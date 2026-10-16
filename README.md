@@ -5,7 +5,7 @@
 **A self-hosted mini-game arcade on Cloudflare Workers — one lobby, one account, many games.**
 
 A lobby with accounts, cloud saves, friends, leaderboards and a play-chip wallet, plus a growing set of
-browser games (a stock-market roguelike, Guandan, Texas Hold'em, Sichuan mahjong) that you can play
+browser games (a stock-market roguelike, Guandan, Texas Hold'em, Sichuan mahjong, turn-based card racing) that you can play
 solo against the computer or in private rooms with friends.
 
 [![Check isolation](https://github.com/yyyu-star/arcade/actions/workflows/check.yml/badge.svg)](https://github.com/yyyu-star/arcade/actions/workflows/check.yml)
@@ -21,11 +21,12 @@ solo against the computer or in private rooms with friends.
 
 </div>
 
-| 开盘 · Kaipan | 掼蛋 · Guandan | 德州 · Texas Hold'em | 雀馆 · Mahjong |
-|:---:|:---:|:---:|:---:|
-| ![Kaipan](platform/public/covers/kaipan.webp) | ![Guandan](platform/public/covers/guandan.webp) | ![Texas Hold'em](platform/public/covers/texas.webp) | ![Mahjong](platform/public/covers/mahjong.webp) |
-| Stock-market roguelike driven by real historical price data | Full-rules competitive Guandan, 4 players | No-limit Hold'em, 2–9 seats | Sichuan "bloody" mahjong engine |
+| 开盘 · Kaipan | 掼蛋 · Guandan | 德州 · Texas Hold'em | 雀馆 · Mahjong | 飞驰 · Racing |
+|:---:|:---:|:---:|:---:|:---:|
+| ![Kaipan](platform/public/covers/kaipan.webp) | ![Guandan](platform/public/covers/guandan.webp) | ![Texas Hold'em](platform/public/covers/texas.webp) | ![Mahjong](platform/public/covers/mahjong.webp) | ![Racing](platform/public/covers/racing.webp) |
+| Stock-market roguelike driven by real historical price data | Full-rules competitive Guandan, 4 players | No-limit Hold'em, 2–9 seats | Sichuan "bloody" mahjong engine | Turn-based card racing, 2–6 cars |
 
+> There is no public demo hosted from this repository: run it locally (see [Quick start](#quick-start)) or deploy your own copy (see [Deploy](#deploy)).
 > The games' user interface is in Simplified Chinese. Chips are play money only: they cannot be bought, sold, exchanged or transferred.
 
 ## Features
@@ -47,6 +48,7 @@ solo against the computer or in private rooms with friends.
 | [`games/guandan`](games/guandan/) | **掼蛋 Guandan** | Complete competitive rules, solo vs. three computer players, private rooms, per-hand review. |
 | [`games/texas`](games/texas/) | **德州扑克 Texas Hold'em** | No-limit, 2–9 players, computer personalities, private rooms, stickers and props. |
 | [`games/mahjong`](games/mahjong/) | **雀馆 Mahjong** | One engine for many variants; Sichuan "bloody" rules first; ready-hand hints, private rooms. |
+| [`games/racing`](games/racing/) | **飞驰 Racing** | Turn-based card racing (shift gears, manage heat, brake for corners, slipstream); three tracks, computer drivers, private rooms. Contributed by a community member; play-for-fun only, no wallet. |
 
 ## Quick start
 
@@ -54,7 +56,7 @@ Requirements: **Node.js 22** (see `.nvmrc`) and npm. Every module is installed a
 
 ```bash
 git clone https://github.com/yyyu-star/arcade.git
-cd arcade/platform          # or games/kaipan, games/guandan, games/texas, games/mahjong
+cd arcade/platform          # or games/kaipan, games/guandan, games/texas, games/mahjong, games/racing
 npm ci
 npm run dev                 # local dev server
 npm test                    # unit tests (vitest) and Worker tests
@@ -68,8 +70,9 @@ npm run build               # production build
 | games/guandan | 5174 | 4174 |
 | games/texas | 5175 | 4175 |
 | games/mahjong | 5176 | 4176 |
+| games/racing | 5177 | 4177 |
 
-Each module's README explains its own scripts, test tools and smoke tests.
+Each module's README explains its own scripts, test tools and smoke tests. Before opening a pull request, also run `node tools/check-isolation.mjs` at the repository root (needs no install).
 
 ## Deploy
 
@@ -111,8 +114,8 @@ The button at the top deploys the platform alone (it creates the D1 database and
 No platform, no domain needed — the game gets a `https://<id>.<your-subdomain>.workers.dev` address.
 
 - **Deploy to Cloudflare button**: `https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
-  (replace `<id>` with `kaipan`, `guandan`, `texas` or `mahjong`). The button copies only that game's directory, so it works once
-  the game depends on the published `@yyyu-star/arcade-kit` from npm (aliased: `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`) instead of the in-repo copy; each game's README says whether its button is ready.
+  (replace `<id>` with `kaipan`, `guandan`, `texas`, `mahjong` or `racing`). The button copies only that game's directory, so it works once
+  the game depends on the published `@yyyu-star/arcade-kit` from npm (aliased: `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.2"`) instead of the in-repo copy; each game's README says whether its button is ready.
 - **From a fork**: `cd games/<id> && npm ci && npx wrangler login && npm run deploy`.
 
 A standalone game has single-player against the computer, friend rooms (players are identified by a guest cookie and pick a
@@ -156,9 +159,11 @@ Detailed documentation is written in Chinese.
 - [docs/architecture.md](docs/architecture.md) — overall architecture
 - [docs/platform-backend.md](docs/platform-backend.md) — accounts, online rooms, quotas and circuit breakers
 - [docs/economy.md](docs/economy.md) — the chip economy
+- [docs/balance.md](docs/balance.md) — difficulty and payout targets shared by all games
+- [docs/table-fun.md](docs/table-fun.md) — the shared table-interaction spec (emotes, props, computer reactions)
 - [docs/new-game.md](docs/new-game.md) — how to add a new game
 - [docs/review-policy.md](docs/review-policy.md) — how pull requests are reviewed and merged (automated pre-review; only maintainers merge and approve deploys)
-- Module READMEs: [platform](platform/README.md) · [kaipan](games/kaipan/README.md) · [guandan](games/guandan/README.md) · [texas](games/texas/README.md) · [mahjong](games/mahjong/README.md) · [arcade-kit](packages/arcade-kit/README.md)
+- Module READMEs: [platform](platform/README.md) · [kaipan](games/kaipan/README.md) · [guandan](games/guandan/README.md) · [texas](games/texas/README.md) · [mahjong](games/mahjong/README.md) · [racing](games/racing/README.md) · [arcade-kit](packages/arcade-kit/README.md)
 
 ## Contributing
 

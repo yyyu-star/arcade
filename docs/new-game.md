@@ -2,6 +2,7 @@
 
 > 给想在 Arcade 里加一个新游戏的开发者。读完这一篇再动手，能少走很多弯路。
 > 硬约束以根目录 [AGENTS.md](../AGENTS.md) 为准；PR 怎么审、怎么合见 [review-policy.md](review-policy.md)。
+> 牌桌类游戏另见 [table-fun.md](table-fun.md)（互动规范）和 [balance.md](balance.md)（难度与收益配平），接钱包见 [economy.md](economy.md)。
 
 ## 0. 先想清楚
 

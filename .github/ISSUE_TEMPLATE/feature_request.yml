@@ -12,6 +12,7 @@ body:
         - games/guandan
         - games/texas
         - games/mahjong
+        - games/racing
         - packages/arcade-kit
         - new game / 新游戏
         - repository / docs

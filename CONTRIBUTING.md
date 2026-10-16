@@ -36,6 +36,13 @@ you (fork) ──PR──▶ automated reviewer ──▶ CI ──▶ maintaine
   signed-in player. Reviewers treat it as code that can reach player accounts.
 - **Want to add a game?** Read [docs/new-game.md](docs/new-game.md) first (in Chinese) and open an issue with the game id you want.
 
+## Development setup
+
+- Node.js 22 (`.nvmrc`) and npm; a Cloudflare account is not needed for development.
+- There is no root `package.json`: `cd` into a module (`platform/`, `games/<id>/`, `packages/arcade-kit/`) and run `npm ci`, then `npm run dev`, `npm test`, `npm run build`.
+  Dev and preview ports are listed in the [README](README.md#quick-start).
+- Documentation is in Chinese except the root documents (`README.md`, `CONTRIBUTING.md`, `SECURITY.md`); comments and in-game text are Chinese. Issues and pull requests may be written in English or Chinese.
+
 ## Workflow
 
 1. **Branch from the latest `main`**: `git switch -c <module>/<short-description> origin/main`, e.g. `kaipan/bank-button-contrast`.
@@ -53,6 +60,10 @@ you (fork) ──PR──▶ automated reviewer ──▶ CI ──▶ maintaine
    A maintainer re-checks the diff and the review, then merges.
 7. **After merge** the module's workflow builds the bundle; its deploy job waits until a maintainer approves the `production` environment.
    After the deploy, open the live game and check the version number, the main flow and that the console has no errors.
+
+### Commit messages
+
+Start with the module name, then a short description: `kaipan: fix empty row in the monthly bill`, `platform: …`, `repo: …`. Squash merge makes the pull request title the commit on `main`, so give the title the same form.
 
 ### Commit identity
 
@@ -111,7 +122,7 @@ Repository settings, kept in sync with this section:
 - **Publishing `arcade-kit` to npm** (package name `@yyyu-star/arcade-kit`; the npm token only covers that scope): only a maintainer publishes, from their own machine, from a merge commit on `main` — the npm token never goes into
   GitHub. `git switch --detach origin/main && cd packages/arcade-kit && npm ci && npm test && npm publish` (the version must be the one in its
   `package.json` / `CHANGELOG.md`, merged through a kit pull request). Then verify in an empty directory with `npm i arcade-kit@npm:@yyyu-star/arcade-kit@<version>`.
-  Games install it under the alias `arcade-kit` (`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`), so their `arcade-kit/...` imports stay unchanged.
+  Games install it under the alias `arcade-kit` (`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.2"`), so their `arcade-kit/...` imports stay unchanged.
   Games move to a new kit version through their own pull requests; `pkg-arcade-kit.yml` already runs every game's tests against the packed kit.
 - **Pinned tooling**: third-party actions are pinned to full commit SHAs, and the deployer's wrangler version is fixed in `tools/deployer/` (upgrade steps in
   [tools/deployer/README.md](tools/deployer/README.md)). Pull requests that touch `tools/` or `.github/workflows/` also run the whole deploy path for one game

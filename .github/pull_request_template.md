@@ -6,6 +6,10 @@ One PR changes one module; split cross-module work and state the merge order.
 
 ## What and why / 改了什么、为什么
 
+## Related issue / 关联 issue
+
+Fixes #… / 无
+
 ## Module and version / 模块与版本
 
 - Module: platform / games/<id> / packages/<name> / repository
@@ -16,6 +20,7 @@ One PR changes one module; split cross-module work and state the merge order.
 - [ ] `node tools/check-isolation.mjs` passes at the repository root
 - [ ] `npm test` and the build pass in the module (commands and results below)
 - [ ] UI changes: screenshots (desktop 1280×720 and phone landscape), zero console errors
+- [ ] Docs, README and the module's `AGENTS.md` updated where behaviour changed
 - [ ] Balance or AI changes: simulator / bot results attached
 
 ## Notes for reviewers / 审阅备注

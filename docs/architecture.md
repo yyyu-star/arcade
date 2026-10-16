@@ -24,6 +24,7 @@
 | `games/guandan/` | 掼蛋 | `guandan` | `/games/guandan/` |
 | `games/texas/` | 德州扑克 | `texas` | `/games/texas/` |
 | `games/mahjong/` | 《雀馆》麻将（先做川麻·血战到底） | `mahjong` | `/games/mahjong/` |
+| `games/racing/` | 《飞驰》回合制卡牌赛车（社区贡献者的游戏，只有娱乐模式） | `racing` | `/games/racing/` |
 | `games/<id>/` | 以后的每个小游戏 | `<id>` | `/games/<id>/` |
 | `packages/arcade-kit/` | 共用包：联机房间基类、开房进房入口、浏览器连接器、协议、表情道具（0.7.x）；只测不部署（`pkg-arcade-kit.yml`） | 无 | 无 |
 | `packages/<name>/` | 以后的共用包 | 无 | 无 |
@@ -66,6 +67,7 @@ https://<站点>/games/<id>/*     → 各游戏的 Worker（路径路由，优�
 - 每个游戏的联机房间放在它自己的 Worker 里（Durable Objects，休眠写法，免费版只能用 SQLite 后端），开房 `…/rooms`、进房 `…/rooms/<码>/ws`（德州、麻将挂在 `/games/<id>/` 下，掼蛋挂在 `/games/guandan/room/` 下）。
 - 共用代码放进共用包 `packages/arcade-kit`，所有游戏必须遵守其中的房间规范。现有房间基类、开房进房入口（经平台 `/api/me` 认人）、浏览器连接器、协议、计量、表情道具（`arcade-kit/fun`）；
   入场票、房间登记以后再加，第一版的取舍见 platform-backend.md 4.6、5.3。
+- 牌桌游戏的互动（头像菜单、表情、道具、电脑反应）统一做成 kit 里的组件，规范见 [table-fun.md](table-fun.md)；各游戏的难度和筹码收益按 [balance.md](balance.md) 的目标配平，档位和钱包见 [economy.md](economy.md)。
 - 费用：自计量熔断 + GraphQL 对账 + 墓碑版本兜底，默认 8 美元停服。联机之前，平台接口先按免费版的日额度自计量，到线就只读或停服（platform-backend.md 6.6）。
 
 ## 5. 本地开发
@@ -77,5 +79,6 @@ https://<站点>/games/<id>/*     → 各游戏的 Worker（路径路由，优�
 | guandan | 5174 | 4174 |
 | texas | 5175 | 4175 |
 | mahjong | 5176 | 4176 |
+| racing | 5177 | 4177 |
 
 开发时，平台的"进入游戏"会跳到游戏自己的开发服务器（`src/games.ts` 里的 `devUrl`）；正式构建用同域路径。
