@@ -156,4 +156,24 @@ describe('电脑座位的短语（0.10.0，GameRoom.botEmote）', () => {
     expect(await tryEmote(2, 5)).toBe(true);
     expect(await a.until(emoted)).toEqual({ t: 'emote', seat: 2, id: 5, bot: true });
   });
+
+  it('真人短语钩子（0.10.1，onEmote）：真人发的校验过、广播后调；里面 botEmote 的回应所有人收到；电脑的短语不触发；被拒的不触发；不写库', async () => {
+    const { code, a, b, watcher } = await started();
+    const snap = () => runInDurableObject(chatty(code), (r: ChattyRoom, st) => ({ total: (r as unknown as { totalWrites: number }).totalWrites, rows: st.storage.sql.exec('SELECT v FROM kit_room').toArray() }));
+    const before = await snap();
+    b.send({ t: 'emote', id: 4, to: 0 });
+    for (const c of [a, b, watcher]) {
+      expect(await c.until(emoted)).toEqual({ t: 'emote', seat: 1, id: 4, to: 0 });
+      expect(await c.until(emoted)).toEqual({ t: 'emote', seat: 2, id: 5, to: 1, bot: true });
+    }
+    a.send({ t: 'emote', id: 1 });
+    expect(await b.until(emoted)).toEqual({ t: 'emote', seat: 0, id: 1 });
+    // 电脑自己发的不触发；被拒的（编号不对）也不触发
+    expect(await runInDurableObject(chatty(code), (r: ChattyRoom) => r.tryBotEmote(3, 4))).toBe(true);
+    expect(await b.until(emoted)).toEqual({ t: 'emote', seat: 3, id: 4, bot: true });
+    a.send({ t: 'emote', id: 99 });
+    expect(await a.until((m) => m.t === 'error')).toEqual({ t: 'error', code: 'bad_emote' });
+    expect(await runInDurableObject(chatty(code), (r: ChattyRoom) => r.heard)).toEqual([{ from: 1, id: 4, to: 0 }, { from: 0, id: 1 }]);
+    expect(await snap()).toEqual(before);
+  });
 });

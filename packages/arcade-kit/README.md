@@ -234,6 +234,14 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
     和真人共用同一个座位的令牌桶（`emoteMs` / `emoteBurst`），不写存储、不改 seq。电脑短语即时到达，不跟着 `frames` 的播放延迟走：想让它落在某一帧之后，游戏在页面上自己按帧排队。
     **公平约束（游戏侧守，kit 只管广播）**：电脑发不发、发什么只看公开信息（出过的牌、结算结果），不读隐藏的牌，也不读任何真人的短语——
     kit 本来就不把真人短语交给规则和 `onStep`，游戏也不要自己记下来喂给电脑。电脑出牌的决策（`ai`）照旧不受短语影响。
+  - **电脑回应真人的短语**（0.10.1）：覆盖 `protected onEmote(from, id, to?)`，真人发的短语校验通过、广播完之后调一次，**只许在里面调 `botEmote`**：
+    ```ts
+    protected override onEmote(from: number, id: number, to?: number): void {
+      if (to !== undefined && id === TAUNT) this.botEmote(to, TALK_BACK, from);   // 被点名的电脑回嘴（to 是真人座位时 botEmote 回 false，不发）
+    }
+    ```
+    故意不给牌局状态；同步、不能 await、不能写存储，抛错只记日志。电脑的 `botEmote` 不会再触发它（免得电脑互相回个没完），
+    回应照样占那个电脑座位的令牌桶。**不许把真人短语记进状态、字段或存储**，电脑的出牌决策绝不能读到它。
 - **好玩素材** `arcade-kit/fun`（0.7.0，浏览器用，纯 DOM + SVG + Web Animations，不依赖渲染库）：
   - **图层**：`createFunLayer({ zIndex?, parent? })` 往 `document.body` 挂一个 `position: fixed; inset: 0; pointer-events: none` 的层（class `arcade-fun`，默认 z-index 50），
     点击全部穿透。要比牌桌高、比游戏的弹窗低：**游戏的弹窗、确认框的 z-index 要高于它**。界面在自己的层叠上下文里的（`position: fixed` 的容器、带 transform 缩放的舞台），
