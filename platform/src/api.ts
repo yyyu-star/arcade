@@ -178,6 +178,13 @@ export function isNetworkFail(e: unknown): boolean {
   return e instanceof ApiFail && (e.code === 'network' || e.code === 'timeout' || e.code === 'unreachable');
 }
 
+/** Retry-After 头：秒数或 HTTP 日期，换成还要等几秒；看不懂就不写多久 */
+function retryAfterHeader(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const s = /^\d+$/.test(value.trim()) ? Number(value) : Math.ceil((Date.parse(value) - Date.now()) / 1000);
+  return Number.isFinite(s) && s > 0 ? Math.min(s, 86_400) : undefined;
+}
+
 async function request<T>(method: string, path: string, body?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const headers: Record<string, string> = {};
   if (method !== 'GET') {
@@ -193,11 +200,11 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
   let data: Record<string, unknown> | null = null;
   try {
     try {
+      // credentials 不写：fetch 默认就是 same-origin，同域请求照样带会话 cookie
       res = await fetch(path, {
         method,
         headers,
         body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
-        credentials: 'same-origin',
         signal: ctrl.signal,
       });
     } catch {
@@ -214,6 +221,12 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
     clearTimeout(timer);
   }
   if (!res.ok || !data) {
+    // 429 不管回的是什么都是"太频繁"：我们的接口回 JSON（带 retryAfter），网关限速回的是它自己的页面，不能说成"连不上"
+    if (res.status === 429) {
+      const retryAfter = typeof data?.retryAfter === 'number' ? data.retryAfter : retryAfterHeader(res.headers.get('retry-after'));
+      const message = typeof data?.message === 'string' ? data.message : '试得太频繁了，稍等一会儿再来';
+      throw new ApiFail(429, typeof data?.error === 'string' ? data.error : 'rate_limited', message, retryAfter);
+    }
     if (!data) throw new ApiFail(res.status, 'unreachable', '连不上服务器，过一会儿再试');
     const code = typeof data.error === 'string' ? data.error : 'internal';
     const message = typeof data.message === 'string' ? data.message : '服务器出错了，过一会儿再试';
