@@ -219,42 +219,45 @@ try {
   await pa.screenshot({ path: join(SHOTS, 'room-start-a.png') });
   await pb.screenshot({ path: join(SHOTS, 'room-start-b.png') });
 
-  // 交流（0.3.0）：A 说一句、发一张表情、冲 B 扔一个道具，B 那边看得到
-  await pa.click('.comms-btn');
-  await pa.click('.comms-body .phrase:has-text("雄起！")');
-  check(!!(await pb.waitForSelector('.bubble:has-text("雄起！")', { timeout: 4_000 }).catch(() => null)), 'A 说的短语 B 看得到');
-  await pa.click('.comms-btn');
-  await pa.click('.comms-tabs .chip:has-text("表情")');
-  await pa.click('.comms-body .pic >> nth=0');
+  // 互动（kit 的 table-fun，0.11.0 起）：按 kit 的 DOM 点（头像热区 .atf-hot[data-seat]、菜单里的 [data-key]、"互动"按钮 .atf-btn）。
+  // A 是 0 号、B 是 1 号，2、3 号是电脑
+  const hot = (page: Page, seat: number): Promise<void> => page.click(`.atf-hot[data-seat="${seat}"]`);
+  const key = (page: Page, k: string): Promise<void> => page.click(`[data-key="${k}"]`);
+  await pa.click('.atf-btn');
+  await key(pa, 'fun:tab:phrase');
+  await key(pa, 'fun:phrase0');
+  check(!!(await pb.waitForSelector('.atf-bubble:has-text("雄起！")', { timeout: 4_000 }).catch(() => null)), 'A 说的短语 B 看得到');
+  await sleep(1_200);
+  await hot(pa, 0);
+  await key(pa, 'fun:sticker0');
   check(!!(await pb.waitForSelector('.arcade-fun > *', { timeout: 4_000 }).catch(() => null)), 'A 发的表情 B 看得到');
   await sleep(2_500);
-  await pa.click('.comms-btn');
-  await pa.click('.comms-tabs .chip:has-text("道具")');
-  await pa.click('.comms-body .pic >> nth=0');
-  await pa.click('.comms-body .act:has-text("smokeB")');
+  await hot(pa, 1);
+  await key(pa, 'fun:prop0');
   check(!!(await pb.waitForSelector('.arcade-fun > *', { timeout: 4_000 }).catch(() => null)), 'A 冲 B 扔的道具 B 看得到');
   await pb.screenshot({ path: join(SHOTS, 'room-comms-b.png') });
-  // 点名（0.5.0）：A 挑 B 说一句，B 看到带 @ 的气泡；B 在设置里屏蔽 A，A 再说 B 就看不到，解开以后又看得到
-  await sleep(2_500);
-  await pa.click('.comms-btn');
-  await pa.click('.comms-tabs .chip:has-text("说一句")');
-  await pa.click('.comms-body .to-row .chip:has-text("smokeB")');
-  await pa.click('.comms-body .phrase:has-text("巴适得板！")');
-  const named = await pb.waitForSelector('.bubble:has-text("巴适得板")', { timeout: 4_000 }).catch(() => null);
-  check(!!named && (await named.textContent())!.startsWith('@'), 'A 点名 B 说的话 B 看得到（带 @名字）');
+  // 点名：A 点 B 的头像，菜单里的点名短语，B 看到气泡
+  await sleep(1_700);
+  await hot(pa, 1);
+  await key(pa, 'fun:named0');
+  check(!!(await pb.waitForSelector('.atf-bubble', { timeout: 4_000 }).catch(() => null)), 'A 点名 B 说的话 B 看得到');
   await pa.screenshot({ path: join(SHOTS, 'room-comms-a.png') });
-  await pb.click('.comms-btn');
-  await pb.click('.comms-tabs .chip:has-text("设置")');
-  await pb.click('.comms-body .set-row:has-text("smokeA")');
-  await pb.click('.comms-btn');
+  // B 屏蔽 A：A 再说 B 就看不到；解开以后照常
   await sleep(2_800);
-  await pa.click('.comms-btn');
-  await pa.click('.comms-body .to-row .chip:has-text("大家")');
-  await pa.click('.comms-body .phrase:has-text("安逸！")');
-  check(!(await pb.waitForSelector('.bubble:has-text("安逸！")', { timeout: 2_000 }).catch(() => null)), 'B 屏蔽了 A，A 说的 B 看不到');
-  await pb.click('.comms-btn');
-  await pb.click('.comms-body .set-row:has-text("smokeA")');
-  await pb.click('.comms-btn');
+  await hot(pb, 0);
+  await key(pb, 'fun:block');
+  await pa.click('.atf-btn');
+  await key(pa, 'fun:tab:phrase');
+  await key(pa, 'fun:phrase8');
+  check(!(await pb.waitForSelector('.atf-bubble:has-text("安逸！")', { timeout: 2_000 }).catch(() => null)), 'B 屏蔽了 A，A 说的 B 看不到');
+  await hot(pb, 0);
+  await key(pb, 'fun:block');
+  // 冲两个电脑轮流扔几下：房间里的电脑按 kit 的 botReact 回（60%，再乘性格），回的东西两边都看得到
+  for (let i = 0; i < 8; i++) {
+    await sleep(1_700);
+    await hot(pa, 2 + (i % 2));
+    await key(pa, 'fun:prop0');
+  }
   await playUntil([A, B], () => A.round > ROUNDS && B.round > ROUNDS, 6 * 60_000, '娱乐房打局');
   check(true, `娱乐房打满 ${ROUNDS} 局（A 打出 ${A.discards} 张，B 打出 ${B.discards} 张，${Math.round((Date.now() - t) / 1000)} 秒）`);
   check(botEmotes > 0, `电脑在好友房里由房间发表情（A 收到 ${botEmotes} 条）`);

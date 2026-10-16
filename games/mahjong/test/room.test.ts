@@ -413,7 +413,9 @@ describe('好友房里电脑的互动（src/room/talk.ts）', () => {
   test('电脑连着出手推好几步也不漏胡；只有电脑座位发，编号合法', () => {
     // 一个只认事，一个认了再让电脑发（同一步只认一次）
     const eye = new RoomTalk(9);
-    const talk = new RoomTalk(9);
+    // 名场面（杠、自摸、杠上花、清一色）才起哄、各按概率：一场下来一个种子可能一次都没有，几个种子合起来数
+    const talks = [9, 10, 11, 12, 13].map((x) => new RoomTalk(x));
+    const talk = talks[0]!;
     let s = begin(['human', 'ai', 'ai', 'ai'], 'fun');
     let hus = 0;
     let kans = 0;
@@ -426,7 +428,7 @@ describe('好友房里电脑的互动（src/room/talk.ts）', () => {
       const ms = eye.watch(s);
       hus += ms.filter((m) => m.k === 'hu').length;
       kans += ms.filter((m) => m.k === 'kan').length;
-      for (const a of talk.step(s, now)) {
+      for (const a of talks.flatMap((t) => t.step(s, now))) {
         acts++;
         expect(s.kinds[a.seat]).toBe('ai');
         expect(a.id >= 0 && a.id < EMOTES).toBe(true);
@@ -436,9 +438,19 @@ describe('好友房里电脑的互动（src/room/talk.ts）', () => {
     expect(hus).toBe(st.reduce((n, h) => n + h.wins.length, 0));
     expect(kans).toBeGreaterThan(0);
     expect(eye.watch(s)).toEqual([]);
-    // 真人冲电脑扔了东西：只有被冲着的电脑可能回
-    const r = talk.reply(0, EMOTES - 4, 1, now + 60_000);
-    if (r) expect(r.seat).toBe(1);
+    // 真人冲电脑扔了东西（kit 的 botReact，60% 回应）：只有被冲着的电脑回，回一定是表情 + 有时回扔道具；扔 40 次总有回的
+    let back = 0;
+    for (let i = 0; i < 40; i++) {
+      for (const a of talk.reply(0, EMOTES - 4, 1, now + 60_000 + i * 1_600)) {
+        back++;
+        expect(a.seat).toBe(1);
+        expect(a.id >= 0 && a.id < EMOTES).toBe(true);
+      }
+    }
+    expect(back).toBeGreaterThan(10);
+    // 冲真人扔的、对大家说的，电脑不回
+    expect(talk.reply(1, EMOTES - 4, 0, now + 200_000)).toEqual([]);
+    expect(talk.reply(0, 0, undefined, now + 200_000)).toEqual([]);
     expect(acts).toBeGreaterThan(0);
   });
 });

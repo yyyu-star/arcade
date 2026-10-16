@@ -108,6 +108,7 @@ export class TableUi<V extends TableView, A> {
   private center: HTMLElement;
   private myHand: HTMLElement;
   private bar: HTMLElement;
+  private slot: HTMLElement;
   private fxLayer: HTMLElement;
   private frame: Frame<V> | null = null;
   private selected: Tile[] = [];
@@ -121,9 +122,6 @@ export class TableUi<V extends TableView, A> {
   private tick = 0;
   /** 选中一张牌、再点一次才打（手机上防误触）；电脑上双击直接打 */
   private readonly confirmTap = true;
-
-  /** 点了谁的头像（互动菜单，view/comms.ts 接） */
-  onAvatar: ((seat: number) => void) | null = null;
 
   private readonly ui: VariantUi<V, A>;
   private readonly send: (a: CommonAct | A) => void;
@@ -143,6 +141,7 @@ export class TableUi<V extends TableView, A> {
     this.center = el('div', 'center', this.root);
     this.myHand = this.hands[0]!;
     this.bar = el('div', 'bar', this.root);
+    this.slot = el('div', 'fun-slot', this.root);
     this.fxLayer = el('div', 'fx', this.root);
   }
 
@@ -162,6 +161,21 @@ export class TableUi<V extends TableView, A> {
 
   avatarEl(seat: number): HTMLElement | null {
     return this.badges[this.rel(seat)]!.querySelector('.avatar');
+  }
+
+  /** 这个座位上是谁（互动：名字、是不是电脑、空位） */
+  seatMeta(seat: number): SeatMeta | null {
+    return this.frame?.seats[seat] ?? null;
+  }
+
+  /** 互动的菜单、面板不能盖的：自己的手牌和操作条 */
+  avoidRects(): DOMRect[] {
+    return [this.myHand.getBoundingClientRect(), this.bar.getBoundingClientRect()].filter((r) => r.width > 0);
+  }
+
+  /** "互动"按钮的位置：牌桌上留的空位（自己头像右边，style.css 按横竖屏摆） */
+  funSlot(): DOMRect {
+    return this.slot.getBoundingClientRect();
   }
 
   render(frame: Frame<V>): void {
@@ -190,12 +204,6 @@ export class TableUi<V extends TableView, A> {
     this.drawBar();
     this.ui.effects(v, this.fx, frame.seats.map((x) => x.name));
     this.startTimer();
-  }
-
-  /** 冒一个气泡（快捷短语） */
-  bubble(seat: number, text: string): void {
-    const b = el('div', `bubble r${this.rel(seat)}`, this.fxLayer, text);
-    window.setTimeout(() => b.remove(), 2_600);
   }
 
   readonly fx: Fx = {
@@ -240,12 +248,8 @@ export class TableUi<V extends TableView, A> {
     b.classList.toggle('turn', v.turn === seat && (v.phase === 'turn' || v.phase === 'claim'));
     b.classList.toggle('won', !!s.won);
     b.classList.toggle('empty', !!meta.empty);
-    // 头像是个按钮：点别人的扔道具、点自己的发表情（view/comms.ts）
-    const av = el('button', 'avatar', b);
-    av.type = 'button';
-    av.disabled = !!meta.empty;
-    av.setAttribute('aria-label', meta.empty ? '空位' : `${meta.name}：互动`);
-    av.addEventListener('click', () => this.onAvatar?.(seat));
+    // 点头像互动由 kit 的 table-fun 在头像上盖一块透明热区接（view/fun.ts），这里只画
+    const av = el('div', 'avatar', b);
     av.appendChild(this.avatarArt(seat, meta.name, meta.bot));
     if (v.dealer === seat) el('span', 'dealer', av, '庄');
     const info = el('div', 'info', b);

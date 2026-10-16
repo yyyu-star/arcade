@@ -29,8 +29,8 @@ export interface Persona {
   tempo: number;
   /** 话多：单机里胡、杠、点炮以后开口的千分比 */
   talk: number;
-  /** 互动性格：爱闹（概率 ×1.5）、普通（×1）、高冷（×0.3），乘在被扔后回应、名场面扔东西的概率上（game/banter.ts 读；电脑出牌不读） */
-  fun: 'lively' | 'normal' | 'cool';
+  /** 互动性格（kit 的 FunTemper）：爱闹（概率 ×1.5）、普通（×1）、高冷（×0.3），乘在被扔后回应、名场面起哄的概率上（kit 的 botReact 读；电脑出牌不读） */
+  fun: 'rowdy' | 'normal' | 'cool';
   /** 强弱的档：0 新手、1 普通、2 稳、3 老练（场地表按它排，见 venues.ts） */
   level: number;
   /** 功力：牌效多看一步、按胡牌的番算听牌好坏、读牌和防守更细（0–1000；场地的手紧再往上加，见 style.ts） */
@@ -38,10 +38,10 @@ export interface Persona {
 }
 
 export const PERSONAS: readonly Persona[] = [
-  { name: '幺妹儿', style: '快：见胡就胡，能碰就碰', defense: 350, greed: 0, kanLove: 300, pon: 900, slip: 50, reads: 250, temper: 300, swing: 300, tempo: 650, talk: 700, fun: 'lively', level: 1, skill: 0 },
+  { name: '幺妹儿', style: '快：见胡就胡，能碰就碰', defense: 350, greed: 0, kanLove: 300, pon: 900, slip: 50, reads: 250, temper: 300, swing: 300, tempo: 650, talk: 700, fun: 'rowdy', level: 1, skill: 0 },
   { name: '熊猫哥', style: '贪：爱做清一色、对对胡', defense: 200, greed: 950, kanLove: 500, pon: 450, slip: 60, reads: 200, temper: 600, swing: 500, tempo: 1_000, talk: 800, fun: 'normal', level: 1, skill: 0 },
   { name: '盖碗儿', style: '稳：守门清，少碰少杠', defense: 950, greed: 200, kanLove: 150, pon: 150, slip: 20, reads: 700, temper: 100, swing: 200, tempo: 1_350, talk: 250, fun: 'cool', level: 2, skill: 300 },
-  { name: '兔头哥', style: '爱杠：能杠就杠，输了容易上头', defense: 300, greed: 400, kanLove: 1_000, pon: 600, slip: 60, reads: 300, temper: 700, swing: 500, tempo: 850, talk: 900, fun: 'lively', level: 1, skill: 0 },
+  { name: '兔头哥', style: '爱杠：能杠就杠，输了容易上头', defense: 300, greed: 400, kanLove: 1_000, pon: 600, slip: 60, reads: 300, temper: 700, swing: 500, tempo: 850, talk: 900, fun: 'rowdy', level: 1, skill: 0 },
   { name: '火锅婆婆', style: '老练：牌效和防守都细', defense: 750, greed: 350, kanLove: 400, pon: 450, slip: 0, reads: 1_000, temper: 0, swing: 250, tempo: 1_150, talk: 400, fun: 'cool', level: 3, skill: 1_000 },
   { name: '板凳儿', style: '新手：常打错，不太防守', defense: 50, greed: 100, kanLove: 600, pon: 700, slip: 300, reads: 0, temper: 900, swing: 800, tempo: 900, talk: 600, fun: 'normal', level: 0, skill: 0 },
 ];

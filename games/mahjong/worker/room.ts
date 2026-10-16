@@ -30,10 +30,9 @@ export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, 
     for (const a of this.talk.step(s, Date.now())) this.botEmote(a.seat, a.id, a.to);
   }
 
-  /** 真人冲电脑发了东西：被冲着的电脑按性格回一句（kit 只给座位和编号；不记下来，电脑出牌读不到） */
+  /** 真人冲电脑发了东西：被冲着的电脑按性格回（kit 的 botReact：表情 + 一句，有时回扔道具；不记下来，电脑出牌读不到） */
   protected override onEmote(from: number, id: number, to?: number): void {
-    const a = this.talk?.reply(from, id, to, Date.now());
-    if (a) this.botEmote(a.seat, a.id, a.to);
+    for (const a of this.talk?.reply(from, id, to, Date.now()) ?? []) this.botEmote(a.seat, a.id, a.to);
   }
 
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {

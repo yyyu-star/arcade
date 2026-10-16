@@ -467,9 +467,6 @@ button {
 .stake,
 .link,
 .home,
-.comms-btn,
-.comms-body .phrase,
-.comms-body .pic,
 .dialog .x {
   position: relative;
   display: inline-flex;
@@ -490,27 +487,25 @@ button {
 .stake::after,
 .link::after,
 .home::after,
-.comms-btn::after,
-.comms-body .phrase::after,
 .dialog .x::after {
   content: '';
   position: absolute;
   inset: min(0px, calc((100% - var(--tap)) / 2)) min(0px, calc((100% - var(--tap)) / 2));
 }
 @media (hover: hover) {
-  :is(.act, .pill, .icon, .chip, .stake, .link, .home, .comms-btn, .comms-body .phrase, .comms-body .pic, .dialog .x):not(:disabled, .off):hover {
+  :is(.act, .pill, .icon, .chip, .stake, .link, .home, .dialog .x):not(:disabled, .off):hover {
     filter: brightness(1.12);
   }
 }
-:is(.act, .pill, .icon, .chip, .stake, .home, .comms-btn, .comms-body .phrase, .comms-body .pic):not(:disabled, .off):active {
+:is(.act, .pill, .icon, .chip, .stake, .home):not(:disabled, .off):active {
   transform: translateY(1px) scale(0.97);
   filter: brightness(0.95);
 }
-:is(.act, .pill, .icon, .chip, .stake, .link, .home, .comms-btn, .comms-body .phrase, .comms-body .pic, .dialog .x):focus-visible {
+:is(.act, .pill, .icon, .chip, .stake, .link, .home, .dialog .x):focus-visible {
   outline: 3px solid var(--gold);
   outline-offset: 2px;
 }
-:is(.act, .pill, .icon, .chip, .stake, .link, .comms-btn, .comms-body .phrase, .comms-body .pic):disabled {
+:is(.act, .pill, .icon, .chip, .stake, .link):disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -682,12 +677,6 @@ button {
   width: 44px;
   height: 44px;
   flex: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
   border-radius: 50%;
   /* 圆框：金边外再压一道深色，任何底色上都框得住 */
   box-shadow:
@@ -714,19 +703,6 @@ button {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-}
-/* 点头像扔道具：屏幕上至少 44 像素可点 */
-.badge .avatar::after {
-  content: '';
-  position: absolute;
-  inset: min(0px, calc((44px - var(--tap, 44px)) / 2));
-}
-.badge .avatar:disabled {
-  cursor: default;
-}
-.badge .avatar:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
 }
 .badge .dealer {
   position: absolute;
@@ -1160,6 +1136,12 @@ button {
 .bar .claim-tile {
   display: flex;
 }
+/* 给 kit 的"互动"按钮留的空位：不画东西、不挡点击，只告诉 kit 按钮放哪、多大 */
+.fun-slot {
+  width: 112px;
+  height: 48px;
+  pointer-events: none;
+}
 /* 碰杠胡过：大、醒目，浮在手牌右上方 */
 .bar .act {
   min-width: 84px;
@@ -1429,36 +1411,6 @@ button {
     animation: none;
   }
 }
-.bubble {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: linear-gradient(#ffffff, #f1ece0);
-  color: #222;
-  font-size: var(--fs-md);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-lg);
-  border: 1px solid #0000001a;
-  box-shadow: var(--sh-1);
-  animation: bub 2.6s ease-out forwards;
-  white-space: nowrap;
-}
-@keyframes bub {
-  0% {
-    transform: scale(0.5);
-    opacity: 0;
-  }
-  10% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
 .weather {
   inset: 0;
   overflow: hidden;
@@ -1527,17 +1479,13 @@ button {
 [data-orient='land'] .river.r3 { left: 196px; top: 175px; width: 180px; flex-direction: row-reverse; }
 [data-orient='land'] .river.r1 { left: 624px; top: 175px; width: 180px; }
 [data-orient='land'] .bar { right: 176px; bottom: 96px; height: 64px; }
-/* 互动按钮在自己头像右边（名牌最长约 194），不进手牌那一排 */
-[data-orient='land'] .comms { left: 212px; bottom: 102px; }
+/* "互动"按钮（kit 的 table-fun 画，view/fun.ts）放在这个空位：自己头像右边（名牌最长约 194），不进手牌那一排 */
+[data-orient='land'] .fun-slot { left: 212px; bottom: 102px; }
 [data-orient='land'] .banner.r0 { left: 50%; top: 66%; }
 [data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
 [data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
 [data-orient='land'] .banner.r3 { left: 20%; top: 46%; }
 [data-orient='land'] .banner.center { left: 50%; top: 46%; }
-[data-orient='land'] .bubble.r0 { left: 40px; bottom: 158px; }
-[data-orient='land'] .bubble.r1 { right: 40px; bottom: 158px; }
-[data-orient='land'] .bubble.r2 { right: 40px; top: 74px; }
-[data-orient='land'] .bubble.r3 { left: 40px; top: 74px; }
 
 /* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
  * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
@@ -1572,19 +1520,13 @@ button {
 [data-orient='port'] .river.r1 { left: 352px; top: calc(var(--c) - 74px); width: 108px; }
 [data-orient='port'] .bar { left: 50%; bottom: 146px; height: 64px; transform: translateX(-50%); justify-content: center; }
 /* 头像右边、手牌抬起来（离底 78）也碰不到 */
-[data-orient='port'] .comms { left: 204px; bottom: 84px; }
-/* 竖屏面板往上展开时整块抬到浮着的按钮（离底 136–200）上面，不盖按钮 */
-[data-orient='port'] .comms .comms-panel { margin-bottom: 84px; }
+[data-orient='port'] .fun-slot { left: 204px; bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }
 [data-orient='port'] .banner.r0 { left: 50%; top: 72%; }
 [data-orient='port'] .banner.r1 { left: 78%; top: 40%; }
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
 [data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
 [data-orient='port'] .banner.center { left: 50%; top: 46%; }
-[data-orient='port'] .bubble.r0 { left: 30px; bottom: 144px; }
-[data-orient='port'] .bubble.r1 { right: 30px; bottom: 144px; }
-[data-orient='port'] .bubble.r2 { right: 30px; top: 68px; }
-[data-orient='port'] .bubble.r3 { left: 30px; top: 68px; }
 [data-orient='port'] .lobby-head h1 { font-size: 46px; }
 
 /* ---------- 弹窗 ---------- */
@@ -1742,151 +1684,6 @@ button {
 }
 .end .dialog > .summary + .summary {
   margin-top: var(--sp-4);
-}
-
-/* ---------- 好友房交流 ---------- */
-.comms {
-  position: absolute;
-  z-index: 8;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: var(--sp-2);
-}
-/* 位置在上面的横屏、竖屏布局里：横屏在左下角（手牌一排的左边），竖屏在自己头像右边；面板往上展开 */
-.comms {
-  align-items: flex-start;
-}
-.comms-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 2px solid #ffffff50;
-  background: radial-gradient(circle at 50% 35%, #ffffff26, #00000080 70%);
-  box-shadow: var(--sh-1);
-  font-size: var(--fs-lg);
-  font-weight: 700;
-}
-.comms.nudge .comms-btn {
-  animation: nudge 0.4s ease-in-out 3;
-  border-color: var(--gold);
-}
-@keyframes nudge {
-  50% {
-    transform: scale(1.15);
-  }
-}
-.comms-panel {
-  width: 300px;
-  max-height: 330px;
-  overflow-y: auto;
-  padding: var(--sp-3);
-  border-radius: var(--r-lg);
-  background: #102a20f0;
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-2);
-}
-.comms-tabs {
-  display: flex;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
-/* 总开关关着：按钮淡一点 */
-.comms.off .comms-btn {
-  opacity: 0.5;
-}
-.comms-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.comms-body .phrase {
-  min-height: 32px;
-  border: 0;
-  border-radius: var(--r-pill);
-  padding: var(--sp-1) var(--sp-3);
-  font-size: var(--fs-sm);
-  background: var(--surface-hi);
-}
-.comms-body .phrase.hint {
-  background: #f3c86b40;
-  border: 1px solid var(--gold);
-}
-.comms-body .pic {
-  width: 56px;
-  height: 56px;
-  padding: var(--sp-1);
-  border: 0;
-  border-radius: var(--r-md);
-  background: #ffffff14;
-}
-.comms-body .pic svg {
-  width: 100%;
-  height: 100%;
-}
-.comms-body .aim {
-  width: 100%;
-  font-size: var(--fs-sm);
-  opacity: 0.85;
-}
-.comms-body .to-row {
-  width: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
-  border-bottom: 1px solid #ffffff1a;
-}
-.comms-body .to-row .aim {
-  width: auto;
-}
-.comms-body .set-row {
-  width: 100%;
-  text-align: left;
-}
-/* 名场面横幅：牌桌正中偏上，在好玩图层里（点击穿透），不压手牌和按钮 */
-.fame {
-  position: absolute;
-  left: 50%;
-  top: 16%;
-  transform: translate(-50%, 0);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--sp-2) var(--sp-6);
-  border-radius: var(--r-lg);
-  background:
-    linear-gradient(90deg, transparent, #f3c86b33 50%, transparent),
-    linear-gradient(#7a2416f0, #2b0d08f0);
-  border: 2px solid var(--gold);
-  box-shadow: inset 0 1px 0 #ffffff33, 0 0 24px #f3c86b66, var(--sh-2);
-  color: #ffe9b0;
-  text-shadow: 0 2px 6px #000a;
-  white-space: nowrap;
-}
-.fame small {
-  font-size: var(--fs-xs);
-  letter-spacing: 4px;
-  opacity: 0.85;
-}
-.fame b {
-  font-size: 28px;
-}
-.urge {
-  position: absolute;
-  right: -16px;
-  top: -18px;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border: 0;
-  background: none;
-  animation: nudge 0.8s ease-in-out infinite;
-  z-index: 6;
-}
-.urge svg {
-  width: 100%;
-  height: 100%;
 }
 
 /* 从平台大厅的"好友房"进来：开房、进房亮两下 */

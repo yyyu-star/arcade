@@ -69,51 +69,43 @@ async function play(page: Page, name: string): Promise<boolean> {
 }
 
 /**
- * 单机的互动：面板里点名一个电脑说一句、先选人再冲它扔个番茄（它按性格回不回都行）；
- * 点一个电脑的头像扔一个道具（菜单收起）、点自己的头像发一个表情；设置里屏蔽它、关掉再打开总开关。
- * 截两张图（shots/smoke-land-comms.png 面板后、smoke-land-menu.png 头像菜单开着）
+ * 单机的互动（kit 的 table-fun，开发服务器上 main.ts 把组件挂在 window.__fun、流水在 window.__funLog）：
+ * 点一个电脑的头像，菜单里 8 个道具 + 3 句点名 + 屏蔽他，扔第二个道具（菜单收起）；点自己的头像，12 个表情里发一个；
+ * "互动"按钮的面板里点名说一句。按控件的屏幕中心点（kit 的 controls()），流水里要有扔道具、表情、短语三行。
+ * 截一张头像菜单开着的图（shots/smoke-land-menu.png）
  */
 async function soloComms(page: Page): Promise<void> {
-  await page.click('.comms-btn');
-  await page.click('.comms-body .to-row .chip >> nth=1');
-  await page.click('.comms-body .phrase:has-text("雄起！")');
-  await page.waitForSelector('.bubble:has-text("@")');
-  await page.click('.comms-btn');
-  await page.click('.comms-tabs .chip:has-text("道具")');
-  await page.click('.comms-body .act >> nth=0');
-  await page.click('.comms-body .pic.prop >> nth=0');
-  // 冷却：刚扔完再点，按钮转圈、不再发
-  await page.click('.comms-btn');
-  await page.click('.comms-tabs .chip:has-text("道具")');
-  await page.click('.comms-body .act >> nth=0');
-  await page.waitForSelector('.comms-body .pic.prop.cool');
-  // 等电脑回一下（性格定回不回），冷却过去
-  await page.waitForTimeout(1_700);
-  await page.screenshot({ path: `${root}shots/smoke-land-comms.png` });
-  await page.click('.comms-btn');
-  // 点别人的头像：菜单里 8 个道具、3 句短语、屏蔽他；点第二个道具（鸡蛋）扔出去，菜单收起
-  await page.click('.badge .avatar >> nth=1');
-  await page.waitForSelector('.fun-menu .fm-props .pic');
-  if ((await page.$$('.fun-menu .fm-props .pic')).length !== 8 || (await page.$$('.fun-menu .fm-say .phrase')).length !== 3) throw new Error('头像菜单不是 8 个道具 + 3 句短语');
+  type Box = { x: number; y: number; w: number; h: number };
+  const controls = (): Promise<Record<string, Box>> => page.evaluate(() => (window as unknown as { __fun: { controls(): Record<string, Box> } }).__fun.controls());
+  const tap = async (key: string): Promise<void> => {
+    const c = (await controls())[key];
+    if (!c) throw new Error(`没有控件 ${key}`);
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+  };
+  const log = (): Promise<string[]> => page.evaluate(() => (window as unknown as { __funLog?: string[] }).__funLog ?? []);
+  await page.waitForFunction(() => !!(window as unknown as { __fun?: unknown }).__fun);
+  await tap('fun:seat1');
+  const menu = Object.keys(await controls());
+  const props = menu.filter((k) => /^fun:prop\d/.test(k)).length;
+  const named = menu.filter((k) => /^fun:named\d/.test(k)).length;
+  if (props !== 8 || named !== 3 || !menu.includes('fun:block')) throw new Error(`头像菜单不是 8 个道具 + 3 句点名 + 屏蔽他：${props}、${named}`);
   await page.screenshot({ path: `${root}shots/smoke-land-menu.png` });
-  await page.click('.fun-menu .fm-props .pic >> nth=1');
-  await page.waitForSelector('.fun-menu', { state: 'detached' });
+  await tap('fun:prop1');
   await page.waitForTimeout(1_700);
-  // 点自己的头像：12 个表情，点一个，菜单收起
-  await page.click('.badge .avatar >> nth=0');
-  await page.waitForSelector('.fun-menu.mine .pic');
-  if ((await page.$$('.fun-menu.mine .pic')).length !== 12) throw new Error('自己的头像菜单不是 12 个表情');
-  await page.click('.fun-menu.mine .pic >> nth=2');
-  await page.waitForSelector('.fun-menu', { state: 'detached' });
+  await tap('fun:seat0');
+  const mine = Object.keys(await controls()).filter((k) => /^fun:sticker\d/.test(k)).length;
+  if (mine !== 12) throw new Error(`自己的表情菜单不是 12 个：${mine}`);
+  await tap('fun:sticker2');
   await page.waitForTimeout(1_200);
-  await page.click('.comms-btn');
-  await page.click('.comms-tabs .chip:has-text("设置")');
-  await page.click('.comms-body .set-row:has-text("屏蔽 ") >> nth=1');
-  await page.waitForSelector('.comms-body .set-row.on:has-text("屏蔽 ")');
-  await page.click('.comms-body .set-row:has-text("互动")');
-  await page.waitForSelector('text=打开互动');
-  await page.click('text=打开互动');
-  await page.click('.comms-btn');
+  await tap('fun:button');
+  await tap('fun:tab:phrase');
+  await tap('fun:phrase0');
+  await page.waitForTimeout(300);
+  const lines = await log();
+  for (const [what, re] of [['扔道具', /^道具 0>1/], ['发表情', /^表情 0/], ['说短语', /^短语 0/]] as const) {
+    if (!lines.some((l) => re.test(l))) throw new Error(`互动流水里没有${what}：${lines.join(' | ')}`);
+  }
 }
 
 // 平台大厅的"好友房"按钮带 ?online=1：开房、进房那一块亮起来，参数用完从地址栏去掉
