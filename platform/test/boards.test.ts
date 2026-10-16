@@ -135,6 +135,7 @@ describe('交分', () => {
     expect(await count('SELECT COUNT(*) AS n FROM boards')).toBe(2);
   });
 
+  // 要真交 200 次分才碰得到上限：单独跑约 2.5 秒，机器忙时（几个模块一起装依赖、跑测试）会贴着默认的 5 秒超时，所以这一条单独给 20 秒
   it('每天上限默认 200（0.10.2 从 50 放宽）（没更好也算一次）：超了 429、0 行；第二天恢复', async () => {
     const u = await newUser();
     for (let i = 0; i < 200; i++) expect((await submit(u, i % 3)).status).toBe(200);
@@ -144,7 +145,7 @@ describe('交分', () => {
     advance(24 * 3_600_000);
     // 第二天：昨天的榜也还收
     expect((await submit(u, 99)).status).toBe(200);
-  });
+  }, 20_000);
 
   it('并发交分冲不破每天上限', async () => {
     await resetAll.limits({ scorePerDay: 3 });
