@@ -33,7 +33,6 @@ export interface LobbyHandlers {
   backToRoom(): void;
 }
 
-
 type Mode = 'fun' | 'real';
 
 export class Lobby {

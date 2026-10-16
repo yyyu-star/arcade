@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createCloud, emptyStats, KEYS, mergeStats, parseStats, type Stats } from '../src/net/cloud.ts';
+import { createCloud, emptyStats, mergeStats, parseStats, type Stats } from '../src/net/cloud.ts';
+import { KEYS } from '../src/store.ts';
 
 type Handler = (req: Req) => Response | Promise<Response> | 'offline';
 interface Req {

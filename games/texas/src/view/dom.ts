@@ -15,4 +15,3 @@ export function setText(e: Element, text: string): void {
 export function toggle(e: Element, cls: string, on: boolean): void {
   if (e.classList.contains(cls) !== on) e.classList.toggle(cls, on);
 }
-

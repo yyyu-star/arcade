@@ -60,8 +60,6 @@ export interface Cloud {
   onStorage(e: { key: string | null; newValue: string | null }): void;
 }
 
-export { KEYS };
-
 const SAVES = '/api/saves/texas';
 const SLOT = 'stats';
 const DEBOUNCE = 10_000;
