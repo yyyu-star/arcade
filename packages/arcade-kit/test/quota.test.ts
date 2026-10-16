@@ -290,6 +290,8 @@ describe('计量连不上', () => {
     advance(30_000);
     expect(await refusedWith(await upgrade(code, 'newbie', { prefix: FLAKY }))).toBe(CLOSE.tryLater);
     expect((await playOut(h)).room.status).toBe('over');
+    // 打完时房间还名额是广播之后才 await 的：先等它真的被拒，再恢复计量，不然这一下可能赶在恢复之后、直接还成功
+    await eventually(() => runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.refusedReleases > 0));
     // 恢复以后：过了重试间隔，房间下一次有事件时补上
     await setDown(false);
     expect((await createRoom('host', FLAKY)).status).toBe(409);

@@ -117,6 +117,8 @@ export class FlakyMeter extends RoomMeter {
   down = false;
   /** 收到过几次 kitReport（测"攒够一批才报"） */
   reports = 0;
+  /** 断线时拒掉了几次 kitRelease（测试等房间真的试过、被拒了，再恢复计量） */
+  refusedReleases = 0;
   private check(): void {
     if (this.down) throw new Error('meter down');
   }
@@ -125,6 +127,7 @@ export class FlakyMeter extends RoomMeter {
     return super.kitReserve(...a);
   }
   override async kitRelease(...a: Parameters<RoomMeter['kitRelease']>) {
+    if (this.down) this.refusedReleases++;
     this.check();
     return super.kitRelease(...a);
   }
