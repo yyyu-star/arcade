@@ -121,6 +121,8 @@ export interface Table {
   log: LogEntry[];
   lastHand: HandResult | null;
   bank: number;
+  /** 庄家净投入：电脑坐下带上桌的减去电脑离桌收回的（0.3.3）。真人那边扣的 = 结回的 + 输给电脑的（= 牌桌清空时的 house），测试据此核对没有筹码凭空消失；旧存档没有，按 0 算 */
+  house?: number;
   out: Payout[];
   opSeq: number;
   /** 这一手是不是全下后自动发完的（摊牌时所有人亮牌） */
@@ -206,6 +208,7 @@ export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { 
     log: [],
     lastHand: null,
     bank: 0,
+    house: 0,
     out: [],
     opSeq: 0,
     runout: false,
@@ -507,17 +510,18 @@ function dealStreet(t: Table): void {
   t.log.push({ seat: -1, act: t.phase as 'flop' | 'turn' | 'river', amount: 0 });
 }
 
-/** 这一轮最高注里没人跟的部分退回（最后一个加注超出别人能跟的） */
+/**
+ * 这一轮最高注里没人跟的部分退回（最后一个加注超出别人能跟的）。只退给还在这一手里的人：下了注又弃牌的
+ * （好友房里下注后马上离座，不轮到他也算弃牌）那一注是死钱，留在池里给赢家。0.3.3 前也退给弃了牌的人，
+ * 可他离座时那一份已经结回钱包、封上了，退回的这一注只能搁在房间里，房间关了就没了
+ */
 function returnUncalled(t: Table): void {
   let top = -1;
-  let second = 0;
   for (let i = 0; i < t.seats.length; i++) {
-    const b = t.seats[i]!.bet;
-    if (top < 0 || b > t.seats[top]!.bet) {
-      if (top >= 0) second = Math.max(second, t.seats[top]!.bet);
-      top = i;
-    } else second = Math.max(second, b);
+    if (t.seats[i]!.status !== 'folded' && (top < 0 || t.seats[i]!.bet > t.seats[top]!.bet)) top = i;
   }
+  let second = 0;
+  for (let i = 0; i < t.seats.length; i++) if (i !== top) second = Math.max(second, t.seats[i]!.bet);
   if (top < 0) return;
   const s = t.seats[top]!;
   const extra = s.bet - second;
@@ -641,6 +645,7 @@ function setTilt(s: SeatState, n: number): void {
 function removeSeat(t: Table, seat: number): void {
   const s = t.seats[seat]!;
   t.bank -= s.stack;
+  if (s.owner === 'house') t.house = (t.house ?? 0) - s.stack;
   if (s.owner === 'player' && s.stack > 0) t.out.push({ id: `p${++t.opSeq}`, seat, amount: s.stack });
   t.seats[seat] = emptySeat();
 }
@@ -656,6 +661,7 @@ function putHouse(t: Table, seat: number): void {
   const stack = t.bb * (HOUSE_MIN_BB + r.below(HOUSE_MAX_BB - HOUSE_MIN_BB + 1));
   t.seats[seat] = { ...emptySeat(), owner: 'house', persona, stack };
   t.bank += stack;
+  t.house = (t.house ?? 0) + stack;
 }
 
 /** 坐下、补码、回来时顺手开一手：空闲、而且不是"一手刚打完、停着等发"的时候 */

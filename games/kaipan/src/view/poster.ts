@@ -310,7 +310,8 @@ export async function sharePoster(blob: Blob, name: string, title = '开盘 · �
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (file && typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title, text: `${title} ${gameLink(location.href)}` });
+      // 只放 text：带上 title 的话，安卓不少应用（和 iOS 的备忘录、邮件）会把标题和正文拼在一起，同一句出现两遍
+      await nav.share({ files: [file], text: `${title} ${gameLink(location.href)}` });
       return 'shared';
     } catch (e) {
       // 玩家自己关掉分享框：不当失败，也不再弹下载

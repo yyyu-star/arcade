@@ -10,8 +10,12 @@ import { chips, handName } from './text.ts';
 export interface SoloSummary {
   practice: boolean;
   buyin: number;
-  /** 结回钱包的（娱乐桌是剩下的筹码）；还没结回去（钱包连不上）时为 null */
+  /** 结回钱包的（娱乐桌是剩下的筹码）；还没结回去（钱包连不上、登录过期）或者钱包拒了时为 null */
   out: number | null;
+  /** 还没结回去时括号里说什么，默认"连上后自动结回" */
+  pending?: string;
+  /** 钱包拒了这一笔结回（0.3.3）：按平台 15.10 说清楚，比如放太久已经原样退回 */
+  refused?: string;
   /** 牌桌上剩下、本该结回的（到顶时 out 比它少） */
   left: number;
   hands: number;
@@ -42,11 +46,12 @@ export function soloSummary(parent: HTMLElement, s: SoloSummary): Promise<unknow
   const grid = el('div', 'sum-grid', body);
   const net = s.left - s.buyin;
   row(grid, '带上桌', chips(s.buyin));
-  row(grid, s.practice ? '剩下' : '结回钱包', s.out === null ? `${chips(s.left)}（连上后自动结回）` : chips(s.practice ? s.left : s.out));
+  row(grid, s.practice ? '剩下' : '结回钱包', s.refused ? '没结上' : s.out === null ? `${chips(s.left)}（${s.pending ?? '连上后自动结回'}）` : chips(s.practice ? s.left : s.out));
   row(grid, '这一场', signed(net), net > 0 ? 'plus' : net < 0 ? 'minus' : '');
   row(grid, '打了', s.hands ? `${s.hands} 手，赢了 ${s.won} 手` : '还没打完一手');
   if (s.best) row(grid, '最大的一手', `${s.best.value === null ? '别人都弃牌' : handName(s.best.value)}，赢 ${chips(s.best.won)}`);
   const notes: string[] = [];
+  if (s.refused) notes.push(s.refused);
   if (s.practice) notes.push('娱乐桌的筹码不算数，不进钱包。');
   if (s.capped > 0) notes.push(`今天单机实盘赢够了，多出的 ${chips(s.capped)} 没进钱包；好友房不限，娱乐模式照常玩。`);
   if (s.busted) notes.push(s.practice ? '这一桌的筹码打完了，想玩随时再开一桌。' : '这一桌打完了。歇一会儿吧：钱包快空了的话每天能领一次补给，娱乐模式随时能玩。');

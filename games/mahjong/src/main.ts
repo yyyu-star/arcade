@@ -3,12 +3,12 @@
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
 import { DEFAULT_OPTS, TURN_MS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
-import { stakesOf, type StakesId, type TierId } from './game/stakes.ts';
-import { getWallet, randomId, soloBuyin, type WalletReply, type WalletView } from './net/wallet.ts';
+import { stakesOf, type StakesId } from './game/stakes.ts';
+import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
 import { createError, createRoom, Online, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
-import { loadSolo, newSolo, Solo } from './solo.ts';
+import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, showGuide, showRules } from './view/guide.ts';
@@ -169,10 +169,7 @@ function lobby(friends = false): void {
     opts: prefs.opts,
     canResume: loadSolo() !== null,
     onSolo: (stakes, opts) => void startSolo(stakes, opts),
-    onResume: () => {
-      const save = loadSolo();
-      if (save) playSolo(new Solo(save, soloUi));
-    },
+    onResume: () => void resumeSolo(),
     onRules: () => showRules(stage),
     onRoom: (stakes, opts) => void openRoom(stakes, opts),
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
@@ -184,25 +181,70 @@ async function startSolo(stakes: StakesId, opts: XzOpts): Promise<void> {
   prefs.stakes = stakes;
   prefs.opts = opts;
   savePrefs();
-  const st = stakesOf(stakes)!;
-  let ref: string | null = null;
-  let chips = st.share;
-  if (st.wallet) {
-    await refreshWallet();
-    if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-    chips = Math.min(st.share, wallet.balance);
-    if (chips <= 0) return showError(walletError('no_funds').text, 'less');
-    if (chips < st.share && !(await confirmBox(stage, `钱包只有 ${num(chips)}，不够一份（${num(st.share)}）。带 ${num(chips)} 上桌？`, '带上桌', '不了'))) return;
-    ref = randomId();
-    const r = await soloBuyin({ op: randomId(), session: ref, stakes: stakes as TierId, amount: chips });
-    if (!r.ok) {
-      const e = walletError(r.error, r.retryAfter);
-      return showError(e.text, e.fix);
-    }
-    if (r.wallet) wallet = r.wallet;
+  // 上一场实盘还没结回钱包：先结了再开，不然新的一场会盖掉它的存档（自审 C1）
+  const old = loadSolo();
+  if (unsettled(old)) {
+    if (!(await confirmBox(stage, '上一场实盘还没结算完。先把上一场的筹码结回钱包，再开新的一场？', '先结算', '不了'))) return;
+    const r = await new Solo(old!, quietUi).finish();
+    if (!old!.done) return showError(`上一场还没结上：${walletError(r && !r.ok ? r.error : 'network').text}`);
   }
-  playSolo(new Solo(newSolo(stakes, opts, myName, ref, chips), soloUi));
+  const st = stakesOf(stakes)!;
+  let chips = st.share;
+  if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips), soloUi));
+  await refreshWallet();
+  if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
+  chips = Math.min(st.share, wallet.balance);
+  if (chips <= 0) return showError(walletError('no_funds').text, 'less');
+  if (chips < st.share && !(await confirmBox(stage, `钱包只有 ${num(chips)}，不够一份（${num(st.share)}）。带 ${num(chips)} 上桌？`, '带上桌', '不了'))) return;
+  // 带入前先存"带入中"（ref、操作号），回包丢了下次用同一个号重发（自审 C3）
+  const save = newSolo(stakes, opts, myName, randomId(), chips);
+  save.buying = { op: randomId(), amount: chips };
+  const s = new Solo(save, soloUi);
+  const r = await s.buyin();
+  if (!r.ok) return buyinFailed(r);
+  if (r.wallet) wallet = r.wallet;
+  playSolo(s);
 }
+
+/** 带入没成：明确被拒的照说原因；没回话的告诉他下次会自动再确认，不会多扣 */
+function buyinFailed(r: Extract<WalletReply, { ok: false }>): void {
+  if (maybeApplied(r.error)) return showError('钱包这次没回话，不知道筹码扣了没有。下次点"接着打上一场"会自动再确认一次，不会多扣。');
+  const e = walletError(r.error, r.retryAfter);
+  showError(e.text, e.fix);
+}
+
+/** 选桌页"接着打上一场"：带入还没确认的先确认；已经离开、只差结回的只结回、不接着打（自审 C2、C3） */
+async function resumeSolo(): Promise<void> {
+  const save = loadSolo();
+  if (!save) return;
+  const s = new Solo(save, soloUi);
+  if (save.settle) return settleLeftover(s);
+  if (save.buying) {
+    const r = await s.buyin();
+    if (!r.ok) {
+      lobby();
+      return buyinFailed(r);
+    }
+  }
+  playSolo(s);
+}
+
+/** 上一场已经离开、结回没成：再结一次，成了说一声 */
+async function settleLeftover(s: Solo): Promise<void> {
+  const r = await s.finish();
+  if (screen.classList.contains('lobby')) lobby();
+  if (r?.ok) toast('上一场的筹码已经结回钱包');
+  else if (r) toast(`上一场的筹码还没结上：${walletError(r.error).text}`);
+}
+
+/** 不画牌桌的单机（结旧的一场用）：结回的结果由调用的人说 */
+const quietUi = {
+  frame(): void {},
+  roundEnd(): void {},
+  settled(): void {
+    void refreshWallet();
+  },
+};
 
 // ---------- 好友房 ----------
 
@@ -311,7 +353,11 @@ function drawWaiting(s: OnlineState): void {
     onSit: (seat) => online?.sit(seat),
     onStart: () => online?.start(),
     onShare: () => void share(),
-    onLeave: () => lobby(),
+    // 等人页离开：先离座再断开（只断开的话 kit 只记掉线、座位还占着，房主开打会照样从他钱包带一份，自审 C4）
+    onLeave: () => {
+      if (s.you?.seat !== null && s.you?.seat !== undefined) online?.leaveSeat();
+      lobby();
+    },
   });
 }
 
@@ -589,7 +635,12 @@ async function leave(): Promise<void> {
   if (!over) {
     const ok = await confirmBox(stage, st.wallet ? '现在离开会马上结算：按手上的筹码结回钱包。离开吗？' : '这一场还没打完，离开就不算了。离开吗？', '离开', '接着打');
     if (!ok) return;
-    await solo.leave();
+    const s = solo;
+    await s.leave();
+    lobby();
+    // 结回没成（断网、平台忙）：说清楚下次会自动再结（自审 C2）
+    if (st.wallet && !s.save.done) showError('筹码这次没结回钱包（网络不好）。下次打开雀馆会自动再结，按你离开时手上的数，不会少。');
+    return;
   }
   lobby();
 }
@@ -627,6 +678,9 @@ void (async () => {
   }
   if (code && /^\d{6}$/.test(code)) return enterRoom(code, false);
   lobby(friends);
+  // 上一场单机实盘离开时没结上：打开就自动再结一次（自审 C2）
+  const left = loadSolo();
+  if (left?.settle && !left.done) void settleLeftover(new Solo(left, quietUi));
   if (!localStorage.getItem(GUIDE_KEY) && !loadSolo()) showGuide(stage);
 })();
 

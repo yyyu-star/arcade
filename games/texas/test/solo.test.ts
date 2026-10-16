@@ -15,6 +15,8 @@ type Cmd = { t: 'buyin'; op: string; session: string; stakes: StakesId; amount: 
 class FakeWallet implements WalletApi {
   s: { balance: number; table: { ref: string; amount: number } | null } = { balance: 10_000, table: null };
   down = false;
+  /** 不为 null 时钱包一律回这个错（登录过期 login、停了带入 busy 这类），什么都不办 */
+  refuse: string | null = null;
   /** 请求到了、钱包办了，回话却丢了（浏览器看到的是连不上） */
   lose = false;
   capAt: number | null = null;
@@ -24,6 +26,7 @@ class FakeWallet implements WalletApi {
   onCall: (cmd: Cmd) => void = () => {};
   private send(cmd: Cmd): WalletReply {
     if (this.down) return { ok: false, error: 'offline' };
+    if (this.refuse) return { ok: false, error: this.refuse };
     this.onCall(cmd);
     this.calls.push(cmd);
     const r = this.done.get(cmd.op) ?? this.run(cmd);
@@ -162,6 +165,33 @@ describe('单机', () => {
     const balance = w.s.balance;
     expect((await w.cashout(op, saved.id, amount)).ok).toBe(true);
     expect(w.s.balance).toBe(balance);
+  });
+
+  it('离桌时登录过期：钱包没收到，这一桌和那笔结回留在本机，登录后用同一个操作 id 再结（0.3.3：原来当明确拒了，整桌筹码丢了）', async () => {
+    const w = new FakeWallet();
+    const d = deps(w);
+    const solo = await open(d);
+    await playHands(solo, 3);
+    w.refuse = 'login';
+    expect(await solo.leave()).toBe('login');
+    const saved = Solo.load(d.store, 'u1')!;
+    expect(saved.pending).toMatchObject({ t: 'cashout' });
+    expect(solo.closing).toBe(true);
+    w.refuse = null;
+    const left = saved.pending!.amount;
+    const before = w.s.balance;
+    expect(await new Solo(saved, d).settle()).toBeNull();
+    expect(w.s.balance).toBe(before + left);
+    expect(d.store.getItem(SESSION_KEY)).toBeNull();
+  });
+
+  it('坐下时平台停了带入（busy）：钱没扣，当明确拒了，不留本机的牌局、不一直重试（0.3.3）', async () => {
+    const w = new FakeWallet();
+    const d = deps(w);
+    w.refuse = 'busy';
+    expect(await Solo.open(d, { userId: 'u1', stakes: 'small', size: 6, amount: 2_000, practice: false })).toEqual({ error: 'busy' });
+    expect(d.store.getItem(SESSION_KEY)).toBeNull();
+    expect(w.s.balance).toBe(10_000);
   });
 
   it('钱包操作先存盘再发请求：请求半路页面被关，下次打开能用同一个操作 id 重发', async () => {

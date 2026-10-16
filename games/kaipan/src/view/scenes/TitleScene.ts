@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { MAX_DIFFICULTY, THEME_IDS, dailyBoardId, difficultyView, liveSetup, personaView, stocksOf, type GameState, type LiveTier, type PersonaId } from '../../core/index.ts';
 import { emptyProfile, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Profile } from '../../platform/profile.ts';
-import { LEGACY_NOTICE, hasSave } from '../../platform/storage.ts';
+import { hasSave } from '../../platform/storage.ts';
 import { APP_VERSION } from '../../platform/version.ts';
 import { KEYART_KEY, ensureMetaArt, hasArt, metaArtReady, settleLazy, stockKey } from '../assets.ts';
 import { dailyBadgeView, dailyDate, dailyText, profileLine, setupLine } from '../labels.ts';
@@ -496,23 +496,7 @@ export class TitleScene extends BaseScene {
     const n = this.session.notice;
     if (n) {
       this.session.notice = null;
-      const from = this.session.legacyFrom;
-      this.session.legacyFrom = null;
-      const restored = this.session.restored;
-      this.session.restored = false;
-      const back = '0.3 那一局已经找回来了，点"继续"接着玩。';
-      if (n === 'restored') {
-        this.openNotice('进度找回来了', `上次更新时收起来的${back}`);
-        return;
-      }
-      if (n === 'legacy' && from === '0.4a') {
-        const tail4 = restored ? back : '从新的一局开始吧。';
-        this.openNotice('版本调整', `美股测试版（0.4.0-alpha.1）已经撤回，它的存档备份在本地。${tail4}`);
-        return;
-      }
-      const what = from === '0.3a' ? '测试版（0.3.0-alpha）的存档' : from === '0.1' ? '0.1 的存档' : '0.2 的存档和纪录';
-      const tail = from === '0.3a' ? '正式版换了新的存档结构，从新的一局开始吧。' : '现在开始的是 0.3 的新玩法。';
-      if (n === 'legacy') this.openNotice('版本大更新', `${LEGACY_NOTICE}。${what}已备份在本地，${tail}`);
+      if (n === 'legacy') this.openNotice('版本大更新', '上次那局是很早的版本存的，现在接不上了，从新的一局开始吧。');
       else this.openNotice('存档坏了', '这台设备上的存档读不出来，已经备份并清掉。开一局新的吧。');
     } else if (this.session.profileNotice) {
       this.session.profileNotice = false;
