@@ -1,21 +1,22 @@
 # 掼蛋（guandan）
 
-arcade 总仓库里的独立游戏模块：两副牌、四人、对家一队，从打 2 升到过 A。单机：玩家 + 3 个电脑，全在浏览器里跑；0.2 起有好友房：四人联机，房间在 Durable Object 里，服务端说了算；0.3 起正式放开，每天的联机额度由 arcade-kit 的计量管着。
-线上位置：`game.yyyu.org/games/guandan/`，Worker 名 `guandan`。
+两副牌、四人、对家一队，从打 2 升到过 A 的掼蛋。单机和三个电脑打，也能开好友房四人联机；arcade 小游戏平台的一个独立模块，挂在平台的 `/games/guandan/` 下。
 
-## 现状（0.6）
+![封面](public/cover.png)
 
-- 规则核心 `src/core/`：牌型识别（含逢人配的所有解释）、比大小、出法枚举、进贡/抗贡/还贡、接风、名次升级、打 A，纯函数、可序列化、可回放。
-- 电脑对手 `src/ai/`：三档难度，只读玩家视角。
-- 画面层 `src/view/`：Phaser 4 牌桌、标题页、规则、设置、战绩、新手引导、动画与 WebAudio 合成音效；每副结算页有复盘和称号。
-- 联机 `src/net/` + `worker/room.ts`：基于 `packages/arcade-kit`；开房、叫朋友（链接进房自动坐下、开打后接管电脑座位）、掉线重连、30 秒超时代出、
-  走开了自动托管（0.6.3）、掉线 60 秒电脑托管、打完"再来一场"（0.6.2）；好友房的嘲讽、表情包、扔道具（0.6.0，见 AGENTS.md 第 3 节）。
-- 实盘 `src/stake/` + `src/net/stake.ts` + `worker/stake.ts`：筹码走平台钱包，单机（0.4）和好友房（0.5）都有，设计在 `docs/stake.md`。
-- 美术 `src/view/art/`：全部程序生成的原创 SVG（牌面、牌背、头像、图标、桌布、标题图），启动时烘焙成纹理。
+## 功能
 
-## 好友房里会碰到的限制（0.6.0 盘点）
+- **完整规则**：牌型识别（含逢人配的所有解释）、比大小、进贡 / 抗贡 / 还贡、接风、名次升级、打 A，规则核心是纯函数、同一种子同一串操作结果完全相同（`src/core/`，取舍见 `docs/rules.md`）。
+- **电脑对手**：简单 / 普通 / 困难三档，只读自己能看到的信息（`src/ai/`）。
+- **单机**：标题页、新手引导、规则说明、设置、战绩，每副结算有复盘和称号；云存档同步战绩（需要平台账号）。
+- **好友房**：开房后"叫朋友来"发链接，点开就进房、自动坐下，开打后接管电脑的座位；掉线重连、走开了自动托管、打完"再来一场"；
+  嘲讽、表情包、扔道具（人人一样、免费，不影响牌局）。房间是 Cloudflare Durable Object，服务端说了算，底座是共用包 `packages/arcade-kit`。
+- **实盘**：用平台钱包里的筹码带入、结回，单机和好友房都有（筹码不能买、不能换、不能转，设计见 `docs/stake.md`）。
+- **手机友好**：横屏牌桌按可见区域排版，老 iPhone 省内存（渲染倍数封顶、被系统杀过自动降档），画面全部程序生成。
 
-所有者定的方向："联机体验要正好，不要设乱七八糟的限制"。没必要的已经去掉，留下的都是为了不超账单、筹码算得对或者牌局能往下走，页面上都有一句大白话：
+### 好友房里会碰到的限制
+
+原则是联机体验要顺、不设没必要的限制。没必要的已经去掉，留下的都是为了不超账单、筹码算得对或者牌局能往下走，页面上都有一句大白话：
 
 | 限制 | 为什么留着 | 用户看到的 / 怎么办 |
 |---|---|---|
@@ -34,14 +35,17 @@ arcade 总仓库里的独立游戏模块：两副牌、四人、对家一队，�
 房间里没真人了电脑还一直打到房间超时（现在真人都走了房间马上结束、还名额）；点开邀请链接还要再点"坐这里"（现在自动坐第一个空位，开打了自动接管电脑座位；实盘房间坐下要带入，仍由自己点）；
 打完一整场要回首页重新开房、重新发链接（0.6.2 起结束页点"再来一场"，大家一起过去；实盘房间打完照旧结回，再开要自己开）。
 
-## 开发
+## 本地开发
+
+需要 Node 22（`.nvmrc`）。在本目录里：
 
 ```bash
 npm ci
 npm test              # vitest：牌型、比大小、流程、进贡、打 A、回放、防泄漏、电脑、架构约束
 npm run typecheck     # 全量 tsc；npm run typecheck:core 只查规则核心和电脑（不带 DOM 库）
 npm run sim           # 机器人对打 5000 副：电脑 vs 随机；更多模式见 tools/sim.ts 顶部
-npm run dev           # 0.0.0.0:5174（预览 npm run build && npm run preview → 4174）
+npm run dev           # 0.0.0.0:5174（局域网里的手机也能打开）
+npm run build         # 页面产物 dist/（预览 npm run preview → 4174）
 npm run shot          # 无头冒烟 + 截图到 shots/（--playtest 真实速度鼠标试玩一副，--only desktop,mobile,viewport,… 只跑部分）
 node tools/mem.ts     # 内存估算（模拟 iPhone 8 / 8 Plus 横屏，各渲染倍数的纹理和画布占用）
 npm run test:room     # 联机房间测试（workerd 里的真 Durable Object）；npm run room-sim 规则层批量对打
@@ -49,11 +53,54 @@ npm run online-smoke  # 本地联机栈 + 四个无头浏览器打一整副、�
 npm run quota-smoke   # 额度调得极紧的本地联机栈：同时开着的房间太多、今天开房次数用完、今天人太多、不进新人、额度满了收场，五种提示
 npm run stake-smoke   # 实盘：本地栈（真 Worker + 假钱包）上单机的选档、退回、接着打、结算、到顶、再来一场、现在结算、被拒，加好友房实盘打完一场（--no-room 跳过）
 npm run art           # 美术预览图 → shots/art/；npm run cover 重新生成 public/cover.png
-npm run build:cf      # 部署产物 dist-cf/games/guandan/（线上 Worker：worker/，登录闸门 GATE=off|login、好友房开关 ONLINE=on|off，见 AGENTS.md）；npm run deploy = build:cf + wrangler deploy（拆成独立仓库后才用，总仓库里只经 PR 合并后由 CI 部署）
+npm run build:cf      # 部署产物 dist-cf/games/guandan/（线上 Worker：worker/，登录闸门 GATE=off|login、好友房开关 ONLINE=on|off，见 AGENTS.md）；npm run deploy = build:cf + wrangler deploy，路由要另加 --route（见下面的部署一节）
 ```
 
 调试用 URL 参数：`?seed=abc`（直接开局）、`&jump=tribute`（第二副进贡）、`&jump=ace`（打 A）、`&debug=1`（挂 `window.__game`）、
 `&autoplay=1`（电脑代打我）、`&online=1`（打开就弹出好友房面板）、`&room=123456`（直接进房）、`&anim=0`、`&speed=2`、`&difficulty=hard`。URL 开的局在已有存档时不写存档、不计战绩。
+
+## 部署
+
+正式环境只由仓库的 CI 部署（`.github/workflows/game-guandan.yml`，main 上经 PR 合并的提交），整体怎么部署见仓库根 README 的部署一节。
+
+本模块要的东西：
+
+| 种类 | 名字 | 说明 |
+|---|---|---|
+| 静态资源 | `ASSETS` | `npm run build:cf` 生成的 `dist-cf/`；只有首页、房间接口、实盘接口先进 Worker（`run_worker_first`） |
+| Durable Object | `ROOM`、`METER` | 联机房间（`worker/room.ts`）和 arcade-kit 的额度计量 |
+| 服务绑定 | `ARCADE` | 平台 Worker（名字 `arcade`）：登录闸门、进房、实盘认人都问它的 `/api/me`；所以要先部署平台 |
+| 服务绑定 | `WALLET` | 平台钱包 RPC（`entrypoint: WalletService`，`props.game: guandan`） |
+| 变量 | `GATE`、`ONLINE`、`KIT_QUOTA` | 登录闸门（`login` / `off`）、好友房开关（`on` / `off`）、每天的联机额度门槛，写在 `wrangler.jsonc` |
+| 变量（部署时注入） | `SITE_ORIGIN` | 只认这个站点发起的开房、实盘请求；不设就按请求自己的 origin |
+| 部署环境的 secret | `SITE_HOST`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 站点主机名（不带协议）只在这里，仓库里不写；工作流用它注入路由和 `SITE_ORIGIN` |
+
+`wrangler.jsonc` 不写路由，部署时注入。本模块通过 `file:../../packages/arcade-kit` 依赖共用包，暂时不能用 Deploy to Cloudflare 按钮（按钮只复制这一个目录）；
+手动部署要在整个仓库的检出里做，平台先部署好，然后：
+
+```bash
+export SITE_HOST=game.example.com   # 换成你的站点主机名
+npm ci && npm run build:cf
+npx wrangler deploy --route "$SITE_HOST/games/guandan" --route "$SITE_HOST/games/guandan/*" --var "SITE_ORIGIN:https://$SITE_HOST"
+```
+
+## 目录结构
+
+```
+src/core/    规则核心（纯函数、确定性）
+src/ai/      电脑对手
+src/net/     联机规则（房间和页面共用）、视角旋转、实盘的桌
+src/stake/   实盘的计分、档位、称号、战绩小结
+src/view/    画面层（Phaser 4）：场景、牌桌部件、界面、程序生成的美术、合成音效、存储
+src/debug/   URL 参数、调试跳转、调试桥
+worker/      线上 Worker：登录闸门、开房进房、联机房间、单机实盘接口
+public/      封面、图标、称号表
+tests/       vitest；tests/room/ 是在 workerd 里跑真房间的测试
+tools/       模拟器、冒烟和截图、本地联机栈、部署构建、美术预览
+docs/        设计、规则核实、核心接口、实盘设计
+```
+
+更细的约定（规则核心的约束、画面层、联机、实盘、存储 key）见 `AGENTS.md`。
 
 ## 素材
 
@@ -72,4 +119,10 @@ pyftsubset NotoSerifSC-Bold.otf --text-file=src/view/fonts/svg-chars.txt --flavo
 ```
 `public/cover.png`（平台首页封面）由 `tools/cover.ts` 从同一套 SVG 渲染。
 
-文档：`docs/design.md` 设计、`docs/rules.md` 规则核实与取舍、`docs/core-api.md` 给画面层的接口说明、`docs/stake.md` 实盘设计（筹码体系第 3 步；0.4.0 单机实盘、0.5.0 好友房实盘；数字由 `node tools/stake-sim.ts` 量出）。
+## 文档
+
+`docs/design.md` 设计、`docs/rules.md` 规则核实与取舍、`docs/core-api.md` 给画面层的接口说明、`docs/stake.md` 实盘设计（筹码体系第 3 步；0.4.0 单机实盘、0.5.0 好友房实盘；数字由 `node tools/stake-sim.ts` 量出）。
+
+## 许可证
+
+MIT，见仓库根目录的 `LICENSE`。

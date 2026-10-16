@@ -58,7 +58,7 @@ export function roomWhy(why: string): string {
 export const ROOM_STAKE_TEXT = {
   needTwo: '实盘好友房至少要两个人；一个人想玩实盘，去单机',
   bots: '电脑一律困难',
-  /** 0.6.0 所有者："离开立即结算" */
+  /** 0.6.0 起离开立即结算 */
   leave: '离开房间？按现在的分马上结回钱包，之后电脑接着打，输赢不再算你的；回来会重新带入一份',
   pending: '带入在办，到账之前的分归庄家',
 } as const;

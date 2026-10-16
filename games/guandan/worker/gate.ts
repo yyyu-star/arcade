@@ -6,15 +6,13 @@
  * 登录闸门只管首页。静态资源仍由 Workers 静态资源直接返回，只有首页导航的三个路径和房间接口 /games/guandan/room/*
  * （wrangler.jsonc 的 assets.run_worker_first）先经过这里，js、图片不经过、不多花请求额度。
  *
- * GATE = "off"：原样交给静态资源。
- * GATE = "login"（邀请制测试，2026-10-14 所有者定）：问平台 GET /api/me（服务绑定 ARCADE，只转发 Cookie 和 cf-connecting-ip，3 秒超时）。
- *   - 已登录 → 放行；未登录 → 302 到 /login?next=<请求的路径 + 查询>（平台 0.10.1，docs/platform-backend.md 5.7）：
- *     登录完整页回到原链接，查询原样带回，房间链接 ?room= 直接进房（0.6.0"叫朋友来"）；
- *   - 平台出错、不是 JSON、超时、绑定不存在 → 503"暂时确认不了你登录没有"。宁可暂时谁都进不去，也不能放行（所有者原话"不希望其他人可以玩到"）。
- * GATE 是 "off" 以外的任何值（包括没配）都按 login 处理：配错时同样不放行。
+ * 首页的闸门用 arcade-kit 的 loginGate（0.6.5 起，原来自己写的一份和它做法相同）：
+ * GATE = "off"：原样交给静态资源。其他值（包括没配）都要登录：经服务绑定 ARCADE 问平台的 /api/me（地址按请求的 origin 拼）。
+ *   - 已登录 → 放行；未登录 → 302 到 /login?next=<请求的路径 + 查询>：登录完整页回到原链接，房间链接 ?room= 直接进房（0.6.0"叫朋友来"）；
+ *   - 平台出错、超时、绑定不存在 → 503（掼蛋自己的页面 DOWN_PAGE）。宁可暂时谁都进不去，也不能放行。
  */
 
-import { acceptCreate, acceptJoin, type GateOptions, type KitEnv } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, loginGate, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
@@ -32,7 +30,7 @@ export interface Env {
   ROOM?: DurableObjectNamespace;
   /** "on" 才开联机；其他值（含没配）开房 404、进房 4004 */
   ONLINE?: string;
-  /** 房间只认这个网站发起的请求（Origin）；不设就是正式站 https://game.yyyu.org。本地联调设成本机地址 */
+  /** 只认这个网站发起的请求（Origin）：正式部署由工作流注入 https://<站点>；不设就按请求自己的 origin */
   SITE_ORIGIN?: string;
   /** arcade-kit 的计量（房间自己用：开房占名额、报写入）；这里不碰，列出来是为了一眼看全 */
   METER?: DurableObjectNamespace;
@@ -42,79 +40,17 @@ export interface Env {
   WALLET?: WalletRpc;
 }
 
-export const ME_URL = 'https://game.yyyu.org/api/me';
-/** 没登录时去哪儿登录：带上 next，登录完回到这条链接（平台只认本站的 /games/... 路径，不认的按没带处理） */
-export function loginUrlFor(url: URL): string {
-  return `/login?next=${encodeURIComponent(url.pathname + url.search)}`;
-}
 /** 和 wrangler.jsonc 的 run_worker_first 一致；不在这里的路径（理论上不会进 Worker）一律原样交给静态资源 */
 export const GATED_PATHS = ['/games/guandan', '/games/guandan/', '/games/guandan/index.html'];
-/** 转给平台的请求头：只要能认出人（cookie）和按 IP 限流（cf-connecting-ip）的 */
-const FORWARD_HEADERS = ['cookie', 'cf-connecting-ip'];
-const TIMEOUT_MS = 3000;
 
-export type Verdict = 'allow' | 'login' | 'unavailable';
-
-export interface Check {
-  verdict: Verdict;
-  /**
-   * 平台 /api/me 下发的全部 Set-Cookie（会话每 30 天续期、会话失效时清 cookie）。放行和跳登录时要原样带回浏览器，
-   * 否则只玩游戏、不开平台首页的人 cookie 续不上（400 天后要重新登录），失效的 cookie 也清不掉。
-   */
-  setCookies: string[];
-}
-
-const UNAVAILABLE: Check = { verdict: 'unavailable', setCookies: [] };
-
-/** 问平台这个请求的人登录没有。任何意外都返回 unavailable（不放行，也不带平台的 cookie）。 */
-export async function checkLogin(request: Request, arcade: Fetcher | undefined, timeoutMs = TIMEOUT_MS): Promise<Check> {
-  if (!arcade || typeof arcade.fetch !== 'function') return UNAVAILABLE;
-  const headers = new Headers();
-  for (const name of FORWARD_HEADERS) {
-    const v = request.headers.get(name);
-    if (v !== null) headers.set(name, v);
-  }
-  const ctl = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => {
-      ctl.abort();
-      resolve('timeout');
-    }, timeoutMs);
-  });
-  const ask = (async (): Promise<Check> => {
-    const res = await arcade.fetch(ME_URL, { method: 'GET', headers, redirect: 'manual', signal: ctl.signal });
-    if (res.status !== 200) return UNAVAILABLE;
-    const body: unknown = await res.json();
-    if (typeof body !== 'object' || body === null || !('user' in body)) return UNAVAILABLE;
-    const user = (body as { user: unknown }).user;
-    // getSetCookie 逐条返回；headers.get 会把多条用逗号合并（Expires 里本身就有逗号），浏览器拆不回来
-    const setCookies = res.headers.getSetCookie();
-    if (user === null) return { verdict: 'login', setCookies };
-    return typeof user === 'object' ? { verdict: 'allow', setCookies } : UNAVAILABLE;
-  })().catch((): Check => UNAVAILABLE); // 超时后中止的请求会在这里落空，不留未处理的拒绝
-  try {
-    // 读响应体也算在 3 秒里
-    const r = await Promise.race([ask, timeout]);
-    return r === 'timeout' ? UNAVAILABLE : r;
-  } catch {
-    return UNAVAILABLE;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-const UNAVAILABLE_HTML = `<!doctype html>
+/** 平台连不上时的 503 页（loginGate 回它）：掼蛋自己的标题和配色 */
+const DOWN_PAGE = `<!doctype html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>掼蛋</title>
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d2a1f;color:#e8f0e8;
 font:18px/1.6 "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;text-align:center}a{color:#ffe3a0}</style></head>
 <body><main><p>暂时确认不了你登录没有（平台一时连不上），过一会儿刷新再来</p><p><a href="/">回首页</a></p></main></body>
 </html>`;
-
-function appendCookies(headers: Headers, setCookies: readonly string[]): void {
-  for (const c of setCookies) headers.append('Set-Cookie', c);
-}
 
 const CREATE_PATH = `${ROOM_PATH}/rooms`;
 const JOIN_RE = new RegExp(`^${ROOM_PATH}/rooms/([^/]+)/ws$`);
@@ -158,26 +94,13 @@ async function createWithOptions(request: Request, kitEnv: KitEnv, opts: GateOpt
   return acceptCreate(request, kitEnv, stake === undefined || stake === null ? opts : { ...opts, options: { stake } });
 }
 
-export async function handle(request: Request, env: Env, timeoutMs = TIMEOUT_MS): Promise<Response> {
+export async function handle(request: Request, env: Env): Promise<Response> {
   const room = routeRoom(request, env);
   if (room) return room;
   // 实盘接口自己认人（和房间一样不经过 GATE）
   const stake = routeStake(request, env);
   if (stake) return stake;
-  if (env.GATE === 'off') return env.ASSETS.fetch(request);
   if (!GATED_PATHS.includes(new URL(request.url).pathname)) return env.ASSETS.fetch(request);
-  const { verdict, setCookies } = await checkLogin(request, env.ARCADE, timeoutMs);
-  if (verdict === 'allow') {
-    const asset = await env.ASSETS.fetch(request);
-    const out = new Response(asset.body, asset);
-    out.headers.set('Cache-Control', 'private, no-store');
-    appendCookies(out.headers, setCookies);
-    return out;
-  }
-  if (verdict === 'login') {
-    const headers = new Headers({ Location: loginUrlFor(new URL(request.url)), 'Cache-Control': 'private, no-store' });
-    appendCookies(headers, setCookies);
-    return new Response(null, { status: 302, headers });
-  }
-  return new Response(UNAVAILABLE_HTML, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  // 闸门的 Fetcher 只声明了 fetch；运行时的绑定就是 kit 要的 Fetcher
+  return loginGate(request, env as GateEnv, { downPage: DOWN_PAGE });
 }

@@ -11,6 +11,6 @@ export const ROOM_PATH = '/games/guandan/room';
 
 /**
  * 单机实盘接口的路径前缀（游戏 Worker 里，run_worker_first 放行这一段；worker/stake.ts）。
- * 放在 /api/ 下面：网关的限速规则（每 IP 每 10 秒 60 次）只认 /api/*、/games/* 下含 /room/ 或 /rooms、/games/* 下含 /api/ 的路径（主线审 #82）
+ * 放在 /api/ 下面：网关的限速规则（每 IP 每 10 秒 60 次）只认 /api/*、/games/* 下含 /room/ 或 /rooms、/games/* 下含 /api/ 的路径
  */
 export const STAKE_PATH = '/games/guandan/api/stake';

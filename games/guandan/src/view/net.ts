@@ -82,7 +82,7 @@ export async function currentUserId(fetcher: typeof fetch = fetch): Promise<stri
 
 /** 本机记着的、属于现在这个账号的房间（标题页"回到房间"、大厅"回到刚才的房间"、邀请链接带房主标记之前都要过这一关） */
 /**
- * 进房后自动坐哪儿（0.6.0 所有者：点开链接就能打，不用再找按钮）：回自己绑着的座位；等人时坐第一个空位；
+ * 进房后自动坐哪儿（0.6.0：点开链接就能打，不用再找按钮）：回自己绑着的座位；等人时坐第一个空位；
  * 开打了接管第一个没绑人的电脑座位。实盘房间坐下就要从钱包带入，不替人拿主意（回自己的座位除外）。null：不自动坐
  */
 export function autoSeat(room: RoomInfo, you: { seat: number | null; bound?: number | null }, prefer: number | null = null): number | null {
@@ -154,7 +154,7 @@ export function closeText(code: number | null, reason: string | null = null): st
     case CLOSE.tooOld:
       return '页面版本太旧了，刷新一下再进';
     case CLOSE.forbidden:
-      return '请从 game.yyyu.org 打开游戏再进房间';
+      return '请从游戏大厅打开掼蛋再进房间';
     case CLOSE.policy:
     case CLOSE.tooBig:
       return '连接出了点问题，刷新页面再试';
@@ -180,7 +180,7 @@ function wsUrl(code: string): string {
 /**
  * 开房：成功给房间码，失败给一句话。额度（arcade-kit 0.2.0）不够时 kit 回 JSON { error, code? }：
  * 同时开着的房间到上限（409 has_room）、今天开房次数用完（429）、今天联机的人太多（503 busy）。
- * 0.6.0 起"开房间"永远开新房：has_room 只说清楚，不再把人送回旧房间（所有者："不要给我再设乱七八糟的限制"）
+ * 0.6.0 起"开房间"永远开新房：has_room 只说清楚，不再把人送回旧房间（不给玩家设没必要的限制）
  */
 export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | null = null): Promise<{ code: string } | { error: string; login?: boolean; quota?: CreateError }> {
   let res: Response;
@@ -199,7 +199,7 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
     return { error: '开房没成功，刷新一下再试' };
   }
   if (res.status === 401) return { error: '还没登录，先登录再来', login: true };
-  if (res.status === 403) return { error: '请从 game.yyyu.org 打开游戏再开房' };
+  if (res.status === 403) return { error: '请从游戏大厅打开掼蛋再开房' };
   if (res.status === 404) return { error: '好友房暂时关了，单机照常玩' };
   const body = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown } | null;
   if (body?.error === 'has_room') return { error: QUOTA_TEXT.has_room, quota: 'has_room' };

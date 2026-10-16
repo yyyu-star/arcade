@@ -61,7 +61,7 @@ type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' 
 
 /**
  * 电脑的思考时间（毫秒，再经 dur 换算）：不要最快，跟牌稍慢，领出要想想，出炸弹前犹豫一下。
- * 太快了看不清谁出了什么，也没有"在博弈"的感觉（所有者对德州的反馈，2026-10-15）。
+ * 太快了看不清谁出了什么，也没有"在博弈"的感觉（德州试玩时的反馈，掼蛋按同一标准自查）。
  */
 function botThink(kind: 'pass' | 'play' | 'bomb', lead: boolean): number {
   const base = kind === 'pass' ? 550 : kind === 'bomb' ? 1500 : lead ? 1100 : 850;

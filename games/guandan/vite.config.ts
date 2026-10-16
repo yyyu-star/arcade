@@ -5,7 +5,7 @@ import pkg from './package.json' with { type: 'json' };
 // 平台按 Origin 校验写请求，所以把 Host 和 Origin 都改成 5181；在浏览器里先到 5181 登录拿 cookie 才能同步。
 const API = 'http://localhost:5181';
 
-// 监听所有网卡。在 Paseo 守卫内启动时只绑定在隔离区网卡上，需再执行 `paseo-svc publish 5174` 才能从内网访问。
+// 监听所有网卡：局域网里的手机、平板也能直接打开开发服务器试玩。
 export default defineConfig({
   // 相对路径：游戏挂在 /games/guandan/ 下，不假设自己在域名根
   base: './',

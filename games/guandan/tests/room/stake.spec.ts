@@ -54,7 +54,7 @@ describe('好友房实盘', () => {
     expect(users.map((u) => b.balances[u])).toEqual([START - 2_000, START - 2_000]);
     for (const seat of [0, 1]) {
       const op = `${st.ref}-s${seat}-in`;
-      // 带入前先 view（#75 审阅：钱包只记最近 32 个 op，重发前要先看桌上是不是已经有这一份）
+      // 带入前先 view（旧仓库 PR 75 审阅：钱包只记最近 32 个 op，重发前要先看桌上是不是已经有这一份）
       expect(b.log.indexOf(`view:${users[seat]}`)).toBeLessThan(b.log.indexOf(`buyin:${op}`));
       expect(b.done[op]).toBe(1);
     }

@@ -101,7 +101,7 @@ export async function postStake(action: 'buyin' | 'settle' | 'refund', body: unk
   }
 }
 
-/** 钱包暂时的毛病：busy（预算、并发）、internal（D1 一时出错）、没连上。结回、放弃遇到这些要重试（主线 #75 审阅） */
+/** 钱包暂时的毛病：busy（预算、并发）、internal（D1 一时出错）、没连上。结回、放弃遇到这些要重试（旧仓库 PR 75 审阅） */
 export function transient(error: string): boolean {
   return error === 'busy' || error === 'internal' || error === 'unavailable';
 }

@@ -1,5 +1,6 @@
 {
-  // 掼蛋：静态资源 Worker + 一个很小的脚本（登录闸门、联机房间的开房进房），只经平台域名访问（路径路由 game.yyyu.org/games/guandan*），不开 workers.dev。
+  // 掼蛋：静态资源 Worker + 一个很小的脚本（登录闸门、联机房间的开房进房），只经平台的域名访问（路径路由 <站点>/games/guandan*），不开 workers.dev。
+  // 这里不写路由：部署时由工作流注入（wrangler deploy --route），站点的主机名只在部署环境的 secret 里，见 README 的部署一节。
   // 入口 worker/main.ts：默认导出（worker/index.ts）+ 房间类 Room（Durable Object）。
   // 产物由 tools/build-cf.ts 生成在 dist-cf/games/guandan/ 下（npm run build:cf），_headers/_redirects 在 dist-cf/ 根。
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -8,10 +9,6 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [
-    { "pattern": "game.yyyu.org/games/guandan", "zone_name": "yyyu.org" },
-    { "pattern": "game.yyyu.org/games/guandan/*", "zone_name": "yyyu.org" }
-  ],
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
@@ -45,7 +42,7 @@
     // "on"：开联机；其他值开房 404、进房 4004。出问题时改成 "off" 再走 PR 就能一键关掉
     "ONLINE": "on",
     // 每天的额度门槛（arcade-kit 的计量）。10 万行写入是全账户共用的：掼蛋 5 万停开新房、6 万收场，各游戏怎么分见仓库根 docs/platform-backend.md 4.7。
-    // 每人开房（0.6.0 所有者："不要给我再设乱七八糟的限制"，和德州 0.2.4 一样）：同时 5 个、每天 100 个；全站每天 300 个照 kit 默认（防账单的不放宽）
+    // 每人开房（0.6.0 起放宽，不给玩家设没必要的限制）：同时 5 个、每天 100 个；全站每天 300 个照 kit 默认（防账单的不放宽）
     "KIT_QUOTA": { "busyWrites": 50000, "stopWrites": 60000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 }
   }
 }

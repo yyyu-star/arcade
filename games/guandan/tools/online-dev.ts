@@ -10,8 +10,8 @@
  * 冒烟脚本里 import { startOnlineStack } from './online-dev.ts'，拿到 origin 后给浏览器上下文加 cookie __Host-sid=<id>。
  *
  * 几个要点：
- * - wrangler dev 默认把请求的 Host、Origin 改写成 wrangler.jsonc 路由里的 game.yyyu.org；--local-upstream 指回本机端口，
- *   Origin 才保持本机地址，和 --var SITE_ORIGIN 对得上（不然开房 403）。所以端口要先定下来（系统分配一个空闲端口再交给 wrangler）；
+ * - --local-upstream 指回本地端口，请求的 Host、Origin 保持本地地址（配置里有路由时 wrangler dev 会改写成路由的域名），
+ *   和 --var SITE_ORIGIN 对得上（不然开房 403）。所以端口要先定下来（系统分配一个空闲端口再交给 wrangler）；
  * - GATE=off（首页不问平台），ONLINE=on；房间状态存在系统临时目录里，每次启动都是新的，停的时候删掉；
  * - 已知：进一个不存在的房间码时，房间接受连接后马上 4004 关掉，这个关闭帧经 wrangler dev 的本地代理到不了浏览器（只看到 open，
  *   之后没有消息）；在 Worker 里就拒掉的（码格式不对 4004、没登录 4401、别的网站 4403）能收到。vitest 里（tests/room）直连 workerd 能收到。

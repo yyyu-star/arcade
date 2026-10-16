@@ -394,7 +394,7 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
     return { ...(t ? withoutSeat(t) : guandanRoom.ai(s, seat)), idle: true };
   },
   // 实盘房间：一场（5 副、过 A、到账的都封顶）打完就结束，结回由 effects 接着办。
-  // 真人都点了"离开"（0.6.0 所有者："没真人就结束"）：也算打完，kit 马上还开房名额；带入还在路上的等它办完再算（到账了要原样结回）。
+  // 真人都点了"离开"（0.6.0 起没真人就结束）：也算打完，kit 马上还开房名额；带入还在路上的等它办完再算（到账了要原样结回）。
   // 只是掉线的人座位还是真人的，不算没人（房间按 noHumanMs 另算）
   // 娱乐房间打完一整场先不算完（0.6.2）：停 AGAIN_MS 等人点"再来一场"，点了或者停够了才算
   over: (s) =>

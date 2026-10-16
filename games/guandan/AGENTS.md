@@ -57,10 +57,14 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 座位：0 我（下）、1 老张（右，下家）、2 小美（上，对家）、3 阿强（左，上家）。性格只影响台词/表情（`personas.ts`）。
 - 存储只在 `store.ts` 里读写（测试检查）；调试桥 `window.__game` 只在开发模式或 `?debug=1` 时挂。
 - 标题字体是内嵌的宋体子集（`fonts.ts`，README 素材一节）：新加的大字、横幅、弹窗标题如果用了字表里没有的字，`tests/view.test.ts` 会报缺字。
-- 登录闸门（`worker/gate.ts`，0.1.4 起）：线上只有三个首页路径（`wrangler.jsonc` 的 `assets.run_worker_first`）先进 Worker，js、图片照旧直接走静态资源。
-  变量 `GATE`：`"off"` 原样放行；`"login"`（以及配错的任何值）问平台 `GET /api/me`（服务绑定 `ARCADE`，只转发 Cookie 和 cf-connecting-ip，3 秒超时），
-  已登录放行、未登录 302 到 `/login?next=<请求的路径 + 查询>`（平台 0.10.1，登录完回到原链接，房间链接直接进房）（这两种都把平台 `/api/me` 的全部 Set-Cookie 用 `getSetCookie()` 原样带回浏览器：会话续期、清失效 cookie），其他一切情况 503"暂时确认不了你登录没有（平台一时连不上），过一会儿刷新再来"——fail-closed，宁可谁都进不去也不放行（所有者 2026-10-14 定：邀请制测试）。
+- 登录闸门（`worker/gate.ts`，0.1.4 起；0.6.5 起用 arcade-kit 的 `loginGate`）：线上只有三个首页路径（`wrangler.jsonc` 的 `assets.run_worker_first`）先进 Worker，js、图片照旧直接走静态资源。
+  变量 `GATE`：`"off"` 原样放行；其他值（包括没配）都要登录：没带平台会话 cookie 的直接 302，带了的经服务绑定 `ARCADE` 问平台 `/api/me`（地址按请求的 origin 拼）。
+  已登录放行、未登录 302 到 `/login?next=<请求的路径 + 查询>`（登录完回到原链接，房间链接直接进房），这两种都把平台下发的 Set-Cookie 原样带回浏览器（会话续期、清失效 cookie）；
+  其他一切情况回掼蛋自己的 503 页（`DOWN_PAGE`）——fail-closed，宁可谁都进不去也不放行。kit 里的细节（转发哪些头、3 秒超时）以 kit 为准，测试在 kit 的 `auth.test.ts`。
   本地 `npm run dev` / 冒烟走 vite，不经过 Worker。要看运行时行为用 `npx wrangler dev --var GATE:login`（先 `npm run build:cf`）。
+- 站点地址不进仓库（开源整改，0.6.5）：`wrangler.jsonc` 不写路由，部署时由 `.github/workflows/game-guandan.yml` 用部署环境的 secret `SITE_HOST`
+  注入 `--route "$SITE_HOST/games/guandan"`、`--route "$SITE_HOST/games/guandan/*"` 和 `--var SITE_ORIGIN:https://$SITE_HOST`（没设就失败，不带着空路由部署）。
+  代码里的同站校验用 `SITE_ORIGIN`，没设就按请求自己的 origin；给玩家看的话不写域名；测试夹具用 `game.example.com`。
 - 云存档（`src/view/cloud.ts`，0.1.7 起；规格见仓库 `docs/platform-backend.md` 5.5、15.1–15.3）：只同步 `stats` 和 `tutorial` 两个槽，牌局和设置不同步。
   store 里改这两个槽的函数会发 `onSyncedChange`，`main.ts` 接到 `CloudSync.markDirty`；云同步写回本地走 `rawStore`，不再触发通知。
   合并：数字取大、布尔取或、数组并集。上传 10 秒防抖 + 同槽至少隔 5 分钟（每人每天 100 次 PUT）；切后台 / pagehide 用 keepalive 补传一个槽，
@@ -75,7 +79,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   400 表示请求本身不合格：这个槽本次打开不再传，不算"连不上"。
   拉取也带预期账号：`GET /api/saves/guandan?userId=<user.id>`（平台 0.7.3），回 409 `wrong_user` 时走换号流程；GET 回来时本页账号已经变了就丢掉结果。
   多个标签页靠 `storage` 事件同步元数据：rev 取大；别的页传完、本页又没改过的槽，本页的待上传跟着清掉。
-  本地联调：`npm run dev` 把 `/api` 代理到平台的 `npm run dev:api`（5181，先告诉主线再开），浏览器先在 5181 登录。冒烟里 `/api` 由 `tools/shot.ts` 的假平台回答。
+  本地联调：`npm run dev` 把 `/api` 代理到平台的 `npm run dev:api`（5181），浏览器先在 5181 登录。冒烟里 `/api` 由 `tools/shot.ts` 的假平台回答。
 - 回大厅（`src/view/lobby.ts`，0.1.9 起，所有游戏统一）：左上角"大厅"（小房子）指向平台首页 `/`。标题页直接走；牌桌上打到一半先弹确认（这局会存着 / 调试开局不保存 / 好友房：头 60 秒轮到你时等 30 秒按"能不出就不出"代出，之后电脑替你打，回来接着打——回大厅不调 `leave()`，座位和 `guandan.room` 都留着）；
   手机竖屏时牌桌被"请横过来"盖住，提示层左上角也有一个（打到一半用浏览器自带的确认框）。离开前调一次 `cloud.flushOnHide()`（pagehide 时也会触发，同槽在途不重发）。
   小房子图标只用来表示"回大厅"；回掼蛋自己的首页用箭头。冒烟只断言跳到 `/`，不加载平台页面。
@@ -102,7 +106,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     重连中、连不上时的话走 `NetSession.linkText`：上次断开是 1013 就说"平台有点忙"，不让玩家去查网络（关闭码由 kit 0.1.1 的 `onStatus` 带来，1006 是断网）；4030 是这个人的消息额度用完，不再重连。
   - 开打后座位绑人（arcade-kit 0.1.1）：坐过的人只能回自己的座位（别的回 `not_your_seat`），没坐过的人只能接管没绑人的电脑座位（`SeatInfo.reserved` 为 false），
     绑了别人的座位接管不了（`seat_reserved`），电脑一直替主人打、显示"电脑代 某某 打"。大厅按 `you.bound` 给离座的人"回到我的座位"，`reserved` 的电脑座位不挂"接管"。
-    回归测试在 `tests/room/seats.spec.ts`（#50 审阅：离座后接管对手的电脑座位能看到对手手牌）。
+    回归测试在 `tests/room/seats.spec.ts`（旧仓库 PR 50 的审阅：离座后接管对手的电脑座位能看到对手手牌）。
   - 改了房间和页面之间的约定（动作、视图形状）就加 `src/net/version.ts` 的 `CLIENT_VERSION`：旧页面进房会被 4005 请去刷新。改规则加 `RULES_VERSION`，打到一半的房间按旧规则打完。
   - 验收：`npm run test:room`（真房间机器人对打、写入行数、断线、让位、座位绑人、结算等人）、`npm run room-sim`（规则层大批量）、`npm run online-smoke`（四个浏览器端到端，约 5 分钟，`--quick` 跳过 70 秒托管那项）。
 - 实盘（0.4.0 起单机；设计和数字在 `docs/stake.md`，钱包接口是仓库 `docs/platform-backend.md` 5.9）：
@@ -147,7 +151,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
 | `npm run stake-smoke` / `node tools/stake-sim.ts` | 单机实盘冒烟（本地栈 + 假钱包）/ 实盘计分模拟 |
-| `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174；本机在 Paseo 守卫内还要 `paseo-svc publish <端口>` |
+| `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174 |
 
 ## 5. 浏览器存储 key（全部 `guandan.` 前缀）
 
@@ -170,7 +174,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 
 新增 key 必须带前缀、只在 `src/view/store.ts` 里读写，并补进这张表。
 
-## 6. 待办（不阻塞，2026-10-14 主线审阅 0.1.3 时记下）
+## 6. 待办（不阻塞）
 
 - 简单难度对普通约 2 成：看试玩反馈再定。要调的话优先降记牌和配合，不再加失误率（失误多了看起来是"蠢"，不是"弱"）。
 - 1280×720 下，手牌列数在"每列最多 4 张"和"5 张"之间切换时（`table/hand.ts` 的 `MIN_SPACING_SHORT`），布局会跳一下。

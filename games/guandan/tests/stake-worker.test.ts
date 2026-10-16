@@ -7,7 +7,7 @@ import { handle, type Env, type Fetcher } from '../worker/gate.ts';
 import type { WalletReply, WalletRpc } from '../worker/stake.ts';
 import { SOLO_HOURS, WALLET_ID } from '../src/stake/index.ts';
 
-const SITE = 'https://game.yyyu.org';
+const SITE = 'https://game.example.com';
 
 type Call = { method: string; req: Record<string, unknown> };
 

@@ -47,7 +47,7 @@ function setup(o: { hint?: boolean; user?: string | null; savesPaused?: boolean;
   const empty = (slot: SyncSlot) => (slot === 'stats' ? stats() : { v: 1, done: false });
   const fetch = async (url: string, init: RequestInit = {}) => {
     const raw = typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null;
-    const u = new URL(url, 'https://game.yyyu.org');
+    const u = new URL(url, 'https://game.example.com');
     const c: Call = { method: init.method ?? 'GET', url: u.pathname, query: u.search ? u.search : null, init, body: null, user: server.user };
     if (raw) {
       const { userId, ...rest } = raw;
@@ -567,7 +567,7 @@ describe('图标状态', () => {
   });
 });
 
-describe('换账号中途断了：下次打开也不能把旧账号的数据传给新账号（审阅 #1）', () => {
+describe('换账号中途断了：下次打开也不能把旧账号的数据传给新账号（审阅第 1 条）', () => {
   const old: CloudMeta = { v: 1, userId: 'u1', rev: { stats: 3 }, dirty: ['stats'] };
   const mine = stats({ games: 50, wins: 30 });
   const cases: [string, (h: ReturnType<typeof setup>) => void][] = [
@@ -602,7 +602,7 @@ describe('换账号中途断了：下次打开也不能把旧账号的数据传�
     });
   }
 
-  it('换账号的备份单独存一份，之后合并写的 pre-sync 不会盖掉它（审阅 #5）', async () => {
+  it('换账号的备份单独存一份，之后合并写的 pre-sync 不会盖掉它（审阅第 5 条）', async () => {
     const h = setup({ user: 'u2', meta: old, local: { stats: mine }, remote: { stats: { rev: 1, data: stats({ games: 2 }) } } });
     await h.cloud.start();
     h.server.saves.set('stats', { rev: 2, data: stats({ games: 5 }) });
@@ -613,7 +613,7 @@ describe('换账号中途断了：下次打开也不能把旧账号的数据传�
   });
 });
 
-describe('连不上、停服时不显示"未登录"，点了也不去登录页（审阅 #2）', () => {
+describe('连不上、停服时不显示"未登录"，点了也不去登录页（审阅第 2 条）', () => {
   it('/api/me 连不上：待上传 + 连不上的说明，点了是说明', async () => {
     const h = setup();
     h.server.override = () => 'throw';
@@ -660,7 +660,7 @@ describe('连不上、停服时不显示"未登录"，点了也不去登录页�
   });
 });
 
-describe('429 的等待、切后台的间隔（审阅 #3、#4）', () => {
+describe('429 的等待、切后台的间隔（审阅第 3、4 条）', () => {
   it('429 之后玩家又改了：也不早于 retryAfter 再传', async () => {
     const h = setup();
     await h.cloud.start();
@@ -713,7 +713,7 @@ describe('429 的等待、切后台的间隔（审阅 #3、#4）', () => {
   });
 });
 
-describe('多个标签页（审阅 #6）', () => {
+describe('多个标签页（审阅第 6 条）', () => {
   it('另一个标签页传完了：这边跟着更新 rev，再传不冲突', async () => {
     const h = setup();
     const tab2 = h.open();
@@ -966,7 +966,7 @@ describe('连不上时回到前台：按上次尝试的时间限频（不只看�
   });
 });
 
-describe('换号时的备份（审阅 #34）', () => {
+describe('换号时的备份（0.1.8 审阅）', () => {
   const mine = stats({ games: 41, wins: 20 });
   const theirs = stats({ games: 7, wins: 30, firsts: 5 });
 
@@ -1084,7 +1084,7 @@ describe('换号时的备份（审阅 #34）', () => {
   });
 });
 
-describe('400 和换号后的状态（审阅 #34）', () => {
+describe('400 和换号后的状态（0.1.8 审阅）', () => {
   it('400：这个槽本次不再传，给"云端不收"的说明（不是"连不上"）；别的槽照常', async () => {
     const h = setup();
     await h.cloud.start();
@@ -1122,7 +1122,7 @@ describe('400 和换号后的状态（审阅 #34）', () => {
   });
 });
 
-describe('并回备份只并一次（复审 #34）', () => {
+describe('并回备份只并一次（0.1.8 复审）', () => {
   it('并回、传上去以后备份改名成 .restored；之后输了一局连胜归零，再打开不会被抬回去、也不多传', async () => {
     const h = setup({ user: 'u1', meta: { v: 1, userId: 'u2', rev: { stats: 1 }, dirty: [] }, local: { stats: stats({ games: 2 }) }, remote: { stats: { rev: 4, data: stats({ games: 8 }) } } });
     h.backups.set('stats.pre-switch.u1', stats({ games: 10, wins: 6, streak: 5, bestStreak: 5 }));
@@ -1225,7 +1225,7 @@ describe('拉取带预期账号（平台 0.7.3）', () => {
   });
 });
 
-describe('并回备份的收尾（复审 #34 第二轮）', () => {
+describe('并回备份的收尾（0.1.8 复审第二轮）', () => {
   it('并回后上传撞上 409、合并后和云端一样不用重交：备份照样改名，下次不再并', async () => {
     const h = setup({ user: 'u1', meta: { v: 1, userId: 'u2', rev: {}, dirty: [] }, remote: { stats: { rev: 4, data: stats({ games: 8 }) } } });
     h.backups.set('stats.pre-switch.u1', stats({ games: 10, streak: 3 }));

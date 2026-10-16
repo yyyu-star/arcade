@@ -13,7 +13,6 @@ import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, validSol
 import { STAKE_PATH } from '../src/net/version.ts';
 import type { Fetcher } from './gate.ts';
 
-const SITE_ORIGIN = 'https://game.yyyu.org';
 /** 请求体最多几个字节：最大的结回请求约 90 字节，带上战绩小结（平台只收 ≤ 256 字节的）不到 400，留足余量 */
 const MAX_BODY = 1024;
 const GAME = 'guandan';
@@ -61,8 +60,9 @@ async function handleStake(request: Request, env: StakeEnv, action: string): Pro
   if (action !== 'buyin' && action !== 'settle' && action !== 'refund') return reply({ ok: false, error: 'not_found' }, 404);
   if (request.method !== 'POST') return reply({ ok: false, error: 'method' }, 405);
   // 动钱包的请求只认本站页面发起的：别的网站的页面也能往这里 POST（浏览器会带上 cookie）
-  if (!sameOrigin(request, env.SITE_ORIGIN ?? SITE_ORIGIN)) return reply({ ok: false, error: 'origin' }, 403);
-  // 读请求体之前先限大小（德州 #76 同样的问题）：分块传输的大请求体不带 content-length，没登录的人也能让 Worker 白白解析一大段。
+  // 只认本站页面发起的：设了 SITE_ORIGIN（正式部署由工作流注入）就按它，没设按请求自己的 origin
+  if (!sameOrigin(request, env.SITE_ORIGIN ?? new URL(request.url).origin)) return reply({ ok: false, error: 'origin' }, 403);
+  // 读请求体之前先限大小（德州的实盘接口遇到过同样的问题）：分块传输的大请求体不带 content-length，没登录的人也能让 Worker 白白解析一大段。
   // 浏览器的 fetch 带着字符串请求体时总会给 content-length
   const len = Number(request.headers.get('content-length') ?? NaN);
   if (!Number.isInteger(len) || len <= 0 || len > MAX_BODY) return reply({ ok: false, error: 'bad_request' }, 400);

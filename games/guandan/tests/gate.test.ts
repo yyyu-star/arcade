@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import worker from '../worker/index.ts';
 import * as entry from '../worker/index.ts';
-import { GATED_PATHS, ME_URL, handle, type Env, type Fetcher } from '../worker/gate.ts';
+import { GATED_PATHS, handle, type Env, type Fetcher } from '../worker/gate.ts';
 import wranglerText from '../wrangler.jsonc?raw';
 
-const PAGE = 'https://game.yyyu.org/games/guandan/';
+const PAGE = 'https://game.example.com/games/guandan/';
 
 /** 静态资源绑定：记下被请求的路径，返回一个带缓存头的首页 */
 function assets(): Fetcher & { calls: string[] } {
@@ -31,9 +31,11 @@ function arcade(reply: (req: Request) => Promise<Response>): Fetcher & { seen: R
   };
 }
 
+/** 平台 /api/me 里的已登录用户：kit 要 id 和昵称都在才认 */
+const U = { id: 'u1', displayName: '小王' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const visit = (path = '/games/guandan/', headers: Record<string, string> = {}) =>
-  new Request(`https://game.yyyu.org${path}`, { headers: { Cookie: '__Host-sid=abc', 'cf-connecting-ip': '203.0.113.7', 'User-Agent': 't', Authorization: 'x', ...headers } });
+  new Request(`https://game.example.com${path}`, { headers: { Cookie: '__Host-sid=abc', 'cf-connecting-ip': '203.0.113.7', 'User-Agent': 't', Authorization: 'x', ...headers } });
 
 function env(arc: Fetcher | undefined, gate = 'login'): Env & { ASSETS: ReturnType<typeof assets> } {
   return { ASSETS: assets(), ARCADE: arc, GATE: gate };
@@ -50,12 +52,12 @@ describe('登录闸门（GATE=login）', () => {
   });
 
   it('问平台时只转发 Cookie 和 cf-connecting-ip，用 GET 问 /api/me', async () => {
-    const arc = arcade(async () => json({ user: { id: 'u1' } }));
+    const arc = arcade(async () => json({ user: U }));
     await handle(visit(), env(arc));
     expect(arc.seen).toHaveLength(1);
     const req = arc.seen[0]!;
     expect(req.method).toBe('GET');
-    expect(req.url).toBe(ME_URL);
+    expect(req.url).toBe('https://game.example.com/api/me');
     expect([...req.headers.keys()].sort()).toEqual(['cf-connecting-ip', 'cookie']);
     expect(req.headers.get('cookie')).toBe('__Host-sid=abc');
     expect(req.headers.get('cf-connecting-ip')).toBe('203.0.113.7');
@@ -68,6 +70,14 @@ describe('登录闸门（GATE=login）', () => {
     expect(res.headers.get('Location')).toBe('/login?next=%2Fgames%2Fguandan%2F%3Froom%3D123456');
   });
 
+  it('没带平台的会话 cookie：直接 302 到登录页，不问平台', async () => {
+    const arc = arcade(async () => json({ user: U }));
+    const res = await handle(visit('/games/guandan/', { Cookie: 'other=1' }), env(arc));
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/login?next=%2Fgames%2Fguandan%2F');
+    expect(arc.seen).toHaveLength(0);
+  });
+
   it('未登录：302 到登录页（next 带回原路径），不碰静态资源', async () => {
     const e = env(arcade(async () => json({ user: null, service: 'ok', saves: 'ok' })));
     const res = await handle(visit(), e);
@@ -78,8 +88,8 @@ describe('登录闸门（GATE=login）', () => {
   });
 
   // 以下都要 fail-closed：503 页，绝不放行
-  const closed = async (e: ReturnType<typeof env>, timeoutMs?: number) => {
-    const res = await handle(visit(), e, timeoutMs);
+  const closed = async (e: ReturnType<typeof env>) => {
+    const res = await handle(visit(), e);
     expect(res.status).toBe(503);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     const html = await res.text();
@@ -94,29 +104,21 @@ describe('登录闸门（GATE=login）', () => {
 
   it('平台返回别的非 200（比如 302、500）：不放行', async () => {
     await closed(env(arcade(async () => new Response(null, { status: 302, headers: { Location: '/' } }))));
-    await closed(env(arcade(async () => json({ user: { id: 'u1' } }, 500))));
+    await closed(env(arcade(async () => json({ user: U }, 500))));
   });
 
   it('平台返回的不是 JSON：不放行', async () => {
     await closed(env(arcade(async () => new Response('<html>出错了</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }))));
   });
 
-  it('JSON 里没有 user 字段，或者 user 不是对象：不放行', async () => {
+  it('JSON 里没有 user 字段、user 不是对象或缺昵称：不放行', async () => {
     await closed(env(arcade(async () => json({ service: 'ok' }))));
     await closed(env(arcade(async () => json({ user: 'admin' }))));
     await closed(env(arcade(async () => json([]))));
+    await closed(env(arcade(async () => json({ user: { id: 'u1' } }))));
   });
 
-  it('平台超时：不放行（用 50 毫秒代替 3 秒）', async () => {
-    const t0 = Date.now();
-    await closed(env(arcade(() => new Promise<Response>(() => {}))), 50);
-    expect(Date.now() - t0).toBeLessThan(1000);
-  });
-
-  it('平台响应头到了、响应体一直不来：同样算超时', async () => {
-    const stall = new ReadableStream({ start() {} });
-    await closed(env(arcade(async () => new Response(stall, { status: 200, headers: { 'Content-Type': 'application/json' } }))), 50);
-  });
+  // 超时（包括响应体一直不来）由 arcade-kit 的 whoIs 管，测试在 kit 的 auth.test.ts
 
   it('平台调用直接抛错：不放行', async () => {
     await closed(env(arcade(async () => { throw new Error('network'); })));
@@ -201,7 +203,7 @@ describe('平台下发的 Set-Cookie（会话续期、清掉失效 cookie）', (
   };
 
   it('放行时把平台的每一条 Set-Cookie 原样带回浏览器', async () => {
-    const res = await handle(visit(), env(arcade(async () => withCookies({ user: { id: 'u1' } }, [RENEW, HINT]))));
+    const res = await handle(visit(), env(arcade(async () => withCookies({ user: U }, [RENEW, HINT]))));
     expect(res.status).toBe(200);
     expect(res.headers.getSetCookie()).toEqual([RENEW, HINT]);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
@@ -215,7 +217,7 @@ describe('平台下发的 Set-Cookie（会话续期、清掉失效 cookie）', (
   });
 
   it('平台没下发就不带', async () => {
-    const res = await handle(visit(), env(arcade(async () => json({ user: { id: 'u1' } }))));
+    const res = await handle(visit(), env(arcade(async () => json({ user: U }))));
     expect(res.headers.getSetCookie()).toEqual([]);
   });
 
