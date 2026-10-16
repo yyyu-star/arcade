@@ -46,7 +46,7 @@ arcade/
      游戏自己的资源（静态资源、自己的 Durable Object、`vars`）写在里面，不带平台也能部署成一个能玩的游戏（共用包 0.10.0 的独立模式：游客身份）；
      接平台的服务绑定（`ARCADE`、`WALLET`）、`GATE: "login"`、路由、`SITE_ORIGIN` 由维护者的部署工具（`tools/deployer/deploy.mjs`）按 `tools/workers.json` 的声明在本站部署时补上，
      游戏不用写（过渡期写了的必须和规范形式一模一样）；平台的 Secret 用 `wrangler secret put` 设，不进仓库；
-   - 浏览器存储（localStorage、IndexedDB、Cache）的 key 一律加 `<游戏id>.` 前缀，比如开盘用 `kaipan.save`。平台自己的 key 用 `arcade.` 前缀（目前只有 sessionStorage 的 `arcade.reloaded`：平台 0.9.8 起，发版后分块加载失败时防重复重载；原来的 `arcade.beta` 平台 0.10.17 删了，启动时清掉旧值）。所有游戏和平台同域，前缀是唯一的隔离手段；
+   - 浏览器存储（localStorage、IndexedDB、Cache）的 key 一律加 `<游戏id>.` 前缀，比如开盘用 `kaipan.save`。平台自己的 key 用 `arcade.` 前缀（目前是 sessionStorage 的 `arcade.reloaded`：平台 0.9.8 起，发版后分块加载失败时防重复重载；localStorage 的 `arcade.sound`：平台 0.10.26 起，记住声音关没关）。所有游戏和平台同域，前缀是唯一的隔离手段；
    - 游戏挂在 `/games/<id>/` 下，资源一律用相对路径，不假设自己在域名根；回大厅的入口例外，指向平台首页 `/`（平台的公开地址）；
    - 线上 Worker 数量 = 平台 1 个 + 每个游戏 1 个，**不另建测试或实验 Worker**（不设 staging）；需要临时实验时用完当天删除。
 6. **不写死本机路径**：代码和配置里不能有 `/root/`、`/home/`、`/tmp/` 这类绝对路径。临时文件用 `os.tmpdir()` 或命令行参数传入。
