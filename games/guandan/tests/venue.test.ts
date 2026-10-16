@@ -19,31 +19,30 @@ function midGame(seed: string, steps: number): GameState {
 }
 
 describe('场地 → 电脑（docs/ai.md）', () => {
-  it('单机娱乐：默认"普通"是新手场，对手偏弱；简单再弱（会手软）；较强四个座位一样强；困难全是最强', () => {
+  it('单机娱乐三档（docs/balance.md 第 3 节）：新手档对手最弱（会手软）、搭档较强；普通四个座位一样强；高手全是最强', () => {
     expect(SOLO_FUN_BOTS).toEqual({
-      easy: { mate: 'normal', opp: 'novice' },
-      normal: { mate: 'normal', opp: 'easy' },
-      good: { mate: 'normal', opp: 'normal' },
-      hard: { mate: 'hard', opp: 'hard' },
+      novice: { mate: 'good', opp: 'novice' },
+      normal: { mate: 'normal', opp: 'normal' },
+      pro: { mate: 'hard', opp: 'hard' },
     });
-    // 设置面板按这个顺序摆，对手一档比一档不弱
-    expect(SOLO_LEVELS).toEqual(['easy', 'normal', 'good', 'hard']);
+    // 设置面板、选难度按这个顺序摆，对手一档比一档强
+    expect(SOLO_LEVELS).toEqual(['novice', 'normal', 'pro']);
     for (let i = 1; i < SOLO_LEVELS.length; i++) expect(rank(SOLO_FUN_BOTS[SOLO_LEVELS[i]!].opp)).toBeGreaterThan(rank(SOLO_FUN_BOTS[SOLO_LEVELS[i - 1]!].opp));
     expect(TUNING.novice.soft).toBeGreaterThan(0);
     for (const d of DIFFICULTIES) if (d !== 'novice') expect(TUNING[d].soft).toBe(0);
   });
 
-  it('单机实盘越往上越难（docs/stake.md 1.3）：对手不变弱，豪华档换成简单搭档', () => {
+  it('单机实盘越往上越难（docs/stake.md 1.3）：对手一档比一档不弱；大档两个对手一普通一较强', () => {
     expect(SOLO_BOTS).toEqual({
-      small: { mate: 'normal', opp: 'easy' },
-      mid: { mate: 'normal', opp: 'good' },
-      big: { mate: 'normal', opp: 'hard' },
-      lux: { mate: 'easy', opp: 'hard' },
+      small: { mate: 'easy', opp: 'novice' },
+      mid: { mate: 'good', opp: 'normal' },
+      big: { mate: 'good', opp: 'normal', opp3: 'good' },
+      lux: { mate: 'hard', opp: 'hard' },
     });
-    for (let i = 1; i < TIER_IDS.length; i++) expect(rank(SOLO_BOTS[TIER_IDS[i]!].opp)).toBeGreaterThanOrEqual(rank(SOLO_BOTS[TIER_IDS[i - 1]!].opp));
-    // 新手场（娱乐默认、实盘小档）不比"普通"难
-    expect(rank(SOLO_FUN_BOTS.normal.opp)).toBeLessThan(rank('normal'));
-    expect(rank(SOLO_BOTS.small.opp)).toBeLessThan(rank('normal'));
+    const opps = (t: (typeof TIER_IDS)[number]) => rank(SOLO_BOTS[t].opp) + rank(SOLO_BOTS[t].opp3 ?? SOLO_BOTS[t].opp);
+    for (let i = 1; i < TIER_IDS.length; i++) expect(opps(TIER_IDS[i]!)).toBeGreaterThan(opps(TIER_IDS[i - 1]!));
+    // 小档照顾小白：对手是最弱的新手
+    expect(SOLO_BOTS.small.opp).toBe('novice');
   });
 
   it('好友房：娱乐普通；实盘一律最强（docs/stake.md 3.1）', () => {
@@ -58,7 +57,8 @@ describe('场地 → 电脑（docs/ai.md）', () => {
       expect(botFor({ kind: 'solo', level: l }, 1)).toEqual({ difficulty: SOLO_FUN_BOTS[l].opp, persona: 'laozhang' });
     }
     for (const t of TIER_IDS) {
-      expect(botFor({ kind: 'soloStake', tier: t }, 3)).toEqual({ difficulty: SOLO_BOTS[t].opp, persona: 'aqiang' });
+      expect(botFor({ kind: 'soloStake', tier: t }, 3)).toEqual({ difficulty: SOLO_BOTS[t].opp3 ?? SOLO_BOTS[t].opp, persona: 'aqiang' });
+      expect(botFor({ kind: 'soloStake', tier: t }, 1)).toEqual({ difficulty: SOLO_BOTS[t].opp, persona: 'laozhang' });
       expect(botFor({ kind: 'roomStake', tier: t }, 0).difficulty).toBe('hard');
     }
     expect(botFor({ kind: 'room' }, 2)).toEqual({ difficulty: 'normal', persona: 'xiaomei' });

@@ -1,13 +1,20 @@
 /**
  * 电脑再训练的模拟（0.7.0；docs/ai.md和 docs/stake.md 1.3、3.1 的表从这里来）：
  *
- *   node tools/ai-sim.ts solo  [--matches 2000]  单机各场地：0 号坐"普通玩家"（普通难度、没性格）或"新手"（简单难度），
+ *   node tools/ai-sim.ts solo  [--matches 2000]  单机各场地：0 号坐"普通"（普通难度、没性格）或"小白"（rookie，见下），
  *                                                搭档和对手按 src/ai/venue.ts；每场 8 副按实盘计分（娱乐场也这么量），给期望（份）± 标准误、胜率
  *   node tools/ai-sim.ts room  [--matches 2000]  好友房实盘：两个普通真人搭档（坐 0、2 或 1、3）对两个电脑、三个真人一个电脑，
  *                                                电脑取 normal / good / hard，一场 5 副；给真人每人的期望 ± 标准误
  *   node tools/ai-sim.ts style [--matches 400]   性格的风格指标：老张、小美、阿强（普通强弱）坐 1 号，别的座位是没性格的普通电脑；
  *                                                压牌率、每副炸弹、开局就炸的比例、每场之间压牌率的起伏、手热和手冷两种状态的差别
  *   node tools/ai-sim.ts time  [--matches 100]   单次决策耗时（各强弱、各性格）：p50 / p99 / 最大
+ *   node tools/ai-sim.ts grid  [--matches 2000]  配平（仓库 docs/balance.md）：0 号坐"小白"或"普通"，搭档 × 对手的每种强弱组合（带性格），
+ *                                                期望 ± 2 倍标准误、胜率；--mates / --opps 限定组合
+ *
+ * 两个玩家模型（docs/balance.md 第 1 节，不读隐藏信息、确定性）：
+ * - 普通 = 没性格的普通难度电脑（会看牌力、会留炸弹、会配合）；
+ * - 小白 = rookie：能出就出最小的（领出出最小的单张，跟牌拿最小的压法），压不过就炸（炸弹乱用），不记牌、不配合，只是不压队友；
+ *   进贡、还贡按规则给能给的第一张。
  *
  * 一场：从打 2 开局，打满副数（或有一队过 A）结束；每副按名次给头游那一队计分（双下 3、单下 2、末游 1），输的一队扣同样的分；
  * 累计到 ±20 分（一份）封顶提前结束。份数 = 分 / 20。并行：按 CPU 数分给几个 worker 线程，结果和单线程一样（每场的种子固定）。
@@ -16,7 +23,7 @@ import { cpus } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { createGame, dispatch, legalPlays, seatsToAct, teamOf, viewFor, type Action, type GameState, type PlayerView } from '../src/core/index.ts';
 import { decide, formOf, type Difficulty, type PersonaId } from '../src/ai/index.ts';
-import { SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor, type Venue } from '../src/ai/venue.ts';
+import { SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor, type SoloBots, type Venue } from '../src/ai/venue.ts';
 import { TIER_IDS } from '../src/stake/index.ts';
 
 const SHARE = 20;
@@ -27,9 +34,9 @@ function arg(name: string, def: string): string {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : def;
 }
 
-/** 一个座位怎么出：没性格的"真人"代理，或者带性格的电脑 */
+/** 一个座位怎么出：没性格的"真人"代理（普通电脑或小白 rookie），或者带性格的电脑 */
 interface SeatSpec {
-  difficulty: Difficulty;
+  difficulty: Difficulty | 'rookie';
   persona?: PersonaId;
 }
 
@@ -76,8 +83,27 @@ function dealPoints(s: GameState): number {
   return teamOf(head) === 0 ? pts : -pts;
 }
 
+/** 小白（docs/balance.md 第 1 节）：能出就出最小的，压不过就炸，不记牌、不配合 */
+function rookie(view: PlayerView): Action {
+  if (view.myTribute) {
+    const card = view.myTribute.allowed[0]!;
+    return view.myTribute.kind === 'tribute' ? { type: 'tribute', seat: view.seat, card } : { type: 'return', seat: view.seat, card };
+  }
+  const plays = legalPlays(view);
+  if (plays.length === 0) return { type: 'pass', seat: view.seat };
+  // 队友的牌在上面时不压：新手也知道别压自己人（不加这一条，小白对最弱的对手也每场输 0.2 份，不像真人新手）
+  const last = view.trick.last;
+  if (last && last.seat !== view.seat && teamOf(last.seat) === teamOf(view.seat)) return { type: 'pass', seat: view.seat };
+  const bomb = (p: (typeof plays)[number]) => BOMB_TYPES.includes(p.type);
+  const small = (a: (typeof plays)[number], b: (typeof plays)[number]) => a.value - b.value || a.cards.length - b.cards.length;
+  const plain = plays.filter((p) => !bomb(p)).sort(small);
+  const p = plain[0] ?? plays.filter(bomb).sort((a, b) => a.cards.length - b.cards.length || a.value - b.value)[0]!;
+  return { type: 'play', seat: view.seat, cards: p.cards, as: { type: p.type, rank: p.rank, extra: p.extra } };
+}
+
 function act(job: Job, view: PlayerView, seat: number, times: Record<string, number[]> | null): Action {
   const spec = job.seats[seat]!;
+  if (spec.difficulty === 'rookie') return rookie(view);
   const t0 = times ? performance.now() : 0;
   const a = decide(view, { seed: `${job.id}|${seat}`, difficulty: spec.difficulty, persona: spec.persona, match: job.id })!;
   if (times) (times[`${spec.difficulty}/${spec.persona ?? '-'}`] ??= []).push(performance.now() - t0);
@@ -176,7 +202,15 @@ function summary(rs: Result[], side = 1): string {
   return `${f3(mean(shares))} ± ${se(shares).toFixed(3)} 份，胜率 ${((shares.filter((x) => x > 0).length / shares.length) * 100).toFixed(0)}%`;
 }
 
-function soloJobs(venue: Venue, me: Difficulty, matches: number, prefix: string): Job[] {
+/** 期望（份）± 2 倍标准误、胜率（docs/balance.md 第 1 节的报法） */
+function summary2(rs: Result[]): string {
+  const xs = rs.map((r) => r.points / SHARE);
+  return `${f3(mean(xs))} ± ${(2 * se(xs)).toFixed(3)} 份，胜率 ${((xs.filter((x) => x > 0).length / xs.length) * 100).toFixed(0)}%`;
+}
+
+const botsText = (b: SoloBots): string => `搭档 ${b.mate} / 对手 ${b.opp}${b.opp3 ? `+${b.opp3}` : ''}`;
+
+function soloJobs(venue: Venue, me: SeatSpec['difficulty'], matches: number, prefix: string): Job[] {
   return Array.from({ length: matches }, (_, i) => {
     const seats: SeatSpec[] = [{ difficulty: me }];
     for (let s = 1; s < 4; s++) seats.push(botFor(venue, s));
@@ -189,16 +223,16 @@ async function main(): Promise<void> {
   const prefix = arg('seed', 'ai');
   if (mode === 'solo') {
     const matches = Number(arg('matches', '2000'));
-    console.log(`单机各场地，每格 ${matches} 场（8 副），0 号是"普通玩家"/"新手"，期望按 0、2 号这一队：`);
+    console.log(`单机各场地，每格 ${matches} 场（8 副），0 号是"普通"/"小白"（docs/balance.md 的两个玩家模型），期望按 0、2 号这一队，± 2 倍标准误：`);
     const venues: [string, Venue][] = [
-      ...SOLO_LEVELS.map((l): [string, Venue] => [`娱乐·${l}（搭档 ${SOLO_FUN_BOTS[l].mate} / 对手 ${SOLO_FUN_BOTS[l].opp}）`, { kind: 'solo', level: l }]),
-      ...TIER_IDS.map((t): [string, Venue] => [`实盘·${t}（搭档 ${SOLO_BOTS[t].mate} / 对手 ${SOLO_BOTS[t].opp}）`, { kind: 'soloStake', tier: t }]),
+      ...SOLO_LEVELS.map((l): [string, Venue] => [`娱乐·${l}（${botsText(SOLO_FUN_BOTS[l])}）`, { kind: 'solo', level: l }]),
+      ...TIER_IDS.map((t): [string, Venue] => [`实盘·${t}（${botsText(SOLO_BOTS[t])}）`, { kind: 'soloStake', tier: t }]),
     ];
     const only = arg('venue', '');
     for (const [name, v] of venues) {
       if (only && !name.includes(only)) continue;
       const line: string[] = [];
-      for (const me of ['normal', 'easy'] as const) line.push(`${me === 'normal' ? '普通玩家' : '新手'} ${summary(await runAll(soloJobs(v, me, matches, `${prefix}-solo`)))}`);
+      for (const me of ['normal', 'rookie'] as const) line.push(`${me === 'normal' ? '普通' : '小白'} ${summary2(await runAll(soloJobs(v, me, matches, `${prefix}-solo`)))}`);
       console.log(`- ${name}：${line.join('；')}`);
     }
   } else if (mode === 'room') {
@@ -251,8 +285,33 @@ async function main(): Promise<void> {
     }
     console.log(`单次决策耗时（毫秒，${matches} 场 × 2 组）：`);
     for (const [k, xs] of Object.entries(all)) console.log(`- ${k}：${xs.length} 次，p50 ${pct(xs, 0.5).toFixed(2)}，p99 ${pct(xs, 0.99).toFixed(2)}，最大 ${Math.max(...xs).toFixed(1)}`);
+  } else if (mode === 'grid') {
+    const matches = Number(arg('matches', '2000'));
+    const mates = arg('mates', 'easy,normal,good,hard').split(',') as Difficulty[];
+    // 对手写 a+b 表示 1 号 a、3 号 b（两个对手不一样强）
+    const opps = arg('opps', 'novice,easy,normal,good,hard').split(',');
+    const ci = (rs: Result[]): string => {
+      const xs = rs.map((r) => r.points / SHARE);
+      return `${f3(mean(xs))} ± ${(2 * se(xs)).toFixed(3)}（胜 ${((xs.filter((x) => x > 0).length / xs.length) * 100).toFixed(0)}%）`;
+    };
+    console.log(`配平网格，每格 ${matches} 场 × 8 副；电脑带性格（1 号老张、2 号小美、3 号阿强），期望按份 ± 2SE：`);
+    console.log('| 搭档 / 对手 | 小白 | 普通 |');
+    console.log('|---|---|---|');
+    for (const mate of mates) {
+      for (const opp of opps) {
+        const [o1, o3 = o1] = opp.split('+') as [Difficulty, Difficulty?];
+        const seats = (me: SeatSpec['difficulty']): SeatSpec[] => [
+          { difficulty: me },
+          { difficulty: o1, persona: 'laozhang' },
+          { difficulty: mate, persona: 'xiaomei' },
+          { difficulty: o3, persona: 'aqiang' },
+        ];
+        const run = (me: SeatSpec['difficulty']) => runAll(Array.from({ length: matches }, (_, i) => ({ id: `${prefix}-grid-${i}`, seats: seats(me), deals: 8, watch: -1 })));
+        console.log(`| ${mate} / ${opp} | ${ci(await run('rookie'))} | ${ci(await run('normal'))} |`);
+      }
+    }
   } else {
-    throw new Error(`不认得的模式 ${mode}（solo / room / style / time）`);
+    throw new Error(`不认得的模式 ${mode}（solo / room / style / time / grid）`);
   }
 }
 

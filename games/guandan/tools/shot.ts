@@ -253,6 +253,11 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await page.waitForTimeout(300);
   await shot(ctx, '01b-mode');
   await click(ctx, 'fun');
+  // 娱乐再选难度（0.12.1：新手 / 普通 / 高手，第一次默认新手）
+  await until(ctx, '选难度', "'level:novice' in g.controls() && 'level:pro' in g.controls()");
+  await page.waitForTimeout(300);
+  await shot(ctx, '01c-level');
+  await click(ctx, 'level:novice');
   await until(ctx, '新手引导', "g.scene === 'table' && g.tutorialStep === 0");
   await page.waitForTimeout(400);
   await shot(ctx, '02-tutorial-patterns');
@@ -856,6 +861,8 @@ async function playtest(browser: Browser): Promise<void> {
   await until(ctx, '选模式', "'fun' in g.controls()");
   await page.waitForTimeout(300);
   await press('fun');
+  await until(ctx, '选难度', "'level:normal' in g.controls()");
+  await press('level:normal');
   await until(ctx, '引导', 'g.tutorialStep === 0');
   await press('tutorial:skip');
   let turns = 0;

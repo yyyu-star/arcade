@@ -6,7 +6,29 @@
 /** 档位的名字 */
 export const TIER_NAME = { small: '小档', mid: '中档', big: '大档', lux: '豪华档' } as const;
 
-export const DIFF_NAME = { novice: '新手', easy: '简单', normal: '普通', good: '较强', hard: '困难' } as const;
+/** 电脑多强：1–4 颗星（仓库 docs/balance.md 第 5 节，四个游戏一样的写法） */
+export function stars(n: number): string {
+  return '★'.repeat(n) + '☆'.repeat(Math.max(0, 4 - n));
+}
+
+/**
+ * 娱乐三档的卡（docs/ai.md 第 2 节）：电脑多强、一局多久、适合谁。娱乐一局打到过 A，随时存档；
+ * 时长按模拟的中位数（新手档 8 副约 20 分钟，普通、高手 11 副约 30 分钟；我每手 4 秒估）
+ */
+export const LEVEL_CARD = {
+  novice: { name: '新手', stars: 1, time: '一局约 20 分钟，随时存档', who: '刚学掼蛋，先赢几把找感觉' },
+  normal: { name: '普通', stars: 2, time: '一局约 30 分钟，随时存档', who: '会打，想认真赢' },
+  pro: { name: '高手', stars: 4, time: '一局约 30 分钟，随时存档', who: '老手，电脑全记牌、配合好' },
+} as const;
+
+/** 实盘四档的卡：电脑多强；一场 8 副约 20 分钟（docs/stake.md 1.4） */
+export const TIER_CARD = {
+  small: { stars: 1 },
+  mid: { stars: 2 },
+  big: { stars: 3 },
+  lux: { stars: 4 },
+  time: '约 20 分钟',
+} as const;
 
 /**
  * 钱包被拒、没连上时页面说的话（按 error）：照平台的错误码对照表（docs/platform-backend.md 15.10，0.10.2），

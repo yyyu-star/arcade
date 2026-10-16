@@ -8,7 +8,7 @@ import { Session, randomSeed } from '../session.ts';
 import { SOLO_DEALS } from '../../stake/index.ts';
 import { STAKE_ERROR, TIER_NAME, signed } from '../stake-text.ts';
 import { StakeSession, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
-import { loadSave } from '../store.ts';
+import { getSettings, loadSave, updateSettings } from '../store.ts';
 import { TYPE, minHit } from '../theme.ts';
 import { goLobby } from '../lobby.ts';
 import { join, openOnline } from '../online.ts';
@@ -16,7 +16,7 @@ import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
 import { Button, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { confirm, openRules, openSettings, openStats } from '../ui/panels.ts';
-import { openModePicker, openTierPicker } from '../ui/stake.ts';
+import { openLevelPicker, openModePicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
 
 export class TitleScene extends Phaser.Scene {
@@ -157,9 +157,13 @@ export class TitleScene extends Phaser.Scene {
 
   /** 先选娱乐 / 实盘（docs/stake.md 2.1）。娱乐照旧：有存档时"开新局"先确认 */
   pickMode(saved: string | null): void {
+    // 娱乐先选难度（docs/balance.md 第 3 节：新手 / 普通 / 高手，第一次默认新手），有存档时再确认一次
     const onNew = (): void => {
-      if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame());
-      else this.newGame();
+      this.overlay = openLevelPicker(this, getSettings().difficulty, (difficulty) => {
+        updateSettings({ difficulty });
+        if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame());
+        else this.newGame();
+      });
     };
     // 单独部署没有实盘：不用选娱乐 / 实盘，直接开（"继续"在标题页上另有按钮）
     if (standalone()) return onNew();

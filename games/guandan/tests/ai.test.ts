@@ -505,7 +505,7 @@ describe('电脑不看别人的牌（反事实）', () => {
       return { kind: 'soloStake', tier: 'lux' };
     }
   }
-  const solo = (level: 'easy' | 'normal' | 'hard') => (st: GameState) => {
+  const solo = (level: 'novice' | 'normal' | 'pro') => (st: GameState) => {
     const x = new Session(st, [], level);
     x.persist = false;
     x.scored = false;
@@ -539,8 +539,8 @@ describe('电脑不看别人的牌（反事实）', () => {
 
   it('单机（娱乐三档、实盘豪华档）：几百个决策点，换掉别人的牌，电脑的决定一次都不变', () => {
     const t = fresh();
-    walkSolo(solo('easy'), 'cf-easy', t);
-    walkSolo(solo('hard'), 'cf-hard', t);
+    walkSolo(solo('novice'), 'cf-novice', t);
+    walkSolo(solo('pro'), 'cf-pro', t);
     walkSolo((st) => new StakeLike(st), 'cf-lux', t);
     expect(t.points).toBeGreaterThan(300);
     // 平行世界真的换了牌（只剩几张、全被看见时才会一样）

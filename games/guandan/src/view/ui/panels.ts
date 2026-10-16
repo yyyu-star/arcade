@@ -54,7 +54,7 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   seg(colL, y, [{ label: '慢', value: 'slow' }, { label: '中', value: 'normal' }, { label: '快', value: 'fast' }], s.speed, (v) => updateSettings({ speed: v as Settings['speed'] }));
   y += P;
   row(colL, y, '电脑难度');
-  seg(colL, y, [{ label: '简单', value: 'easy' }, { label: '普通', value: 'normal' }, { label: '较强', value: 'good' }, { label: '困难', value: 'hard' }], s.difficulty, (v) => {
+  seg(colL, y, [{ label: '新手', value: 'novice' }, { label: '普通', value: 'normal' }, { label: '高手', value: 'pro' }], s.difficulty, (v) => {
     updateSettings({ difficulty: v as Settings['difficulty'] });
     if (app.session) app.session.difficulty = v as Settings['difficulty'];
   });

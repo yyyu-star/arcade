@@ -45,7 +45,7 @@ export interface Tuning {
 /** 强弱预设。easy / normal / hard 的数是 0.1.3 起按 npm run sim 校准的；novice、good 是 0.7.0 加的两头 */
 export const TUNING: Record<Difficulty, Tuning> = {
   // 新手场：不记牌、不配合、常犯小错，对手快走完时还常常手软
-  novice: { recall: 'none', teamwork: false, threat: 2, breakTolerance: 1.2, slip: 0.3, feedAt: 0, chase: 0.4, lastChance: 0.1, bombLove: 0, soft: 0.4, jitter: 0, rush: 0 },
+  novice: { recall: 'none', teamwork: false, threat: 2, breakTolerance: 1.2, slip: 0.35, feedAt: 0, chase: 0.3, lastChance: 0.05, bombLove: 0, soft: 0.7, jitter: 0, rush: 0 },
   // 失误率按 npm run sim 校准（0.1.3）：简单对普通整局胜率约 2 成多，困难对普通约 7 成。
   // 失误不再拆炸弹/同花顺、不压队友以后（0.2.x），一次失误亏得少了，按同样目标重调：简单 0.13 → 0.25，普通 0.05 → 0.1
   easy: { recall: 'none', teamwork: false, threat: 2, breakTolerance: 1.2, slip: 0.25, feedAt: 0, chase: 0.6, lastChance: 0.2, bombLove: 0, soft: 0, jitter: 0, rush: 0 },

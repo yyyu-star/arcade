@@ -39,6 +39,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 规则有出入的点先查 `docs/rules.md`；改规则要同步改该文档、`docs/core-api.md` 和测试，地方差异做成 `options.ts` 开关。
 - 改电脑策略后跑 `npm run sim`（`--mode random|greedy|ai|easy-vs-hard|normal-vs-prev`），确认无非法动作、无死锁、难度梯度还在。
   改强弱、性格、场地表后跑 `npm run ai-sim -- solo|room|style`，把新数字写进 `docs/ai.md` 和 `docs/stake.md` 1.3、3.1（好友房实盘每档要"两个普通真人搭档期望加两倍标准误 ≤ 0"）。
+  配平目标是仓库 `docs/balance.md`（两个玩家模型：普通、小白 `rookie`）：实盘小档、娱乐新手档按小白调，其余按普通调（掼蛋的例外，`docs/ai.md` 2.1）；`ai-sim -- grid` 量搭档 × 对手的每种组合。
   没给性格时 `decide` 就是难度预设本身（聪明提示、代打、`sim` 都靠这个），新加的打法参数默认 0、不改原来的行为。
   `normal-vs-prev` 的基准只在电脑 AI 有改动的版本复制（主线 2026-10-16 定）：改了 `src/ai` 打法的 PR 里，把这一版的 `src/ai` 复制成
   `tools/baseline-ai-<版本>/`（改 import 路径）、把 `sim.ts` 的 prev 指过去，PR 说明写一句；普通发版不动。现在的基准是 0.1.2，强弱另用 `ai-sim` 的胜率表对比（docs/ai.md）。
@@ -207,6 +208,5 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 
 ## 6. 待办（不阻塞）
 
-- 简单难度对普通约 2 成：看试玩反馈再定。要调的话优先降记牌和配合，不再加失误率（失误多了看起来是"蠢"，不是"弱"）。
 - 1280×720 下，手牌列数在"每列最多 4 张"和"5 张"之间切换时（`table/hand.ts` 的 `MIN_SPACING_SHORT`），布局会跳一下。
 - 标题字体的缺字测试（`tests/view.test.ts`）按行用正则扫字符串，标题文字跨行写会漏检。

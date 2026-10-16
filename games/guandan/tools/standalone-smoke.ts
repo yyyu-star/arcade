@@ -80,10 +80,13 @@ async function main(): Promise<void> {
     assert(!t['cloud'] && !t['lobby'] && t['online'], `标题页不该有云存档和大厅，要有好友房（${Object.keys(t).join(',')}）`);
     await shot(solo, 's1-title');
     await click(solo, 'new');
+    // 不选娱乐 / 实盘，直接选难度（0.12.1）
+    await until(solo, "!!g.controls()['level:novice']", 10_000);
+    await click(solo, 'level:novice');
     await until(solo, "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
     assert(!(await ctl(solo))['cloud'], '牌桌上不该有云存档');
     await shot(solo, 's2-solo-table');
-    notes.push('标题页没有云存档和大厅；"开始"直接开局（不选娱乐 / 实盘）');
+    notes.push('标题页没有云存档和大厅；"开始"直接选难度开局（不选娱乐 / 实盘）');
     await click(solo, 'lobby');
     await until(solo, "!!g.controls()['ok']", 10_000);
     await shot(solo, 's3-leave-confirm');
@@ -115,8 +118,8 @@ async function main(): Promise<void> {
     await host.click('#ol-start');
     for (const p of [host, guest]) await until(p, "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
     // 朋友点房主的头像（朋友画面上房主在左手边，画面座位 3）扔番茄
-    await click(guest, 'avatar3');
-    await click(guest, 'menu:prop0');
+    await click(guest, 'fun:seat3');
+    await click(guest, 'fun:prop0');
     await until(host, "g.fxLog.includes('道具 1>0:tomato')", 15_000);
     await host.waitForTimeout(6_000);
     await shot(host, 's5-room-table');
