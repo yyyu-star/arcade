@@ -5,6 +5,7 @@
     "kaipan": { "platform": ["ARCADE", "WALLET"] },
     "guandan": { "platform": ["ARCADE", "WALLET"] },
     "texas": { "platform": ["ARCADE", "WALLET"] },
-    "mahjong": { "platform": ["ARCADE", "WALLET"] }
+    "mahjong": { "platform": ["ARCADE", "WALLET"] },
+    "racing": { "platform": ["ARCADE"] }
   }
 }
