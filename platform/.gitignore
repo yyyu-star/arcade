@@ -7,6 +7,3 @@ dist/
 .dev.vars
 # 冒烟截图（npm run smoke）
 shots/
-
-# 正式部署时由 tools/deploy-config.ts 生成（带正式库 id），不进 Git
-wrangler.deploy.json
