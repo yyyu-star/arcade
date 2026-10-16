@@ -1,19 +1,19 @@
 /**
- * 好友房实盘桌的期望（DESIGN.md 4.1）：两个真人对两个最强的电脑（实盘桌的电脑一律 STRONGEST），按档位各打 N 场，
- * 看真人每场平均净输赢（份）和标准误。真人用"普通水平"的性格代替（默认 幺妹儿、熊猫哥、兔头哥 轮着坐），
- * 两个真人的座位在六种坐法（相邻、对家）里轮换。要的是"真人对电脑不该稳赚"：期望不为正。
- * 用法：node scripts/stake-room.ts [每档场数，默认 1000] [真人用的性格，逗号分隔，默认 0,1,3] [只跑这些档，逗号分隔，默认全部实盘档]
- * 想快就每个档开一个进程并行跑（第三个参数）
+ * 好友房实盘桌（DESIGN.md 4.1）：两个"普通玩家"（代理玩家 PLAYER，当真人）对两个电脑，看真人每人每场的平均净输赢（份）和标准误。
+ * 两个真人的座位在六种坐法（相邻、对家）里轮换，默认规则。要的是"两个普通真人对电脑不该稳赚"：期望 + 一个标准误 ≤ 0。
+ * 用法：
+ *   node scripts/stake-room.ts [场数，默认 1000] search [档]   由弱到强试候选组合，报每个的期望，挑最弱的过线的
+ *   node scripts/stake-room.ts [场数] venues [档,档…]        按场地表（venues.ts 的 room:<档>）逐档验证
  */
-import { PERSONAS, STRONGEST } from '../src/ai/personas.ts';
-import { sichuanXuezhan as XZ, type XzState } from '../src/core/variants/sichuan-xuezhan/index.ts';
-import { runAuto } from '../src/game/driver.ts';
-import { baseOf, STAKES } from '../src/game/stakes.ts';
+import { stream } from 'arcade-kit/rng';
+import { PERSONAS } from '../src/ai/personas.ts';
+import { seatPlan, VENUES, type Venue } from '../src/ai/venues.ts';
+import { sichuanXuezhan as XZ } from '../src/core/variants/sichuan-xuezhan/index.ts';
+import { STAKES, stakesOf, type StakesId } from '../src/game/stakes.ts';
+import { meanSe, playMatch, PLAYER, signed } from './play.ts';
 
 const N = Number(process.argv[2] ?? 1000);
-const POOL = (process.argv[3] ?? '0,1,3').split(',').map(Number);
-const ONLY = process.argv[4]?.split(',');
-const KINDS = ['ai', 'ai', 'ai', 'ai'] as const;
+const MODE = process.argv[3] ?? 'venues';
 const PAIRS = [
   [0, 1],
   [1, 2],
@@ -23,34 +23,57 @@ const PAIRS = [
   [1, 3],
 ] as const;
 
-console.log(`真人用 ${POOL.map((p) => PERSONAS[p]!.name).join('、')}，电脑一律 ${PERSONAS[STRONGEST]!.name}，每档 ${N} 场，默认规则`);
-for (const tier of STAKES.filter((x) => x.wallet && (!ONLY || ONLY.includes(x.id)))) {
-  let sum = 0;
-  let sq = 0;
-  let n = 0;
+/** 候选组合，由弱到强（权重顺序同 PERSONAS：幺妹儿、熊猫哥、盖碗儿、兔头哥、火锅婆婆、板凳儿） */
+const CANDIDATES: Venue[] = [
+  { weights: [1, 1, 0, 1, 0, 1], soft: 100 },
+  { weights: [1, 1, 0, 1, 0, 1], soft: 0 },
+  { weights: [1, 1, 0, 1, 0, 0], soft: 0 },
+  { weights: [1, 1, 1, 1, 0, 0], soft: 0 },
+  { weights: [0, 1, 2, 1, 1, 0], soft: 0 },
+  { weights: [0, 0, 2, 1, 2, 0], soft: 0 },
+  { weights: [0, 0, 1, 0, 1, 0], soft: 0 },
+];
+
+function run(tier: StakesId, venue: Venue): { mean: number; se: number; house: number } {
+  const st = stakesOf(tier)!;
+  const nets: number[] = [];
   let house = 0;
+  const id = '__candidate';
+  (VENUES as Record<string, Venue>)[id] = venue;
   for (let i = 0; i < N; i++) {
     const pair = PAIRS[i % PAIRS.length]!;
-    const humans = [POOL[i % POOL.length]!, POOL[(i + 1) % POOL.length]!];
-    const personas = [0, 1, 2, 3].map((seat) => (seat === pair[0] ? humans[0]! : seat === pair[1] ? humans[1]! : STRONGEST));
-    const key = [i, tier.share, 11, 7, 7, 7, 7, 7];
-    let s = XZ.begin(key, XZ.defaults, KINDS, { share: tier.share, base: baseOf(tier.share), personas }) as XzState;
-    for (;;) {
-      for (const st of runAuto(XZ, s, KINDS, 5_000)) s = st.state as XzState;
-      if (XZ.over(s)) break;
-      s = XZ.resume(s);
-    }
+    const key = [i, st.share, 11, 7, 7, 7, 7, 7];
+    const plan = seatPlan(stream(key, 'persona'), id, 4);
+    const proxies = new Map(pair.map((seat) => [seat, PLAYER] as const));
+    const { s } = playMatch(key, st.share, plan.personas, plan.tunes, proxies);
     const r = XZ.result(s);
-    for (const seat of pair) {
-      const net = r.seats[seat]!.net / tier.share;
-      sum += net;
-      sq += net * net;
-      n++;
-    }
-    for (let seat = 0; seat < 4; seat++) if (seat !== pair[0] && seat !== pair[1]) house += r.seats[seat]!.net / tier.share;
+    for (const seat of pair) nets.push(r.seats[seat]!.net / st.share);
+    for (let seat = 0; seat < 4; seat++) if (!(pair as readonly number[]).includes(seat)) house += r.seats[seat]!.net / st.share;
   }
-  const mean = sum / n;
-  const se = Math.sqrt(Math.max(0, sq / n - mean * mean) / n);
-  const sign = (x: number): string => (x >= 0 ? '+' : '') + x.toFixed(3);
-  console.log(`${tier.id.padEnd(5)} 一份 ${String(tier.share).padStart(7)}  真人每人每场 ${sign(mean)} ± ${se.toFixed(3)} 份（${Math.round(mean * tier.share)} 筹码）  两个电脑合计每场 ${sign(house / N)} 份`);
+  delete (VENUES as Record<string, Venue>)[id];
+  return { ...meanSe(nets), house: house / N };
+}
+
+const names = (v: Venue): string =>
+  v.weights
+    .map((w, i) => (w ? `${PERSONAS[i]!.name}${w > 1 ? `×${w}` : ''}` : ''))
+    .filter(Boolean)
+    .join('、') + (v.soft ? `，手软 ${v.soft}` : '');
+
+if (MODE === 'search') {
+  const tier = (process.argv[4] ?? 'small') as StakesId;
+  console.log(`搜索：${tier} 档，两个普通玩家，每个组合 ${N} 场`);
+  for (const [i, c] of CANDIDATES.entries()) {
+    const r = run(tier, c);
+    const ok = r.mean + r.se <= 0;
+    console.log(`#${i} ${names(c).padEnd(30, '　')} 真人每人每场 ${signed(r.mean)} ± ${r.se.toFixed(3)} 份  电脑合计 ${signed(r.house)}  ${ok ? '过线' : ''}`);
+  }
+} else {
+  const tiers = process.argv[4]?.split(',') ?? STAKES.filter((x) => x.wallet).map((x) => x.id);
+  for (const tier of tiers) {
+    const v = VENUES[`room:${tier}`]!;
+    const r = run(tier as StakesId, v);
+    const share = stakesOf(tier as StakesId)!.share;
+    console.log(`room:${tier.padEnd(5)} ${names(v)}  真人每人每场 ${signed(r.mean)} ± ${r.se.toFixed(3)} 份（${Math.round(r.mean * share)} 筹码）  电脑合计 ${signed(r.house)} 份`);
+  }
 }

@@ -8,7 +8,8 @@
  */
 import { stream } from 'arcade-kit/rng';
 import { AIS } from './ai/index.ts';
-import { pickPersonas, PERSONAS } from './ai/personas.ts';
+import { PERSONAS } from './ai/personas.ts';
+import { seatPlan, venueOf } from './ai/venues.ts';
 import type { SettleStats } from './core/match/index.ts';
 import { sichuanXuezhan as XZ, view, type XzAction, type XzOpts, type XzState, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import type { SeatKind } from './core/variants/types.ts';
@@ -81,12 +82,25 @@ function persist(s: SoloSave, own: boolean): void {
 export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: string | null, chips: number): SoloSave {
   const st = stakesOf(stakes)!;
   const key = [...crypto.getRandomValues(new Uint32Array(8))];
-  const personas = [0, ...pickPersonas(stream(key, 'persona'), st.level, 3)];
-  const state = XZ.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, chips: [chips, st.share, st.share, st.share] }) as XzState;
+  // 三个电脑按场地挑性格、各配这一场的状态；0 号座位是自己（性格、状态用不上）
+  const plan = seatPlan(stream(key, 'persona'), venueOf('solo', stakes), 3);
+  const personas = [0, ...plan.personas];
+  const tunes = [{ mood: 0, soft: 0 }, ...plan.tunes];
+  const state = XZ.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, tunes, chips: [chips, st.share, st.share, st.share] }) as XzState;
   return { v: 1, id: randomId(), state, stakes, names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
 }
 
-/** 电脑每一步之后停多久（毫秒，再乘速度） */
+/**
+ * 电脑出手的快慢跟性格走（tempo：幺妹儿快、盖碗儿慢），每一手再有一点起伏，不拖、也不秒出。
+ * 起伏由局面算（不用随机数，但这里只是画面节奏，不影响结果）
+ */
+function paceOf(s: XzState, seat: number): number {
+  const tempo = PERSONAS[s.personas[seat]!]?.tempo ?? 1_000;
+  const wobble = 850 + ((s.wall.head * 7 + seat * 13 + s.round * 31) % 300);
+  return (tempo * wobble) / 1_000_000;
+}
+
+/** 电脑每一步之后停多久（毫秒，再乘性格的快慢和速度） */
 function delayOf(prev: XzState, next: XzState): number {
   if (next.events.some((e) => e.e === 'hu')) return 1_300;
   if (next.events.some((e) => e.e === 'pon' || e.e === 'kan')) return 1_000;
@@ -200,7 +214,7 @@ export class Solo {
         if (seat === undefined) return;
         const next = XZ.apply(s, seat, XZ.auto(s, seat, ai));
         if ('error' in next) throw new Error(`ai move rejected: ${next.error}`);
-        const wait = delayOf(s, next) * this.speed;
+        const wait = delayOf(s, next) * paceOf(s, seat) * this.speed;
         if (wait > 0) await sleep(wait);
         if (this.stopped) return;
         this.step(next);

@@ -1,6 +1,7 @@
 /**
  * 电脑的性格（DESIGN.md 第 5 节）：化名，不用真人；名字要加进平台的保留昵称。
  * 参数都是整数千分比（不用浮点的平台相关函数，同一局面同一选择）。
+ * 性格只是底子：每一场按 Tune 的种子在 swing 的范围里浮动，场地的"手软"和局面（领先、落后、快输光、刚点了炮）再往上加减（style.ts）。
  */
 import type { RandomStream } from 'arcade-kit/rng';
 
@@ -14,32 +15,39 @@ export interface Persona {
   greed: number;
   /** 爱杠：听牌时也杠（0–1000） */
   kanLove: number;
+  /** 爱碰：碰了能快一点就碰，不在乎门清（0–1000；低的守门清） */
+  pon: number;
   /** 偶尔打错：千分之几的时候不打最好的那张，在第 2 到第 4 好里挑（新手连向听都会打坏） */
   slip: number;
   /** 读牌：看出别人在做清一色（副露、弃牌都偏一门）就不打那一门（0–1000，越大越准） */
   reads: number;
-  /** 档位：0 小档常见、3 只在大档豪华档出现（越大越强） */
+  /** 上头：刚点了炮、输了一大把以后打得更急、更容易错（0–1000） */
+  temper: number;
+  /** 状态起伏：每一场在性格范围里浮动多大（0–1000，新手忽好忽坏，老手稳） */
+  swing: number;
+  /** 出手快慢：单机里思考时间的千分比（1000 = 平常） */
+  tempo: number;
+  /** 话多：单机里胡、杠、点炮以后开口的千分比 */
+  talk: number;
+  /** 强弱的档：0 新手、1 普通、2 稳、3 老练（场地表按它排，见 venues.ts） */
   level: number;
 }
 
 export const PERSONAS: readonly Persona[] = [
-  { name: '幺妹儿', style: '快：见胡就胡，不贪', defense: 400, greed: 0, kanLove: 300, slip: 60, reads: 300, level: 1 },
-  { name: '熊猫哥', style: '贪：爱做清一色、对对胡', defense: 250, greed: 900, kanLove: 500, slip: 60, reads: 200, level: 1 },
-  { name: '盖碗儿', style: '稳：防守重，很少点炮', defense: 950, greed: 200, kanLove: 200, slip: 20, reads: 700, level: 2 },
-  { name: '兔头哥', style: '爱杠：能杠就杠', defense: 300, greed: 400, kanLove: 1000, slip: 60, reads: 300, level: 1 },
-  { name: '火锅婆婆', style: '老练：牌效和防守都细', defense: 750, greed: 350, kanLove: 400, slip: 0, reads: 1000, level: 3 },
-  { name: '板凳儿', style: '新手：常打错，不太防守', defense: 50, greed: 100, kanLove: 600, slip: 300, reads: 0, level: 0 },
+  { name: '幺妹儿', style: '快：见胡就胡，能碰就碰', defense: 350, greed: 0, kanLove: 300, pon: 900, slip: 50, reads: 250, temper: 300, swing: 300, tempo: 650, talk: 700, level: 1 },
+  { name: '熊猫哥', style: '贪：爱做清一色、对对胡', defense: 200, greed: 950, kanLove: 500, pon: 450, slip: 60, reads: 200, temper: 600, swing: 500, tempo: 1_000, talk: 800, level: 1 },
+  { name: '盖碗儿', style: '稳：守门清，少碰少杠', defense: 950, greed: 200, kanLove: 150, pon: 150, slip: 20, reads: 700, temper: 100, swing: 200, tempo: 1_350, talk: 250, level: 2 },
+  { name: '兔头哥', style: '爱杠：能杠就杠，输了容易上头', defense: 300, greed: 400, kanLove: 1_000, pon: 600, slip: 60, reads: 300, temper: 700, swing: 500, tempo: 850, talk: 900, level: 1 },
+  { name: '火锅婆婆', style: '老练：牌效和防守都细', defense: 750, greed: 350, kanLove: 400, pon: 450, slip: 0, reads: 1_000, temper: 0, swing: 250, tempo: 1_150, talk: 400, level: 3 },
+  { name: '板凳儿', style: '新手：常打错，不太防守', defense: 50, greed: 100, kanLove: 600, pon: 700, slip: 300, reads: 0, temper: 900, swing: 800, tempo: 900, talk: 600, level: 0 },
 ];
 
-/** 最强的性格（档最高的那个）：好友房实盘的电脑一律用它（DESIGN.md 第 4 节） */
+/** 最强的性格（档最高的那个） */
 export const STRONGEST = PERSONAS.reduce((best, p, i) => (p.level > PERSONAS[best]!.level ? i : best), 0);
 
-/**
- * 按档位挑三个（或四个）不同的性格：level 是档位的序号（娱乐和小档 0、中档 1、大档 2、豪华 3）。
- * 档位越高，越挑"老练"的；小档里常有新手。
- */
-export function pickPersonas(rng: RandomStream, level: number, n: number): number[] {
-  const pool = PERSONAS.map((p, i) => ({ i, w: weight(p.level, level) })).filter((x) => x.w > 0);
+/** 按权重挑 n 个不同的性格（weights[i] 是 PERSONAS[i] 的权重，0 不挑）；挑不够 n 个时剩下的用第一个补（好友房实盘只有火锅婆婆一个） */
+export function pickPersonas(rng: RandomStream, weights: readonly number[], n: number): number[] {
+  const pool = weights.map((w, i) => ({ i, w })).filter((x) => x.w > 0);
   const out: number[] = [];
   while (out.length < n && pool.length) {
     const total = pool.reduce((a, x) => a + x.w, 0);
@@ -48,10 +56,6 @@ export function pickPersonas(rng: RandomStream, level: number, n: number): numbe
     out.push(pool[at]!.i);
     pool.splice(at, 1);
   }
+  while (out.length < n) out.push(out[0] ?? 0);
   return out;
-}
-
-function weight(p: number, level: number): number {
-  const d = Math.abs(p - level);
-  return d === 0 ? 6 : d === 1 ? 3 : d === 2 ? 1 : level >= 2 && p === 0 ? 0 : 1;
 }

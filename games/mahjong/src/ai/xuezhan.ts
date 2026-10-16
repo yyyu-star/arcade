@@ -4,14 +4,16 @@
  *
  * 打牌：向听数优先，同向听比有效牌（减去看得见的张数），再加牌型倾向（清一色、对对胡、七对）；
  * 别人像听牌、自己离胡还远时，按"危险度"挑：对那家是缺门的 > 场上见了三四张的 > 他打过的 > 生张。
- * 没有随机数：要"偶尔打错"的性格用局面算出来的数决定（同一局面同一选择）。
+ * 怎么打由 style.ts 叠出来：性格、这一场的状态、场地的手软、局面（领先落后、快输光、上头）。
+ * 没有随机数：要"偶尔打错"的性格用局面和这一场的状态算出来的数决定（同一局面同一选择）。
  */
 import { shanten, ukeire } from '../core/hand/index.ts';
 import { countsOf, kindOf, rankOf, suitKinds, suitOf, type Suit, type Tile } from '../core/tiles/index.ts';
 import type { VariantAi } from '../core/variants/types.ts';
 import { scoreHand, NO_CONTEXT, type XzAction, type XzView } from '../core/variants/sichuan-xuezhan/index.ts';
 import { HIDDEN, SHAPE, SUITED_KINDS } from '../core/variants/sichuan-xuezhan/index.ts';
-import { PERSONAS, type Persona } from './personas.ts';
+import { PERSONAS } from './personas.ts';
+import { styleOf, type Style } from './style.ts';
 
 const queKinds = (q: number): number[] => (q < 0 ? [] : suitKinds(q as Suit));
 
@@ -27,8 +29,8 @@ export function visibleCounts(v: XzView): number[] {
   return c;
 }
 
-/** 由局面算出的 0–999 的数（代替随机数，同一局面同一结果） */
-function noise(v: XzView): number {
+/** 由局面和这一场的状态算出的 0–999 的数（代替随机数，同一局面同一结果；不同场次的同一局面不一样） */
+function noise(v: XzView, salt = 0): number {
   let h = 2166136261;
   const feed = (x: number): void => {
     h = Math.imul(h ^ (x & 0xff), 16777619) >>> 0;
@@ -36,6 +38,9 @@ function noise(v: XzView): number {
   for (const t of v.me!.hand) feed(t);
   feed(v.wall);
   feed(v.round);
+  feed(salt);
+  const m = v.me!.tune.mood;
+  for (let i = 0; i < 4; i++) feed(m >>> (i * 8));
   return h % 1000;
 }
 
@@ -134,23 +139,25 @@ function danger(v: XzView, k: number, opp: number, visible: readonly number[], m
 }
 
 /** 牌型倾向：清一色（某门占得多）、对对胡和七对（对子多）给想留的牌加分 */
-function shapeBonus(hand: readonly Tile[], discard: Tile, p: Persona, melds: number): number {
+function shapeBonus(hand: readonly Tile[], discard: Tile, p: Style, melds: number): number {
   const rest = hand.filter((t) => t !== discard);
   const n = suitCounts(rest);
   const main = Math.max(...n);
   const k = kindOf(discard);
   let bonus = 0;
-  // 主门占到 10 张以上（老练的 9 张就开始）：打别的门加分（越贪越重）
-  const from = p.level >= 2 ? 9 : 10;
+  // 主门占到 10 张以上（老练的 9 张、贪的 8 张就开始）：打别的门加分（越贪越重）
+  const from = p.greed >= 800 ? 8 : p.level >= 2 ? 9 : 10;
   if (main >= from && n[suitOf(k) as Suit] < main) bonus += (60 + p.greed / 10) * (main - from + 1);
   // 对子多：拆对子减分
   const c = countsOf(rest);
   const pairs = c.filter((x) => x >= 2).length;
   if (pairs >= 4 && melds === 0) bonus += countsOf(hand)[k]! >= 2 ? -(30 + p.greed / 20) : 10;
+  // 贪的冲对对胡：对子、刻子三组以上就不拆
+  else if (p.greed >= 700 && pairs >= 3 && countsOf(hand)[k]! >= 2) bonus -= p.greed / 8;
   return bonus;
 }
 
-function evalDiscards(v: XzView, p: Persona): Eval[] {
+function evalDiscards(v: XzView, p: Style): Eval[] {
   const me = v.me!;
   const seat = v.seats[me.seat]!;
   const hand = me.hand;
@@ -174,13 +181,14 @@ function evalDiscards(v: XzView, p: Persona): Eval[] {
     const sh = shanten(c, melds, SHAPE, dead);
     const u = ukeire(c, melds, SHAPE, allowed, visible, dead).total;
     let score = -sh * 10_000 + u * 10 + shapeBonus(hand, t, p, melds);
-    // 防守：自己离胡还远（≥ 2 向听，或贪心不重的 1 向听），有人像听牌时把危险度算进来
-    if (maxThreat > 500 && sh >= 1) {
+    // 防守：有人像听牌、自己还没听时把危险度算进来。越稳的越早开始收（看起来"像听"的门槛低），
+    // 一向听也肯为不点炮绕路；不防守的只在离胡还远时才管
+    if (maxThreat > 700 - p.defense / 3 && sh >= 1) {
       let d = 0;
       threat.forEach((th, i) => {
         if (th > 0) d += (danger(v, k, i, visible, mine, p.reads) * th) / 1000;
       });
-      const weight = (p.defense * (sh >= 2 ? 30 : 12)) / 1000;
+      const weight = (p.defense * (sh >= 2 ? 30 : p.defense >= 600 ? 16 : 6)) / 1000;
       score -= d * weight;
     }
     out.push({ tile: t, shanten: sh, ukeire: u, score });
@@ -212,7 +220,7 @@ function afterCall(v: XzView, k: number, take: number): { shanten: number; ukeir
   return best;
 }
 
-function decideClaim(v: XzView, p: Persona): XzAction {
+function decideClaim(v: XzView, p: Style): XzAction {
   const c = v.prompt!.claim!;
   const me = v.me!;
   const seat = v.seats[me.seat]!;
@@ -222,8 +230,11 @@ function decideClaim(v: XzView, p: Persona): XzAction {
     const hand = countsOf([...me.hand, v.claim!.tile]);
     const fan = scoreHand(hand, seat.melds, NO_CONTEXT, v.opts.cap).fan;
     const n = suitCounts(me.hand);
-    const skip = p.greed >= 800 && fan === 0 && v.wall > 40 && Math.max(...n) >= 11 && !v.claim!.rob;
-    if (!skip) return { t: 'claim', w: c.w, c: 'ron' };
+    const pairs = countsOf(me.hand).filter((x) => x >= 2).length;
+    const skip = p.greed >= 800 && fan === 0 && v.wall > 30 && (Math.max(...n) >= 10 || pairs >= 4) && !v.claim!.rob;
+    // 新手场的手软：真人打出来的 0 番小胡，偶尔放过去（牌墙还多时），让人有赢的感觉
+    const soft = p.soft > 0 && fan === 0 && v.wall > 20 && !v.claim!.rob && v.seats[v.claim!.from]!.kind === 'human' && noise(v, 1) * 8 < p.soft;
+    if (!skip && !soft) return { t: 'claim', w: c.w, c: 'ron' };
   }
   const dead = queKinds(seat.que);
   const now = shanten(countsOf(me.hand), seat.melds.length, SHAPE, dead);
@@ -236,14 +247,17 @@ function decideClaim(v: XzView, p: Persona): XzAction {
     const n = suitCounts(me.hand);
     const flush = Math.max(...n) >= 9 && suitOf(k) === n.indexOf(Math.max(...n));
     const pairs = countsOf(me.hand).filter((x) => x >= 2).length;
-    // 七对的牌型（对子多、没副露）不碰
+    // 七对的牌型（对子多、没副露）不碰；守门清的（爱碰低）离听还远时不为快一步碰
     const seven = seat.melds.length === 0 && pairs >= 5;
-    if (!seven && (after.shanten < now || (after.shanten === now && (flush || pairs >= 3) && p.greed >= 300))) return { t: 'claim', w: c.w, c: 'pon' };
+    const closed = p.pon < 300 && seat.melds.length === 0 && now >= 2 && !flush;
+    const faster = after.shanten < now && !closed;
+    const same = after.shanten === now && (((flush || pairs >= 3) && p.greed >= 300) || (p.pon >= 800 && after.ukeire >= 8));
+    if (!seven && (faster || same)) return { t: 'claim', w: c.w, c: 'pon' };
   }
   return { t: 'claim', w: c.w, c: 'pass' };
 }
 
-function decideTurn(v: XzView, p: Persona): XzAction {
+function decideTurn(v: XzView, p: Style): XzAction {
   const pr = v.prompt!;
   if (pr.zimo) return { t: 'zimo' };
   const me = v.me!;
@@ -270,10 +284,15 @@ function decideTurn(v: XzView, p: Persona): XzAction {
 }
 
 export function decide(v: XzView): XzAction {
+  if (!v.me) throw new Error('ai: nothing to do');
+  return decideAs(v, styleOf(v, PERSONAS[v.seats[v.me.seat]!.persona] ?? PERSONAS[0]!));
+}
+
+/** 按给定的参数打（模拟器的代理玩家直接给固定参数） */
+export function decideAs(v: XzView, p: Style): XzAction {
   const me = v.me;
   const pr = v.prompt;
   if (!me || !pr) throw new Error('ai: nothing to do');
-  const p = PERSONAS[v.seats[me.seat]!.persona] ?? PERSONAS[0]!;
   if (pr.swap) return { t: 'swap', tiles: chooseSwap(me.hand) };
   if (pr.que) return { t: 'que', suit: chooseQue(me.hand) };
   if (pr.claim) return decideClaim(v, p);

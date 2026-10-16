@@ -9,8 +9,6 @@ export interface Stakes {
   id: StakesId;
   /** 一份 */
   share: number;
-  /** 电脑的档次（挑性格用，见 src/ai/personas.ts） */
-  level: number;
   /** 碰不碰钱包 */
   wallet: boolean;
 }
@@ -18,11 +16,11 @@ export interface Stakes {
 export const BASE_DIV = 25;
 
 export const STAKES: readonly Stakes[] = [
-  { id: 'fun', share: 2_000, level: 0, wallet: false },
-  { id: 'small', share: 2_000, level: 0, wallet: true },
-  { id: 'mid', share: 10_000, level: 1, wallet: true },
-  { id: 'big', share: 50_000, level: 2, wallet: true },
-  { id: 'lux', share: 200_000, level: 3, wallet: true },
+  { id: 'fun', share: 2_000, wallet: false },
+  { id: 'small', share: 2_000, wallet: true },
+  { id: 'mid', share: 10_000, wallet: true },
+  { id: 'big', share: 50_000, wallet: true },
+  { id: 'lux', share: 200_000, wallet: true },
 ];
 
 export const stakesOf = (id: unknown): Stakes | null => STAKES.find((x) => x.id === id) ?? null;

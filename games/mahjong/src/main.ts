@@ -18,7 +18,7 @@ import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
 import { play, setSound, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { GAME_NAME, num, PHRASES, VARIANT_NAME, walletError } from './view/text.ts';
+import { GAME_NAME, num, PHRASES, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
 import { matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
@@ -605,19 +605,29 @@ function flashTitle(): void {
   document.addEventListener('visibilitychange', stop);
 }
 
-/** 电脑的台词：只由公开的事触发（胡了、点炮、杠），和手牌无关 */
+/** 每个座位上一句说的什么：同一个人不连着说同一句 */
+const lastLine = new Map<number, string>();
+
+/** 电脑的台词：只由公开的事触发（胡了、点炮、杠、碰），和手牌无关；说不说、说什么按性格（话多的多说，口吻见 VOICES） */
 function chatter(v: XzView): void {
   if (!table) return;
   for (const e of v.events) {
     let seat = -1;
-    let pool: number[] = [];
-    if (e.e === 'hu' && e.seat !== 0) [seat, pool] = [e.seat, [1, 8, 0]];
-    else if (e.e === 'hu' && e.from !== null && e.from !== 0) [seat, pool] = [e.from, [10, 13, 2]];
-    else if (e.e === 'kan' && e.seat !== 0) [seat, pool] = [e.seat, [5, 0]];
-    else if (e.e === 'pon' && e.seat !== 0) [seat, pool] = [e.seat, [4, 6]];
-    if (seat < 0 || Math.random() > 0.45) continue;
-    const say = pool[Math.floor(Math.random() * pool.length)]!;
-    window.setTimeout(() => table?.bubble(seat, PHRASES[say]!), 500);
+    let kind: 'hu' | 'pao' | 'kan' | 'pon' = 'hu';
+    let fallback: number[] = [];
+    if (e.e === 'hu' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'hu', [1, 8, 0]];
+    else if (e.e === 'hu' && e.from !== null && e.from !== 0) [seat, kind, fallback] = [e.from, 'pao', [10, 13, 2]];
+    else if (e.e === 'kan' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'kan', [5, 0]];
+    else if (e.e === 'pon' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'pon', [4, 6]];
+    if (seat < 0) continue;
+    const p = PERSONAS[v.seats[seat]!.persona];
+    // 碰是常事，少说；胡、点炮、杠按话多不多
+    if (Math.random() * 1_000 > (p?.talk ?? 450) * (kind === 'pon' ? 0.35 : 0.65)) continue;
+    const lines = (p && VOICES[p.name]?.[kind]) || fallback.map((i) => PHRASES[i]!);
+    const fresh = lines.filter((x) => x !== lastLine.get(seat));
+    const say = (fresh.length ? fresh : lines)[Math.floor(Math.random() * (fresh.length || lines.length))]!;
+    lastLine.set(seat, say);
+    window.setTimeout(() => table?.bubble(seat, say), 500);
   }
 }
 

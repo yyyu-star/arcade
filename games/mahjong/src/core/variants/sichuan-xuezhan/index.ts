@@ -4,7 +4,7 @@
 import { MAX_TITLES, type Payment, type SettleStats } from '../../match/index.ts';
 import { wallLeft, type ClaimKind, type Meld, type RiverTile } from '../../table/index.ts';
 import { kindOf, suitOf, type Suit, type Tile } from '../../tiles/index.ts';
-import type { MatchResult, Variant, VariantAi } from '../types.ts';
+import { NEUTRAL_TUNE, type MatchResult, type Tune, type Variant, type VariantAi } from '../types.ts';
 import {
   actorsOf,
   applyMut,
@@ -82,7 +82,8 @@ export interface XzView {
   wall: number;
   swapDir: number | null;
   seats: SeatView[];
-  me: { seat: number; hand: Tile[]; drawn: Tile | null; swapOut: Tile[] | null; swapIn: Tile[] | null } | null;
+  /** tune 是这个座位当电脑时这一场的状态（只给本人，电脑出手时用） */
+  me: { seat: number; hand: Tile[]; drawn: Tile | null; swapOut: Tile[] | null; swapIn: Tile[] | null; tune: Tune } | null;
   prompt: Prompt | null;
   /** 正在被声明的那张牌（公开），我答过没有 */
   claim: { id: number; tile: Tile; from: number; rob: boolean; answered: boolean } | null;
@@ -134,7 +135,8 @@ export function view(s: XzState, seat: number | null): XzView {
       ? null
       : (() => {
           const p = s.players[seat]!;
-          return { seat, hand: p.hand.slice(), drawn: s.turn === seat ? s.drawn : null, swapOut: p.swapOut?.slice() ?? null, swapIn: p.swapIn?.slice() ?? null };
+          const tune = s.tunes?.[seat] ?? NEUTRAL_TUNE;
+          return { seat, hand: p.hand.slice(), drawn: s.turn === seat ? s.drawn : null, swapOut: p.swapOut?.slice() ?? null, swapIn: p.swapIn?.slice() ?? null, tune: { ...tune } };
         })();
   // 别人摸的牌、暗杠的牌只说"有这么回事"（画面要动一下），不给牌面
   const events = s.events.map((e): XzEvent => {

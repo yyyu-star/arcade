@@ -16,7 +16,7 @@ import { isComplete, waits, type ShapeRules } from '../../hand/index.ts';
 import { payMany, payOne, type Payment } from '../../match/index.ts';
 import { distance, drawHead, drawTail, newWall, nextSeat, resolveClaims, wallLeft, type Answer, type ClaimKind, type KanType, type Meld, type RiverTile, type Wall } from '../../table/index.ts';
 import { buildWall, byTile, countsOf, kindOf, suitKinds, suitOf, type Suit, type Tile, type TileSet } from '../../tiles/index.ts';
-import type { MatchSetup, SeatKind } from '../types.ts';
+import type { MatchSetup, SeatKind, Tune } from '../types.ts';
 import { NO_CONTEXT, scoreHand, unitOf, type FanItem, type WinContext } from './fan.ts';
 
 export const VARIANT = 'sichuan-xuezhan' as const;
@@ -138,6 +138,8 @@ export interface XzState {
   base: number;
   kinds: SeatKind[];
   personas: number[];
+  /** 每个座位当电脑时这一场的状态（部署前存下的没有，按不浮动算） */
+  tunes?: Tune[];
   round: number;
   dealer: number;
   chips: number[];
@@ -238,6 +240,7 @@ export function begin(key: Entropy, opts: XzOpts, kinds: readonly SeatKind[], se
     base: setup.base,
     kinds: [...kinds],
     personas: [...setup.personas],
+    ...(setup.tunes ? { tunes: setup.tunes.map((t) => ({ ...t })) } : {}),
     round: 0,
     dealer: stream(key, 'seat', 0).below(SEATS),
     chips: setup.chips ? [...setup.chips] : Array.from({ length: SEATS }, () => setup.share),

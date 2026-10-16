@@ -21,10 +21,24 @@ export interface Actors {
  * 一场的钱和电脑：share 是带进来的一份（娱乐按小档的数），base 是底分（玩法自己的计分单位换成筹码），
  * personas 是每个座位当电脑时的性格编号（由调用方按档位挑，见 src/ai/personas.ts；真人座位离座后电脑用它）
  */
+/**
+ * 电脑这一场的"状态"（DESIGN.md 第 5 节）：mood 是这一场的种子（房间、单机开场时用带种子的随机数定），
+ * 电脑按它在自己性格的范围里浮动，同一个性格不同场次打法不一样；0 是不浮动（测试、模拟器里的代理玩家）。
+ * soft 是场地的"手软"（0–1000）：新手场大，电脑偶尔打错、少防守、偶尔放过小胡。只有电脑用，规则不看
+ */
+export interface Tune {
+  mood: number;
+  soft: number;
+}
+
+export const NEUTRAL_TUNE: Tune = { mood: 0, soft: 0 };
+
 export interface MatchSetup {
   share: number;
   base: number;
   personas: number[];
+  /** 每个座位当电脑时这一场的状态；不给就是不浮动 */
+  tunes?: Tune[];
   /** 每个座位实际带进来的（钱包不够一份时可以少带）；不给就是每人一份 */
   chips?: number[];
 }

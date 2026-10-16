@@ -7,7 +7,8 @@
 ## 功能
 
 - **川麻·血战到底**：换三张、定缺、刮风下雨、一炮多响、查花猪查大叫；局数、封顶番数、换三张、自摸加底可以选。
-- **电脑**：六个性格（新手到老练，强弱拉开），档位越高电脑越强；好友房实盘的电脑一律最强。
+- **电脑**：六个性格（快、贪、稳、爱杠、老练、新手），每一场的状态不一样，落后会追、领先会稳、点了炮会上头；出手快慢和台词跟性格走。
+  按场地分强弱：新手场（娱乐、小档）偏弱偏宽容，档位越高越强，豪华档接近最强；好友房实盘一律最强。
 - **单机**：娱乐局直接玩；实盘局从平台钱包带筹码上桌，打完结回。筹码无任何现金价值，不能买、不能兑换、不能转让。
 - **好友房**：分享链接或房间号叫朋友，掉线托管、中途接管电脑、离座马上结回、打完"再来一场"。实盘好友房至少两个真人（一个人想玩实盘去单机）。
 - **手感和画面**：听牌提示（剩几张只按看得见的牌算）、点两下或往上拖出牌、飞牌、胡牌亮牌和番型。
@@ -25,9 +26,9 @@ npm ci
 npm run dev          # http://localhost:5176/games/mahjong/（娱乐局直接能玩；平台接口转给 5181）
 npm test             # 类型检查 + vitest（规则、电脑、架构约束、房间规则）+ workerd 里的 Worker 和房间测试
 npm run build        # 页面
-npm run sim 2000     # 模拟器：电脑对打，量时长、输赢、各性格强弱（DESIGN.md 4.1）
+npm run sim 1500     # 模拟器：单机各场地普通玩家、新手的期望，各性格的打法指标（DESIGN.md 4.1）
 node scripts/strength.ts 1200 0,2,3 5   # 一个性格对固定三家的强弱（轮换座位）
-node scripts/stake-room.ts 2000          # 好友房实盘桌：两个普通真人对两个最强电脑的期望（DESIGN.md 4.1）
+node scripts/stake-room.ts 1500 venues   # 好友房实盘桌：两个普通真人对电脑的期望（DESIGN.md 4.1）
 npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场
 npm run build:cf && npm run smoke:room  # 好友房两个浏览器（本地 wrangler dev + 假平台）
 npm run build:cf && npm run dev:worker  # 本地整套（Worker + 页面 + 假平台），端口由系统分配，打开它打印的地址；登录用 __Host-sid cookie（见 test/arcade.dev.ts）
@@ -66,7 +67,7 @@ npx wrangler deploy --route "$SITE_HOST/games/mahjong" --route "$SITE_HOST/games
 |---|---|
 | `src/core/tiles`、`hand`、`table`、`match` | 通用层：牌、向听和听牌、牌桌小件、筹码账 |
 | `src/core/variants/<id>/` | 玩法（`sichuan-xuezhan`）；`variants/index.ts` 登记 |
-| `src/ai/` | 电脑（只拿视图），`personas.ts` 性格 |
+| `src/ai/` | 电脑（只拿视图）：`personas.ts` 性格，`style.ts` 这一场的状态和局面，`venues.ts` 场地 → 电脑 |
 | `src/game/` | 档位和底分、单机推进、交流编号 |
 | `src/room/` | 好友房的规则（kit 的 RoomGame：带入结回、座位换人、再来一场），房间和页面共用 |
 | `src/net/` | 单机实盘的带入结回（经本模块 Worker 转平台钱包） |

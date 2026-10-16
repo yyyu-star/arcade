@@ -7,6 +7,7 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, test } from 'vitest';
 import type { XzState, XzView } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import { STRONGEST } from '../src/ai/personas.ts';
+import { VENUES } from '../src/ai/venues.ts';
 import { EMOTES } from '../src/game/emotes.ts';
 import { mahjongRoom as G, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
@@ -178,11 +179,17 @@ describe('实盘至少两个真人', () => {
     expect(t.own[2]).toBe(true);
   });
 
-  test('实盘桌的电脑一律用最强的性格；娱乐还按档位挑', () => {
+  test('电脑按场地挑：实盘各档用 room:<档> 的组合，娱乐和不计输赢的按 room:fun；每个座位都有这一场的状态', () => {
+    const allowed = (venue: string, s: RoomState) => (s.g as XzState).personas.every((p) => VENUES[venue]!.weights[p]! > 0);
     for (const st of ['small', 'mid', 'big', 'lux']) {
-      expect(g(begin(['human', 'human', 'ai', 'ai'], st), 0).seats.map((x) => x.persona)).toEqual([STRONGEST, STRONGEST, STRONGEST, STRONGEST]);
+      const s = begin(['human', 'human', 'ai', 'ai'], st);
+      expect(allowed(`room:${st}`, s)).toBe(true);
+      expect((s.g as XzState).tunes!.every((t) => t.mood !== 0 && t.soft === VENUES[`room:${st}`]!.soft)).toBe(true);
     }
-    expect(new Set(g(begin(['human', 'human', 'ai', 'ai'], 'fun'), 0).seats.map((x) => x.persona)).size).toBe(4);
+    // 实盘桌一律最强
+    expect((begin(['human', 'human', 'ai', 'ai'], 'big').g as XzState).personas).toEqual([STRONGEST, STRONGEST, STRONGEST, STRONGEST]);
+    expect(allowed('room:fun', begin(['human', 'human', 'ai', 'ai'], 'fun'))).toBe(true);
+    expect((begin(['human', 'ai', 'ai', 'ai'], 'lux').g as XzState).tunes![1]!.soft).toBe(VENUES['room:fun']!.soft);
   });
 
   test('开打以后只剩一个真人在下注：这一场当场结束，所有人桌上的筹码按那一刻结回', () => {
