@@ -25,6 +25,8 @@ export const KEYS = {
   blocked: 'guandan.blocked',
   /** 单独部署（没有平台）时好友房里的昵称（platform.ts、online.ts，0.8.0） */
   nick: 'guandan.nick',
+  /** 首次进牌桌冒过"点头像扔道具"的提示了（table/taunt.ts，0.11.0）：只出一次 */
+  hintFun: 'guandan.hint.fun',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */

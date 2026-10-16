@@ -38,7 +38,9 @@ export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, 
     for (const e of s.ev) {
       if (e.type === 'play') this.botSay(banterOnEvent(this.banter, e, victimOf(s.g.history), this.bots, humans, now, Math.random));
       else if (e.type === 'finish') this.botSay(banterOnEvent(this.banter, e, -1, this.bots, humans, now, Math.random));
-      else if (e.type === 'dealEnd') this.botSay(banterOnDeal(this.banter, e.result, this.bots, now, Math.random));
+      else if (e.type === 'dealEnd') this.botSay(banterOnDeal(this.banter, e.result, this.bots, now, Math.random, humans));
+      // 新的一副：电脑主动互动的次数（每副最多 2 次）从头算
+      else if (e.type === 'dealStart') banterOnEvent(this.banter, e, -1, this.bots, humans, now, Math.random);
     }
   }
 

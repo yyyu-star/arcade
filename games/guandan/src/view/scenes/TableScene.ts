@@ -285,7 +285,7 @@ export class TableScene extends Phaser.Scene {
     return out;
   }
 
-  /** 电脑要发的按它的反应时间播出来；设置里"嘲讽和道具：不看"时电脑一句也不发 */
+  /** 电脑要发的按它的反应时间播出来；设置里"互动：不看"时电脑一句也不发 */
   private playBanter(outs: BanterOut[]): void {
     if (this.net || !getSettings().taunts) return;
     for (const o of outs) {
@@ -1192,6 +1192,8 @@ export class TableScene extends Phaser.Scene {
     const W = worldW(this);
     switch (e.type) {
       case 'dealStart': {
+        // 新的一副：电脑主动互动的次数（每副最多 2 次，net/banter.ts）从头算
+        banterOnEvent(this.banter, e, -1, this.banterBots(), [ME], Date.now(), Math.random);
         this.cancelBot();
         this.dealJiefeng = 0;
         if (e.dealNo === 1) {
@@ -1308,7 +1310,7 @@ export class TableScene extends Phaser.Scene {
         break;
       }
       case 'dealEnd':
-        this.playBanter(banterOnDeal(this.banter, e.result, this.banterBots(), Date.now(), Math.random));
+        this.playBanter(banterOnDeal(this.banter, e.result, this.banterBots(), Date.now(), Math.random, [ME]));
         // 最后一手和名次章留在桌上看清楚，再弹结算
         await wait(this, 1500);
         break;

@@ -62,10 +62,10 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   row(colL, y, '牌背');
   seg(colL, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 }));
 
-  // 右栏。别人（好友房的人、单机的电脑）的嘲讽、表情、道具：关掉就不看也不听，单机的电脑也不发（自己照样能发）
+  // 右栏。别人（好友房的人、单机的电脑）的互动（短语、表情、道具，docs/table-fun.md 第 5 节）：关掉就不看也不听，单机的电脑也不发（自己照样能发）
   y = top;
-  row(colR, y, '嘲讽和道具');
-  seg(colR, y, [{ label: '看', value: '1' }, { label: '不看', value: '0' }], s.taunts ? '1' : '0', (v) => updateSettings({ taunts: v === '1' }), 196);
+  row(colR, y, '互动');
+  seg(colR, y, [{ label: '开', value: '1' }, { label: '不看', value: '0' }], s.taunts ? '1' : '0', (v) => updateSettings({ taunts: v === '1' }), 196);
   // 地方规则：下一局生效
   y += P * 0.8;
   b.add(text(scene, colR, y, '地方规则', { size: TYPE.body, bold: true, ox: 0, color: COLOR.red }));

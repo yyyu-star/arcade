@@ -11,8 +11,8 @@ src/net/    联机（房间和页面共用，纯函数）：rules 把规则核�
             stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
-src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选模式选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
-            recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）
+src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 互动面板、点头像菜单和表情）、fun-tally 护盾/连击/回敬、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选模式选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
+            recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
@@ -40,8 +40,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 改电脑策略后跑 `npm run sim`（`--mode random|greedy|ai|easy-vs-hard|normal-vs-prev`），确认无非法动作、无死锁、难度梯度还在。
   改强弱、性格、场地表后跑 `npm run ai-sim -- solo|room|style`，把新数字写进 `docs/ai.md` 和 `docs/stake.md` 1.3、3.1（好友房实盘每档要"两个普通真人搭档期望加两倍标准误 ≤ 0"）。
   没给性格时 `decide` 就是难度预设本身（聪明提示、代打、`sim` 都靠这个），新加的打法参数默认 0、不改原来的行为。
-  `normal-vs-prev` 现在对比的是 0.1.2 的电脑：之后的版本没再复制，强弱的改动用 `ai-sim` 的胜率表对比（docs/ai.md）。
-  要留新的基准，就把这一版的 `src/ai` 复制成 `tools/baseline-ai-<版本>/`（改 import 路径），再把 `sim.ts` 的 prev 指过去。
+  `normal-vs-prev` 的基准只在电脑 AI 有改动的版本复制（主线 2026-10-16 定）：改了 `src/ai` 打法的 PR 里，把这一版的 `src/ai` 复制成
+  `tools/baseline-ai-<版本>/`（改 import 路径）、把 `sim.ts` 的 prev 指过去，PR 说明写一句；普通发版不动。现在的基准是 0.1.2，强弱另用 `ai-sim` 的胜率表对比（docs/ai.md）。
 
 ## 3. 画面层约定
 
@@ -139,10 +139,14 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     结回带战绩小结 `stats`（`src/stake/stats.ts`）。房间的 `perform`（`worker/room.ts`）去钱包办：带入前先 `view`（钱包只记最近 32 个 op），
     `busy` / `internal` / 异常抛出去让 kit 退避重试，业务拒绝回 `{ ok: false, error }` 交给 `settled`。视图 `NetView.stake` 公开每个座位的分和到账，被拒原因只给自己。
     房间测试 `tests/room/stake.spec.ts` 用 `tests/room/wallet.ts` 的假钱包（测试入口 `tests/room/main.ts` 多导出 `FakeWallet` / `WalletBank`，WALLET 绑到自己）。
-- 好友房的乐子（0.6.0 起，底座是 kit 的 `emote` 和 `arcade-kit/fun`；公平底线：人人一样、免费、不挂筹码，不停计时、不挡牌和按钮）：
+- 牌桌互动（0.6.0 起，底座是 kit 的 `emote` 和 `arcade-kit/fun`；0.11.0 起按仓库根 `docs/table-fun.md` 和德州、麻将对齐，做法不同以那份为准；公平底线：人人一样、免费、不挂筹码，不停计时、不挡牌和按钮）：
+  - 入口：左下"互动"按钮（面板：短语 / 表情 / 道具）、点别人头像（一排 8 个道具、3 句点名短语、"屏蔽他"，菜单在头像朝桌心那侧）、点自己头像（12 个表情）；
+    首次进牌桌冒一次"点头像扔道具"（`guandan.hint.fun`）。自己发的冷却道具 1.5 秒、表情和短语 1 秒；同一个人 10 秒最多被扔 6 次，多了亮"护盾"不播；
+    3 秒内连着扔同一个人冒"×N"，被扔后 3 秒内扔回去冒"回敬！"（`src/view/fun-tally.ts`，纯函数有单测）。
   - 嘲讽、表情包、扔道具都是 kit 转发的编号（文字在 `src/net/emotes.ts`），面板和点头像菜单在 `src/view/table/taunt.ts`；设置里能整个关掉，点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（sessionStorage `guandan.blocked`）。
   - 单机（0.7.1 起）挂同一套面板：`taunt.ts` 只认 `FunChannel`，好友房经房间转发，单机在本地播。电脑什么时候发、被扔了怎么回、真人想太久怎么催在 `src/net/banter.ts`（纯函数，
-    随机数和时间由调用方给，只看公开事件；按性格和状态，有冷却）。电脑出牌（`src/ai`）绝不读这些（测试查 `src/ai` 不引 banter/emotes）。名场面在 `src/view/highlights.ts`。
+    随机数和时间由调用方给，只看公开事件）：被扔后 60% 回应、其中四分之一同类回扔（同一个电脑 20 秒最多回扔 2 次）；
+    名场面（炸弹、头游、双下）输的一方 40% 冲赢家、赢的一方 30% 得意；每副最多 2 次主动互动（`dealStart` 清零）；互动性格爱闹 ×1.5、普通 ×1、高冷 ×0.3（阿强、老张、小美）。电脑出牌（`src/ai`）绝不读这些（测试查 `src/ai` 不引 banter/emotes）。名场面在 `src/view/highlights.ts`。
   - 好友房的电脑也用 banter（kit 0.10.1 的钩子）：`worker/room.ts` 的 `onStep` 每步广播完看公开事件、`onEmote` 回真人冲电脑扔的东西，经 `botEmote` 发（消息带 `bot: true`，
     页面排到手头的帧播完再放）。冷却、电脑性格只在内存里，不写存储、不记真人短语；好友房电脑不催人（房间只有一个闹钟）。`npm run test:room` 断言电脑房有电脑互动、4 真人房没有。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
@@ -181,7 +185,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | key | 内容 |
 |---|---|
 | `guandan.save` | 进行中的整局：`{ v, state: GameState, difficulty, counted, dealsCounted }`；整局结束即删除 |
-| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、嘲讽和道具开关 |
+| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`） |
 | `guandan.stats` | 战绩：局数、胜局、连胜、最高连胜、副数、头游次数 |
 | `guandan.tutorial` | 新手引导是否看过 |
 | `guandan.errors` | 最近 20 条未捕获错误（兜底面板写入） |
@@ -193,6 +197,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.stake` | 单机实盘这一场（0.4.0 起）：`{ v, userId, ref, tier, share, until, match: { tier, deals }, state, settle }`；只在本机、不进云同步；结回或退回后删，过了 `until` 打开标题页时删 |
 | `guandan.a2hs` | 标题页"添加到主屏幕玩更大"提示点过 ✕（值 1，0.1.10 起） |
 | `guandan.nick` | 单独部署时好友房里的昵称（字符串，0.8.0 起；有平台时不用，昵称以平台账号为准） |
+| `guandan.hint.fun` | 首次进牌桌冒过"点头像扔道具"了（0.11.0），只出一次 |
 | `guandan.blocked` | sessionStorage：点头像"屏蔽他"屏蔽了谁 `{ code, seats: [{ seat, name }] }`，只对这个房间、这个标签页，那个座位换了人就不算（0.6.0 起，0.6.4 加名字） |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 
