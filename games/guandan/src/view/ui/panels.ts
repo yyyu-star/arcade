@@ -15,11 +15,11 @@ export function applyAudio(s: Settings = getSettings()): void {
 
 /**
  * 设置：两栏（0.9.0）。手机横屏上每一行至少 44 CSS 像素高（minHit），一栏九行排不下，所以左边放声音、速度、难度、牌背，
- * 右边放嘲讽、地方规则和"重看引导"。选项组的点按区域高到行距、宽到和邻居相接。
+ * 右边放互动、地方规则和"重看引导"。选项组的点按区域高到行距、宽到和邻居相接。
  */
 export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => void; onClose?: () => void } = {}): Modal {
   const P = Math.max(64, minHit());
-  // 高度跟着行距走：右栏最长（一行嘲讽 + 规则标题 + 三行规则 + 按钮，约 4.6 行），上面留标题飘带、下面留边
+  // 高度跟着行距走：右栏最长（一行互动 + 规则标题 + 三行规则 + 按钮，约 4.6 行），上面留标题飘带、下面留边
   const PH = Math.round(4.6 * P + 200);
   const PW = Math.min(worldW(scene) - SPACE.xxl * 2, 1200);
   const m = modal(scene, PW, PH, '设置', { onClose: opts.onClose });

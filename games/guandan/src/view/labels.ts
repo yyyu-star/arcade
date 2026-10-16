@@ -79,7 +79,7 @@ export function seatName(seat: number): string {
 /** 画面上的名字最多几个字（seatName 截短用） */
 export const NAME_MAX = 7;
 
-/** 不截短的名字：只给认人用（屏蔽名单按名字核对是不是换了人），不往画面上放 */
+/** 不截短的名字：只给认人、取全名用，不往画面上放 */
 export function fullSeatName(seat: number): string {
   if (seat === 0) return '你';
   const who = seatIdentity[seat];

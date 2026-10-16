@@ -4,7 +4,7 @@
  */
 import { isBomb, type DealResult, type Play, type PlayRecord } from '../core/index.ts';
 
-export type HighlightKind = 'jokerBomb' | 'bombOnBomb' | 'bombs3' | 'comeback' | 'doubleDown' | 'quick';
+type HighlightKind = 'jokerBomb' | 'bombOnBomb' | 'bombs3' | 'comeback' | 'doubleDown' | 'quick';
 
 export interface Highlight {
   kind: HighlightKind;
@@ -16,7 +16,7 @@ export interface Highlight {
 const team = (s: number): number => s % 2;
 
 /** 几手以内出完算"秒走"（一个人 27 张，平常要十几手） */
-export const QUICK_PLAYS = 7;
+const QUICK_PLAYS = 7;
 
 /**
  * 这一手是不是"炸上炸"：用炸弹压住了对方的炸弹。history 里还没有这一手。

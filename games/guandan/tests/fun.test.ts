@@ -9,7 +9,7 @@ import { funBots, guandanRoom, testKey } from '../src/net/rules.ts';
 
 const play = (s: string) => interpret(parseCards(s), 2, DEFAULT_OPTIONS)[0]!;
 
-describe('嘲讽系统', () => {
+describe('互动编号、顺手提示、称号', () => {
   it('编号表：短语 0–7 不动，嘲讽、表情、道具依次往后；表情、道具对得上 kit 的列表', () => {
     expect(EMOTES).toHaveLength(8);
     expect(emoteOf(0)).toEqual({ kind: 'phrase', text: '好牌！' });
