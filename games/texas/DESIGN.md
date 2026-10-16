@@ -1227,7 +1227,7 @@ games/texas/
 | 站点根 `/` | 平台的 | 跳到 `/games/texas/`（kit 的 `standaloneRoot`） |
 | "大厅"按钮 | 平台首页 `/` | 游戏自己的首页 `./` |
 
-- **页面怎么知道**：开局用 kit 的 `detectPlatform()` 问同域 `/api/me`（顺带拿平台昵称，替掉原来单独问的一次）。单独部署时 `/api/me` 由德州 Worker 答 200 `{ standalone: true }`
+- **页面怎么知道**：开局用 kit 的 `detectPlatform()` 问同域 `/api/me`（顺带拿平台昵称，替掉原来单独问的一次）。单独部署时 `/api/me` 由德州 Worker 经 kit 的 `standaloneRoot` 答 200 `{ standalone: true }`（0.7.0 是德州自己答的，kit 0.10.2 收进 kit）
   （没有 user 就算没有平台）：不回 404，免得每次打开页面控制台都冒一条红的。平台抖了一下（5xx、超时，`unknown`）按有平台算，和以前一样。结果记在 `src/site.ts`。
 - **安全**：本站有 ARCADE 绑定，游客 cookie 一律不认；绑定丢了（GATE=login 却没有 ARCADE）kit 按平台不可用拒绝，房间也不会因为没有 WALLET 就白给筹码（`perform` 只在单独部署时回 ok，否则回 `unavailable`）。
 - **真人至少两个**照旧（规则不分部署），说明换成不提实盘的一句。

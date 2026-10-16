@@ -12,7 +12,7 @@
  */
 import { sameOrigin, whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
-import { acceptCreate, acceptJoin, isStandalone, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
 import { PERSONAS } from '../src/ai/personas.ts';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
 import type { WalletReply } from '../src/net/wallet.ts';
@@ -63,13 +63,11 @@ const STATUS: Record<string, number> = {
 
 export default {
   async fetch(request, env): Promise<Response> {
+    // 单独部署时站点根 / 跳到游戏首页，/api/me 答"没有平台"（kit 0.10.2，页面的 detectPlatform 据此降级）
     const root = standaloneRoot(request, env, 'texas');
     if (root) return root;
     const url = new URL(request.url);
     const path = url.pathname;
-    // 页面开局问 /api/me 有没有平台（kit 的 detectPlatform）。单独部署时由这里答"没有"：2xx 的 JSON 里没有 user 就算没有平台，
-    // 不回 404 是免得每次打开页面控制台都冒一条红的。本站的 /api/* 由平台的路由接，到不了这里
-    if (path === '/api/me' && isStandalone(env)) return json({ standalone: true }, 200);
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
     if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST });
