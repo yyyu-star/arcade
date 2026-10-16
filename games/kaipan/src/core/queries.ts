@@ -9,7 +9,6 @@ import { BALANCE } from './balance.ts';
 import { flipDir, topicsOf } from './chat.ts';
 import {
   CALENDAR,
-  EVENTS,
   EVENT_BRIEF,
   ITEM_BRIEF,
   calendarOf,
@@ -565,11 +564,6 @@ export function eventView(s: Readonly<GameState>): EventView | null {
     brief: b ? b.brief(s.event, s) : d.name,
     picks: b ? b.picks(s.event, s) : [{ label: options[0] }, { label: options[1] }],
   };
-}
-
-/** 全部事件的名字（图鉴、调试用）。 */
-export function eventNames(): { id: string; name: string }[] {
-  return EVENTS.map((d) => ({ id: d.id, name: d.name }));
 }
 
 // ================================================================ 结束页

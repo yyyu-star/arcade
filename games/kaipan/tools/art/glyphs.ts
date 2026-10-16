@@ -4,7 +4,7 @@
  *
  *   node tools/art/build.ts glyphs
  */
-import { INK, WHITE, type Frag, darken, ellipseD, frag, hiArc, merge, rrectD, shape, starD, svgDoc } from './lib/svg.ts';
+import { INK, WHITE, type Frag, ellipseD, frag, hiArc, merge, rrectD, shape, starD, svgDoc } from './lib/svg.ts';
 
 const S = 3;
 
@@ -335,6 +335,5 @@ export const GLYPHS: Record<string, () => Frag> = {
 
 export function build(write: (rel: string, data: string) => void): number {
   for (const [name, fn] of Object.entries(GLYPHS)) write(`ui/gl_${name}.svg`, svgDoc(48, 48, fn()));
-  void darken;
   return Object.keys(GLYPHS).length;
 }

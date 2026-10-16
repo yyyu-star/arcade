@@ -19,7 +19,7 @@ import { StockGuy } from '../ui/stockGuy.ts';
 import { addText, setColor } from '../ui/text.ts';
 import { pctArrow } from '../labels.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
-import { FEEL_WORD, ROLE_TERM, ROLE_WORD, term, termTip } from '../glossary.ts';
+import { ROLE_TERM, ROLE_WORD, term, termTip } from '../glossary.ts';
 import { SLOTS, slotRects } from './layout.ts';
 import { SHORT_COLOR, chipStack, sunglasses, unitPips } from './ext.ts';
 import { positionsView, chatView, formatMoney, freeUnits, type RecView } from '../../core/index.ts';
@@ -113,7 +113,6 @@ class SlotCard {
     this.stockId = card?.id ?? null;
     const { x, y, w, h } = rect;
     this.root = scene.add.container(0, 0);
-    const cx = x + w / 2;
     if (!card) {
       // 0.5.1：空格不再画一模一样的现金卡——第一个空格是"邀请位"（虚线框 + ＋ + 今天推荐的小人招手，点它直接买），
       // 其余空格由 HoldingsView 合并成一块"现金 · 空几格"（这里只留点击区，选格子模式照样能点）
@@ -463,8 +462,6 @@ export class HoldingsView {
     const rects = slotRects(hc.length);
     const pv = s.ext ? positionsView(s) : null;
     const ext: SlotExt | null = pv ? { total: pv.total, cash: pv.cash } : null;
-    const extSig = ext ? `${ext.total}:${ext.cash}` : '';
-    this.extSig = extSig;
     this.drawCash(pv);
     if (this.cards.length !== hc.length) {
       for (const c of this.cards) c.destroy();
@@ -618,7 +615,6 @@ export class HoldingsView {
     for (const c of this.cards) if (c && !c.stockId) c.root.setDepth(1);
   }
 
-  private extSig = '';
   private cashNode: Phaser.GameObjects.Container | null = null;
   private cashRect: Rect | null = null;
 

@@ -687,16 +687,6 @@ function meanDEff(range: [number, number], heat: number): number {
   return sum / n;
 }
 
-/** 一个题材的信念：昨天收盘后的后验，以及今天开盘前的先验（含今天的消息）。 */
-interface ThemeBelief {
-  /** 今天开盘前的先验（还没看消息） */
-  prior: Dist;
-  /** 今天看过消息后的信念 */
-  today: Dist;
-  /** 今天开盘前的热度 */
-  heat: number;
-}
-
 function uniformStart(theme: ThemeId): Dist {
   const d = newDist();
   for (let si = 0; si < NS; si++) {

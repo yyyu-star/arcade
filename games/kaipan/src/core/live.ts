@@ -6,7 +6,7 @@
 import { BALANCE } from './balance.ts';
 import { personaAccount } from './content/index.ts';
 import { debtOf } from './engine.ts';
-import { LIVE_TIERS, liveGear, liveLevered, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
+import { liveGear, liveLevered, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
 import type { GameState, PersonaId, RunSetup } from './types.ts';
 
 export { LIVE_MAX_BP, LIVE_TIERS, isLiveTier, liveGear, liveLevered, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
@@ -19,7 +19,6 @@ export function liveSetup(tier: LiveTier, persona: PersonaId = 'newbie', x = 1):
   const gear = g ? { gear: { ...g, interest: g.interest * gearRate } } : {};
   return { persona, difficulty: liveTierById(tier).difficulty, live: { months: BALANCE.live.months, billMult, lev, tier, ...gear } };
 }
-
 
 /** 0.10.0 以前一档一个难度，那时开的局没记档位，按难度认 */
 const LEGACY_TIER: Record<number, LiveTier> = { 1: 'small', 2: 'mid', 3: 'big', 4: 'lux' };

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { chatView, formatMoney, friendView, holdingCards, stockCard, themeBoard, type GameState, type ThemeId } from '../../core/index.ts';
+import { chatView, friendView, holdingCards, stockCard, themeBoard, type GameState, type ThemeId } from '../../core/index.ts';
 import { avatarKey } from '../assets.ts';
 import { FEEL_WORD, ROLE_TERM, ROLE_WORD, term } from '../glossary.ts';
 import { pctArrow, recordText } from '../labels.ts';
@@ -10,7 +10,7 @@ import { addSpark } from '../ui/spark.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
 import { MIN_TEXT_SIZE, addText, fitWidth } from '../ui/text.ts';
 import { hideTooltip } from '../ui/tooltip.ts';
-import { friendCalls, marketMoves, preCount, stockMoves, streakOf, sumMoves, themeHeat, toLevels, vsMarket, vsWord } from './tape.ts';
+import { friendCalls, preCount, stockMoves, streakOf, sumMoves, themeHeat, toLevels, vsMarket, vsWord } from './tape.ts';
 
 /**
  * 0.5.1 详情卡：点股票小人 / 推荐卡 / 风口行 / 群友头像打开，让玩家自己研究。
@@ -196,7 +196,5 @@ export function openFriendDetail(scene: Phaser.Scene, s: Readonly<GameState>, fr
     fitWidth(t, 540, 3);
     r.add(t);
   }
-  void formatMoney;
-  void marketMoves;
   return d;
 }

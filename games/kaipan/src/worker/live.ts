@@ -33,7 +33,6 @@ const BUYIN_TTL_MS = 24 * 3600 * 1000;
 const REF_RE = /^[A-Za-z0-9_-]{8,57}$/;
 const PREFIX = '/games/kaipan/api/live/';
 const ACTIONS = ['buyin', 'settle', 'refund'] as const;
-type Action = (typeof ACTIONS)[number];
 
 function reply(status: number, body: unknown, cookies: string[] = []): Response {
   const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store' });

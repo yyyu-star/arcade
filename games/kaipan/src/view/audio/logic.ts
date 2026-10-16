@@ -107,8 +107,6 @@ export const SCALES = {
   minorPentatonic: [0, 3, 5, 7, 10],
 } as const satisfies Record<string, readonly number[]>;
 
-type ScaleName = keyof typeof SCALES;
-
 /** 音阶第 degree 级（0 起，可为负或超过一个八度）的 MIDI 音高。 */
 export function scaleNote(root: number, scale: readonly number[], degree: number): number {
   const n = scale.length;

@@ -34,31 +34,6 @@ export const THEME_REAL: Record<ThemeId, { sectors: readonly string[]; name: str
   pig: { sectors: ['consumer', 'materials'], name: '食品和原材料' },
 };
 
-/** 真实行业的大白话（数据工具用；画面上不显示）。 */
-export const SECTOR_WORD: Record<string, string> = {
-  internet: '互联网',
-  software: '软件',
-  hardware: '电脑',
-  semis: '芯片',
-  netequip: '网络设备',
-  telecom: '电信',
-  media: '传媒',
-  bank: '银行',
-  broker: '券商',
-  finance: '保险金融',
-  realestate: '地产',
-  energy: '能源',
-  materials: '原材料',
-  industrial: '工业',
-  auto: '汽车',
-  retail: '零售',
-  consumer: '食品消费',
-  pharma: '制药',
-  biotech: '生物科技',
-  health: '医疗',
-  utility: '电力',
-};
-
 export interface SegmentStock {
   /** 绑定的游戏股票 id（src/core/content/stocks.ts） */
   slot: string;

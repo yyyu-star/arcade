@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { formatMoney, formatPoints, type HoldingMove } from '../../core/index.ts';
+import { formatMoney, type HoldingMove } from '../../core/index.ts';
 import { CAT_HINT_KEY, NEWS_KEY, hasArt, stockKey } from '../assets.ts';
 import type { Animator } from '../fx/anim.ts';
 import type { Rect } from '../rect.ts';

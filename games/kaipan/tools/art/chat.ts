@@ -4,10 +4,6 @@
  */
 import { INK, WHITE, type Frag, darken, frag, hiArc, merge, rrectD, shape, sparkleD, starD, svgDoc } from './lib/svg.ts';
 
-function line(d: string, color: string, w: number, extra = ''): string {
-  return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
-}
-
 /** 手机外框 360×720，九宫格四边各 48px。屏幕区域内缩 14px，底色米白。 */
 function phoneFrame(): Frag {
   const outer = rrectD(4, 4, 352, 712, 46);

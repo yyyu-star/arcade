@@ -1,7 +1,34 @@
+# Kaipan · 开盘
+
+A stock-market roguelike deck-builder for the browser (Phaser 4 + TypeScript). You are a small-time retail trader: each morning read the
+group-chat gossip, pick cartoon "stock buddies" for your hand, then hit **Open** and watch hot themes rotate, leaders drag their followers
+up limit after limit, and your account swing. Pay the bill at the end of every month or the run is over.
+
+- **Real price action, fictional everything else.** Every run replays a random slice of real 1996–2018 US market history (public-domain
+  WIKI Prices data), scaled into the game; years, companies and tickers never appear on screen. All stocks, people, news, art and audio
+  are original or procedurally generated.
+- **Deterministic rules core.** `src/core/` is pure: same seed + same actions = the same run, bit for bit. Saves, replays, the daily
+  challenge and bot simulations (`npm run sim`) all rely on it.
+- **Modes.** Casual runs (a 5-month short run or a full year, three difficulties plus five harder market climates), a daily challenge with
+  a leaderboard, and a "live" mode that stakes play chips from the Arcade platform wallet. Chips are play money only.
+- **Runs standalone.** `wrangler.jsonc` deploys the game on its own as a single Worker; login, cloud saves, leaderboards and chips light up
+  only when it is mounted next to the Arcade platform.
+
+```bash
+cd games/kaipan && npm ci
+npm run dev      # http://localhost:5173
+npm test         # vitest: rules, replays, content, workers, architecture checks
+npm run build:cf # production build for /games/kaipan/
+```
+
+The rest of this README, the in-game text, code comments and design docs (`docs/`) are in Simplified Chinese. License: MIT (`LICENSE`).
+
+---
+
 # 开盘
 
 散户炒股主题的肉鸽构筑游戏：每天看群聊里的小道消息，挑股票放进持仓，开盘后看它们跟着风口轮流火、
-带头大哥带着小弟涨；每个月底账户里要留够钱还上一笔，还不上游戏就结束。12 个月后，看你是韭菜还是股神。
+带头大哥带着小弟涨；每个月底账户里要留够钱还上一笔，还不上游戏就结束。打完一局（短局 5 个月，完整一年 12 个月），看你是韭菜还是股神。
 画面一律用大白话，A 股原词（题材、龙头、跟风……）只出现在提示和图鉴的小白词典里。
 浏览器运行（Phaser 4 + TypeScript），美术与音频全部为程序生成的原创内容；股票、公司、人物和消息全部虚构。
 
@@ -75,7 +102,7 @@
   云同步还没确认账号时，每日挑战开局（或恢复）后几秒先问一次 `/api/me`（0.5.11），免得结束页马上回大厅时这个普通请求被取消。
   读榜按榜和范围缓存 45 秒，交分后那次读也进缓存；交上分（含 odd）时作废这个榜，缓存带版本号，作废前发出的读晚回来不写进缓存（0.5.12）。接口见总仓库 `docs/platform-backend.md` 9.2、15.5。
 - 实盘模式（设计 `docs/design-live.md`）：规则在开局设置 `RunSetup.live`（打几个月、账单倍数、涨跌倍数、档位，开局时从 `BALANCE.live` 抄进这局）和 `src/core/live.ts`
-  （四档对应难度 1/2/3/3、当前资产 = 账户 − 借款、结回倍数用万分之几的整数、破产为 0）。`npm run sim -- --live` 出各档的结回分布，`tests/live-sim.test.ts` 锁住梯度。
+  （四档对应难度 1/2/3/3、当前资产 = 账户 − 借款、结回倍数用万分之几的整数、破产为 0）。0.11.0 起开局可选杠杆 1× / 2× / 3×（`live.gear`：封顶、每月利息、清零线，设计稿 2.6），`npm run sim -- --gear` 出杠杆表。`npm run sim -- --live` 出各档的结回分布，`tests/live-sim.test.ts` 锁住梯度。
 - 配平（0.10.0，`docs/design-balance.md`）：模拟器里的小白 `xiaobai`、普通 `putong` 两个玩家模型，`npm run sim -- --balance --runs 2000` 出实盘四档、娱乐三档（短局和完整一年）的对照表和一局约几分钟。娱乐短局的规则在开局设置 `RunSetup.short`（`shortSetup`）。
   档位表和结回算法单放在 `src/core/liveTiers.ts`（Worker 也用，不把规则引擎打进 Worker）。
   - 钱包（0.6.0）：浏览器 → 开盘 Worker（同域 `POST api/live/{buyin,settle,refund}`，`src/worker/live.ts`，入口分流在 `route.ts`）→ 服务绑定 `WALLET`（平台的 `WalletService`，`props.game = kaipan`）。
@@ -190,9 +217,9 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
   市况、游戏化标题和大事的故事句，没有年份、日期、公司和代码（`tests/segments-leak.test.ts` 把关）。id 和真实年份的对照只在
   `tools/data/segments-manifest.json`，大事的故事版在 `tools/data/beats.ts`，都不进画面包。重新生成：
   `node tools/data/segments.ts --packs .data/wiki-prices/packs --step 1`（同一份年包结果逐字节一致）。
-- `docs/`：现行的是 `design-0.5.md`、`design-0.5-visual.md`、`core-api-0.5.md`、`design-live.md`（实盘），其余带版本号的是历史稿，
+- `docs/`：现行的是 `design-0.5.md`、`design-0.5-visual.md`、`core-api-0.5.md`、`design-live.md`（实盘）、`design-balance.md`（配平），其余带版本号的是历史稿，
   索引见 `docs/README.md`。
 
 ## 许可证
 
-MIT，见仓库根目录的 `LICENSE`。
+MIT，见本目录的 `LICENSE`（和仓库根目录的一样，拆成单独仓库时随模块带走）。
