@@ -199,12 +199,12 @@ describe('结回、放弃', () => {
     expect(calls.filter((x) => x.url === 'api/live/settle')).toHaveLength(1);
   });
 
-  it('种子对不上、已经在结了：什么都不发；倍数夹在 0..30000', async () => {
+  it('种子对不上、已经在结了：什么都不发；倍数夹在 0..70000（最高一档杠杆的封顶）', async () => {
     const { c, store, calls } = await playing([OK({ credited: 6_000 })]);
     await c.finish('other-seed', 'settle', 10_000);
     expect(calls).toHaveLength(1);
     await c.finish('seed', 'settle', 99_999);
-    expect(calls[1]!.body?.bp).toBe(30_000);
+    expect(calls[1]!.body?.bp).toBe(70_000);
     await c.finish('seed', 'settle', 10_000);
     expect(calls).toHaveLength(2);
     expect(saved(store)?.step).toBe('done');

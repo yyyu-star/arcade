@@ -74,4 +74,5 @@ export const AUTO_SELL_LABEL: Record<AutoSellReason, string> = {
 
 export const END_REASON_LABEL: Record<EndReason, string> = {
   bankrupt: '没还上钱，游戏结束',
+  margin: '开了杠杆，跌到清零线，这局按 0 结',
 };

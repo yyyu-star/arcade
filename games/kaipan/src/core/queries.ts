@@ -624,7 +624,7 @@ export interface RunSummary {
    * 0.6.0 实盘：打几个月、开局资产、当前资产（账户 − 借款）、结回倍数（万分之几）、档位和一份、按倍数结回多少；
    * clean 是正常从界面开的实盘局（图鉴照记）。娱乐局为 null
    */
-  live: { months: number; start: number; assets: number; bp: number; tier: LiveTier | null; stake: number; value: number; clean: boolean } | null;
+  live: { months: number; start: number; assets: number; bp: number; tier: LiveTier | null; stake: number; value: number; clean: boolean; /** 0.11.0 杠杆（1 / 2 / 3）和是不是跌到清零线结束的 */ gear: number; margin: boolean } | null;
   /** 本局达成的成就 id（结束后才判定） */
   achievements: string[];
   /** 本局见过的东西（图鉴） */
@@ -770,6 +770,8 @@ export function runSummary(s: Readonly<GameState>): RunSummary {
           stake: liveTierOf(s)?.stake ?? 0,
           value: liveValue(s) ?? 0,
           clean: isCleanLiveSetup(s.setup),
+          gear: s.setup.live.gear?.x ?? 1,
+          margin: s.endReason === 'margin',
         }
       : null,
     achievements: achievementsOf(s),

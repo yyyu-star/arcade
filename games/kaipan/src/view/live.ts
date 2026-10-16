@@ -2,7 +2,7 @@
  * 0.6.0 实盘在画面这一层的接线（docs/design-live.md 第 2.4 节）：一个全局的 LiveClient（platform/live.ts），
  * 加上什么时候结回、什么时候重发、打开时怎么接上这局。
  */
-import { isLive, liveMultipleBp, liveSettleStats, runSummary, type GameState, type SettleStats } from '../core/index.ts';
+import { BALANCE, gearLevered, isLive, liveMultipleBp, liveSettleStats, runSummary, type GameState, type SettleStats } from '../core/index.ts';
 import { LiveClient } from '../platform/live.ts';
 import { defaultStore } from '../platform/settings.ts';
 import { standalone } from '../platform/mode.ts';
@@ -24,6 +24,13 @@ export const live = new LiveClient({
 export function onLiveChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+/** 0.11.0 开了杠杆、放大后的结回倍数离清零线不到 warnGap 份：返回现在的倍数（顶栏变红闪、提醒一句）；不用提醒为 null */
+export function marginWarn(s: Readonly<GameState>): number | null {
+  const v = gearLevered(s);
+  const call = s.setup?.live?.gear?.call ?? 0;
+  return v !== null && s.phase === 'premarket' && v > call && v <= call + BALANCE.live.warnGap ? v : null;
 }
 
 /** 这局是正在打的实盘（记录对得上、还没结） */

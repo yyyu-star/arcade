@@ -14,6 +14,7 @@ import {
   collateralById,
   collateralTerms,
   EVENTS,
+  GEAR_INTEREST_BILL,
   SHORT_GOAL_BILL,
   SURPRISE_BILLS,
   FRIENDS,
@@ -36,7 +37,7 @@ import {
   stocksOf,
 } from './content/index.ts';
 import type { EventCtx, HoldingCtx, MarketRules, Rules } from './hooks.ts';
-import { isLiveTier } from './liveTiers.ts';
+import { isLiveTier, liveLevered } from './liveTiers.ts';
 import {
   MOODS,
   advanceStage,
@@ -666,6 +667,9 @@ function startMonth(s: GameState, month: number, em: Emitter): void {
   // 0.10.0 娱乐短局：最后一个月月底多交一笔首付（这局的最终目标，开局时就说了）
   const goal = shortGoal(s);
   if (goal > 0 && month === runMonths(s)) extras.push({ id: SHORT_GOAL_BILL.id, name: SHORT_GOAL_BILL.name, amount: goal });
+  // 0.11.0 实盘杠杆：每月的融资利息（开局资产的比例，取整到百元）
+  const interest = gearInterest(s);
+  if (interest > 0) extras.push({ id: GEAR_INTEREST_BILL.id, name: GEAR_INTEREST_BILL.name, amount: interest });
   let amount = base;
   for (const x of extras) amount += x.amount;
   s.bill = { month, name: BILL_NAMES[month - 1] ?? '账单', amount, extras };
@@ -1325,8 +1329,41 @@ function open(s: GameState, em: Emitter): void {
   s.dayInMonth += 1;
   emit(em, { type: 'dayClosed', report });
 
+  if (marginCalled(s, em)) return;
   if (s.dayInMonth >= daysInMonth(s.month)) endMonth(s, em);
   else startDay(s, em);
+}
+
+/**
+ * 0.11.0 实盘杠杆每月的利息（元，取整到百元）；没开杠杆为 0。interest 按结回倍数算（每月让结回少几成），
+ * 折回游戏里的钱要除以这一档的涨跌倍数：不然越往上的档位利息被放大得越多，开杠杆在大档、豪华档几乎必输。
+ */
+export function gearInterest(s: Readonly<GameState>): number {
+  const live = s.setup?.live;
+  const g = live?.gear;
+  if (!g || !(g.interest > 0)) return 0;
+  const start = s.setup?.account ?? personaAccount(s.persona);
+  return Math.round((g.interest * start) / (live.lev ?? 1) / 100) * 100;
+}
+
+/** 0.11.0 实盘杠杆：放大后的结回倍数（没截断）；没加杠杆为 null */
+export function gearLevered(s: Readonly<GameState>): number | null {
+  const live = s.setup?.live;
+  if (!live?.gear || live.gear.x <= 1) return null;
+  const start = s.setup?.account ?? personaAccount(s.persona);
+  return liveLevered((s.account - debtOf(s)) / start, live.lev ?? 1, live.gear.x);
+}
+
+/** 0.11.0 爆仓：放大后的结回倍数跌到爆仓线，强制平仓、这局按 0 结（收盘后、月底还完账单后各查一次） */
+function marginCalled(s: GameState, em: Emitter): boolean {
+  const v = gearLevered(s);
+  const call = s.setup?.live?.gear?.call ?? 0;
+  if (v === null || v > call) return false;
+  s.phase = 'lost';
+  s.endReason = 'margin';
+  emit(em, { type: 'gearWiped', month: s.month, account: s.account, levered: v });
+  emit(em, { type: 'runLost', reason: 'margin', month: s.month, account: s.account, bill: 0 });
+  return true;
 }
 
 /**
@@ -1423,6 +1460,7 @@ function endMonth(s: GameState, em: Emitter): void {
   }
   s.stats.billsPaid += 1;
   if (s.ext) checkBank(s, em, 'bill');
+  if (marginCalled(s, em)) return;
   if (s.month >= runMonths(s)) {
     // 0.4 C：一年结束，银行把没还的借款收回去（东西还给你）
     if (s.ext) {
@@ -1725,6 +1763,8 @@ function checkSetup(setup: RunSetup | null): void {
     if (!(billMult > 0 && billMult <= 1)) throw new Error('实盘的账单倍数要在 (0, 1]');
     if (lev !== undefined && !(lev >= 1 && lev <= 10)) throw new Error('实盘的涨跌倍数要在 1..10');
     if (tier !== undefined && !isLiveTier(tier)) throw new Error(`未知档位：${String(tier)}`);
+    const g = setup.live.gear;
+    if (g !== undefined && !(g.x >= 1 && g.x <= 5 && g.cap >= 1 && g.cap <= 10 && g.interest >= 0 && g.interest < 1 && g.call >= 0 && g.call < 1)) throw new Error('实盘的杠杆设置不对');
     if (setup.daily !== undefined) throw new Error('每日挑战不能是实盘');
   }
   if (setup.short !== undefined) {

@@ -91,6 +91,8 @@ export {
   replay,
   surprisePlan,
   runMonths,
+  gearInterest,
+  gearLevered,
   shortGoal,
   shortGoalFor,
   shortSetup,
@@ -99,7 +101,7 @@ export {
 } from './engine.ts';
 export type { DispatchOptions, DispatchResult } from './engine.ts';
 export { END_TITLES, STYLE_TITLES, liveSettleStats, titlesJson, type SettleStats } from './career.ts';
-export { LIVE_MAX_BP, LIVE_TIERS, isCleanLiveSetup, isLive, isLiveTier, liveAssets, liveMultipleBp, liveReturn, liveSetup, liveStart, liveTierById, liveTierOf, liveValue } from './live.ts';
+export { LIVE_MAX_BP, LIVE_TIERS, isCleanLiveSetup, isLive, isLiveTier, liveAssets, liveGear, liveLevered, liveMultipleBp, liveReturn, liveSetup, liveStart, liveTierById, liveTierOf, liveValue } from './live.ts';
 export type { LiveTier, LiveTierDef } from './live.ts';
 export { formatMoney, formatMult, formatPct, formatPoints } from './format.ts';
 export type {

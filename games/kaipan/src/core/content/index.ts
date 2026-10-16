@@ -10,7 +10,7 @@ import { PERSONAS } from './personas.ts';
 import { STOCKS, THEMES } from './stocks.ts';
 
 export { ACHIEVEMENTS } from './achievements.ts';
-export { BILL_NAMES, CALENDAR, SHORT_GOAL_BILL, SURPRISE_BILLS } from './calendar.ts';
+export { BILL_NAMES, CALENDAR, GEAR_INTEREST_BILL, SHORT_GOAL_BILL, SURPRISE_BILLS } from './calendar.ts';
 export { DIFFICULTIES, MAX_DIFFICULTY, MIN_DIFFICULTY } from './difficulty.ts';
 export { PERSONAS, PERSONA_IDS, personaAccount } from './personas.ts';
 export { EVENTS, EVENT_BRIEF, eventSlot, type EventBrief, type EventPick } from './events.ts';

@@ -61,6 +61,31 @@ function range([lo, hi]: [number, number], f: (x: number) => string): string {
 }
 const ok = (x: number, [lo, hi]: [number, number]): string => (x >= lo && x <= hi ? '✓' : '✗');
 
+/** 0.11.0 杠杆的目标（小档，每场期望（份））；中、大、豪华档按逐档变难同比往下，不另设区间 */
+const GEAR_TARGET: Record<number, Record<(typeof MODELS)[number], [number, number]>> = {
+  1: { xiaobai: [1.05, 1.15], putong: [1.25, 1.35] },
+  2: { xiaobai: [0.95, 1.05], putong: [1.4, 1.5] },
+  3: { xiaobai: [0.75, 0.9], putong: [1.55, 1.7] },
+};
+
+/** 0.11.0 杠杆表：每档 × 模型 × 杠杆，均值 ± 2SE、中位数、≥ 3 倍、≥ 5 倍、结回 0（其中跌到清零线的） */
+export function gearTable(runs: number): void {
+  console.log(`实盘杠杆（每格 ${runs} 局，种子 bal-*；目标只给小档）\n`);
+  console.log('| 档位 | 模型 | 杠杆 | 每场期望（份）± 2SE | 目标 | 中位数 | ≥ 3 倍 | ≥ 5 倍 | 结回 0 | 其中清零线 |');
+  console.log('|---|---|---|---|---|---|---|---|---|---|');
+  for (const t of LIVE_TIERS) {
+    for (const m of MODELS) {
+      for (const x of [1, 2, 3]) {
+        const r = liveStats(t.id, m, runs, 'bal', 'newbie', x);
+        const tg = t.id === 'small' ? GEAR_TARGET[x]![m] : null;
+        console.log(
+          `| ${t.name} | ${NAME[m]} | ×${x} | ${share(r.mean)} ± ${(2 * r.se).toFixed(3)}${tg ? ` ${ok(r.mean, tg)}` : ''} | ${tg ? range(tg, share) : '—'} | ${r.p50.toFixed(2)} | ${pct(r.x3)} | ${pct(r.x5)} | ${pct(r.zero)} | ${pct(r.margin)} |`,
+        );
+      }
+    }
+  }
+}
+
 /** 打出第 6 节的对照表（Markdown，直接贴进 PR 和设计稿） */
 export function balanceTable(runs: number): void {
   const live = new Map<string, LiveStats & { minutes: number }>();

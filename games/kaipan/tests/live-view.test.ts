@@ -64,6 +64,15 @@ describe('说话的分寸', () => {
     for (const t of [small.body, zero.body]) expect(t).not.toMatch(/大档|豪华|更高/);
   });
 
+  it('0.11.0 结算页写「杠杆 ×N，结回 X 倍」；跌到清零线另说一句', () => {
+    expect(liveEndText(rec({ credited: 6_800, bp: 34_000 }), true, { x: 2, margin: false }).body).toBe('几个月打下来，杠杆 ×2，结回 3.40 倍。');
+    expect(liveEndText(rec({ credited: 1_640, bp: 8_200 }), true, { x: 1, margin: false }).body).toContain('小亏，杠杆 ×1，结回 0.82 倍。');
+    const wiped = liveEndText(rec({ credited: 0, bp: 0 }), false, { x: 3, margin: true });
+    expect(wiped.body).toContain('杠杆 ×3，资产跌到清零线，这局按 0 结');
+    expect(wiped.body).toContain('每天能领补给');
+    expect(wiped.body).not.toMatch(/大档|豪华|更高/);
+  });
+
   it('到顶：大字写进了钱包的数，另说一句没进钱包的数', () => {
     const t = liveEndText(rec({ credited: 4_000, capped: 380, bp: 21_900 }), true);
     // 大字是进了钱包的数（credited），没进的另说

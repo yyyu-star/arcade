@@ -33,7 +33,8 @@ export type Rarity = 'common' | 'uncommon' | 'rare';
 export type ItemKind = 'tactic' | 'tool' | 'network';
 /** premarket：盘前（买卖、开盘）；reward：月度三选一；event：事件二选一；won/lost：本局结束。 */
 export type Phase = 'premarket' | 'reward' | 'event' | 'won' | 'lost';
-export type EndReason = 'bankrupt';
+/** bankrupt：账单交不上；margin（0.11.0）：实盘加了杠杆，资产跌破爆仓线被强制平仓 */
+export type EndReason = 'bankrupt' | 'margin';
 /** 人设（0.3.0）：开局可选 newbie / retiree / mom，coder、youzi 由成就解锁。 */
 export type PersonaId = 'newbie' | 'retiree' | 'mom' | 'coder' | 'youzi';
 /** 成就档位：铜（轻松）、银（需要构筑）、金（硬核）。 */
@@ -722,6 +723,16 @@ export interface LiveRules {
   lev?: number;
   /** 0.10.0：档位；更早开的局没有，按难度认（那时一档一个难度） */
   tier?: LiveTier;
+  /** 0.11.0：玩家选的杠杆（开局时从 BALANCE.live.gears 抄进来）；稳健 1× 和更早开的局没有 */
+  gear?: LiveGear;
+}
+
+/** 0.11.0 实盘杠杆：结回再按 x 放大、封顶 cap 份，每月扣利息（让结回少 interest），放大后的结回倍数跌到清零线 call 就按 0 结。 */
+export interface LiveGear {
+  x: number;
+  cap: number;
+  interest: number;
+  call: number;
 }
 
 export interface GameState {
@@ -959,6 +970,8 @@ export type GameEvent =
   | { type: 'pendingSettled'; id: string; amount: number; delta: number; text: string }
   | { type: 'itemExpired'; itemId: string }
   | { type: 'runLost'; reason: EndReason; month: number; account: number; bill: number }
+  /** 0.11.0 实盘杠杆爆仓：levered 是放大后的结回倍数（跌到了爆仓线） */
+  | { type: 'gearWiped'; month: number; account: number; levered: number }
   /** 0.5：月初公布本月主题（"本月看点"卡），紧跟在 monthStarted 之后 */
   | { type: 'monthTheme'; goal: MonthGoalState; name: string; intro: string; rule: string; goalText: string; rewardText: string; roast: { friendId: string; text: string } }
   /** 0.5：月度目标进度变化 / 达成 / 失败 */

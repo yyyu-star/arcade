@@ -18,7 +18,7 @@ import { MOOD_WORD, term } from '../glossary.ts';
 /** 大环境方向：只决定顶栏箭头和颜色（文字说明在日历提示里）。 */
 const MOOD_SIGN: Record<Mood, number> = { bull: 1, flat: 0, bear: -1 };
 import { TOP } from './layout.ts';
-import { isLiveRun } from '../live.ts';
+import { isLiveRun, marginWarn } from '../live.ts';
 import { chips, levText } from '../liveText.ts';
 import { lobbyLabel } from '../lobby.ts';
 
@@ -280,8 +280,11 @@ export class TopBarView {
     // 0.6.0 实盘：这一行换成实盘小牌子「实盘 · 小档 2,000 → 约 2,104」（人设、难度在悬停里），跟着每天收盘更新
     const lv = t.live && isLiveRun(s) ? t.live : null;
     // 手机上这一行右边紧挨着月度目标的图标，豪华档的数字长，省掉一份是多少（悬停里有）
-    this.accLabel.setText(lv ? (PHONE ? `实盘${lv.tierName} → 约 ${chips(lv.value)}` : `实盘 · ${lv.tierName} ${chips(lv.stake)} → 约 ${chips(lv.value)}`) : `${PHONE ? '' : '账户 · '}${t.personaName} · Lv${t.difficulty}${t.daily ? ' · 每日' : ''}`);
+    // 0.11.0 杠杆常显：「实盘 · 小档 2,000 · 杠杆×2 → 约 2,480」
+    const gx = s.setup?.live?.gear?.x ?? 1;
+    this.accLabel.setText(lv ? (PHONE ? `实盘${lv.tierName}×${gx} → 约 ${chips(lv.value)}` : `实盘 · ${lv.tierName} ${chips(lv.stake)} · 杠杆×${gx} → 约 ${chips(lv.value)}`) : `${PHONE ? '' : '账户 · '}${t.personaName} · Lv${t.difficulty}${t.daily ? ' · 每日' : ''}`);
     setColor(this.accLabel, t.daily || lv ? COLOR.accentDark : COLOR.muted);
+    this.renderDanger(lv ? marginWarn(s) : null);
     this.renderFlags(t, this.weather.x + this.weather.width + 8);
     this.setAccount(s.account);
     this.renderBill(s);
@@ -361,6 +364,19 @@ export class TopBarView {
     t.scene.tweens.killTweensOf(t);
     t.setScale(1);
     t.scene.tweens.add({ targets: t, scale: 1.12, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
+  }
+
+  private flash: Phaser.Tweens.Tween | null = null;
+
+  /** 0.11.0 开了杠杆、离清零线不远：账户数字变红闪；离远了恢复 */
+  private renderDanger(warn: number | null): void {
+    const on = warn !== null;
+    if (on === !!this.flash) return;
+    this.flash?.stop();
+    this.flash = null;
+    this.account.setAlpha(1);
+    setColor(this.account, on ? COLOR.danger : COLOR.ink);
+    if (on) this.flash = this.scene.tweens.add({ targets: this.account, alpha: 0.35, duration: 380, yoyo: true, repeat: -1 });
   }
 
   setAccount(v: number): void {

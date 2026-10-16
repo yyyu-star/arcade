@@ -3,6 +3,7 @@
  * 单独一个文件、运行时只依赖 balance.ts 的数，Worker 打包时不会把规则引擎带进去。
  */
 import { BALANCE } from './balance.ts';
+import type { LiveGear } from './types.ts';
 
 export type LiveTier = 'small' | 'mid' | 'big' | 'lux';
 
@@ -23,8 +24,22 @@ export const LIVE_TIERS: readonly LiveTierDef[] = [
   { id: 'lux', name: '豪华档', stake: 200_000, difficulty: 3 },
 ];
 
-/** 结回倍数的上限（万分之几）：最多拿回 cap 份 */
-export const LIVE_MAX_BP = BALANCE.live.cap * 10_000;
+/** 结回倍数的上限（万分之几）：最多拿回几份（0.11.0 起按最高一档杠杆的封顶算，Worker 用它拦写错的数） */
+export const LIVE_MAX_BP = Math.max(BALANCE.live.cap, ...BALANCE.live.gears.map((g) => g.cap)) * 10_000;
+
+/** 0.11.0 杠杆 x 那一档的规则（封顶、利息、清零线）；没有这一档时按稳健 1× */
+export function liveGear(x: number): LiveGear {
+  return BALANCE.live.gears.find((g) => g.x === x) ?? (BALANCE.live.gears[0] as LiveGear);
+}
+
+/**
+ * 放大后的结回倍数（还没取整、没截断）：r = 当前资产 ÷ 开局资产，先按档位的涨跌倍数 lev 放大（0.10.0），
+ * 再按玩家选的杠杆 x 放大（0.11.0）。倍数是 1 的那一步照原来的算式，免得浮点多绕一步差出 1。
+ */
+export function liveLevered(r: number, lev = 1, x = 1): number {
+  const m = lev === 1 ? r : 1 + lev * (r - 1);
+  return x === 1 ? m : 1 + x * (m - 1);
+}
 
 export function isLiveTier(x: unknown): x is LiveTier {
   return LIVE_TIERS.some((t) => t.id === x);

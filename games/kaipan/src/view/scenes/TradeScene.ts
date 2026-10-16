@@ -60,6 +60,7 @@ import { quipBubble } from '../trade/quip.ts';
 import type { Animator } from '../fx/anim.ts';
 import { recapOf } from '../recap.ts';
 import { newbieHint } from '../hints.ts';
+import { isLiveRun, marginWarn } from '../live.ts';
 import { hintsOn, loadViewPrefs } from '../meta/prefs.ts';
 import { BankPanel, BuyDialog, HoldingMenu, bankCallCard, knowledgeToast, redeemFx, seizedCard, squeezeFx } from '../trade/ext.ts';
 import { loadSeenTips, markTipSeen, nextExtTip, type ExtTipId } from '../extTips.ts';
@@ -271,6 +272,12 @@ export class TradeScene extends BaseScene {
     }
     this.room.setMood(s.mood, null);
     this.room.setRainbow(!!s.lastDay && s.lastDay.market.ret >= 1.5);
+    // 0.11.0 开了杠杆、离清零线不远：每天盘前提醒一句（顶栏的账户同时变红闪）
+    const warn = isLiveRun(s) ? marginWarn(s) : null;
+    if (warn !== null && this.warnedDay !== s.dayIndex) {
+      this.warnedDay = s.dayIndex;
+      this.toast(`离清零线不远了：结回只剩约 ${warn.toFixed(1)} 份，再跌一点这局就按 0 结`, 3200);
+    }
     this.renderMonitor(s);
     const pre = s.phase === 'premarket';
     this.openBtn.setEnabled(pre).setLocked(this.busy);
@@ -435,6 +442,36 @@ export class TradeScene extends BaseScene {
   private act(action: Action): void {
     const r = this.session.dispatch(action);
     if (r.error) this.toast(r.error);
+  }
+
+  /** 0.11.0 今天已经提醒过离清零线不远（一天只说一次） */
+  private warnedDay = -1;
+
+  /** 0.11.0 开了杠杆、跌到清零线：一张卡说清楚这局按 0 结，等玩家点了再去结束页 */
+  private async playMarginCall(): Promise<void> {
+    sound.cue({ type: 'runLost' });
+    const layer = this.add.container(0, 0).setDepth(300);
+    layer.add(this.add.rectangle(0, 0, VIEW.w, VIEW.h, COLOR.ink, 0.45).setOrigin(0, 0).setInteractive());
+    const cw = PHONE_MODE ? 520 : 560;
+    const cy = PHONE_MODE ? 190 : 330;
+    const x = this.session.state.setup?.live?.gear?.x ?? 1;
+    const body = addText(this, VIEW.w / 2, cy + 6, `开了杠杆 ×${x}，资产跌到了清零线，这局按 0 结。\n杠杆越高，赢得越多，也越容易一下清零。`, {
+      size: 16,
+      color: COLOR.ink,
+      originX: 0.5,
+      originY: 0.5,
+      wrap: cw - 60,
+      align: 'center',
+      lineSpacing: 4,
+    });
+    const ch = body.height + 110;
+    const panel = this.add.rectangle(VIEW.w / 2, cy, cw, ch, COLOR.paper).setRounded(18).setStrokeStyle(4, COLOR.danger);
+    const title = addText(this, VIEW.w / 2, cy - ch / 2 + 34, '清零了', { size: 30, bold: true, color: COLOR.danger, originX: 0.5, originY: 0.5 });
+    layer.add([panel, title, body]);
+    this.showContinue(layer, '看看这一局怎么样');
+    this.setBusy(false);
+    await this.waitContinue();
+    this.continueBtn = null;
   }
 
   private toastNode: Phaser.GameObjects.Container | null = null;
@@ -1092,6 +1129,13 @@ export class TradeScene extends BaseScene {
       !report?.tempo ||
       events.some((e) => e.type === 'eventStarted' || e.type === 'monthStarted' || e.type === 'bankCalled' || e.type === 'seized' || e.type === 'crashHit' || e.type === 'autoSold' || e.type === 'stockNews');
 
+    // 0.11.0 开了杠杆、收盘后跌到清零线：一张卡说清楚，点了去结束页（月底还完账单后跌到的在账单卡后面说）
+    const called = first(events, 'gearWiped');
+    if (called && !first(events, 'billPaid')) {
+      await this.playMarginCall();
+      return;
+    }
+
     // 月底
     const paid = first(events, 'billPaid');
     const broke = first(events, 'bankrupt');
@@ -1106,6 +1150,11 @@ export class TradeScene extends BaseScene {
       const bill = await playBill(this, a, info);
       if (paid) this.top.setAccount(paid.after);
       if (billBank) await this.playBank(events);
+      if (called) {
+        bill.destroy();
+        await this.playMarginCall();
+        return;
+      }
       if (broke || first(events, 'runWon')) {
         this.showContinue(bill, broke ? '看看这一局怎么样' : '通关了！看看这一局');
         this.setBusy(false);

@@ -3,7 +3,7 @@
  * 只说事实、输了说安慰话，不催、不倒计时、不推荐更高的档位。不依赖 Phaser，测试直接读。
  */
 import { BALANCE } from '../core/balance.ts';
-import { LIVE_TIERS, liveReturn, type LiveTierDef } from '../core/liveTiers.ts';
+import { LIVE_TIERS, liveGear, liveReturn, type LiveTierDef } from '../core/liveTiers.ts';
 import type { LiveRecord } from '../platform/live.ts';
 import { group } from '../core/format.ts';
 
@@ -17,7 +17,7 @@ export function chipsDiff(n: number): string {
   return n > 0 ? `+${chips(n)}` : n < 0 ? `−${chips(-n)}` : '±0';
 }
 
-export const LIVE_RULE = `打 ${BALANCE.live.months} 个月，资产涨跌按档位放大算进筹码：最多拿回 ${BALANCE.live.cap} 份，赔光就是这一份`;
+export const LIVE_RULE = `打 ${BALANCE.live.months} 个月，按最后的资产结回，最多输掉带进去的这一份`;
 
 /**
  * 0.10.0 选档的三件事（仓库根 docs/balance.md 第 5 节）：多难（1–4 颗星）、一局约多久、最多赢 / 最多输。
@@ -32,14 +32,25 @@ export function levText(lev: number): string {
   return String(Math.round(lev * 10) / 10);
 }
 
-/** 一张档位卡上的字：几颗星（1–4）、最多赢 / 最多输多少筹码、涨跌按几倍算 */
-export function tierCard(t: Readonly<LiveTierDef>): { stars: number; win: string; lose: string; lev: string } {
+/** 一张档位卡上的字：几颗星（1–4）、最多赢 / 最多输多少筹码、涨跌按几倍算（0.11.0 起连杠杆一起算） */
+export function tierCard(t: Readonly<LiveTierDef>, x = 1): { stars: number; win: string; lose: string; lev: string } {
   return {
-    stars: LIVE_TIERS.findIndex((x) => x.id === t.id) + 1,
-    win: chips(t.stake * (BALANCE.live.cap - 1)),
+    stars: LIVE_TIERS.findIndex((d) => d.id === t.id) + 1,
+    win: chips(t.stake * (liveGear(x).cap - 1)),
     lose: chips(t.stake),
-    lev: levText(BALANCE.live.tiers[t.id].lev),
+    lev: levText(BALANCE.live.tiers[t.id].lev * x),
   };
+}
+
+/** 0.11.0 三档杠杆的名字 */
+export const GEAR_NAME: Record<number, string> = { 1: '稳健', 2: '进取', 3: '疯狂' };
+
+/** 选杠杆时写清风险：结回再翻几倍、最多拿回几份、每月利息约多少筹码、跌到多少份就清零 */
+export function gearText(t: Readonly<LiveTierDef>, x: number): string {
+  const g = liveGear(x);
+  if (g.x <= 1) return `${GEAR_NAME[1]} 1×：结回按档位算，最多拿回 ${g.cap} 份，不收利息`;
+  const interest = Math.floor(g.interest * BALANCE.live.tiers[t.id].gearRate * t.stake);
+  return `${GEAR_NAME[g.x] ?? ''} ${g.x}×：结回再翻 ${g.x} 倍、最多拿回 ${g.cap} 份；每月利息约 ${chips(interest)} 筹码，结回跌到 ${g.call} 份就清零`;
 }
 export const LIVE_WALLET_NOTE = '无任何现金价值';
 
@@ -88,7 +99,7 @@ export function buyinFailText(error: string, why?: 'offline' | 'login', code?: s
 }
 
 /** 结算的说法：head 是一行大字（结回多少），body 是一两句话。won 是打满了（不是破产、不是提前收手）。 */
-export function liveEndText(r: Readonly<LiveRecord>, won: boolean): { head: string; body: string } {
+export function liveEndText(r: Readonly<LiveRecord>, won: boolean, gear?: { x: number; margin: boolean }): { head: string; body: string } {
   const bp = r.bp ?? 0;
   if (r.step === 'settling' || r.step === 'playing') {
     const body = r.wait === 'login' ? '成绩记下了，登录后自动结回。' : '成绩记下了，联网后自动结回。';
@@ -107,12 +118,15 @@ export function liveEndText(r: Readonly<LiveRecord>, won: boolean): { head: stri
   const got = r.credited ?? 0;
   const capped = r.capped ?? 0;
   const head = `结回 ${chips(got)} 筹码（${chipsDiff(got - r.stake)}）`;
-  const times = `×${(bp / 10_000).toFixed(2)}`;
+  // 0.11.0 结算页知道这局开了几倍杠杆：写成「杠杆 ×N，结回 X 倍」；开始菜单的局外提醒不知道，照旧
+  const times = gear ? `${(bp / 10_000).toFixed(2)} 倍` : `×${(bp / 10_000).toFixed(2)}`;
+  const share = gear ? `杠杆 ×${gear.x}，结回 ${times}` : `结回是带进来那一份的 ${times}`;
   const span = won ? '几个月打下来' : '这局';
   let body: string;
-  if (got === 0 && capped === 0) body = `这次本金赔光了。炒股本来就有赢有输，别往心里去。钱包每天能领补给，明天还能来玩；也可以去玩娱乐模式，不花筹码。`;
-  else if (got + capped < r.stake) body = `${span}小亏，结回是带进来那一份的 ${times}。行情有起有落，下次换个档位或换个打法试试。`;
-  else body = `${span}，结回是带进来那一份的 ${times}。`;
+  if (got === 0 && capped === 0 && gear?.margin) body = `杠杆 ×${gear.x}，资产跌到清零线，这局按 0 结。杠杆开得越大，涨得快跌得也快；钱包每天能领补给，明天还能来玩，也可以先用稳健 1× 试试。`;
+  else if (got === 0 && capped === 0) body = `这次本金赔光了。炒股本来就有赢有输，别往心里去。钱包每天能领补给，明天还能来玩；也可以去玩娱乐模式，不花筹码。`;
+  else if (got + capped < r.stake) body = `${span}小亏，${share}。行情有起有落，下次换个档位或换个打法试试。`;
+  else body = `${span}，${share}。`;
   if (capped > 0) body += `\n今天单机实盘赢够了：这局多出的 ${chips(capped)} 筹码没进钱包，明天再来。`;
   return { head, body };
 }

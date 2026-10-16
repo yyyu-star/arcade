@@ -3,7 +3,7 @@
  * 真实行情，段按局号均匀覆盖（第 i 局用第 i % 段数 段），仓位 / 押跌 / 抵押都开（正式游戏都开）。
  * `npm run sim -- --live` 和 tests/live-sim.test.ts 共用。
  */
-import { liveSetup, runSummary, type Action, type GameState, type LiveTier, type PersonaId } from '../src/core/index.ts';
+import { liveGear, liveSetup, runSummary, type Action, type GameState, type LiveTier, type PersonaId } from '../src/core/index.ts';
 import { botByName, playRun, useExt, useMarket, type Bot } from './bots.ts';
 import { loadSegment, segmentIndex } from './segments-disk.ts';
 
@@ -66,6 +66,12 @@ export interface LiveStats {
   within: number;
   /** 碰到 3 倍封顶的局占比 */
   capped: number;
+  /** 0.11.0：结回 ≥ 3 份、≥ 5 份的局占比；爆仓（跌到清零线强制结束）的局占比 */
+  x3: number;
+  x5: number;
+  margin: number;
+  /** 杠杆 */
+  gear: number;
   p10: number;
   p50: number;
   p90: number;
@@ -86,15 +92,17 @@ export function useLiveMarket(prefix: string): void {
   useExt(true);
 }
 
-export function liveStats(tier: LiveTier, bot: string, runs: number, prefix = 'live', persona: PersonaId = 'newbie'): LiveStats {
+export function liveStats(tier: LiveTier, bot: string, runs: number, prefix = 'live', persona: PersonaId = 'newbie', gear = 1): LiveStats {
   useLiveMarket(prefix);
   const ms: number[] = [];
+  let margin = 0;
   const t = timed(botByName(bot)());
   let sec = 0;
   for (let i = 0; i < runs; i++) {
     t.reset();
-    const end = playRun(`${prefix}-${i}`, t.bot, liveSetup(tier, persona));
+    const end = playRun(`${prefix}-${i}`, t.bot, liveSetup(tier, persona, gear));
     sec += t.seconds();
+    if (end.endReason === 'margin') margin++;
     if (end.phase !== 'won' && end.phase !== 'lost') throw new Error(`${bot} 在 ${prefix}-${i} 没打完`);
     ms.push((runSummary(end).live?.bp ?? 0) / 10_000);
   }
@@ -113,7 +121,11 @@ export function liveStats(tier: LiveTier, bot: string, runs: number, prefix = 'l
     up: share((m) => m > 1),
     zero: share((m) => m === 0),
     within: share((m) => m <= 2),
-    capped: share((m) => m >= 3),
+    capped: share((m) => m >= liveGear(gear).cap),
+    x3: share((m) => m >= 3),
+    x5: share((m) => m >= 5),
+    margin: margin / runs,
+    gear,
     p10: q(0.1),
     p50: q(0.5),
     p90: q(0.9),

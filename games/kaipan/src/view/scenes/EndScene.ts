@@ -16,7 +16,7 @@ import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
 import { randomSeed, type Session } from '../session.ts';
 import { sound } from '../sound.ts';
-import { COLOR, GAME_WIDTH, PHONE, TYPE, arrowOf, signColor } from '../theme.ts';
+import { COLOR, GAME_WIDTH, PHONE, TYPE, VIEW, arrowOf, signColor } from '../theme.ts';
 import { addGlyph, addPaper, addPill } from '../ui/art.ts';
 import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
 import { statTile, tipOnButton } from '../meta/bits.ts';
@@ -515,6 +515,29 @@ export class EndScene extends BaseScene {
     sound.mood(s.phase === 'won' ? 'victory' : 'defeat');
   }
 
+  /** 0.11.0 实盘结回 ≥ 3 倍：屏幕正中一行大字弹出来，两秒后收起（点哪儿都不挡） */
+  private celebrate(bp: number, gear: number): void {
+    sound.cue({ type: 'settle', ret: 5 });
+    confetti(this, this.anim);
+    const t = addText(this, VIEW.w / 2, VIEW.h / 2, `杠杆 ×${gear}　结回 ${(bp / 10_000).toFixed(1)} 倍！`, {
+      size: PHONE ? 40 : 52,
+      bold: true,
+      color: COLOR.accentDark,
+      originX: 0.5,
+      originY: 0.5,
+      stroke: 0xfff6e6,
+      strokeWidth: 10,
+    }).setDepth(500);
+    t.setName('end:celebrate');
+    if (this.anim.instant) {
+      this.time.delayedCall(2200, () => t.destroy());
+      return;
+    }
+    t.setScale(0.3);
+    this.tweens.add({ targets: t, scale: 1, duration: 420, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 500, onComplete: () => t.destroy() });
+  }
+
   /** 实盘结算的字：按本机的实盘记录（待结、结完、作废、出错）；说过一次就记下，开始菜单不再弹 */
   private updateLive(): void {
     const head = this.liveHead;
@@ -522,7 +545,7 @@ export class EndScene extends BaseScene {
     const sum = this.summary;
     if (!head?.active || !body?.active || !sum?.live) return;
     const r = live.record;
-    const t = r && r.seed === this.session.state.seed ? liveEndText(r, sum.won) : { head: '这局不算筹码', body: '这局没有带入筹码（或者本金已经原样退回），只是打着玩。' };
+    const t = r && r.seed === this.session.state.seed ? liveEndText(r, sum.won, sum.live ? { x: sum.live.gear, margin: sum.live.margin } : undefined) : { head: '这局不算筹码', body: '这局没有带入筹码（或者本金已经原样退回），只是打着玩。' };
     head.setText(t.head);
     body.setText(t.body);
     setColor(head, r?.step === 'error' || r?.step === 'void' ? COLOR.danger : COLOR.accentDark);
@@ -534,6 +557,9 @@ export class EndScene extends BaseScene {
     if (!this.summary) return;
     sound.cue({ type: this.summary.won ? 'runWon' : 'runLost' });
     if (this.summary.won) confetti(this, this.anim);
+    // 0.11.0 实盘结回 ≥ 3 倍：大字庆祝、再放一次彩带和大赚的音效
+    const lv = this.summary.live;
+    if (lv && lv.bp >= 30_000) this.celebrate(lv.bp, lv.gear);
     const list = this.session.takeUnlocks(this.summary.runId, unlocksOf(this.result));
     const won = this.summary.won;
     // 不阻塞会话队列：玩家这时点「新局」也能马上走

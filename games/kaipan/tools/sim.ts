@@ -24,6 +24,7 @@
  *   node tools/sim.ts --real-table --runs 520 [--per-segment]   真实行情难度表 + 各市况通关率（各段均匀覆盖）
  *   node tools/sim.ts --live --runs 540 [--bots normal,random] [--tiers small,mid] [--persona id]
  *                                                         0.6.0 实盘：各档、各机器人的结回倍数分布（设计稿 docs/design-live.md 第 3.3 节）
+ *   node tools/sim.ts --gear --runs 2000                 0.11.0 杠杆：四档 × 小白 / 普通 × 杠杆 1/2/3 的结回分布（≥ 3 倍、≥ 5 倍、结回 0、清零线）
  *   node tools/sim.ts --balance --runs 2000              0.10.0 配平：小白 / 普通在实盘四档、娱乐三档的结果和一局约几分钟（仓库根 docs/balance.md 第 6 节的表）
  */
 import {
@@ -52,7 +53,7 @@ import {
   type Segment,
   type Stage,
 } from '../src/core/index.ts';
-import { balanceTable } from './balance.ts';
+import { balanceTable, gearTable } from './balance.ts';
 import { liveStats } from './live.ts';
 import { ARCHETYPES, BOT_DESC, BOTS, botByName, playRun, setRealMsg, useExt, useMarket, type Bot, type BotFactory } from './bots.ts';
 import { loadSegment, segmentForSeed, segmentIndex } from './segments-disk.ts';
@@ -770,6 +771,10 @@ function main(): void {
   if (flag('accept')) {
     accept(runs, prefix);
     if (flag('ach')) achReport();
+    return;
+  }
+  if (flag('gear')) {
+    gearTable(runs);
     return;
   }
   if (flag('balance')) {

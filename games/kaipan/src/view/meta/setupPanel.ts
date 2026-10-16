@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { BALANCE, LIVE_TIERS, difficultiesView, difficultyDef, liveTierById, personaById, personasView, shortGoalFor, type LiveTier, type PersonaId, type PersonaView } from '../../core/index.ts';
 import type { WalletView } from '../../platform/live.ts';
-import { FUN_MINUTES, LIVE_MINUTES, LIVE_RULE, LIVE_WALLET_NOTE, chips, tierCard } from '../liveText.ts';
+import { FUN_MINUTES, GEAR_NAME, LIVE_MINUTES, LIVE_RULE, LIVE_WALLET_NOTE, chips, gearText, tierCard } from '../liveText.ts';
 import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, type Profile } from '../../platform/profile.ts';
 import { difficultyKey, hasArt, personaKey } from '../assets.ts';
 import { jiggle } from '../fx/effects.ts';
@@ -103,7 +103,8 @@ interface SetupOpts {
    * 0.6.0 实盘：给了就是实盘模式，八个难度徽章换成四张档位卡，开始按钮写"带 2,000 进场"。
    * wallet 是 GET /api/wallet 看到的钱包（连不上为 null）；blocked 是开不了的原因（另一台设备上有一局、上一局还没结完……），能开为 null。
    */
-  live?: { wallet: WalletView | null; blocked: string | null; tier: LiveTier; onStart: (persona: PersonaId, tier: LiveTier) => void; aside?: LiveAside | null };
+  /** gear（0.11.0）：玩家选的杠杆 1 / 2 / 3，默认稳健 1× */
+  live?: { wallet: WalletView | null; blocked: string | null; tier: LiveTier; onStart: (persona: PersonaId, tier: LiveTier, gear: number) => void; aside?: LiveAside | null };
   /** 顶上的「娱乐 | 实盘」开关：点了另一边就关掉这个面板，由调用方按那个模式重开（带上选好的人设） */
   onMode?: (mode: 'fun' | 'live', persona: PersonaId) => void;
 }
@@ -136,6 +137,9 @@ export class SetupPanel extends Dialog {
   /** 0.6.0 实盘模式（opts.live）：选中的档位、开始按钮（文字跟着档位变） */
   private readonly live: SetupOpts['live'] | null;
   private tier: LiveTier = 'small';
+  /** 0.11.0 实盘：选的杠杆，和随杠杆变的档位卡上那两行（涨跌几倍、最多赢多少） */
+  private gear = 1;
+  private readonly cardLines = new Map<LiveTier, { lev: Phaser.GameObjects.Text; win: Phaser.GameObjects.Text }>();
   private startBtn: Button | null = null;
 
   constructor(scene: Phaser.Scene, opts: SetupOpts) {
@@ -163,7 +167,12 @@ export class SetupPanel extends Dialog {
     this.personaDesc = addText(scene, W / 2, ly + (g === DESKTOP ? 24 : 23), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5 });
     this.inner.add([this.personaMoney, this.personaText, this.personaDesc]);
 
-    if (this.live) this.tierCards(opts.anim);
+    if (this.live) {
+      // 手机上档位卡紧贴人设那一行，放不下介绍（介绍在人设卡的悬停里还有）
+      if (g !== DESKTOP) this.personaDesc.setVisible(false);
+      this.tierCards(opts.anim);
+      this.gearRow();
+    }
     else {
       const levels = difficultiesView();
       const slot = (W - 84) / levels.length;
@@ -176,6 +185,11 @@ export class SetupPanel extends Dialog {
     this.stack = scene.add.container(g === DESKTOP ? 176 : 140, H - (g === DESKTOP ? 42 : 36));
     this.diffStars = scene.add.container(0, g.diffY);
     this.inner.add([this.diffText, this.diffDesc, this.stack, this.diffStars]);
+    // 0.11.0 实盘：档位卡下面多了一排杠杆，杠杆的风险和钱包那两行往下挪
+    if (this.live) {
+      this.diffText.setY(g === DESKTOP ? 566 : 342).setFontSize(g === DESKTOP ? 16 : 14);
+      this.diffDesc.setY(g === DESKTOP ? 588 : 362);
+    }
 
     // 手机：底部一排收窄（开局 170×46、返回 100×40），贴着 24 的边
     const sw = g === DESKTOP ? 200 : 170;
@@ -185,7 +199,7 @@ export class SetupPanel extends Dialog {
     this.startBtn = start;
     start.setHandler(() => {
       this.close();
-      if (this.live) this.live.onStart(this.persona, this.tier);
+      if (this.live) this.live.onStart(this.persona, this.tier, this.gear);
       else opts.onStart(this.persona, this.difficulty, this.short);
     });
     if (this.live) start.onDenied(() => this.liveBlock());
@@ -404,10 +418,10 @@ export class SetupPanel extends Dialog {
     const s = this.scene;
     const desk = this.g === DESKTOP;
     const cw = desk ? 260 : 200;
-    const ch = desk ? 116 : 92;
+    const ch = desk ? 106 : 86;
     const gap = desk ? 16 : 12;
-    // 上面是人设的一句介绍（电脑到 y≈400），卡片从它下面开始；下面紧挨着钱包那一行
-    const y = this.g.badgesY - ch / 2 + (desk ? 6 : 4);
+    // 上面是人设的一句介绍（电脑到 y≈400），卡片从它下面开始；下面是杠杆那一排
+    const y = desk ? 406 : 208;
     const x0 = (this.g.w - (cw * LIVE_TIERS.length + gap * (LIVE_TIERS.length - 1))) / 2;
     LIVE_TIERS.forEach((t, i) => {
       const x = x0 + i * (cw + gap);
@@ -416,14 +430,16 @@ export class SetupPanel extends Dialog {
       const d = difficultiesView()[t.difficulty - 1];
       const card = tierCard(t);
       c.add(addSlice(s, 0, 0, cw, ch, 'card_holding'));
-      c.add(addText(s, 14, desk ? 12 : 8, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
-      c.add(addStars(s, cw - 14, desk ? 24 : 18, card.stars, desk ? 18 : 14, 1));
-      const sy = desk ? 48 : 40;
+      c.add(addText(s, 14, desk ? 10 : 6, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
+      c.add(addStars(s, cw - 14, desk ? 22 : 14, card.stars, desk ? 18 : 14, 1));
+      const sy = desk ? 42 : 30;
       c.add(addGlyph(s, 26, sy, 'moneybag', desk ? 28 : 22));
       c.add(addText(s, 44, sy, chips(t.stake), { size: desk ? TYPE.big : TYPE.title + 2, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 }));
       const small = { size: desk ? TYPE.label : TYPE.label - 1, color: COLOR.muted };
-      c.add(addText(s, 14, desk ? 70 : 56, `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${card.lev}`, small));
-      c.add(addText(s, 14, desk ? 90 : 72, `最多赢 ${card.win} · 最多输 ${card.lose}`, small));
+      const lev = addText(s, 14, desk ? 60 : 44, `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${card.lev}`, small);
+      const win = addText(s, 14, desk ? 78 : 59, `最多赢 ${card.win} · 最多输 ${card.lose}`, small);
+      c.add([lev, win]);
+      this.cardLines.set(t.id, { lev, win });
       if (!afford) c.setAlpha(0.5);
       const ring = s.add.rectangle(-4, -4, cw + 8, ch + 8).setOrigin(0, 0).setRounded(16).setStrokeStyle(4, COLOR.accent, 1).setVisible(false);
       c.add(ring);
@@ -437,10 +453,11 @@ export class SetupPanel extends Dialog {
         this.refresh();
       });
       bindTooltip(hit, () => ({ x: this.inner.x + x, y: this.inner.y + y, w: cw, h: ch }), () => {
+        const k = tierCard(t, this.gear);
         const lines = [`一份 ${chips(t.stake)} 筹码；行情按难度「${d?.name ?? t.difficulty}」`];
         if (d) lines.push(this.levelText(d.level, d.desc, d.detail).desc);
-        lines.push(`资产涨跌按 ${card.lev} 倍算进筹码：资产涨 10%，结回多 ${Math.round(Number(card.lev) * 10)}%`);
-        lines.push(`一局约 ${LIVE_MINUTES} 分钟；最多赢 ${card.win}，最多输 ${card.lose}（就是这一份）`);
+        lines.push(`资产涨跌按 ${k.lev} 倍算进筹码（杠杆 ×${this.gear}）：资产涨 10%，结回多 ${Math.round(Number(k.lev) * 10)}%`);
+        lines.push(`一局约 ${LIVE_MINUTES} 分钟；最多赢 ${k.win}，最多输 ${k.lose}（就是这一份）`);
         if (!this.affords(t.stake)) lines.push('钱包不够这一档');
         return { title: t.name, body: lines.join('\n'), color: this.affords(t.stake) ? undefined : COLOR.danger };
       });
@@ -448,6 +465,33 @@ export class SetupPanel extends Dialog {
       this.inner.add(c);
       this.rings.set(`t:${t.id}`, ring);
       this.named[`setup:tier:${t.id}`] = { center: () => ({ x: this.inner.x + x + cw / 2, y: this.inner.y + y + ch / 2 }) };
+    });
+  }
+
+  /** 0.11.0 档位卡下面一排：稳健 1× / 进取 2× / 疯狂 3×，默认稳健；风险写在下面一行 */
+  private gearRow(): void {
+    const s = this.scene;
+    const desk = this.g === DESKTOP;
+    const bw = desk ? 150 : 118;
+    const bh = desk ? 34 : 28;
+    const gap = desk ? 12 : 8;
+    const y = desk ? 520 : 298;
+    const x0 = (this.g.w - (bw * 3 + gap * 2)) / 2;
+    const btns: Button[] = [];
+    [1, 2, 3].forEach((x, i) => {
+      const b = new Button(s, x0 + i * (bw + gap), y, { width: bw, height: bh, label: `${GEAR_NAME[x]} ${x}×`, fontSize: desk ? 15 : 13 });
+      b.setSelected(x === this.gear);
+      b.setHandler(() => {
+        if (x === this.gear) return;
+        sound.ui('select');
+        this.gear = x;
+        btns.forEach((o, k) => o.setSelected(k === i));
+        this.refresh();
+      });
+      b.tooltip(() => ({ title: `杠杆 ${GEAR_NAME[x]} ${x}×`, body: gearText(liveTierById(this.tier), x) }));
+      btns.push(b);
+      this.inner.add(b);
+      this.named[`setup:gear:${x}`] = b;
     });
   }
 
@@ -535,9 +579,19 @@ export class SetupPanel extends Dialog {
     if (!l) return;
     const block = this.liveBlock();
     const w = l.wallet;
-    this.diffText.setText(block && block !== '钱包不够这一档' ? block : w ? `钱包 ${chips(w.balance)} 筹码（${LIVE_WALLET_NOTE}）` : '');
-    setColor(this.diffText, block && block !== '钱包不够这一档' ? COLOR.danger : COLOR.ink);
-    this.diffDesc.setText(block === '钱包不够这一档' ? '钱包里的筹码不够这一档：换小一档少带一点，或者去大厅领补给' : LIVE_RULE);
+    // 档位卡上随杠杆变的两行
+    for (const t of LIVE_TIERS) {
+      const k = tierCard(t, this.gear);
+      const lines = this.cardLines.get(t.id);
+      lines?.lev.setText(`约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${k.lev}`);
+      lines?.win.setText(`最多赢 ${k.win} · 最多输 ${k.lose}`);
+    }
+    // 第一行：开不了的原因，或者这一档杠杆的风险；第二行：钱包余额 + 规则
+    const hard = block && block !== '钱包不够这一档';
+    this.diffText.setText(hard ? block : gearText(liveTierById(this.tier), this.gear));
+    setColor(this.diffText, hard ? COLOR.danger : this.gear >= 3 ? COLOR.accentDark : COLOR.ink);
+    const wallet = w ? `钱包 ${chips(w.balance)} 筹码（${LIVE_WALLET_NOTE}）` : '';
+    this.diffDesc.setText(block === '钱包不够这一档' ? '钱包里的筹码不够这一档：换小一档少带一点，或者去大厅领补给' : [wallet, LIVE_RULE].filter(Boolean).join(' · '));
     setColor(this.diffDesc, block === '钱包不够这一档' ? COLOR.danger : COLOR.muted);
     this.stack.removeAll(true);
     this.asideRow(l.aside ?? null);

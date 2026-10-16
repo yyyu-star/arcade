@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContextOptions, type Page, type Route } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
 import { SAVE_FORMAT } from '../src/platform/storage.ts';
-import { BALANCE, bankRisk, bankView, baseBill, chatView, createRun, dailyScore, dailySegmentId, dailySetup, dispatch, isBusy, rngFor, runSummary, topBar, totalDays, type Action, type GameEvent, type GameState, type RunSetup, type Segment } from '../src/core/index.ts';
+import { BALANCE, bankRisk, bankView, baseBill, chatView, createRun, dailyScore, dailySegmentId, dailySetup, dispatch, gearLevered, isBusy, liveSetup, replay, rngFor, runSummary, topBar, totalDays, type Action, type GameEvent, type GameState, type RunSetup, type Segment } from '../src/core/index.ts';
 import { emptyProfile, recordRun } from '../src/platform/profile.ts';
 import { presetProfile } from '../src/debug/profiles.ts';
 import { botByName, playRun, useExt, useMarket } from './bots.ts';
@@ -1239,10 +1239,11 @@ async function liveShots(browser: Browser): Promise<void> {
   const texts = async (ctx: Ctx): Promise<string[]> => (await ctx.page.evaluate(() => window.__game?.displayList() ?? [])).filter((t) => t.startsWith('text:')).map((t) => t.slice(5));
   const hasText = async (ctx: Ctx, part: string): Promise<boolean> => (await texts(ctx)).some((t) => t.includes(part));
   const rec = (ctx: Ctx) => ctx.page.evaluate(() => window.__game?.live() ?? null);
-  const startLive = async (ctx: Ctx, tier: string): Promise<void> => {
+  const startLive = async (ctx: Ctx, tier: string, gear = 1): Promise<void> => {
     await press(ctx, 'live');
     await dialogOpen(ctx, `setup:tier:${tier}`);
     await press(ctx, `setup:tier:${tier}`);
+    if (gear > 1) await press(ctx, `setup:gear:${gear}`);
     await ctx.page.waitForTimeout(200);
     await press(ctx, 'setup:start');
     await waitIdle(ctx, '实盘开局', "window.__game.scene === 'trade'");
@@ -1268,6 +1269,9 @@ async function liveShots(browser: Browser): Promise<void> {
     await press(ctx, 'setup:tier:mid');
     await ctx.page.waitForTimeout(200);
     expect(await hasText(ctx, '带 10,000 进场'), '开始按钮应写"带 10,000 进场"');
+    // 0.11.0 杠杆：默认稳健，这局选进取 ×2
+    await press(ctx, 'setup:gear:2');
+    await ctx.page.waitForTimeout(200);
     await shot(ctx, 'l1-setup-live');
     await press(ctx, 'setup:start');
     await waitIdle(ctx, '实盘开局', "window.__game.scene === 'trade'");
@@ -1276,8 +1280,8 @@ async function liveShots(browser: Browser): Promise<void> {
     expect(!!r && r.step === 'playing' && r.tier === 'mid' && r.stake === 10_000, `带入后记录应是 playing（${JSON.stringify(r)}）`);
     expect(!!buy && buy.body.ref === r?.ref && buy.body.tier === 'mid' && buy.xArcade === '1' && Object.keys(buy.body).sort().join() === 'ref,tier', `带入只传 ref 和 tier、带 X-Arcade（${JSON.stringify(buy)}）`);
     const st = await state<GameState>(ctx, 'window.__game.state()');
-    expect(st.seed === r?.seed && st.setup?.live?.months === BALANCE.live.months && st.setup.live.tier === 'mid' && st.difficulty === 2, `中档打 ${BALANCE.live.months} 个月、难度 2（${JSON.stringify(st.setup)}）`);
-    await waitFor(ctx, '顶栏的实盘小牌子', `g.displayList().some((t) => t === 'text:${PHONE ? '实盘中档 → 约 10,000' : '实盘 · 中档 10,000 → 约 10,000'}')`);
+    expect(st.seed === r?.seed && st.setup?.live?.months === BALANCE.live.months && st.setup.live.tier === 'mid' && st.setup.live.gear?.x === 2 && st.difficulty === 2, `中档打 ${BALANCE.live.months} 个月、难度 2（${JSON.stringify(st.setup)}）`);
+    await waitFor(ctx, '顶栏的实盘小牌子', `g.displayList().some((t) => t === 'text:${PHONE ? '实盘中档×2 → 约 10,000' : '实盘 · 中档 10,000 · 杠杆×2 → 约 10,000'}')`);
     await shot(ctx, 'l2-trade-badge');
     const end = finished(st);
     const bp = runSummary(end).live?.bp ?? -1;
@@ -1484,6 +1488,48 @@ async function liveShots(browser: Browser): Promise<void> {
     await press(ctx, 'live');
     await ctx.page.waitForTimeout(400);
     expect(!('setup:start' in (await controls(ctx))) && w.calls.length === 0, '没登录点「实盘」不开面板');
+    await ctx.page.context().close();
+  }
+
+  // H. 0.11.0 杠杆 ×3 跌到清零线：前一天盘前顶栏变红、提醒一句；开盘后弹「清零了」，结束页说按 0 结
+  {
+    useMarket(null);
+    useExt(true);
+    const setup = liveSetup('small', 'newbie', 3);
+    const gear = setup.live!.gear!;
+    let pre: GameState | null = null;
+    for (let i = 0; i < 80 && !pre; i++) {
+      const end = playRun(`wipe-${i}`, botByName('xiaobai'), setup);
+      if (end.endReason !== 'margin') continue;
+      const last = end.actions.map((a) => a.type).lastIndexOf('open');
+      const s = replay(end.seed, end.actions.slice(0, last), setup, { ext: true });
+      const v = gearLevered(s);
+      if (s.phase === 'premarket' && v !== null && v <= gear.call + BALANCE.live.warnGap) pre = s;
+    }
+    useExt(false);
+    if (!pre) throw new Error('找不到杠杆 ×3 清零的局面');
+    const w = fakeWallet();
+    const ctx = await openPage(browser, 'live-wipe', '', opts(w));
+    await startLive(ctx, 'small', 3);
+    // 实盘记录换成找好的那一局的种子（记录每次都从存储里读）
+    await ctx.page.evaluate((seed) => {
+      const r = JSON.parse(localStorage.getItem('kaipan.live') ?? '{}') as { seed: string };
+      r.seed = seed;
+      localStorage.setItem('kaipan.live', JSON.stringify(r));
+    }, pre.seed);
+    await loadState(ctx, pre);
+    await waitIdle(ctx, '交易画面', "window.__game.scene === 'trade'");
+    await ctx.page.waitForTimeout(400);
+    expect(await hasText(ctx, '离清零线不远了'), `清零前一天应提醒（${(await texts(ctx)).join(' | ')}）`);
+    await shot(ctx, 'l11-trade-near-wipe');
+    await click(ctx, 'open');
+    await waitFor(ctx, '清零卡', "g.displayList().some((t) => t === 'text:清零了')");
+    await ctx.page.waitForTimeout(400);
+    await shot(ctx, 'l12-trade-wiped');
+    await ctx.page.keyboard.press('Space');
+    await waitIdle(ctx, '结束页', "window.__game.scene === 'end'");
+    await ctx.page.waitForTimeout(400);
+    await shot(ctx, 'l13-end-wiped');
     await ctx.page.context().close();
   }
 }

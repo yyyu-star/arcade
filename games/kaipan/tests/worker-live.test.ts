@@ -110,13 +110,15 @@ describe('settle 的金额与 bp 校验', () => {
     ['mid', 10543, 10543],
     ['big', 30000, 150000],
     ['lux', 30000, 600000],
+    // 0.11.0 疯狂 3× 封顶 7 倍
+    ['small', 70000, 14000],
   ])('%s bp=%i → %i', async (tier, bp, amount) => {
     const e = env();
     await run(e, post('settle', { ref: REF, tier, bp }));
     expect(e.w.calls[0]!.args.amount).toBe(amount);
   });
-  it('上限就是 3 倍', () => expect(LIVE_MAX_BP).toBe(30000));
-  it.each([[-1], [30001], [1.5], ['100'], [null], [NaN]])('bp=%s → 400 bad_bp，不碰平台和钱包', async (bp) => {
+  it('上限是最高一档杠杆的封顶：7 倍（0.11.0 前是 3 倍）', () => expect(LIVE_MAX_BP).toBe(70000));
+  it.each([[-1], [70001], [1.5], ['100'], [null], [NaN]])('bp=%s → 400 bad_bp，不碰平台和钱包', async (bp) => {
     const e = env();
     const res = await run(e, post('settle', { ref: REF, tier: 'small', bp }));
     expect(res.status).toBe(400);

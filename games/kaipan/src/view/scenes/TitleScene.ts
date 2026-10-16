@@ -331,7 +331,7 @@ export class TitleScene extends BaseScene {
           anim: this.anim,
           real: this.session.market !== 'synthetic',
           onStart: (p, difficulty, short) => this.guardNew(() => this.startSetup(p, difficulty, short)),
-          live: mode === 'live' && wallet ? { wallet: wallet.wallet, blocked: wallet.blocked, aside: wallet.aside ?? null, tier: 'small', onStart: (p, tier) => this.guardNew(() => this.startLive(p, tier)) } : undefined,
+          live: mode === 'live' && wallet ? { wallet: wallet.wallet, blocked: wallet.blocked, aside: wallet.aside ?? null, tier: 'small', onStart: (p, tier, gear) => this.guardNew(() => this.startLive(p, tier, gear)) } : undefined,
           // 调试会话、没登录时没有开关（实盘按钮也是灰的）
           onMode: can ? (m, p) => this.time.delayedCall(1, () => (m === 'live' ? this.openLive(p) : this.openSetup('fun', undefined, p))) : undefined,
         }),
@@ -405,7 +405,7 @@ export class TitleScene extends BaseScene {
   }
 
   /** 实盘开局：先带入（钱包扣一份），成了再开局；没成就说原因，筹码没动 */
-  private startLive(persona: PersonaId, tier: LiveTier): void {
+  private startLive(persona: PersonaId, tier: LiveTier, gear = 1): void {
     if (this.busy) return;
     const close = showBanner('正在带入……');
     // 带入到开局（还要挑行情）之间挡住开始菜单：这时点别的会盖掉或抢在这局实盘前面
@@ -422,7 +422,7 @@ export class TitleScene extends BaseScene {
         if (r.ok) {
           close();
           // 挡板留着，开局换场景时跟着走
-          this.session.newRun(seed, liveSetup(tier, persona));
+          this.session.newRun(seed, liveSetup(tier, persona, gear));
           return;
         }
         unblock();

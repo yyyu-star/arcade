@@ -6,16 +6,20 @@
 import { BALANCE } from './balance.ts';
 import { personaAccount } from './content/index.ts';
 import { debtOf } from './engine.ts';
-import { LIVE_MAX_BP, LIVE_TIERS, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
+import { LIVE_TIERS, liveGear, liveLevered, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
 import type { GameState, PersonaId, RunSetup } from './types.ts';
 
-export { LIVE_MAX_BP, LIVE_TIERS, isLiveTier, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
+export { LIVE_MAX_BP, LIVE_TIERS, isLiveTier, liveGear, liveLevered, liveReturn, liveTierById, type LiveTier, type LiveTierDef } from './liveTiers.ts';
 
 /** 实盘开局设置：难度由档位定，规则从 BALANCE.live 抄进这局（以后改默认值不影响已经开了的局）。 */
-export function liveSetup(tier: LiveTier, persona: PersonaId = 'newbie'): RunSetup {
-  const { billMult, lev } = BALANCE.live.tiers[tier];
-  return { persona, difficulty: liveTierById(tier).difficulty, live: { months: BALANCE.live.months, billMult, lev, tier } };
+export function liveSetup(tier: LiveTier, persona: PersonaId = 'newbie', x = 1): RunSetup {
+  const { billMult, lev, gearRate } = BALANCE.live.tiers[tier];
+  // 0.11.0 杠杆：稳健 1× 不写（和 0.10.0 的局一模一样），进取、疯狂把封顶、利息（按档位打折）、清零线抄进这局
+  const g = x > 1 ? liveGear(x) : null;
+  const gear = g ? { gear: { ...g, interest: g.interest * gearRate } } : {};
+  return { persona, difficulty: liveTierById(tier).difficulty, live: { months: BALANCE.live.months, billMult, lev, tier, ...gear } };
 }
+
 
 /** 0.10.0 以前一档一个难度，那时开的局没记档位，按难度认 */
 const LEGACY_TIER: Record<number, LiveTier> = { 1: 'small', 2: 'mid', 3: 'big', 4: 'lux' };
@@ -60,10 +64,10 @@ export function liveMultipleBp(s: Readonly<GameState>): number {
   if (s.phase === 'lost') return 0;
   const start = liveStart(s);
   if (!(start > 0)) return 0;
-  const lev = s.setup?.live?.lev ?? 1;
-  const r = liveAssets(s) / start;
-  const bp = Math.floor((lev === 1 ? r : 1 + lev * (r - 1)) * 10_000);
-  return Math.max(0, Math.min(LIVE_MAX_BP, bp));
+  const live = s.setup?.live;
+  const gear = live?.gear;
+  const bp = Math.floor(liveLevered(liveAssets(s) / start, live?.lev ?? 1, gear?.x ?? 1) * 10_000);
+  return Math.max(0, Math.min((gear?.cap ?? BALANCE.live.cap) * 10_000, bp));
 }
 
 /** 按现在的资产，这局能结回多少筹码（顶栏小牌子、提前收手的确认框用）；不是实盘为 null */

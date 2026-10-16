@@ -220,7 +220,14 @@ export interface LiveParams {
    * lev 是资产涨跌算进筹码的倍数（资产涨 10%、lev 3 → 结回多 30%）。一局只有几个月，资产的起伏本来就小，
    * 不放大的话会玩和不会玩的只差零点几成，赚也赚不到哪去（docs/design-live.md 第 3 节）。
    */
-  tiers: Record<'small' | 'mid' | 'big' | 'lux', { billMult: number; lev: number }>;
+  tiers: Record<'small' | 'mid' | 'big' | 'lux', { billMult: number; lev: number; gearRate: number }>;
+  /**
+   * 0.11.0 玩家自己选的杠杆（稳健 1× / 进取 2× / 疯狂 3×）：结回再按 x 放大一次，封顶 cap 份；
+   * interest 是每月的利息（按结回倍数算：每月让结回少这么多，和账单一起扣），call 是清零线（放大后的结回倍数跌到这里就强制结束、按 0 结）。
+   */
+  gears: readonly { x: number; cap: number; interest: number; call: number }[];
+  /** 放大后的结回倍数离清零线不到这么多份时，顶栏的账户变红闪、提醒一句（只是画面，不影响规则） */
+  warnGap: number;
 }
 
 /** 0.5：个股照搬真实走势。 */
@@ -645,11 +652,18 @@ export const BALANCE: Balance = {
     months: 5,
     cap: 3,
     tiers: {
-      small: { billMult: 0.17, lev: 2.8 },
-      mid: { billMult: 0.18, lev: 3.5 },
-      big: { billMult: 0.18, lev: 4 },
-      lux: { billMult: 0.22, lev: 5 },
+      // gearRate（0.11.0）：开杠杆的利息在这一档打几折。大档、豪华档的涨跌倍数本来就大，再叠杠杆起伏已经很猛，利息照小档收就几乎必输
+      small: { billMult: 0.17, lev: 2.8, gearRate: 1 },
+      mid: { billMult: 0.18, lev: 3.5, gearRate: 0.5 },
+      big: { billMult: 0.18, lev: 4, gearRate: 0.25 },
+      lux: { billMult: 0.22, lev: 5, gearRate: 0.25 },
     },
+    gears: [
+      { x: 1, cap: 3, interest: 0, call: 0 },
+      { x: 2, cap: 5, interest: 0.013, call: 0.2 },
+      { x: 3, cap: 7, interest: 0.0224, call: 0.1 },
+    ],
+    warnGap: 0.3,
   },
 };
 
