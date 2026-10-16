@@ -52,6 +52,13 @@ export const soloBuyin = (b: { op: string; session: string; stakes: TierId; amou
 /** 单机结回：带这一场的小结（docs/platform-backend.md 5.10，Worker 原样转发） */
 export const soloSettle = (b: { op: string; session: string; amount: number; stats?: SettleStats }): Promise<WalletReply> => post('settle', b);
 
+/**
+ * 带入、结回失败时，钱包那边是不是可能已经办了：平台明确拒的（钱不够、上限、参数不对、没登录……）一定没办；
+ * 没回话、平台暂时不行、认不出来的都当"可能办了"，留着操作号以后重发（平台按号去重）
+ */
+const REFUSED = new Set(['no_funds', 'limit', 'at_table', 'no_stake', 'expired', 'bad_mode', 'bad_amount', 'bad_until', 'bad_request', 'login', 'forbidden', 'rate_limited']);
+export const maybeApplied = (error: string): boolean => !REFUSED.has(error);
+
 /** 8–64 位 [A-Za-z0-9_-] 的随机号（ref、op） */
 export function randomId(len = 20): string {
   const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

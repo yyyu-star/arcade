@@ -4,6 +4,7 @@
  * - 每一步存进 mahjong.solo，关了页面回来接着打；
  * - 实盘（client 模式）：开场经 Worker 从钱包带入，一场打完（或中途离开）带着小结结回；带入、结回的操作号都先存下来，
  *   断网、刷新后用同一个号重发，平台按号去重，不会多扣多给。
+ * - 存档只有一份（mahjong.solo），每一场有自己的号（id）：已经停下的旧一场（晚到的结回）只改、只删自己那份，不碰新开的一场（自审 C1）。
  */
 import { stream } from 'arcade-kit/rng';
 import { AIS } from './ai/index.ts';
@@ -12,7 +13,7 @@ import type { SettleStats } from './core/match/index.ts';
 import { sichuanXuezhan as XZ, view, type XzAction, type XzOpts, type XzState, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import type { SeatKind } from './core/variants/types.ts';
 import { baseOf, stakesOf, type StakesId, type TierId } from './game/stakes.ts';
-import { randomId, soloSettle, type WalletReply } from './net/wallet.ts';
+import { maybeApplied, randomId, soloBuyin, soloSettle, type WalletReply } from './net/wallet.ts';
 
 export const SOLO_KEY = 'mahjong.solo';
 const KINDS: SeatKind[] = ['human', 'ai', 'ai', 'ai'];
@@ -20,12 +21,16 @@ export const ME = 0;
 
 export interface SoloSave {
   v: 1;
+  /** 这一场的号（0.3.8 起；之前的存档没有，当作就是存着的那一场） */
+  id?: string;
   state: XzState;
   stakes: StakesId;
   names: string[];
   /** 实盘：钱包里这一份的号；结回的操作号和小结（先存再发，重发用同一个） */
   ref: string | null;
   settle: { op: string; amount: number; stats: SettleStats } | null;
+  /** 实盘带入还没确认：先存再发，没回话（断网、刷新）下次用同一个操作号重发 */
+  buying?: { op: string; amount: number } | null;
   /** 已经结回（或者娱乐局打完） */
   done: boolean;
 }
@@ -50,10 +55,23 @@ export function loadSolo(): SoloSave | null {
   }
 }
 
-function persist(s: SoloSave): void {
+/** 实盘、还没结回钱包的存档：开新的一场前要先把它结了（自审 C1） */
+export function unsettled(s: SoloSave | null): boolean {
+  return !!s && !s.done && !!s.ref && !!stakesOf(s.stakes)?.wallet;
+}
+
+/**
+ * 存档。own 是"这一场正在打"：正在打的那一场总能写；已经停下的（离开了、换成了新的一场）只在存着的还是自己时才改、才删，
+ * 免得晚到的结回把新一场的存档删掉或者盖掉。
+ */
+function persist(s: SoloSave, own: boolean): void {
   try {
-    if (s.done) localStorage.removeItem(SOLO_KEY);
-    else localStorage.setItem(SOLO_KEY, JSON.stringify(s));
+    const raw = localStorage.getItem(SOLO_KEY);
+    const cur = raw ? (JSON.parse(raw) as SoloSave).id : undefined;
+    const mine = cur === undefined || cur === s.id;
+    if (!own && !mine) return;
+    if (!s.done) localStorage.setItem(SOLO_KEY, JSON.stringify(s));
+    else if (mine) localStorage.removeItem(SOLO_KEY);
   } catch {
     // 存不上（隐私模式、满了）：这一场照打，只是关了页面就接不上
   }
@@ -65,7 +83,7 @@ export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: str
   const key = [...crypto.getRandomValues(new Uint32Array(8))];
   const personas = [0, ...pickPersonas(stream(key, 'persona'), st.level, 3)];
   const state = XZ.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, chips: [chips, st.share, st.share, st.share] }) as XzState;
-  return { v: 1, state, stakes, names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
+  return { v: 1, id: randomId(), state, stakes, names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
 }
 
 /** 电脑每一步之后停多久（毫秒，再乘速度） */
@@ -105,9 +123,35 @@ export class Solo {
     return this.s.names;
   }
 
+  /** 存档（停下以后只碰自己那份） */
+  private save$(): void {
+    persist(this.s, !this.stopped);
+  }
+
+  /**
+   * 实盘带入：先把"带入中"（ref、操作号）存下来再发（自审 C3）。成了就清掉；平台明确拒了（没扣）就丢掉这一场；
+   * 没回话、平台暂时不行（可能扣了）就留着，下次用同一个操作号重发，平台按号去重，不会多扣
+   */
+  async buyin(): Promise<WalletReply> {
+    const b = this.s.buying;
+    if (!b || !this.s.ref) return { ok: true };
+    this.save$();
+    const r = await soloBuyin({ op: b.op, session: this.s.ref, stakes: this.s.stakes as TierId, amount: b.amount });
+    if (r.ok) this.s.buying = null;
+    else if (!maybeApplied(r.error)) this.s.done = true;
+    this.save$();
+    return r;
+  }
+
   /** 画当前的局面，接着让电脑出（回来接着打时也从这里开始） */
   resume(): void {
-    persist(this.s);
+    // 已经离开、结回没成的（存着结回的数）：不再接着打，只把结回再办一次（自审 C2）
+    if (this.s.settle) {
+      this.ui.frame(this.view, this.s.names);
+      void this.finish();
+      return;
+    }
+    this.save$();
     this.ui.frame(this.view, this.s.names);
     if (this.s.state.phase === 'end' || this.s.state.phase === 'over') this.ui.roundEnd(this.view, this.s.names);
     if (this.s.state.phase === 'over') void this.finish();
@@ -136,7 +180,7 @@ export class Solo {
 
   private step(next: XzState): void {
     this.s.state = next;
-    persist(this.s);
+    this.save$();
     this.ui.frame(this.view, this.s.names);
     if (next.phase === 'end' || next.phase === 'over') this.ui.roundEnd(this.view, this.s.names);
     if (next.phase === 'over') void this.finish();
@@ -166,28 +210,32 @@ export class Solo {
     }
   }
 
-  /** 实盘结回（一场打完，或者中途离开）：先把操作号和小结存下来再发，失败了下次用同一个号重发 */
-  async finish(): Promise<void> {
+  /**
+   * 实盘结回（一场打完，或者中途离开）：先把操作号和小结存下来再发，失败了下次用同一个号重发。
+   * 带入还没确认的也走这里：没扣成的平台回 no_stake，算结完。返回结回的回话（娱乐局是 null）
+   */
+  async finish(): Promise<WalletReply | null> {
     const st = stakesOf(this.s.stakes)!;
     if (!st.wallet || !this.s.ref) {
       if (this.s.state.phase === 'over') {
         this.s.done = true;
-        persist(this.s);
+        this.save$();
       }
-      return;
+      return null;
     }
     if (!this.s.settle) {
       const r = XZ.result(this.s.state).seats[ME]!;
       this.s.settle = { op: randomId(), amount: Math.max(0, r.chips), stats: r.stats };
-      persist(this.s);
+      this.save$();
     }
     const r = await soloSettle({ op: this.s.settle.op, session: this.s.ref, amount: this.s.settle.amount, stats: this.s.settle.stats });
     // 结过了、放太久已经退回：都算结完
     if (r.ok || r.error === 'no_stake' || r.error === 'expired') {
       this.s.done = true;
-      persist(this.s);
+      this.save$();
     }
     this.ui.settled(r);
+    return r;
   }
 
   /** 中途离开：马上结算（娱乐局直接丢掉） */
@@ -196,7 +244,7 @@ export class Solo {
     const st = stakesOf(this.s.stakes)!;
     if (!st.wallet) {
       this.s.done = true;
-      persist(this.s);
+      this.save$();
       return;
     }
     await this.finish();
