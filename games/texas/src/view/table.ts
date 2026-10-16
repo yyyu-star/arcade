@@ -164,27 +164,55 @@ export class TableView {
   }
 
   /**
-   * 加注面板打开时，被它盖住的座位挪到面板上方（r 是面板在屏幕上的位置），收起时放回去。
-   * 按实际位置算：不同人数、不同屏幕宽，盖住的是哪个座位不一样
+   * 加注面板打开时，被它盖住的座位挪开（r 是操作区在屏幕上的位置），收起时放回去。
+   * 按实际位置算：不同人数、不同屏幕宽，盖住的是哪个座位不一样。先试整个座位往上挪到面板上方，再试往左挪到面板左边，
+   * 都放不下就只留名牌（名字和筹码）塞到面板上方（.tucked，头像、底牌、动作签先藏起来）。挪过去不许压到别的座位、出舞台
+   * （0.9.0 之前只往上挪，6 人桌右下的座位叠到右上那个上面）
    */
   avoid(r: DOMRect | null): void {
+    const stage = this.root.getBoundingClientRect();
+    // 屏幕像素换回舞台单位（舞台整体缩放过）
+    const scale = stage.height / (this.root.offsetHeight || 1);
+    // 各座位没挪时占的地方：轮到我时操作区一更新就会再问一次，座位可能已经挪过、还在挪的动画里，减掉此刻挪到哪了
+    // （不然第二次量到的是挪了一半的位置，0.3.0 冒烟抓到）
+    const boxes = this.seats.map((n) => {
+      const [mx = 0, my = 0] = (getComputedStyle(n.root).translate.match(/-?[\d.]+/g) ?? []).map(Number);
+      const parts = [n.avatar, n.plate, ...n.cards.filter((c) => !c.classList.contains('hidden'))].map((e) => e.getBoundingClientRect()).filter((b) => b.width > 0);
+      return {
+        left: Math.min(...parts.map((b) => b.left)) - mx * scale,
+        right: Math.max(...parts.map((b) => b.right)) - mx * scale,
+        top: Math.min(...parts.map((b) => b.top)) - my * scale,
+        bottom: Math.max(...parts.map((b) => b.bottom)) - my * scale,
+      };
+    });
+    type Box = (typeof boxes)[number];
+    const overlap = (a: Box, b: Box | DOMRect): boolean => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+    const shift = (a: Box, dx: number, dy: number): Box => ({ left: a.left + dx, right: a.right + dx, top: a.top + dy, bottom: a.bottom + dy });
+    // 面板刚打开时还在往上升的动画里（低 8 个单位），再留 6 个单位的缝
+    const gap = 14 * scale;
     for (const [i, n] of this.seats.entries()) {
+      const box = boxes[i]!;
       // 我的座位不挪（操作区在右下角，碰不到我；万一碰到也不能把自己的牌挪走）
-      if (!r || i === this.me) {
+      if (!r || i === this.me || !overlap(box, r)) {
         n.root.style.translate = '';
+        toggle(n.root, 'tucked', false);
         continue;
       }
-      // 轮到我时操作区一更新就会再问一次：座位可能已经挪过、还在挪的动画里。按没挪时的位置算（减掉此刻动画到哪了），
-      // 不然第二次量到的是挪了一半的位置，挪得不够还盖着（0.3.0 冒烟抓到）
-      const a = n.avatar.getBoundingClientRect();
+      const fits = (b: Box): boolean => b.top >= stage.top && b.left >= stage.left && !overlap(b, r) && boxes.every((o, k) => k === i || !overlap(b, o));
       const p = n.plate.getBoundingClientRect();
-      // 屏幕像素换回舞台单位（舞台整体缩放过）
-      const scale = a.height / (n.avatar.offsetHeight || 1);
-      const moved = (parseFloat(getComputedStyle(n.root).translate.split(' ')[1] ?? '0') || 0) * scale;
-      const box = { left: Math.min(a.left, p.left), right: Math.max(a.right, p.right), top: Math.min(a.top, p.top) - moved, bottom: Math.max(a.bottom, p.bottom) - moved };
-      const hit = !(box.right <= r.left || box.left >= r.right || box.bottom <= r.top || box.top >= r.bottom);
-      // 面板刚打开时还在往上升的动画里（低 8 个单位），再留 6 个单位的缝
-      n.root.style.translate = hit ? `0 ${-Math.ceil((box.bottom - r.top) / scale + 8 + 6)}px` : '';
+      const [mx = 0, my = 0] = (getComputedStyle(n.root).translate.match(/-?[\d.]+/g) ?? []).map(Number);
+      const plate = { left: p.left - mx * scale, right: p.right - mx * scale, top: p.top - my * scale, bottom: p.bottom - my * scale };
+      const up = -(box.bottom - r.top + gap);
+      const left = -(box.right - r.left + gap);
+      const tuck = -(plate.bottom - r.top + gap);
+      let move: [number, number, Box] = [0, 0, box];
+      if (fits(shift(box, 0, up))) move = [0, up, shift(box, 0, up)];
+      else if (fits(shift(box, left, 0))) move = [left, 0, shift(box, left, 0)];
+      else if (fits(shift(plate, 0, tuck))) move = [0, tuck, shift(plate, 0, tuck)];
+      toggle(n.root, 'tucked', move[2] !== box && move[2].bottom - move[2].top < box.bottom - box.top);
+      // 挪过去的座位也算占了地方，后面的座位别再挪到这里
+      boxes[i] = move[2];
+      n.root.style.translate = move[0] || move[1] ? `${Math.round(move[0] / scale)}px ${Math.round(move[1] / scale)}px` : '';
     }
   }
 

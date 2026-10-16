@@ -434,6 +434,7 @@ async function resume(): Promise<void> {
 async function relief(): Promise<void> {
   if (busy) return;
   busy = true;
+  drawLobby();
   const r = await reliefApi();
   busy = false;
   if (r.ok) {

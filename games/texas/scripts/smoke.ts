@@ -172,16 +172,29 @@ async function assertAutoNext(page: Page): Promise<void> {
 }
 
 /** 自动打到第 n 手打完；大多跟注过牌，偶尔加注、弃牌，让各条路都走到。一手打完点"下一手"（第一次先核对不点不发、再试一次自动下一手） */
-/** 加注面板盖住了几个座位的头像或名牌（单机打磨时加的检查） */
+/** 加注面板盖住了几个座位的头像或名牌（单机打磨时加的检查）；只留名牌的座位（.tucked，0.9.0）头像藏着，不算 */
 const coveredSeats = (page: Page): Promise<number> =>
   page.evaluate(() => {
     const r = document.querySelector('.raise-panel')!.getBoundingClientRect();
     return [...document.querySelectorAll('.seat:not(.empty)')].filter((seat) =>
-      [...seat.querySelectorAll('.avatar, .plate')].some((e) => {
+      [...seat.querySelectorAll(seat.classList.contains('tucked') ? '.plate' : '.avatar, .plate')].some((e) => {
         const b = e.getBoundingClientRect();
         return b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom;
       }),
     ).length;
+  });
+
+/** 座位之间互相压着的对数（头像、名牌；0.9.0：原来挪开的座位会压到别的座位上，上面那个检查看不出来） */
+const seatOverlaps = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('.seat:not(.empty)')].map((seat) =>
+      [...seat.querySelectorAll(seat.classList.contains('tucked') ? '.plate' : '.avatar, .plate')].map((e) => e.getBoundingClientRect()),
+    );
+    let n = 0;
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++)
+        if (boxes[i]!.some((a) => boxes[j]!.some((b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom))) n++;
+    return n;
   });
 
 async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks = false): Promise<void> {
@@ -236,6 +249,11 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
         if (covered) {
           await shot(page, `raise-covers-${no}`);
           throw new Error(`raise panel covers ${covered} seat(s)`);
+        }
+        const stacked = await seatOverlaps(page);
+        if (stacked) {
+          await shot(page, `raise-stacks-${no}`);
+          throw new Error(`moving seats out of the raise panel stacked ${stacked} pair(s) of seats`);
         }
         if (shotAt.has(-1)) {
           shotAt.delete(-1);

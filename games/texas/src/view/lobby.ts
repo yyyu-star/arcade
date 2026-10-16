@@ -69,6 +69,8 @@ export class Lobby {
   private mode: Mode = 'real';
   private s: LobbyState = { wallet: null, note: null, resume: null, orphan: null, busy: true, room: null };
   private readonly h: LobbyHandlers;
+  /** 最后点的那个要等回话的按钮：忙着的时候它转圈（0.9.0） */
+  private pending: HTMLButtonElement | null = null;
 
   constructor(parent: HTMLElement, h: LobbyHandlers) {
     this.h = h;
@@ -89,7 +91,7 @@ export class Lobby {
     const wallet = (this.walletBox = el('div', 'wallet', panel));
     el('span', 'w-label', wallet, '我的筹码');
     this.balance = el('span', 'w-balance', wallet, '…');
-    this.reliefBtn = button(wallet, 'relief', '领今日补给', () => h.relief());
+    this.reliefBtn = button(wallet, 'relief', '领今日补给', () => this.wait(this.reliefBtn, () => h.relief()));
     el('div', 'disclaimer', panel, '筹码无任何现金价值：不能买、不能换钱换物、不能转给别人');
     this.noteEl = el('div', 'note', panel);
 
@@ -132,12 +134,12 @@ export class Lobby {
     this.slider.addEventListener('input', () => this.draw());
     this.buyAmt = el('span', 'buy-amt', buy);
     const go = el('div', 'go-row', panel);
-    this.startBtn = button(go, 'start', '坐下开打', () => this.h.start(this.stakes, this.size, Number(this.slider.value), this.fun()));
+    this.startBtn = button(go, 'start', '坐下开打', () => this.wait(this.startBtn, () => this.h.start(this.stakes, this.size, Number(this.slider.value), this.fun())));
 
     // 好友房：开房用上面选的档位和人数，买入固定是这一档的满买入
     const fr = (this.friends = el('div', 'friends', panel));
     el('span', 'label', fr, '好友房');
-    this.openBtn = button(fr, 'pill', '开房间', () => h.openRoom(this.stakes, this.size));
+    this.openBtn = button(fr, 'pill', '开房间', () => this.wait(this.openBtn, () => h.openRoom(this.stakes, this.size)));
     this.codeIn = el('input', 'code-in', fr);
     Object.assign(this.codeIn, { type: 'text', inputMode: 'numeric', maxLength: 6, placeholder: '6 位房间码', autocomplete: 'off' });
     this.codeIn.addEventListener('input', () => {
@@ -145,9 +147,9 @@ export class Lobby {
       this.draw();
     });
     this.codeIn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !this.joinBtn.disabled) h.joinRoom(this.codeIn.value);
+      if (e.key === 'Enter' && !this.joinBtn.disabled) this.wait(this.joinBtn, () => h.joinRoom(this.codeIn.value));
     });
-    this.joinBtn = button(fr, 'pill', '进房间', () => h.joinRoom(this.codeIn.value));
+    this.joinBtn = button(fr, 'pill', '进房间', () => this.wait(this.joinBtn, () => h.joinRoom(this.codeIn.value)));
     // 单独部署时好友房里别人看到的名字（kit 的 ?name=，服务端清洗，不合格就是"游客1234"）；有平台时用平台的昵称，不显示
     this.nickRow = el('div', 'nick-row hidden', panel);
     el('span', 'label', this.nickRow, '昵称');
@@ -197,6 +199,11 @@ export class Lobby {
     void this.friends.offsetWidth;
     this.friends.classList.add('spot');
     if (matchMedia('(pointer: fine)').matches) this.codeIn.focus({ preventScroll: true });
+  }
+
+  private wait(b: HTMLButtonElement, go: () => void): void {
+    this.pending = b;
+    go();
   }
 
   private pick(id: StakesId): void {
@@ -271,6 +278,7 @@ export class Lobby {
     this.openBtn.disabled = busy || (!this.alone && (!wallet || (bal ?? 0) < st.min));
     this.openBtn.title = this.alone ? '' : !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
     this.joinBtn.disabled = busy || this.codeIn.value.length !== 6;
+    for (const b of [this.startBtn, this.openBtn, this.joinBtn, this.reliefBtn]) toggle(b, 'loading', busy && b === this.pending);
     toggle(this.roomBox, 'hidden', !room);
     if (room) {
       setText(this.roomText, room.text);
