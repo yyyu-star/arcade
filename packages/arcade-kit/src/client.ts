@@ -30,9 +30,9 @@ export interface RoomClientOptions<V> {
   onStatus?(status: ClientStatus, closeCode?: number, reason?: string): void;
   /**
    * 有人发了快捷短语（0.6.0，见 RoomGame.emotes）：seat 是房间的座位号，id 是短语编号。不传就丢掉。
-   * to（0.7.0）：冲着哪个座位发的，没指定时是 undefined
+   * to（0.7.0）：冲着哪个座位发的，没指定时是 undefined；bot（0.10.0）：电脑座位发的（GameRoom.botEmote）是 true，一般不用区分
    */
-  onEmote?(seat: number, id: number, to?: number): void;
+  onEmote?(seat: number, id: number, to?: number, bot?: boolean): void;
   /** 下面这些是给测试注入的；浏览器里不用传 */
   WebSocketImpl?: { new (url: string): WebSocketLike };
   random?: () => number;
@@ -207,7 +207,7 @@ export class RoomClient<A = unknown, V = unknown> {
         return;
       }
       if (msg.t === 'emote') {
-        if (Number.isInteger(msg.seat) && Number.isInteger(msg.id)) this.opts.onEmote?.(msg.seat, msg.id, Number.isInteger(msg.to) ? msg.to : undefined);
+        if (Number.isInteger(msg.seat) && Number.isInteger(msg.id)) this.opts.onEmote?.(msg.seat, msg.id, Number.isInteger(msg.to) ? msg.to : undefined, msg.bot === true);
         return;
       }
       // 本地已经按节奏排队了，房间偶尔还嫌快（比如刚重连、节奏刚调过）：静默丢掉，不打扰页面

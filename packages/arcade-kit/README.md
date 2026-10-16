@@ -218,6 +218,22 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
     `RoomGame.emotes` 是总数；房间不区分种类，只校验 id 范围和 `to`。表情、道具按"游戏的起始编号 + 下标"映射到 `arcade-kit/fun` 的 `STICKERS`、`PROPS`（顺序固定、只往后加）；
   - 被拒回 `error`（不带 moveId，页面可以不提示）：`no_emotes` 游戏没写 `emotes`；`bad_emote` 编号不是 0 到 `emotes - 1` 的整数；
     `not_seated` 没入座（来看的人不能发，免得旁观的刷屏）；`room_over` 房间打完了；`emote_too_fast` 这个座位没令牌了；`bad_target` 对象不对。
+  - **电脑也会互动**（0.10.0）：房间子类覆盖 `protected onStep(state)`（每一步广播完调一次，同步、不能 await、不写存储，抛错只记日志），
+    在里面看这一步的公开事件，需要时调 `protected botEmote(seat, id, to?): boolean` 让电脑座位发一句：
+    ```ts
+    class Room extends GameRoom<S, A, V, Env> {
+      protected readonly game = rules;
+      protected override onStep(state: S): void {
+        const e = lastPublicEvent(state);          // 游戏自己的：谁出了什么、谁赢了一把（只取公开的）
+        if (e?.bigWin) this.botEmote(e.seat, CHEER, e.loser);
+      }
+    }
+    ```
+    只有电脑在出手的座位能发（`kind` 是 `ai`，或真人掉线后电脑托管 `auto`）；真人座位、空位、编号或 `to` 不对、房间打完了、这个座位没令牌了都回 `false`、不广播。
+    广播的消息和真人的一样（`{ t: 'emote', seat, id, to? }`），多带 `bot: true`（`onEmote` 的第 4 个参数），页面一般不用区分。
+    和真人共用同一个座位的令牌桶（`emoteMs` / `emoteBurst`），不写存储、不改 seq。电脑短语即时到达，不跟着 `frames` 的播放延迟走：想让它落在某一帧之后，游戏在页面上自己按帧排队。
+    **公平约束（游戏侧守，kit 只管广播）**：电脑发不发、发什么只看公开信息（出过的牌、结算结果），不读隐藏的牌，也不读任何真人的短语——
+    kit 本来就不把真人短语交给规则和 `onStep`，游戏也不要自己记下来喂给电脑。电脑出牌的决策（`ai`）照旧不受短语影响。
 - **好玩素材** `arcade-kit/fun`（0.7.0，浏览器用，纯 DOM + SVG + Web Animations，不依赖渲染库）：
   - **图层**：`createFunLayer({ zIndex?, parent? })` 往 `document.body` 挂一个 `position: fixed; inset: 0; pointer-events: none` 的层（class `arcade-fun`，默认 z-index 50），
     点击全部穿透。要比牌桌高、比游戏的弹窗低：**游戏的弹窗、确认框的 z-index 要高于它**。界面在自己的层叠上下文里的（`position: fixed` 的容器、带 transform 缩放的舞台），

@@ -18,6 +18,9 @@
   - **有 `ARCADE` 绑定时行为完全不变**，游客 cookie 一律不认；`GATE: "login"` 却没绑 `ARCADE` 时 fail-closed（以前 GATE 不写也是这样，现在不写 GATE 又没绑 ARCADE 算独立模式）。
   - 测试 `test/guest.test.ts`：发 cookie、认人、重连还是同一个人、换 cookie 是另一个人、昵称清洗、本站带游客 cookie 不认、GATE=login 不退成游客、同源检查照旧；
     反证：让 `isStandalone` 忽略 `ARCADE`，平台模式那几条全部失败。
+- **电脑也会互动**：`GameRoom` 加 `protected onStep(state)`（每步广播完调一次）和 `protected botEmote(seat, id, to?): boolean`：只有电脑座位（`ai`、托管 `auto`）能发，
+  校验和限速同真人（同一个座位令牌桶），不写存储；广播的 `EmotedMsg` 多带 `bot: true`（协议只加字段），`onEmote` 多一个参数 `bot`。
+  测试（`test/emote.test.ts` 的 `ChattyRoom`）：所有连接收到、真人座位发不出、限速生效、不写库；反证：去掉"必须是电脑座位"的判断，两条都失败。
 
 ## 0.9.1
 
