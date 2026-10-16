@@ -62,7 +62,9 @@ arcade/
 - **新增一个游戏**：
   1. 建 `games/<id>/`，满足第 1 节；
   2. 加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、`environment: production` 和"只部署经 PR 合并的提交"那一步）；
-  3. 在平台的 `platform/src/games.ts` 里登记，并放一张封面；
+  3. 在平台的 `platform/src/games.ts` 里登记，并放一张封面（钱包、云存档、分数榜、保留用户名都从这份登记派生；想先接钱包再上大厅就先登记成 `status: 'coming'`）；
+     游戏里电脑人物的名字同时登记进平台 `worker/api/validate.ts` 的 `RESERVED_PERSONAS`（真人昵称不许冒充电脑）。以后加、改电脑人物，
+     在游戏自己的 PR 说明里写上名字，主线转给平台补上；有每日挑战榜的，登记 `daily: true` 并在游戏的 `public/daily.json` 里写分数怎么显示（平台 0.10.18）；
   4. 游戏的 `wrangler.jsonc` 加路由 `game.yyyu.org/games/<id>` 和 `game.yyyu.org/games/<id>/*`，关掉 `workers_dev`；
   5. 在下面的端口表里登记开发端口；
   6. 做一个常驻的"回大厅"入口（左上角，小房子加"大厅"，指向 `/`）：任何界面两步内能回到大厅，对局中离开先确认一次并补传云存档，冒烟里点一次（所有者 2026-10-14 要求）。

@@ -13,8 +13,8 @@
 
 ### 哪些是约定、哪些有兜底
 
-这个仓库是免费个人账号下的私有仓库：GitHub 不提供分支保护和规则集，协作者也只能是"可推送"权限。
-所以上面三条在 GitHub 上**拦不住**，是大家必须遵守的约定，另有几层兜底：
+这个仓库是公开仓库（2026-10-16 起；之前的历史留在所有者的私有存档里，不公开）。GitHub 的分支保护强制 main 只能经 PR 合并、
+必须通过 `Check isolation`、禁止 force push 和删除；仓库管理员（所有者账号）可以绕过，所以下面几层兜底照旧保留：
 
 | 兜底 | 能做到 | 做不到 |
 |---|---|---|
@@ -23,7 +23,7 @@
 | `Main guard` 流程 | main 被 force push 或混进不合规的提交时，开 issue 指派给所有者 | 同上 |
 | 本机 `tools/git-hooks/pre-push` | 本机（包括 AI 代理）推 arcade 时拦直接推 main 和 force push | 网页编辑、其他机器 |
 
-违反约定的提交会被 revert，凭证会被轮换。要让 GitHub 真正强制，需要升级 GitHub Pro 或改为公开仓库，再按第 5 节加规则集。
+违反约定的提交会被 revert，凭证会被轮换。
 
 ## 2. 改动的流程
 
@@ -34,7 +34,8 @@
 3. **本地先自查**：仓库根 `node tools/check-isolation.mjs`；模块里 `npm ci && npm test` 和构建；改了画面跑冒烟截图并亲自看；
    游戏的发版改动同时更新 `package.json` 版本号和 `CHANGELOG.md`。
 4. **推分支、开 PR**：标题以模块名开头（`kaipan: …`、`guandan: …`、`platform: …`、`repo: …`），按模板写清改了什么、为什么、怎么验证的。
-   在 PR 里 @yyyu-star 请所有者审阅（免费私有仓库不会按 CODEOWNERS 自动请人）。
+   在 PR 里 @yyyu-star 请所有者审阅。
+   提交作者的邮箱会公开：只用 GitHub 的 noreply 地址（`<id>+<用户名>@users.noreply.github.com`），不用个人或公司邮箱。
 5. **CI 必须全绿**：`Check isolation`，以及改动模块的流程里的 `test` 任务（PR 上只测试和构建，不部署、不接触凭证）。
 6. **审阅与修复**：
    - 审阅人读完整个 diff，不只看描述：正确性、是否违反 AGENTS.md 的硬约束、测试是否覆盖、用户看到的文字和画面；
@@ -81,7 +82,9 @@
 
 - 合并方式：只开 Squash merge，提交标题取 PR 标题；合并后自动删除分支。合并提交由 GitHub 生成并签名，`verify-main.sh` 靠这一点认人。
 - `production` 环境：只允许 `main` 部署；`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 只放在这个环境里，仓库级不放凭证。
-- Actions：默认令牌只读（workflow 可以自行申请更多权限，所以审阅时要看 `permissions:`）；私有仓库不运行 fork 来的 PR 的流程。
-- 可信起点：`tools/verify-main.sh` 里的 `TRUSTED_BASE`，初值是启用 PR 流程前 main 的最后一个提交。只有所有者能通过 PR 把它往前移（见第 4 节）。
-- 升级 GitHub Pro 或改为公开仓库后，给 main 加规则集：必须经 PR、至少 1 个批准且要 code owner 审阅（所有者可在 PR 内绕过）、
-  必须通过 `Check isolation` 和改动模块的 `test`、禁止 force push 和删除；然后把第 1 节的"约定"改成"GitHub 强制"。
+- Actions：默认令牌只读（workflow 可以自行申请更多权限，所以审阅时要看 `permissions:`）；外部贡献者（包括 fork）的 PR，流程要所有者批准后才运行；
+  fork 来的 PR 拿不到任何 Secret。公开仓库用 GitHub 标准运行器不计分钟。
+- 密钥扫描和推送保护：开着，推送里带密钥会被直接拦下。
+- 可信起点：`tools/verify-main.sh` 里的 `TRUSTED_BASE`，初值是公开仓库的起点提交。只有所有者能通过 PR 把它往前移（见第 4 节）。
+- main 的分支保护：必须经 PR（不要求批准：代理的 PR 由所有者账号开、所有者账号合，GitHub 不允许作者批准自己的 PR）、
+  必须通过 `Check isolation`、禁止 force push 和删除；管理员可绕过。协作者的 PR 仍由所有者本人审阅、合并（第 3 节）。
