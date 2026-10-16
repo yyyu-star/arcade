@@ -40,3 +40,9 @@ export function mountRotateHint(onLobby: () => void): void {
   document.body.appendChild(el);
 }
 
+/** 单独部署时"大厅"改叫"首页"（platform.ts）；提示层启动就挂上了，问完平台再改字 */
+export function setRotateLobbyLabel(name: string): void {
+  const b = document.getElementById('rh-lobby');
+  if (b) b.innerHTML = `${HOUSE}${name}`;
+}
+

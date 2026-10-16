@@ -1,7 +1,7 @@
 {
   "name": "guandan",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.8.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -24,6 +24,7 @@
     "online-smoke": "node tools/online-smoke.ts",
     "quota-smoke": "node tools/quota-smoke.ts",
     "stake-smoke": "node tools/stake-smoke.ts",
+    "standalone-smoke": "node tools/standalone-smoke.ts",
     "room-bulk": "ROOM_GAMES=200 ROOM_GAMES_SOLO=200 vitest run -c vitest.room.config.ts tests/room/bots.spec.ts --silent=false"
   },
   "devDependencies": {
@@ -36,7 +37,7 @@
     "wrangler": "^4.149.0"
   },
   "dependencies": {
-    "arcade-kit": "file:../../packages/arcade-kit",
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1",
     "phaser": "^4.2.1"
   }
 }

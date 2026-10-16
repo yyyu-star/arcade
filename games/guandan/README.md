@@ -10,8 +10,9 @@
 - **电脑对手**：老张、小美、阿强各有性格（爱炸、捂炸弹、抢牌），每场状态有起伏，随级数差和输赢调整，说话和出手快慢跟着性格走；
   强弱按场地定，新手场偏弱、档位越高越强。只读自己能看到的信息（`src/ai/`，设计和模拟见 `docs/ai.md`）。
 - **单机**：标题页、新手引导、规则说明、设置、战绩，每副结算有复盘和称号；云存档同步战绩（需要平台账号）。
+- **能单独部署**：不要平台也能部署成一个能玩的游戏（单机 + 游客好友房，见"单独部署这个游戏"）。
 - **好友房**：开房后"叫朋友来"发链接，点开就进房、自动坐下，开打后接管电脑的座位；掉线重连、走开了自动托管、打完"再来一场"；
-  嘲讽、表情包、扔道具（人人一样、免费，不影响牌局；单机和好友房里的电脑都会按性格显摆、回怼、认怂，单机里还会催你）。房间是 Cloudflare Durable Object，服务端说了算，底座是共用包 `packages/arcade-kit`。
+  嘲讽、表情包、扔道具（人人一样、免费，不影响牌局；单机和好友房里的电脑都会按性格显摆、回怼、认怂，单机里还会催你）。房间是 Cloudflare Durable Object，服务端说了算，底座是共用包 arcade-kit（npm 上的 `@yyyu-star/arcade-kit`，源码在仓库的 `packages/arcade-kit`）。
 - **实盘**：用平台钱包里的筹码带入、结回，单机和好友房都有（筹码不能买、不能换、不能转，设计见 `docs/stake.md`）。
 - **手机友好**：横屏牌桌按可见区域排版，老 iPhone 省内存（渲染倍数封顶、被系统杀过自动降档），画面全部程序生成。
 
@@ -30,7 +31,7 @@
 | 实盘房间至少两个真人 | 防一个人带三个电脑绕开单机的每日上限 | "实盘好友房至少要两个人；一个人想玩实盘，去单机" |
 | 嘲讽、表情、道具每人每秒 1 个（能攒 3 个） | 不刷屏、房间账单 | 不提示，发得快的自动排队 |
 | 打完一整场，"再来一场"等 3 分钟（0.6.2，娱乐房间） | 没人点的房间要关掉、还开房名额 | 结束页上点"再来一场"，这一桌自动换到新房间，队友、上下家和上一场一样；过了 3 分钟再点，自己先去新房间，再叫朋友 |
-| 必须登录 | 测试期邀请制 | 点开房间链接没登录的，先去登录，登录完直接回到这个房间 |
+| 必须登录（本站） | 测试期邀请制 | 点开房间链接没登录的，先去登录，登录完直接回到这个房间；单独部署没有登录，用游客身份 |
 
 去掉的：同时只能开 1 个房间（"你已经有一个房间了，先回去"）、每天只能开 6 个；离开实盘房间要等整场打完才结回（现在点"离开"马上按当时的分结回）；
 房间里没真人了电脑还一直打到房间超时（现在真人都走了房间马上结束、还名额）；点开邀请链接还要再点"坐这里"（现在自动坐第一个空位，开打了自动接管电脑座位；实盘房间坐下要带入，仍由自己点）；
@@ -55,36 +56,49 @@ npm run online-smoke  # 本地联机栈 + 四个无头浏览器打一整副、�
 npm run quota-smoke   # 额度调得极紧的本地联机栈：同时开着的房间太多、今天开房次数用完、今天人太多、不进新人、额度满了收场，五种提示
 npm run stake-smoke   # 实盘：本地栈（真 Worker + 假钱包）上单机的选档、退回、接着打、结算、到顶、再来一场、现在结算、被拒，加好友房实盘打完一场（--no-room 跳过）
 npm run art           # 美术预览图 → shots/art/；npm run cover 重新生成 public/cover.png
-npm run build:cf      # 部署产物 dist-cf/games/guandan/（线上 Worker：worker/，登录闸门 GATE=off|login、好友房开关 ONLINE=on|off，见 AGENTS.md）；npm run deploy = build:cf + wrangler deploy，路由要另加 --route（见下面的部署一节）
+npm run standalone-smoke # 单独部署的样子：原样用 wrangler.jsonc 起 wrangler dev（没有平台），单机、两个游客的好友房、实盘接口拒绝
+npm run build:cf      # 部署产物 dist-cf/games/guandan/（线上 Worker：worker/，登录闸门 GATE=off|login、好友房开关 ONLINE=on|off，见 AGENTS.md）；npm run deploy = build:cf + wrangler deploy（单独部署，见下面）
 ```
 
 调试用 URL 参数：`?seed=abc`（直接开局）、`&jump=tribute`（第二副进贡）、`&jump=ace`（打 A）、`&debug=1`（挂 `window.__game`）、
 `&autoplay=1`（电脑代打我）、`&online=1`（打开就弹出好友房面板）、`&room=123456`（直接进房）、`&anim=0`、`&speed=2`、`&difficulty=hard`。URL 开的局在已有存档时不写存档、不计战绩。
 
-## 部署
+## 单独部署这个游戏（不要平台）
 
-正式环境只由仓库的 CI 部署（`.github/workflows/game-guandan.yml`，main 上经 PR 合并的提交），整体怎么部署见仓库根 README 的部署一节。
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/guandan)
 
-本模块要的东西：
+`wrangler.jsonc` 是一份独立配置，只部署掼蛋这一个 Worker 就能玩，不需要平台：
+
+- 点上面的按钮（会把这个目录复制成你账户下的新仓库，自动构建、部署，Durable Object 按配置建好）；
+- 或者 fork / 拆出来以后，在本目录里 `npm ci && npx wrangler login && npm run deploy`（`build:cf` + `wrangler deploy`）。
+
+部署完得到 `https://guandan.<你的子域>.workers.dev`，打开会转到 `/games/guandan/`。共用包从 npm 装（`@yyyu-star/arcade-kit`），不依赖仓库里别的目录。
+
+| 有 | 没有 |
+|---|---|
+| 单机对电脑（三个电脑的性格、互动、名场面照旧） | 登录：谁打开都能玩，身份是浏览器里的游客 cookie |
+| 好友房：开房、叫朋友、断线重连、托管、再来一场、嘲讽和道具；昵称在好友房面板里自己填（不填叫"游客"加 4 位数字，不许冒充三个电脑） | 云存档（战绩只存在这台设备上）、排行榜 |
+| 本机存档、战绩、设置 | 平台钱包和实盘（单机、好友房都没有"实盘"，接口回 409 `no_wallet`） |
+
+页面启动时问一次同域的 `/api/me`（arcade-kit 的 `detectPlatform`）：回 404 就是单独部署，藏起实盘和云存档，左上角的"大厅"变成"首页"、回游戏自己的首页。
+想要账号和钱包，就按仓库根 README 把平台也部署上，由部署工具补上平台绑定（下一节）。
+
+## 本站部署（部署工具补什么）
+
+正式环境只由仓库的 CI 部署（`.github/workflows/game-guandan.yml`，main 上经 PR 合并、维护者批准的提交），整体怎么部署见仓库根 README 的部署一节。
+CI 用仓库的部署工具（`tools/deployer/deploy.mjs`，按 `tools/workers.json` 的声明）在这份独立配置上叠加本站的东西，模块里不写：
 
 | 种类 | 名字 | 说明 |
 |---|---|---|
-| 静态资源 | `ASSETS` | `npm run build:cf` 生成的 `dist-cf/`；只有首页、房间接口、实盘接口先进 Worker（`run_worker_first`） |
-| Durable Object | `ROOM`、`METER` | 联机房间（`worker/room.ts`）和 arcade-kit 的额度计量 |
-| 服务绑定 | `ARCADE` | 平台 Worker（名字 `arcade`）：登录闸门、进房、实盘认人都问它的 `/api/me`；所以要先部署平台 |
-| 服务绑定 | `WALLET` | 平台钱包 RPC（`entrypoint: WalletService`，`props.game: guandan`） |
-| 变量 | `GATE`、`ONLINE`、`KIT_QUOTA` | 登录闸门（`login` / `off`）、好友房开关（`on` / `off`）、每天的联机额度门槛，写在 `wrangler.jsonc` |
-| 变量（部署时注入） | `SITE_ORIGIN` | 只认这个站点发起的开房、实盘请求；不设就按请求自己的 origin |
-| 部署环境的 secret | `SITE_HOST`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 站点主机名（不带协议）只在这里，仓库里不写；工作流用它注入路由和 `SITE_ORIGIN` |
-
-`wrangler.jsonc` 不写路由，部署时注入。本模块通过 `file:../../packages/arcade-kit` 依赖共用包，暂时不能用 Deploy to Cloudflare 按钮（按钮只复制这一个目录）；
-手动部署要在整个仓库的检出里做，平台先部署好，然后：
-
-```bash
-export SITE_HOST=game.example.com   # 换成你的站点主机名
-npm ci && npm run build:cf
-npx wrangler deploy --route "$SITE_HOST/games/guandan" --route "$SITE_HOST/games/guandan/*" --var "SITE_ORIGIN:https://$SITE_HOST"
-```
+| 静态资源 | `ASSETS` | `npm run build:cf` 生成的 `dist-cf/`；只有站点根、首页、房间接口、实盘接口先进 Worker（`run_worker_first`）；模块里写好的 |
+| Durable Object | `ROOM`、`METER` | 联机房间（`worker/room.ts`）和 arcade-kit 的额度计量；模块里写好的 |
+| 变量 | `ONLINE`、`KIT_QUOTA` | 好友房开关（`on` / `off`）、每天的联机额度门槛；模块里写好的 |
+| 服务绑定（部署工具补） | `ARCADE` | 平台 Worker（名字 `arcade`）：登录闸门、进房、实盘认人都问它的 `/api/me`；所以要先部署平台 |
+| 服务绑定（部署工具补） | `WALLET` | 平台钱包 RPC（`entrypoint: WalletService`，`props.game: guandan`） |
+| 变量（部署工具补） | `GATE = login` | 没登录不让进；有它却没绑 `ARCADE` 时 kit 一律拒绝，不会退成游客 |
+| `workers_dev`（部署工具关） | `false` | 本站只经站点域名访问 |
+| 路由和变量（部署时注入） | `<站点>/games/guandan*`、`SITE_ORIGIN` | 只认这个站点发起的开房、实盘请求；不设就按请求自己的 origin |
+| 部署环境的 secret | `SITE_HOST`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 站点主机名（不带协议）只在这里，仓库里不写 |
 
 ## 目录结构
 

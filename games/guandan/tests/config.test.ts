@@ -29,7 +29,9 @@ function parseJsonc(text: string): unknown {
 }
 
 interface Wrangler {
-  services: { binding: string; service: string; entrypoint?: string; props?: unknown }[];
+  services?: unknown;
+  workers_dev: boolean;
+  preview_urls: boolean;
   assets: { run_worker_first: string[] };
   durable_objects: { bindings: { name: string; class_name: string }[] };
   migrations: { tag: string; new_sqlite_classes?: string[] }[];
@@ -59,18 +61,15 @@ describe('wrangler.jsonc', () => {
     expect(conf.vars.KIT_QUOTA).toEqual({ busyWrites: 50_000, stopWrites: 60_000, roomsPerUser: 5, dailyRoomsPerUser: 100 });
   });
 
-  it('联机开着（ONLINE 是一键关的开关），登录闸门开着', () => {
+  it('联机开着（ONLINE 是一键关的开关）', () => {
     expect(conf.vars.ONLINE).toBe('on');
-    expect(conf.vars.GATE).toBe('login');
   });
 
-  it('钱包绑定：WalletService，props.game 是 guandan（没写平台一律回 bad_game）；实盘接口先进 Worker', () => {
-    expect(conf.services).toEqual(
-      expect.arrayContaining([
-        { binding: 'ARCADE', service: 'arcade' },
-        { binding: 'WALLET', service: 'arcade', entrypoint: 'WalletService', props: { game: 'guandan' } },
-      ]),
-    );
-    expect(conf.assets.run_worker_first).toContain('/games/guandan/api/stake/*');
+  it('独立配置（0.8.0）：不写平台绑定和 GATE（本站部署时由部署工具补），开 workers.dev、关预览地址；站点根和实盘接口先进 Worker', () => {
+    expect(conf.services).toBeUndefined();
+    expect(conf.vars.GATE).toBeUndefined();
+    expect(conf.workers_dev).toBe(true);
+    expect(conf.preview_urls).toBe(false);
+    expect(conf.assets.run_worker_first).toEqual(expect.arrayContaining(['/', '/games/guandan/api/stake/*']));
   });
 });

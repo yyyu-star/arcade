@@ -155,9 +155,13 @@ describe('没到钱包的情况', () => {
     expect(w.calls).toHaveLength(0);
   });
 
-  it('平台连不上、没有钱包绑定、钱包 RPC 抛异常：503', async () => {
+  it('平台连不上、钱包 RPC 抛异常：503；没有钱包绑定（单独部署）：409 no_wallet，不问平台', async () => {
     expect((await handle(post('buyin', { tier: 'small' }), env(wallet(() => ({ ok: true, wallet: W })), arcade(null, 500)))).status).toBe(503);
-    expect((await handle(post('buyin', { tier: 'small' }), env(undefined))).status).toBe(503);
+    for (const action of ['buyin', 'settle', 'refund']) {
+      const none = await handle(post(action, { tier: 'small', ref: REF }), env(undefined));
+      expect(none.status).toBe(409);
+      expect(await none.json()).toEqual({ ok: false, error: 'no_wallet' });
+    }
     const res = await handle(
       post('refund', { ref: REF }),
       env(

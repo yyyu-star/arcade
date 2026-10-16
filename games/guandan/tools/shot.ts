@@ -71,6 +71,8 @@ async function serveApi(name: string, route: Route, api: FakeApi | undefined): P
   const req = route.request();
   const path = new URL(req.url()).pathname;
   const reply = (body: unknown, status = 200): Promise<void> => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+  // 启动时问一次有没有平台（kit 的 detectPlatform，0.8.0）：没登录时平台照样回 200 { user: null }，这一个不算"没登录也发请求"
+  if (!api && path === '/api/me' && req.method() === 'GET') return reply({ user: null });
   if (!api) {
     errors.push(`[${name}] 没登录也请求了 ${req.method()} ${path}`);
     return reply({ error: 'unauthorized', message: '' }, 401);
@@ -218,7 +220,9 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   const merged = JSON.parse((await page.evaluate(() => localStorage.getItem('guandan.stats'))) ?? 'null');
   assert(merged?.games === 3 && merged?.deals === 30 && merged?.firsts === 6, '云端战绩和本机的合并（每项取大）');
   assert(await page.evaluate(() => localStorage.getItem('guandan.stats.pre-sync') !== null), '合并前备份本机战绩');
-  assert(api.log.slice(0, 2).map((l) => `${l.method} ${l.path}`).join() === 'GET /api/me,GET /api/saves/guandan', '先问 /api/me 再拉存档');
+  // 最前面可能多一个启动时问有没有平台的 /api/me（0.8.0）；拉存档之前紧挨着的一定是云存档自己问的 /api/me
+  const pull = api.log.findIndex((l) => l.method === 'GET' && l.path === '/api/saves/guandan');
+  assert(pull > 0 && api.log[pull - 1]!.path === '/api/me' && api.log.slice(0, pull).every((l) => l.path === '/api/me'), '先问 /api/me 再拉存档');
   await page.waitForTimeout(900);
   await shot(ctx, '01-title');
   // "开始"先选娱乐 / 实盘（0.4.0）

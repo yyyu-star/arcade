@@ -20,6 +20,7 @@ import { seatIdentity, setSeatIdentities, type SeatIdentity } from './labels.ts'
 import type { BotStyle, TableSession } from './session.ts';
 import { QUOTA_TEXT } from './quota-text.ts';
 import { KEYS, rawStore } from './store.ts';
+import { GUEST_ID, lobbyName, standalone, withNick } from './platform.ts';
 
 export { QUOTA_TEXT };
 
@@ -70,6 +71,7 @@ export function roomOwnerCheck(saved: SavedRoom, userId: string | null): 'show' 
  * 每次现问：云同步记的账号可能落后于别的标签页的切换。只在本机记着房间时才问，次数很少。
  */
 export async function currentUserId(fetcher: typeof fetch = fetch): Promise<string | null> {
+  if (standalone()) return GUEST_ID;
   try {
     const res = await fetcher('/api/me', { credentials: 'same-origin' });
     if (res.status !== 200) return null;
@@ -136,7 +138,8 @@ export function closeText(code: number | null, reason: string | null = null): st
     case CLOSE.busy:
       return QUOTA_TEXT.joinBusy;
     case CLOSE.unauthorized:
-      return '还没登录，先登录再来';
+      // 单独部署：游客 cookie 是打开首页时发的，没带上多半是浏览器没存住
+      return standalone() ? '认不出你是谁（浏览器没存上 cookie），刷新页面再进' : '还没登录，先登录再来';
     case CLOSE.tryLater:
       return '平台有点忙，正在重新连接…';
     case CLOSE.noRoom:
@@ -154,7 +157,7 @@ export function closeText(code: number | null, reason: string | null = null): st
     case CLOSE.tooOld:
       return '页面版本太旧了，刷新一下再进';
     case CLOSE.forbidden:
-      return '请从游戏大厅打开掼蛋再进房间';
+      return `请从游戏${lobbyName()}打开掼蛋再进房间`;
     case CLOSE.policy:
     case CLOSE.tooBig:
       return '连接出了点问题，刷新页面再试';
@@ -174,7 +177,7 @@ export function roomsUrl(): string {
 
 function wsUrl(code: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}${ROOM_PATH}/rooms/${code}/ws`;
+  return withNick(`${proto}//${window.location.host}${ROOM_PATH}/rooms/${code}/ws`);
 }
 
 /**
@@ -189,7 +192,7 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
     const init: RequestInit = stake
       ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) }
       : { method: 'POST', credentials: 'same-origin' };
-    res = await fetcher(roomsUrl(), init);
+    res = await fetcher(withNick(roomsUrl()), init);
   } catch {
     return { error: '连不上服务器，检查一下网络' };
   }
@@ -198,8 +201,8 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
     if (body && typeof body.code === 'string' && /^\d{6}$/.test(body.code)) return { code: body.code };
     return { error: '开房没成功，刷新一下再试' };
   }
-  if (res.status === 401) return { error: '还没登录，先登录再来', login: true };
-  if (res.status === 403) return { error: '请从游戏大厅打开掼蛋再开房' };
+  if (res.status === 401) return standalone() ? { error: '认不出你是谁，刷新页面再试' } : { error: '还没登录，先登录再来', login: true };
+  if (res.status === 403) return { error: `请从游戏${lobbyName()}打开掼蛋再开房` };
   if (res.status === 404) return { error: '好友房暂时关了，单机照常玩' };
   const body = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown } | null;
   if (body?.error === 'has_room') return { error: QUOTA_TEXT.has_room, quota: 'has_room' };

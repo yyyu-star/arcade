@@ -14,7 +14,8 @@ import { LOW_MEMORY, appBox, fitAppToViewport, isIOS, markForeground, markRender
 import { hideErrorPanel, installErrorHandler, showErrorPanel } from './view/errors.ts';
 import { goLobby, inOnlineGame, leaveText, savedGameInProgress } from './view/lobby.ts';
 import { autoJoin, forgetRoom, openOnline } from './view/online.ts';
-import { mountRotateHint } from './view/orientation.ts';
+import { mountRotateHint, setRotateLobbyLabel } from './view/orientation.ts';
+import { detectOnce, lobbyName, standalone } from './view/platform.ts';
 import { BootScene } from './view/scenes/BootScene.ts';
 import { TableScene } from './view/scenes/TableScene.ts';
 import { TitleScene } from './view/scenes/TitleScene.ts';
@@ -26,6 +27,8 @@ import { worldW } from './view/ui/kit.ts';
 import { applyAudio } from './view/ui/panels.ts';
 
 installErrorHandler();
+// 有没有平台（单独部署时没有）：开场景、进房、云存档都等它（kit 默认最多等 2.5 秒）
+const platform = detectOnce();
 // 竖屏提示层里的"大厅"：牌桌被盖住，有打到一半的存档（或好友房正在打）时用浏览器自带的确认框
 mountRotateHint(() => {
   if ((app.net ? inOnlineGame() : savedGameInProgress()) && !window.confirm(leaveText())) return;
@@ -82,7 +85,11 @@ window.addEventListener('storage', (e) => {
 });
 // 有的浏览器关页、刷新时不发 visibilitychange；两边都触发也只会传一次（同一个槽在途时不重发）
 window.addEventListener('pagehide', () => cloud.flushOnHide());
-void cloud.start();
+// 单独部署没有账号，云存档不启动（没有登录提示 cookie 时它本来也一个请求都不发，这里说清楚）
+void platform.then(() => {
+  if (standalone()) setRotateLobbyLabel(lobbyName());
+  else void cloud.start();
+});
 
 applyAudio();
 const unlock = (): void => audio.unlock();
@@ -212,5 +219,7 @@ if (import.meta.env.DEV || params.debug) mountBridge(game);
 
 // 邀请链接 ?online=1&room=xxxxxx（或只带 room=）：启动后直接进房间；只带 ?online=1（平台大厅的好友房入口）：直接打开好友房面板。
 // 大厅画在 DOM 层，不等 Phaser
-if (params.room) void autoJoin(params.room);
-else if (params.online) openOnline();
+void platform.then(() => {
+  if (params.room) void autoJoin(params.room);
+  else if (params.online) openOnline();
+});

@@ -10,6 +10,8 @@ import { parseRoomOpts } from '../net/stake.ts';
 import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../stake/index.ts';
 import { ROOM_STAKE_TEXT, STAKE_TEXT, TIER_NAME, fmtChips } from './stake-text.ts';
 import { fetchWallet } from './stake.ts';
+import { standalone } from './platform.ts';
+import { getNick, setNick } from './store.ts';
 import { loginUrl } from './ui/cloud.ts';
 
 const TEAM = ['#d9443a', '#3a78c8'];
@@ -99,10 +101,20 @@ export function openOnline(): void {
   void myRoom().then((back) => {
     if (back && slot.isConnected) slot.appendChild(button(`回到刚才的房间 ${back.code}`, () => join(back.code, back.host), '', 'ol-back'));
   });
+  // 单独部署（0.8.0）没有账号：别人看到的名字自己填，开房、进房的地址上带着（不填就叫"游客"加数字）
+  if (standalone()) {
+    const row = el('label', { class: 'ol-row' });
+    row.appendChild(el('span', {}, '你的昵称'));
+    const nick = el('input', { id: 'ol-nick', maxlength: '12', placeholder: '不填就叫"游客"', autocomplete: 'nickname' });
+    nick.value = getNick();
+    nick.addEventListener('change', () => setNick(nick.value.trim()));
+    row.appendChild(nick);
+    c.appendChild(row);
+  }
   const make = el('div', { class: 'ol-row' });
   make.appendChild(button('开个房间', () => void create(null), '', 'ol-create'));
-  // 实盘房间（0.5.0，docs/stake.md 第 3 节）：开房时选档位，之后不能改
-  make.appendChild(button('开实盘房间', () => pickTier(tiers), 'ol-2', 'ol-create-stake'));
+  // 实盘房间（0.5.0，docs/stake.md 第 3 节）：开房时选档位，之后不能改。单独部署没有钱包，不摆
+  if (!standalone()) make.appendChild(button('开实盘房间', () => pickTier(tiers), 'ol-2', 'ol-create-stake'));
   c.appendChild(make);
   const tiers = el('div', { class: 'ol-row', id: 'ol-tiers' });
   c.appendChild(tiers);
@@ -221,7 +233,11 @@ function renderRoom(): void {
     if (isFinalForRoom(s.closeCode)) roomInUrl(null);
     const row = el('div', { class: 'ol-row' });
     // 登录完回到这个房间（地址栏里的房间码上面刚去掉了，按房间码拼）
-    if (s.closeCode === CLOSE.unauthorized) row.appendChild(button('去登录', () => (window.location.href = loginUrl(`?room=${s.code}`))));
+    // 单独部署：游客 cookie 是打开首页时发的，刷新一下（带着房间码）就有了
+    if (s.closeCode === CLOSE.unauthorized) {
+      if (standalone()) row.appendChild(button('刷新再进', () => window.location.assign(`./?room=${s.code}`)));
+      else row.appendChild(button('去登录', () => (window.location.href = loginUrl(`?room=${s.code}`))));
+    }
     if (s.status === 'failed') row.appendChild(button('再试一次', () => s.retry()));
     row.appendChild(button('好', () => openOnline(), 'ol-2', 'ol-ok'));
     c.appendChild(row);

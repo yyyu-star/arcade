@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import worker from '../worker/index.ts';
 import * as entry from '../worker/index.ts';
-import { GATED_PATHS, handle, type Env, type Fetcher } from '../worker/gate.ts';
+import { GATED_PATHS, GUEST, handle, type Env, type Fetcher } from '../worker/gate.ts';
+import { PERSONAS } from '../src/view/art/avatars.ts';
 import wranglerText from '../wrangler.jsonc?raw';
 
 const PAGE = 'https://game.example.com/games/guandan/';
@@ -128,11 +129,9 @@ describe('登录闸门（GATE=login）', () => {
     await closed(env(undefined));
   });
 
-  it('GATE 配错（不是 off 也不是 login）或没配：按 login 处理', async () => {
+  it('GATE 配错（不是 off 也不是 login）：绑着平台就按 login 处理', async () => {
     const e1 = env(arcade(async () => json({ user: null })), 'Off');
     expect((await handle(visit(), e1)).status).toBe(302);
-    const e2 = env(undefined, undefined as unknown as string);
-    expect((await handle(visit(), e2)).status).toBe(503);
   });
 
   it('三个首页路径都检查；别的路径（理论上不会进 Worker）原样交给静态资源', async () => {
@@ -145,6 +144,28 @@ describe('登录闸门（GATE=login）', () => {
     const res = await handle(visit('/games/guandan/assets/index-abc.js'), e);
     expect(res.status).toBe(200);
     expect(arc.seen).toHaveLength(0);
+  });
+});
+
+describe('单独部署（没有 ARCADE，GATE 也不是 login）', () => {
+  it('首页放行并发游客 cookie，不碰平台；站点根转到 /games/guandan/', async () => {
+    const e: Env & { ASSETS: ReturnType<typeof assets> } = { ASSETS: assets() };
+    const res = await handle(visit(), e);
+    expect(res.status).toBe(200);
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('__Host-kit-guest='))).toBe(true);
+    const root = await handle(visit('/'), e);
+    expect(root.status).toBe(302);
+    expect(new URL(root.headers.get('location')!, PAGE).pathname).toBe('/games/guandan/');
+  });
+
+  it('绑着平台时站点根不归掼蛋管（交给静态资源，本站的根是平台）', async () => {
+    const e = env(arcade(async () => json({ user: U })));
+    await handle(visit('/'), e);
+    expect(e.ASSETS.calls).toEqual(['/']);
+  });
+
+  it('游客昵称挡住的名字就是画面上三个电脑的名字', () => {
+    expect([...(GUEST.reserved ?? [])].sort()).toEqual(Object.values(PERSONAS).map((p) => p.name).sort());
   });
 });
 
@@ -170,20 +191,19 @@ describe('wrangler.jsonc', () => {
   // JSONC：去掉整行注释再解析
   const cfg = JSON.parse(wranglerText.replace(/^\s*\/\/.*$/gm, '')) as {
     main: string;
-    vars: { GATE: string };
-    services: { binding: string; service: string }[];
+    vars: { GATE?: string };
+    services?: unknown;
     assets: { binding: string; run_worker_first: string[] };
   };
-  it('只有三个首页路径、房间接口和实盘接口先进 Worker，js、图片等直接走静态资源', () => {
-    expect(cfg.assets.run_worker_first).toEqual([...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*']);
+  it('只有站点根（单独部署时转到游戏）、三个首页路径、房间接口和实盘接口先进 Worker，js、图片等直接走静态资源', () => {
+    expect(cfg.assets.run_worker_first).toEqual(['/', ...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*']);
     expect(cfg.assets.binding).toBe('ASSETS');
     // 部署入口是 main.ts（默认导出 + 房间类 Room）；index.ts 只有默认导出，上面的"入口模块"测试查的是它
     expect(cfg.main).toBe('worker/main.ts');
   });
-  it('服务绑定 ARCADE → arcade（另有钱包 WALLET，见 config.test.ts）；邀请制测试期 GATE 为 login（0.1.5 起）', () => {
-    expect(cfg.services[0]).toEqual({ binding: 'ARCADE', service: 'arcade' });
-    expect(cfg.services.map((s) => s.binding)).toEqual(['ARCADE', 'WALLET']);
-    expect(cfg.vars.GATE).toBe('login');
+  it('独立配置（0.8.0）：不写 ARCADE、WALLET 和 GATE，本站部署时由部署工具补（GATE=login），见 config.test.ts', () => {
+    expect(cfg.services).toBeUndefined();
+    expect(cfg.vars.GATE).toBeUndefined();
   });
   it('首页路径以 / 开头，没有通配', () => {
     for (const p of GATED_PATHS) expect(p).toMatch(/^\/games\/guandan(\/|\/index\.html)?$/);

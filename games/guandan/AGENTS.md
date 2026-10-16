@@ -12,15 +12,15 @@ src/net/    联机（房间和页面共用，纯函数）：rules 把规则核�
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗、art 程序生成 SVG、audio 合成音效、store 存储、
-            recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅
+            recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
-worker/     线上 Worker：main.ts 部署入口（默认导出 + Durable Object 类 Room）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
+worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
 public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、_headers
 tests/      vitest；architecture.test.ts 检查 core/ai 的纯度；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai-<版本>/ 上一版电脑的副本（sim 的 prev 基准，不进产品包）；
-            online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC）；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
+            online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
             quota-smoke.ts 额度提示冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
 docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计（0.4.0 单机、0.5.0 好友房）
 ```
@@ -59,13 +59,18 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 座位：0 我（下）、1 老张（右，下家）、2 小美（上，对家）、3 阿强（左，上家）。性格只影响台词/表情（`personas.ts`）。
 - 存储只在 `store.ts` 里读写（测试检查）；调试桥 `window.__game` 只在开发模式或 `?debug=1` 时挂。
 - 标题字体是内嵌的宋体子集（`fonts.ts`，README 素材一节）：新加的大字、横幅、弹窗标题如果用了字表里没有的字，`tests/view.test.ts` 会报缺字。
+- 两种部署（0.8.0，kit 0.10 的独立模式，由 env 决定）：`wrangler.jsonc` 是独立配置，不写 `ARCADE`、`WALLET`、`GATE`；本站部署时部署工具（`tools/deployer`）按 `tools/workers.json` 补上平台绑定和 `GATE=login`。
+  没有 `ARCADE`、`GATE` 也不是 login 就是单独部署：`gate.ts` 先调 `standaloneRoot`（站点根转到 `/games/guandan/`），`loginGate`、`acceptCreate`、`acceptJoin` 传同一个 `GUEST`（昵称不许含三个电脑的名字，`tests/gate.test.ts` 和画面上的名字核对），
+  没有 `WALLET` 时单机实盘接口和实盘房间回 409 `no_wallet`、房间的 `perform` 兜底拒绝。页面在 `src/view/platform.ts`：启动时 kit 的 `detectPlatform` 问一次 `/api/me`（`main.ts` 和 `BootScene` 等它），
+  404 是单独部署——不摆实盘和云存档、"开始"不选模式、"大厅"变"首页"回 `./`、`currentUserId` 回固定的游客（同一个浏览器就是同一个游客）、好友房面板填昵称（`guandan.nick`）并用 `withNickname` 带在开房、进房地址上；
+  5xx、超时按有平台处理。本地：`npm run online-dev`（和 online/stake/quota 冒烟）写一份补了平台绑定的派生配置连假平台；`npm run standalone-smoke` 原样用 `wrangler.jsonc`。
 - 登录闸门（`worker/gate.ts`，0.1.4 起；0.6.5 起用 arcade-kit 的 `loginGate`）：线上只有三个首页路径（`wrangler.jsonc` 的 `assets.run_worker_first`）先进 Worker，js、图片照旧直接走静态资源。
   变量 `GATE`：`"off"` 原样放行；其他值（包括没配）都要登录：没带平台会话 cookie 的直接 302，带了的经服务绑定 `ARCADE` 问平台 `/api/me`（地址按请求的 origin 拼）。
   已登录放行、未登录 302 到 `/login?next=<请求的路径 + 查询>`（登录完回到原链接，房间链接直接进房），这两种都把平台下发的 Set-Cookie 原样带回浏览器（会话续期、清失效 cookie）；
   其他一切情况回掼蛋自己的 503 页（`DOWN_PAGE`）——fail-closed，宁可谁都进不去也不放行。kit 里的细节（转发哪些头、3 秒超时）以 kit 为准，测试在 kit 的 `auth.test.ts`。
-  本地 `npm run dev` / 冒烟走 vite，不经过 Worker。要看运行时行为用 `npx wrangler dev --var GATE:login`（先 `npm run build:cf`）。
-- 站点地址不进仓库（开源整改，0.6.5）：`wrangler.jsonc` 不写路由，部署时由 `.github/workflows/game-guandan.yml` 用部署环境的 secret `SITE_HOST`
-  注入 `--route "$SITE_HOST/games/guandan"`、`--route "$SITE_HOST/games/guandan/*"` 和 `--var SITE_ORIGIN:https://$SITE_HOST`（没设就失败，不带着空路由部署）。
+  本地 `npm run dev` / 冒烟走 vite，不经过 Worker。要看平台模式的运行时行为用 `npm run online-dev`；`npx wrangler dev`（先 `npm run build:cf`）原样起来是单独部署。
+- 站点地址不进仓库（开源整改，0.6.5）：`wrangler.jsonc` 不写路由，部署时由部署工具用部署环境的 secret `SITE_HOST`
+  注入 `<站点>/games/guandan`、`<站点>/games/guandan/*` 两条路由和 `SITE_ORIGIN`（没设就失败，不带着空路由部署）。
   代码里的同站校验用 `SITE_ORIGIN`，没设就按请求自己的 origin；给玩家看的话不写域名；测试夹具用 `game.example.com`。
 - 云存档（`src/view/cloud.ts`，0.1.7 起；规格见仓库 `docs/platform-backend.md` 5.5、15.1–15.3）：只同步 `stats` 和 `tutorial` 两个槽，牌局和设置不同步。
   store 里改这两个槽的函数会发 `onSyncedChange`，`main.ts` 接到 `CloudSync.markDirty`；云同步写回本地走 `rawStore`，不再触发通知。
@@ -73,6 +78,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   但离上次上传不到 3 分钟不补；429 之后的改动也不早于 retryAfter。
   换账号（`/api/me` 的 user.id ≠ `guandan.cloud` 的 userId）不合并、不上传：识别到的当下就备份、清空本地、存盘，再去拉取新账号的数据
   （拉取失败或页面被关也不会留下"旧数据 + 新账号"）。没有提示 cookie `__Host-arcade_li` 时一个请求都不发。
+  单独部署（0.8.0）不启动云存档；有没有平台由启动时那一次 `/api/me`（`platform.ts`）判断，没登录也会发这一个。
   连不上、停服时登录状态不明：图标不显示"未登录"、点了只给说明，不引人去登录（15.1、5.7）。
   平台按 cookie 记账，页面开着时别的标签页可能换了账号：每个 PUT 都带 `/api/me` 给的 `userId`（平台 0.7.1 起），不是当前会话的账号时平台回
   409 `wrong_user`、一行不写——不合并、不重试，按换账号处理（备份到 pre-switch、清本地、元数据不记账号，再问 `/api/me`）。409 要按 `error` 区分 `conflict` 和 `wrong_user`。
@@ -82,7 +88,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   拉取也带预期账号：`GET /api/saves/guandan?userId=<user.id>`（平台 0.7.3），回 409 `wrong_user` 时走换号流程；GET 回来时本页账号已经变了就丢掉结果。
   多个标签页靠 `storage` 事件同步元数据：rev 取大；别的页传完、本页又没改过的槽，本页的待上传跟着清掉。
   本地联调：`npm run dev` 把 `/api` 代理到平台的 `npm run dev:api`（5181），浏览器先在 5181 登录。冒烟里 `/api` 由 `tools/shot.ts` 的假平台回答。
-- 回大厅（`src/view/lobby.ts`，0.1.9 起，所有游戏统一）：左上角"大厅"（小房子）指向平台首页 `/`。标题页直接走；牌桌上打到一半先弹确认（这局会存着 / 调试开局不保存 / 好友房：头 60 秒轮到你时等 30 秒按"能不出就不出"代出，之后电脑替你打，回来接着打——回大厅不调 `leave()`，座位和 `guandan.room` 都留着）；
+- 回大厅（`src/view/lobby.ts`，0.1.9 起，所有游戏统一）：左上角"大厅"（小房子）指向平台首页 `/`；单独部署（0.8.0）叫"首页"、指向 `./`，标题页本身就是首页，不摆。标题页直接走；牌桌上打到一半先弹确认（这局会存着 / 调试开局不保存 / 好友房：头 60 秒轮到你时等 30 秒按"能不出就不出"代出，之后电脑替你打，回来接着打——回大厅不调 `leave()`，座位和 `guandan.room` 都留着）；
   手机竖屏时牌桌被"请横过来"盖住，提示层左上角也有一个（打到一半用浏览器自带的确认框）。离开前调一次 `cloud.flushOnHide()`（pagehide 时也会触发，同槽在途不重发）。
   小房子图标只用来表示"回大厅"；回掼蛋自己的首页用箭头。冒烟只断言跳到 `/`，不加载平台页面。
 - 联机好友房（0.2.0-beta 起，0.3.0 正式放开；底座是 `packages/arcade-kit`，房间规范见仓库 `docs/platform-backend.md` 第 4 节）：
@@ -176,6 +182,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.boot` | iOS 防崩溃标记 `{ v, pending, low, ver }`：页面在前台时 pending=1，切后台/离开清 0；打开时还是 1 说明上次被系统杀了，low 升一档（1 = 一倍渲染，2 = 再换 Canvas 渲染）；ver 不是当前版本就整条作废（0.1.10 起，只在 iOS 上写） |
 | `guandan.stake` | 单机实盘这一场（0.4.0 起）：`{ v, userId, ref, tier, share, until, match: { tier, deals }, state, settle }`；只在本机、不进云同步；结回或退回后删，过了 `until` 打开标题页时删 |
 | `guandan.a2hs` | 标题页"添加到主屏幕玩更大"提示点过 ✕（值 1，0.1.10 起） |
+| `guandan.nick` | 单独部署时好友房里的昵称（字符串，0.8.0 起；有平台时不用，昵称以平台账号为准） |
 | `guandan.blocked` | sessionStorage：点头像"屏蔽他"屏蔽了谁 `{ code, seats: [{ seat, name }] }`，只对这个房间、这个标签页，那个座位换了人就不算（0.6.0 起，0.6.4 加名字） |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 

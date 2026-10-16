@@ -6,6 +6,7 @@ import { bakeAll, ensureBackdrops } from '../textures.ts';
 import { COLOR } from '../theme.ts';
 import { worldH, worldW } from '../ui/kit.ts';
 import { showErrorPanel } from '../errors.ts';
+import { detectOnce } from '../platform.ts';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -30,6 +31,8 @@ export class BootScene extends Phaser.Scene {
         await bakeAll(this, (p) => bar(p * 0.85));
         await font;
         await ensureBackdrops(this, W, worldH);
+        // 标题页按有没有平台摆按钮（实盘、云存档、"大厅"）：main.ts 启动时就问了，通常早就有结果
+        await detectOnce();
         bar(1);
         document.getElementById('boot')?.remove();
         app.bootMs = Math.round(performance.now() - t0);

@@ -17,6 +17,7 @@ import { cloudButton } from '../ui/cloud.ts';
 import { Button, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { confirm, openRules, openSettings, openStats } from '../ui/panels.ts';
 import { openModePicker, openTierPicker } from '../ui/stake.ts';
+import { standalone } from '../platform.ts';
 
 export class TitleScene extends Phaser.Scene {
   private buttons: Record<string, Button> = {};
@@ -57,7 +58,8 @@ export class TitleScene extends Phaser.Scene {
 
     const save = loadSave();
     // 单机实盘的存档（只在这台设备上）：过了 24 小时钱包已经原样退回，删掉说一句；没过就在最上面给"接着打实盘"
-    let stake = loadStake();
+    // 单独部署（0.8.0）没有钱包：不摆实盘（本来也不会有实盘存档，存档跟着站点走）
+    let stake = standalone() ? null : loadStake();
     if (stake && stakeExpired(stake)) {
       clearStake(stake.ref);
       stake = null;
@@ -106,15 +108,22 @@ export class TitleScene extends Phaser.Scene {
     small('stats', '战绩', 'stats', () => (this.overlay = openStats(this)));
 
     this.cloudBtn = cloudButton(this, W - 44, 44, 52).setDepth(20);
-    // 回大厅（平台首页）：标题页不在对局中，直接走（打到一半的局本来就存着）
+    // 回大厅（平台首页）：标题页不在对局中，直接走（打到一半的局本来就存着）。
+    // 单独部署没有账号和大厅：不摆云存档；标题页就是游戏首页，"首页"按钮只在牌桌上有
     this.lobbyBtn = new Button(this, 74, 40, 120, 52, '大厅', 'wood', () => goLobby(), 'home').setDepth(20);
+    if (standalone()) {
+      this.cloudBtn.setVisible(false);
+      this.lobbyBtn.setVisible(false).disableInteractive();
+    }
     // 好友房（联机，0.3.0 起一直露出）。本机记着这个账号刚才的房间（回大厅、关了页面）时旁边再给一个"回到房间"，一下就回去；
     // 先问平台现在是谁，换了账号的人看不到上一个人的房间。"好友房"里也有"回到刚才的房间"
-    this.onlineBtn = new Button(this, 226, 40, 160, 52, '好友房', 'red', () => openOnline(), 'cards').setDepth(20);
+    // 单独部署没有"大厅"：好友房、回到房间往左挪到它的位置
+    const dx = standalone() ? -130 : 0;
+    this.onlineBtn = new Button(this, 226 + dx, 40, 160, 52, '好友房', 'red', () => openOnline(), 'cards').setDepth(20);
     this.backBtn = null;
     void myRoom().then((back) => {
       if (!back || !this.sys.isActive() || this.backBtn) return;
-      this.backBtn = new Button(this, 408, 40, 180, 52, '回到房间', 'wood', () => join(back.code, back.host), 'cards').setDepth(20);
+      this.backBtn = new Button(this, 408 + dx, 40, 180, 52, '回到房间', 'wood', () => join(back.code, back.host), 'cards').setDepth(20);
     });
 
     text(this, W - 16, worldH - 14, `v${__APP_VERSION__}`, { size: 14, color: 0xd8c6a6, ox: 1, oy: 1 }).setDepth(20);
@@ -145,10 +154,16 @@ export class TitleScene extends Phaser.Scene {
 
   /** 先选娱乐 / 实盘（docs/stake.md 2.1）。娱乐照旧：有存档时"开新局"先确认 */
   pickMode(saved: string | null): void {
+    const onNew = (): void => {
+      if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame());
+      else this.newGame();
+    };
+    // 单独部署没有实盘：不用选娱乐 / 实盘，直接开（"继续"在标题页上另有按钮）
+    if (standalone()) return onNew();
     this.overlay = openModePicker(this, {
       saved,
       onContinue: () => this.continueGame(),
-      onNew: () => (saved ? (this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame())) : this.newGame()),
+      onNew,
       onStake: () => (this.overlay = openTierPicker(this, (ses) => this.startStake(ses))),
     });
   }
@@ -170,8 +185,8 @@ export class TitleScene extends Phaser.Scene {
   controls(): Record<string, { x: number; y: number }> {
     const out: Record<string, { x: number; y: number }> = {};
     for (const [k, b] of Object.entries(this.buttons)) out[k] = { x: b.x, y: b.y };
-    if (this.cloudBtn) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y };
-    if (this.lobbyBtn) out['lobby'] = { x: this.lobbyBtn.x, y: this.lobbyBtn.y };
+    if (this.cloudBtn?.visible) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y };
+    if (this.lobbyBtn?.visible) out['lobby'] = { x: this.lobbyBtn.x, y: this.lobbyBtn.y };
     if (this.onlineBtn) out['online'] = { x: this.onlineBtn.x, y: this.onlineBtn.y };
     if (this.backBtn) out['back'] = { x: this.backBtn.x, y: this.backBtn.y };
     // 弹层里的按钮（选模式、选档位）：坐标是弹层里的，加上弹层的位置

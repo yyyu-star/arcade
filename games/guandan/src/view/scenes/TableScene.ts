@@ -58,6 +58,7 @@ import { Taunts, type FunChannel } from '../table/taunt.ts';
 import { banterOnDeal, banterOnEmote, banterOnEvent, banterOnSlow, newBanter, type BanterBot, type BanterOut } from '../../net/banter.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { TrickView } from '../table/trick.ts';
+import { lobbyName, standalone } from '../platform.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
 
@@ -350,13 +351,15 @@ export class TableScene extends Phaser.Scene {
       c.add(text(this, x + 106, 29, levelName(lv), { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 3 }));
       if (fails > 0) c.add(text(this, x + 132, 10, `A×${fails}`, { size: 14, color: 0xffd0c0, bold: true, ox: 1, oy: 0 }));
     };
-    // 最左：回大厅（平台首页），所有游戏统一放左上角
-    this.lobbyBtn = new Button(this, 70, 29, 112, 46, '大厅', 'wood', () => this.onLobby(), 'home');
+    // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
+    this.lobbyBtn = new Button(this, 70, 29, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
     c.add(this.lobbyBtn);
     team(138, '我方', v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
     team(280, '对方', v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
     // 云存档：放左边（右边四个按钮已经挤满）
     this.cloudBtn = cloudButton(this, 446, 29, 46);
+    // 单独部署没有账号，不摆云存档
+    if (standalone()) this.cloudBtn.setVisible(false);
     c.add(this.cloudBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：云朵右边，中途进来的人接管电脑的座位。右边的图标和名次条已经排满了
     const net = this.net;
@@ -495,11 +498,11 @@ export class TableScene extends Phaser.Scene {
     if (this.net) {
       // 好友房回大厅不算离开房间：座位留着（掉线宽限过了电脑先替他打），房间码也留着，回来点"回到刚才的房间"接着打
       if (!inOnlineGame()) return goLobby();
-      this.openOverlay('menu', confirm(this, leaveText(), '回大厅', () => goLobby(), () => this.closeOverlay()));
+      this.openOverlay('menu', confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
       return;
     }
     if (!inGame()) return goLobby();
-    this.openOverlay('menu', confirm(this, leaveText(), '回大厅', () => goLobby(), () => this.closeOverlay()));
+    this.openOverlay('menu', confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
   }
 
   private onHome(): void {
@@ -1780,7 +1783,7 @@ export class TableScene extends Phaser.Scene {
     if (this.counterAt) out['counter'] = { ...this.counterAt, enabled: true, visible: true };
     this.taunts?.controls(out);
     if (this.inviteBtn) out['invite'] = { x: this.inviteBtn.x, y: this.inviteBtn.y, enabled: true, visible: true };
-    if (this.cloudBtn) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y, enabled: true, visible: true };
+    if (this.cloudBtn?.visible) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y, enabled: true, visible: true };
     put('lobby', this.lobbyBtn);
     put('rebuy', this.rebuyBtn);
     this.topIcons.forEach((b, i) => (out[`top${i}`] = { x: b.x, y: b.y, enabled: true, visible: b.visible }));

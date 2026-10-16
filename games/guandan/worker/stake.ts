@@ -6,7 +6,7 @@
  *
  * 回话：钱包的回话原样带回（成功 { ok: true, wallet, credited?, capped?, dup? }，被拒 { ok: false, error, wallet? }，都是 200），
  * 页面按 error 说人话（2.4）。HTTP 状态码只用来说"没到钱包"的情况：400 参数不对、401 没登录、403 不是本站发起的、
- * 503 平台或钱包连不上（这时页面当作"钱包暂时忙"）。
+ * 409 no_wallet 没绑钱包（单独部署）、503 平台或钱包连不上（这时页面当作"钱包暂时忙"）。
  */
 import { sameOrigin, whoIs } from 'arcade-kit/auth';
 import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, validSoloResult, type TierId } from '../src/stake/index.ts';
@@ -59,6 +59,8 @@ export function routeStake(request: Request, env: StakeEnv): Promise<Response> |
 async function handleStake(request: Request, env: StakeEnv, action: string): Promise<Response> {
   if (action !== 'buyin' && action !== 'settle' && action !== 'refund') return reply({ ok: false, error: 'not_found' }, 404);
   if (request.method !== 'POST') return reply({ ok: false, error: 'method' }, 405);
+  // 单独部署没有平台钱包：单机实盘也没有（页面上不给选，这里挡住手写的请求）
+  if (!env.WALLET) return reply({ ok: false, error: 'no_wallet' }, 409);
   // 动钱包的请求只认本站页面发起的：别的网站的页面也能往这里 POST（浏览器会带上 cookie）
   // 只认本站页面发起的：设了 SITE_ORIGIN（正式部署由工作流注入）就按它，没设按请求自己的 origin
   if (!sameOrigin(request, env.SITE_ORIGIN ?? new URL(request.url).origin)) return reply({ ok: false, error: 'origin' }, 403);

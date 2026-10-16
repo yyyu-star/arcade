@@ -9,6 +9,9 @@
  * 浏览器里先设 cookie 再打开页面：document.cookie = '__Host-sid=u1; Secure; Path=/'（每个标签页/浏览器配置用不同的 id 就是不同的人）。
  * 冒烟脚本里 import { startOnlineStack } from './online-dev.ts'，拿到 origin 后给浏览器上下文加 cookie __Host-sid=<id>。
  *
+ * 0.8.0 起模块的 wrangler.jsonc 是独立配置（不写平台绑定），本站部署时由部署工具补 ARCADE、WALLET：这里照样补（同一份规范形式），
+ * 写一份派生配置到临时目录再交给 wrangler，连到假平台。standalone: true 时反过来，原样用 wrangler.jsonc、不加任何变量（单独部署的样子，游客身份）。
+ *
  * 几个要点：
  * - --local-upstream 指回本地端口，请求的 Host、Origin 保持本地地址（配置里有路由时 wrangler dev 会改写成路由的域名），
  *   和 --var SITE_ORIGIN 对得上（不然开房 403）。所以端口要先定下来（系统分配一个空闲端口再交给 wrangler）；
@@ -17,7 +20,7 @@
  *   之后没有消息）；在 Worker 里就拒掉的（码格式不对 4004、没登录 4401、别的网站 4403）能收到。vitest 里（tests/room）直连 workerd 能收到。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,6 +49,8 @@ export interface OnlineStackOptions {
   readyTimeoutMs?: number;
   /** 另加的环境变量（--var 名:值），比如额度冒烟把 KIT_QUOTA 调得很紧 */
   vars?: Record<string, string>;
+  /** 单独部署的样子：原样用 wrangler.jsonc（没有平台、GATE、SITE_ORIGIN），不起假平台（0.8.0） */
+  standalone?: boolean;
 }
 
 export interface OnlineStack {
@@ -64,6 +69,30 @@ function freePort(): Promise<number> {
       srv.close(() => (port ? ok(port) : fail(new Error('拿不到空闲端口'))));
     });
   });
+}
+
+/** 本站部署时部署工具补的平台绑定（tools/deployer/lib.mjs 的规范形式），本地连到假平台（tools/fake-platform，名字也叫 arcade） */
+const PLATFORM_SERVICES = [
+  { binding: 'ARCADE', service: 'arcade' },
+  { binding: 'WALLET', service: 'arcade', entrypoint: 'WalletService', props: { game: 'guandan' } },
+];
+
+/**
+ * 模块的 wrangler.jsonc 加上平台绑定，写成 dir 下的 wrangler.json。配置里的路径按配置文件所在目录算，搬到临时目录后改成绝对路径。
+ * 只去整行注释（这份配置的注释都是整行的）
+ */
+function platformConfig(dir: string): string {
+  const conf = JSON.parse(readFileSync(join(MODULE_DIR, 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')) as Record<string, unknown> & {
+    main: string;
+    assets: { directory: string };
+  };
+  delete conf['$schema'];
+  conf.main = join(MODULE_DIR, conf.main);
+  conf.assets = { ...conf.assets, directory: join(MODULE_DIR, conf.assets.directory) };
+  conf['services'] = PLATFORM_SERVICES;
+  const file = join(dir, 'wrangler.json');
+  writeFileSync(file, JSON.stringify(conf, null, 2));
+  return file;
 }
 
 function run(cmd: string, args: string[], log?: (s: string) => void): Promise<void> {
@@ -105,21 +134,21 @@ export async function startOnlineStack(opts: OnlineStackOptions = {}): Promise<O
   const port = opts.port || (await freePort());
   const origin = `http://127.0.0.1:${port}`;
   const state = mkdtempSync(join(tmpdir(), 'guandan-online-'));
-  const args = [
-    'dev',
-    '-c', 'wrangler.jsonc',
-    '-c', 'tools/fake-platform/wrangler.jsonc',
-    '--ip', '127.0.0.1',
-    '--port', String(port),
-    '--local-upstream', `127.0.0.1:${port}`,
-    '--upstream-protocol', 'http',
-    '--var', `SITE_ORIGIN:${origin}`,
-    '--var', 'GATE:off',
-    '--var', 'ONLINE:on',
-    ...Object.entries(opts.vars ?? {}).flatMap(([k, v]) => ['--var', `${k}:${v}`]),
-    '--persist-to', state,
-    '--show-interactive-dev-session=false',
-  ];
+  const common = ['--ip', '127.0.0.1', '--port', String(port), '--persist-to', join(state, 'do'), '--show-interactive-dev-session=false'];
+  const args = opts.standalone
+    ? ['dev', '-c', 'wrangler.jsonc', ...common]
+    : [
+        'dev',
+        '-c', platformConfig(state),
+        '-c', 'tools/fake-platform/wrangler.jsonc',
+        ...common,
+        '--local-upstream', `127.0.0.1:${port}`,
+        '--upstream-protocol', 'http',
+        '--var', `SITE_ORIGIN:${origin}`,
+        '--var', 'GATE:off',
+        '--var', 'ONLINE:on',
+        ...Object.entries(opts.vars ?? {}).flatMap(([k, v]) => ['--var', `${k}:${v}`]),
+      ];
   const child = spawn(join(MODULE_DIR, 'node_modules', '.bin', 'wrangler'), args, {
     cwd: MODULE_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -151,11 +180,16 @@ export async function startOnlineStack(opts: OnlineStackOptions = {}): Promise<O
       child.once('error', fail);
       child.once('exit', (code) => fail(new Error(`wrangler dev 退出了（${code}）`)));
     });
-    // 起来以后实际问一下：页面能打开、没登录开房回 401（说明房间路由和假平台都接上了）
+    // 起来以后实际问一下：页面能打开、没登录开房回 401（说明房间路由和假平台都接上了）；
+    // 单独部署时没登录这回事，开房现发游客 cookie（201），这里不开房（会占一个房间名额），只看首页发不发游客 cookie
     const page = await fetch(`${origin}/games/guandan/?online=1`);
     if (page.status !== 200) throw new Error(`页面 ${page.status}`);
-    const anon = await fetch(`${origin}/games/guandan/room/rooms`, { method: 'POST', headers: { origin } });
-    if (anon.status !== 401) throw new Error(`没登录开房应当 401，实际 ${anon.status}`);
+    if (opts.standalone) {
+      if (!page.headers.getSetCookie().some((c) => c.startsWith('kit-guest='))) throw new Error('单独部署的首页应当发游客 cookie');
+    } else {
+      const anon = await fetch(`${origin}/games/guandan/room/rooms`, { method: 'POST', headers: { origin } });
+      if (anon.status !== 401) throw new Error(`没登录开房应当 401，实际 ${anon.status}`);
+    }
   } catch (e) {
     await stop();
     throw new Error(`${e instanceof Error ? e.message : String(e)}\n--- wrangler 输出（最后 3000 字）---\n${out.slice(-3000)}`);

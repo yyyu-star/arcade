@@ -23,6 +23,8 @@ export const KEYS = {
   stake: 'guandan.stake',
   /** 好友房点头像"屏蔽他"（table/taunt.ts）：sessionStorage，只对这个房间、这个标签页 */
   blocked: 'guandan.blocked',
+  /** 单独部署（没有平台）时好友房里的昵称（platform.ts、online.ts，0.8.0） */
+  nick: 'guandan.nick',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */
@@ -79,6 +81,17 @@ function write(key: string, value: unknown): void {
   } catch {
     // 存储满了或被禁用：游戏照常进行，只是不能续玩
   }
+}
+
+/** 单独部署时好友房里的昵称：没填是空串（服务端按"游客"加数字叫） */
+export function getNick(): string {
+  const v = read<unknown>(KEYS.nick);
+  return typeof v === 'string' ? v : '';
+}
+
+export function setNick(name: string): void {
+  if (name) write(KEYS.nick, name);
+  else rawStore.remove(KEYS.nick);
 }
 
 // ───────────── 设置 ─────────────

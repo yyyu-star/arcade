@@ -70,8 +70,8 @@ export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, 
    */
   protected override async perform(e: StakeEffect, userId: string | null): Promise<unknown> {
     const w = this.env.WALLET;
-    // 没绑人的座位不会有带入；万一有，或者部署时漏了钱包绑定：当作被拒，这个座位不计输赢
-    if (!userId || !w) return { ok: false, error: userId ? 'unavailable' : 'no_user' };
+    // 没绑人的座位不会有带入；万一有，或者没有钱包（单独部署开房时已经挡住实盘，这里兜底）：当作被拒，这个座位不计输赢
+    if (!userId || !w) return { ok: false, error: userId ? 'no_wallet' : 'no_user' };
     if (e.kind === 'in') {
       // 带入重发前先看钱包（旧仓库 PR 75 审阅）：钱包每人只记最近 32 个 op，隔得太久的重发拿不到 dup，同一 ref、同一档会被当成补码再扣一次。
       // 第一次办也看一眼（多 1 次 RPC、0 行写入），省得自己记"是不是重发"——房间被驱逐后内存里的记录就没了
