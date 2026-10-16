@@ -15,9 +15,6 @@ export function chipsDiff(n: number): string {
   return n > 0 ? `+${chips(n)}` : n < 0 ? `−${chips(-n)}` : '±0';
 }
 
-/** 每日补给补到多少（economy.md 第 3 节） */
-const RELIEF_TO = 2_000;
-
 export const LIVE_RULE = '打半年，按最后的资产结回：赚了最多拿回 3 份，赔光就是这一份';
 export const LIVE_WALLET_NOTE = '无任何现金价值';
 
@@ -88,7 +85,7 @@ export function liveEndText(r: Readonly<LiveRecord>, won: boolean): { head: stri
   const times = `×${(bp / 10_000).toFixed(2)}`;
   const span = won ? '半年下来' : '这局';
   let body: string;
-  if (got === 0 && capped === 0) body = `这次本金赔光了。炒股本来就有赢有输，别往心里去。钱包每天会补到 ${chips(RELIEF_TO)}，明天还能来玩；也可以去玩娱乐模式，不花筹码。`;
+  if (got === 0 && capped === 0) body = `这次本金赔光了。炒股本来就有赢有输，别往心里去。钱包每天能领补给，明天还能来玩；也可以去玩娱乐模式，不花筹码。`;
   else if (got + capped < r.stake) body = `${span}小亏，资产 ${times}。行情有起有落，下次换个档位或换个打法试试。`;
   else body = `${span}资产 ${times}。`;
   if (capped > 0) body += `\n今天单机实盘赢够了：这局多出的 ${chips(capped)} 筹码没进钱包，明天再来。`;
