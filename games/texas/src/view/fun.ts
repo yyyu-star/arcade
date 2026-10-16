@@ -33,27 +33,31 @@ export function suggest(r: HandResult, log: readonly LogEntry[], me: number): nu
   return riverTurnaround(r) !== null ? [T('运气而已，别骄傲'), T('再来！')] : [T('好牌，服了'), T('下一把轮到我了')];
 }
 
-const KEY = KEYS.fun;
-
 export interface FunPrefs {
-  /** 不看嘲讽和道具（总开关；电脑说话也一起收起） */
+  /** 互动"不看"（总开关，记在本机；电脑说话也一起收起） */
   off: boolean;
-  /** 屏蔽了谁（好友房里的昵称） */
+  /** 屏蔽了谁（真人按昵称、电脑按性格名）：只记在这个标签页（sessionStorage），关了就没了 */
   muted: string[];
 }
 
-export function loadFun(store: Storage): FunPrefs {
-  try {
-    const p = JSON.parse(store.getItem(KEY) ?? 'null') as Partial<FunPrefs> | null;
-    return { off: p?.off === true, muted: Array.isArray(p?.muted) ? p.muted.filter((x): x is string => typeof x === 'string').slice(0, 50) : [] };
-  } catch {
-    return { off: false, muted: [] };
-  }
+/** 总开关在 local（texas.fun），屏蔽名单在 session（texas.fun.muted）；0.10.1 以前存在 local 里的名单不再读 */
+export function loadFun(local: Storage, session: Storage): FunPrefs {
+  const read = (store: Storage, key: string): unknown => {
+    try {
+      return JSON.parse(store.getItem(key) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  const p = read(local, KEYS.fun) as { off?: unknown } | null;
+  const m = read(session, KEYS.funMuted);
+  return { off: p?.off === true, muted: Array.isArray(m) ? m.filter((x): x is string => typeof x === 'string').slice(0, 50) : [] };
 }
 
-export function saveFun(store: Storage, p: FunPrefs): void {
+export function saveFun(local: Storage, session: Storage, p: FunPrefs): void {
   try {
-    store.setItem(KEY, JSON.stringify(p));
+    local.setItem(KEYS.fun, JSON.stringify({ off: p.off }));
+    session.setItem(KEYS.funMuted, JSON.stringify(p.muted));
   } catch {
     // 存不上：这一次还按改过的算，刷新后回到原样
   }

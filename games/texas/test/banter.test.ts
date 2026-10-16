@@ -1,7 +1,7 @@
 /** 电脑的互动（0.6.0，DESIGN.md 13.5）：被招惹时按性格回、冷却、催人、一手打完主动来一下；嘲讽只用短语表里的（只说牌局） */
 import { PROPS, STICKERS } from 'arcade-kit/fun';
 import { describe, expect, it } from 'vitest';
-import { Banter, emoteOf, pokeOf, PROP_ORDER, SEAT_GAP_MS, STICKER_ORDER, TABLE_GAP_MS, type Out } from '../src/fun/banter.ts';
+import { Banter, ECHO, emoteOf, FUN_STYLE, funMult, momentOf, pokeOf, PROP_ORDER, REACT_GAP_MS, REACT_P, REVENGE_MAX, SEAT_GAP_MS, STICKER_ORDER, TABLE_GAP_MS, type Out } from '../src/fun/banter.ts';
 import { TAUNTS } from '../src/fun/taunts.ts';
 import type { HandResult, LogEntry } from '../src/core/table.ts';
 import { EMOTE_COUNT, PROP_BASE, STICKER_BASE } from '../src/room/rules.ts';
@@ -42,8 +42,8 @@ function temper(persona: number, n = 3000): { back: number; meek: number; quiet:
     if (!o) c.quiet++;
     else {
       valid(o);
-      if ('prop' in o || 'taunt' in o) {
-        expect(o.to).toBe(0);
+      if ('prop' in o || 'taunt' in o || ('sticker' in o && o.sticker === 'angry')) {
+        if (!('sticker' in o)) expect(o.to).toBe(0);
         c.back++;
       } else if ('sticker' in o && (o.sticker === 'sweat' || o.sticker === 'cry')) c.meek++;
       else if ('say' in o && o.say.endsWith('…')) c.meek++;
@@ -99,7 +99,9 @@ describe('电脑的互动', () => {
     let n = 0;
     for (let k = 0; k < 200; k++) {
       const b = new Banter(lcg(k), clock(SEAT_GAP_MS));
-      const a = b.afterHand(seats, 20, r, log);
+      const outs = b.afterHand(seats, 20, r, log);
+      expect(outs.length).toBeLessThanOrEqual(1);
+      const a = outs[0];
       if (!a) continue;
       n++;
       expect(a.seat).toBe(1);
@@ -109,10 +111,10 @@ describe('电脑的互动', () => {
     expect(n).toBeGreaterThan(40);
     // 只输了盲注：不来
     const small = { ...r, pots: [{ amount: 30, winners: [{ seat: 1, won: 30 }] }] } as unknown as HandResult;
-    for (let k = 0; k < 50; k++) expect(new Banter(lcg(k), clock(SEAT_GAP_MS)).afterHand(seats, 20, small, log.slice(0, 2))).toBeNull();
+    for (let k = 0; k < 50; k++) expect(new Banter(lcg(k), clock(SEAT_GAP_MS)).afterHand(seats, 20, small, log.slice(0, 2))).toEqual([]);
   });
 
-  it('被扔东西按性格回：虎子、阿飙爱扔回来，慢慢多认怂，老鹰多不理；回的都在表情、短语、道具表里', () => {
+  it('被扔东西按性格回：虎子、阿飙爱回怼，慢慢回的里面多是认怂，老鹰多不理；回的都在表情、短语、道具表里', () => {
     const huzi = temper(HUZI);
     const abiao = temper(ABIAO);
     const manman = temper(MANMAN);
@@ -120,7 +122,8 @@ describe('电脑的互动', () => {
     console.log(`回怼 / 认怂 / 不理：虎子 ${JSON.stringify(huzi)}、阿飙 ${JSON.stringify(abiao)}、慢慢 ${JSON.stringify(manman)}、老鹰 ${JSON.stringify(laoying)}`);
     expect(huzi.back).toBeGreaterThan(manman.back * 4);
     expect(abiao.back).toBeGreaterThan(laoying.back * 1.5);
-    expect(manman.meek).toBeGreaterThan(huzi.meek * 2);
+    const share = (c: { back: number; meek: number }): number => c.meek / (c.back + c.meek);
+    expect(share(manman)).toBeGreaterThan(share(huzi) * 2);
     expect(laoying.quiet).toBeGreaterThan(huzi.quiet);
   });
 
@@ -128,7 +131,7 @@ describe('电脑的互动', () => {
     let t = 0;
     const b = new Banter(() => 0, () => t);
     expect(b.react({ seat: 3, persona: HUZI }, 0, { prop: 'egg' })).not.toBeNull();
-    t += SEAT_GAP_MS - 1;
+    t += REACT_GAP_MS - 1;
     expect(b.react({ seat: 3, persona: HUZI }, 0, { prop: 'egg' })).toBeNull();
     // 别的电脑不受影响
     expect(b.react({ seat: 4, persona: HUZI }, 0, { prop: 'egg' })).not.toBeNull();
@@ -193,11 +196,88 @@ describe('电脑的互动', () => {
       let back = 0;
       for (let i = 0; i < 3000; i++) {
         const o = b.react({ seat: 2, persona }, 0, { prop: 'egg' });
-        if (o && ('prop' in o || 'taunt' in o)) back++;
+        if (o && ('prop' in o || 'taunt' in o || ('sticker' in o && o.sticker === 'angry'))) back++;
       }
       return back;
     };
     expect(run(HUZI, true)).toBeGreaterThan(run(HUZI, false));
     expect(run(MANMAN, true)).toBeLessThanOrEqual(run(MANMAN, false));
+  });
+
+  it('规范第 4 节：被扔道具约 60% 回（乘互动性格：爱闹 ×1.5、高冷 ×0.3）；回应里约 25% 是同类回敬（番茄还番茄、鸡蛋还拖鞋）', () => {
+    expect(FUN_STYLE).toHaveLength(10);
+    expect(funMult(HUZI)).toBe(1.5);
+    expect(funMult(LAOYING)).toBe(0.3);
+    expect(ECHO.tomato).toBe('tomato');
+    expect(ECHO.egg).toBe('slipper');
+    for (const [persona, want] of [
+      [0, REACT_P],
+      [HUZI, Math.min(1, REACT_P * 1.5)],
+      [LAOYING, REACT_P * 0.3],
+    ] as const) {
+      // 每次隔一分钟：回敬的上限不起作用
+      const b = new Banter(lcg(persona + 9), clock(60_000));
+      let n = 0;
+      let echo = 0;
+      for (let i = 0; i < 4000; i++) {
+        const o = b.react({ seat: 2, persona }, 0, { prop: 'egg' });
+        if (!o) continue;
+        n++;
+        if ('prop' in o) {
+          expect(o).toEqual({ prop: 'slipper', to: 0 });
+          echo++;
+        }
+      }
+      expect(Math.abs(n / 4000 - want)).toBeLessThan(0.03);
+      expect(Math.abs(echo / n - 0.25)).toBeLessThan(0.04);
+    }
+  });
+
+  it('同一个电脑 20 秒里最多回敬 2 次', () => {
+    let t = 0;
+    const b = new Banter(() => 0, () => t);
+    const props: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      t += REACT_GAP_MS;
+      const o = b.react({ seat: 2, persona: HUZI }, 0, { prop: 'tomato' });
+      if (o && 'prop' in o) props.push(t);
+    }
+    // 8 次都在 20 秒里（2.5 秒一次）
+    expect(props).toHaveLength(REVENGE_MAX);
+  });
+
+  it('名场面（全下赢、诈唬被抓）：输的电脑冲赢家扔东西或冒表情、赢的电脑得意；每手最多 2 次', () => {
+    // 1 号电脑全下，0 号真人跟，摊牌 0 号赢；2、3 号电脑也亮了牌、输了
+    const seats = [
+      { owner: 'player', persona: 0 },
+      { owner: 'house', persona: HUZI },
+      { owner: 'house', persona: 8 },
+      { owner: 'house', persona: ABIAO },
+    ];
+    const log: LogEntry[] = [
+      { seat: 2, act: 'sb', amount: 10 },
+      { seat: 3, act: 'bb', amount: 20 },
+      { seat: 1, act: 'raise', amount: 2000, allin: true },
+      { seat: 0, act: 'call', amount: 2000 },
+      { seat: 2, act: 'call', amount: 1990 },
+      { seat: 3, act: 'call', amount: 1980 },
+    ];
+    const shown = [0, 1, 2, 3].map((seat) => ({ seat, value: (seat === 0 ? 5 : 1) << 20, cards: [] }));
+    const r = { handNo: 1, board: [], shown, pots: [{ amount: 8000, winners: [{ seat: 0, won: 8000 }] }], uncalled: null, byFold: false } as unknown as HandResult;
+    expect(momentOf(r, log)).toEqual({ winner: 0, losers: [1, 2, 3] });
+    let n = 0;
+    for (let k = 0; k < 300; k++) {
+      const outs = new Banter(lcg(k), clock(SEAT_GAP_MS)).afterHand(seats, 20, r, log);
+      expect(outs.length).toBeLessThanOrEqual(2);
+      for (const o of outs) {
+        valid(o.out);
+        expect([1, 2, 3]).toContain(o.seat);
+        if ('prop' in o.out) expect(o.out.to).toBe(0);
+      }
+      n += outs.length;
+    }
+    expect(n).toBeGreaterThan(300);
+    // 没有全下、没亮牌（弃牌赢）不算名场面
+    expect(momentOf({ ...r, byFold: true } as HandResult, log)).toBeNull();
   });
 });

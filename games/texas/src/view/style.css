@@ -1227,6 +1227,57 @@ body.texas-dialog .arcade-fun { visibility: hidden !important; }
 .read-card.below {
   transform: translate(-50%, 0);
 }
+/* 我自己的头像弹的表情包（docs/table-fun.md 第 1 节）：在头像和底牌上方，6 个一行 */
+.read-card.above { transform: translate(-50%, -100%); }
+.read-card.mine { min-width: 0; padding: var(--s-2); }
+.read-card.mine .rc-icons { display: grid; grid-template-columns: repeat(6, 40px); margin-top: 0; }
+.read-card.mine .rc-icon { width: 40px; height: 40px; }
+.rc-says { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); }
+.rc-says:empty { display: none; }
+.rc-say {
+  padding: var(--s-1) var(--s-2);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, .06);
+  color: #f1ede0;
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+/* 扔道具的冷却（1.5 秒）：一层暗色从满到空，转完能再扔 */
+.rc-icon, .fp-icon { position: relative; }
+.cooling { pointer-events: none; }
+.cooling::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(rgba(0, 0, 0, .62) var(--left, 100%), transparent 0);
+  animation: cool var(--cd, 1.5s) linear forwards;
+}
+@property --left { syntax: '<percentage>'; inherits: false; initial-value: 100%; }
+@keyframes cool { from { --left: 100%; } to { --left: 0%; } }
+/* 连击"×3"、"回敬！"、"护盾"：头像上方弹一下就收 */
+.fun-flash {
+  position: absolute;
+  z-index: 52;
+  transform: translate(-50%, -50%);
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, .7);
+  animation: fun-flash .9s ease-out forwards;
+}
+.fun-flash.combo { color: var(--gold); font-size: 26px; }
+.fun-flash.revenge { color: #ff9a6a; font-size: var(--fs-4); }
+.fun-flash.shield { padding: 2px var(--s-2); border: 1px solid rgba(140, 200, 255, .8); border-radius: var(--r-pill); background: rgba(20, 50, 80, .85); color: #cfe8ff; font-size: var(--fs-2); }
+@keyframes fun-flash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+  45% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -80%); }
+}
+.fun-btn svg { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .rc-name { font-size: var(--fs-4); font-weight: 800; }
 .rc-style { margin-top: var(--s-0); font-size: var(--fs-2); color: var(--muted); }
 .rc-tag { display: inline-block; margin: 6px 0 4px; padding: var(--s-0) var(--s-2); border-radius: var(--r-2); background: rgba(243, 200, 107, .15); color: var(--gold); font-size: var(--fs-2); font-weight: 800; }

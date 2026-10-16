@@ -12,6 +12,10 @@ export const KEYS = {
   lastRoom: 'texas.lastRoom',
   session: 'texas.session',
   fun: 'texas.fun',
+  /** 按人屏蔽（sessionStorage：只对这一局、这个房间有效，docs/table-fun.md 第 5 节） */
+  funMuted: 'texas.fun.muted',
+  /** "点头像扔道具"的提示出过了（只出一次） */
+  hintFun: 'texas.hint.fun',
   stats: 'texas.stats',
   meta: 'texas.cloud',
   preSync: 'texas.stats.pre-sync',

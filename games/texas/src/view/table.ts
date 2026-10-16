@@ -120,6 +120,15 @@ const MS = {
   clear: 420,
 };
 
+/** 头像菜单里的一项：icon 是道具、表情（一行图标），say 是点名短语，都没有是文字按钮；cool 是还要冷却多少毫秒 */
+export interface CardAct {
+  label: string;
+  run: () => void;
+  icon?: string;
+  say?: true;
+  cool?: number;
+}
+
 export class TableView {
   readonly root: HTMLDivElement;
   private readonly feltEl: HTMLDivElement;
@@ -473,7 +482,7 @@ export class TableView {
    * 头像旁边冒一句话，过一会儿自己消失：电脑说话、好友房的嘲讽共用（0.3.0）。
    * 不挡点击（pointer-events: none）；我自己的放在头像左边，不压我的底牌和右下的操作区
    */
-  bubble(seat: number, text: string): void {
+  bubble(seat: number, text: string, ms = 2_600): void {
     const p = this.seatPt(seat);
     // 同一个人上一句还没收：换成新的，不叠
     this.fx.querySelector(`.speech[data-seat="${seat}"]`)?.remove();
@@ -487,7 +496,15 @@ export class TableView {
       // 我自己的放在头像左上（0.6.1：原来和头像一样高，盖住左下角的"歇一手""嘲讽"）
       seat === this.me ? { x: p.x - 196, y: p.y - 30 } : side === 'below' ? { x: p.x, y: p.y + 92 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y + 58 },
     );
-    window.setTimeout(() => e.remove(), 2_600 * this.opts.pace());
+    window.setTimeout(() => e.remove(), ms * this.opts.pace());
+  }
+
+  /** 头像上冒一个小字：连击"×3"、回敬"回敬！"、被扔太多的"护盾"（docs/table-fun.md 第 2、3 节），一下就收 */
+  flash(seat: number, text: string, kind: 'combo' | 'revenge' | 'shield'): void {
+    const p = this.seatPt(seat);
+    const e = el('div', `fun-flash ${kind}`, this.fx, text);
+    place(e, { x: p.x, y: p.y - (kind === 'revenge' ? 64 : 30) });
+    window.setTimeout(() => e.remove(), 900);
   }
 
   /** 这个座位头像在屏幕上的位置（道具往这儿扔，0.3.0）；按实际画出来的算，横竖屏、9 人桌都对。空座位、没摆出来回 null */
@@ -721,27 +738,38 @@ export class TableView {
    * 看对手（0.2.2）：点头像弹一张小卡，名字、风格、这一场的数；放在座位往桌心那一侧，点别处或 5 秒后收起。
    * tag 是按这一场的数给的标签，电脑再加上它的性格那一句
    */
-  showCard(seat: number, tag: string, rows: string[], actions: { label: string; run: () => void; icon?: string }[] = []): void {
+  showCard(seat: number, tag: string, rows: string[], actions: CardAct[] = []): void {
     this.hideCard();
     const s = this.frame?.seats[seat];
-    if (!s || s.owner === 'none' || seat === this.me) return;
-    const card = el('div', 'read-card', this.root);
-    el('div', 'rc-name', card, this.nameOf(seat, s));
-    if (s.owner === 'house') el('div', 'rc-style', card, personaStyle(s.persona));
-    el('div', 'rc-tag', card, tag);
-    for (const r of rows) el('div', 'rc-row', card, r);
+    const mine = seat === this.me;
+    // 我自己的头像（docs/table-fun.md 第 1 节）：只弹表情包，没有"看对手"的数
+    if (!s || s.owner === 'none' || (mine && !actions.length)) return;
+    const card = el('div', `read-card${mine ? ' mine' : ''}`, this.root);
+    if (!mine) {
+      el('div', 'rc-name', card, this.nameOf(seat, s));
+      if (s.owner === 'house') el('div', 'rc-style', card, personaStyle(s.persona));
+      el('div', 'rc-tag', card, tag);
+      for (const r of rows) el('div', 'rc-row', card, r);
+    }
     // 好友房里真人的卡（0.3.0）：能点的按钮（屏蔽他）；有按钮的卡接收点击，点卡里不收起
     if (actions.length) {
       card.classList.add('acts');
+      // 顺序照规范：道具（或表情）一行图标、点名短语一行、最后"屏蔽他"
       const icons = el('div', 'rc-icons', card);
+      const says = el('div', 'rc-says', card);
       const row = el('div', 'rc-acts', card);
       for (const a of actions) {
-        // 有图标的（道具）排一行小图标，别的是文字按钮
-        const b = el('button', a.icon ? 'rc-icon' : 'rc-act', a.icon ? icons : row, a.icon ? '' : a.label);
+        const b = el('button', a.icon ? 'rc-icon' : a.say ? 'rc-say' : 'rc-act', a.icon ? icons : a.say ? says : row, a.icon ? '' : a.label);
         if (a.icon) {
           b.innerHTML = a.icon;
           b.title = a.label;
           b.setAttribute('aria-label', a.label);
+        }
+        // 冷却中（规范 2 节）：盖一层转圈，转完就能再扔
+        if (a.cool && a.cool > 0) {
+          b.classList.add('cooling');
+          b.style.setProperty('--cd', `${a.cool}ms`);
+          window.setTimeout(() => b.classList.remove('cooling'), a.cool);
         }
         b.type = 'button';
         b.addEventListener('click', () => {
@@ -753,9 +781,10 @@ export class TableView {
     }
     // 贴着座位朝桌心那一边摆，不盖住这个人自己的头像和名字：顶上的往下，两边的往里
     const p = this.seatPt(seat);
-    const side = isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
+    // 我的在头像上方、底牌再往上（不盖底牌和右下的操作区）
+    const side = mine ? 'above' : isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
     card.classList.add(side);
-    place(card, side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
+    place(card, side === 'above' ? { x: p.x, y: p.y - 100 } : side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
     this.card = card;
     this.cardTimer = window.setTimeout(() => this.hideCard(), 5_000);
     // 下一次点哪里都收起（这一次的点击已经冒泡完了）

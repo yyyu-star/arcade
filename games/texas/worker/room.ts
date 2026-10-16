@@ -50,8 +50,7 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
     this.banterHand = r.handNo;
     this.banterRng = stream(s.t.seed, RNG.banter, r.handNo);
     // 一手打完牌桌停着（holdHands），操作记录还是这一手的
-    const a = this.banter.afterHand(s.t.seats, s.t.bb, r, s.t.log);
-    if (a) this.botSay(a.seat, a.out);
+    for (const a of this.banter.afterHand(s.t.seats, s.t.bb, r, s.t.log)) this.botSay(a.seat, a.out);
   }
 
   protected override onEmote(from: number, id: number, to?: number): void {

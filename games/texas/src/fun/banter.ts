@@ -5,7 +5,8 @@
  * 电脑的出牌决定（src/ai）不引用这里、也拿不到这里的任何东西：互动不影响它怎么打（test/arch.test.ts 查）。
  * 触发只看公开的事（谁对谁扔了什么、谁赢了谁的大池子、轮到谁想了多久）；嘲讽只说牌局，不说人。
  */
-import { putIn } from '../core/fame.ts';
+import { categoryOf } from '../core/eval.ts';
+import { bluffer, putIn, riverTurnaround } from '../core/fame.ts';
 import type { HandResult, LogEntry } from '../core/table.ts';
 import { PROP_BASE, STICKER_BASE } from '../room/rules.ts';
 import { tauntId as T } from './taunts.ts';
@@ -84,8 +85,32 @@ const TEMPER: readonly Temper[] = [
   { back: 2, shrug: 2, meek: 6, urge: 3, props: ['egg'], meekSay: ['为什么扔我…', '我做错什么了？'], shrugSay: ['这是什么？'] },
 ];
 
-/** 被招惹后多久回（毫秒，像人：看一眼再回） */
-export const REPLY_DELAY: readonly [number, number] = [600, 1_500];
+/**
+ * 互动性格（docs/table-fun.md 第 4 节），顺序同 PERSONAS：爱闹的回应、名场面出手的概率 ×1.5，高冷的 ×0.3。
+ * 和 CHATTY（多爱说话）分开：话多不等于爱扔东西
+ */
+export const FUN_STYLE = ['普通', '爱闹', '普通', '高冷', '高冷', '普通', '爱闹', '高冷', '爱闹', '普通'] as const;
+const STYLE_MULT = { 爱闹: 1.5, 普通: 1, 高冷: 0.3 } as const;
+export const funMult = (persona: number): number => STYLE_MULT[FUN_STYLE[persona] ?? '普通'];
+
+/** 被扔回去的同类道具：番茄还番茄，鸡蛋还拖鞋（规范 4 节） */
+export const ECHO: Readonly<Record<PropId, PropId>> = { tomato: 'tomato', egg: 'slipper', stinkyEgg: 'stinkyEgg', slipper: 'slipper', bomb: 'bomb', rose: 'rose', like: 'like', cheers: 'cheers' };
+
+/** 被招惹后多久回（毫秒，像人：看一眼再回；规范 0.8–2 秒） */
+export const REPLY_DELAY: readonly [number, number] = [800, 2_000];
+/** 被扔道具时回应的概率（再乘互动性格）；只是冲他做个表情、点名一句的少一些 */
+export const REACT_P = 0.6;
+const REACT_P_SOFT = 0.35;
+/** 回应里直接回敬一个道具的比例；同一个电脑 REVENGE_WINDOW_MS 里最多回敬 REVENGE_MAX 次 */
+export const REVENGE_P = 0.25;
+export const REVENGE_WINDOW_MS = 20_000;
+export const REVENGE_MAX = 2;
+/** 同一个电脑两次回应至少隔这么久（真人连着扔，不每下都回） */
+export const REACT_GAP_MS = 2_500;
+/** 名场面：输的电脑出手、赢的电脑得意的概率（再乘互动性格）；每手最多 MOMENT_MAX 次电脑主动互动 */
+export const MOMENT_LOSER_P = 0.4;
+export const MOMENT_WINNER_P = 0.3;
+export const MOMENT_MAX = 2;
 /** 同一个电脑两次互动至少隔这么久（不连着刷） */
 export const SEAT_GAP_MS = 10_000;
 /** 整桌两次主动互动（一手打完、催人）至少隔这么久；回应被招惹的不看它 */
@@ -100,6 +125,9 @@ export interface Seat {
 
 export class Banter {
   private lastSeat = new Map<number, number>();
+  private lastReact = new Map<number, number>();
+  /** 每个电脑最近几次回敬的时间 */
+  private revenges = new Map<number, number[]>();
   private lastTable = -Infinity;
   /** 每个电脑这一场的情绪：最近输赢（大盲）的滑动和，正的是顺、负的是背 */
   private mood = new Map<number, number>();
@@ -125,6 +153,8 @@ export class Banter {
   /** 换桌、换人：全清 */
   clear(): void {
     this.lastSeat.clear();
+    this.lastReact.clear();
+    this.revenges.clear();
     this.lastTable = -Infinity;
     this.mood.clear();
   }
@@ -136,19 +166,25 @@ export class Banter {
   }
 
   /**
-   * 真人 from 对电脑 who 做了 poke：回什么（不回就 null）。话多的回得勤；顺的时候更爱回怼、少认怂，背的时候爱赌的更冲、胆小的更怂
+   * 真人 from 对电脑 who 做了 poke：回什么（不回就 null）。被扔道具 60% 回（乘互动性格），其中 25% 直接回敬同类道具
+   * （20 秒最多 2 次）；别的按脾气：回怼的生气、点名，认怂的流汗，不理的打哈欠。顺的时候更爱回怼，背的时候爱赌的更冲、胆小的更怂
    */
   react(who: Seat, from: number, poke: Poke): Out | null {
     const t = this.now();
-    if (t - (this.lastSeat.get(who.seat) ?? -Infinity) < SEAT_GAP_MS) return null;
-    const chatty = (CHATTY[who.persona] ?? 300) / 1000;
+    if (t - (this.lastReact.get(who.seat) ?? -Infinity) < REACT_GAP_MS) return null;
     const tp = TEMPER[who.persona] ?? TEMPER[0]!;
     const friendly = 'prop' in poke ? !HOSTILE.includes(poke.prop) : 'sticker' in poke ? poke.sticker === 'love' || poke.sticker === 'clap' : poke.taunt === T('好牌，服了');
-    // 被点名、被扔东西的回得多；只是冲他做个表情的少回
-    const p = ('sticker' in poke ? 0.2 : 0.45) + chatty * 0.5;
+    const p = ('prop' in poke ? REACT_P : REACT_P_SOFT) * funMult(who.persona);
     if (this.rand() >= p) return null;
-    this.lastSeat.set(who.seat, t);
-    if (friendly) return this.pick<Out>([[{ sticker: 'love' }, 3], [{ sticker: 'clap' }, 2], [{ prop: 'cheers', to: from }, 2], [this.say('谢谢', 'clap'), 1]]);
+    this.lastReact.set(who.seat, t);
+    if (friendly) return this.pick<Out>([[{ sticker: 'love' }, 4], [{ sticker: 'clap' }, 2], [{ prop: 'cheers', to: from }, 1], [this.say('谢谢', 'clap'), 1]]);
+    if ('prop' in poke && this.rand() < REVENGE_P) {
+      const recent = (this.revenges.get(who.seat) ?? []).filter((x) => t - x < REVENGE_WINDOW_MS);
+      if (recent.length < REVENGE_MAX) {
+        this.revenges.set(who.seat, [...recent, t]);
+        return { prop: ECHO[poke.prop], to: from };
+      }
+    }
     const mood = this.mood.get(who.seat) ?? 0;
     const hot = tp.back > tp.meek;
     let back = tp.back;
@@ -161,20 +197,15 @@ export class Banter {
       else meek *= 1.5;
     }
     const kind = this.pick<'back' | 'shrug' | 'meek'>([['back', back], ['shrug', tp.shrug], ['meek', meek]]);
-    if (kind === 'back') {
-      const prop = tp.props[Math.floor(this.rand() * tp.props.length)]!;
-      const echo = 'prop' in poke ? poke.prop : prop;
+    if (kind === 'back')
       return this.pick<Out>([
-        [{ prop: echo, to: from }, 3],
-        [{ prop, to: from }, 2],
+        [{ sticker: 'angry' }, 3],
         [{ taunt: T('就这？'), to: from }, 2],
         [{ taunt: T('跟啊，怕了？'), to: from }, 1],
         [{ taunt: T('下一把轮到我了'), to: from }, 1],
       ]);
-    }
-    if (kind === 'meek') return this.pick<Out>([[{ sticker: 'sweat' }, 2], [{ sticker: 'cry' }, 1], [this.say(this.one(tp.meekSay), 'sweat'), 3]]);
-    // 装没看见：多半什么都不说，偶尔打个哈欠、嘀咕一句
-    return this.pick<Out | null>([[null, 3], [{ sticker: 'sleep' }, 2], [this.say(this.one(tp.shrugSay), 'sleep'), 2]]);
+    if (kind === 'meek') return this.pick<Out>([[{ sticker: 'sweat' }, 3], [{ sticker: 'cry' }, 1], [this.say(this.one(tp.meekSay), 'sweat'), 3]]);
+    return this.pick<Out>([[{ sticker: 'sleep' }, 2], [this.say(this.one(tp.shrugSay), 'sleep'), 2]]);
   }
 
   /**
@@ -203,25 +234,43 @@ export class Banter {
   }
 
   /**
-   * 一手打完（只用公开的：投进去多少看操作记录，分到多少看结果）：记下每个电脑这一手的输赢（情绪）；
-   * 赢了或输了 ≥ 20 个大盲的电脑偶尔对对面来一下（after）。回谁、做什么；没有就 null
+   * 一手打完（只用公开的：投进去多少看操作记录，分到多少看结果）：记下每个电脑这一手的输赢（情绪）。
+   * 名场面（全下赢、反超、诈唬被抓，momentOf）：输的电脑 40% 冲赢家扔个道具或冒表情，赢的电脑 30% 得意（都乘互动性格）；
+   * 没有名场面时，赢了或输了 ≥ 20 个大盲的电脑偶尔对对面来一下（after）。每手最多 MOMENT_MAX 次
    */
-  afterHand(seats: readonly SeatLike[], bb: number, r: HandResult, log: readonly LogEntry[]): { seat: number; out: Emote } | null {
+  afterHand(seats: readonly SeatLike[], bb: number, r: HandResult, log: readonly LogEntry[]): { seat: number; out: Emote }[] {
     const net = new Map<number, number>();
     for (const [s, x] of putIn(log)) net.set(s, -x);
     for (const p of r.pots) for (const w of p.winners) net.set(w.seat, (net.get(w.seat) ?? 0) + w.won);
     if (r.uncalled) net.set(r.uncalled.seat, (net.get(r.uncalled.seat) ?? 0) + r.uncalled.amount);
     const house = (i: number): boolean => seats[i]?.owner === 'house';
     for (const [s, x] of net) if (house(s)) this.result(s, x / bb);
+    const m = momentOf(r, log);
+    if (m) {
+      const outs: { seat: number; out: Emote }[] = [];
+      for (const l of m.losers) {
+        if (!house(l) || this.rand() >= MOMENT_LOSER_P * funMult(seats[l]!.persona)) continue;
+        const tp = TEMPER[seats[l]!.persona] ?? TEMPER[0]!;
+        const prop = tp.props.find((x) => HOSTILE.includes(x)) ?? 'tomato';
+        outs.push({ seat: l, out: this.pick<Emote>([[{ prop, to: m.winner }, 3], [{ sticker: 'angry' }, 1], [{ sticker: 'cry' }, 1], [{ sticker: 'shock' }, 1]]) });
+      }
+      if (house(m.winner) && this.rand() < MOMENT_WINNER_P * funMult(seats[m.winner]!.persona)) outs.push({ seat: m.winner, out: this.pick<Emote>([[{ sticker: 'smug' }, 3], [{ sticker: 'cool' }, 2]]) });
+      if (outs.length) {
+        const t = this.now();
+        this.lastTable = t;
+        for (const o of outs) this.lastSeat.set(o.seat, t);
+        return outs.slice(0, MOMENT_MAX);
+      }
+    }
     const ranked = [...net].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
     const top = ranked[0];
     const bottom = ranked[ranked.length - 1];
-    if (!top || !bottom || top[0] === bottom[0]) return null;
+    if (!top || !bottom || top[0] === bottom[0]) return [];
     const big = 20 * bb;
     const [seat, won, other] = house(top[0]) && top[1] >= big ? [top[0], true, bottom[0]] : house(bottom[0]) && -bottom[1] >= big ? [bottom[0], false, top[0]] : [-1, false, -1];
-    if (seat < 0) return null;
+    if (seat < 0) return [];
     const out = this.after({ seat, persona: seats[seat]!.persona }, won, other);
-    return out && { seat, out };
+    return out ? [{ seat, out }] : [];
   }
 
   /**
@@ -257,4 +306,19 @@ export class Banter {
     for (const [x, w] of xs) if ((r -= w) < 0) return x;
     return xs[xs.length - 1]![0];
   }
+}
+
+/**
+ * 这一手是不是名场面（docs/table-fun.md 第 4 节，德州：全下赢、反超、诈唬被抓），只看摊牌亮出来的牌和操作记录。
+ * 主池只有一个赢家才算（平分了没有"赢家"可冲）；losers 是亮了牌、没赢主池的
+ */
+export function momentOf(r: HandResult, log: readonly LogEntry[]): { winner: number; losers: number[] } | null {
+  if (r.byFold || r.shown.length < 2) return null;
+  const main = r.pots[0]?.winners ?? [];
+  if (main.length !== 1) return null;
+  const winner = main[0]!.seat;
+  const losers = r.shown.map((x) => x.seat).filter((x) => x !== winner);
+  const allin = r.shown.some((x) => log.some((e) => e.seat === x.seat && e.allin && e.act !== 'sb' && e.act !== 'bb'));
+  const caught = r.shown.some((x) => x.seat !== winner && bluffer(log, x.seat, categoryOf(x.value)));
+  return allin || caught || riverTurnaround(r) === winner ? { winner, losers } : null;
 }
