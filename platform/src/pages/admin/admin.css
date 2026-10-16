@@ -1,5 +1,4 @@
 /* 管理页（按需加载，不进大厅首屏）：控制台布局、数字卡片、趋势图、用户列表和详情、宽表格。主题变量在 src/styles.css */
-.admin-entry { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
 .rules-log { margin: var(--s-2) 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--muted); display: grid; gap: var(--s-1); }
 /* 控制台：电脑上左边分区导航、右边内容；窄一点的屏幕导航在顶上一排 */
 .console { display: grid; grid-template-columns: 180px 1fr; gap: var(--s-5); align-items: start; }
@@ -8,16 +7,28 @@
 .console__nav a:hover { background: var(--highlight-warm); }
 .console__nav a.console__on { background: var(--accent); color: var(--white); box-shadow: inset 0 -3px 0 var(--accent-deep); }
 .console__main { min-width: 0; display: flex; flex-direction: column; gap: var(--s-5); }
-.console__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--s-5); align-items: start; }
+/* 同一行的面板等高、底边对齐；面板里最后一块撑满剩下的高度 */
+.console__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--s-5); align-items: stretch; }
+.console__grid > .panel, .console__col > .panel:last-child { display: flex; flex-direction: column; }
+.console__grid > .panel > :last-child, .console__col > .panel:last-child > :last-child { flex: 1; }
+/* 设置：左边一列两块、右边一块，两列底边对齐 */
+.console__col { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
+.console__col > .panel:last-child { flex: 1; }
 .console__single { max-width: var(--narrow); margin: 0 auto; width: 100%; }
 @media (max-width: 1023px) {
   .console { grid-template-columns: 1fr; }
   .console__nav { position: static; flex-direction: row; flex-wrap: wrap; padding: var(--s-2); box-shadow: var(--sh-sm); }
   .console__nav a { flex: 1; justify-content: center; padding: 0 var(--s-2); white-space: nowrap; }
 }
+@media (min-width: 1024px) { .console__grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .console__grid { grid-template-columns: 1fr; } }
-/* 数字卡片：一排，放不下就折行，每张一样宽 */
+/* 数字卡片：一排，放不下就折行，每张一样宽。电脑上固定 6 列、间距和下面的面板网格一样，第 3 张的右边正好对着左边面板的右边 */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-3); margin: 0; }
+@media (min-width: 1024px) {
+  .tiles:not(.tiles--small) { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-5); }
+  .tiles:not(.tiles--small) .tile { padding: var(--s-3); }
+  .tiles:not(.tiles--small) .tile dd { font-size: var(--fs-lg); }
+}
 .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--s-3) var(--s-4); border: var(--bw) solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--sh-md); }
 .tile dt { font-size: var(--fs-xs); color: var(--muted); font-weight: 700; }
 .tile dd { margin: 0; font-size: var(--fs-xl); font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -26,24 +37,31 @@
 .tiles--small .tile dd { font-size: var(--fs-xl); }
 @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
 /* 趋势图：手写 SVG，颜色跟主题走 */
-.chart { margin: 0; }
+.chart { position: relative; margin: 0; display: flex; flex-direction: column; justify-content: space-between; gap: var(--s-2); }
 .chart svg { display: block; width: 100%; height: auto; }
 .chart__axis { stroke: var(--line); stroke-width: 2; }
+.chart__grid { stroke: var(--divider); stroke-width: 1; stroke-dasharray: 4 4; }
+.chart__hit { fill: transparent; }
+.chart__day--on .chart__hit { fill: var(--highlight-warm); }
+.chart__people { font-size: 13px; font-weight: 700; fill: var(--ink); }
+.chart__tip { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px; padding: var(--s-1) var(--s-2); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); box-shadow: var(--sh-sm); font-size: var(--fs-xs); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
 .chart__in { fill: var(--accent); }
 .chart__out { fill: #4fae6f; }
-.chart__line { fill: none; stroke: var(--focus); stroke-width: 2.5; stroke-linejoin: round; }
-.chart__dot { fill: var(--white); stroke: var(--focus); stroke-width: 2.5; }
 .chart__label { font-size: 12px; fill: var(--muted); }
-.chart__legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin-top: var(--s-2); font-size: var(--fs-xs); color: var(--muted); }
+.chart__legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); font-size: var(--fs-xs); color: var(--muted); }
 .chart__key::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; }
 .chart__key--in::before { background: var(--accent); }
 .chart__key--out::before { background: #4fae6f; }
-.chart__key--line::before { height: 3px; vertical-align: 3px; background: var(--focus); }
-.game-today { list-style: none; margin: 0 0 var(--s-4); padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
-.game-today li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s-3); padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); }
-.game-today li > span:last-child { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-sm); }
+.chart__key--people::before { content: none; }
+.game-today { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.game-today li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s-3); padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); align-content: center; }
+@media (max-width: 560px) { .game-today { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto; } }
+.game-today li > span:not(.tnum), .game-today li > small { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); }
 /* 用户：左边列表、右边详情；窄屏一次只看一边 */
-.users-split { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: var(--s-5); align-items: start; }
+/* 两边底边对齐：列表和详情谁矮谁撑到和对方一样高 */
+.users-split { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: var(--s-5); align-items: stretch; }
+.users-split__detail { display: flex; flex-direction: column; }
+.users-split__detail > * { flex: 1; }
 .users { gap: var(--s-2); max-height: 70vh; overflow-y: auto; }
 .users__item { display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: 56px; padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .users__item:hover { background: var(--highlight-warm); }
@@ -54,7 +72,6 @@
 .users__new { width: 100%; margin-bottom: var(--s-3); }
 .users-split__hint { padding: var(--s-6); border: var(--bw-thin) dashed var(--dashed); border-radius: var(--r-lg); text-align: center; }
 .users-split__back { display: none; }
-.user-panel { position: sticky; top: var(--s-4); }
 .user-detail { display: flex; flex-direction: column; gap: var(--s-3); margin-bottom: var(--s-3); }
 .user-detail__title { margin: var(--s-2) 0 0; font-size: var(--fs-md); }
 .user-panel__actions { margin-top: var(--s-2); }
@@ -64,7 +81,6 @@
   .users-split:not(.users-split--picked) .users-split__detail { display: none; }
   .users-split__back { display: inline-flex; margin-bottom: var(--s-2); }
   .users { max-height: none; }
-  .user-panel { position: static; }
 }
 /*
  * 宽表格（管理页的趋势和筹码统计）：手机上横着滑；右边还有没露出来的列时，右沿有一道阴影提示能滑。
@@ -92,10 +108,13 @@
   .cards-on-phone td.cards-on-phone__wide { grid-column: 1 / -1; flex-direction: column; justify-content: flex-start; text-align: left; }
   .cards-on-phone .per-game { white-space: normal; text-align: left; }
 }
+.stats-table .cards-on-phone__wide { text-align: left; }
 .per-game { margin: 0; padding: 0; list-style: none; white-space: nowrap; }
-.per-game b { margin-right: 4px; }
-.per-game span { white-space: nowrap; }
+/* 游戏名一列、数字一列，几行之间对得齐 */
+.per-game li { display: grid; grid-template-columns: 4.5em 1fr; column-gap: var(--s-2); }
+.per-game span span { white-space: nowrap; }
 /* 电脑上宽表格放得下：照常是表格、撑满面板（窄一点的屏幕上才横着滑，手机上是卡片） */
 @media (min-width: 1024px) {
   .stats-table { display: table; background: none; }
 }
+.game-today .nowrap { white-space: nowrap; }

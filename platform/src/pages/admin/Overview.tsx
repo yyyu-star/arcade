@@ -50,31 +50,32 @@ export function Overview() {
           </div>
         ))}
       </dl>
-      <div className="console__grid">
+      <div className="console__grid console__grid--2">
         <Panel icon="shield" title="近 7 天">
-          <TrendChart days={[...days].reverse()} />
+          <TrendChart days={week(today, data.days)} />
         </Panel>
-        <Panel icon="coin" title="今天各游戏">
+        <Panel icon="coin" title="今天各游戏" action={<AdminChipsButton className="btn btn--primary btn--small" title="给人加减筹码（正数加、负数扣），有记录" />}>
           {games(today).length > 0 ? (
             <ul className="game-today">
               {games(today).map(([g, x]) => (
                 <li key={g}>
                   <strong>{gameName(g)}</strong>
-                  <span>{dash(x.players)} 人</span>
+                  <span className="tnum">{dash(x.players)} 人</span>
                   <span>
-                    带入 <b className="tnum">{num(x.in)}</b> · 结回 <b className="tnum">{num(x.out)}</b>
-                    {x.capped ? ` · 到顶没进 ${num(x.capped)}` : ''}
+                    <span className="nowrap">
+                      带入 <b className="tnum">{num(x.in)}</b>
+                    </span>{' '}
+                    · <span className="nowrap">
+                      结回 <b className="tnum">{num(x.out)}</b>
+                    </span>
                   </span>
+                  {x.capped ? <small>到顶没进 {num(x.capped)}</small> : null}
                 </li>
               ))}
             </ul>
           ) : (
             <p className="note">今天还没人带筹码玩。</p>
           )}
-          <div className="admin-entry">
-            <AdminChipsButton className="btn btn--primary" />
-            <span className="note">给人加减筹码（正数加、负数扣），有记录。</span>
-          </div>
         </Panel>
       </div>
       <Panel icon="shield" title="每天明细">
@@ -113,46 +114,84 @@ export function Overview() {
   );
 }
 
+type Day = { day: string; in: number; out: number; people: number };
+
+/** 固定 7 天（旧的在前、今天在最后）：没记录的天画 0，x 轴不跳天 */
+function week(today: WalletDayStats, past: WalletDayStats[]): Day[] {
+  const byDay = new Map([today, ...past].map((d) => [d.day, d]));
+  const end = Date.parse(`${today.day}T00:00:00Z`);
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(end - (6 - i) * 86_400_000).toISOString().slice(0, 10);
+    const d = byDay.get(day);
+    return { day, in: d ? sum(d, 'in') : 0, out: d ? sum(d, 'out') : 0, people: d?.active ?? 0 };
+  });
+}
+
+/** 刻度取 1、2、2.5、5 乘 10 的幂，三格正好盖住最大值 */
+function niceStep(max: number): number {
+  const raw = Math.max(1, max) / 3;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= raw) ?? 10) * p;
+}
+
 /**
- * 近 7 天的带入、结回（并排的柱）和玩过筹码局的人数（折线）：手写 SVG，不加图表库。
- * 柱和线各用自己的刻度（筹码和人数差几个数量级），右上角写各自的最大值。
+ * 近 7 天的带入、结回（并排的柱，左边刻度）和玩过筹码局的人数（柱顶的小数字）：手写 SVG，不加图表库。
+ * 悬停一天，整列高亮，上面浮一张当天的数字。
  */
-function TrendChart({ days }: { days: WalletDayStats[] }) {
-  const W = 560;
-  const H = 180;
-  const pad = { l: 8, r: 8, t: 24, b: 28 };
-  const ins = days.map((d) => sum(d, 'in'));
-  const outs = days.map((d) => sum(d, 'out'));
-  const people = days.map((d) => d.active ?? 0);
-  const maxChips = Math.max(1, ...ins, ...outs);
-  const maxPeople = Math.max(1, ...people);
+function TrendChart({ days }: { days: Day[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  // 画布按面板的实际宽度（电脑上约 400–600）定，字不会被缩得太小
+  const W = 460;
+  const H = 210;
+  const pad = { l: 52, r: 6, t: 22, b: 26 };
+  const step = niceStep(Math.max(...days.map((d) => Math.max(d.in, d.out))));
+  const top = step * 3;
   const slot = (W - pad.l - pad.r) / days.length;
-  const bw = Math.min(18, slot / 3);
-  const y = (v: number, max: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
+  const bw = Math.min(26, slot * 0.32);
+  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / top);
   const cx = (i: number) => pad.l + slot * i + slot / 2;
-  const line = people.map((p, i) => `${i ? 'L' : 'M'}${cx(i).toFixed(1)} ${y(p, maxPeople).toFixed(1)}`).join('');
+  const label = (d: Day, i: number) => (i === days.length - 1 ? '今天' : d.day.slice(5));
+  const h = hover === null ? null : days[hover]!;
   return (
-    <figure className="chart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`近 7 天带入、结回和玩过的人数，带入最多 ${num(maxChips)}，人数最多 ${maxPeople}`}>
-        <line x1={pad.l} x2={W - pad.r} y1={H - pad.b} y2={H - pad.b} className="chart__axis" />
-        {days.map((d, i) => (
-          <g key={d.day}>
-            <rect x={cx(i) - bw - 1} y={y(ins[i]!, maxChips)} width={bw} height={H - pad.b - y(ins[i]!, maxChips)} rx="3" className="chart__in" />
-            <rect x={cx(i) + 1} y={y(outs[i]!, maxChips)} width={bw} height={H - pad.b - y(outs[i]!, maxChips)} rx="3" className="chart__out" />
-            <text x={cx(i)} y={H - 8} textAnchor="middle" className="chart__label">
-              {i === days.length - 1 ? '今天' : d.day.slice(5)}
+    <figure className="chart" onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`近 7 天带入、结回和玩过的人数：${days.map((d, i) => `${label(d, i)} 带入 ${num(d.in)} 结回 ${num(d.out)} ${d.people} 人`).join('；')}`}>
+        {[1, 2, 3].map((k) => (
+          <g key={k}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(step * k)} y2={y(step * k)} className="chart__grid" />
+            <text x={pad.l - 6} y={y(step * k) + 4} textAnchor="end" className="chart__label">
+              {big(step * k)}
             </text>
           </g>
         ))}
-        <path d={line} className="chart__line" />
-        {people.map((p, i) => (
-          <circle key={i} cx={cx(i)} cy={y(p, maxPeople)} r="3.5" className="chart__dot" />
+        <line x1={pad.l} x2={W - pad.r} y1={H - pad.b} y2={H - pad.b} className="chart__axis" />
+        {days.map((d, i) => (
+          <g key={d.day} className={hover === i ? 'chart__day chart__day--on' : 'chart__day'} onMouseEnter={() => setHover(i)}>
+            <rect x={pad.l + slot * i} y={pad.t - 18} width={slot} height={H - pad.t - pad.b + 18} className="chart__hit" />
+            <rect x={cx(i) - bw - 1} y={y(d.in)} width={bw} height={H - pad.b - y(d.in)} rx="3" className="chart__in" />
+            <rect x={cx(i) + 1} y={y(d.out)} width={bw} height={H - pad.b - y(d.out)} rx="3" className="chart__out" />
+            {d.people > 0 && (
+              <text x={cx(i)} y={Math.min(y(d.in), y(d.out)) - 6} textAnchor="middle" className="chart__people">
+                {d.people}人
+              </text>
+            )}
+            <text x={cx(i)} y={H - 8} textAnchor="middle" className="chart__label">
+              {label(d, i)}
+            </text>
+          </g>
         ))}
       </svg>
+      {h && hover !== null && (
+        <div className="chart__tip" style={{ left: `${(cx(hover) / W) * 100}%` }} role="status">
+          <strong>{label(h, hover)}</strong>
+          <span>带入 {num(h.in)}</span>
+          <span>结回 {num(h.out)}</span>
+          <span>玩过 {h.people} 人</span>
+        </div>
+      )}
       <figcaption className="chart__legend">
-        <span className="chart__key chart__key--in">带入（最多 {num(maxChips)}）</span>
+        <span className="chart__key chart__key--in">带入</span>
         <span className="chart__key chart__key--out">结回</span>
-        <span className="chart__key chart__key--line">玩过的人（最多 {maxPeople}）</span>
+        <span className="chart__key chart__key--people">柱顶数字：玩过筹码局的人</span>
       </figcaption>
     </figure>
   );

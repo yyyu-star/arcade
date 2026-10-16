@@ -154,18 +154,29 @@ export function RecoveryCodeCard({ code, username, onDone, doneText }: { code: s
 const PANEL_ICONS = { key: KeyIcon, user: UserIcon, lock: LockIcon, people: PeopleIcon, coin: CoinIcon, trophy: TrophyIcon, shield: ShieldIcon };
 
 /** 页面外框：标题（前面一个小图标，按这一块讲的是什么选）+ 卡片。 */
-export function Panel({ title, icon, children }: { title: string; icon?: keyof typeof PANEL_ICONS; children: ReactNode }) {
+/** action：放在标题行右边的按钮（管理页概览的"管理筹码"） */
+export function Panel({ title, icon, action, children }: { title: string; icon?: keyof typeof PANEL_ICONS; action?: ReactNode; children: ReactNode }) {
   const Icon = icon && PANEL_ICONS[icon];
+  const heading = (
+    <h2 className="panel__title">
+      {Icon && (
+        <span className="panel__icon">
+          <Icon />
+        </span>
+      )}
+      {title}
+    </h2>
+  );
   return (
     <section className="panel">
-      <h2 className="panel__title">
-        {Icon && (
-          <span className="panel__icon">
-            <Icon />
-          </span>
-        )}
-        {title}
-      </h2>
+      {action ? (
+        <div className="panel__head">
+          {heading}
+          {action}
+        </div>
+      ) : (
+        heading
+      )}
       {children}
     </section>
   );

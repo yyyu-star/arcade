@@ -1238,7 +1238,16 @@ async function adminOverview(browser: Browser): Promise<void> {
     await ov.getByText('14').waitFor();
     const texasToday = (await page.locator('.game-today li', { hasText: '德州扑克' }).innerText()).replace(/\s+/g, ' ');
     check(texasToday.includes('6 人') && texasToday.includes('带入 24,000 · 结回 21,000'), `今天各游戏里德州那行不对：${texasToday}`);
-    check((await page.locator('.chart svg rect').count()) === (FAKE_OVERVIEW.days.length + 1) * 2, '趋势图应该每天带入、结回两根柱');
+    // 模拟数据只有两天：x 轴照样排满 7 天，没记录的天是 0 高的柱
+    const chartDays = await page.locator('.chart__day .chart__label').allTextContents();
+    check(chartDays.join(' ') === '10-10 10-11 10-12 10-13 10-14 10-15 今天', `趋势图应该固定 7 天：${chartDays.join(' ')}`);
+    check((await page.locator('.chart__day .chart__in[height="0"]').count()) === 5, '没记录的 5 天应该画 0');
+    if (screen !== 'portrait') {
+      await page.locator('.chart__day').last().hover();
+      const tip = (await page.locator('.chart__tip').innerText()).replace(/\s+/g, ' ');
+      check(tip.includes('今天') && tip.includes('带入 30,000') && tip.includes('玩过 9 人'), `悬停今天应该浮出当天的数字：${tip}`);
+    }
+    check(await page.locator('.panel__head').getByTestId('admin-chips-open').isVisible(), '"管理筹码"应该在"今天各游戏"的标题行里');
     await shot(page, `admin-console-${screen}`);
     const trendOld = await page.getByTestId('trend').locator('tbody tr').nth(1).locator('td').nth(1).textContent();
     check(trendOld === '—', `0.10.7 以前的记录应该写"—"：${trendOld}`);

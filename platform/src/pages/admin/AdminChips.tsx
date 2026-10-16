@@ -10,11 +10,11 @@ import { FormError } from '../../ui.tsx';
 
 
 /** "管理筹码"按钮，点了弹小窗口。只放在 /admin 最上面（维护者 0.9.7：外面重复了，只留管理页里的） */
-export function AdminChipsButton({ className }: { className: string }) {
+export function AdminChipsButton({ className, title }: { className: string; title?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className={className} type="button" onClick={() => setOpen(true)} data-testid="admin-chips-open">
+      <button className={className} type="button" title={title} onClick={() => setOpen(true)} data-testid="admin-chips-open">
         管理筹码
       </button>
       {open && <ChipsDialog onClose={() => setOpen(false)} />}

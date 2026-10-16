@@ -71,9 +71,11 @@ export function AdminPage() {
         )}
         {section === 'stats' && <WalletStats />}
         {section === 'settings' && (
-          <div className="console__grid">
-            <NoticePanel />
-            <RegistrationSwitch />
+          <div className="console__grid console__grid--2">
+            <div className="console__col">
+              <NoticePanel />
+              <RegistrationSwitch />
+            </div>
             <WalletRulesPanel />
           </div>
         )}

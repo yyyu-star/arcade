@@ -39,7 +39,7 @@ export function WalletStats() {
               <th>管理员调整</th>
               <th>庄家</th>
               <th>到顶没进</th>
-              <th>各游戏</th>
+              <th className="cards-on-phone__wide">各游戏</th>
             </tr>
           </thead>
           <tbody>
@@ -58,7 +58,10 @@ export function WalletStats() {
                     <ul className="per-game">
                       {Object.entries(d.games).map(([g, x]) => (
                         <li key={g}>
-                          <b>{gameName(g)}</b> <span>带入 {num(x.in)}</span> · <span>结回 {num(x.out)}</span> · <span>退回 {num(x.back)}</span>
+                          <b>{gameName(g)}</b>{' '}
+                          <span>
+                            <span>带入 {num(x.in)}</span> · <span>结回 {num(x.out)}</span> · <span>退回 {num(x.back)}</span>
+                          </span>
                         </li>
                       ))}
                     </ul>
