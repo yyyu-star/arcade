@@ -33,7 +33,7 @@ export interface D1MetaLike {
   size_after?: number;
 }
 
-const hourKey = (now: number) => new Date(now).toISOString().slice(0, 13);
+export const hourKey = (now: number) => new Date(now).toISOString().slice(0, 13);
 const dayKey = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 class Meter {

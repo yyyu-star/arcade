@@ -8,7 +8,7 @@ import { api } from './api.ts';
 import { useSession } from './session.tsx';
 import { FormError, useSubmit, useWritable } from './ui.tsx';
 import { useWallet } from './wallet.tsx';
-import { num } from './format.ts';
+import { num, signed } from './format.ts';
 
 /**
  * 各页面按需加载：大厅首屏只带首页要用的（React 加卡片），点进哪页再下那一页的代码。
@@ -109,8 +109,7 @@ function GameCard({ game }: { game: GameEntry }) {
           {game.name}
           {wnet !== null && (
             <span className={`card__week${wnet > 0 ? ' up' : wnet < 0 ? ' down' : ''}`} data-testid={`week-${game.id}`}>
-              本周 {wnet > 0 ? '+' : ''}
-              {num(wnet)}
+              本周 {signed(wnet)}
             </span>
           )}
         </h2>
@@ -261,9 +260,12 @@ function LobbyNudge() {
 /** 右上角：没登录是"登录"，登录了是头像（昵称第一个字）加昵称；管理员前面多一个"管理"。 */
 function AccountButton() {
   const { loading, user, service } = useSession();
+  const path = useLocation().pathname;
   if (loading) return <span className="topbar"><span className="account account--loading" aria-hidden="true" /></span>;
   // 停服档登也登不上，连不上时不知道登没登录：顶上的提示已经说明了，不放入口
   if (service === 'off' || service === 'unreachable') return null;
+  // 已经在登录、找回页上了，右上角再放一个"登录"是多余的
+  if (!user && (path === '/login' || path === '/forgot')) return null;
   if (!user) {
     return (
       <span className="topbar">

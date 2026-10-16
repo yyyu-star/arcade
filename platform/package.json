@@ -1,7 +1,7 @@
 {
   "name": "arcade",
   "private": true,
-  "version": "0.10.26",
+  "version": "0.10.27",
   "type": "module",
   "description": "小游戏平台：主界面和 /api（账号、云存档、好友、排行榜），部署到 Cloudflare Workers",
   "license": "MIT",

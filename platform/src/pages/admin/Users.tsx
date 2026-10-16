@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, type AdminUser, errorText } from '../../api.ts';
 import { LedgerList } from '../../ledger.tsx';
 import { Field, FormError, Panel, SubmitButton, useSubmit } from '../../ui.tsx';
-import { chips, type Credentials, dateText, gameName } from './common.ts';
+import { num, type Credentials, dateText, gameName } from './common.ts';
 
 export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
   const [username, setUsername] = useState('');
@@ -124,7 +124,7 @@ function walletLine(w: NonNullable<AdminUser['wallet']>): string {
   const played = Object.entries(w.played)
     .map(([g, n]) => `${gameName(g)} ${n} 次`)
     .join('、');
-  return `余额 ${chips(w.balance)}${w.onTable ? ` · 桌上 ${chips(w.onTable)}` : ''}${played ? ` · ${played}` : ''}`;
+  return `余额 ${num(w.balance)}${w.onTable ? ` · 桌上 ${num(w.onTable)}` : ''}${played ? ` · ${played}` : ''}`;
 }
 
 /** 展开一个人：战绩（各游戏）和钱包流水（最近 30 条，新的在前） */
@@ -147,8 +147,8 @@ function UserDetail({ username }: { username: string }) {
   return (
     <div className="user-detail" data-testid="user-detail">
       <p className="note">
-        余额 {chips(data.wallet.balance)}
-        {data.wallet.stakes.length ? ` · 桌上 ${data.wallet.stakes.map((s) => `${gameName(s.game)} ${chips(s.amount)}`).join('、')}` : ''}
+        余额 {num(data.wallet.balance)}
+        {data.wallet.stakes.length ? ` · 桌上 ${data.wallet.stakes.map((s) => `${gameName(s.game)} ${num(s.amount)}`).join('、')}` : ''}
         {data.wallet.fresh ? '（还没用过钱包）' : ''}
       </p>
       {career.length > 0 && (
@@ -172,9 +172,9 @@ function UserDetail({ username }: { username: string }) {
                 <td>{c.n}</td>
                 <td>{c.rounds || '—'}</td>
                 <td>{c.rounds ? `${Math.round((c.wins / c.rounds) * 100)}%` : '—'}</td>
-                <td>{c.best ? chips(c.best) : '—'}</td>
-                <td>{chips(c.wnet)}</td>
-                <td>{chips(c.net)}</td>
+                <td>{c.best ? num(c.best) : '—'}</td>
+                <td>{num(c.wnet)}</td>
+                <td>{num(c.net)}</td>
                 <td>{c.titles.length}</td>
               </tr>
             ))}
@@ -182,7 +182,7 @@ function UserDetail({ username }: { username: string }) {
         </table>
       )}
       {data.ledger && data.ledger.length > 0 ? (
-        <LedgerList entries={data.ledger} gameName={gameName} />
+        <LedgerList entries={data.ledger} />
       ) : (
         <p className="note">还没有流水（0.10.7 以前的操作没记）。</p>
       )}

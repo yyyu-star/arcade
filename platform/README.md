@@ -19,7 +19,7 @@
 - **邀请制**：不登录不能玩；注册默认关着，管理员在 `/admin` 或用命令行工具随时开关（存在 D1，不用重新部署）。
   `wrangler.jsonc` 的 `vars.REGISTRATION` 是紧急总闸：`"switch"`（默认）听上面的开关，改成别的值一定关。
 - **管理页**（`/admin`）：今日概况和 7 天趋势、大厅公告、开放注册、钱包规则（即时生效、留记录）、给朋友建号、重设密码、删号、
-  账号详情（钱包摘要、战绩、最近 30 笔流水）、筹码统计；大厅里有"管理筹码"小窗口。页面上动不了管理员账号，管理员只能用命令行工具建。
+  账号详情（钱包摘要、战绩、最近 30 笔流水）、筹码统计、"管理筹码"小窗口。页面上动不了管理员账号，管理员只能用命令行工具建。
 - **隐私说明**（`/privacy`）：其中"积分和筹码"一段适用于所有游戏：免费、没有充值，积分筹码没有现金价值，不能买、换、转让，不设奖品。
 - **防刷和熔断**：持久限流、每天上限、内存令牌桶；按类别的写入预算和熔断档位（`docs/platform-backend.md` 5.4、6.6）。
 
@@ -36,7 +36,7 @@ npm test           # 类型检查 + vitest（跑在本地 workerd 里，D1 是�
 npm run build      # 类型检查 + 正式构建到 dist/
 npm run preview    # 用正式构建启动服务 0.0.0.0:4180
 npm run smoke      # 界面冒烟：临时本地 D1 + 无头浏览器走主流程，控制台零报错，截图到 shots/（5181 要空着）
-npm run smoke -- --only=wallet   # 只跑一段：wallet chunk next stats boards friends rules overview notice nudge
+npm run smoke -- --only=wallet   # 只跑一段：wallet chunk next stats boards friends rules overview notice nudge sound
 ```
 
 起接口前先 `npm run build` 生成 `dist/`（wrangler 把它当静态资源目录；改了界面要重新 build），再把 `.dev.vars.example` 复制成 `.dev.vars`
@@ -80,7 +80,7 @@ ARCADE_ADMIN_TOKEN=dev:local-dev-admin-token-000000 npm run admin -- create me �
 | `API_MODE` | Secret，可选 | 紧急开关 `normal` / `readonly` / `off`（`docs/platform-backend.md` 6.6） |
 | `PEPPER_*_PREV` | Secret，可选 | 换 pepper 时还要认的旧值（`PEPPER_IP` 没有，`docs/platform-backend.md` 5.1） |
 
-每一项的说明也写在 `.dev.vars.example` 和 `package.json` 的 `cloudflare.bindings` 里。Secret 一律自己生成随机值（`openssl rand -hex 24`），
+必填的几项也写在 `.dev.vars.example` 和 `package.json` 的 `cloudflare.bindings` 里。Secret 一律自己生成随机值（`openssl rand -hex 24`），
 不要用 `.dev.vars.example` 里的本地假值。另有 Cron（每天 UTC 19:17）跑统计和清理，写在 `wrangler.jsonc` 里。
 
 ### 一键部署（Deploy to Cloudflare）
@@ -146,14 +146,16 @@ platform/
 │  ├─ games.ts          游戏目录（界面和接口共用）
 │  ├─ session.tsx       登录状态；wallet.tsx 钱包余额；api.ts 接口封装；router.tsx 极简路由
 │  ├─ gamefile.ts       读各游戏公开的 JSON（titles.ts 读称号名，daily.ts 读每日榜分数写法）
-│  └─ format.ts、ui.tsx、ledger.tsx、next.ts   格式化、表单和恢复码卡片、流水列表、登录后跳回的地址
+│  ├─ icons.tsx、sound.ts  手写 SVG 图标和小插画、大厅点按声（WebAudio 合成，可关）
+│  ├─ styles.css        全站样式：开头是主题变量（颜色、间距、字号、圆角、阴影），组件只用变量
+│  └─ format.ts、ui.tsx、ledger.tsx、next.ts、play.ts   格式化、表单和恢复码卡片、流水列表、登录后跳回的地址、进游戏的地址
 ├─ worker/              Worker
 │  ├─ index.ts          入口：/api/* 交给 api/router.ts；Cron；导出钱包 RPC 入口 WalletService（wallet-service.ts）
 │  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、boards、saves、stats、leaderboard、settings；
 │                       钱包 wallet.ts（核心）→ wallet-store.ts（读写）→ wallet-api.ts（接口），只能 api → store → 核心这样 import；
 │                       crypto、validate、ratelimit、meter、db、time、config（所有上限和阈值的默认值）
 ├─ migrations/          D1 迁移，只增不删
-├─ public/              静态资源：_headers（CSP 等安全头）、covers/（游戏封面）
+├─ public/              静态资源：_headers（CSP 等安全头）、covers/（游戏封面）、favicon.svg、bg.svg（底色小图案）
 ├─ test/                接口测试（每个接口断言写入行数，docs/platform-backend.md 7.2）
 ├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面
 ├─ wrangler.jsonc       Worker 配置（不含域名和正式库 id）

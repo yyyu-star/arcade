@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, errorText, type NoticeState, type RegistrationState, type WalletRules, type WalletRulesState } from '../../api.ts';
 import { Field, FormError, Panel, SubmitButton, useSubmit, useWritable } from '../../ui.tsx';
-import { chips, timeText } from './common.ts';
+import { num, timeText } from './common.ts';
 
 /** 大厅公告（0.10.8）：发了以后登录的人在大厅顶上看到，别的服务器最多晚 30 秒 */
 export function NoticePanel() {
@@ -161,7 +161,7 @@ export function WalletRulesPanel() {
     if (!state || !changed.length || bad) return;
     const body: Partial<WalletRules> = {};
     for (const k of changed) body[k] = Number(draft[k]);
-    const lines = changed.map((k) => `${RULE_TEXT[k].label}：${chips(state.rules[k])} → ${chips(body[k]!)}`).join('\n');
+    const lines = changed.map((k) => `${RULE_TEXT[k].label}：${num(state.rules[k])} → ${num(body[k]!)}`).join('\n');
     if (!window.confirm(`马上对所有人生效：\n${lines}\n确定吗？`)) return;
     take(await api.admin.setWalletRules(body));
     setSaved(true);
@@ -176,7 +176,7 @@ export function WalletRulesPanel() {
             <Field
               key={k}
               label={RULE_TEXT[k].label}
-              hint={`${RULE_TEXT[k].hint}。默认 ${chips(state.defaults[k])}`}
+              hint={`${RULE_TEXT[k].hint}。默认 ${num(state.defaults[k])}`}
               name={k}
               type="number"
               inputMode="numeric"
@@ -187,7 +187,7 @@ export function WalletRulesPanel() {
               onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
             />
           ))}
-          <FormError text={bad && state ? `「${RULE_TEXT[bad].label}」要是 ${chips(state.range[bad][0])} 到 ${chips(state.range[bad][1])} 的整数` : error} />
+          <FormError text={bad && state ? `「${RULE_TEXT[bad].label}」要是 ${num(state.range[bad][0])} 到 ${num(state.range[bad][1])} 的整数` : error} />
           {saved && !changed.length && <p className="ok">改好了，已经生效</p>}
           <SubmitButton busy={busy} disabled={!changed.length || !!bad || !writable}>
             {changed.length ? `保存（改 ${changed.length} 条）` : '没有改动'}
@@ -200,7 +200,7 @@ export function WalletRulesPanel() {
                   <li key={l.at}>
                     {timeText(l.at)} {l.by}：
                     {Object.entries(l.changes)
-                      .map(([k, [from, to]]) => `${RULE_TEXT[k as keyof WalletRules].label} ${chips(from)} → ${chips(to)}`)
+                      .map(([k, [from, to]]) => `${RULE_TEXT[k as keyof WalletRules].label} ${num(from)} → ${num(to)}`)
                       .join('；')}
                   </li>
                 ))}

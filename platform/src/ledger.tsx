@@ -1,6 +1,6 @@
 /** 钱包流水（0.10.7 起记，每人最近 30 笔）：管理页查人、钱包页"最近进出"共用。 */
 import type { LedgerEntry } from './api.ts';
-import { num, signed, timeText } from './format.ts';
+import { gameName, num, signed, timeText } from './format.ts';
 
 const LEDGER_TEXT: Record<LedgerEntry['t'], string> = {
   grant: '新号送的',
@@ -13,8 +13,8 @@ const LEDGER_TEXT: Record<LedgerEntry['t'], string> = {
 };
 
 
-/** entries 新的在前；gameName 把游戏 id 换成名字 */
-export function LedgerList({ entries, gameName }: { entries: LedgerEntry[]; gameName: (id: string) => string }) {
+/** entries 新的在前 */
+export function LedgerList({ entries }: { entries: LedgerEntry[] }) {
   return (
     <ul className="ledger" data-testid="ledger">
       {entries.map((e, i) => (

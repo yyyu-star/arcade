@@ -82,7 +82,7 @@ h1, h2, h3 { line-height: 1.25; }
 /* 手机上去掉点击的灰色高亮和双击缩放的延迟 */
 a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 /* 数字一律等宽，排行、余额、表格上下对得齐 */
-.stats, .stats-table, .overview dd, .rank__value, .stake__amount, .wallet__balance, .account--chips, .career__facts dd, .career__summary, .ledger, .card__week { font-variant-numeric: tabular-nums; }
+.stats-table, .overview dd, .rank__value, .stake__amount, .wallet__balance, .account--chips, .career__facts dd, .career__summary, .ledger, .card__week { font-variant-numeric: tabular-nums; }
 .up { color: var(--good); }
 .down { color: var(--bad); }
 
@@ -97,7 +97,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .top { position: relative; margin-bottom: var(--s-8); display: flex; flex-direction: column; align-items: center; gap: var(--s-2); text-align: center; }
 .top__home { color: inherit; text-decoration: none; border-radius: var(--r-sm); }
 .top__logo { display: inline-flex; align-items: center; gap: var(--s-3); font-size: var(--fs-3xl); margin: 0; color: var(--accent); letter-spacing: 2px; text-shadow: 2px 2px 0 var(--line); }
-.logo-mark { flex: none; filter: drop-shadow(2px 2px 0 var(--line)); transform: rotate(-6deg); transition: transform 0.2s ease; }
+.logo-mark { flex: none; transform: rotate(-6deg); transition: transform 0.2s ease; }
 @media (hover: hover) {
   .top__home:hover .logo-mark { transform: rotate(0deg) scale(1.06); }
 }
@@ -357,7 +357,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 
 /* ---------- 钱包 ---------- */
 .wallet__balance { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-1) 0 var(--s-2); font-size: 44px; font-weight: 800; line-height: 1.1; }
-.wallet__balance .coin { border-radius: 50%; background: radial-gradient(circle, rgb(255 200 61 / 55%) 0 40%, transparent 70%); filter: drop-shadow(2px 2px 0 var(--line)); }
+.wallet__balance .coin { border-radius: 50%; background: radial-gradient(circle, rgb(255 200 61 / 55%) 0 40%, transparent 70%); }
 .wallet__relief { margin-top: var(--s-4); }
 .wallet__relief .note { margin: var(--s-2) 0 0; }
 .stake { border-width: var(--bw); }
@@ -422,15 +422,12 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
  * 宽表格（管理页的趋势和筹码统计）：手机上横着滑；右边还有没露出来的列时，右沿有一道阴影提示能滑。
  * 阴影用两层背景：遮罩跟着内容走（local），阴影钉在框上（scroll），滑到头时遮罩正好盖住阴影
  */
-.table-wrap, .stats-table {
+.stats-table {
   display: block; overflow-x: auto; -webkit-overflow-scrolling: touch;
   background:
     linear-gradient(to left, var(--surface) 30%, rgb(255 250 240 / 0%)) right / 32px 100% no-repeat local,
     radial-gradient(farthest-side at 100% 50%, rgb(58 43 51 / 22%), transparent) right / 12px 100% no-repeat scroll;
 }
-.stats { border-collapse: collapse; font-size: var(--fs-sm); white-space: nowrap; }
-.stats th, .stats td { padding: 6px var(--s-3); border-bottom: var(--bw-thin) solid var(--divider); text-align: right; }
-.stats th:first-child, .stats td:first-child, .stats td:last-child, .stats th:last-child { text-align: left; }
 .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .stats-table th, .stats-table td { padding: var(--s-1) var(--s-2); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--divider); }
 .stats-table th:first-child, .stats-table td:first-child { text-align: left; }

@@ -23,8 +23,6 @@ export interface GameEntry {
   /** 本地开发时的地址（游戏自己的开发服务器） */
   devUrl?: string;
   status: GameStatus;
-  /** 代码所在仓库（私有；游戏在总仓库的 games/<id>/ 下） */
-  repo?: string;
   /**
    * 不按日期的固定排行榜（如 endless），名字只用小写字母、数字、短横线，不以 daily 开头。
    * 每日榜 daily-YYYY-MM-DD 不用登记；没登记的榜交分一律不收（防止随便开榜把库撑大）。
@@ -58,7 +56,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/kaipan/',
     devUrl: 'http://localhost:5173/',
     status: 'playable',
-    repo: 'yyyu-star/arcade',
     daily: true,
   },
   {
@@ -71,7 +68,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/guandan/',
     devUrl: 'http://localhost:5174/',
     status: 'playable',
-    repo: 'yyyu-star/arcade',
     online: { label: '好友房', query: 'online=1' },
   },
   {
@@ -84,7 +80,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/texas/',
     devUrl: 'http://localhost:5175/',
     status: 'playable',
-    repo: 'yyyu-star/arcade',
     online: { label: '好友房', query: 'online=1' },
   },
   {
@@ -97,8 +92,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/mahjong/',
     devUrl: 'http://localhost:5176/',
     status: 'playable',
-    repo: 'yyyu-star/arcade',
-    // 麻将 PR③ 起认 ?online=1 直接进好友房；之前打开的是选桌页，那里本来就有"好友房"入口（维护者 2026-10-16）
     online: { label: '好友房', query: 'online=1' },
   },
   {
@@ -112,7 +105,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/racing/',
     devUrl: 'http://localhost:5177/',
     status: 'playable',
-    repo: 'yyyu-star/arcade',
     // 只有娱乐模式，不碰钱包（游戏 README）
     wallet: false,
     online: { label: '好友房', query: 'online=1' },

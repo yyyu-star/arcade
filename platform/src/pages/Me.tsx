@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api, ApiFail, type SaveSlot } from '../api.ts';
-import { timeText } from '../format.ts';
+import { fullDateText, timeText } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { confirmLeave, Link, navigate } from '../router.tsx';
 import { useSession } from '../session.tsx';
@@ -13,7 +13,6 @@ import { Field, FormError, Panel, RecoveryCodeCard, SubmitButton, useSubmit } fr
 /** 再验证（输当前密码）时 bad_credentials 只可能是密码错，别说"用户名或密码不对"。 */
 const REAUTH = { bad_credentials: '密码不对' };
 
-const dateText = (ms: number) => new Date(ms).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 
 export function MePage() {
   const { loading, user, service } = useSession();
@@ -54,7 +53,7 @@ export function MePage() {
             </Link>
           </dd>
           <dt>注册于</dt>
-          <dd>{dateText(user.createdAt)}</dd>
+          <dd>{fullDateText(user.createdAt)}</dd>
         </dl>
         <Rename />
         <LogoutButton />

@@ -3,7 +3,7 @@
  * 钱包规则（wallet_rules）也存在这张表里，代码在 wallet-store.ts。
  *
  * 规则（维护者 2026-10-14 同意）：
- * - vars.REGISTRATION 是紧急总闸：只有 "switch"（不分大小写、去首尾空白）才听 D1 的开关；"off"、没设、写错、旧的 "open"/"closed" 一律强制关（fail-closed）。
+ * - vars.REGISTRATION 是紧急总闸：只有 "switch"（不分大小写、去首尾空白）才听 D1 的开关；"off"、没设、写错一律强制关（fail-closed）。
  * - 听开关时：settings 里 registration = 'open' 才开，没有这一行按关。
  * - 注册接口每次读最新值（1 行）：关了以后不会还有人注册进来。
  * - /api/me 的 registration 字段用每个 isolate 30 秒的内存缓存：游戏闸门每次打开游戏首页都问 /api/me，不想给每次访问都加一次 D1 读；

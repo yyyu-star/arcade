@@ -4,7 +4,7 @@
 
 ## 大厅封面 `public/covers/<id>.webp`（16:9）
 
-0.9.8 起统一 800×450：卡片最宽约 350 像素，手机 2 倍屏也够，三张合计从约 218 KB 降到约 135 KB。德州按这个尺寸从 SVG 直接渲染；开盘、掼蛋给的大图用 `npm run cover -- --shrink` 缩；麻将给的是 SVG，用 `npm run cover -- --from=<SVG> --id=mahjong` 光栅化。
+0.9.8 起统一 800×450：卡片最宽约 350 像素，手机 2 倍屏也够，当时的三张（开盘、掼蛋、德州）合计从约 218 KB 降到约 135 KB。德州按这个尺寸从 SVG 直接渲染；开盘、掼蛋给的大图用 `npm run cover -- --shrink` 缩；麻将给的是 SVG，用 `npm run cover -- --from=<SVG> --id=mahjong` 光栅化。
 
 | 封面 | 来源 |
 |---|---|

@@ -150,7 +150,7 @@ export function WalletPage() {
         </Panel>
       )}
       <Panel icon="coin" title="最近进出">
-        {ledger.length > 0 ? <LedgerList entries={ledger} gameName={gameName} /> : <Empty>还没有进出。</Empty>}
+        {ledger.length > 0 ? <LedgerList entries={ledger} /> : <Empty>还没有进出。</Empty>}
         <p className="note">只留最近 30 笔；10 月 16 日以前的没记下来。</p>
       </Panel>
     </>

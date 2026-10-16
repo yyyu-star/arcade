@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { type AdminOverview, api, errorText, type WalletDayStats } from '../../api.ts';
 import { FormError, Panel } from '../../ui.tsx';
 import { WALLET_GAMES } from '../../games.ts';
-import { chips, gameName } from './common.ts';
+import { num, gameName } from './common.ts';
 
 /** 今日概况（0.10.7）：今天现算，加前 6 天的趋势。0.10.7 以前的记录没有人数，写"—"。 */
 export function Overview() {
@@ -21,7 +21,7 @@ export function Overview() {
   }, []);
   const games = (d: WalletDayStats) => Object.entries(d.games);
   const sum = (d: WalletDayStats, k: 'in' | 'out') => games(d).reduce((t, [, g]) => t + g[k], 0);
-  const dash = (n: number | undefined) => (n === undefined ? '—' : chips(n));
+  const dash = (n: number | undefined) => (n === undefined ? '—' : num(n));
   return (
     <Panel icon="shield" title="今日概况">
       {error && <FormError text={error} />}
@@ -31,7 +31,7 @@ export function Overview() {
           <dl className="overview" data-testid="overview">
             <div>
               <dt>来过</dt>
-              <dd>{chips(data.today.visitors)}</dd>
+              <dd>{num(data.today.visitors)}</dd>
             </div>
             <div>
               <dt>玩过筹码局</dt>
@@ -43,19 +43,19 @@ export function Overview() {
             </div>
             <div>
               <dt>新号送的</dt>
-              <dd>{chips(data.today.grant)}</dd>
+              <dd>{num(data.today.grant)}</dd>
             </div>
             <div>
               <dt>管理员调整</dt>
-              <dd>{chips(data.today.admin ?? 0)}</dd>
+              <dd>{num(data.today.admin ?? 0)}</dd>
             </div>
           </dl>
           {games(data.today).length > 0 ? (
             <ul className="overview__games">
               {games(data.today).map(([g, x]) => (
                 <li key={g}>
-                  <strong>{gameName(g)}</strong> {dash(x.players)} 人 · 带入 {chips(x.in)} · 结回 {chips(x.out)}
-                  {x.capped ? ` · 到顶没进 ${chips(x.capped)}` : ''}
+                  <strong>{gameName(g)}</strong> {dash(x.players)} 人 · 带入 {num(x.in)} · 结回 {num(x.out)}
+                  {x.capped ? ` · 到顶没进 ${num(x.capped)}` : ''}
                 </li>
               ))}
             </ul>
@@ -83,9 +83,9 @@ export function Overview() {
                   {WALLET_GAMES.map(({ id }) => (
                     <td key={id}>{d.games[id] ? dash(d.games[id]!.players) : 0}</td>
                   ))}
-                  <td>{chips(sum(d, 'in'))}</td>
-                  <td>{chips(sum(d, 'out'))}</td>
-                  <td>{chips(d.relief)}</td>
+                  <td>{num(sum(d, 'in'))}</td>
+                  <td>{num(sum(d, 'out'))}</td>
+                  <td>{num(d.relief)}</td>
                 </tr>
               ))}
             </tbody>

@@ -50,7 +50,9 @@ export function ShieldIcon() {
 /** 大厅的标志：一台小街机（屏幕里一个像素小怪、摇杆和两个按钮） */
 export function LogoMark({ size = 48 }: { size?: number }) {
   return (
-    <svg className="logo-mark" viewBox="0 0 48 48" width={size} height={size} aria-hidden="true" focusable="false">
+    <svg className="logo-mark" viewBox="0 0 50 50" width={size} height={size} aria-hidden="true" focusable="false">
+      {/* 错开的实心影子画在图里，不用 CSS filter（filter 要单独合成一层，首屏多花时间） */}
+      <rect x="11" y="5" width="30" height="42" rx="6" fill="#3a2b33" />
       <rect x="9" y="3" width="30" height="42" rx="6" fill="#f07a3a" stroke="#3a2b33" strokeWidth="3" />
       <rect x="13" y="7" width="22" height="6" rx="2" fill="#ffd257" stroke="#3a2b33" strokeWidth="2" />
       <rect x="13" y="15.5" width="22" height="15" rx="2" fill="#2b2140" stroke="#3a2b33" strokeWidth="2" />

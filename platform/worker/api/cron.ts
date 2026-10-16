@@ -7,7 +7,7 @@ import type { Env } from '../env';
 import { limitsOf } from './config';
 import { DAY } from './context';
 import { Db, newStats } from './db';
-import { meter } from './meter';
+import { hourKey, meter } from './meter';
 import { GAME_IDS } from '../../src/games';
 import { deleteUserStatements } from './session';
 import { beijingDate } from './time';
@@ -70,7 +70,7 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
       );
     }
     if (budget() > 0) {
-      const cutoff = new Date(now - 7 * DAY).toISOString().slice(0, 13);
+      const cutoff = hourKey(now - 7 * DAY);
       await db.run(
         db.stmt('DELETE FROM meter_hourly WHERE hour IN (SELECT hour FROM meter_hourly WHERE hour < ?1 LIMIT ?2)', cutoff, budget()),
       );
