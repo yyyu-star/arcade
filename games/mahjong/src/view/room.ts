@@ -5,7 +5,7 @@
 import type { RoomInfo, You } from 'arcade-kit/protocol';
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf } from '../game/stakes.ts';
-import type { RoomOpts, RoomView } from '../room/rules.ts';
+import { MIN_HUMANS, type RoomOpts, type RoomView } from '../room/rules.ts';
 import { avatarSvg } from './avatar.ts';
 import { button, el } from './dom.ts';
 import { num, STAKES_NAME, VARIANT_NAME, walletError } from './text.ts';
@@ -56,15 +56,20 @@ export function renderWaiting(box: HTMLElement, p: WaitingProps): void {
     }
   });
   el('p', 'room-hint', box, '空着的座位开打时由电脑补上；开打以后朋友也能进来接管电脑的座位。');
-  if (stakesOf(p.opts?.stakes)?.wallet) el('p', 'room-hint', box, '实盘：坐下的人在房主开打时各从钱包带一份；不想带就别坐，看着也行。');
+  const wallet = !!stakesOf(p.opts?.stakes)?.wallet;
+  // 实盘至少两个真人：好友房是来和朋友打的，电脑座位的钱归庄家（房间那边也拦，这里先说清楚）
+  const few = wallet && p.room.seats.filter((s) => s.kind === 'human').length < MIN_HUMANS;
+  if (wallet) el('p', 'room-hint', box, '实盘：坐下的人在房主开打时各从钱包带一份；不想带就别坐，看着也行。电脑都是最强的。');
+  if (few) el('p', 'room-hint warn', box, '实盘好友房至少要两个人；一个人想玩实盘，去单机。');
   const row = el('div', 'go-row', box);
   button('act soft', row, '离开房间', p.onLeave);
-  if (p.host) button('act go big', row, '开打', p.onStart);
-  else el('span', 'room-wait', row, '等房主开打');
+  if (p.host) button('act go big', row, '开打', p.onStart).disabled = few;
+  else el('span', 'room-wait', row, few ? '等朋友坐下' : '等房主开打');
 }
 
 /** 开打以后牌桌顶上的一条（没有要说的返回 null） */
 export function roomNotice(v: RoomView, seat: number | null, onRebuy: () => void): HTMLElement | null {
+  if (v.unrated && !v.done) return note('实盘只有一个人，这一场不计输赢、不动钱包');
   if (seat === null) return note('你在旁观，点空出来的电脑座位可以接手');
   if (v.opening) return note('等大家的筹码到账……');
   if (v.own[seat]) return null;

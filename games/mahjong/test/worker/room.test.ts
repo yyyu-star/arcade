@@ -166,16 +166,17 @@ describe('实盘开局', () => {
     expect(host.raw.some((r) => r.includes('"key"'))).toBe(false);
   });
 
-  it('有人离座：他的一份马上结回钱包（余额回来），桌上那一份没了；另一个人不受影响', async () => {
+  it('有人离座、只剩一个人在下注：这一场当场结束，两个人的那一份都马上结回钱包', async () => {
     const { ids, host, guest } = await table();
     await guest.see((x) => x.own[1]! && !x.opening);
     guest.send({ t: 'leave' });
     await guest.until((m) => m.t === 'state' && m.you.seat === null);
-    for (let i = 0; i < 150 && (await walletOf(ids[1]!)).stakes.length > 0; i++) await sleep(20);
+    for (let i = 0; i < 150 && ((await walletOf(ids[0]!)).stakes.length > 0 || (await walletOf(ids[1]!)).stakes.length > 0); i++) await sleep(20);
+    // 刚开局（换三张），桌上的筹码还是一整份
     expect(await walletOf(ids[1]!)).toMatchObject({ balance: NEW_BALANCE, stakes: [] });
-    expect(await walletOf(ids[0]!)).toMatchObject({ balance: NEW_BALANCE - SHARE });
-    const v = await host.see((x) => !x.own[1]!);
-    expect(v.own[0]).toBe(true);
+    expect(await walletOf(ids[0]!)).toMatchObject({ balance: NEW_BALANCE, stakes: [] });
+    const v = await host.see((x) => x.cut);
+    expect(v).toMatchObject({ done: true, own: [false, false, false, false] });
   });
 
   it('钱包只有 500：先被拒 no_funds，房间自动少带 500 再扣一次，成功', async () => {

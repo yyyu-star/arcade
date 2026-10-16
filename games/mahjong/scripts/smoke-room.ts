@@ -7,7 +7,8 @@
  * 内容：
  * 1. 娱乐房：A 开房（局数 4）、B 凭 ?room= 进等人页坐下、A 开打，两边自动打满 N 局（换三张、定缺、能胡就胡、不然过、打最右边那张），
  *    B 离开并确认，A 继续打、牌桌还在动；
- * 2. 实盘小档房：A、B 进房开打，检查假钱包各扣 2,000、stakes 里各有 mahjong 的 server 模式一份；B 中途离开，那一份马上没了、余额加回结回的数。
+ * 2. 实盘小档房：A 一个人时"开打"灰着、有"至少要两个人"的提示；A、B 进房开打，检查假钱包各扣 2,000、stakes 里各有 mahjong 的 server 模式一份；
+ *    B 中途离开，只剩 A 一个人在下注：这一场当场结束，两个人的那一份都马上结回、余额加回结回的数，A 的结算上写着提前结束。
  * 两边控制台零报错。端口由系统分配（不占 5176 / 4176）。截图放在 shots/（--shots 可改）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -249,6 +250,9 @@ try {
   log('开房前钱包', w0.a.balance, w0.b.balance);
   code = await openRoom(pa, base, '小档');
   log('A 开实盘小档房', code);
+  await pa.waitForSelector('.room-seat.me');
+  check(await pa.isDisabled('button:text-is("开打")'), '实盘房只有 A 一个人："开打"灰着');
+  check(!!(await pa.$('.room-hint.warn:has-text("至少要两个人")')), '实盘房只有 A 一个人：提示"至少要两个人"');
   await joinAndStart(pa, pb, base, code);
   // 带入是房间开打后异步办的，等两边到账
   let w1 = { a: await wallet(pa), b: await wallet(pb) };
@@ -276,16 +280,19 @@ try {
   log('B 离开后钱包', w2.balance, JSON.stringify(w2.stakes));
   check(w2.stakes.length === 0, 'B 离开后那一份马上没了');
   check(w2.balance > w1.b.balance, `B 余额加回结回的数：${w1.b.balance} → ${w2.balance}（结回 ${w2.balance - w1.b.balance}）`);
-  const wa = await wallet(pa);
-  check(wa.stakes.length === 1, `B 走后 A 的那一份还在（余额 ${wa.balance}）`);
-  await pb.screenshot({ path: join(SHOTS, 'room-stake-b.png') });
-  await leaveRoom(pa, 'A');
-  let wa2 = await wallet(pa);
-  for (let i = 0; i < 25 && wa2.stakes.length > 0; i++) {
+  // 只剩 A 一个人在下注：这一场当场结束，A 的那一份也马上结回（实盘至少两个真人）
+  let wa = await wallet(pa);
+  for (let i = 0; i < 25 && wa.stakes.length > 0; i++) {
     await sleep(200);
-    wa2 = await wallet(pa);
+    wa = await wallet(pa);
   }
-  log('A 离开后钱包', wa2.balance, JSON.stringify(wa2.stakes));
+  check(wa.stakes.length === 0 && wa.balance > w1.a.balance, `B 走后只剩 A：这一场提前结束，A 的那一份也结回了（余额 ${w1.a.balance} → ${wa.balance}）`);
+  await pa.waitForSelector('.mask.end .settle-note:has-text("提前结束")', { timeout: 10_000 });
+  check(true, 'A 的结算上写着"实盘这一场提前结束"');
+  await pb.screenshot({ path: join(SHOTS, 'room-stake-b.png') });
+  await pa.screenshot({ path: join(SHOTS, 'room-stake-cut.png') });
+  await pa.click('.mask.end button:text-is("回选桌")');
+  await pa.waitForSelector('.lobby-head', { timeout: 5_000 });
 
   // ---------- 再来一场（0.3.6）：娱乐房打完一整场，A 点"再来一场"，B 看到提示、自动跟进新房间，坐回和上一场一样的相对位置 ----------
   t = Date.now();

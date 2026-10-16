@@ -6,6 +6,7 @@ import { snapshotBytes } from 'arcade-kit/game';
 import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, test } from 'vitest';
 import type { XzState, XzView } from '../src/core/variants/sichuan-xuezhan/index.ts';
+import { STRONGEST } from '../src/ai/personas.ts';
 import { EMOTES } from '../src/game/emotes.ts';
 import { mahjongRoom as G, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
@@ -112,21 +113,23 @@ describe('开局和带入', () => {
   });
 
   test('钱包不够一份：有多少带多少（同一份、换个操作 id），筹码按带进来的算', () => {
-    let s = begin(['human', 'ai', 'ai', 'ai']);
+    let s = G.settled!(begin(['human', 'human', 'ai', 'ai']), 'b1', OK);
     s = G.settled!(s, 'b0', { ok: false, error: 'no_funds', balance: 500 });
-    expect(fx(s).map(strip)).toEqual([{ id: 'b1', seat: 0, kind: 'debit', amount: 500 }]);
+    expect(fx(s).map(strip)).toEqual([{ id: 'b2', seat: 0, kind: 'debit', amount: 500 }]);
     expect(fx(s)[0]!.ref).toBe(`${s.ref}s0n1`);
-    s = G.settled!(s, 'b1', OK);
+    s = G.settled!(s, 'b2', OK);
     expect(s.own[0]).toBe(true);
     expect(g(s, 0).seats[0]!.chips).toBe(500);
     expect(G.view(s, 0).inn).toBe(500);
     // 少带的数就是他的钱包余额：只给本人看；桌上的筹码本来就公开
-    expect(G.view(s, 1).inn).toBe(0);
+    expect(G.view(s, 1).inn).toBe(SHARE);
+    expect(G.view(s, 2).inn).toBe(0);
   });
 
   test('被拒（一分钱没有）：座位由庄家出筹码、这里替电脑打，他不能出手；可以再带一次', () => {
-    let s = begin(['human', 'human', 'ai', 'ai']);
-    s = G.settled!(G.settled!(s, 'b0', OK), 'b1', { ok: false, error: 'no_funds', wallet: { balance: 0 } });
+    // 三个真人：被拒一个还剩两个在下注，接着打
+    let s = begin(['human', 'human', 'human', 'ai']);
+    s = G.settled!(G.settled!(G.settled!(s, 'b0', OK), 'b2', OK), 'b1', { ok: false, error: 'no_funds', wallet: { balance: 0 } });
     expect(s.opening).toBe(false);
     expect(G.view(s, 1).refused).toBe('no_funds');
     expect(G.view(s, 0).refused).toBeNull();
@@ -135,11 +138,11 @@ describe('开局和带入', () => {
     expect(seatsOf(s)).not.toContain(1);
     expect(G.apply(s, 1, { t: 'play', v: 'sichuan-xuezhan', a: { t: 'que', suit: 0 } })).toEqual({ error: 'not_seated' });
     s = act(s, 1, { t: 'rebuy' });
-    expect(fx(s).map(strip)).toEqual([{ id: 'b2', seat: 1, kind: 'debit', amount: SHARE }]);
+    expect(fx(s).map(strip)).toEqual([{ id: 'b3', seat: 1, kind: 'debit', amount: SHARE }]);
     // 没开成的那一份不算，再带还是第 1 份
     expect(fx(s)[0]!.ref).toBe(`${s.ref}s1n1`);
     expect(G.view(s, 1).buying[1]).toBe(true);
-    s = G.settled!(s, 'b2', OK);
+    s = G.settled!(s, 'b3', OK);
     expect(s.own[1]).toBe(true);
     expect(g(s, 1).seats[1]!.chips).toBe(SHARE);
   });
@@ -157,14 +160,66 @@ describe('开局和带入', () => {
   });
 });
 
+describe('实盘至少两个真人', () => {
+  test('开局只有一个真人（旧页面、脚本绕过了灰掉的"开打"）：整场不计输赢、不碰钱包，按娱乐打完', () => {
+    let s = begin(['human', 'ai', 'ai', 'ai']);
+    expect(s.unrated).toBe(true);
+    expect(fx(s)).toEqual([]);
+    expect(s.opening).toBe(false);
+    expect(s.own).toEqual([true, false, false, false]);
+    expect(G.view(s, 0)).toMatchObject({ unrated: true, cut: false, canRebuy: false });
+    s = drive(s);
+    expect(s.done).toBe(true);
+    expect(fx(s)).toEqual([]);
+    // 中途有人来接管电脑的座位也一样不碰钱包
+    let t = drive(begin(['human', 'ai', 'ai', 'ai']), 200, (x) => x.n > 20);
+    t = G.seated!(t, 2, 'human');
+    expect(fx(t)).toEqual([]);
+    expect(t.own[2]).toBe(true);
+  });
+
+  test('实盘桌的电脑一律用最强的性格；娱乐还按档位挑', () => {
+    for (const st of ['small', 'mid', 'big', 'lux']) {
+      expect(g(begin(['human', 'human', 'ai', 'ai'], st), 0).seats.map((x) => x.persona)).toEqual([STRONGEST, STRONGEST, STRONGEST, STRONGEST]);
+    }
+    expect(new Set(g(begin(['human', 'human', 'ai', 'ai'], 'fun'), 0).seats.map((x) => x.persona)).size).toBe(4);
+  });
+
+  test('开打以后只剩一个真人在下注：这一场当场结束，所有人桌上的筹码按那一刻结回', () => {
+    let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
+    s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
+    const chips = g(s, null).seats.map((x) => x.chips);
+    s = G.seated!(s, 1, 'ai');
+    expect(s.cut).toBe(true);
+    expect(s.done).toBe(true);
+    expect(g(s, 0).phase).toBe('over');
+    expect(G.view(s, 0).cut).toBe(true);
+    expect(fx(s).map(strip)).toEqual([
+      { id: 'c2', seat: 1, kind: 'credit', amount: Math.max(0, Math.min(chips[1]!, 4 * SHARE)) },
+      { id: 'c3', seat: 0, kind: 'credit', amount: Math.max(0, Math.min(chips[0]!, 4 * SHARE)) },
+    ]);
+    expect(G.apply(s, 0, { t: 'play', v: 'sichuan-xuezhan', a: { t: 'zimo' } })).toEqual({ error: 'closed' });
+    expect(G.apply(s, 0, { t: 'rebuy' })).toEqual({ error: 'closed' });
+  });
+
+  test('开局有人被拒、只剩一个人在下注：当场结束，到账的那一份原样结回', () => {
+    let s = begin(['human', 'human', 'ai', 'ai']);
+    s = G.settled!(G.settled!(s, 'b0', OK), 'b1', { ok: false, error: 'no_funds', balance: 0 });
+    expect(s.cut).toBe(true);
+    expect(fx(s).map(strip)).toEqual([{ id: 'c2', seat: 0, kind: 'credit', amount: SHARE }]);
+    expect(G.view(s, 1).canRebuy).toBe(false);
+  });
+});
+
 describe('离座和结回', () => {
   test('离座：马上带着筹码和小结结回，座位交给电脑接着打；回来再坐开新的一份', () => {
-    let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
+    // 三个真人：走一个还剩两个在下注，接着打
+    let s = settleAll(begin(['human', 'human', 'human', 'ai']));
     s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
     const chips = g(s, 0).seats[0]!.chips;
     s = G.seated!(s, 0, 'ai');
     const c = fx(s);
-    expect(c.map(strip)).toEqual([{ id: 'c2', seat: 0, kind: 'credit', amount: Math.max(0, Math.min(chips, 4 * SHARE)) }]);
+    expect(c.map(strip)).toEqual([{ id: 'c3', seat: 0, kind: 'credit', amount: Math.max(0, Math.min(chips, 4 * SHARE)) }]);
     expect(c[0]!.ref).toBe(`${s.ref}s0n1`);
     expect(c[0]!.stats).toMatchObject({ rounds: expect.any(Number), wins: expect.any(Number) });
     expect(s.own[0]).toBe(false);
@@ -179,19 +234,19 @@ describe('离座和结回', () => {
   });
 
   test('真人都走了：房间就算打完（结回排上，kit 办完再关）', () => {
-    let s = settleAll(begin(['human', 'ai', 'ai', 'ai']));
-    s = G.seated!(s, 0, 'ai');
+    let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
+    s = G.seated!(G.seated!(s, 0, 'ai'), 1, 'ai');
     expect(G.over(s)).toBe(true);
-    expect(fx(s)).toHaveLength(1);
+    expect(fx(s)).toHaveLength(2);
   });
 
   test('带入还在路上人就走了：到账后原样结回', () => {
-    let s = begin(['human', 'ai', 'ai', 'ai']);
+    let s = G.settled!(G.settled!(begin(['human', 'human', 'human', 'ai']), 'b1', OK), 'b2', OK);
     s = G.seated!(s, 0, 'ai');
     expect(G.over(s)).toBe(false);
     s = G.settled!(s, 'b0', OK);
-    expect(fx(s).map(strip)).toEqual([{ id: 'c1', seat: 0, kind: 'credit', amount: SHARE }]);
-    expect(G.over(s)).toBe(true);
+    expect(fx(s).map(strip)).toEqual([{ id: 'c3', seat: 0, kind: 'credit', amount: SHARE }]);
+    expect(s.done).toBe(false);
   });
 
   test('一场打完：桌上每个真人各结回一笔（按"最多赢 3 份"截过，带小结）；电脑的归庄家', () => {
@@ -245,10 +300,11 @@ describe('好友房的公平和边角', () => {
     expect(g(end, 0).events.some((e) => e.e === 'hu')).toBe(true);
   });
 
-  test('四个真人带入都被拒：全由庄家代打，一直打到整场结束，不卡住', () => {
+  test('四个真人带入都被拒：没人下注，这一场当场结束，不卡住', () => {
     let s = begin(['human', 'human', 'human', 'human']);
     for (const e of fx(s)) s = G.settled!(s, e.id, { ok: false, error: 'no_funds', balance: 0 });
     expect(s.own).toEqual([false, false, false, false]);
+    expect(s.cut).toBe(true);
     for (let k = 0; k < 100 && !G.over(s); k++) {
       // 谁也不用出手：停在结算，到点 resume
       expect(seatsOf(s)).toEqual([]);
@@ -259,7 +315,7 @@ describe('好友房的公平和边角', () => {
   });
 
   test('房间到点替庄家代打的座位代出（kit 的 timeout、ai 带 srv）：照样往下推；客户端发的被拒', () => {
-    let s = begin(['human', 'ai', 'ai', 'ai']);
+    let s = G.settled!(G.settled!(begin(['human', 'human', 'human', 'ai']), 'b1', OK), 'b2', OK);
     s = G.settled!(s, 'b0', { ok: false, error: 'no_funds', balance: 0 });
     // 构造一个 sync 没推完的局面：把一个"该庄家代打"的状态直接交给 apply
     const a = G.timeout!(s, 1);

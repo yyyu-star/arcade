@@ -89,4 +89,6 @@ export interface Variant<S, A, V, O> {
   seated(s: S, seat: number, kind: SeatKind): S;
   /** 好友房有人接管电脑的座位、带入到账：这个座位从 chips 重新算（输赢、"最多赢 3 份"都按它） */
   restake(s: S, seat: number, chips: number): S;
+  /** 这一场到此为止（好友房实盘只剩一个真人）：桌上的筹码按现在的数算，不再往下打，over 变 true */
+  finish(s: S): S;
 }

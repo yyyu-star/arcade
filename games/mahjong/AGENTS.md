@@ -11,7 +11,7 @@
   电脑只拿视图（`src/ai/` 不出现状态类型）。`test/arch.test.ts` 检查这些。
 - 隐藏信息：`view` 只放这个座位能看到的；别人的手牌、牌墙、密钥、换三张的牌、声明窗口里别人的选择一律不下发。
   声明窗口的名单是所有没胡的别家，真人的回答走 kit 的 `free`（DESIGN.md 第 6 节），改这块要保住"从外面看不出谁能碰杠胡"。
-- 改了电脑或底分，跑 `npm run sim 2000`（性格强弱再跑 `scripts/strength.ts`），结果写进 DESIGN.md 4.1。
+- 改了电脑或底分，跑 `npm run sim 2000`（性格强弱再跑 `scripts/strength.ts`，好友房实盘桌再跑 `scripts/stake-room.ts`），结果写进 DESIGN.md 4.1。
 - 改了牌桌布局，跑 `node scripts/capture.ts se-port|se-land|port|land 40` 看截图和"压住了"的报告（DESIGN.md 第 7 节）。
 - 筹码：钱包是平台的（服务绑定 `WALLET`，`props.game = "mahjong"`）；不能买、不能兑换、不能转让，界面写明"无任何现金价值"。
   显示钱包、平台的错误一律按 `docs/platform-backend.md` 15.10 的对照表说人话（`src/view/text.ts`）。

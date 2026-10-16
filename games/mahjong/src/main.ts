@@ -363,8 +363,12 @@ function drawWaiting(s: OnlineState): void {
 }
 
 function seatMetas(s: OnlineState, g: XzView): SeatMeta[] {
+  // 实盘桌的电脑都是同一个最强性格：重名的按座位编号，免得"火锅婆婆点炮火锅婆婆"分不清
+  const named = g.seats.map((x) => PERSONAS[x.persona]?.name ?? '电脑');
+  const bots = s.room!.seats.map((x, i) => (x.kind === 'human' || x.name ? null : named[i]!));
   return s.room!.seats.map((x, i): SeatMeta => {
-    const persona = PERSONAS[g.seats[i]!.persona]?.name ?? '电脑';
+    const same = bots.filter((b) => b === bots[i]).length > 1;
+    const persona = same ? `${named[i]}${bots.slice(0, i + 1).filter((b) => b === bots[i]).length}` : named[i]!;
     // 绑了人、主人离座了的座位：电脑代他打
     const name = x.kind === 'human' ? (x.name ?? '玩家') : x.name ? `电脑（代${x.name}）` : persona;
     return { name, bot: x.kind !== 'human', away: x.away, auto: x.auto };
@@ -423,14 +427,17 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
 /** 一局打完：房间停 8 秒自动发下一局，结算摆着不用点；一场打完给总结算 */
 function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean): void {
   const names = seatMetas(s, g).map((x) => x.name);
-  const unit = stakesOf(rv.stakes)?.wallet ? '' : ' 分';
+  const wallet = !!stakesOf(rv.stakes)?.wallet && !rv.unrated;
+  const unit = wallet ? '' : ' 分';
   if (g.phase === 'over' || rv.done) {
     const me = s.you?.seat ?? null;
     if (!(replay && document.querySelector('.mask.end'))) {
       dialog(stage, 'end', (box) => {
         box.appendChild(roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
-        if (stakesOf(rv.stakes)?.wallet) el('div', 'settle-note', box, '桌上的筹码已经结回钱包');
+        if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
+        if (wallet) el('div', 'settle-note', box, '桌上的筹码已经结回钱包');
+        else if (rv.unrated) el('div', 'settle-note', box, '实盘只有一个人，这一场不计输赢、没动钱包');
         const row = el('div', 'row end-acts', box);
         button('act soft', row, '回选桌', () => {
           closeDialog();
