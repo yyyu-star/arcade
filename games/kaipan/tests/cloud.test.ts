@@ -599,7 +599,7 @@ describe('上传的档案不超过 48 KB', () => {
   });
 });
 
-describe('换账号和多标签页的坑（掼蛋 #28 审出来的）', () => {
+describe('换账号和多标签页的坑（掼蛋审出来的，旧仓库 PR 28）', () => {
   /** u1 同步过、又有没传上去的改动的一台设备 */
   async function deviceOfU1() {
     const plat = platform();
@@ -955,7 +955,7 @@ describe('上传带上确认过的账号（平台 0.7.1 的 wrong_user）', () =
   });
 });
 
-describe('独立审阅（#31）：旧标签页、备份失败、重试', () => {
+describe('独立审阅（旧仓库 PR 31）：旧标签页、备份失败、重试', () => {
   /** u1（alice）同步过的设备 */
   async function synced(runs = 5) {
     const plat = platform();
@@ -1253,7 +1253,7 @@ describe('一层一层的保护各自都管用（没有 wrong_user 兜底时）'
   });
 });
 
-describe('复审（#31 1743cd0）：拉取回来时、换号恢复途中、教程重开、确认节流', () => {
+describe('复审（旧仓库 PR 31）：拉取回来时、换号恢复途中、教程重开、确认节流', () => {
   /** u1 同步过（本地 runs 5），之后别的设备往 u1 的云端加了 S[7] */
   async function u1Device() {
     const plat = platform();

@@ -1518,7 +1518,7 @@ async function lowMemShots(browser: Browser): Promise<void> {
     const box = await ctx.page.locator('canvas').boundingBox();
     expect(!!box && box.y >= 0 && box.y + box.height <= visible.height + 1, `画布应在看得见的区域里（${JSON.stringify(box)}）`);
     await shot(ctx, 'm-toolbar-trade');
-    // 双指放大（visualViewport.scale = 2，看得见的宽高减半）：画布不跟着缩、不抖（#45 审阅）
+    // 双指放大（visualViewport.scale = 2，看得见的宽高减半）：画布不跟着缩、不抖（0.5.9 审阅）
     const before = { box: await ctx.page.locator('canvas').boundingBox(), h: await ctx.page.evaluate(() => document.documentElement.style.getPropertyValue('--app-h')) };
     await ctx.page.evaluate(() => {
       const vv = window.visualViewport!;
@@ -1532,7 +1532,7 @@ async function lowMemShots(browser: Browser): Promise<void> {
     await ctx.page.waitForTimeout(600);
     const after = { box: await ctx.page.locator('canvas').boundingBox(), h: await ctx.page.evaluate(() => document.documentElement.style.getPropertyValue('--app-h')) };
     expect(JSON.stringify(after) === JSON.stringify(before), `双指放大时画布不该变（${JSON.stringify(before)} → ${JSON.stringify(after)}）`);
-    // WebGL 上下文丢了：很快恢复就不提示；3 秒没恢复才提示一条，恢复后收起（#45 审阅）
+    // WebGL 上下文丢了：很快恢复就不提示；3 秒没恢复才提示一条，恢复后收起（0.5.9 审阅）
     const banners = (): Promise<number> => ctx.page.evaluate(() => document.querySelectorAll('.kp-banner').length);
     const lose = await ctx.page.evaluate(() => {
       const gl = document.querySelector('canvas')?.getContext('webgl2') ?? document.querySelector('canvas')?.getContext('webgl');
@@ -1638,7 +1638,7 @@ async function lobbyShots(browser: Browser): Promise<void> {
     await buyVia(ctx, 'buy:0', PHONE);
     await waitIdle(ctx, '取消回大厅后买入');
     expect((await state<number>(ctx, held)) === before + 1, '取消回大厅后应能接着买');
-    // 改过设置（平淡日改手动，关掉设置框时要重建画面）再点回大厅：确认框也得出来（#41 审阅）
+    // 改过设置（平淡日改手动，关掉设置框时要重建画面）再点回大厅：确认框也得出来（0.5.10 修的）
     await press(ctx, 'settings');
     await dialogOpen(ctx, 'settings:lobby');
     if (!('settings:quiet-manual' in (await controls(ctx)))) await press(ctx, 'settings:tab-1');
