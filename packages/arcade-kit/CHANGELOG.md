@@ -1,5 +1,15 @@
 # 更新日志
 
+## 0.10.1
+
+- **npm 上的包名是 `@yyyu-star/arcade-kit`**（发布令牌只对 `@yyyu-star` 作用域有权限；0.10.0 没有发布到 npm）。游戏按别名装：
+  `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里的 `arcade-kit/...` 不用改；仓库内的 `file:` 引用照旧。
+- **电脑回应真人的短语**：`GameRoom` 加 `protected onEmote(from, id, to?)`：真人短语校验通过、广播完之后调一次（被拒的不调），
+  只给座位和编号、不给牌局状态，同步、不写存储，抛错只记日志；注释写明只许用来调 `botEmote`，电脑的出牌决策绝不能读到真人短语，游戏不许把它记进状态。
+  电脑的 `botEmote` 不触发它。
+- 测试（`test/emote.test.ts`）：真人发短语后钩子被调、里面 `botEmote` 的回应所有连接收到；电脑短语、被拒的短语不触发；不写库。
+  反证：让 `botEmote` 也调 `onEmote`，这条失败。
+
 ## 0.10.0
 
 - **能发到 npm**：去掉 `private`，补 `repository`、`homepage`、`bugs`、`keywords`、`files`、`engines`（Node ≥ 22）、`sideEffects: false`、`publishConfig.access: public`、`LICENSE`；

@@ -17,7 +17,7 @@
   },
   // 不写 routes：站点域名由部署时注入（正式站：工作流的 --domain；一键部署：部署后自己绑自定义域名），见 README 的部署一节。
   // 账号、存档、好友等数据。不写 database_id：一键部署时 Cloudflare 自动建库；
-  // 正式部署由工作流用 tools/deploy-config.ts 生成一份带正式库 id 的部署配置（不进 Git），迁移和部署都指向它。
+  // 正式部署由仓库级的部署程序 tools/deployer 从这份配置生成最终配置、填上正式库 id（不进 Git），先迁移再部署。
   "d1_databases": [
     {
       "binding": "DB",

@@ -2,6 +2,12 @@
 
 更早的版本没有单独的更新日志：各版本做了什么，见 `docs/platform-backend.md` 各节里的版本标注。
 
+## 0.10.21
+
+- 删掉 `tools/deploy-config.ts`（和 `.gitignore` 里它生成的 `wrangler.deploy.json`）：正式部署改由仓库级的部署程序 `tools/deployer` 从审过的 `wrangler.jsonc` 生成最终配置，平台这份不用了。
+- README 的部署一节改写：本仓库的正式站只由 `main` 上的 GitHub Actions 部署（`production` 要维护者批准）；fork 后自己部署整站照仓库根 README；Deploy to Cloudflare 按钮只部署平台本身。
+- 线上行为不变。
+
 ## 0.10.20
 
 开源整改，线上行为不变（同一个域名、同一个库）：

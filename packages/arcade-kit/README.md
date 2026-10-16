@@ -4,9 +4,13 @@
 
 ## Install
 
+Published on npm as **`@yyyu-star/arcade-kit`**. Install it under the alias `arcade-kit` so imports stay `arcade-kit/room`, `arcade-kit/worker`, …:
+
 ```bash
-npm i arcade-kit
+npm i arcade-kit@npm:@yyyu-star/arcade-kit
 ```
+
+(`package.json` then reads `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`.)
 
 Multiplayer toolkit for small turn-based games on Cloudflare Workers: a Durable Object room base class (`arcade-kit/room`),
 create/join entry points for your game Worker (`arcade-kit/worker`), a reconnecting browser client (`arcade-kit/client`),
@@ -50,7 +54,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 
 ## 游戏怎么接
 
-1. `package.json` 加依赖：仓库外 `npm i arcade-kit`；仓库内现在仍是 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用），以后各游戏改用 npm 上的版本。
+1. `package.json` 加依赖：仓库外 `npm i arcade-kit@npm:@yyyu-star/arcade-kit`（npm 上的包名是 `@yyyu-star/arcade-kit`，装成别名 `arcade-kit`，代码里照旧 `arcade-kit/room`）；仓库内现在仍是 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用），以后各游戏改用 npm 上的版本。
 2. 写规则：实现 `RoomGame<S, A, V>`（`begin`、`parse`、`apply`、`turn`、`view`、`ai`、`timeout`、`over`，可选 `actors`、`turnMs`、`breakPoint`），都是纯函数，浏览器和房间共用。
    - **开局用 `begin(entropy, rulesVersion)`**（0.2.0）：`entropy` 是房间现生成的 256 位熵（8 个 u32），当 `arcade-kit/rng` 的密钥发牌，
      后面每一副从同一把密钥分出的流里取：`shuffle(deck, stream(key, 'deal', 第几副))`。密钥放在自己的状态里（只在服务端），`view` 绝不能带上它。
@@ -234,6 +238,14 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
     和真人共用同一个座位的令牌桶（`emoteMs` / `emoteBurst`），不写存储、不改 seq。电脑短语即时到达，不跟着 `frames` 的播放延迟走：想让它落在某一帧之后，游戏在页面上自己按帧排队。
     **公平约束（游戏侧守，kit 只管广播）**：电脑发不发、发什么只看公开信息（出过的牌、结算结果），不读隐藏的牌，也不读任何真人的短语——
     kit 本来就不把真人短语交给规则和 `onStep`，游戏也不要自己记下来喂给电脑。电脑出牌的决策（`ai`）照旧不受短语影响。
+  - **电脑回应真人的短语**（0.10.1）：覆盖 `protected onEmote(from, id, to?)`，真人发的短语校验通过、广播完之后调一次，**只许在里面调 `botEmote`**：
+    ```ts
+    protected override onEmote(from: number, id: number, to?: number): void {
+      if (to !== undefined && id === TAUNT) this.botEmote(to, TALK_BACK, from);   // 被点名的电脑回嘴（to 是真人座位时 botEmote 回 false，不发）
+    }
+    ```
+    故意不给牌局状态；同步、不能 await、不能写存储，抛错只记日志。电脑的 `botEmote` 不会再触发它（免得电脑互相回个没完），
+    回应照样占那个电脑座位的令牌桶。**不许把真人短语记进状态、字段或存储**，电脑的出牌决策绝不能读到它。
 - **好玩素材** `arcade-kit/fun`（0.7.0，浏览器用，纯 DOM + SVG + Web Animations，不依赖渲染库）：
   - **图层**：`createFunLayer({ zIndex?, parent? })` 往 `document.body` 挂一个 `position: fixed; inset: 0; pointer-events: none` 的层（class `arcade-fun`，默认 z-index 50），
     点击全部穿透。要比牌桌高、比游戏的弹窗低：**游戏的弹窗、确认框的 z-index 要高于它**。界面在自己的层叠上下文里的（`position: fixed` 的容器、带 transform 缩放的舞台），

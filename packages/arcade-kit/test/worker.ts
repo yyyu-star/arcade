@@ -164,6 +164,13 @@ export class ChattyRoom extends ToyRoom {
     const last = state.played.at(-1);
     if (last) this.botTries.push({ seat: last.seat, ok: this.botEmote(last.seat, 0) });
   }
+  /** 0.10.1：收到过的真人短语（只记座位和编号，测钩子调了几次）；电脑的 botEmote 不该出现在这里 */
+  heard: { from: number; id: number; to?: number }[] = [];
+  /** 真人发 4 号短语时，2 号位（电脑）回一句 5 号、冲着发的人 */
+  protected override onEmote(from: number, id: number, to?: number): void {
+    this.heard.push(to === undefined ? { from, id } : { from, id, to });
+    if (id === 4) this.botEmote(2, 5, from);
+  }
   /** 测试直接调（runInDurableObject） */
   tryBotEmote(seat: number, id: number, to?: number): boolean {
     return this.botEmote(seat, id, to);

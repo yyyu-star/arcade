@@ -659,6 +659,8 @@ body::before {
   cursor: pointer;
 }
 .fp-off { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+/* 一键屏蔽全桌（0.6.0）：总开关下面一行小字按钮 */
+.fp-mute-all { margin-top: 6px; padding: 3px 10px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 10px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
 /* 好友房带入被拒（0.2.5）：挂在我的座位上面，醒目，点了重新带入 */
 .rebuy-cta {
   position: absolute;

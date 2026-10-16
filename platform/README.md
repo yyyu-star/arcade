@@ -60,7 +60,11 @@ ARCADE_ADMIN_TOKEN=dev:local-dev-admin-token-000000 npm run admin -- create me �
 
 ## 部署
 
-整个仓库怎么部署见仓库根 README 的部署一节。平台是一个 Worker（名字 `arcade`）加一个 D1 库，要先部署：游戏经服务绑定 `arcade` 调它。
+平台是一个 Worker（名字 `arcade`）加一个 D1 库，要先于游戏部署：游戏经服务绑定 `arcade` 调它。
+
+- **本仓库的正式站**：只由 `main` 上的 GitHub Actions 部署（见下面"本仓库的正式部署"），不手动部署。
+- **fork 以后自己部署整站**（平台加游戏）：照仓库根 README 的部署一节做。
+- **Deploy to Cloudflare 按钮**：只部署平台本身（下面"一键部署"），游戏要另外部署。
 
 ### 绑定、变量和 Secret
 
@@ -80,6 +84,8 @@ ARCADE_ADMIN_TOKEN=dev:local-dev-admin-token-000000 npm run admin -- create me �
 不要用 `.dev.vars.example` 里的本地假值。另有 Cron（每天 UTC 19:17）跑统计和清理，写在 `wrangler.jsonc` 里。
 
 ### 一键部署（Deploy to Cloudflare）
+
+按钮只部署平台本身，不带游戏。
 
 1. 点上面的按钮：Cloudflare 把本目录复制成你自己的仓库，自动建 D1 库，按提示填 Secret；`npm run deploy` 会先建表（D1 迁移）再部署。
 2. **绑自定义域名**：`wrangler.jsonc` 关掉了 workers.dev 地址（它绕过网关限速），所以部署完要绑一个域名才能访问：
@@ -101,15 +107,12 @@ ARCADE_ADMIN_TOKEN=dev:local-dev-admin-token-000000 npm run admin -- create me �
 
 ### 本仓库的正式部署
 
-正式站由 GitHub Actions 部署（仓库根的 `.github/workflows/platform.yml`）：改动经 PR 合并进 `main` 后，先测试，再用 `production` 环境里的 secret 部署。
-仓库里不写正式站的域名和 D1 的 id，部署时注入：
+正式部署只走 `main` 上的 GitHub Actions（仓库根的 `.github/workflows/platform.yml`）：改动经 PR 合并进 `main` 后，先测试、构建、打包，
+再由仓库级的部署程序 `tools/deployer` 部署；部署作业进 `production` 环境，要维护者批准。
+部署程序从审过的 `wrangler.jsonc` 生成最终配置，填上 `production` 环境 secret 里的正式库 id（`D1_DATABASE_ID`）和站点域名（`SITE_HOST`），
+先跑 D1 迁移再部署；仓库里不写这两个值。做法和理由见 `tools/deployer/README.md`。
 
-- `D1_DATABASE_ID`：`node tools/deploy-config.ts` 照抄 `wrangler.jsonc`、填上这个 id，写出 `wrangler.deploy.json`（不进 Git），
-  D1 迁移和部署都用 `-c wrangler.deploy.json`。id 为空或不像 id 时直接失败：没有 id 的 D1，wrangler 会自己新建一个空库。
-- `SITE_HOST`：`wrangler deploy --domain "$SITE_HOST" --var "SITE_ORIGIN:https://$SITE_HOST"`，没设就失败。
-- `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`：部署凭证。
-
-正式站不用 `npm run deploy` 手动部署（它不带上面的注入）；Secret 用 `wrangler secret put` 单独设，不随部署变。
+正式站不用 `npm run deploy` 手动部署（它不带上面的注入和检查）；Secret 用 `wrangler secret put` 单独设，不随部署变。
 
 ### 命令行工具
 
@@ -152,7 +155,7 @@ platform/
 ├─ migrations/          D1 迁移，只增不删
 ├─ public/              静态资源：_headers（CSP 等安全头）、covers/（游戏封面）
 ├─ test/                接口测试（每个接口断言写入行数，docs/platform-backend.md 7.2）
-├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面、deploy-config.ts 正式部署配置
+├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面
 ├─ wrangler.jsonc       Worker 配置（不含域名和正式库 id）
 ├─ .dev.vars.example    Secret 一览和本地假值
 ├─ ASSETS.md            素材来源

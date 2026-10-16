@@ -29,3 +29,4 @@
 - 版本号和 `CHANGELOG.md` 各自独立；提交信息以 `arcade-kit:` 开头，分支名 `pkg/<说明>`。
 - 电脑短语（0.10.0）：`onStep` 是同步钩子（广播之后、不 await、不写存储、抛错只记日志），`botEmote` 只给电脑座位（`ai`、托管 `auto`），和真人共用座位令牌桶。
   真人的短语不交给规则、`onStep`，也不要加这样的入口（公平：电脑不读真人互动）。
+  唯一的例外是 `onEmote`（0.10.1）：真人短语广播后调，不给牌局状态，只许用来调 `botEmote` 让电脑回一句；`botEmote` 不触发它。改的时候这几条测试（`test/emote.test.ts` 的 ChattyRoom）要守住。

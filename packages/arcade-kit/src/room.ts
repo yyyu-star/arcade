@@ -245,6 +245,15 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   protected onStep(_state: S): void {}
 
   /**
+   * 真人发的短语校验通过、广播完之后调一次（0.10.1，可选覆盖）：from 是发的座位，id 是编号，to 是对象座位（没指定是 undefined）。
+   * **只许用来调 botEmote 让电脑回一句**（被点名的电脑回嘴、全桌起哄），别的什么都不做：
+   * - 故意不给牌局状态：电脑的出牌决策（RoomGame.ai）绝不能读到真人的短语，游戏也不许把短语记进状态、字段或存储，留着以后喂给电脑；
+   * - 同步执行、不能 await、不能写存储；抛错只记日志，不影响已经广播的那一句；
+   * - 电脑自己的 botEmote 不会再触发它（不然几个电脑互相回个没完）；回应同样走那个电脑座位的令牌桶，刷不出限速。
+   */
+  protected onEmote(_from: number, _id: number, _to?: number): void {}
+
+  /**
    * 让电脑座位发一句快捷短语（0.10.0）：广播的消息和真人发的一样（{ t: 'emote', seat, id, to? }），多带 bot: true，客户端可以不管它。
    * 只有电脑在出手的座位能发：kind 是 ai，或者真人掉线后由电脑托管（auto）。id、to 的校验和真人一样，走同一个座位的令牌桶
    * （emoteMs / emoteBurst），不写存储、不改 seq。发出去了回 true；座位是真人在打、空位、编号不对、目标不对、房间打完了、太快了，回 false 不广播
@@ -679,6 +688,11 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (!this.takeEmote(seat)) return this.reject(ws, 'emote_too_fast');
     const msg: EmotedMsg = { t: 'emote', seat, id: raw, ...(to !== undefined ? { to } : {}) };
     for (const o of this.sockets()) if (attachmentOf(o)) this.send(o, msg);
+    try {
+      this.onEmote(seat, raw, to as number | undefined);
+    } catch (e) {
+      console.error('onEmote threw', st.code, e instanceof Error ? e.message : e);
+    }
   }
 
   /** 快捷短语的节奏：KIT_QUOTA 里写了就用那里的，没写用 RoomLimits（只算一次） */
