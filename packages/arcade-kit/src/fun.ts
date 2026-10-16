@@ -10,6 +10,7 @@
  * - 被扔的头像抖一下由游戏做（头像在游戏的画布或 DOM 里，kit 碰不到）：命中时调 opts.onHit(prop)。
  * 这个文件引用 DOM，但只在调用时才碰：在 workerd、Node 里 import 不会出错（测试只测纯函数和素材）。
  */
+import { FUN_TIMING } from './fun-logic.js';
 import { BURST, DRIP, PETAL, PROPS, SHELL, SMOKE, SOOT, SPARK, SPLAT_TOMATO, STAR, STICKERS, STINK, dot, propSvg, splatEgg, stickerSvg, type PropId, type StickerId } from './fun-art.js';
 
 export { PROPS, STICKERS, propSvg, stickerSvg, type PropId, type StickerId };
@@ -226,7 +227,7 @@ const SPIN: Record<PropId, number> = { tomato: 540, egg: 600, stinkyEgg: 600, sl
 const FLY_MS = 700;
 
 /**
- * 从 from（发的人头像的屏幕矩形）扔到 to（对象头像），命中后按道具播效果，污渍留 1.5–2 秒再淡出。
+ * 从 from（发的人头像的屏幕矩形）扔到 to（对象头像），命中后按道具播效果，脏东西的污渍留 3 秒（FUN_TIMING.stainMs）再淡出，玫瑰停 1.6 秒。
  * 名额满了直接返回 false；播完（不含污渍的停留）返回 true。
  */
 export async function throwAt(layer: FunLayer, from: RectLike, to: RectLike, prop: PropId, opts: ThrowOptions = {}): Promise<boolean> {
@@ -312,7 +313,7 @@ async function splat(h: Hit, svg: string, scale: number, extra?: (g: HTMLElement
   const sz = h.s * scale;
   const d = sprite(g, svg, sz, h.c, `rotate(${rnd(-20, 20).toFixed(0)}deg)`);
   extra?.(g);
-  stain(h.el, h.key, g, 1700);
+  stain(h.el, h.key, g, FUN_TIMING.stainMs);
   await play(d, [{ transform: pos(h.c, sz, 'scale(.25)') }, { transform: pos(h.c, sz, 'scale(1.18)'), offset: 0.6 }, { transform: pos(h.c, sz, 'scale(1)') }], 180, { easing: 'ease-out' });
   return g;
 }

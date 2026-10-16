@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>arcade-kit/table-fun 演示</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1f5a3a; font: 14px system-ui, sans-serif; color: #fff; overflow: hidden; }
+      .seat { position: absolute; width: 80px; height: 80px; border-radius: 50%; background: #f3d9a4; border: 4px solid #6b3f20; box-sizing: border-box; }
+      .seat span { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+      #s0 { left: 40px; bottom: 150px; }
+      #s1 { right: 60px; top: 40%; }
+      #s2 { left: 50%; top: 40px; margin-left: -40px; }
+      #s3 { left: 40px; top: 22%; }
+      #hand { position: absolute; left: 160px; right: 20px; bottom: 10px; height: 120px; background: rgba(255, 255, 255, .15); border-radius: 8px; }
+      #act { position: absolute; left: 35%; right: 20%; bottom: 140px; height: 50px; background: rgba(0, 0, 0, .3); border-radius: 8px; }
+      .bar { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+      button { font: inherit; padding: 6px 10px; }
+      .hit { animation: hit .35s; }
+      @keyframes hit { 25% { transform: translateX(-6px) scale(.94); } 50% { transform: translateX(6px) scale(.97); } 75% { transform: translateX(-3px); } }
+    </style>
+  </head>
+  <body>
+    <!-- 牌桌互动组件的演示：我在左下，三家电脑（爱闹、普通、高冷）。手牌区、操作区是"禁区"，菜单不盖它们。npx vite 后打开 /demo/table-fun.html -->
+    <div class="seat" id="s0"><span>我</span></div>
+    <div class="seat" id="s1"><span>右家·爱闹</span></div>
+    <div class="seat" id="s2"><span>对家·普通</span></div>
+    <div class="seat" id="s3"><span>左家·高冷</span></div>
+    <div id="hand"></div>
+    <div id="act"></div>
+    <div class="bar"><button id="moment">名场面：我炸了右家</button></div>
+    <script type="module" src="./table-fun.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.11.0
+
+- **牌桌互动组件** `arcade-kit/table-fun`（仓库根 `docs/table-fun.md` 第 0 节"互动第二版"）：几个牌桌游戏共用一套，游戏只给头像的屏幕矩形、禁区、发送通道、名场面映射和短语表。
+  - `TableFun`（DOM）：头像上的透明热区（点别人出菜单、点自己出表情菜单；长按 0.4 秒连扔上次的道具 / 发上次的表情）、"互动"按钮和面板（短语 / 表情 / 道具、选对象、全部屏蔽）、
+    菜单第一格是上次扔的道具、"屏蔽他"（sessionStorage `<id>.fun.blocked`，按 `scope` 分房间）、首次提示"点头像扔道具，长按连扔"（localStorage `<id>.hint.fun`，只一次）、
+    冷却转圈、护盾、连击 ×N、回敬、名场面横幅 `banner`；菜单避开游戏给的禁区矩形，点按区 ≥ 44px。
+  - 单机（`localBots`）电脑由组件按 `botReact` 反应：一定是表情加一句话的气泡，回扔时道具飞回去；好友房电脑发来的东西晚 0.9 秒播、表情自动配一句话。
+  - `controls()` 给冒烟每个能点的东西的中心和大小，`log` 给一行行流水；演示页 `demo/table-fun.html`。
+- **`arcade-kit/fun-logic`**（纯函数，房间、测试、页面都能用）：`FUN_TIMING`（冷却 1.5 / 1 秒、护盾 10 秒 6 次、连击 3 秒、长按 0.4 秒、污渍 3 秒）、`FunCooldown`、`FunTally`、
+  `botReact(事件, 电脑, 状态, 现在, 随机数, 参数?)`（`BOT_REACT`：被扔 60% 回应、其中四分之一回扔、20 秒最多回扔 2 次，名场面输 40% / 赢 30%，每手 2 次，两次至少隔 1 秒；性格 ×1.5 / ×1 / ×0.3）、
+  `placeMenu`、编号换算 `funIdCount`/`funItem`/`stickerId`/`propId`，房间用的 `hitEvent`、`botEmoteIds`、`stickerMood`。
+- `fun.ts`：污渍从约 1.7 秒改成 3 秒（`FUN_TIMING.stainMs`）。
+- 测试 `test/fun-logic.test.ts`：botReact 的概率区间（按性格）、冷却、护盾、连击（换人断开）、回敬、回扔上限和窗口、每手上限、最小间隔、菜单避开禁区、编号和房间换算。
+
 ## 0.10.2
 
 - `standaloneRoot` 独立模式下也接 `/api/me`：回 200 `{ standalone: true }`（没有 `user`，页面的 `detectPlatform` 认作没有平台）。

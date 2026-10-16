@@ -10,8 +10,10 @@
   `src/` 里相互引用写 `.js` 扩展名（`./auth.js`），游戏的 tsconfig 不用特别配置。发布（`npm publish`）由维护者做。
 - 两种部署方式（0.10.0，`src/guest.ts`）：有 `ARCADE` 绑定是平台模式，行为和以前一样、游客 cookie 一律不认；没有 `ARCADE`、`GATE` 也不是 `"login"` 是独立模式（游客）。
   `GATE: "login"` 没绑 `ARCADE` 必须 fail-closed。改认人的代码时 `test/guest.test.ts` 的"平台模式不认游客"几条必须守住。
-- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
+- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
   `fun.ts`（0.7.0）只在调用时碰 DOM，import 时不碰；只动 transform、opacity，不读布局；素材只用 `fun-art.ts` 里手写的 SVG，不用 emoji 字体、不引外部资源，新素材也照这个来。`auth.ts`、`internal.ts` 不依赖运行时以外的东西。
+- 牌桌互动（0.11.0，规范是仓库根 `docs/table-fun.md`）：`fun-logic.ts` 是纯函数（不碰 DOM、时间和随机数由调用方给，房间也 import），数字的默认值就是规范，改了同步改测试和 README；
+  `table-fun.ts` 和 `fun.ts` 同样的规矩：import 时不碰 DOM，动画只动 transform、opacity，量位置只在开菜单和 `controls()` 时。kit 里不出现任何游戏的名字、短语和人物，这些都由游戏传进来。
 - 游戏只经 `acceptCreate` / `acceptJoin` 开房进房，不自己把浏览器的请求转给房间；房间的 `fetch` 只认 `KIT_HOST` 内部地址，开房走 RPC。
   `internal.ts` 不进 `package.json` 的 `exports`，游戏引用不到；新加的内部工具也放 `internal.ts`。`auth.ts` 从 0.3.1 起导出（游戏的登录闸门用），只认人，不碰内部地址和身份头。
 - 能被别人挤占的额度不能挂在房间上：按座位（人）分开算，没入座的连接单独封顶，入座的人回来永远进得了；一个人也不能用光整个房间的额度（`maxInboundShare`）。
