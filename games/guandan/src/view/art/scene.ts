@@ -3,7 +3,7 @@
  */
 import { bustSvgBody as avatarSvgBodyScaled } from './avatars.ts';
 import { cardBackSvg, cardFaceSvg } from './cards.ts';
-import { C, SERIF, cloudPath, esc, f, hashStr, hex, huiwenRow, prng, shade, svg } from './common.ts';
+import { C, SERIF, cloudPath, esc, f, hashStr, hex, huiwenRow, prng, shade, suitShape, svg } from './common.ts';
 
 /** 把一段完整 SVG 去掉外壳、给 id 加前缀，便于嵌进另一张图（避免 id 冲突） */
 export function inlineSvg(src: string, prefix: string, x: number, y: number, w: number, h: number, extra = ''): string {
@@ -13,53 +13,83 @@ export function inlineSvg(src: string, prefix: string, x: number, y: number, w: 
   return `<svg x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" viewBox="${m[1] ?? ''}" ${extra}>${body}</svg>`;
 }
 
-/** 牌桌背景：深色木沿 + 金线 + 墨绿绒面（细纹理、中心亮四周暗）+ 极淡的中心暗纹 */
+/** 牌桌背景：红木边框（拉长噪声做木纹）+ 渐变漆金嵌线 + 中心亮四周暗的墨绿绒面（细绒噪点）+ 极淡的墨印"掼"与金环。
+ *  不再手画几十条木纹路径：一个 feTurbulence 滤镜就够，字符串小，手机按世界宽度栅格化一次也省。顶上约 58px 会被顶栏盖住，所以那里只放木色，不放细节 */
 export function tableSvg(w: number, h: number): string {
   const B = 28;
-  const rnd = prng(20261013);
-  // 木纹：沿四边的细波纹线
-  let grain = '';
-  for (let i = 0; i < 9; i++) {
-    const yy = 3 + i * 2.8 + rnd() * 1.5;
-    let d = `M0 ${f(yy)}`;
-    for (let x = 0; x <= w; x += 80) d += `Q${f(x + 40)} ${f(yy + (rnd() - 0.5) * 3.2)} ${f(x + 80)} ${f(yy)}`;
-    grain += `<path d="${d}" opacity="${f(0.25 + rnd() * 0.35)}"/>`;
-    grain += `<path d="${d}" transform="translate(0 ${f(h - B)})" opacity="${f(0.25 + rnd() * 0.35)}"/>`;
-  }
-  for (let i = 0; i < 9; i++) {
-    const xx = 3 + i * 2.8 + rnd() * 1.5;
-    let d = `M${f(xx)} 0`;
-    for (let y = 0; y <= h; y += 80) d += `Q${f(xx + (rnd() - 0.5) * 3.2)} ${f(y + 40)} ${f(xx)} ${f(y + 80)}`;
-    grain += `<path d="${d}" opacity="${f(0.25 + rnd() * 0.35)}"/>`;
-    grain += `<path d="${d}" transform="translate(${f(w - B)} 0)" opacity="${f(0.25 + rnd() * 0.35)}"/>`;
-  }
   const cx = w / 2, cy = h / 2;
   const R = h * 0.3;
+  const iw = w - 2 * B, ih = h - 2 * B;
   return svg(w, h,
     `<defs>` +
-    `<linearGradient id="wdh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a4424"/><stop offset=".5" stop-color="#5a2f16"/><stop offset="1" stop-color="#3a1c0b"/></linearGradient>` +
-    `<radialGradient id="fl" cx=".5" cy=".46" r=".72"><stop offset="0" stop-color="#2f7a55"/><stop offset=".55" stop-color="#1f5a3e"/><stop offset="1" stop-color="#0b2c1d"/></radialGradient>` +
-    `<pattern id="weave" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6L6 0" stroke="#fff" stroke-opacity=".035" stroke-width="1"/><path d="M0 0L6 6" stroke="#000" stroke-opacity=".06" stroke-width="1"/><circle cx="3" cy="3" r=".6" fill="#fff" fill-opacity=".03"/></pattern>` +
+    `<linearGradient id="wdh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a2e1c"/><stop offset=".5" stop-color="#58210f"/><stop offset="1" stop-color="#34120a"/></linearGradient>` +
+    // 木纹：横向很稀、纵向很密的噪声 = 沿边长方向的细长纹；着成褐色，alpha 由噪声决定
+    `<filter id="wgr" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".008 .18" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 .13  0 0 0 0 .04  0 0 0 0 .02  0 0 0 1.5 -.45"/></filter>` +
+    `<linearGradient id="gil" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${C.goldLight}"/><stop offset=".3" stop-color="${C.gold}"/><stop offset=".5" stop-color="#f6e29a"/><stop offset=".75" stop-color="${C.goldDeep}"/><stop offset="1" stop-color="${C.gold}"/></linearGradient>` +
+    `<radialGradient id="fl" cx=".5" cy=".46" r=".72"><stop offset="0" stop-color="#35885f"/><stop offset=".5" stop-color="#206044"/><stop offset="1" stop-color="#082419"/></radialGradient>` +
+    `<radialGradient id="lit" cx=".5" cy=".46" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>` +
     `<filter id="nz" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter>` +
-    `<clipPath id="fc"><rect x="${B}" y="${B}" width="${w - 2 * B}" height="${h - 2 * B}" rx="16"/></clipPath>` +
+    `<clipPath id="fc"><rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16"/></clipPath>` +
     `</defs>` +
     `<rect width="${w}" height="${h}" fill="url(#wdh)"/>` +
-    `<g fill="none" stroke="#2a1206" stroke-width="1.1">${grain}</g>` +
-    `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" fill="none" stroke="#a0683a" stroke-width="1.5" opacity=".6"/>` +
-    `<rect x="${B - 9}" y="${B - 9}" width="${w - 2 * B + 18}" height="${h - 2 * B + 18}" rx="22" fill="none" stroke="${C.gold}" stroke-width="1.6" opacity=".85"/>` +
-    `<rect x="${B}" y="${B}" width="${w - 2 * B}" height="${h - 2 * B}" rx="16" fill="url(#fl)"/>` +
+    `<rect width="${w}" height="${h}" filter="url(#wgr)"/>` +
+    // 漆面反光：边框上缘一道淡亮
+    `<rect x="3" y="3" width="${w - 6}" height="${f(B * 0.5)}" rx="6" fill="#fff" opacity=".07"/>` +
+    `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" fill="none" stroke="#1c0a05" stroke-width="3" opacity=".7"/>` +
+    // 漆金嵌线：外细内粗两道
+    `<rect x="${B - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="#1c0a05" stroke-width="4.2" opacity=".6"/>` +
+    `<rect x="${B - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="url(#gil)" stroke-width="2.4"/>` +
+    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="url(#fl)"/>` +
     `<g clip-path="url(#fc)">` +
-    `<rect width="${w}" height="${h}" fill="url(#weave)"/>` +
-    `<rect width="${w}" height="${h}" filter="url(#nz)" opacity=".18"/>` +
-    // 中央极淡暗纹：双圆环 + 回纹环 + "掼"
-    `<g opacity=".07" fill="none" stroke="#d9f0c8"><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R)}" stroke-width="3"/><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R - 14)}" stroke-width="1.2"/>` +
-    `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R + 22)}" stroke-width="10" stroke-dasharray="6 10"/></g>` +
-    `<text x="${f(cx)}" y="${f(cy + R * 0.36)}" font-family='${SERIF}' font-weight="900" font-size="${f(R * 1.05)}" fill="#d9f0c8" opacity=".035" text-anchor="middle">掼</text>` +
+    `<rect width="${w}" height="${h}" fill="url(#lit)"/>` +
+    `<rect width="${w}" height="${h}" filter="url(#nz)" opacity=".2"/>` +
+    // 桌心的主装饰：回纹圆章（tableEmblem）
+    tableEmblem(cx, cy, R) +
     // 内侧阴影（木沿投在绒面上）
-    `<rect x="${B}" y="${B}" width="${w - 2 * B}" height="${h - 2 * B}" rx="16" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="14"/>` +
-    `<rect x="${B}" y="${B}" width="${w - 2 * B}" height="${h - 2 * B}" rx="16" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="30"/>` +
+    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="14"/>` +
+    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="30"/>` +
     `</g>` +
-    `<rect x="${B}" y="${B}" width="${w - 2 * B}" height="${h - 2 * B}" rx="16" fill="none" stroke="${C.goldDeep}" stroke-width="2"/>`);
+    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="${C.goldDeep}" stroke-width="2"/>`);
+}
+
+/**
+ * 桌心圆章：外圈回纹带、双金线，四方祥云、四角花色，正中一方凸起的"掼"字印。
+ * 出牌区就在桌心，所以整枚都是"同色压花"：墨绿暗面 + 极淡金线，远看是绒布上的织纹，不抢牌面。
+ */
+function tableEmblem(cx: number, cy: number, R: number): string {
+  const ink = '#04140c';
+  const at = (deg: number, r: number): [number, number] => [cx + r * Math.cos((deg * Math.PI) / 180), cy + r * Math.sin((deg * Math.PI) / 180)];
+  // 回纹带：40 个回字单元沿圆周排一圈，每个单元按自己的角度转正
+  const u = 15;
+  const n = 40;
+  let band = '';
+  for (let i = 0; i < n; i++) band += `<path transform="rotate(${f((360 / n) * i)} ${f(cx)} ${f(cy)})" d="${huiwenRow(cx - u / 2, cy - R - 31, u, 1)}"/>`;
+  let clouds = '';
+  for (const deg of [-90, 0, 90, 180]) {
+    const [x, y] = at(deg, R - 44);
+    clouds += `<path transform="rotate(${f(deg + 90)} ${f(x)} ${f(y)})" d="${cloudPath(x, y, 72)}"/>`;
+  }
+  let suits = '';
+  [-45, 45, 135, 225].forEach((deg, i) => {
+    const [x, y] = at(deg, R - 52);
+    suits += suitShape([0, 1, 2, 3][i]!, x, y, 30, ink, false, 'opacity=".2"');
+  });
+  const S = R * 0.84;
+  const sx = cx - S / 2;
+  const sy = cy - S / 2;
+  return `<g fill="none" stroke="${C.gold}" stroke-linecap="square">` +
+    `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R + 38)}" stroke-width="1.5" opacity=".14"/>` +
+    `<g stroke-width="2" opacity=".15">${band}</g>` +
+    `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R)}" stroke-width="2.6" opacity=".17"/>` +
+    `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R - 9)}" stroke-width="1" opacity=".14"/>` +
+    `<g stroke-width="2.4" opacity=".16" stroke-linecap="round">${clouds}</g></g>` +
+    suits +
+    // 正中的字印：暗面方章 + 金色双框；字用压花：先一层暗字，再往左上错 2 的极淡亮字，像从绒布里凸出来
+    `<rect x="${f(sx)}" y="${f(sy)}" width="${f(S)}" height="${f(S)}" rx="18" fill="${ink}" opacity=".07"/>` +
+    `<rect x="${f(sx)}" y="${f(sy)}" width="${f(S)}" height="${f(S)}" rx="18" fill="none" stroke="${C.gold}" stroke-width="2.4" opacity=".18"/>` +
+    `<rect x="${f(sx + 9)}" y="${f(sy + 9)}" width="${f(S - 18)}" height="${f(S - 18)}" rx="11" fill="none" stroke="${C.gold}" stroke-width="1" opacity=".14"/>` +
+    `<text x="${f(cx)}" y="${f(cy + S * 0.27)}" font-family='${SERIF}' font-weight="900" font-size="${f(S * 0.76)}" fill="${ink}" opacity=".13" text-anchor="middle">掼</text>` +
+    `<text x="${f(cx - 2)}" y="${f(cy + S * 0.27 - 2)}" font-family='${SERIF}' font-weight="900" font-size="${f(S * 0.76)}" fill="#fff" opacity=".045" text-anchor="middle">掼</text>`;
 }
 
 /** 灯笼：中心 (x,y)，尺寸 s（1 = 宽 90） */
@@ -234,6 +264,8 @@ export function stampSvg(text: string, color: string): string {
     `<g transform="rotate(-8 100 100)" mask="url(#m)" opacity=".92">` +
     `<rect x="22" y="22" width="156" height="156" rx="16" fill="none" stroke="${color}" stroke-width="11"/>` +
     `<rect x="36" y="36" width="128" height="128" rx="8" fill="none" stroke="${color}" stroke-width="3"/>` +
+    // 印泥边上一圈淡金，和牌桌漆金嵌线呼应
+    `<rect x="17" y="17" width="166" height="166" rx="20" fill="none" stroke="${C.goldLight}" stroke-width="1.2" opacity=".5"/>` +
     glyph + `</g>`);
 }
 
@@ -264,9 +296,13 @@ export function particleSvg(kind: 'spark' | 'petal' | 'coin' | 'confetti' | 'sta
 export function seatPlateSvg(color: number): string {
   const c = hex(color);
   return svg(200, 64,
-    `<defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c, 0.18)}"/><stop offset=".5" stop-color="${c}"/><stop offset="1" stop-color="${shade(c, -0.4)}"/></linearGradient></defs>` +
+    `<defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c, 0.18)}"/><stop offset=".5" stop-color="${c}"/><stop offset="1" stop-color="${shade(c, -0.4)}"/></linearGradient>` +
+    `<linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${C.goldLight}"/><stop offset=".45" stop-color="${C.gold}"/><stop offset=".7" stop-color="#f6e29a"/><stop offset="1" stop-color="${C.goldDeep}"/></linearGradient></defs>` +
     `<rect x="2" y="4" width="196" height="58" rx="14" fill="#000" opacity=".3"/>` +
-    `<rect x="2" y="2" width="196" height="56" rx="14" fill="url(#p)" stroke="${C.gold}" stroke-width="2.5"/>` +
+    `<rect x="2" y="2" width="196" height="56" rx="14" fill="url(#p)" stroke="url(#pg)" stroke-width="2.8"/>` +
+    // 漆面上半一层淡高光，下沿一道深线，像刷过几遍的大漆
+    `<path d="M10 6H190Q196 6 196 14V26Q100 34 4 26V14Q4 6 10 6Z" fill="#fff" opacity=".1"/>` +
+    `<rect x="4" y="4" width="192" height="52" rx="12" fill="none" stroke="#1c0a05" stroke-width="1" opacity=".5"/>` +
     `<rect x="7" y="7" width="186" height="46" rx="10" fill="none" stroke="${C.goldLight}" stroke-width="1" opacity=".55"/>` +
     `<path d="M16 8H184" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".14"/>` +
     `<path d="${cloudPath(22, 32, 22)}" fill="none" stroke="${C.goldLight}" stroke-width="1.4" opacity=".7"/>` +

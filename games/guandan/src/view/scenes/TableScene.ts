@@ -121,6 +121,8 @@ export class TableScene extends Phaser.Scene {
   builds = 0;
   /** 顶栏右边四个图标（冒烟检查它们在可见区内） */
   private topIcons: Phaser.GameObjects.Container[] = [];
+  /** 顶栏右边图标点按区域的左边（记牌条避开它） */
+  private iconsLeft = Infinity;
   private alive = true;
   /** 调试/冒烟：最近一次 dispatch 的错误 */
   lastError: string | null = null;
@@ -181,7 +183,9 @@ export class TableScene extends Phaser.Scene {
     const W = worldW(this);
     this.add.image(0, 0, `table:${W}`).setOrigin(0, 0).setDisplaySize(W, worldH);
 
-    const anchors = seatAnchors(W);
+    // 手机上（minHit 大）顶栏左边的云朵、邀请按钮要 44 CSS 像素宽，对家头像往右让：412 是两队级数框的右边，49 是头像半径加空隙
+    const mh = minHit();
+    const anchors = seatAnchors(W, mh > 60 ? 412 + mh * (this.net ? 2 : 1) + 49 : 0);
     for (let s = 0; s < 4; s++) this.seats.push(new SeatView(this, s, anchors[s]!));
     this.trick = new TrickView(this, anchors);
     this.hand = new HandView(this);
@@ -211,7 +215,10 @@ export class TableScene extends Phaser.Scene {
     this.btnPass = new Button(this, cx - 200, BUTTON_Y, 168, 60, '不要', 'wood', () => this.onPass(), 'pass');
     this.btnHint = new Button(this, cx, BUTTON_Y, 168, 60, '提示', 'gold', () => this.onHint(), 'hint');
     this.btnPlay = new Button(this, cx + 200, BUTTON_Y, 168, 60, '出牌', 'red', () => this.onPlay(), 'play');
-    this.btnSort = new Button(this, cx - 410, BUTTON_Y + 4, 138, 52, '理牌', 'green', () => this.onSort(), 'sort');
+    // 16:9 的小手机上往右让一点：左边要放下我的头像和聊天按钮，两个都要 minHit() 宽（taunt.ts 按"理牌"的左边排聊天按钮）
+    const mh = minHit();
+    const sortX = Math.max(cx - 410, 60 + Math.max(72, mh) / 2 + Math.max(56, mh) + Math.max(138, mh) / 2);
+    this.btnSort = new Button(this, sortX, BUTTON_Y + 4, 138, 52, '理牌', 'green', () => this.onSort(), 'sort');
     this.btnClear = new Button(this, cx + 410, BUTTON_Y + 4, 138, 52, '重选', 'blue', () => this.onClear(), 'undo');
     this.btnPrev = new Button(this, cx + 548, BUTTON_Y + 4, 112, 52, '上一墩', 'wood', () => this.showPrevTrick());
     for (const b of [this.btnPass, this.btnHint, this.btnPlay, this.btnSort, this.btnClear, this.btnPrev]) b.setDepth(400);
@@ -337,9 +344,12 @@ export class TableScene extends Phaser.Scene {
     this.top = c;
     this.counterAt = null;
     const g = this.add.graphics();
-    g.fillStyle(0x1a0e07, 0.78).fillRect(0, 0, W, TOPBAR_H);
-    g.lineStyle(2, COLOR.gold, 0.7).lineBetween(0, TOPBAR_H, W, TOPBAR_H);
-    g.lineStyle(1, COLOR.gold, 0.3).lineBetween(0, TOPBAR_H - 4, W, TOPBAR_H - 4);
+    // 黑漆顶栏：上亮下暗三层叠出漆面（Canvas 渲染也能画，不用渐变填充），底下双金线
+    g.fillStyle(0x24130a, 0.94).fillRect(0, 0, W, TOPBAR_H);
+    g.fillStyle(0x3a2214, 0.55).fillRect(0, 0, W, TOPBAR_H * 0.45);
+    g.fillStyle(0xffffff, 0.05).fillRect(0, 2, W, TOPBAR_H * 0.2);
+    g.lineStyle(2, COLOR.gold, 0.9).lineBetween(0, TOPBAR_H, W, TOPBAR_H);
+    g.lineStyle(1, COLOR.goldLight, 0.35).lineBetween(0, TOPBAR_H - 4, W, TOPBAR_H - 4);
     c.add(g);
     const v = this.ses.view();
     // 左：两队级数
@@ -355,27 +365,27 @@ export class TableScene extends Phaser.Scene {
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
     this.lobbyBtn = new Button(this, 70, 29, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
     // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）：下面没有能点的就伸到底（deep），
-    // 搭档头像（顶 67、左右 W/2 - 250 ± 45）上面的只到 67（shallow），不压着头像
+    // 搭档头像（顶 67、左右 ax ± 45）正上方的只到 67（shallow），不压着头像。手机上头像已经往右让开了（create 里的 seatAnchors）
     const deep = Math.max(54, 2 * (minHit() - 29));
     const shallow = Math.min(deep, 2 * (67 - 29));
-    const barH = (x0: number, x1: number): number => (x1 <= W / 2 - 295 || x0 >= W / 2 - 205 ? deep : shallow);
+    const pa = this.seats[2]!.a;
+    const barH = (x0: number, x1: number): number => (x1 <= pa.ax - pa.size / 2 - 4 || x0 >= pa.ax + pa.size / 2 + 4 ? deep : shallow);
     this.lobbyBtn.setHit(112, deep);
     c.add(this.lobbyBtn);
     team(138, '我方', v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
     team(280, '对方', v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
-    // 云存档：放左边（右边四个按钮已经挤满）
-    // 和右边的图标一样：有地方就把间距拉到 44 CSS 像素，最少 56；不越过下面记牌器的左边（W/2 - 140，它的点按区域往上伸进顶栏）
-    const lp = Math.max(56, Math.min(minHit(), (W / 2 - 140 - 418) / (this.net ? 2 : 1)));
-    this.cloudBtn = cloudButton(this, 418 + lp / 2, 29, 46);
-    setHit(this.cloudBtn, lp, barH(418, 418 + lp));
+    // 云存档：放左边（右边四个按钮已经挤满），紧挨两队级数框（右边 412）。有地方就把间距拉到 44 CSS 像素，最少 56
+    const lp = Math.max(56, Math.min(minHit(), (pa.ax - pa.size / 2 - 4 - 412) / (this.net ? 2 : 1)));
+    this.cloudBtn = cloudButton(this, 412 + lp / 2, 29, 46);
+    setHit(this.cloudBtn, lp, barH(412, 412 + lp));
     // 单独部署没有账号，不摆云存档
     if (standalone()) this.cloudBtn.setVisible(false);
     c.add(this.cloudBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：云朵右边，中途进来的人接管电脑的座位。右边的图标和名次条已经排满了
     const net = this.net;
-    this.inviteBtn = net ? iconButton(this, 418 + lp * 1.5, 29, 'invite', () => void this.invite(net.code), 46) : null;
+    this.inviteBtn = net ? iconButton(this, 412 + lp * 1.5, 29, 'invite', () => void this.invite(net.code), 46) : null;
     if (this.inviteBtn) {
-      setHit(this.inviteBtn, lp, barH(418 + lp, 418 + lp * 2));
+      setHit(this.inviteBtn, lp, barH(412 + lp, 412 + lp * 2));
       c.add(this.inviteBtn);
     }
 
@@ -390,9 +400,10 @@ export class TableScene extends Phaser.Scene {
     const who = v.declarer < 0 ? '双方' : v.declarer === 0 ? '我方' : '对方';
     c.add(text(this, mx + 36, 29, `${who}的级 · 第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
 
-    // 名次条：四个小格，出完的人依次填进去
+    // 名次条：四个小格，出完的人依次填进去。16:9 的小手机上顶栏放不下它和够大的图标：让给图标（名次头像上也盖着印章）
     const px = mx + 250;
-    for (let i = 0; i < 4; i++) {
+    const stripFits = (W - 34 - (px + 3 * 48 + 21)) / 3.5 >= minHit();
+    for (let i = 0; i < 4 && stripFits; i++) {
       const seat = v.finished[i];
       const x = px + i * 48;
       const pg = this.add.graphics();
@@ -415,12 +426,13 @@ export class TableScene extends Phaser.Scene {
       ['settings', () => this.openOverlay('menu', openSettings(this, { onTutorial: () => this.startTutorial(), onClose: () => this.closeOverlay() }))],
       ['rules', () => this.openOverlay('menu', openRules(this, () => this.closeOverlay(), this.ses.view().level))],
     ];
-    // 间距：手机横屏世界更宽，有地方就拉到 44 CSS 像素（minHit），16:9 屏挤不下时最少 56；最左一个的点按区域不越过名次条
-    const room = (W - 34 - (px + 3 * 48 + 21)) / 3.5;
+    // 间距：有地方就拉到 44 CSS 像素（minHit），最少 56；最左一个的点按区域不越过名次条（没摆名次条时不越过中间那行字，约 mx + 260）
+    const room = (W - 34 - (stripFits ? px + 3 * 48 + 21 : mx + 260)) / 3.5;
     const pitch = Math.max(56, Math.min(minHit(), room));
     icons.forEach(([icon, fn], i) => {
       const b = iconButton(this, W - 34 - i * pitch, 29, icon, fn, 46);
       setHit(b, pitch, deep);
+      this.iconsLeft = W - 34 - 3.5 * pitch;
       c.add(b);
       this.topIcons[i] = b;
       if (icon === 'mute' || icon === 'sound') this.soundIcon = b;
@@ -464,7 +476,16 @@ export class TableScene extends Phaser.Scene {
    */
   private buildCounter(c: Phaser.GameObjects.Container, W: number, v: PlayerView, y0: number): void {
     if (v.phase !== 'play' && v.phase !== 'tribute' && v.phase !== 'return') return;
-    const x0 = W / 2 - 140;
+    // 横向：在对家剩余张数（头像中心右边约 95）之后。纵向：和顶栏图标的点按区域（往下伸到 minHit()）横向重叠时，挪到它下面
+    const pa = this.seats[2]!.a;
+    const x0 = Math.max(W / 2 - 140, pa.ax + 104);
+    const cells = countLeft(v.hand, v.history);
+    if (x0 + cells.length * 32 + 16 > this.iconsLeft) y0 = Math.max(y0, minHit() + 4);
+    // 点按区域只往下扩到够 44 CSS 像素：往上会压着顶栏
+    const hitDown = (z: Phaser.GameObjects.Zone, w: number, h: number): void => {
+      setHit(z, w, Math.max(h, minHit()));
+      z.setPosition(x0, y0);
+    };
     const toggle = (): void => {
       updateSettings({ counter: !getSettings().counter });
       this.buildTopBar(worldW(this));
@@ -475,13 +496,12 @@ export class TableScene extends Phaser.Scene {
       g.fillStyle(0x1a0e07, 0.6).fillRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
       g.lineStyle(1.5, COLOR.gold, 0.6).strokeRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
       const z = this.add.zone(x0, y0, t.width + 28, 34).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-      setHit(z, Math.max(t.width + 28, minHit()), minHit());
+      hitDown(z, Math.max(t.width + 28, minHit()), 34);
       z.on('pointerdown', toggle);
       c.add([g, t, z]);
       this.counterAt = { x: x0 + (t.width + 28) / 2, y: y0 + 17 };
       return;
     }
-    const cells = countLeft(v.hand, v.history);
     const cw = 32;
     const w = cells.length * cw + 16;
     const h = 50;
@@ -499,8 +519,7 @@ export class TableScene extends Phaser.Scene {
       c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: 0xffffff }).setAlpha(a));
     });
     const z = this.add.zone(x0, y0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    // 记牌器只有 50 高：点按区域上下各扩一点，够 44 CSS 像素（左右没有别的能点的）
-    setHit(z, w, Math.max(h, minHit()));
+    hitDown(z, w, h);
     z.on('pointerdown', toggle);
     c.add(z);
     this.counterAt = { x: x0 + w / 2, y: y0 + h / 2 };

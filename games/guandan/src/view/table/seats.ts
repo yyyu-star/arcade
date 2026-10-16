@@ -217,6 +217,8 @@ export class SeatView {
   say(msg: string, ms = 1800, tone: BubbleTone = 'plain'): void {
     this.talk?.destroy();
     const b = bubble(this.scene, this.a.bx, this.a.by, msg, this.a.bdir, tone);
+    // 尾巴朝右的气泡（对家）按右边对齐：长短不一的话都贴着头像，不往右盖住记牌条
+    if (this.a.bdir === 'right') b.x -= b.width / 2;
     this.talk = b;
     this.scene.time.delayedCall(Math.max(900, dur(ms)), () => {
       if (this.talk !== b) return;

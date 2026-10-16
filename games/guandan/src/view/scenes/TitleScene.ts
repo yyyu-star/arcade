@@ -65,8 +65,8 @@ export class TitleScene extends Phaser.Scene {
       stake = null;
       this.time.delayedCall(600, () => toast(this, STAKE_ERROR['expired']!, W / 2, worldH - 60));
     }
-    // 竖排按钮的间隔：手机横屏拉开到小按钮 + 间隔够 44 CSS 像素（minHit），电脑上 14；最多的一种（实盘或存档 + 五个按钮）底边约 690
-    const gap = Math.max(14, Math.min(26, minHit() - 56));
+    // 竖排按钮的间隔：手机横屏拉开到小按钮 + 间隔够 44 CSS 像素（minHit），电脑上 14；封顶 29 是 667×375 要的（minHit 85），最多的一种（实盘或存档 + 五个按钮）底边约 705，还在 720 以内
+    const gap = Math.max(14, Math.min(29, minHit() - 56));
     let y = 300;
     const add = (key: string, label: string, style: 'red' | 'gold' | 'wood', icon: string, fn: () => void, h = 64): void => {
       // 点按区域到间隔的中线为止，不互相压着

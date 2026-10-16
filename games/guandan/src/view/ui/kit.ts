@@ -111,20 +111,31 @@ function shade(c: number, f: number): number {
 
 export type ButtonStyle = Exclude<keyof typeof BUTTON, 'off'>;
 
-/** 圆角按钮底板（带投影、上半高光、金边）。按下时面板下沉 2、投影跟着收。 */
+/**
+ * 圆角按钮底板：漆面（0.10.0）。不用渐变填充（Canvas 渲染不支持），用几层叠出来：上半亮、下沿暗、顶上一道高光，金边外加一圈细亮线。
+ * 按下时面板下沉 2、投影跟着收。
+ */
 export function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
   g.clear();
   const dy = pressed ? 2 : 0;
+  const top = -h / 2 + dy;
+  const fh = h - 4;
   g.fillStyle(0x000000, SHADOW.alpha);
   g.fillRoundedRect(-w / 2, -h / 2 + SHADOW.dy + 1, w, h, r);
-  g.fillStyle(shade(fill, 0.62), 1);
+  g.fillStyle(shade(fill, 0.55), 1);
   g.fillRoundedRect(-w / 2, -h / 2 + 3 + dy, w, h - 3, r);
+  g.fillStyle(shade(fill, 0.82), 1);
+  g.fillRoundedRect(-w / 2, top, w, fh, r);
   g.fillStyle(fill, 1);
-  g.fillRoundedRect(-w / 2, -h / 2 + dy, w, h - 4, r);
-  g.fillStyle(0xffffff, 0.16);
-  g.fillRoundedRect(-w / 2 + 4, -h / 2 + 3 + dy, w - 8, (h - 4) * 0.42, { tl: r - 3, tr: r - 3, bl: 6, br: 6 });
-  g.lineStyle(2, rim, 0.9);
-  g.strokeRoundedRect(-w / 2 + 1, -h / 2 + 1 + dy, w - 2, h - 6, r - 1);
+  g.fillRoundedRect(-w / 2, top, w, fh * 0.78, r);
+  g.fillStyle(shade(fill, 1.14), 1);
+  g.fillRoundedRect(-w / 2 + 2, top + 2, w - 4, fh * 0.46, { tl: r - 2, tr: r - 2, bl: 8, br: 8 });
+  g.fillStyle(0xffffff, 0.22);
+  g.fillRoundedRect(-w / 2 + 6, top + 4, w - 12, fh * 0.2, { tl: r - 5, tr: r - 5, bl: 4, br: 4 });
+  g.lineStyle(2.5, rim, 0.95);
+  g.strokeRoundedRect(-w / 2 + 1, top + 1, w - 2, fh - 2, r - 1);
+  g.lineStyle(1, 0xffffff, 0.18);
+  g.strokeRoundedRect(-w / 2 + 4, top + 4, w - 8, fh - 8, Math.max(2, r - 4));
 }
 
 /**
@@ -376,6 +387,13 @@ export function modal(scene: Phaser.Scene, w: number, h: number, title?: string,
   const close = (): void => {
     if (closed) return;
     closed = true;
+    // 淡出期间整屏遮罩和里面的按钮立刻不接点击：机器一卡，120 毫秒的淡出会拖很久，这时点别的按钮会被看不见的遮罩吞掉
+    //（手机冒烟"点大厅出确认框"偶发超时的根因）
+    const off = (o: Phaser.GameObjects.GameObject): void => {
+      if (o.input) o.disableInteractive();
+      if (o instanceof Phaser.GameObjects.Container) o.list.forEach(off);
+    };
+    off(root);
     scene.tweens.add({ targets: root, alpha: 0, duration: 120, onComplete: () => root.destroy() });
     opts.onClose?.();
   };
@@ -437,6 +455,8 @@ export function bubble(scene: Phaser.Scene, x: number, y: number, msg: string, d
   else if (dir === 'up') tri(-10, -h / 2 + 1, 10, -h / 2 + 1, -4, -h / 2 - 14);
   else tri(-10, h / 2 - 1, 10, h / 2 - 1, -4, h / 2 + 14);
   c.add([g, t]);
+  // 记下大小：调用方按边对齐要用（不开输入，不影响点击）
+  c.setSize(w, h);
   c.setScale(0.6).setAlpha(0);
   scene.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 180, ease: 'Back.easeOut' });
   return c;

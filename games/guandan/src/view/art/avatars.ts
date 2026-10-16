@@ -198,19 +198,28 @@ export function bustSvgBody(id: AvatarId, mood: Mood): string {
   }
 }
 
-/** 头像徽章：外圈木框金边，内底色，头肩像随表情变化 */
+/** 头像徽章：红木外圈（带细木纹）+ 渐变漆金环 + 深漆内圈 + 顶部高光，内底色，头肩像随表情变化 */
 export function avatarSvg(id: AvatarId, mood: Mood): string {
   const [c0, c1] = BG[id];
   return svg(160, 160,
-    `<defs><linearGradient id="wd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5e2e"/><stop offset=".5" stop-color="#6b3a1e"/><stop offset="1" stop-color="#3b1d0c"/></linearGradient>` +
+    `<defs><linearGradient id="wd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a3a22"/><stop offset=".5" stop-color="#5a1f12"/><stop offset="1" stop-color="#2e0f08"/></linearGradient>` +
+    // 金环用斜向多段渐变，亮暗交替才像抛光的金属而不是一块黄
+    `<linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${C.goldLight}"/><stop offset=".3" stop-color="${C.gold}"/><stop offset=".55" stop-color="#f6e29a"/><stop offset=".8" stop-color="${C.goldDeep}"/><stop offset="1" stop-color="#8a5e18"/></linearGradient>` +
+    // 木纹：纵向拉长的噪声，只着色到外圈
+    `<filter id="wg" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".02 .22" numOctaves="2" seed="5"/><feColorMatrix values="0 0 0 0 .1  0 0 0 0 .02  0 0 0 0 0  0 0 0 .9 -.25"/></filter>` +
     `<radialGradient id="bgc" cx=".5" cy=".38" r=".65"><stop offset="0" stop-color="${c0}"/><stop offset="1" stop-color="${c1}"/></radialGradient>` +
+    `<clipPath id="wc"><circle cx="80" cy="80" r="78"/></clipPath>` +
     `<clipPath id="cc"><circle cx="80" cy="80" r="67"/></clipPath></defs>` +
     `<circle cx="80" cy="80" r="78" fill="url(#wd)"/>` +
-    `<circle cx="80" cy="80" r="74" fill="none" stroke="${C.goldLight}" stroke-width="1.2" opacity=".6"/>` +
-    `<circle cx="80" cy="80" r="70" fill="${C.gold}"/>` +
+    `<rect width="160" height="160" filter="url(#wg)" clip-path="url(#wc)" opacity=".7"/>` +
+    `<circle cx="80" cy="80" r="77.2" fill="none" stroke="#000" stroke-width="1.6" opacity=".55"/>` +
+    `<circle cx="80" cy="80" r="75" fill="none" stroke="url(#gr)" stroke-width="2.4"/>` +
+    `<circle cx="80" cy="80" r="70" fill="url(#gr)"/>` +
+    `<circle cx="80" cy="80" r="70" fill="none" stroke="${C.goldDeep}" stroke-width="1" opacity=".7"/>` +
     `<circle cx="80" cy="80" r="67" fill="url(#bgc)"/>` +
     `<g clip-path="url(#cc)"><circle cx="80" cy="80" r="52" fill="#fff" opacity=".08"/>${bustSvgBody(id, mood)}</g>` +
-    `<circle cx="80" cy="80" r="67" fill="none" stroke="${C.goldDeep}" stroke-width="2"/>` +
+    `<circle cx="80" cy="80" r="66.2" fill="none" stroke="#1c0a05" stroke-width="2.4" opacity=".9"/>` +
     `<path d="M24 52A62 62 0 0 1 60 18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".25"/>` +
+    `<path d="M30 40A54 54 0 0 1 70 14" fill="none" stroke="#fff6d0" stroke-width="2" stroke-linecap="round" opacity=".5"/>` +
     moodExtraSvg(id, mood));
 }

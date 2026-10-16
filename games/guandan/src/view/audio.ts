@@ -99,24 +99,36 @@ function run(a: Ctx, degs: number[], gap: number, dur: number, vol: number, base
 const thump = (a: Ctx, f: number, to: number, dur: number, vol: number, delay = 0): void =>
   tone(a, f, dur, vol, { slideTo: to, delay, attack: 0.002 });
 
+/** 金属/铜器泛音：频率比不成整数，才像锣镲而不是音符；每个泛音衰减各异，尾巴更真 */
+const metal = (a: Ctx, base: number, ratios: number[], dur: number, vol: number, delay = 0, attack = 0.004): void =>
+  ratios.forEach((r, i) => tone(a, base * r, dur / (1 + i * 0.35), vol / (1 + i * 0.5), { delay, attack }));
+
+/** 木鱼/木块的"嗒"：短促的带通噪声(敲击) + 两个不成整数比的快衰减正弦(木腔共鸣) */
+const wood = (a: Ctx, f: number, vol: number, delay = 0): void => {
+  noise(a, 0.025, vol * 0.7, { type: 'bandpass', f0: f * 2.2, q: 2, delay });
+  tone(a, f, 0.07, vol, { delay, slideTo: f * 0.85, attack: 0.001 });
+  tone(a, f * 1.58, 0.04, vol * 0.4, { delay, attack: 0.001 });
+};
+
 // ---------- 各音效配方 ----------
 
 const RECIPES: Record<Sfx, (a: Ctx) => void> = {
-  // 轻短的"嗒"
-  click: (a) => tone(a, 900, 0.05, 0.22, { type: 'triangle', slideTo: 700 }),
+  // 轻敲木头的"嗒"
+  click: (a) => wood(a, 980, 0.2),
   // 选牌很轻很短，取消略低，听感上一升一降
   select: (a) => tone(a, 1500, 0.035, 0.11),
   deselect: (a) => tone(a, 1050, 0.035, 0.09),
-  // 发牌要连发 27 次，所以极短极轻，带一点噪声的"嚓"
+  // 发牌要连发 27 次，所以极短极轻：三个错开几毫秒的高频噪声小点，像牌沿拨过的"唰"
   deal: (a) => {
-    noise(a, 0.035, 0.12, { type: 'bandpass', f0: 3200, q: 1.2 });
-    tone(a, 620, 0.03, 0.05, { slideTo: 420 });
+    [0, 0.011, 0.023].forEach((d, i) => noise(a, 0.014, 0.07 - i * 0.015, { type: 'bandpass', f0: 4200 + i * 600, q: 1.6, delay: d }));
+    tone(a, 520, 0.025, 0.03, { slideTo: 380, delay: 0.02 });
   },
-  // 纸牌拍桌：低通噪声(纸) + 短促下滑的正弦(木头共鸣)
+  // 牌拍在木桌上："啪"的高频脆响 + 桌面的闷响 + 木腔共鸣
   play: (a) => {
-    noise(a, 0.07, 0.4, { type: 'lowpass', f0: 2200, f1: 600 });
-    thump(a, 190, 90, 0.1, 0.4);
-    tone(a, 340, 0.05, 0.08, { type: 'triangle' });
+    noise(a, 0.03, 0.34, { type: 'bandpass', f0: 2600, f1: 1400, q: 0.9 });
+    noise(a, 0.07, 0.22, { type: 'lowpass', f0: 1500, f1: 400 });
+    thump(a, 170, 80, 0.1, 0.42);
+    tone(a, 310, 0.05, 0.1, { type: 'triangle', slideTo: 260 });
   },
   // 大牌：在 play 上叠更深的低频和一点上方的亮度
   playBig: (a) => {
@@ -126,20 +138,22 @@ const RECIPES: Record<Sfx, (a: Ctx) => void> = {
     tone(a, 523, 0.22, 0.12, { type: 'triangle', lp: 3000, delay: 0.02 });
   },
   pass: (a) => tone(a, 220, 0.26, 0.26, { slideTo: 196, attack: 0.03, lp: 900 }),
-  // 炸弹：低频冲击 + 噪声爆裂 + 锯齿隆隆，全长 ≤ 1.1s
+  // 炸弹：低频冲击 + 噪声爆裂 + 锯齿隆隆，尾巴是一串渐隐的金属泛音，全长 ≤ 1.2s
   bomb: (a) => {
     thump(a, 130, 32, 1.0, 0.75);
-    noise(a, 0.7, 0.6, { type: 'lowpass', f0: 5000, f1: 180 });
+    noise(a, 0.7, 0.55, { type: 'lowpass', f0: 5000, f1: 180 });
     tone(a, 70, 0.6, 0.18, { type: 'sawtooth', slideTo: 40, lp: 300 });
-    noise(a, 0.2, 0.25, { type: 'highpass', f0: 3000, delay: 0.01 });
+    noise(a, 0.2, 0.22, { type: 'highpass', f0: 3000, delay: 0.01 });
+    metal(a, 330, [1, 1.51, 2.37, 3.12], 1.1, 0.1, 0.04);
   },
-  // 天王炸：更大更长的冲击，再叠一层上扬的金属泛音
+  // 天王炸：更大更长的冲击，金属尾巴更长，再叠一层上扬的泛音
   jokerBomb: (a) => {
     thump(a, 150, 30, 1.5, 0.8);
-    noise(a, 1.0, 0.6, { type: 'lowpass', f0: 6000, f1: 150 });
+    noise(a, 1.0, 0.55, { type: 'lowpass', f0: 6000, f1: 150 });
     tone(a, 65, 1.0, 0.2, { type: 'sawtooth', slideTo: 35, lp: 300 });
+    metal(a, 280, [1, 1.51, 2.37, 3.12, 4.2], 1.7, 0.12, 0.05);
     [880, 1320, 1760, 2217].forEach((f, i) => {
-      tone(a, f, 1.4, 0.08, { slideTo: f * 1.5, delay: 0.15 + i * 0.05, attack: 0.05 });
+      tone(a, f, 1.4, 0.07, { slideTo: f * 1.5, delay: 0.15 + i * 0.05, attack: 0.05 });
     });
     noise(a, 1.2, 0.12, { type: 'highpass', f0: 6000, delay: 0.1, attack: 0.1 });
   },
@@ -149,12 +163,19 @@ const RECIPES: Record<Sfx, (a: Ctx) => void> = {
     tone(a, 1568, 0.4, 0.2, { delay: 0.22 });
     tone(a, 3136, 0.2, 0.05, { delay: 0.22 });
   },
-  // 盖章：闷而有力
+  // 盖章：闷而有力的一击，随后一声温暖的小铜铃(宫+徵)，有"喜"的意思
   stamp: (a) => {
     thump(a, 95, 45, 0.32, 0.7);
     noise(a, 0.08, 0.3, { type: 'lowpass', f0: 700 });
+    tone(a, C4 * 2, 0.5, 0.1, { type: 'triangle', delay: 0.06, lp: 3500 });
+    tone(a, C4 * 3, 0.4, 0.06, { delay: 0.06 });
   },
-  levelUp: (a) => run(a, [0, 1, 2, 3, 4, 5], 0.09, 0.4, 0.2),
+  // 升级：五声音阶上行，每音带一缕铃音，末音收在一个温暖的和音上
+  levelUp: (a) => {
+    run(a, [0, 1, 2, 3, 4, 5], 0.09, 0.4, 0.2);
+    [0, 1, 2, 3, 4, 5].forEach((d, i) => tone(a, C4 * 4 * semi(scaleSemi(d)), 0.18, 0.035, { delay: i * 0.09 + 0.01 }));
+    [5, 7].forEach((d) => tone(a, C4 * 2 * semi(scaleSemi(d)), 0.7, 0.1, { type: 'triangle', delay: 0.55, lp: 3500 }));
+  },
   // 胜利：五声音阶乐句 + 长和弦 + 锣/镲，全长 ≈ 2.6s
   win: (a) => {
     run(a, [0, 2, 3, 4, 3, 4, 5], 0.15, 0.3, 0.2);
@@ -175,8 +196,12 @@ const RECIPES: Record<Sfx, (a: Ctx) => void> = {
     tone(a, 2093, 0.35, 0.12, { type: 'triangle', delay: 0.09 });
   },
   error: (a) => tone(a, 150, 0.13, 0.25, { type: 'sawtooth', slideTo: 120, lp: 600 }),
-  // 接风：两声轻快上扬
-  jiefeng: (a) => run(a, [3, 5], 0.11, 0.25, 0.22),
+  // 接风：两声轻快上扬，尾音带一点铃响，喜气
+  jiefeng: (a) => {
+    run(a, [3, 5], 0.11, 0.25, 0.22);
+    tone(a, C4 * 4 * semi(scaleSemi(5)), 0.35, 0.05, { delay: 0.11 });
+    tone(a, C4 * semi(scaleSemi(3)), 0.3, 0.08, { type: 'triangle', lp: 900 });
+  },
   // 收墩：一把牌扫过桌面的"唰"，很轻，只为听出一墩到头了
   collect: (a) => {
     noise(a, 0.22, 0.14, { type: 'bandpass', f0: 1800, f1: 700, q: 0.9, attack: 0.04 });
@@ -187,13 +212,15 @@ const RECIPES: Record<Sfx, (a: Ctx) => void> = {
     tone(a, 820, 0.09, 0.3, { type: 'triangle', lp: 2400 });
     tone(a, 820, 0.09, 0.26, { type: 'triangle', lp: 2400, delay: 0.13 });
   },
-  // 头游：一声小锣
+  // 头游：一声锣。先一记低沉的"嗡"，再是不成整数比的泛音缓慢衰减，起音略微上漂像敲击后的颤动
   gong: (a) => {
-    [210, 331, 457, 612].forEach((f, i) => tone(a, f, 1.6 - i * 0.25, 0.16 / (i + 1) ** 0.5, { attack: 0.006 }));
-    noise(a, 0.5, 0.08, { type: 'highpass', f0: 4500, attack: 0.005 });
+    tone(a, 150, 1.8, 0.2, { slideTo: 138, attack: 0.012, lp: 600 });
+    [210, 331, 457, 612, 905].forEach((f, i) =>
+      tone(a, f, 1.7 - i * 0.22, 0.15 / (i + 1) ** 0.5, { attack: 0.006, slideTo: f * 0.985 }));
+    noise(a, 0.4, 0.09, { type: 'bandpass', f0: 3800, q: 0.8, attack: 0.004 });
   },
-  // 读秒：短促的木鱼"嗒"（调用方最后两秒升调）
-  tick: (a) => tone(a, 1200, 0.05, 0.22, { type: 'square', lp: 2600 }),
+  // 读秒：木鱼的"笃"(调用方最后两秒升调)
+  tick: (a) => wood(a, 1050, 0.26),
   // 嘲讽：弹簧"嘣～"一声，调皮
   taunt: (a) => {
     tone(a, 330, 0.32, 0.22, { type: 'triangle', slideTo: 520 });

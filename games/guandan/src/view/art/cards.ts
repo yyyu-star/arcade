@@ -2,7 +2,7 @@
  * 牌面、牌背、级牌 / 逢人配覆盖层。viewBox 统一 0 0 200 280。
  *
  * 可读性约束：牌被压住时只露出左上 x∈[0,110]、y∈[0,84]，所以左上索引（点数 + 花色）全部画在 x<108、y<80 以内，
- * 点数字高约 44（字号 60）、花色约 34，粗体高对比；右下是倒置的小索引。
+ * 点数字高约 44（字号 60）、花色约 34，粗体高对比。右下不画索引：手牌被屏幕底边裁掉，半截的小索引只会显得脏。
  */
 import { C, CARD_H, CARD_R, CARD_W, SANS, SERIF, cloudPath, f, huiwenRow, svg, suitColor, suitShape } from './common.ts';
 import { SUIT_PALETTES, jackFigure, kingFigure, lionHead, queenFigure } from './figures.ts';
@@ -13,13 +13,30 @@ function label(rank: number): string {
   return RANK_LABEL[rank] ?? String(rank);
 }
 
-/** 象牙底牌身（带纸感渐变与细描边） */
+/** 金色渐变描边的定义：牌面人物框、王牌框共用，id 带牌面前缀避免内联后撞名 */
+function goldDefs(id: string): string {
+  return `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e4a2"/><stop offset=".45" stop-color="${C.gold}"/><stop offset=".7" stop-color="${C.goldDeep}"/><stop offset="1" stop-color="#e9c874"/></linearGradient>`;
+}
+
+/** 插画区的金框：渐变粗线 + 外侧细线 + 四角菱形小饰，不碰框内插画 */
+function goldFrame(g: string, x: number, y: number, w: number, h: number, r: number): string {
+  const d = (cx: number, cy: number) => `M${cx} ${cy - 4.5}L${cx + 4.5} ${cy}L${cx} ${cy + 4.5}L${cx - 4.5} ${cy}Z`;
+  const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]] as const;
+  return `<rect x="${x - 4}" y="${y - 4}" width="${w + 8}" height="${h + 8}" rx="${r + 3}" fill="none" stroke="url(#${g})" stroke-width="1" opacity=".85"/>` +
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="url(#${g})" stroke-width="3"/>` +
+    `<path d="${pts.map(([cx, cy]) => d(cx, cy)).join('')}" fill="url(#${g})" stroke="${C.goldDeep}" stroke-width=".8"/>`;
+}
+
+/** 象牙底牌身：纸张渐变 + 高光 + 极淡的纸纹噪点（feTurbulence，低透明度，不影响索引可读）+ 暖色内细框 */
 function cardBase(id: string, top: string = C.ivory, bottom: string = C.ivoryDeep): string {
+  const body = `x="1" y="1" width="${CARD_W - 2}" height="${CARD_H - 2}" rx="${CARD_R}"`;
   return `<defs><linearGradient id="${id}" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient>` +
-    `<radialGradient id="${id}s" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>` +
-    `<rect x="1" y="1" width="${CARD_W - 2}" height="${CARD_H - 2}" rx="${CARD_R}" fill="url(#${id})" stroke="#b9a77c" stroke-width="2"/>` +
-    `<rect x="1" y="1" width="${CARD_W - 2}" height="${CARD_H - 2}" rx="${CARD_R}" fill="url(#${id}s)"/>` +
-    `<rect x="6" y="6" width="${CARD_W - 12}" height="${CARD_H - 12}" rx="${CARD_R - 5}" fill="none" stroke="#d9c9a0" stroke-width="1"/>`;
+    `<radialGradient id="${id}s" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>` +
+    `<filter id="${id}n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 .45 0 0 0 0 .33 0 0 0 0 .15 0 0 0 .5 -.16"/></filter></defs>` +
+    `<rect ${body} fill="url(#${id})" stroke="#b9a77c" stroke-width="2"/>` +
+    `<rect ${body} fill="url(#${id}s)"/>` +
+    `<rect ${body} filter="url(#${id}n)" opacity=".55"/>` +
+    `<rect x="6" y="6" width="${CARD_W - 12}" height="${CARD_H - 12}" rx="${CARD_R - 5}" fill="none" stroke="#cdb27a" stroke-width="1" opacity=".75"/>`;
 }
 
 /** 左上索引（点数 + 花色），坐标落在 x<108、y<80 */
@@ -70,18 +87,16 @@ function jokerFace(big: boolean): string {
   const word = big ? '大王' : '小王';
   const idx = `<text x="12" y="58" font-family='${SERIF}' font-weight="900" font-size="46" fill="${main}" textLength="90" lengthAdjust="spacingAndGlyphs" stroke="${big ? C.goldDeep : '#000'}" stroke-width="${big ? 1.2 : 0.6}" paint-order="stroke">${word}</text>` +
     `<text x="57" y="79" font-family='${SANS}' font-weight="900" font-size="15" fill="${big ? C.goldDeep : '#5b5d66'}" text-anchor="middle" letter-spacing="3">JOKER</text>`;
-  const small = `<g transform="rotate(180 100 140)"><text x="12" y="38" font-family='${SERIF}' font-weight="900" font-size="26" fill="${main}">${word}</text></g>`;
   return svg(CARD_W, CARD_H,
     cardBase('jb', big ? '#fff8e8' : '#f7f6f2', big ? '#f5e3bc' : '#e3e2dd') +
-    `<defs><clipPath id="jc"><rect x="20" y="88" width="160" height="150" rx="10"/></clipPath>` +
+    `<defs>${goldDefs('jf')}<clipPath id="jc"><rect x="20" y="88" width="160" height="150" rx="10"/></clipPath>` +
     `<radialGradient id="jg" cx=".5" cy=".45" r=".6"><stop offset="0" stop-color="${big ? '#fff3cf' : '#ffffff'}"/><stop offset="1" stop-color="${big ? '#f6d892' : '#d9dadf'}"/></radialGradient></defs>` +
     `<rect x="20" y="88" width="160" height="150" rx="10" fill="url(#jg)"/>` +
     `<g clip-path="url(#jc)"><path d="${rays}" fill="${ray}" opacity=".45"/>` +
     `<path d="${cloudPath(48, 222, 70)}" fill="${big ? '#fff3d6' : '#fff'}" stroke="${big ? C.gold : '#9a9ea8'}" stroke-width="2"/>` +
     `<path d="${cloudPath(150, 226, 64)}" fill="${big ? '#fff3d6' : '#fff'}" stroke="${big ? C.gold : '#9a9ea8'}" stroke-width="2"/></g>` +
-    `<rect x="20" y="88" width="160" height="150" rx="10" fill="none" stroke="${big ? C.gold : '#9a9ea8'}" stroke-width="2.5"/>` +
     `<g transform="translate(36 90) scale(1.0)">${lionHead(big)}</g>` +
-    idx + small);
+    goldFrame('jf', 20, 88, 160, 150, 10) + idx);
 }
 
 /** 牌面：rank 2..14（11 J、12 Q、13 K、14 A），16 小王、17 大王；suit 0♠ 1♥ 2♣ 3♦ */
@@ -90,7 +105,6 @@ export function cardFaceSvg(rank: number, suit: number): string {
   const s = ((suit % 4) + 4) % 4;
   const col = suitColor(s);
   const idx = cornerIndex(rank, s);
-  const corner2 = `<g transform="rotate(180 100 140)"><g transform="translate(8 8) scale(.52)">${idx}</g></g>`;
   let center = '';
   if (rank >= 2 && rank <= 10) {
     const size = rank >= 9 ? 27 : 31;
@@ -112,45 +126,40 @@ export function cardFaceSvg(rank: number, suit: number): string {
     // J / Q / K 人物画框
     const pal = SUIT_PALETTES[s] ?? SUIT_PALETTES[0]!;
     const fig = rank === 11 ? jackFigure(pal) : rank === 12 ? queenFigure(pal) : kingFigure(pal);
-    center = `<defs><clipPath id="fc"><rect x="30" y="84" width="140" height="132" rx="10"/></clipPath>` +
+    center = `<defs>${goldDefs('ff')}<clipPath id="fc"><rect x="30" y="84" width="140" height="132" rx="10"/></clipPath>` +
       `<linearGradient id="fbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf3dc"/><stop offset="1" stop-color="#f1dcae"/></linearGradient></defs>` +
       `<rect x="30" y="84" width="140" height="132" rx="10" fill="url(#fbg)"/>` +
       `<g clip-path="url(#fc)"><path d="${cloudPath(48, 104, 44)}" fill="none" stroke="${C.gold}" stroke-width="1.6" opacity=".6"/><path d="${cloudPath(156, 120, 40)}" fill="none" stroke="${C.gold}" stroke-width="1.6" opacity=".6"/>` +
       `<g transform="translate(36 86)">${fig}</g></g>` +
-      `<rect x="30" y="84" width="140" height="132" rx="10" fill="none" stroke="${C.gold}" stroke-width="2.5"/>` +
+      goldFrame('ff', 30, 84, 140, 132, 10) +
       `<rect x="34" y="88" width="132" height="124" rx="7" fill="none" stroke="${pal.main}" stroke-width="1" opacity=".5"/>` +
       // 画框下沿小花色
       `<circle cx="100" cy="216" r="11" fill="${C.ivory}" stroke="${C.gold}" stroke-width="2"/>` + suitShape(s, 100, 216, 13, col);
   }
-  return svg(CARD_W, CARD_H, cardBase('cb') + center + idx + corner2);
+  return svg(CARD_W, CARD_H, cardBase('cb') + center + idx);
 }
 
-/** 牌背：0 中国红、1 墨绿 */
+/** 牌背：0 红漆、1 墨绿漆。深漆底 + 金边内框 + 祥云线纹满铺 + 中央椭圆漆印"掼" */
 export function cardBackSvg(variant: 0 | 1): string {
   const red = variant === 0;
-  const a = red ? '#c0272f' : '#1f5a43';
-  const b = red ? '#7d1218' : '#0c2c20';
-  const lat = red ? '#e0a94a' : '#c9a957';
+  const a = red ? '#a81f27' : '#1f5a43';
+  const b = red ? '#5c0b11' : '#0a261b';
   const hw = huiwenRow(22, 20, 12, 13) + huiwenRow(22, 248, 12, 13);
-  let corners = '';
-  for (const [x, y, r] of [[40, 64, 0], [160, 64, 0], [40, 216, 180], [160, 216, 180]] as const) {
-    corners += `<path d="${cloudPath(x, y, 38)}" fill="none" stroke="${C.gold}" stroke-width="2" stroke-linejoin="round" transform="rotate(${r} ${x} ${y})" opacity=".85"/>`;
-  }
+  const cl = (x: number, y: number) => cloudPath(x, y, 30);
   return svg(CARD_W, CARD_H,
-    `<defs><radialGradient id="bg" cx=".5" cy=".5" r=".75"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></radialGradient>` +
-    `<pattern id="lt" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M8 0L16 8L8 16L0 8Z" fill="none" stroke="${lat}" stroke-width="1" opacity=".22"/><circle cx="8" cy="8" r="1.3" fill="${lat}" opacity=".35"/></pattern>` +
-    `<radialGradient id="md" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="${C.goldLight}"/><stop offset="1" stop-color="${C.gold}"/></radialGradient></defs>` +
+    `<defs><radialGradient id="bg" cx=".5" cy=".4" r=".8"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></radialGradient>` +
+    `<pattern id="xy" width="36" height="28" patternUnits="userSpaceOnUse"><path d="${cl(9, 8)}${cl(27, 22)}" fill="none" stroke="${C.gold}" stroke-width=".9" opacity=".3"/></pattern>` +
+    `<linearGradient id="bk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e4a2"/><stop offset=".5" stop-color="${C.gold}"/><stop offset="1" stop-color="${C.goldDeep}"/></linearGradient>` +
+    `<radialGradient id="sl" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="${red ? '#9a1620' : '#17503a'}"/><stop offset="1" stop-color="${b}"/></radialGradient></defs>` +
     `<rect x="1" y="1" width="198" height="278" rx="${CARD_R}" fill="${C.ivory}" stroke="#b9a77c" stroke-width="2"/>` +
     `<rect x="8" y="8" width="184" height="264" rx="9" fill="url(#bg)"/>` +
-    `<rect x="8" y="8" width="184" height="264" rx="9" fill="url(#lt)"/>` +
-    `<rect x="14" y="14" width="172" height="252" rx="6" fill="none" stroke="${C.gold}" stroke-width="2"/>` +
-    `<rect x="18" y="18" width="164" height="244" rx="4" fill="none" stroke="${C.gold}" stroke-width=".8" opacity=".8"/>` +
-    `<path d="${hw}" fill="none" stroke="${C.gold}" stroke-width="1.6" stroke-linecap="square" opacity=".9"/>` +
-    corners +
-    `<circle cx="100" cy="140" r="52" fill="${b}" stroke="${C.gold}" stroke-width="3"/>` +
-    `<circle cx="100" cy="140" r="45" fill="none" stroke="${C.gold}" stroke-width="1" stroke-dasharray="3 3"/>` +
-    `<circle cx="100" cy="140" r="38" fill="url(#md)" stroke="${C.goldDeep}" stroke-width="1.5"/>` +
-    `<text x="100" y="155" font-family='${SERIF}' font-weight="900" font-size="44" fill="${b}" text-anchor="middle">掼</text>`);
+    `<rect x="8" y="8" width="184" height="264" rx="9" fill="url(#xy)"/>` +
+    `<rect x="14" y="14" width="172" height="252" rx="6" fill="none" stroke="url(#bk)" stroke-width="2.4"/>` +
+    `<rect x="19" y="19" width="162" height="242" rx="4" fill="none" stroke="${C.gold}" stroke-width=".8" opacity=".8"/>` +
+    `<path d="${hw}" fill="none" stroke="${C.gold}" stroke-width="1.4" stroke-linecap="square" opacity=".7"/>` +
+    `<ellipse cx="100" cy="140" rx="44" ry="58" fill="url(#sl)" stroke="url(#bk)" stroke-width="3.5"/>` +
+    `<ellipse cx="100" cy="140" rx="37" ry="51" fill="none" stroke="${C.gold}" stroke-width="1" stroke-dasharray="3 3" opacity=".9"/>` +
+    `<text x="100" y="159" font-family='${SERIF}' font-weight="900" font-size="56" fill="url(#bk)" text-anchor="middle">掼</text>`);
 }
 
 /** 级牌标识（透明覆盖层）：左、上金色细光边 + 索引右侧金色方印"级"（x≈115–159，列横向重叠时仍露出） */
