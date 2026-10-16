@@ -363,7 +363,7 @@ export class TableUi<V extends TableView, A> {
   /** 按住一张往上拖、松手打出；拖不够就弹回去。拖动只是画面，不改规则和计时 */
   private draggable(e: HTMLElement, t: Tile): void {
     e.addEventListener('pointerdown', (d) => {
-      // 上次拖完浏览器不一定补 click（手机上常这样），标记留着会吞掉这次的点（#153 审阅）
+      // 上次拖完浏览器不一定补 click（手机上常这样），标记留着会吞掉这次的点
       delete e.dataset.dragged;
       if (d.button !== 0) return;
       const x0 = d.clientX;

@@ -245,7 +245,7 @@ const isWin = (x: unknown): x is number => Number.isInteger(x) && (x as number) 
 
 /**
  * 只收真人能发的动作。expire（收掉整个声明窗口）和 bot（电脑的回答，答完离开名单）只由服务端的 timeout、auto 造：
- * 客户端能发的话，任何人都能在别人打牌后马上收掉窗口，砍掉别人碰、杠、胡的时间（#130 审阅）
+ * 客户端能发的话，任何人都能在别人打牌后马上收掉窗口，砍掉别人碰、杠、胡的时间
  */
 export function parse(raw: unknown): XzAction | null {
   if (!raw || typeof raw !== 'object') return null;

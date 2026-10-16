@@ -16,7 +16,7 @@
   "services": [{ "binding": "WALLET", "service": "mahjong-test", "entrypoint": "WalletService", "props": { "game": "mahjong" } }],
   "vars": {
     "GATE": "login",
-    "SITE_ORIGIN": "https://game.yyyu.org",
+    "SITE_ORIGIN": "https://game.example.com",
     "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 }
   }
 }

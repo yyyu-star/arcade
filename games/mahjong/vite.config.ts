@@ -5,8 +5,8 @@ const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.
 
 /**
  * 页面挂在 /games/mahjong/ 下，资源一律相对路径（build 用 base './'）。
- * 开发时页面也放在 /games/mahjong/，相对路径的 api/ 正好是 /games/mahjong/api/：设了 MAHJONG_WORKER（本机 Worker 的端口）就转过去，
- * 平台的 /api/wallet* 也一起转给它；没设时实盘连不上，娱乐照常。平台的其他 /api 转给平台的本机接口 5181。
+ * 开发时页面也放在 /games/mahjong/，相对路径的 api/ 正好是 /games/mahjong/api/：设了 MAHJONG_WORKER（本地 Worker 的端口）就转过去，
+ * 平台的 /api/wallet* 也一起转给它；没设时实盘连不上，娱乐照常。平台的其他 /api 转给平台的本地接口 5181。
  */
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/games/mahjong/',

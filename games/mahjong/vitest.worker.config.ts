@@ -14,7 +14,7 @@ export default defineConfig({
         serviceBindings: {
           ARCADE(request: Request): Response {
             const url = new URL(request.url);
-            if (url.origin !== 'https://game.yyyu.org' || url.pathname !== '/api/me') return new Response('not found', { status: 404 });
+            if (url.pathname !== '/api/me') return new Response('not found', { status: 404 });
             const sid = /__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];
             if (sid === 'bad') return new Response('down', { status: 503 });
             if (sid === 'junk') return new Response('<html>', { status: 200 });

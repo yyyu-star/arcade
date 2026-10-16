@@ -4,7 +4,7 @@ import { env, exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
 import type { FakeBank } from 'arcade-kit/testing';
 
-export const SITE = 'https://game.yyyu.org';
+export const SITE = 'https://game.example.com';
 export const BASE = `${SITE}/games/mahjong`;
 
 /**

@@ -1,15 +1,12 @@
 // mahjong Worker 正式配置（DESIGN.md 第 4、6 节）：页面 + 登录闸门 + 单机带入结回（转平台钱包）+ 好友房。
 // 部署只走 .github/workflows/game-mahjong.yml（main 上经 PR 合并的提交）：先 npm run build:cf 把页面打到 dist-cf/games/mahjong/，再 wrangler deploy。
+// 路由（<站点>/games/mahjong、<站点>/games/mahjong/*）和 SITE_ORIGIN 不写在这里，由部署时注入，见 README 的部署一节。
 {
   "name": "mahjong",
   "main": "worker/main.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [
-    { "pattern": "game.yyyu.org/games/mahjong", "zone_name": "yyyu.org" },
-    { "pattern": "game.yyyu.org/games/mahjong/*", "zone_name": "yyyu.org" }
-  ],
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
@@ -32,7 +29,6 @@
   ],
   "vars": {
     "GATE": "login",
-    "SITE_ORIGIN": "https://game.yyyu.org",
     // 每天的 DO 写入预算（DESIGN.md 第 9 节，一房约 800 行）：到 busy 不开新房，到 stop 收场。
     // 每人开房同时 5 个、每天 100 个（和德州一样不卡人）；全站上限照 kit 默认
     "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 }

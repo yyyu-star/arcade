@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import worker, { type Env, type PlatformWallet } from '../../worker/main.ts';
 
-const SITE = 'https://game.yyyu.org';
+const SITE = 'https://game.example.com';
 const BASE = `${SITE}/games/mahjong`;
 
 /** 假平台：cookie 里 __Host-sid=<id> 就认作这个人；anon 是没登录（清 cookie），bad 是平台挂了 */
@@ -137,6 +137,15 @@ describe('单机带入、结回', () => {
     expect((await post('/api/stake/refund', e, buy)).status).toBe(404);
     expect((await call('/api/stake/buyin', e)).status).toBe(405);
     expect(e.WALLET.calls).toEqual([]);
+  });
+
+  it('没设 SITE_ORIGIN 按请求自己的 origin 认本站；设了就只认它', async () => {
+    const own = env({ SITE_ORIGIN: undefined });
+    expect((await post('/api/stake/buyin', own, buy)).status).toBe(200);
+    expect((await post('/api/stake/buyin', own, buy, 'u1', { origin: 'https://evil.example' })).status).toBe(403);
+    const other = env({ SITE_ORIGIN: 'https://other.example' });
+    expect((await post('/api/stake/buyin', other, buy)).status).toBe(403);
+    expect(other.WALLET.calls).toEqual([]);
   });
 
   it('连不上平台钱包：503，页面留着操作号重发', async () => {

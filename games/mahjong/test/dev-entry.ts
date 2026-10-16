@@ -1,6 +1,6 @@
 /**
- * 本机跑麻将 Worker 的入口（冒烟），不部署：线上 /api/* 由路由直接到平台，
- * 本机只有麻将这一个 Worker 对外，浏览器的 /api/me、/api/wallet* 这里转给假平台（test/arcade.dev.ts）。
+ * 本地跑麻将 Worker 的入口（冒烟），不部署：线上 /api/* 由路由直接到平台，
+ * 本地只有麻将这一个 Worker 对外，浏览器的 /api/me、/api/wallet* 这里转给假平台（test/arcade.dev.ts）。
  */
 import worker, { type Env } from '../worker/main.ts';
 

@@ -1,5 +1,5 @@
 /**
- * 给人看的字（AGENTS.md 第 4 节：中文、大白话、少术语）。游戏名只在这里定，所有者要换名字改 GAME_NAME 就行（DESIGN.md 第 0 节）。
+ * 给人看的字（AGENTS.md 第 4 节：中文、大白话、少术语）。游戏名只在这里定，要换名字改 GAME_NAME 就行（DESIGN.md 第 0 节）。
  */
 import type { RoomTexts } from 'arcade-kit/client';
 import type { FanId } from '../core/variants/sichuan-xuezhan/index.ts';
@@ -90,7 +90,7 @@ export const PAY_KIND: Record<string, string> = {
 };
 
 /**
- * 钱包和平台的错误给玩家看的一句话（docs/platform-backend.md 15.10，主线定的对照表）：说清出了什么事、怎么办，不只回错误码。
+ * 钱包和平台的错误给玩家看的一句话（docs/platform-backend.md 15.10 的对照表）：说清出了什么事、怎么办，不只回错误码。
  * fix 是页面可以给的办法（按钮）
  */
 export function walletError(code: string, retryAfter?: number): { text: string; fix?: 'less' | 'wallet' | 'refresh' } {

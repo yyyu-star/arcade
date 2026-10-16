@@ -129,7 +129,7 @@ describe('开房', () => {
     }
   });
 
-  it('请求体有内容却解析不了：400 bad_options，不当默认开（#139 审阅）；没带请求体按默认开', async () => {
+  it('请求体有内容却解析不了：400 bad_options，不当默认开；没带请求体按默认开', async () => {
     for (const body of ['not json', '[1]', '"x"', 'x'.repeat(2_000)]) {
       const res = await createRoom(user(), body);
       expect(res.status, body.slice(0, 10)).toBe(400);

@@ -95,7 +95,7 @@ describe('开局和带入', () => {
     expect(G.apply(s, 0, { t: 'play', v: 'sichuan-xuezhan', a: { t: 'swap', tiles: [] } })).toEqual({ error: 'opening' });
     // 客户端发不了 go（parse 不收）
     expect(G.parse({ t: 'go' })).toBeNull();
-    // 也发不了收掉声明窗口的 expire、电脑的 bot 回答（#130 审阅）；合格的玩法动作带上玩法 id
+    // 也发不了收掉声明窗口的 expire、电脑的 bot 回答；合格的玩法动作带上玩法 id
     expect(G.parse({ t: 'play', a: { t: 'expire', w: 1 } })).toBeNull();
     expect(G.parse({ t: 'play', a: { t: 'claim', w: 1, c: 'pass', bot: true } })).toBeNull();
     expect(G.parse({ t: 'play', a: { t: 'claim', w: 1, c: 'pass' } })).toEqual({ t: 'play', v: 'sichuan-xuezhan', a: { t: 'claim', w: 1, c: 'pass' } });
@@ -120,7 +120,7 @@ describe('开局和带入', () => {
     expect(s.own[0]).toBe(true);
     expect(g(s, 0).seats[0]!.chips).toBe(500);
     expect(G.view(s, 0).inn).toBe(500);
-    // 少带的数就是他的钱包余额：只给本人看（#139 审阅）；桌上的筹码本来就公开
+    // 少带的数就是他的钱包余额：只给本人看；桌上的筹码本来就公开
     expect(G.view(s, 1).inn).toBe(0);
   });
 
@@ -222,7 +222,7 @@ describe('离座和结回', () => {
   });
 });
 
-describe('#139 审阅', () => {
+describe('好友房的公平和边角', () => {
   test('声明窗口里真人答了、窗口没结束：别人的视图一点不变、步数不加（kit 0.7.1 据此不广播）；答完结束窗口的照常加', () => {
     // 四个真人的娱乐房，局面换成"0 号打 5p，1、2 号都能胡"（test/xz-table.ts）
     let s: RoomState = { ...begin(['human', 'human', 'human', 'human'], 'fun'), g: RON() };

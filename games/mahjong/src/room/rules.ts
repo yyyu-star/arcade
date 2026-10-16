@@ -97,7 +97,7 @@ export interface RoomState {
 
 /**
  * play 是玩法的动作（v 是玩法 id），rebuy 是被拒以后再带一次，next 是整场打完后"再来一场"（新房间号）；go 只由房间在开局等带入超时时代出。
- * 客户端发来的在 parse 里就过玩法的 parse（只收真人能发的，#130 审阅：expire、bot 只由服务端造）；
+ * 客户端发来的在 parse 里就过玩法的 parse（只收真人能发的：expire、bot 只由服务端造）；
  * kit 的 ai、timeout 造的不经过 parse，所以 apply 不再 parse 一遍
  */
 export type RoomAction = { t: 'play'; v: string; a: unknown; srv?: true } | { t: 'rebuy' } | { t: 'next'; code: string } | { t: 'go' };
@@ -113,7 +113,7 @@ export interface RoomView {
   own: boolean[];
   /** 每个座位：正在等钱包扣带入 */
   buying: boolean[];
-  /** 我这一份带进来多少（娱乐、没到账、旁观是 0）。只给本人：少带时它就是钱包余额（#139 审阅） */
+  /** 我这一份带进来多少（娱乐、没到账、旁观是 0）。只给本人：少带时它就是钱包余额 */
   inn: number;
   /** 我上一次带入被拒的原因 */
   refused: string | null;
@@ -205,7 +205,7 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     if (a.v !== s.variant) return { error: 'bad_action' };
     const v = vOf(s);
     // 真人坐着、筹码还不是他的（没到账、被拒了）：由这里替电脑打，他不能出手。
-    // 房间到点替这个座位代出（kit 的 timeout、ai）时照样往下推：sync 一次没推完的（#139 审阅），不能卡住
+    // 房间到点替这个座位代出（kit 的 timeout、ai）时照样往下推：sync 一次没推完的，不能卡住
     if (s.kinds[seat] === 'human' && !s.own[seat]) {
       if (!a.srv) return { error: 'not_seated' };
       const g = v.apply(s.g, seat, v.auto(s.g, seat, aiOf(s)));
@@ -213,7 +213,7 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     }
     const g = v.apply(s.g, seat, a.a);
     if (isError(g)) return g;
-    // 声明窗口里真人答了、窗口还没结束（玩法没出事件）：别人什么都不该看出来（#139 审阅）。
+    // 声明窗口里真人答了、窗口还没结束（玩法没出事件）：别人什么都不该看出来。
     // 步数不加、上一步的事件原样留着，别人的视图一点不变，kit 0.7.1 就只回给他、不广播
     const ev = (g as { events?: unknown[] }).events;
     if (v.free(a.a) && ev !== undefined && ev.length === 0) return sync({ ...s, g: { ...(g as object), events: (s.g as { events?: unknown[] }).events ?? [] } });

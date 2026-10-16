@@ -203,7 +203,7 @@ function canWin(p: XzPlayer, hand: Tile[]): boolean {
 }
 
 /**
- * 听哪些牌（手里有缺门就是没听）。四张都在自己手里和自己碰杠里的那种不算：摸不到、也没人打得出来，胡不了的叫不算叫（主线 2026-10-15 定，自审 C7）
+ * 听哪些牌（手里有缺门就是没听）。四张都在自己手里和自己碰杠里的那种不算：摸不到、也没人打得出来，胡不了的叫不算叫（0.3.9）
  */
 export function tenpaiKinds(p: XzPlayer): number[] {
   if (hasQue(p)) return [];
@@ -526,7 +526,7 @@ function endRound(s: XzState, end: 'wall' | 'three'): void {
         ting.set(i, best);
       }
     }
-    // 退税：没听牌的人（含花猪）这一局收的杠钱退回去。杠上炮已经呼叫转移给胡的人的那部分不再退（不然赔两遍，#130 审阅）：
+    // 退税：没听牌的人（含花猪）这一局收的杠钱退回去。杠上炮已经呼叫转移给胡的人的那部分不再退（不然赔两遍）：
     // 同一杠转走的数从先收的那几笔里扣
     for (const i of left) {
       if (ting.has(i)) continue;

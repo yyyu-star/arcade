@@ -297,7 +297,7 @@ function toEnd(s0: XzState): XzState {
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-describe('一局的流程（#130 审阅补）', () => {
+describe('一局的流程', () => {
   test('杠 → 杠上炮转给胡的人 → 流局时杠的人没听牌：转走的不再退（不赔两遍）', () => {
     const s = table(['777m234m56m88m9s11s', '7m8p', '123m456m999m11s46s', '9p'], [1, 2, 1, 0], 1, '9s9s5s');
     const r = act(s, 1, { t: 'discard', tile: tileIn(s, 1, '7m') });
@@ -417,7 +417,7 @@ describe('校验', () => {
     expect(parse({ t: 'claim', w: 3, c: 'pon' })).toEqual({ t: 'claim', w: 3, c: 'pon' });
   });
 
-  test('客户端发 expire、bot 被拒：只有服务端的超时、电脑能收掉窗口、离开名单（#130 审阅）', () => {
+  test('客户端发 expire、bot 被拒：只有服务端的超时、电脑能收掉窗口、离开名单', () => {
     expect(parse({ t: 'expire', w: 3 })).toBeNull();
     expect(parse({ t: 'claim', w: 3, c: 'pass', bot: true })).toBeNull();
     expect(parse({ t: 'claim', w: 3, c: 'pon', bot: 1 })).toBeNull();

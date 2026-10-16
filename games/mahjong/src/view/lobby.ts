@@ -18,7 +18,7 @@ export interface LobbyProps {
   onSolo(stakes: StakesId, opts: XzOpts): void;
   onResume(): void;
   onRules(): void;
-  /** 好友房（PR②）：没有时不显示 */
+  /** 好友房：没有时不显示 */
   onRoom?(stakes: StakesId, opts: XzOpts): void;
   onJoin?(code: string): void;
   /** 从平台大厅的"好友房"按钮进来（?online=1，和德州、掼蛋同一个约定）：开房、进房那一块滚到看得见、亮一下 */
