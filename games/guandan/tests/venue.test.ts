@@ -19,12 +19,16 @@ function midGame(seed: string, steps: number): GameState {
 }
 
 describe('场地 → 电脑（docs/ai.md）', () => {
-  it('单机娱乐：默认"普通"是新手场，对手偏弱；简单再弱（会手软）；困难全是最强', () => {
+  it('单机娱乐：默认"普通"是新手场，对手偏弱；简单再弱（会手软）；较强四个座位一样强；困难全是最强', () => {
     expect(SOLO_FUN_BOTS).toEqual({
       easy: { mate: 'normal', opp: 'novice' },
       normal: { mate: 'normal', opp: 'easy' },
+      good: { mate: 'normal', opp: 'normal' },
       hard: { mate: 'hard', opp: 'hard' },
     });
+    // 设置面板按这个顺序摆，对手一档比一档不弱
+    expect(SOLO_LEVELS).toEqual(['easy', 'normal', 'good', 'hard']);
+    for (let i = 1; i < SOLO_LEVELS.length; i++) expect(rank(SOLO_FUN_BOTS[SOLO_LEVELS[i]!].opp)).toBeGreaterThan(rank(SOLO_FUN_BOTS[SOLO_LEVELS[i - 1]!].opp));
     expect(TUNING.novice.soft).toBeGreaterThan(0);
     for (const d of DIFFICULTIES) if (d !== 'novice') expect(TUNING[d].soft).toBe(0);
   });

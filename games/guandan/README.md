@@ -82,7 +82,7 @@ npm run build:cf      # 部署产物 dist-cf/games/guandan/（线上 Worker：wo
 ```
 
 调试用 URL 参数：`?seed=abc`（直接开局）、`&jump=tribute`（第二副进贡）、`&jump=ace`（打 A）、`&debug=1`（挂 `window.__game`）、
-`&autoplay=1`（电脑代打我）、`&online=1`（打开就弹出好友房面板）、`&room=123456`（直接进房）、`&anim=0`、`&speed=2`、`&difficulty=hard`。URL 开的局在已有存档时不写存档、不计战绩。
+`&autoplay=1`（电脑代打我）、`&online=1`（打开就弹出好友房面板）、`&room=123456`（直接进房）、`&anim=0`、`&speed=2`、`&difficulty=hard`（`easy`、`normal`、`good`、`hard`）。URL 开的局在已有存档时不写存档、不计战绩。
 
 ## 单独部署这个游戏（不要平台）
 

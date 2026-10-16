@@ -2,7 +2,7 @@
  * 浏览器存储：全部 key 带 `guandan.` 前缀（所有游戏同域，前缀是唯一的隔离手段）。
  * 读坏了（JSON 损坏、版本不对）一律退回默认值，不让坏存档卡死游戏。
  */
-import type { SoloLevel } from '../ai/venue.ts';
+import { SOLO_LEVELS, type SoloLevel } from '../ai/venue.ts';
 import type { GameState, Options } from '../core/index.ts';
 
 export const KEYS = {
@@ -134,6 +134,8 @@ export function getSettings(): Settings {
   if (settingsCache) return settingsCache;
   const s = read<Partial<Settings>>(KEYS.settings);
   settingsCache = s && s.v === 1 ? { ...DEFAULT_SETTINGS, ...s, rules: { ...(s.rules ?? {}) } } : { ...DEFAULT_SETTINGS };
+  // 难度只认现在有的几档（0.8.2 加了"较强"）：旧版本存的三档照用，认不得的（比如以后的版本存的、手改坏的）按默认
+  if (!SOLO_LEVELS.includes(settingsCache.difficulty)) settingsCache.difficulty = DEFAULT_SETTINGS.difficulty;
   return settingsCache;
 }
 
@@ -160,6 +162,8 @@ export function loadSave(): SaveData | null {
   if (!s || s.v !== 1 || !s.state || s.state.v !== 1 || !Array.isArray(s.state.hands)) return null;
   // 0.1.10 及以前的存档没记规则版本，都是第 1 版规则开的
   if (typeof s.state.rules !== 'number') s.state.rules = 1;
+  // 存档里的难度认不得就按默认接着打（同 getSettings）
+  if (!SOLO_LEVELS.includes(s.difficulty)) s.difficulty = DEFAULT_SETTINGS.difficulty;
   return s;
 }
 

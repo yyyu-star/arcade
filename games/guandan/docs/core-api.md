@@ -44,7 +44,7 @@ if (r.error) 显示 r.error（大白话中文），state 不变
 - `phase`：`'tribute'` 进贡 → `'return'` 还贡 → `'play'` 出牌 → `'dealEnd'` 一副结束 → 下一副，或 `'gameOver'` 整局结束。
   第一副和抗贡时直接从 `'play'` 开始。
 - 电脑行动：`decide(viewFor(state, seat), { seed, difficulty })` 返回一个 `Action`（不该它动时返回 `null`），再 `dispatch`。
-  `difficulty`：`'easy' | 'normal' | 'hard'`。同样的局面和种子决定相同。
+  `difficulty`：`'novice' | 'easy' | 'normal' | 'good' | 'hard'`。同样的局面和种子决定相同。
 
 ## 3. 玩家视角 `viewFor(state, seat)` → `PlayerView`
 

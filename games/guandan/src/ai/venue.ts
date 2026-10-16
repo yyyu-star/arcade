@@ -10,9 +10,9 @@
 import type { TierId } from '../stake/index.ts';
 import { SEAT_PERSONA, type Difficulty, type PersonaId } from './persona.ts';
 
-/** 单机娱乐的难度设置（设置面板里的三档） */
-export type SoloLevel = 'easy' | 'normal' | 'hard';
-export const SOLO_LEVELS: readonly SoloLevel[] = ['easy', 'normal', 'hard'];
+/** 单机娱乐的难度设置（设置面板里的四档，0.8.2 起在普通和困难之间加了"较强"） */
+export type SoloLevel = 'easy' | 'normal' | 'good' | 'hard';
+export const SOLO_LEVELS: readonly SoloLevel[] = ['easy', 'normal', 'good', 'hard'];
 
 export type Venue =
   | { kind: 'solo'; level: SoloLevel }
@@ -26,10 +26,11 @@ export interface SoloBots {
   opp: Difficulty;
 }
 
-/** 单机娱乐：简单是新手手软的对手，普通（默认）对手偏弱，困难全是最强 */
+/** 单机娱乐：简单是新手手软的对手，普通（默认）对手偏弱，较强四个座位一样强（补普通和困难之间的断档，docs/ai.md 第 2 节），困难全是最强 */
 export const SOLO_FUN_BOTS: Readonly<Record<SoloLevel, SoloBots>> = {
   easy: { mate: 'normal', opp: 'novice' },
   normal: { mate: 'normal', opp: 'easy' },
+  good: { mate: 'normal', opp: 'normal' },
   hard: { mate: 'hard', opp: 'hard' },
 };
 

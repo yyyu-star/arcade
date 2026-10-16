@@ -40,7 +40,7 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   b.add(segmented(scene, segX, y, [{ label: '慢', value: 'slow' }, { label: '中', value: 'normal' }, { label: '快', value: 'fast' }], s.speed, (v) => updateSettings({ speed: v as Settings['speed'] })));
   y += 60;
   row('电脑难度');
-  b.add(segmented(scene, segX, y, [{ label: '简单', value: 'easy' }, { label: '普通', value: 'normal' }, { label: '困难', value: 'hard' }], s.difficulty, (v) => {
+  b.add(segmented(scene, segX, y, [{ label: '简单', value: 'easy' }, { label: '普通', value: 'normal' }, { label: '较强', value: 'good' }, { label: '困难', value: 'hard' }], s.difficulty, (v) => {
     updateSettings({ difficulty: v as Settings['difficulty'] });
     if (app.session) app.session.difficulty = v as Settings['difficulty'];
   }));
