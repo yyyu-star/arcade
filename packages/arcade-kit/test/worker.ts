@@ -5,7 +5,7 @@
 import type { RoomGame } from '../src/game.ts';
 import { shuffle, stream } from '../src/rng.ts';
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from '../src/room.ts';
-import { acceptCreate, acceptJoin, type GateOptions } from '../src/worker.ts';
+import { acceptCreate, acceptJoin, type GateOptions, type KitEnv } from '../src/worker.ts';
 
 // 计量照游戏的写法从 kit 原样导出（wrangler.jsonc 的 class_name 是 RoomMeter）
 export { RoomMeter } from '../src/meter.ts';
@@ -174,11 +174,19 @@ export default {
     const prefixes = { flaky: env.FLAKY_ROOM, ledger: env.LEDGER_ROOM, pause: env.PAUSE_ROOM, noresume: env.NORESUME_ROOM };
     const hit = (Object.keys(prefixes) as (keyof typeof prefixes)[]).find((k) => url.pathname.startsWith(`/${k}/`));
     const path = hit ? url.pathname.slice(hit.length + 1) : url.pathname;
-    const e = hit ? { ...env, ROOM: prefixes[hit] } : env;
+    let e: KitEnv = hit ? { ...env, ROOM: prefixes[hit] } : env;
+    let p = path;
+    // 0.10.0 独立模式：/guest/… 是没绑 ARCADE 的部署（游客），/guest-login/… 是没绑 ARCADE 却写了 GATE=login（应当 fail-closed）
+    const solo = /^\/(guest|guest-login)(\/.*)$/.exec(path);
+    if (solo) {
+      e = { ROOM: env.ROOM, METER: env.METER, ...(solo[1] === 'guest-login' ? { GATE: 'login' } : {}) };
+      p = solo[2]!;
+    }
+    const gate: GateOptions = solo ? { ...GATE, guest: { reserved: ['老王'] } } : GATE;
     // 开房请求体 { opts } 是这个测试 Worker 自己的约定（游戏 Worker 各自决定怎么带），原样交给 kit（0.4.0）
-    if (path === '/rooms') return acceptCreate(request, e, { ...GATE, options: await bodyOpts(request) });
-    const m = /^\/rooms\/([^/]+)\/ws$/.exec(path);
-    if (m) return acceptJoin(request, e, m[1]!, GATE);
+    if (p === '/rooms') return acceptCreate(request, e, { ...gate, options: await bodyOpts(request) });
+    const m = /^\/rooms\/([^/]+)\/ws$/.exec(p);
+    if (m) return acceptJoin(request, e, m[1]!, gate);
     return new Response('not found', { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

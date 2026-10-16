@@ -17,10 +17,10 @@
  *   计量说今天快满了（busy）就不进新人；说满了（stop）就在这一段打完（RoomGame.breakPoint）时收场。
  */
 import { DurableObject } from 'cloudflare:workers';
-import type { RoomEffect, RoomGame, RoomSetup } from './game';
-import { type Identity, KIT_HOST, meterStub, parseIdentity } from './internal';
-import type { MeterEnv, MeterLevel, RoomMeter } from './meter';
-import { ENTROPY_WORDS } from './rng';
+import type { RoomEffect, RoomGame, RoomSetup } from './game.js';
+import { type Identity, KIT_HOST, meterStub, parseIdentity } from './internal.js';
+import type { MeterEnv, MeterLevel, RoomMeter } from './meter.js';
+import { ENTROPY_WORDS } from './rng.js';
 import {
   CLOSE,
   CLOSE_REASON,
@@ -34,10 +34,10 @@ import {
   type RoomInfo,
   type RoomStatus,
   type SeatInfo,
-} from './protocol';
+} from './protocol.js';
 
-export type { RoomEffect, RoomGame, RoomSetup } from './game';
-export type { Identity } from './internal';
+export type { RoomEffect, RoomGame, RoomSetup } from './game.js';
+export type { Identity } from './internal.js';
 
 export interface RoomLimits {
   /** 单条入站消息字节数，超了 1009 断开 */

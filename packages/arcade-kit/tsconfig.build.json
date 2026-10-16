@@ -1,0 +1,15 @@
+{
+  // 发布用的构建（npm run build，prepack 自动跑）：src → dist 的 JS + .d.ts（带 map，跳转定义能落到 src 的 TS 上）。
+  // src 里相互引用写 .js 扩展名，编出来的 JS 原样就能被 Node、vite、esbuild 解析；cloudflare:workers 保留为运行时 import
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}

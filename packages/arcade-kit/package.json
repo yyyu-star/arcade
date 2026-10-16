@@ -1,10 +1,33 @@
 {
   "name": "arcade-kit",
-  "private": true,
+  "version": "0.10.0",
+  "description": "Multiplayer toolkit for small Cloudflare Workers games: Durable Object game rooms, room create/join entry points, browser client, daily write quota, ChaCha20 RNG, platform or standalone (guest) identity. 小游戏共用的联机底座",
   "license": "MIT",
-  "version": "0.9.1",
   "type": "module",
-  "description": "小游戏共用的联机底座：Durable Object 房间基类、每日额度计量、ChaCha20 随机数、经平台 /api/me 认身份、浏览器连接器、消息协议",
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "durable-objects",
+    "websocket",
+    "multiplayer",
+    "game",
+    "room",
+    "turn-based",
+    "chacha20"
+  ],
+  "homepage": "https://github.com/yyyu-star/arcade/tree/main/packages/arcade-kit#readme",
+  "bugs": {
+    "url": "https://github.com/yyyu-star/arcade/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yyyu-star/arcade.git",
+    "directory": "packages/arcade-kit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
   "exports": {
     "./room": "./src/room.ts",
     "./worker": "./src/worker.ts",
@@ -15,11 +38,33 @@
     "./rng": "./src/rng.ts",
     "./auth": "./src/auth.ts",
     "./fun": "./src/fun.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./guest": "./src/guest.ts"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test",
-    "test": "npm run typecheck && vitest run"
+    "check:dist": "npm run build && node scripts/manifest.mjs check",
+    "test": "npm run typecheck && vitest run && npm run check:dist",
+    "prepack": "npm run build && node scripts/manifest.mjs pack",
+    "postpack": "node scripts/manifest.mjs restore"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/workers-types": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.1",

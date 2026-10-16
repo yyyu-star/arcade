@@ -18,7 +18,7 @@
  * 这里的方法只给 kit 自己调（房间经 RPC），游戏不直接用；kitUsage 给运维和测试看。
  */
 import { DurableObject } from 'cloudflare:workers';
-import { meterStub } from './internal';
+import { meterStub } from './internal.js';
 
 export interface QuotaLimits {
   /** 每人同时开着的房间数（自己开的，打完、关掉、到寿命就还） */
