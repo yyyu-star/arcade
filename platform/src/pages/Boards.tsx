@@ -10,6 +10,7 @@ import { GAMES, type GameEntry, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Empty, Panel } from '../ui.tsx';
+import './boards.css';
 
 type Scope = 'all' | 'friends';
 /** 'week'、'titles'，或者有每日榜的游戏 id */
@@ -29,28 +30,56 @@ interface Row {
   tone?: 'up' | 'down';
 }
 
+/**
+ * 排行：前三名站上领奖台（第二、第一、第三从左到右，第一最高），后面的一行一个；自己那行高亮。
+ * 并列时名次一样，领奖台按名单顺序取前三个名次在 3 以内的人。
+ */
 function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: string }) {
   if (!rows.length) return <Empty testId="board-empty">{empty}</Empty>;
+  const top = rows.slice(0, 3).filter((r) => r.rank !== null && r.rank <= 3);
+  const rest = rows.slice(top.length);
+  // 领奖台的站位：第二在左、第一在中、第三在右
+  const stand = top.length === 3 ? [top[1]!, top[0]!, top[2]!] : top.length === 2 ? [top[1]!, top[0]!] : top;
   return (
-    <>
-      <ol className="ranks" data-testid="ranks">
-        {rows.map((r) => (
-          <li key={r.userId} className={`rank${r.isMe ? ' rank--me' : ''}`}>
-            <span className={`rank__no${r.rank !== null && r.rank <= 3 ? ` rank__no--${r.rank}` : ''}`}>{r.rank ?? '—'}</span>
-            <Link className="rank__name" href={`/u/${r.userId}`}>
-              {r.displayName}
-              {r.isMe && <span className="rank__me">我</span>}
-            </Link>
-            <span className={`rank__value${r.tone ? ` ${r.tone}` : ''}`}>{r.text}</span>
-          </li>
-        ))}
-      </ol>
+    <div data-testid="ranks">
+      {stand.length > 0 && (
+        <ol className={`podium podium--${stand.length}`}>
+          {stand.map((r) => (
+            <li key={r.userId} className={`rank podium__item podium__item--${r.rank}${r.isMe ? ' rank--me' : ''}`}>
+              <span className={`rank__no rank__no--${r.rank}`}>{r.rank}</span>
+              <span className="podium__avatar" aria-hidden="true">
+                {Array.from(r.displayName || '我')[0]}
+              </span>
+              <Link className="rank__name" href={`/u/${r.userId}`}>
+                {r.displayName}
+                {r.isMe && <span className="rank__me">我</span>}
+              </Link>
+              <span className={`rank__value${r.tone ? ` ${r.tone}` : ''}`}>{r.text}</span>
+              <span className="podium__step" aria-hidden="true" />
+            </li>
+          ))}
+        </ol>
+      )}
+      {rest.length > 0 && (
+        <ol className="ranks" start={top.length + 1}>
+          {rest.map((r) => (
+            <li key={r.userId} className={`rank${r.isMe ? ' rank--me' : ''}`}>
+              <span className={`rank__no${r.rank !== null && r.rank <= 3 ? ` rank__no--${r.rank}` : ''}`}>{r.rank ?? '—'}</span>
+              <Link className="rank__name" href={`/u/${r.userId}`}>
+                {r.displayName}
+                {r.isMe && <span className="rank__me">我</span>}
+              </Link>
+              <span className={`rank__value${r.tone ? ` ${r.tone}` : ''}`}>{r.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
       {me && !rows.some((r) => r.isMe) && (
         <p className="rank__mine" data-testid="my-rank">
           我：{me.rank === null ? '50 名以后' : `第 ${me.rank} 名`} · {me.text}
         </p>
       )}
-    </>
+    </div>
   );
 }
 

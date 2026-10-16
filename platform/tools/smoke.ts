@@ -19,7 +19,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Dialog, type Page, type Route } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Dialog, type Locator, type Page, type Route } from 'playwright-core';
 // 大厅登记的游戏（和 test/ 一样以 src/games.ts 为准）：按游戏 mock 的地方照它来，新登记的游戏不会漏
 import { GAMES } from '../src/games.ts';
 
@@ -342,6 +342,21 @@ function cli(): string {
   return pw2;
 }
 
+/** 管理页（0.11.0 起分区）：点左边（窄屏是顶上）的分区导航，等那一区出来 */
+async function adminSection(page: Page, label: '概览' | '用户' | '钱包统计' | '设置'): Promise<void> {
+  const id = { 概览: 'overview', 用户: 'users', 钱包统计: 'stats', 设置: 'settings' }[label];
+  await page.locator('.console__nav').getByRole('link', { name: label }).click();
+  await page.getByTestId(`admin-${id}`).waitFor();
+}
+
+/** 管理页·用户：点列表里的一个人，等右边（窄屏是进去的）详情出来，返回详情 */
+async function pickUser(page: Page, username: string): Promise<Locator> {
+  await page.getByTestId(`user-${username}`).click();
+  const detail = page.getByTestId(`detail-${username}`);
+  await detail.waitFor();
+  return detail;
+}
+
 async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   const admin = await newPage(browser, '管理员', 'desktop', { permissions: ['clipboard-read', 'clipboard-write'] });
   const page = admin.page;
@@ -349,7 +364,8 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
 
   console.log('管理员：右上角有"管理"；建号时弱密码 422，留空自动生成');
   await page.getByRole('link', { name: '管理' }).click();
-  await page.getByRole('heading', { name: '给朋友建个账号' }).waitFor();
+  await page.getByTestId('admin-overview').waitFor();
+  await adminSection(page, '钱包统计');
 
   console.log('管理页的筹码统计表；钱包：新号看到 10,000、还没建行，余额够时领补给 409，浏览器没有带入的路');
   const stats = page.getByTestId('wallet-stats');
@@ -376,6 +392,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await shot(page, 'admin-wallet-stats');
 
   console.log('管理员开关注册：默认关着；点了先确认，取消不改；打开后 /api/me 马上是 open，再关回去');
+  await adminSection(page, '设置');
   const sw = page.getByTestId('registration-switch');
   await sw.getByText('现在：只邀请').waitFor();
   await sw.getByText('还没改过（默认关着）').waitFor();
@@ -394,7 +411,8 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await sw.getByRole('button', { name: '关闭注册' }).click();
   await sw.getByText('现在：只邀请').waitFor();
   check((await regOf()) === 'closed', '关闭注册后 /api/me 应该马上是 closed');
-  await page.getByTestId(`user-${ADMIN}`).getByText('你自己的密码去"我的账号"改').waitFor();
+  await adminSection(page, '用户');
+  await (await pickUser(page, ADMIN)).getByText('你自己的密码去"我的账号"改').waitFor();
   await page.getByLabel('用户名').fill(NAME);
   await page.getByLabel('昵称').fill('冒烟小王');
   await page.getByLabel('密码').fill('password1');
@@ -487,7 +505,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   check((await friend.page.getByRole('heading', { name: '给朋友建个账号' }).count()) === 0, '普通用户进不了管理界面');
 
   console.log('管理员重设朋友的密码（顺便换恢复码）：朋友那边会话失效，旧密码登不上，新密码能登');
-  const row = page.getByTestId(`user-${NAME}`);
+  const row = await pickUser(page, NAME);
   await row.getByRole('button', { name: '重设密码' }).click();
   await row.getByLabel('恢复码也换一个').check();
   await shot(page, 'admin-reset-form');
@@ -512,7 +530,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await friend.page.locator('.account__name', { hasText: '冒烟小王' }).waitFor();
 
   console.log('管理员删号：要先勾确认；删完列表里没了');
-  const row2 = page.getByTestId(`user-${NAME2}`);
+  const row2 = await pickUser(page, NAME2);
   await row2.getByRole('button', { name: '删号' }).click();
   const del = row2.locator('form').getByRole('button', { name: '删号' });
   check(await del.isDisabled(), '没勾确认之前不能删号');
@@ -521,7 +539,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await del.click();
   await page.getByText(`已经删掉「要删的号」（${NAME2}）`).waitFor();
   // 提示先出来，列表随后重读：等这一行消失（5 秒内不消失就算失败）
-  await row2.waitFor({ state: 'detached', timeout: 5_000 });
+  await page.getByTestId(`user-${NAME2}`).waitFor({ state: 'detached', timeout: 5_000 });
 
   await friendsFlow(page, friend.page);
   await admin.ctx.close();
@@ -912,15 +930,17 @@ async function mockAdmin(page: Page, registration: object = { open: true, switch
   await page.route('**/api/admin/settings/wallet', (r) => r.fulfill(json(FAKE_RULES)));
   await page.route('**/api/admin/overview', (r) => r.fulfill(json(FAKE_OVERVIEW)));
   await page.route('**/api/admin/settings/notice', (r) => r.fulfill(json({ notice: null, max: 120 })));
+  // 点开一个人就读他的钱包：默认给个没用过钱包的空摘要，要看具体内容的段落再单独挂（后挂的先匹配）
+  await page.route('**/api/admin/wallet/*', (r) => r.fulfill(json({ ...FAKE_WALLET, log: [] })));
 }
 
-/** 用模拟的管理员打开管理页，等账号列表和筹码统计都画出来。 */
+/** 用模拟的管理员打开管理页：先看一眼钱包统计画出来，再停在"用户"一区等账号列表。 */
 async function fakeAdmin(page: Page): Promise<void> {
   await mockAdmin(page);
-  await page.goto(`${BASE}/admin`);
-  await page.getByRole('heading', { name: '给朋友建个账号' }).waitFor();
-  await page.getByTestId('user-xiaoming_2026').waitFor();
+  await page.goto(`${BASE}/admin?s=stats`);
   await page.getByTestId('wallet-stats').getByText('德州扑克 50,000 / 38,000 / 2,000').waitFor();
+  await adminSection(page, '用户');
+  await page.getByTestId('user-xiaoming_2026').waitFor();
 }
 
 const FAKE_FRIENDS = {
@@ -1011,11 +1031,12 @@ async function mobile(browser: Browser): Promise<void> {
   const adm = await newPage(browser, '手机竖屏管理', 'portrait');
   await fakeAdmin(adm.page);
   await shot(adm.page, 'mobile-admin');
-  for (const t of await adm.page.locator('.users .btn').all()) {
+  const row = await pickUser(adm.page, 'a_very_long_name_20');
+  check(await adm.page.getByTestId('user-xiaoming_2026').isHidden(), '手机上点进一个人以后列表应该收起来');
+  for (const t of await row.locator('.btn').all()) {
     const box = await t.boundingBox();
     check(box && box.height >= 44, `管理界面的按钮不到 44 高：${await t.textContent()}（${box?.height ?? 0}）`);
   }
-  const row = adm.page.getByTestId('user-a_very_long_name_20');
   await row.getByRole('button', { name: '删号' }).click();
   await row.getByLabel(/确定删掉/).waitFor();
   await shot(adm.page, 'mobile-admin-delete');
@@ -1163,7 +1184,7 @@ async function lobbyNotice(browser: Browser): Promise<void> {
       sent = r.request().postDataJSON();
       return r.fulfill(json({ notice: { text, at, by: 'owner' }, max: 120 }));
     });
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?s=settings`);
     const form = page.getByTestId('notice-admin');
     await form.getByText('现在没有公告').waitFor();
     await form.getByLabel('公告内容').fill('字'.repeat(121));
@@ -1210,16 +1231,22 @@ async function adminOverview(browser: Browser): Promise<void> {
     await page.goto(`${BASE}/admin`);
     const ov = page.getByTestId('overview');
     await ov.getByText('14').waitFor();
-    await page.getByText('德州扑克 6 人 · 带入 24,000 · 结回 21,000').waitFor();
+    const texasToday = (await page.locator('.game-today li', { hasText: '德州扑克' }).innerText()).replace(/\s+/g, ' ');
+    check(texasToday.includes('6 人') && texasToday.includes('带入 24,000 · 结回 21,000'), `今天各游戏里德州那行不对：${texasToday}`);
+    check((await page.locator('.chart svg rect').count()) === (FAKE_OVERVIEW.days.length + 1) * 2, '趋势图应该每天带入、结回两根柱');
+    await shot(page, `admin-console-${screen}`);
     const trendOld = await page.getByTestId('trend').locator('tbody tr').nth(1).locator('td').nth(1).textContent();
     check(trendOld === '—', `0.10.7 以前的记录应该写"—"：${trendOld}`);
     const trendHead = await page.getByTestId('trend').locator('thead th').allTextContents();
     check(trendHead.includes('德州扑克') && !trendHead.includes('飞驰'), `趋势表按用钱包的游戏分列，不列飞驰：${trendHead.join(' ')}`);
-    const user = page.getByTestId('user-xiaoming_2026');
-    await user.getByTestId('user-wallet').getByText('余额 23,400 · 桌上 2,000 · 开盘 3 次、德州扑克 12 次').waitFor();
+    await adminSection(page, '用户');
+    await page.getByTestId('user-xiaoming_2026').getByTestId('user-wallet').getByText('余额 23,400 · 桌上 2,000 · 开盘 3 次、德州扑克 12 次').waitFor();
     await page.getByTestId('user-a_very_long_name_20').getByText('还没用过钱包').waitFor();
-    await user.getByRole('button', { name: '钱包和战绩' }).click();
-    await user.getByTestId('ledger').getByText('（到顶没进 8,000）').waitFor();
+    const user = await pickUser(page, 'xiaoming_2026');
+    const ledger = user.getByTestId('ledger');
+    await ledger.getByText('到顶没进 8,000').waitFor();
+    await ledger.locator('.ledger__kind--settle').getByText('结回').waitFor();
+    await ledger.locator('.ledger__amount.up', { hasText: '+22,000' }).waitFor();
     await user.getByTestId('user-detail').getByText('21%').waitFor();
     await shot(page, `admin-overview-${screen}`);
     await ctx.close();
@@ -1239,7 +1266,7 @@ async function walletRulesAdmin(browser: Browser): Promise<void> {
       json({ ...FAKE_RULES, rules: { ...DEFAULT_RULES, reliefTo: 3_000 }, log: [{ at: Date.UTC(2026, 9, 15, 16), by: 'owner', changes: { reliefTo: [2_000, 3_000] } }], updatedAt: Date.UTC(2026, 9, 15, 16) }),
     );
   });
-  await page.goto(`${BASE}/admin`);
+  await page.goto(`${BASE}/admin?s=settings`);
   const form = page.getByTestId('wallet-rules');
   await form.getByLabel('单机实盘每天最多赢几份').fill('0');
   await form.getByText('要是 1 到 1,000 的整数').waitFor();
@@ -1563,7 +1590,7 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     await page.getByTestId('stakes').getByText('回房间点“离开房间”').waitFor();
     await page.getByText('开盘：今天实盘赢了 2,400，还能再赢 3,600。').waitFor();
     // 0.10.10 最近进出
-    await page.getByTestId('ledger').getByText('结回 · 开盘（到顶没进 1,200）').waitFor();
+    await page.getByTestId('ledger').locator('.ledger__row', { hasText: '开盘' }).getByText('到顶没进 1,200').waitFor();
     await page.getByTestId('ledger').getByText('+12,000').waitFor();
     await shot(page, `wallet-${screen}`);
     await ctx.close();

@@ -1,28 +1,41 @@
 /**
- * /admin：管理界面。今日概况（0.10.7）、大厅公告（0.10.8）、开关注册（0.8.0）、钱包规则（0.10.6）、给朋友建号、重设密码、删号（维护者 2026-10-14 定）、
- * 账号的钱包和战绩（0.10.7）、筹码统计（0.9.0）。
+ * /admin：管理界面（0.11.0 起是控制台布局）。电脑上左边分区导航、右边内容，手机上导航在顶上一排；分区记在地址的 ?s= 里，后退能回来。
+ * - 概览：顶上一排数字卡片、近 7 天趋势图、各游戏今天的情况、"管理筹码"入口；
+ * - 用户：建号，左边账号列表、右边选中那个人的钱包、战绩、流水和操作（手机上点进去看）；
+ * - 钱包统计：全站筹码每天一行；
+ * - 设置：大厅公告、开放注册、钱包规则。
  * 只有管理员看得到入口；接口另有服务端检查（worker/api/admin.ts），这里挡人只是不让普通用户看到空页面。
  * 管理员账号本身在这里动不了（接口也不许），要用管理命令行工具。
- * 这里只排版和显示建号后的账号卡片，各块在 admin/ 下：概况 Overview、设置 Settings、账号 Users、筹码统计 WalletStats。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { navigate, useLeaveGuard } from '../router.tsx';
+import { Link, navigate, useLeaveGuard, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Panel } from '../ui.tsx';
-import { AdminChipsButton } from './admin/AdminChips.tsx';
 import type { Credentials } from './admin/common.ts';
 import { Overview } from './admin/Overview.tsx';
 import { NoticePanel, RegistrationSwitch, WalletRulesPanel } from './admin/Settings.tsx';
 import { CreateUser, UserList } from './admin/Users.tsx';
 import { WalletStats } from './admin/WalletStats.tsx';
+import './admin/admin.css';
+
+const SECTIONS = [
+  ['overview', '概览'],
+  ['users', '用户'],
+  ['stats', '钱包统计'],
+  ['settings', '设置'],
+] as const;
+type Section = (typeof SECTIONS)[number][0];
 
 export function AdminPage() {
   const { loading, user, service } = useSession();
+  const loc = useLocation();
   const allowed = !!user?.isAdmin;
   const [card, setCard] = useState<Credentials | null>(null);
   // 列表在建号、删号后重读
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  const asked = loc.searchParams.get('s');
+  const section: Section = SECTIONS.some(([id]) => id === asked) ? (asked as Section) : 'overview';
 
   useEffect(() => {
     // 停服、连不上时读不到账号，不算"不是管理员"，别把人赶走
@@ -34,33 +47,46 @@ export function AdminPage() {
   if (!allowed) return null;
   if (card) {
     return (
-      <Panel title={card.title}>
-        <CredentialCard card={card} onDone={() => setCard(null)} />
-      </Panel>
+      <div className="console__single">
+        <Panel title={card.title}>
+          <CredentialCard card={card} onDone={() => setCard(null)} />
+        </Panel>
+      </div>
     );
   }
   return (
-    <>
-      {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
-      <Overview />
-      <Panel icon="coin" title="筹码">
-        <div className="admin-entry">
-          <AdminChipsButton className="btn btn--primary" />
-          <span className="note">给人加减筹码（正数加、负数扣），有记录。</span>
-        </div>
-      </Panel>
-      <NoticePanel />
-      <RegistrationSwitch />
-      <WalletRulesPanel />
-      <CreateUser
-        onDone={(c) => {
-          setCard(c);
-          reload();
-        }}
-      />
-      <UserList version={version} selfId={user!.id} onCard={setCard} onChanged={reload} />
-      <WalletStats />
-    </>
+    <div className="console">
+      <nav className="console__nav" aria-label="管理分区">
+        {SECTIONS.map(([id, label]) => (
+          <Link key={id} href={id === 'overview' ? '/admin' : `/admin?s=${id}`} className={section === id ? 'console__on' : ''} aria-current={section === id ? 'page' : undefined}>
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <div className="console__main" data-testid={`admin-${section}`}>
+        {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
+        {section === 'overview' && <Overview />}
+        {section === 'users' && (
+          <>
+            <UserList version={version} selfId={user!.id} onCard={setCard} onChanged={reload} />
+            <CreateUser
+              onDone={(c) => {
+                setCard(c);
+                reload();
+              }}
+            />
+          </>
+        )}
+        {section === 'stats' && <WalletStats />}
+        {section === 'settings' && (
+          <div className="console__grid">
+            <NoticePanel />
+            <RegistrationSwitch />
+            <WalletRulesPanel />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

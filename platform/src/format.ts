@@ -5,6 +5,8 @@ import { GAMES } from './games.ts';
 export const num = (n: number) => n.toLocaleString('zh-CN');
 /** 输赢：正数带 +，负数本来就有 - */
 export const signed = (n: number) => (n > 0 ? `+${num(n)}` : num(n));
+/** 加绿减红：给数字配 up / down 类 */
+export const tone = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : undefined);
 /** 只要月日，比如"10/15" */
 export const dateText = (ms: number) => new Date(ms).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 /** 带年份的日期：2026年9月26日 */

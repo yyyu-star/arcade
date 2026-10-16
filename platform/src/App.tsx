@@ -329,7 +329,7 @@ export function App() {
   const { service, refresh, loading, slow } = useSession();
   const Page = pageFor(loc.pathname);
   return (
-    <div className={Page ? 'page page--narrow' : 'page'}>
+    <div className={!Page ? 'page' : loc.pathname === '/admin' ? 'page page--wide' : 'page page--narrow'}>
       <header className="top">
         <Link className="top__home" href="/">
           <h1 className="top__logo">
@@ -351,7 +351,8 @@ export function App() {
         </p>
       )}
       {Page ? (
-        <main className="narrow">
+        // 管理页是控制台布局，要整页宽；其余账号页面都是中间一栏
+        <main className={loc.pathname === '/admin' ? 'wide' : 'narrow'}>
           <Suspense fallback={<p className="note page-loading">正在打开…</p>}>
             <Page />
           </Suspense>

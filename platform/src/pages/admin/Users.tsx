@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { api, type AdminUser, errorText } from '../../api.ts';
 import { LedgerList } from '../../ledger.tsx';
-import { Field, FormError, Panel, SubmitButton, useSubmit } from '../../ui.tsx';
+import { Empty, Field, FormError, Panel, SubmitButton, useSubmit } from '../../ui.tsx';
+import { signed, tone } from '../../format.ts';
 import { num, type Credentials, dateText, gameName } from './common.ts';
 
 export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
@@ -29,11 +30,14 @@ export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
   );
 }
 
+/**
+ * 账号：左边列表、右边选中那个人的详情（钱包、战绩、流水、重设密码、删号）。
+ * 手机上一次只看一边：点一个人进详情，详情顶上"返回列表"。
+ */
 export function UserList({ version, selfId, onCard, onChanged }: { version: number; selfId: string; onCard: (c: Credentials) => void; onChanged: () => void }) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState('');
-  /** 正在操作哪一行、做什么：一次只展开一个。 */
-  const [open, setOpen] = useState<{ id: string; action: 'reset' | 'delete' | 'detail' } | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
@@ -51,70 +55,64 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
     };
   }, [version]);
 
-  const toggle = (id: string, action: 'reset' | 'delete' | 'detail') => {
-    setNotice('');
-    setOpen(open?.id === id && open.action === action ? null : { id, action });
-  };
-
+  const current = users?.find((u) => u.id === picked) ?? null;
   return (
-    <Panel icon="user" title={users ? `账号（${users.length}）` : '账号'}>
-      {error && <FormError text={error} />}
-      {notice && <p className="ok" role="status">{notice}</p>}
-      {!users && !error && <p className="note">正在读取…</p>}
-      <ul className="users">
-        {users?.map((u) => (
-          <li key={u.id} className="users__item" data-testid={`user-${u.username}`}>
-            <div className="users__head">
-              <span className="users__name">
-                {u.displayName}
-                {u.id === selfId && <span className="tag">你</span>}
-                {u.role === 'admin' && u.id !== selfId && <span className="tag">管理员</span>}
-              </span>
-              <span className="users__meta">
-                <span className="mono">{u.username}</span> · {dateText(u.createdAt)} 建 · {u.lastSeenAt > u.createdAt ? `${dateText(u.lastSeenAt)} 来过` : '还没来过'}
-              </span>
-              {u.wallet && <span className="users__meta" data-testid="user-wallet">{walletLine(u.wallet)}</span>}
-            </div>
-            <button
-              className="linkish users__detail"
-              type="button"
-              aria-expanded={open?.id === u.id && open.action === 'detail'}
-              onClick={() => toggle(u.id, 'detail')}
-            >
-              {open?.id === u.id && open.action === 'detail' ? '收起' : '钱包和战绩'}
-            </button>
-            {open?.id === u.id && open.action === 'detail' && <UserDetail username={u.username} />}
-            {u.id === selfId ? (
-              <p className="note">你自己的密码去"我的账号"改。</p>
-            ) : u.role === 'admin' ? (
-              <p className="note">管理员账号要用管理命令行工具来改。</p>
-            ) : (
-              <div className="row">
-                <button className="btn btn--small" type="button" aria-expanded={open?.id === u.id && open.action === 'reset'} onClick={() => toggle(u.id, 'reset')}>
-                  重设密码
-                </button>
-                <button className="btn btn--small" type="button" aria-expanded={open?.id === u.id && open.action === 'delete'} onClick={() => toggle(u.id, 'delete')}>
-                  删号
-                </button>
-              </div>
-            )}
-            {open?.id === u.id && open.action === 'reset' && (
-              <ResetPassword user={u} onDone={onCard} />
-            )}
-            {open?.id === u.id && open.action === 'delete' && (
-              <DeleteUser
-                user={u}
-                onDone={() => {
-                  setOpen(null);
-                  setNotice(`已经删掉「${u.displayName}」（${u.username}）`);
-                  onChanged();
+    <div className={`users-split${current ? ' users-split--picked' : ''}`}>
+      <Panel icon="user" title={users ? `账号（${users.length}）` : '账号'}>
+        {error && <FormError text={error} />}
+        {notice && <p className="ok" role="status">{notice}</p>}
+        {!users && !error && <p className="note">正在读取…</p>}
+        <ul className="users">
+          {users?.map((u) => (
+            <li key={u.id}>
+              <button
+                type="button"
+                className={`users__item${u.id === picked ? ' users__item--on' : ''}`}
+                data-testid={`user-${u.username}`}
+                aria-pressed={u.id === picked}
+                onClick={() => {
+                  setNotice('');
+                  setPicked(u.id);
                 }}
-              />
-            )}
-          </li>
-        ))}
-      </ul>
-    </Panel>
+              >
+                <span className="account__avatar" aria-hidden="true">
+                  {Array.from(u.displayName)[0]}
+                </span>
+                <span className="users__head">
+                  <span className="users__name">
+                    {u.displayName}
+                    {u.id === selfId && <span className="tag">你</span>}
+                    {u.role === 'admin' && u.id !== selfId && <span className="tag">管理员</span>}
+                  </span>
+                  <span className="users__meta">
+                    <span className="mono">{u.username}</span> · {u.lastSeenAt > u.createdAt ? `${dateText(u.lastSeenAt)} 来过` : '还没来过'}
+                  </span>
+                  {u.wallet && <span className="users__meta" data-testid="user-wallet">{walletLine(u.wallet)}</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+      <div className="users-split__detail">
+        {current ? (
+          <UserPanel
+            key={current.id}
+            user={current}
+            self={current.id === selfId}
+            onBack={() => setPicked(null)}
+            onCard={onCard}
+            onDeleted={() => {
+              setPicked(null);
+              setNotice(`已经删掉「${current.displayName}」（${current.username}）`);
+              onChanged();
+            }}
+          />
+        ) : (
+          users && users.length > 0 && <p className="note users-split__hint">点左边的一个人，看钱包、战绩和流水。</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -127,7 +125,50 @@ function walletLine(w: NonNullable<AdminUser['wallet']>): string {
   return `余额 ${num(w.balance)}${w.onTable ? ` · 桌上 ${num(w.onTable)}` : ''}${played ? ` · ${played}` : ''}`;
 }
 
-/** 展开一个人：战绩（各游戏）和钱包流水（最近 30 条，新的在前） */
+/** 右边的详情：头部、钱包和战绩、流水、操作（一次只展开一个操作） */
+function UserPanel({ user: u, self, onBack, onCard, onDeleted }: { user: AdminUser; self: boolean; onBack: () => void; onCard: (c: Credentials) => void; onDeleted: () => void }) {
+  const [action, setAction] = useState<'reset' | 'delete' | null>(null);
+  const toggle = (a: 'reset' | 'delete') => setAction(action === a ? null : a);
+  return (
+    <section className="panel user-panel" data-testid={`detail-${u.username}`}>
+      <button className="linkish users-split__back" type="button" onClick={onBack}>
+        ← 返回列表
+      </button>
+      <div className="people__row people__row--big">
+        <span className="account__avatar" aria-hidden="true">
+          {Array.from(u.displayName)[0]}
+        </span>
+        <span className="people__text">
+          <span className="people__name">
+            {u.displayName} {u.role === 'admin' && <span className="tag">管理员</span>}
+          </span>
+          <span className="people__sub">
+            <span className="mono">{u.username}</span> · {dateText(u.createdAt)} 建 · {u.lastSeenAt > u.createdAt ? `${dateText(u.lastSeenAt)} 来过` : '还没来过'}
+          </span>
+        </span>
+      </div>
+      <UserDetail username={u.username} />
+      {self ? (
+        <p className="note">你自己的密码去"我的账号"改。</p>
+      ) : u.role === 'admin' ? (
+        <p className="note">管理员账号要用管理命令行工具来改。</p>
+      ) : (
+        <div className="row user-panel__actions">
+          <button className="btn btn--small" type="button" aria-expanded={action === 'reset'} onClick={() => toggle('reset')}>
+            重设密码
+          </button>
+          <button className="btn btn--small" type="button" aria-expanded={action === 'delete'} onClick={() => toggle('delete')}>
+            删号
+          </button>
+        </div>
+      )}
+      {action === 'reset' && <ResetPassword user={u} onDone={onCard} />}
+      {action === 'delete' && <DeleteUser user={u} onDone={onDeleted} />}
+    </section>
+  );
+}
+
+/** 一个人的钱包摘要、各游戏战绩和钱包流水（最近 30 条，新的在前） */
 function UserDetail({ username }: { username: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof api.admin.walletOf>> | null>(null);
   const [error, setError] = useState('');
@@ -146,13 +187,24 @@ function UserDetail({ username }: { username: string }) {
   const career = Object.entries(data.career ?? {});
   return (
     <div className="user-detail" data-testid="user-detail">
-      <p className="note">
-        余额 {num(data.wallet.balance)}
-        {data.wallet.stakes.length ? ` · 桌上 ${data.wallet.stakes.map((s) => `${gameName(s.game)} ${num(s.amount)}`).join('、')}` : ''}
-        {data.wallet.fresh ? '（还没用过钱包）' : ''}
-      </p>
+      <dl className="tiles tiles--small">
+        <div className="tile">
+          <dt>余额</dt>
+          <dd>{num(data.wallet.balance)}</dd>
+        </div>
+        <div className="tile">
+          <dt>桌上</dt>
+          <dd>{num(data.wallet.stakes.reduce((t, s) => t + s.amount, 0))}</dd>
+        </div>
+      </dl>
+      {(data.wallet.stakes.length > 0 || data.wallet.fresh) && (
+        <p className="note">
+          {data.wallet.stakes.map((s) => `${gameName(s.game)} ${num(s.amount)}`).join('、')}
+          {data.wallet.fresh ? '还没用过钱包' : ''}
+        </p>
+      )}
       {career.length > 0 && (
-        <table className="stats-table">
+        <table className="stats-table cards-on-phone">
           <thead>
             <tr>
               <th>游戏</th>
@@ -168,24 +220,21 @@ function UserDetail({ username }: { username: string }) {
           <tbody>
             {career.map(([g, c]) => (
               <tr key={g}>
-                <td>{gameName(g)}</td>
-                <td>{c.n}</td>
-                <td>{c.rounds || '—'}</td>
-                <td>{c.rounds ? `${Math.round((c.wins / c.rounds) * 100)}%` : '—'}</td>
-                <td>{c.best ? num(c.best) : '—'}</td>
-                <td>{num(c.wnet)}</td>
-                <td>{num(c.net)}</td>
-                <td>{c.titles.length}</td>
+                <td data-label="游戏">{gameName(g)}</td>
+                <td data-label="上桌">{c.n}</td>
+                <td data-label="局数">{c.rounds || '—'}</td>
+                <td data-label="胜率">{c.rounds ? `${Math.round((c.wins / c.rounds) * 100)}%` : '—'}</td>
+                <td data-label="最大一把">{c.best ? num(c.best) : '—'}</td>
+                <td data-label="本周" className={tone(c.wnet)}>{signed(c.wnet)}</td>
+                <td data-label="累计" className={tone(c.net)}>{signed(c.net)}</td>
+                <td data-label="称号">{c.titles.length}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      {data.ledger && data.ledger.length > 0 ? (
-        <LedgerList entries={data.ledger} />
-      ) : (
-        <p className="note">还没有流水（0.10.7 以前的操作没记）。</p>
-      )}
+      <h3 className="user-detail__title">钱包流水</h3>
+      {data.ledger && data.ledger.length > 0 ? <LedgerList entries={data.ledger} /> : <Empty>还没有流水。</Empty>}
     </div>
   );
 }

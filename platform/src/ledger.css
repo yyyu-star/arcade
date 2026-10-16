@@ -1,0 +1,25 @@
+/* 钱包流水（钱包页和管理页按需加载时一起来，不进大厅首屏） */
+.ledger { display: flex; flex-direction: column; gap: var(--s-2); }
+.ledger__day ul { list-style: none; margin: 0; padding: 0; border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); overflow: hidden; }
+.ledger__date { position: sticky; top: 0; z-index: 1; margin: 0 0 6px; padding: var(--s-1) 0; font-size: var(--fs-sm); color: var(--muted); background: var(--surface); }
+.ledger__row { display: grid; grid-template-columns: 48px auto 1fr auto; align-items: center; gap: var(--s-3); min-height: 44px; padding: 6px var(--s-3); font-size: var(--fs-sm); }
+.ledger__row + .ledger__row { border-top: 1px solid var(--divider); }
+.ledger__time { color: var(--muted); }
+.ledger__kind { display: inline-flex; align-items: center; gap: var(--s-1); padding: 2px var(--s-2); border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 700; white-space: nowrap; }
+.ledger__kind--grant { background: #efe4ff; color: #6a3fb5; }
+.ledger__kind--buyin { background: #ffe6d4; color: var(--accent-ink); }
+.ledger__kind--settle { background: #dff3e4; color: var(--good); }
+.ledger__kind--refund, .ledger__kind--expire { background: #e3ecf5; color: #36597d; }
+.ledger__kind--relief { background: var(--highlight); color: #8a5a00; }
+.ledger__kind--admin { background: #dfe9ff; color: var(--focus); }
+.ledger__what { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s-2); }
+.ledger__what small { color: var(--muted); font-size: var(--fs-xs); }
+.ledger__amount { justify-self: end; font-weight: 800; }
+.ledger__more { align-self: center; }
+.ledger + .note { margin-top: var(--s-2); }
+@media (max-width: 420px) {
+  .ledger__row { grid-template-columns: 40px 1fr auto; row-gap: 2px; }
+  .ledger__kind { grid-column: 2; justify-self: start; }
+  .ledger__what { grid-column: 2; grid-row: 2; }
+  .ledger__amount { grid-column: 3; grid-row: 1 / span 2; }
+}

@@ -1,0 +1,15 @@
+/* 排行榜的领奖台（排行页按需加载，不进大厅首屏）：第二、第一、第三从左到右，台子一个比一个矮；自己站上去了就整格高亮 */
+.podium { list-style: none; margin: 0 0 var(--s-3); padding: var(--s-2) 0 0; display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); align-items: end; gap: var(--s-2); }
+.podium--2 { --n: 2; }
+.podium--1 { --n: 1; max-width: 200px; margin-left: auto; margin-right: auto; }
+.podium .podium__item { display: flex; flex-direction: column; align-items: center; gap: var(--s-1); min-height: 0; padding: var(--s-3) var(--s-2) 0; text-align: center; border-radius: var(--r-md) var(--r-md) 0 0; overflow: hidden; }
+.podium .rank__no { position: relative; z-index: 1; margin-bottom: -14px; }
+.podium__avatar { display: grid; place-items: center; width: 52px; height: 52px; border: var(--bw) solid var(--line); border-radius: 50%; background: var(--accent); color: var(--white); font-size: var(--fs-xl); font-weight: 800; box-shadow: var(--sh-sm); }
+.podium__item--1 .podium__avatar { width: 64px; height: 64px; font-size: var(--fs-2xl); }
+.podium .rank__name { max-width: 100%; }
+.podium .rank__value { font-size: var(--fs-lg); }
+.podium__step { align-self: stretch; margin: var(--s-2) calc(-1 * var(--s-2)) 0; height: 28px; background: repeating-linear-gradient(135deg, var(--soft) 0 8px, #e6dccf 8px 16px); border-top: var(--bw-thin) solid var(--line); }
+.podium__item--1 .podium__step { height: 56px; background: repeating-linear-gradient(135deg, #ffe7a3 0 8px, #f9d877 8px 16px); }
+.podium__item--2 .podium__step { height: 40px; background: repeating-linear-gradient(135deg, #eef1f4 0 8px, #dfe4e9 8px 16px); }
+.podium__item--3 .podium__step { background: repeating-linear-gradient(135deg, #f7e2cc 0 8px, #efd0b0 8px 16px); }
+.podium .rank--me { box-shadow: inset 0 0 0 1px var(--line); }

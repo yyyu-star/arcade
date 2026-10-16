@@ -28,7 +28,7 @@ export function WalletStats() {
       {!days && !loadError && <p className="note">正在读取…</p>}
       {days && days.length === 0 && <p className="note">还没有记录：每天凌晨 3 点多记一次前一天的。</p>}
       {days && days.length > 0 && (
-        <table className="stats-table" data-testid="wallet-stats">
+        <table className="stats-table cards-on-phone" data-testid="wallet-stats">
           <thead>
             <tr>
               <th>日期</th>
@@ -45,15 +45,15 @@ export function WalletStats() {
           <tbody>
             {days.map((d) => (
               <tr key={d.day}>
-                <td>{d.day.slice(5)}</td>
-                <td>{num(d.total)}</td>
-                <td>{d.wallets}</td>
-                <td>{num(d.grant)}</td>
-                <td>{num(d.relief)}</td>
-                <td>{num(d.admin ?? 0)}</td>
-                <td>{num(sum(d, 'in') - sum(d, 'out') - sum(d, 'back'))}</td>
-                <td>{num(sum(d, 'capped'))}</td>
-                <td>
+                <td data-label="日期">{d.day.slice(5)}</td>
+                <td data-label="总量">{num(d.total)}</td>
+                <td data-label="钱包">{d.wallets}</td>
+                <td data-label="新号送">{num(d.grant)}</td>
+                <td data-label="补给">{num(d.relief)}</td>
+                <td data-label="管理员调整">{num(d.admin ?? 0)}</td>
+                <td data-label="庄家">{num(sum(d, 'in') - sum(d, 'out') - sum(d, 'back'))}</td>
+                <td data-label="到顶没进">{num(sum(d, 'capped'))}</td>
+                <td data-label="各游戏">
                   {Object.entries(d.games)
                     .map(([g, x]) => `${gameName(g)} ${num(x.in)} / ${num(x.out)} / ${num(x.back)}`)
                     .join('；') || '—'}

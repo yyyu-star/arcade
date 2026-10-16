@@ -1,0 +1,94 @@
+/* 管理页（按需加载，不进大厅首屏）：控制台布局、数字卡片、趋势图、用户列表和详情、宽表格。主题变量在 src/styles.css */
+.admin-entry { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+.rules-log { margin: var(--s-2) 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--muted); display: grid; gap: var(--s-1); }
+/* 控制台：电脑上左边分区导航、右边内容；窄一点的屏幕导航在顶上一排 */
+.console { display: grid; grid-template-columns: 180px 1fr; gap: var(--s-5); align-items: start; }
+.console__nav { position: sticky; top: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border: var(--bw) solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--sh-lg); }
+.console__nav a { display: flex; align-items: center; min-height: var(--tap); padding: 0 var(--s-3); border-radius: var(--r-md); color: var(--ink); font-weight: 700; text-decoration: none; }
+.console__nav a:hover { background: var(--highlight-warm); }
+.console__nav a.console__on { background: var(--accent); color: var(--white); box-shadow: inset 0 -3px 0 var(--accent-deep); }
+.console__main { min-width: 0; display: flex; flex-direction: column; gap: var(--s-5); }
+.console__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--s-5); align-items: start; }
+.console__single { max-width: var(--narrow); margin: 0 auto; width: 100%; }
+@media (max-width: 1023px) {
+  .console { grid-template-columns: 1fr; }
+  .console__nav { position: static; flex-direction: row; flex-wrap: wrap; padding: var(--s-2); box-shadow: var(--sh-sm); }
+  .console__nav a { flex: 1; justify-content: center; padding: 0 var(--s-2); white-space: nowrap; }
+}
+@media (max-width: 560px) { .console__grid { grid-template-columns: 1fr; } }
+/* 数字卡片：一排，放不下就折行，每张一样宽 */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-3); margin: 0; }
+.tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--s-3) var(--s-4); border: var(--bw) solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--sh-md); }
+.tile dt { font-size: var(--fs-xs); color: var(--muted); font-weight: 700; }
+.tile dd { margin: 0; font-size: var(--fs-xl); font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiles--small { grid-template-columns: repeat(2, 1fr); }
+.tiles--small .tile { box-shadow: none; border-width: var(--bw-thin); background: var(--white); }
+.tiles--small .tile dd { font-size: var(--fs-xl); }
+@media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+/* 趋势图：手写 SVG，颜色跟主题走 */
+.chart { margin: 0; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart__axis { stroke: var(--line); stroke-width: 2; }
+.chart__in { fill: var(--accent); }
+.chart__out { fill: #4fae6f; }
+.chart__line { fill: none; stroke: var(--focus); stroke-width: 2.5; stroke-linejoin: round; }
+.chart__dot { fill: var(--white); stroke: var(--focus); stroke-width: 2.5; }
+.chart__label { font-size: 12px; fill: var(--muted); }
+.chart__legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin-top: var(--s-2); font-size: var(--fs-xs); color: var(--muted); }
+.chart__key::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; }
+.chart__key--in::before { background: var(--accent); }
+.chart__key--out::before { background: #4fae6f; }
+.chart__key--line::before { height: 3px; vertical-align: 3px; background: var(--focus); }
+.game-today { list-style: none; margin: 0 0 var(--s-4); padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.game-today li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s-3); padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); }
+.game-today li > span:last-child { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-sm); }
+/* 用户：左边列表、右边详情；窄屏一次只看一边 */
+.users-split { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: var(--s-5); align-items: start; }
+.users { gap: var(--s-2); max-height: 70vh; overflow-y: auto; }
+.users__item { display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: 56px; padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.users__item:hover { background: var(--highlight-warm); }
+.users__item--on { background: var(--highlight-warm); box-shadow: inset 4px 0 0 var(--accent); }
+.users__head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.users__name { font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.users__meta { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.users-split__hint { padding: var(--s-6); border: var(--bw-thin) dashed var(--dashed); border-radius: var(--r-lg); text-align: center; }
+.users-split__back { display: none; }
+.user-panel { position: sticky; top: var(--s-4); }
+.user-detail { display: flex; flex-direction: column; gap: var(--s-3); margin-bottom: var(--s-3); }
+.user-detail__title { margin: var(--s-2) 0 0; font-size: var(--fs-md); }
+.user-panel__actions { margin-top: var(--s-2); }
+@media (max-width: 1023px) {
+  .users-split { grid-template-columns: 1fr; }
+  .users-split--picked > .panel:first-child { display: none; }
+  .users-split:not(.users-split--picked) .users-split__detail { display: none; }
+  .users-split__back { display: inline-flex; margin-bottom: var(--s-2); }
+  .users { max-height: none; }
+  .user-panel { position: static; }
+}
+/*
+ * 宽表格（管理页的趋势和筹码统计）：手机上横着滑；右边还有没露出来的列时，右沿有一道阴影提示能滑。
+ * 阴影用两层背景：遮罩跟着内容走（local），阴影钉在框上（scroll），滑到头时遮罩正好盖住阴影
+ */
+.stats-table {
+  display: block; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background:
+    linear-gradient(to left, var(--surface) 30%, rgb(255 250 240 / 0%)) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 100% 50%, rgb(58 43 51 / 22%), transparent) right / 12px 100% no-repeat scroll;
+}
+.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.stats-table th, .stats-table td { padding: var(--s-1) var(--s-2); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--divider); }
+.stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+/* 手机上宽表格改成一行一张卡片：表头藏起来，每格前面写上它是哪一列 */
+@media (max-width: 560px) {
+  .cards-on-phone, .cards-on-phone tbody { display: block; background: none; overflow: visible; }
+  .cards-on-phone thead { display: none; }
+  .cards-on-phone tr { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px var(--s-3); margin-bottom: var(--s-2); padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); }
+  .cards-on-phone td { display: flex; justify-content: space-between; gap: var(--s-2); padding: 2px 0; border: 0; white-space: normal; }
+  .cards-on-phone td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-xs); }
+  .cards-on-phone td:first-child { grid-column: 1 / -1; font-weight: 800; font-size: var(--fs-md); }
+  .cards-on-phone td:first-child::before { content: none; }
+}
+/* 电脑上宽表格放得下：照常是表格、撑满面板（窄一点的屏幕上才横着滑，手机上是卡片） */
+@media (min-width: 1024px) {
+  .stats-table { display: table; background: none; }
+}

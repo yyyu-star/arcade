@@ -82,7 +82,7 @@ h1, h2, h3 { line-height: 1.25; }
 /* 手机上去掉点击的灰色高亮和双击缩放的延迟 */
 a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 /* 数字一律等宽，排行、余额、表格上下对得齐 */
-.stats-table, .overview dd, .rank__value, .stake__amount, .wallet__balance, .account--chips, .career__facts dd, .career__summary, .ledger, .card__week { font-variant-numeric: tabular-nums; }
+.stats-table, .tile dd, .tnum, .rank__value, .stake__amount, .wallet__balance, .account--chips, .career__facts dd, .career__summary, .ledger, .card__week { font-variant-numeric: tabular-nums; }
 .up { color: var(--good); }
 .down { color: var(--bad); }
 
@@ -94,6 +94,8 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   padding-bottom: max(var(--s-12), env(safe-area-inset-bottom, 0px));
 }
 .narrow { max-width: var(--narrow); margin: 0 auto; display: flex; flex-direction: column; gap: var(--s-5); }
+/* 管理页的控制台占满内容宽度 */
+.wide { display: flex; flex-direction: column; gap: var(--s-5); }
 .top { position: relative; margin-bottom: var(--s-8); display: flex; flex-direction: column; align-items: center; gap: var(--s-2); text-align: center; }
 .top__home { color: inherit; text-decoration: none; border-radius: var(--r-sm); }
 .top__logo { display: inline-flex; align-items: center; gap: var(--s-3); font-size: var(--fs-3xl); margin: 0; color: var(--accent); letter-spacing: 2px; text-shadow: 2px 2px 0 var(--line); }
@@ -334,12 +336,12 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 /* ---------- 列表里的一项（存档、好友、账号、桌上筹码、战绩） ---------- */
 .saves, .people, .users, .stakes, .careers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 .saves { margin-top: var(--s-3); gap: var(--s-2); }
-.saves li, .people__item, .users__item, .stake, .career { padding: var(--s-3) var(--s-4); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); }
+.saves li, .people__item, .stake, .career { padding: var(--s-3) var(--s-4); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); }
 .saves li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); }
 .saves__game { flex: none; font-weight: 700; }
 .saves__info { color: var(--muted); text-align: right; }
 .saves__info--error { color: var(--error-ink); }
-.people__item, .users__item { display: flex; flex-direction: column; gap: var(--s-3); }
+.people__item { display: flex; flex-direction: column; gap: var(--s-3); }
 .people__row { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .people__row--big { margin-bottom: var(--s-4); font-size: 20px; }
 .people__row--big .account__avatar { width: 44px; height: 44px; font-size: var(--fs-xl); }
@@ -348,12 +350,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .people__sub { color: var(--muted); font-size: var(--fs-sm); }
 .people__link { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .people__confirm, .users__panel { border-top: var(--bw-thin) dashed var(--dashed); padding-top: var(--s-3); }
-.people .btn--small, .users .btn--small { min-height: var(--tap); }
-.users__head { display: flex; flex-direction: column; gap: 2px; }
-.users__name { font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.users__meta { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.users__detail { min-height: 32px; }
-.user-detail { margin-top: var(--s-2); padding: var(--s-3); border: var(--bw-thin) dashed var(--dashed); border-radius: var(--r-md); display: grid; gap: var(--s-2); }
+.people .btn--small, .user-panel .btn--small { min-height: var(--tap); }
 
 /* ---------- 钱包 ---------- */
 .wallet__balance { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-1) 0 var(--s-2); font-size: 44px; font-weight: 800; line-height: 1.1; }
@@ -365,10 +362,6 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .stake__mode { padding: 0 var(--s-2); border: var(--bw-thin) solid var(--line); border-radius: var(--r-pill); font-size: 13px; }
 .stake__amount { margin-left: auto; font-size: var(--fs-xl); font-weight: 800; }
 .stake .note { margin: 6px 0; }
-.ledger { list-style: none; margin: 0; padding: 0; font-size: 13px; display: grid; gap: 2px; }
-.ledger li { display: grid; grid-template-columns: 96px 1fr auto; gap: var(--s-2); align-items: baseline; }
-.ledger__time { color: var(--muted); }
-.ledger + .note { margin-top: var(--s-2); }
 @media (max-width: 560px) { .wallet__balance { font-size: 36px; } }
 
 /* ---------- 战绩 ---------- */
@@ -406,34 +399,8 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .rank__me { margin-left: 6px; vertical-align: 1px; font-size: var(--fs-xs); line-height: 18px; padding: 0 6px; border-radius: 6px; background: var(--accent); color: var(--white); }
 .rank__value { font-weight: 800; }
 .rank__mine { margin: var(--s-3) 0 0; font-weight: 700; }
-.ranks + .note, .rank__mine + .note { margin-top: var(--s-3); }
+.ranks + .note, .rank__mine + .note, [data-testid='ranks'] + .note { margin-top: var(--s-3); }
 
-/* ---------- 管理页 ---------- */
-.admin-entry { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
-.rules-log { margin: var(--s-2) 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--muted); display: grid; gap: var(--s-1); }
-/* 今日概况五个数：前三个一行、后两个一行，不剩一个孤零零的 */
-.overview { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s-2); margin: 0 0 var(--s-3); }
-.overview div { grid-column: span 2; display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: var(--s-2); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); text-align: center; }
-.overview div:nth-child(n + 4) { grid-column: span 3; }
-.overview dt { font-size: var(--fs-xs); color: var(--muted); }
-.overview dd { margin: 2px 0 0; font-size: 20px; font-weight: 800; overflow-wrap: anywhere; }
-.overview__games { margin: 0 0 var(--s-3); padding-left: 18px; display: grid; gap: var(--s-1); }
-/*
- * 宽表格（管理页的趋势和筹码统计）：手机上横着滑；右边还有没露出来的列时，右沿有一道阴影提示能滑。
- * 阴影用两层背景：遮罩跟着内容走（local），阴影钉在框上（scroll），滑到头时遮罩正好盖住阴影
- */
-.stats-table {
-  display: block; overflow-x: auto; -webkit-overflow-scrolling: touch;
-  background:
-    linear-gradient(to left, var(--surface) 30%, rgb(255 250 240 / 0%)) right / 32px 100% no-repeat local,
-    radial-gradient(farthest-side at 100% 50%, rgb(58 43 51 / 22%), transparent) right / 12px 100% no-repeat scroll;
-}
-.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.stats-table th, .stats-table td { padding: var(--s-1) var(--s-2); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--divider); }
-.stats-table th:first-child, .stats-table td:first-child { text-align: left; }
-@media (max-width: 420px) {
-  .overview dd { font-size: var(--fs-lg); }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
