@@ -1,19 +1,20 @@
 /**
  * 掼蛋自己多出来的两样互动（其余的头像菜单、面板、冷却、电脑反应都在 arcade-kit/table-fun，见 TableScene.buildFun）：
  * - 顺手提示：公开事件后在"互动"按钮旁冒 1–2 句（suggest.ts 算），一点就发，6 秒后收起；
- * - 催促炸弹：轮到的人想了 8 秒以上，别人能对他扔一个炸弹。只是画面和声音，不缩短计时、不影响规则。
+ * - 催促炸弹：轮到的人想了 8 秒以上，别人能对他扔一个炸弹；单机里我想太久，爱闹的电脑也会扔一个（每手最多一次）。
+ *   只是画面和声音，不缩短计时、不影响规则。
  * 发出去走和 kit 同一个通道（好友房经房间转发，单机本地播），收到时由 kit 照常播。
  */
 import Phaser from 'phaser';
 import { PROPS } from 'arcade-kit/table-fun';
+import type { FunBot } from 'arcade-kit/fun-logic';
 import { PROP_BASE, emoteOf } from '../../net/emotes.ts';
+import { URGE_AFTER_MS, slowUrge } from '../../net/fun-moments.ts';
 import { getSettings } from '../store.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { iconButton, text } from '../ui/kit.ts';
 import type { SeatView } from './seats.ts';
 
-/** 想了多久以后别人能对他扔"催促炸弹" */
-export const URGE_AFTER_MS = 8000;
 /** 顺手提示留多久 */
 const SUGGEST_MS = 6000;
 
@@ -23,6 +24,8 @@ export interface NudgeHost {
   /** 能不能发（好友房坐下了、没有弹窗） */
   canSend(): boolean;
   send(id: number, toView?: number): void;
+  /** 单机：电脑扔过来（走 kit 的收：同样的冷却、护盾、连击） */
+  botThrow(from: number, id: number, to: number): void;
   /** 顺手提示放哪（世界坐标，提示条的左边、中线） */
   tipAt: { x: number; y: number };
 }
@@ -36,6 +39,10 @@ export class Nudges {
   private urged = '';
   private turnKey = '';
   private turnSince = 0;
+  /** 单机：我这一手从什么时候开始想、电脑催过的那一手 */
+  private soloKey = '';
+  private soloSince = 0;
+  private readonly soloUrged = { key: '' };
   private readonly h: NudgeHost;
 
   constructor(h: NudgeHost) {
@@ -106,6 +113,20 @@ export class Nudges {
     }, 40).setDepth(450);
     s.tweens.add({ targets: b, scale: 1.18, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.urge = b;
+  }
+
+  /**
+   * 单机每半秒调一次：key 是我这一手（没轮到我给 null），bots 是电脑和性格。想了 URGE_AFTER_MS 以上，爱闹的电脑按概率扔一个炸弹
+   */
+  tickSolo(key: string | null, bots: readonly FunBot[], now = Date.now()): void {
+    if (key === null || !getSettings().taunts || !this.h.canSend()) return;
+    if (key !== this.soloKey) {
+      this.soloKey = key;
+      this.soloSince = now;
+      return;
+    }
+    const seat = slowUrge(this.soloUrged, key, now - this.soloSince, bots, Math.random);
+    if (seat !== null) this.h.botThrow(seat, PROP_BASE + PROPS.indexOf('bomb'), 0);
   }
 
   private chip(x: number, y: number, w: number, h: number, label: string, fn: () => void, key: string): Phaser.GameObjects.Container {

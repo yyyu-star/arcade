@@ -4,7 +4,7 @@ import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecor
 import { EMOTES, EMOTE_COUNT, PROP_BASE, PROP_COUNT, STICKER_BASE, STICKER_COUNT, TAUNTS, emoteOf, taunt } from '../src/net/emotes.ts';
 import { suggestFor } from '../src/view/suggest.ts';
 import { dealTitles, emptyMatchLog, logDeal, matchTitles } from '../src/stake/titles.ts';
-import { dealMoment, momentOf, victimOf, PHRASES } from '../src/net/fun-moments.ts';
+import { MOOD_LINES, PHRASES, URGE_AFTER_MS, URGE_P, dealMoment, momentOf, slowUrge, victimOf } from '../src/net/fun-moments.ts';
 import { funBots, guandanRoom, testKey } from '../src/net/rules.ts';
 
 const play = (s: string) => interpret(parseCards(s), 2, DEFAULT_OPTIONS)[0]!;
@@ -79,5 +79,26 @@ describe('接 kit 的牌桌互动（0.12.0）', () => {
     const bots = funBots(s);
     expect(bots.map((b) => b.seat)).toEqual([1, 3]);
     for (const b of bots) expect(['rowdy', 'normal', 'cool']).toContain(b.temper);
+  });
+
+  it('电脑的台词是掼蛋的说法：六种情绪都有，只说牌局', () => {
+    for (const lines of Object.values(MOOD_LINES)) {
+      expect(lines.length).toBeGreaterThanOrEqual(3);
+      for (const t of lines) expect(t).not.toMatch(/妈|爹|丑|胖|蠢|傻|笨|男|女|省/);
+    }
+    expect(Object.values(MOOD_LINES).flat().some((t) => /炸|头游|贡|接风|双下/.test(t))).toBe(true);
+  });
+
+  it('单机催人：想够 8 秒、有爱闹的电脑才扔，一手最多判一次', () => {
+    const bots = [{ seat: 1, temper: 'normal' as const }, { seat: 3, temper: 'rowdy' as const }];
+    const st = { key: '' };
+    expect(slowUrge(st, '1:5', URGE_AFTER_MS - 1, bots, () => 0)).toBeNull();
+    expect(slowUrge(st, '1:5', URGE_AFTER_MS, bots, () => 0)).toBe(3);
+    expect(slowUrge(st, '1:5', URGE_AFTER_MS * 3, bots, () => 0)).toBeNull();
+    // 这一手没抽中也算判过
+    expect(slowUrge(st, '1:6', URGE_AFTER_MS, bots, () => URGE_P)).toBeNull();
+    expect(slowUrge(st, '1:6', URGE_AFTER_MS * 2, bots, () => 0)).toBeNull();
+    // 没有爱闹的电脑不催
+    expect(slowUrge({ key: '' }, '1:7', URGE_AFTER_MS, [{ seat: 2, temper: 'cool' }], () => 0)).toBeNull();
   });
 });

@@ -147,7 +147,9 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 编号（`src/net/emotes.ts`，只往后加）：客气话 0–7、嘲讽 8–19 合起来是 kit 的短语表（`PHRASES`），表情 20–31、道具 32–39 正好是 kit 的排法。
   - 名场面（`net/fun-moments.ts`，纯函数有单测）：炸弹压了对方、头游、双下 → kit 的 `bomb`、`first-out`、`double-down`；单机交给 `fun.moment`，好友房在 `worker/room.ts` 的 `onStep` 里问每个电脑的 `botReact`、经 `botEmote` 发。
     真人冲电脑扔的在 `onEmote` 里用 kit 的 `hitEvent` 认、电脑回应。冷却只在内存里，不写存储、不记真人短语。电脑出牌（`src/ai`）绝不读这些。
-  - 掼蛋自己多的两样在 `table/nudge.ts`：公开事件后的顺手提示（`suggest.ts`）、好友房里轮到的人想了 8 秒以上别人能扔的"催促炸弹"。收到的短语、表情配掼蛋自己的提示音（`funIn`）。
+  - 电脑气泡里的话是掼蛋自己的台词（`MOOD_LINES`，按 kit 的六种情绪，经 `moodLines` 传给 kit），好友房的页面也用它配电脑的表情。
+  - 掼蛋自己多的在 `table/nudge.ts`：公开事件后的顺手提示（`suggest.ts`）、好友房里轮到的人想了 8 秒以上别人能扔的"催促炸弹"、
+    单机里我想了 8 秒以上爱闹的电脑按 `URGE_P` 扔一个催促炸弹（`slowUrge`，每手最多判一次，走 kit 的收，同样受护盾）。收到的短语、表情配掼蛋自己的提示音（`funIn`）。
   - 设置里能整个关掉（字段名仍是 `taunts`）；点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（kit 存 sessionStorage `guandan.fun.blocked`）。冒烟点的控件是 kit 的名字（`fun:button`、`fun:seat3`、`fun:prop0`……，换成世界坐标放进 `controls()`）。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
   - 称号和每副复盘只用公开信息（出牌记录、名次），电脑决策不读表情。

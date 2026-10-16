@@ -56,7 +56,7 @@ import { BUTTON_Y, TOPBAR_H, seatAnchors } from '../table/layout.ts';
 import { SeatView } from '../table/seats.ts';
 import { Nudges } from '../table/nudge.ts';
 import { TableFun, funItem, type FunSeat } from 'arcade-kit/table-fun';
-import { PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
+import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
 import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
@@ -276,11 +276,21 @@ export class TableScene extends Phaser.Scene {
       enabled: () => getSettings().taunts,
       scope: () => net?.code ?? 'solo',
       localBots: !net,
+      moodLines: MOOD_LINES,
       sound: (p, phase) => audio.fun(p, phase),
       onHit: (seat) => this.seats[seat]?.hit(),
       log: (line) => this.fxLog.push(line),
     });
-    this.nudges = new Nudges({ scene: this, seats: this.seats, canSend: () => seated() && free(), send, tipAt: { x: left + bw + 20, y: 340 } });
+    this.nudges = new Nudges({
+      scene: this,
+      seats: this.seats,
+      canSend: () => seated() && free(),
+      send,
+      botThrow: (from, id, to) => this.funIn(from, id, to),
+      tipAt: { x: left + bw + 20, y: 340 },
+    });
+    // 单机：我想太久，爱闹的电脑扔个催促炸弹（nudge.ts，每手最多一次）
+    if (!net) this.time.addEvent({ delay: 500, loop: true, callback: () => this.tickSoloUrge() });
     // 弹窗（结算、设置、确认框……）开着时互动层整个藏起来：DOM 层在画布上面，不藏会挡住弹窗上的按钮
     this.time.addEvent({ delay: 200, loop: true, callback: () => this.syncFunShown() });
     this.events.once('shutdown', () => {
@@ -308,6 +318,15 @@ export class TableScene extends Phaser.Scene {
   /** 名场面交给 kit：单机里电脑按性格起哄（好友房的在房间里算） */
   private funMoment(m: ReturnType<typeof dealMoment>): void {
     if (m) this.fun?.moment(m);
+  }
+
+  private tickSoloUrge(): void {
+    const v = this.ses.view();
+    const bots = [1, 2, 3].flatMap((s) => {
+      const p = this.ses.botStyle(s)?.persona;
+      return p ? [{ seat: s, temper: TEMPER[p] }] : [];
+    });
+    this.nudges?.tickSolo(this.mySoloTurn() ? `${v.dealNo}:${v.step}` : null, bots);
   }
 
   private mySoloTurn(): boolean {
