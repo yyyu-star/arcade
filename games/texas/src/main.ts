@@ -17,7 +17,7 @@ import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from '
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
 import { ActionBar } from './view/actions.ts';
 import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
-import { AI_URGE_MS, Banter, emoteOf, pokeOf, REPLY_DELAY, type Out } from './fun/banter.ts';
+import { AI_URGE_MS, Banter, emoteOf, REPLY_DELAY, type Out } from './fun/banter.ts';
 import { tauntId } from './fun/taunts.ts';
 import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow } from './view/summary.ts';
@@ -605,27 +605,32 @@ function who(v: View): (i: number) => string {
 }
 
 /** 点了别人的头像：弹这一场的数 */
-function showRead(i: number): void {
+/**
+ * 点了谁的头像（docs/table-fun.md 第 1 节）：别人的先弹小菜单（8 个道具、3 句点名、"看对手"、"屏蔽他"），
+ * "看对手"再弹这一场的数（full）；我自己的弹 12 个表情。没坐下、关了互动的直接看数
+ */
+function showRead(i: number, full = false): void {
   const v = curView();
   if (!v?.seats[i]) return;
   const r = reads.get(who(v)(i));
-  // 头像菜单（docs/table-fun.md 第 1 节）：别人的是 8 个道具、3 句点名短语、"屏蔽他"（真人、电脑都行）；我自己的是 12 个表情
   const me = mySeat();
   const acts: CardAct[] = [];
   const now = performance.now();
-  if (me !== null && !fun.off && v.seats[i]!.owner !== 'none') {
+  const play = !full && me !== null && !fun.off && v.seats[i]!.owner !== 'none';
+  if (play) {
     if (i === me) STICKERS.forEach((k, n) => acts.push({ label: k, icon: stickerSvg(k), run: () => sendFun(STICKER_BASE + n), cool: coolUntil.say - now }));
     else {
       PROPS.forEach((k, n) => acts.push({ label: PROP_NAMES[k], icon: propSvg(k), run: () => sendFun(PROP_BASE + n, i), cool: coolUntil.prop - now }));
       for (const t of MENU_SAYS) acts.push({ label: t, say: true, run: () => sendFun(tauntId(t), i) });
+      acts.push({ label: '看对手', run: () => showRead(i, true) });
     }
   }
   const name = i !== me ? funKey(v, i) : null;
-  if (name) {
+  if (name && !full) {
     const muted = fun.muted.includes(name);
     acts.push({ label: muted ? '取消屏蔽' : '屏蔽他', run: () => setMuted(name, !muted) });
   }
-  tableView.showCard(i, styleTag(r), readLines(r), acts);
+  tableView.showCard(i, styleTag(r), readLines(r), acts, play && i !== me);
 }
 
 // ---------- 嘲讽、顺手提示、名场面、称号、屏蔽（好友房 0.3.0，DESIGN.md 13.4；单机和电脑的互动 0.6.0，13.5） ----------
@@ -681,18 +686,8 @@ const houseSeats = (v: View): { seat: number; persona: number }[] => v.seats.fla
 function poke(from: number, id: number, to?: number): void {
   const v = curView();
   if (!v || fun.off || online) return;
-  let target = to;
-  if (target === undefined) {
-    if (id >= TAUNT_COUNT) return;
-    const hs = houseSeats(v).filter((s) => s.seat !== from);
-    if (!hs.length) return;
-    target = hs[Math.floor(Math.random() * hs.length)]!.seat;
-  }
-  const s = v.seats[target];
-  if (!s || s.owner !== 'house' || target === from) return;
-  const p = pokeOf(id);
-  const out = p && banter.react({ seat: target, persona: s.persona }, from, p);
-  if (out) aiDo(target, out);
+  const r = banter.poked(v.seats, from, id, to);
+  if (r) aiDo(r.seat, r.out);
 }
 
 /** 单机的电脑做这一下：看一眼再回（REPLY_DELAY），到时候它还坐在那、没关总开关、没被我屏蔽才显示 */

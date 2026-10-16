@@ -505,6 +505,9 @@ body::before {
 .seat .bubble.on { display: block; }
 .seat .bubble.fold { background: rgba(40, 46, 43, .9); color: #a9b3ad; box-shadow: none; }
 .seat .bubble.pop { animation: say .5s ease-out; }
+/* 被道具砸中的那一下（table.ts 的 hit）：动作气泡先淡出，不和番茄、污渍叠在一起 */
+.seat .bubble, .seat .badge { transition: opacity .15s; }
+.seat.hit :is(.bubble, .badge) { opacity: 0; }
 /* 顶上的座位：头像上方是桌边、下方是下注，放在头像左边（底牌在右边） */
 .seat.top .bubble { left: auto; right: 38px; top: -16px; transform: none; }
 /* 贴着左边的顶上座位（6、7 人桌左上角）：头像左边放不下，放头像正上方（0.3.1） */
@@ -701,7 +704,10 @@ body::before {
 }
 .hand-no { font-size: var(--fs-2); color: var(--muted); margin-right: var(--s-1); }
 /* 好友房嘲讽（0.3.0）：按钮、顺手提示在左下，面板从左下弹出；都不压我的底牌（正下方）和操作区（右下） */
-.fun-hints { display: flex; gap: var(--s-2); }
+/* 一手打完的顺手短语：在"歇一手、互动"那一行上面，不挨着我的头像和名牌 */
+.fun-hints { position: absolute; left: 0; bottom: calc(100% + var(--s-2)); display: flex; gap: var(--s-2); }
+/* 竖屏 hud 在顶上，下面是顶上的座位；放到我的名牌和赔率那一行之间的空地（舞台做了缩放，fixed 按舞台算） */
+.stage.tall .fun-hints { position: fixed; left: var(--s-3); right: var(--s-3); bottom: 175px; justify-content: center; }
 .fun-hint {
   padding: var(--s-2) var(--s-3);
   border: 1px solid rgba(243, 200, 107, .7);
@@ -719,7 +725,11 @@ body::before {
   left: var(--s-3); bottom: 60px;
   z-index: 27;
   width: 330px;
-  padding: var(--s-3);
+  /* 限高：顶栏下面到"互动"按钮上面，放不下就在里面滚；底部留出安全区，最后一行不被截 */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 180px);
+  padding: var(--s-3) var(--s-3) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
   border-radius: var(--r-4);
   background: rgba(10, 20, 15, .97);
   border: 1px solid rgba(243, 200, 107, .4);
@@ -729,7 +739,7 @@ body::before {
 .fp-tab { height: 34px; padding: 0 var(--s-3); border: 1px solid transparent; border-radius: var(--r-3); background: transparent; color: var(--muted); font-size: var(--fs-3); cursor: pointer; }
 .fp-tab.sel { font-weight: 800; }
 .fp-to { margin-left: auto; min-width: 0; font-size: var(--fs-2); color: #ffd9a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); max-height: 260px; overflow-y: auto; }
+.fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); flex: 1 1 auto; min-height: 0; max-height: 260px; overflow-y: auto; padding-bottom: var(--s-1); }
 .fp-grid.sticker, .fp-grid.prop { grid-template-columns: repeat(6, 1fr); }
 .fp-icon { aspect-ratio: 1; padding: var(--s-1); border: 1px solid rgba(255, 255, 255, .1); border-radius: var(--r-3); background: rgba(255, 255, 255, .05); cursor: pointer; }
 .fp-hint { grid-column: 1 / -1; padding: var(--s-4) var(--s-2); text-align: center; font-size: var(--fs-3); color: var(--muted); }
@@ -746,7 +756,8 @@ body::before {
 .fp-off { display: flex; align-items: center; gap: var(--s-2); min-height: 34px; margin-top: var(--s-2); font-size: var(--fs-2); color: var(--muted); cursor: pointer; }
 .fp-off input { width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
 /* 一键屏蔽全桌（0.6.0）：总开关下面一行小字按钮 */
-.fp-mute-all { height: 34px; margin-top: var(--s-1); padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-3); background: transparent; color: var(--muted); font-size: var(--fs-2); cursor: pointer; }
+.fun-panel > :not(.fp-grid) { flex: none; }
+.fp-mute-all { align-self: flex-start; height: 34px; margin-top: var(--s-1); padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-3); background: transparent; color: var(--muted); font-size: var(--fs-2); cursor: pointer; }
 /* 好友房带入被拒（0.2.5）：挂在我的座位上面，醒目，点了重新带入 */
 .rebuy-cta {
   position: absolute;
@@ -1044,7 +1055,9 @@ body::before {
 /* 顶栏下面第二行：第几手、歇一手、嘲讽；桌子从 150 往下 */
 .stage.tall .hud { top: 60px; bottom: auto; left: var(--s-3); right: var(--s-3); flex-wrap: wrap; }
 .stage.tall .hud .hand-no { margin-right: auto; }
-.stage.tall .fun-panel { top: 108px; bottom: auto; left: var(--s-3); right: var(--s-3); width: auto; }
+.stage.tall .fun-panel { top: 108px; bottom: auto; left: var(--s-3); right: var(--s-3); width: auto; max-height: calc(100% - 420px); }
+/* 竖屏我的动作气泡（"小盲 10"）：放在头像左边，不压右边的底牌 */
+.stage.tall .seat.me .bubble { left: -150px; top: 22px; transform: translateX(-100%); }
 .stage.tall .where { display: none; }
 /* 竖屏桌心窄，下注筹码会压到水印上：不画水印 */
 .stage.tall .felt-mark { display: none; }

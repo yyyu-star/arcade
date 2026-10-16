@@ -471,6 +471,13 @@ export class TableView {
 
   /** 被道具砸中（kit 的 onHit）：头像抖一下、缩一下 */
   hit(seat: number): void {
+    // 被砸的那一下，这个人的动作气泡（"加注到 70"）先让开，不和番茄叠在一起
+    const root = this.seats[seat]?.root;
+    if (root) {
+      root.classList.add('hit');
+      window.clearTimeout(Number(root.dataset.hitTimer));
+      root.dataset.hitTimer = String(window.setTimeout(() => root.classList.remove('hit'), 1_400));
+    }
     const a = this.seats[seat]?.avatar;
     a?.animate(
       [{ transform: 'scale(1)' }, { transform: 'scale(.86) rotate(-8deg)' }, { transform: 'scale(1.04) rotate(6deg)' }, { transform: 'scale(1)' }],
@@ -738,15 +745,16 @@ export class TableView {
    * 看对手（0.2.2）：点头像弹一张小卡，名字、风格、这一场的数；放在座位往桌心那一侧，点别处或 5 秒后收起。
    * tag 是按这一场的数给的标签，电脑再加上它的性格那一句
    */
-  showCard(seat: number, tag: string, rows: string[], actions: CardAct[] = []): void {
+  showCard(seat: number, tag: string, rows: string[], actions: CardAct[] = [], menu = false): void {
     this.hideCard();
     const s = this.frame?.seats[seat];
     const mine = seat === this.me;
     // 我自己的头像（docs/table-fun.md 第 1 节）：只弹表情包，没有"看对手"的数
     if (!s || s.owner === 'none' || (mine && !actions.length)) return;
     const card = el('div', `read-card${mine ? ' mine' : ''}`, this.root);
-    if (!mine) {
-      el('div', 'rc-name', card, this.nameOf(seat, s));
+    // menu：点头像先弹的小菜单（docs/table-fun.md 第 1 节），只写名字，"看对手"的数在菜单里点开
+    if (!mine) el('div', 'rc-name', card, this.nameOf(seat, s));
+    if (!mine && !menu) {
       if (s.owner === 'house') el('div', 'rc-style', card, personaStyle(s.persona));
       el('div', 'rc-tag', card, tag);
       for (const r of rows) el('div', 'rc-row', card, r);
@@ -772,9 +780,10 @@ export class TableView {
           window.setTimeout(() => b.classList.remove('cooling'), a.cool);
         }
         b.type = 'button';
+        // 先收再做：做的事可能是再弹一张卡（"看对手"）
         b.addEventListener('click', () => {
-          a.run();
           this.hideCard();
+          a.run();
         });
       }
       card.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -785,10 +794,27 @@ export class TableView {
     const side = mine ? 'above' : isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
     card.classList.add(side);
     place(card, side === 'above' ? { x: p.x, y: p.y - 100 } : side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
+    this.clearOf(card);
     this.card = card;
-    this.cardTimer = window.setTimeout(() => this.hideCard(), 5_000);
+    this.cardTimer = window.setTimeout(() => this.hideCard(), menu ? 8_000 : 5_000);
     // 下一次点哪里都收起（这一次的点击已经冒泡完了）
     window.setTimeout(() => window.addEventListener('pointerdown', () => this.hideCard(), { once: true }), 0);
+  }
+
+  /** 卡片不许盖操作按钮、加注那一行和预选（规范 1 节）：压到了就整张往上挪，挪到舞台顶为止 */
+  private clearOf(card: HTMLElement): void {
+    const r = card.getBoundingClientRect();
+    if (!r.height) return;
+    const k = r.height / card.offsetHeight || 1;
+    let lift = 0;
+    for (const e of this.root.parentElement?.querySelectorAll<HTMLElement>('.actions .buttons, .actions .raise-panel, .actions .quick, .actions .odds, .pre') ?? []) {
+      const o = e.getBoundingClientRect();
+      if (!o.height || o.right < r.left || o.left > r.right || o.bottom < r.top || o.top > r.bottom) continue;
+      lift = Math.max(lift, r.bottom - o.top + 8 * k);
+    }
+    const top = this.root.getBoundingClientRect().top;
+    lift = Math.min(lift, r.top - top - 8 * k);
+    if (lift > 0) card.style.top = `${parseFloat(card.style.top) - lift / k}px`;
   }
 
   hideCard(): void {

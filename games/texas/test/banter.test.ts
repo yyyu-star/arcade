@@ -280,4 +280,42 @@ describe('电脑的互动', () => {
     // 没有全下、没亮牌（弃牌赢）不算名场面
     expect(momentOf({ ...r, byFold: true } as HandResult, log)).toBeNull();
   });
+
+  it('单机连扔 20 次（隔 1.5 秒，和扔道具的冷却一样，走页面的 poked）：回应次数在 60% × 互动性格附近，每一下都可能回', () => {
+    const seats = [
+      { owner: 'player', persona: 0 },
+      { owner: 'house', persona: 0 },
+      { owner: 'house', persona: HUZI },
+      { owner: 'house', persona: LAOYING },
+    ];
+    const tomato = PROP_BASE + PROPS.indexOf('tomato');
+    for (const [seat, want] of [
+      [1, 0.6],
+      [2, 0.9],
+      [3, 0.18],
+    ] as const) {
+      let total = 0;
+      for (let run = 0; run < 200; run++) {
+        const b = new Banter(lcg(run * 7 + seat), clock(1_500));
+        let n = 0;
+        for (let k = 0; k < 20; k++) {
+          const r = b.poked(seats, 0, tomato, seat);
+          if (!r) continue;
+          expect(r.seat).toBe(seat);
+          valid(r.out);
+          n++;
+        }
+        // 普通的电脑 20 下里怎么也该回几下
+        if (seat === 1) expect(n).toBeGreaterThanOrEqual(4);
+        total += n;
+      }
+      expect(Math.abs(total / 4000 - want)).toBeLessThan(0.05);
+    }
+    // 对自己、空座、真人扔的电脑不插嘴；没点名的表情、道具不回
+    const b = new Banter(() => 0, clock(1_500));
+    expect(b.poked(seats, 0, tomato, 0)).toBeNull();
+    expect(b.poked([...seats, { owner: 'player', persona: 0 }], 0, tomato, 4)).toBeNull();
+    expect(b.poked(seats, 0, STICKER_BASE)).toBeNull();
+    expect(b.poked(seats, 0, 0)).not.toBeNull();
+  });
 });

@@ -105,8 +105,8 @@ const REACT_P_SOFT = 0.35;
 export const REVENGE_P = 0.25;
 export const REVENGE_WINDOW_MS = 20_000;
 export const REVENGE_MAX = 2;
-/** 同一个电脑两次回应至少隔这么久（真人连着扔，不每下都回） */
-export const REACT_GAP_MS = 2_500;
+/** 同一个电脑两次回应至少隔这么久：比扔道具的冷却（1.5 秒）短，一个人连着扔每一下都可能回；只防好友房几个人同一刻一起扔时刷屏 */
+export const REACT_GAP_MS = 1_000;
 /** 名场面：输的电脑出手、赢的电脑得意的概率（再乘互动性格）；每手最多 MOMENT_MAX 次电脑主动互动 */
 export const MOMENT_LOSER_P = 0.4;
 export const MOMENT_WINNER_P = 0.3;
@@ -206,6 +206,25 @@ export class Banter {
       ]);
     if (kind === 'meek') return this.pick<Out>([[{ sticker: 'sweat' }, 3], [{ sticker: 'cry' }, 1], [this.say(this.one(tp.meekSay), 'sweat'), 3]]);
     return this.pick<Out>([[{ sticker: 'sleep' }, 2], [this.say(this.one(tp.shrugSay), 'sleep'), 2]]);
+  }
+
+  /**
+   * 单机里 from 对 to 发了 emote 编号 id（页面的 sendFun 发的就是这个）：哪个电脑回、回什么。
+   * 没点名的短语随便挑一个电脑可能接话；表情、道具没点名不回。to 不是电脑、是自己的不回
+   */
+  poked(seats: readonly SeatLike[], from: number, id: number, to?: number): { seat: number; out: Out } | null {
+    let target = to;
+    if (target === undefined) {
+      if (id >= STICKER_BASE) return null;
+      const hs = seats.flatMap((x, i) => (x.owner === 'house' && i !== from ? [i] : []));
+      if (!hs.length) return null;
+      target = hs[Math.floor(this.rand() * hs.length)]!;
+    }
+    const s = seats[target];
+    const p = pokeOf(id);
+    if (!s || s.owner !== 'house' || target === from || !p) return null;
+    const out = this.react({ seat: target, persona: s.persona }, from, p);
+    return out && { seat: target, out };
   }
 
   /**
