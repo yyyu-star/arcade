@@ -80,6 +80,11 @@ class Meter {
     return (this.hour.key === hourKey(now) ? this.hour[kind] : 0) + this.pendingAnon[kind];
   }
 
+  /** 读不到全站计量（D1 一时出错）：tier() 这时按停服算，但玩家该看到的是"过几秒再试"，不是"明早恢复" */
+  unreachable(): boolean {
+    return this.failedAt > 0 || !this.day;
+  }
+
   tier(limits: Limits, now: number): Tier {
     if (this.failedAt || !this.day) return 'off';
     const t = this.totals(now);

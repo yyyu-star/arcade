@@ -102,7 +102,7 @@ function ChipsDialog({ onClose }: { onClose: () => void }) {
           <>
             <p className="modal__who">
               <strong>{found.displayName}</strong>（{found.username}）余额 <strong data-testid="admin-chips-balance">{num(found.wallet.balance)}</strong>
-              {found.wallet.fresh && '（还没用过钱包，调整时先送新号的 10,000）'}
+              {found.wallet.fresh && `（还没用过钱包，调整时先按新号送 ${num(found.wallet.balance)}）`}
               {found.wallet.stakes.length > 0 && `；桌上还有 ${num(found.wallet.stakes.reduce((a, s) => a + s.amount, 0))}（不受调整影响）`}
             </p>
             <form className="modal__form" onSubmit={adjust}>

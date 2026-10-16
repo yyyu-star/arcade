@@ -17,7 +17,7 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { GAME_IDS } from '../src/games';
 import { limitsOf } from './api/config';
-import { Db, newStats, type RequestStats } from './api/db';
+import { d1Trouble, Db, newStats, type RequestStats } from './api/db';
 import { effectiveTier, meter } from './api/meter';
 import { isUserIdShape } from './api/context';
 import { type Cmd, parseCmd } from './api/wallet';
@@ -93,8 +93,8 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
       if (kind === 'stake' && (tier === 'readonly' || meter.exhausted('wallet', limits, now))) return { ok: false, error: 'busy' };
       return await fn(db, now, tier);
     } catch (e) {
-      // 只记错误类型，不记参数（里面有 userId）
-      console.error('wallet rpc error', e instanceof Error ? e.name : 'unknown');
+      // 只记错误类型，不记参数（里面有 userId）。回话照旧是 internal：游戏拿同一个 op 重发是安全的（wallet.ts 的 apply 去重）
+      console.error(d1Trouble(e) ? `wallet rpc d1 ${d1Trouble(e)}` : 'wallet rpc error', e instanceof Error ? e.name : 'unknown');
       return { ok: false, error: 'internal' };
     } finally {
       if (meter.shouldFlush(limits, now, tier)) this.ctx.waitUntil(meter.flush(env.DB, limits, now));

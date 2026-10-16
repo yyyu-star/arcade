@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { api, errorText, type LeaderboardResponse, type ScoreBoard } from '../api.ts';
 import { type DailyFormat, loadDailyFormat } from '../daily.ts';
-import { signed } from '../format.ts';
+import { signed, tone } from '../format.ts';
 import { GAMES, type GameEntry, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
@@ -181,7 +181,7 @@ export function BoardsPage() {
   else if (daily) body = <DailyBoard game={daily} board={data.daily[daily.id] ?? null} scope={scope} />;
   else {
     const b = data.boards[tab === 'week' ? weekBoard : 'titles'] ?? { entries: [], me: null };
-    const fmt = (v: number) => (tab === 'week' ? { text: signed(v), tone: v > 0 ? ('up' as const) : v < 0 ? ('down' as const) : undefined } : { text: `${v} 个` });
+    const fmt = (v: number) => (tab === 'week' ? { text: signed(v), tone: tone(v) } : { text: `${v} 个` });
     const rows = b.entries.map((e) => ({ ...e, ...fmt(e.value) }));
     const me = b.me ? { rank: b.me.rank, userId: '', displayName: '', isMe: true, ...fmt(b.me.value) } : null;
     body = (

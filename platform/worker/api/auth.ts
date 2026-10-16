@@ -56,7 +56,7 @@ export async function getMe(c: Ctx): Promise<Response> {
 /** 顺带的写入只在正常、停增长档，而且"好友与资料"类预算没用完时做。 */
 async function touch(c: Ctx): Promise<string[]> {
   if (!c.session || !c.sidCookie) return [];
-  if (c.tier === 'readonly' || c.tier === 'off' || meter.exhausted('social', c.limits, c.now)) return [];
+  if (c.tier === 'readonly' || meter.exhausted('social', c.limits, c.now)) return [];
   return touchSession(c.db.as('social'), c.session, c.sidCookie, c.limits, c.now);
 }
 

@@ -3,7 +3,7 @@
  * 都要再输一次当前密码（注销也可以用恢复码）；再验证失败单独计数，不和登录共用一把锁。
  * 改密码、换恢复码、退出其他设备每人每天合计 acctPerDay 次，只算成功的（6.6、15.6）。
  */
-import { str } from './auth';
+import { check, str } from './auth';
 import { type Ctx, DAY } from './context';
 import {
   hashPassword,
@@ -73,8 +73,7 @@ export async function changePassword(c: Ctx): Promise<Response> {
   const { db, env, limits, now } = c;
   const user = c.session!.user;
   const newPassword = normalizePassword(str(c.body.newPassword));
-  const result = checkPassword(newPassword, user.username);
-  if (result !== 'ok') throw new ApiError(422, result);
+  check(checkPassword(newPassword, user.username));
   const count = await checkAcctCap(c);
   const clear = await reauth(c, false);
   const pwHash = await hashPassword(env, newPassword, limits.pbkdf2Iterations);

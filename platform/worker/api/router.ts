@@ -40,8 +40,8 @@ import { adminAdjust, adminLookup, adminOverview, adminRecentAdjustments, claimR
 import { limitsOf } from './config';
 import { type Ctx, userParams } from './context';
 import { hashIp, MissingSecretError } from './crypto';
-import { Db, newStats, type RequestStats } from './db';
-import { ApiError, clearCookies, errorResponse, readCookie, SID_COOKIE } from './http';
+import { d1Trouble, Db, newStats, type RequestStats } from './db';
+import { ApiError, clearCookies, errorResponse, readCookie, SID_COOKIE, unavailable } from './http';
 import { type Category, effectiveTier, meter } from './meter';
 import { loadSession } from './session';
 
@@ -62,7 +62,7 @@ interface Route {
   cat: Category;
   /** user：必须登录；optional：有会话就带上；admin：命令行工具的 Bearer 令牌，或者管理员的会话（admin.ts）。 */
   auth: 'none' | 'optional' | 'user' | 'admin';
-  /** 停增长档要停的接口（注册、新建存档槽）。 */
+  /** 停增长档要停的接口（注册、交分）；存档槽变多、变大在 saves.ts 里按档位自己判断。 */
   growth?: boolean;
   acct?: AcctPolicy;
   /** 退出：任何档位都能用。 */
@@ -198,7 +198,10 @@ export async function handleApi(request: Request, env: Env, ctx: ExecutionContex
       return errorResponse(new ApiError(503, 'busy'));
     }
     // 只记错误类型和路径，不记请求体和 cookie（5.2）
-    console.error('api error', new URL(request.url).pathname, e instanceof Error ? e.name : 'unknown');
+    const trouble = d1Trouble(e);
+    console.error(trouble ? `d1 ${trouble}` : 'api error', new URL(request.url).pathname, e instanceof Error ? e.name : 'unknown');
+    // D1 一时不行：503 加 Retry-After，和 500（我们的 bug）分开，玩家看到的是"过几秒再试"
+    if (trouble) return errorResponse(unavailable(trouble === 'overloaded' ? 5 : 2));
     return errorResponse(new ApiError(500, 'internal'));
   } finally {
     if (meter.shouldFlush(limits, now, effectiveTier(env, meter.tier(limits, now)))) ctx.waitUntil(meter.flush(env.DB, limits, now));
@@ -232,7 +235,7 @@ async function dispatch(
   await meter.ensureFresh(env.DB, limits, now);
   const tier = effectiveTier(env, meter.tier(limits, now));
   if (!route.alwaysOpen) {
-    if (tier === 'off') throw new ApiError(503, 'busy');
+    if (tier === 'off') throw meter.unreachable() ? unavailable(Math.ceil(limits.meterRetryMs / 1000)) : new ApiError(503, 'busy');
     if (write && tier === 'readonly') throw new ApiError(503, 'busy');
     if (route.growth && tier === 'noGrowth') throw new ApiError(503, 'busy');
     if (write && meter.exhausted(route.cat, limits, now)) {
@@ -264,7 +267,7 @@ async function dispatch(
     await bearerAuth(c);
     return route.handler(c);
   }
-  if (route.auth !== 'none' && sidCookie && tier !== 'off') {
+  if (route.auth !== 'none' && sidCookie) {
     c.session = await loadSession(request, env, db, now);
   }
   if ((route.auth === 'user' || route.auth === 'admin') && !c.session) {

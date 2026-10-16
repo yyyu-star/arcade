@@ -8,17 +8,17 @@ const enc = new TextEncoder();
 /** Crockford base32：去掉了容易看错的 I、L、O、U。 */
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-export function randomBytes(n: number): Uint8Array {
+function randomBytes(n: number): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(n));
 }
 
-export function b64url(bytes: Uint8Array): string {
+function b64url(bytes: Uint8Array): string {
   let s = '';
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function fromB64url(s: string): Uint8Array | null {
+function fromB64url(s: string): Uint8Array | null {
   if (!/^[A-Za-z0-9_-]*$/.test(s)) return null;
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));

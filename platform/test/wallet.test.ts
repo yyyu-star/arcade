@@ -193,6 +193,25 @@ describe('带入、结回、放弃', () => {
     expect(wrote()).toBe(0);
   });
 
+  it('同一份补码补了很多次、早挤出了最近 32 个操作：重发的那次带入照样认得出（0.12.0），操作 id 不给游戏看', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    const bop = id('op');
+    await buyin(uid, { amount: 500, op: bop });
+    // 别的桌来回 34 次，把全钱包记的最近操作挤满
+    for (let i = 0; i < 17; i++) {
+      const ref = `ref-x${String(i).padStart(5, '0')}`;
+      expect(await buyin(uid, { ref, amount: 100 })).toMatchObject({ ok: true });
+      expect(await refund(uid, { ref })).toMatchObject({ ok: true });
+    }
+    expect((await state(uid)).ops.some((o) => o.id === `kaipan:${bop}`)).toBe(false);
+    const again = await buyin(uid, { amount: 500, op: bop });
+    expect(again).toMatchObject({ ok: true, dup: true, wallet: { balance: 9_500 } });
+    expect(wrote()).toBe(0);
+    if (!again.ok) throw new Error('应该成功');
+    expect(again.wallet.stakes).toEqual([expect.not.objectContaining({ ops: expect.anything() })]);
+  });
+
   it('结回被拒（0 行）：没有那一份、ref 不对、模式不对、金额离谱', async () => {
     const u = await registerUser();
     const uid = u.user.id;

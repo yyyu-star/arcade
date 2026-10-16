@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api, errorText, type CareerView, type Relation, type StatsResponse } from '../api.ts';
-import { dateText, gameName, num, signed } from '../format.ts';
+import { dateText, gameName, num, signed, tone } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
@@ -171,7 +171,7 @@ export function StatsPage() {
           <>
             <p className="career__summary">
               <span>
-                本周净赢 <strong className={week > 0 ? 'up' : week < 0 ? 'down' : ''}>{signed(week)}</strong>
+                本周净赢 <strong className={tone(week)}>{signed(week)}</strong>
               </span>
               <span>
                 称号 <strong>{titles}</strong> 个

@@ -273,7 +273,7 @@ export interface Stake {
   until: number;
 }
 
-/** 钱包（15.9 的 GET /api/wallet）。caps：今天各游戏 client 模式的净赢和上限。fresh：还没建钱包，看到的是新号的 10,000。 */
+/** 钱包（15.9 的 GET /api/wallet）。caps：今天各游戏 client 模式的净赢和上限。fresh：还没建钱包，看到的是新号的初始筹码（管理员可调）。 */
 export interface Wallet {
   balance: number;
   stakes: Stake[];

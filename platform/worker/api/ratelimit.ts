@@ -45,7 +45,7 @@ export function takeAnonToken(ipHash: string, limits: Limits, now: number): void
 }
 
 /** 固定窗口计一次的语句（按 UTC 对齐：小时窗口从整点、天窗口从 UTC 0 点算）。超限时 0 行写入、不返回行。 */
-export function hitStatement(db: Db, key: string, limit: number, windowMs: number, now: number): D1PreparedStatement {
+function hitStatement(db: Db, key: string, limit: number, windowMs: number, now: number): D1PreparedStatement {
   const start = now - (now % windowMs);
   return db.stmt(
     `INSERT INTO rate_counters (key, window_start, count) VALUES (?1, ?2, 1)

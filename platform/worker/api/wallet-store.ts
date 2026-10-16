@@ -41,15 +41,21 @@ async function userExists(db: Db, userId: string): Promise<boolean> {
   return !!(await db.first(db.stmt('SELECT 1 AS x FROM users WHERE id = ?1', userId)));
 }
 
-/** 写回：有行就按 rev 更新，没行就插入；被别人抢先了返回 false（0 行）。 */
-async function writeRow(db: Db, userId: string, row: Row | null, s: WalletState, now: number): Promise<boolean> {
+/**
+ * 写回：有行就按 rev 更新，没行就插入；被别人抢先了返回 false（0 行）。
+ * retry：D1 一时出错时重试。两条语句本身幂等（rev 条件、DO NOTHING），但"写成了、回话丢了"再重试会写 0 行、走重读：
+ * 带操作 id 的游戏操作重读后认出是重复、回当时的结果；没有 id 的（管理员调整）会再做一遍，所以只给游戏操作开。
+ */
+async function writeRow(db: Db, userId: string, row: Row | null, s: WalletState, now: number, retry = false): Promise<boolean> {
   const state = JSON.stringify(s);
   const meta = row
     ? await db.run(
         db.stmt('UPDATE wallets SET rev = ?1, state = ?2, updated_at = ?3 WHERE user_id = ?4 AND rev = ?5', row.rev + 1, state, now, userId, row.rev),
+        { idempotent: retry },
       )
     : await db.run(
         db.stmt('INSERT INTO wallets (user_id, rev, state, updated_at) VALUES (?1, 1, ?2, ?3) ON CONFLICT (user_id) DO NOTHING', userId, state, now),
+        { idempotent: retry },
       );
   return (meta.changes ?? 0) > 0;
 }
@@ -76,7 +82,7 @@ export async function runOp(db: Db, userId: string, cmd: Cmd, now: number, opts:
     if ('dup' in out) return { ok: true, wallet: viewOf(normalize(s0, now).s, !row, rules), ...out.dup, dup: true };
     if ('error' in out) return { ok: false, error: out.error, wallet: viewOf(normalize(s0, now).s, !row, rules) };
     if (!row && !opts.create) return { ok: false, error: 'busy' };
-    if (await writeRow(db, userId, row, out.state, now)) return { ok: true, wallet: viewOf(out.state, false, rules), ...out.result };
+    if (await writeRow(db, userId, row, out.state, now, 'op' in cmd)) return { ok: true, wallet: viewOf(out.state, false, rules), ...out.result };
   }
   console.error('wallet write conflict');
   return { ok: false, error: 'busy' };

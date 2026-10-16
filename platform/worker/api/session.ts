@@ -24,12 +24,12 @@ export interface Session {
   user: UserRow;
 }
 
-/** 只给本人看的用户对象（15.1）。 */
 /** 头像存成 JSON 文本，没设过是 null */
 export function avatarOf(avatarJson: string | null): unknown {
   return avatarJson ? (JSON.parse(avatarJson) as unknown) : null;
 }
 
+/** 只给本人看的用户对象（15.1）。 */
 export function userJson(u: UserRow) {
   return {
     id: u.id,

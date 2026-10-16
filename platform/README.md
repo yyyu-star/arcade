@@ -1,3 +1,25 @@
+# Arcade · Platform
+
+The lobby and `/api` of the Arcade mini-game site, running on Cloudflare Workers + D1.
+
+- **Lobby** with game cards, notices and this week's results; **accounts** (username + password + recovery code, invite-only by default).
+- **Cloud saves, friends, leaderboards and match history** shared by every game through `/api/*`.
+- **Play-chip wallet** — one balance across games; game servers buy in and settle through a service-binding RPC (`WalletService`), browsers can only look and claim the daily relief. Chips are play money only.
+- **Admin console** at `/admin` and a command-line tool (`npm run admin`).
+- **Abuse limits and circuit breakers** — persistent rate limits, per-category write budgets, read-only and off tiers.
+
+```bash
+cd platform && npm ci
+npm run build && cp .dev.vars.example .dev.vars
+npm run dev:api   # API on :5181 (local D1)
+npm run dev       # UI on :5180, proxies /api to :5181
+npm test          # type check + vitest in workerd
+```
+
+The rest of this README, the code comments and the API contract (`docs/platform-backend.md` in the repository root, sections 5–7 and 15) are in Simplified Chinese.
+
+---
+
 # 小游戏街机厅 · 平台（platform）
 
 小游戏平台：大厅列出各个小游戏，`/api/*` 提供账号、云存档、好友、排行榜，钱包（筹码）经服务绑定 RPC 给游戏的服务端用。跑在 Cloudflare Workers + D1 上。
@@ -172,4 +194,4 @@ platform/
 
 ## 许可证
 
-MIT，见仓库根的 `LICENSE`。
+MIT，见本目录的 `LICENSE`（和仓库根的同一份，拆成单独的仓库时随模块带走）。

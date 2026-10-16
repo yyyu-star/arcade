@@ -30,6 +30,8 @@ const MAX_HOLD_MS = 24 * HOUR;
 const SETTLE_SLACK_UNITS = 20;
 /** 记住最近几次操作的 id 和结果：游戏重发、补发都在这个范围里 */
 const RECENT_OPS = 32;
+/** 每一份记住最近几次带入的操作 id */
+const STAKE_OPS = 16;
 /** 记住最近几个到期退回过的 ref（"游戏:ref"）：它们再来结回就拒绝，买入已经退过了 */
 const RECENT_EXPIRED = 16;
 /** 每个钱包留最近几次管理员调整 */
@@ -83,6 +85,8 @@ export interface Stake {
   mode: Mode;
   at: number;
   until: number;
+  /** 带入到这一份上的操作 id（最近 STAKE_OPS 个）：一份补码补了很多次、早挤出了 RECENT_OPS，重发的带入照样认得出（0.12.0） */
+  ops?: string[];
 }
 
 /** 某个游戏当天的计数 */
@@ -369,7 +373,8 @@ export function viewOf(s: WalletState, fresh: boolean, rules: WalletRules): Wall
   }
   return {
     balance: s.balance,
-    stakes: Object.values(s.stakes),
+    // 操作 id 是存储里去重用的，不给游戏和浏览器
+    stakes: Object.values(s.stakes).map(({ ops: _ops, ...st }) => st),
     canRelief: canRelief(s, rules),
     writesLeft: Math.max(0, DAILY_WRITES - s.today.writes),
     caps,
@@ -392,6 +397,8 @@ export function apply(
   if (key) {
     const seen = s0.ops.find((o) => o.id === key);
     if (seen) return { dup: seen.r };
+    // 带入成功的结果总是 {}，不用记在全钱包的 ops 里也能回
+    if (cmd.t === 'buyin' && s0.stakes[stakeKey(cmd.game, cmd.ref)]?.ops?.includes(cmd.op)) return { dup: {} };
   }
   const { s } = normalize(s0, now);
   // 结回、放弃不受每天的次数管：桌上的筹码总要能回来（次数由带入那头管住）
@@ -430,12 +437,13 @@ function step(s: WalletState, cmd: Cmd, now: number, rules: WalletRules): OpResu
         if (s.balance < cmd.amount) return { error: 'no_funds' };
         st.amount += cmd.amount;
         st.until = Math.max(st.until, until);
+        st.ops = [...(st.ops ?? []), cmd.op].slice(-STAKE_OPS);
       } else {
         // 这个 ref 已经到期退回过：再用它开一份，之后的结回就分不清是哪一份了
         if (s.expired.includes(key)) return { error: 'expired' };
         // 余额够这次带入就行（0.10.2 去掉了"钱包 ≥ 一整份"的进场要求，economy.md 第 2 节）
         if (s.balance < cmd.amount) return { error: 'no_funds' };
-        s.stakes[key] = { game: cmd.game, ref: cmd.ref, tier: cmd.tier, amount: cmd.amount, mode: cmd.mode, at: now, until };
+        s.stakes[key] = { game: cmd.game, ref: cmd.ref, tier: cmd.tier, amount: cmd.amount, mode: cmd.mode, at: now, until, ops: [cmd.op] };
       }
       s.balance -= cmd.amount;
       const g = gameDay(s, cmd.game);

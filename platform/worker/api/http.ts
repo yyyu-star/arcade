@@ -23,6 +23,7 @@ const MESSAGES: Record<string, string> = {
   rate_limited: '操作太频繁了，歇一会儿再试',
   internal: '服务器出错了，过一会儿再试',
   busy: '服务器今天有点忙，先只能看、不能改，明早恢复',
+  unavailable: '服务器一时连不上数据库，过几秒再试',
   registration_closed: '现在只对受邀的朋友开放，账号找邀请你的人要',
   not_admin: '只有管理员能用',
   admin_protected: '管理员账号只能用管理命令行工具来建、改密码和删除',
@@ -53,6 +54,10 @@ export class ApiError extends Error {
 export function rateLimited(retryAfterMs: number): ApiError {
   const s = Math.max(1, Math.ceil(retryAfterMs / 1000));
   return new ApiError(429, 'rate_limited', { retryAfter: s }, { 'retry-after': String(s) });
+}
+
+export function unavailable(retryAfterS: number): ApiError {
+  return new ApiError(503, 'unavailable', { retryAfter: retryAfterS }, { 'retry-after': String(retryAfterS) });
 }
 
 export function json(status: number, body: unknown, headers: HeadersInit = {}): Response {
