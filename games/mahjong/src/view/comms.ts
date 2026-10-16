@@ -8,7 +8,7 @@ import { createFunLayer, playFunSound, PROPS, propSvg, showSticker, STICKERS, st
 import { PHRASE_COUNT, PROP_BASE, PROP_COUNT, STICKER_BASE, STICKER_COUNT } from '../game/emotes.ts';
 import { dialogHooks } from './dialog.ts';
 import { button, el } from './dom.ts';
-import { audioOut } from './sound.ts';
+import { audioOut, play } from './sound.ts';
 import { PHRASES } from './text.ts';
 
 /** 屏蔽所有人（只是自己不看，别人照样看得到你发的） */
@@ -90,6 +90,7 @@ export class Comms {
       return;
     }
     if (id < STICKER_BASE + STICKER_COUNT) {
+      play('emote');
       void showSticker(this.layer, this.host.avatarRect(seat), STICKERS[id - STICKER_BASE]!);
       return;
     }

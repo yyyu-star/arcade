@@ -682,6 +682,27 @@ button {
   width: 44px;
   height: 44px;
   flex: none;
+  border-radius: 50%;
+  /* 圆框：金边外再压一道深色，任何底色上都框得住 */
+  box-shadow:
+    0 0 0 2px #f3c86bcc,
+    0 0 0 3px #0008,
+    0 2px 6px #0008;
+}
+.badge.turn .avatar {
+  box-shadow:
+    0 0 0 3px var(--gold),
+    0 0 12px var(--gold);
+}
+.badge .info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* 不加上下内边距：头像牌再高一点，横屏左右两家就压到下面的牌墙 */
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(#00000059, #00000080);
+  box-shadow: inset 0 1px 0 #ffffff14;
 }
 .badge .avatar svg {
   width: 100%;
@@ -689,15 +710,24 @@ button {
 }
 .badge .dealer {
   position: absolute;
-  right: -4px;
-  bottom: -2px;
-  background: var(--red);
-  color: #fff;
+  right: -6px;
+  bottom: -4px;
+}
+/* 庄、缺门、托管这些小标记一个样子：圆角小牌、浅色描边，只按颜色区分 */
+.badge .dealer,
+.tag {
   font-size: 11px;
-  line-height: 16px;
-  border-radius: var(--r-pill);
+  /* 连上下 1 像素描边一共 16 高：头像牌不能再高（横屏左右两家下面紧挨着牌墙） */
+  line-height: 14px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
+  border: 1px solid #ffffff59;
   box-shadow: 0 1px 2px #0006;
+}
+.badge .dealer {
+  background: linear-gradient(#ff6b5b, #c0262d);
 }
 .badge .name {
   font-size: var(--fs-sm);
@@ -717,10 +747,6 @@ button {
   gap: var(--sp-1);
 }
 .tag {
-  font-size: 11px;
-  line-height: 16px;
-  border-radius: var(--r-sm);
-  padding: 0 var(--sp-1);
   background: #ffffff26;
 }
 .tag.que.wan {
@@ -778,10 +804,16 @@ button {
   display: flex;
   gap: 2px;
 }
+/* 牌墙里一张挨一张：图里自带缝和厚度，不要间距 */
+.opp-hand:not(:has(.tile)) {
+  gap: 0;
+}
 .opp-hand .back {
-  background: linear-gradient(#2a9a72, #1f7a5a);
-  border: 1px solid #0a3d2c;
-  border-radius: 3px;
+  background: var(--wall-h) center / 100% 100% no-repeat;
+}
+.opp-hand.r1 .back,
+.opp-hand.r3 .back {
+  background-image: var(--wall-v);
 }
 .opp-hand.r2 .back {
   width: 16px;
@@ -826,9 +858,23 @@ button {
 .river .tile.fresh {
   animation: drop 0.25s ease-out;
 }
-.river .tile.hot {
-  box-shadow: 0 0 0 2px var(--gold), 0 0 10px var(--gold);
-  border-radius: 4px;
+.river .tile.hot,
+.river .tile.last {
+  border-radius: 11% / 8%;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 10px var(--gold);
+}
+/* 全桌最近打出的那张：金边慢慢呼吸两下再停住，一眼找得到 */
+.river .tile.last {
+  animation: last-in 0.9s ease-out 2;
+}
+@keyframes last-in {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--gold),
+      0 0 18px var(--gold);
+  }
 }
 @keyframes drop {
   from {
@@ -1046,8 +1092,13 @@ button {
   font-size: 54px;
   font-weight: 900;
   color: #fff;
+  letter-spacing: 2px;
   -webkit-text-stroke: 2px #6a1d00;
-  text-shadow: 0 4px 0 #6a1d00, 0 0 24px #ffb34d;
+  text-shadow:
+    0 2px 0 #9a3a10,
+    0 4px 0 #6a1d00,
+    0 8px 12px #0008,
+    0 0 28px #ffb34d;
   animation: pop 1.5s ease-out forwards;
   white-space: nowrap;
 }
@@ -1092,15 +1143,17 @@ button {
   left: 50%;
   top: 45%;
   max-width: 96%;
-  padding: 12px 16px 14px;
-  border-radius: 16px;
-  background: linear-gradient(#1d4b3cf0, #0e2e24f0);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(ellipse at 50% 0%, #f3c86b26, transparent 60%),
+    linear-gradient(#1d4b3cf2, #0e2e24f2);
   border: 2px solid #f3c86b80;
-  box-shadow: 0 10px 30px #000a;
+  box-shadow: inset 0 1px 0 #ffffff26, var(--sh-3);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   overflow: hidden;
   animation: hu-card var(--ms, 2200ms) ease-out forwards;
 }
@@ -1125,18 +1178,19 @@ button {
 }
 .hu-card .head {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-3);
   align-items: baseline;
-  font-size: 18px;
+  font-size: var(--fs-lg);
 }
 .hu-card .how {
   color: var(--gold);
   font-weight: 800;
-  font-size: 22px;
+  font-size: var(--fs-2xl);
+  text-shadow: 0 2px 0 #0008;
 }
 .hu-card .tiles {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
   align-items: flex-end;
 }
 .hu-card .meld {
@@ -1151,20 +1205,22 @@ button {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 .hu-card .fan,
 .hu-card .total {
-  padding: 2px 10px;
-  border-radius: 12px;
+  padding: 2px var(--sp-3);
+  border-radius: var(--r-pill);
   background: #00000050;
-  font-size: 16px;
+  border: 1px solid #ffffff1a;
+  font-size: var(--fs-md);
   opacity: 0;
   animation: fan-in 0.3s ease-out forwards;
 }
 .hu-card .total {
-  background: var(--gold);
-  color: #3a2a00;
+  background: linear-gradient(var(--gold-hi), var(--gold-lo));
+  border-color: #fff3c4;
+  color: var(--on-gold);
   font-weight: 800;
 }
 @keyframes fan-in {
@@ -1232,11 +1288,12 @@ button {
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: #fff;
+  background: linear-gradient(#ffffff, #f1ece0);
   color: #222;
   font-size: var(--fs-md);
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-lg);
+  border: 1px solid #0000001a;
   box-shadow: var(--sh-1);
   animation: bub 2.6s ease-out forwards;
   white-space: nowrap;
@@ -1311,7 +1368,7 @@ button {
 [data-orient='land'] .badge.r1 { right: 12px; top: 70px; }
 [data-orient='land'] .badge.r2 { left: 230px; top: 4px; }
 [data-orient='land'] .badge.r3 { left: 12px; top: 70px; }
-[data-orient='land'] .opp-hand.r2 { left: 390px; top: 10px; max-width: 330px; flex-wrap: wrap; }
+[data-orient='land'] .opp-hand.r2 { left: 390px; top: 6px; max-width: 330px; flex-wrap: wrap; }
 [data-orient='land'] .opp-hand.r1 { right: 30px; top: 132px; }
 [data-orient='land'] .opp-hand.r3 { left: 30px; top: 132px; }
 [data-orient='land'] .opp-hand.r1:has(.tile),
@@ -1326,10 +1383,13 @@ button {
 [data-orient='land'] .table:has(.opp-hand.r3 .tile) .melds.r3 { left: 12px; top: 236px; }
 [data-orient='land'] .melds.r0 { left: 16px; bottom: 8px; align-items: flex-end; }
 [data-orient='land'] .center { left: 440px; top: 202px; width: 120px; height: 90px; }
-[data-orient='land'] .river.r2 { left: 389px; top: 40px; width: 224px; height: 156px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
-[data-orient='land'] .river.r0 { left: 389px; top: 300px; width: 224px; }
-[data-orient='land'] .river.r3 { left: 200px; top: 150px; width: 168px; }
-[data-orient='land'] .river.r1 { left: 632px; top: 150px; width: 168px; }
+/* 牌河每张 29×41（比副露的小牌大）：左右两家 6 张一行；对家、自己 7 张一行——上下只放得下 4 行和 3 行，6 张一行自己那块 18 张就压到手牌。
+ * 对家的从下边往上长（贴着中控盘，4 行到顶），自己的从上往下 */
+[data-orient='land'] .river .tile { width: 29px; height: 41px; }
+[data-orient='land'] .river.r2 { left: 395px; bottom: 324px; width: 210px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
+[data-orient='land'] .river.r0 { left: 395px; top: 300px; width: 210px; }
+[data-orient='land'] .river.r3 { left: 200px; top: 150px; width: 180px; }
+[data-orient='land'] .river.r1 { left: 620px; top: 150px; width: 180px; }
 [data-orient='land'] .my-hand { right: 16px; bottom: 8px; }
 [data-orient='land'] .bar { right: 16px; bottom: 92px; height: 56px; }
 [data-orient='land'] .banner.r0 { left: 50%; top: 66%; }
@@ -1659,10 +1719,13 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 26px;
-  border-radius: 14px;
-  background: linear-gradient(#5a1d12e8, #2b0d08e8);
-  border: 2px solid var(--gold, #f3c86b);
+  padding: var(--sp-2) var(--sp-6);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(90deg, transparent, #f3c86b33 50%, transparent),
+    linear-gradient(#7a2416f0, #2b0d08f0);
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 1px 0 #ffffff33, 0 0 24px #f3c86b66, var(--sh-2);
   color: #ffe9b0;
   text-shadow: 0 2px 6px #000a;
   white-space: nowrap;
@@ -1700,4 +1763,24 @@ button {
   50% {
     box-shadow: 0 0 0 4px var(--gold), 0 0 22px #f3c86b;
   }
+}
+
+/* ---------- 音量 ---------- */
+.vol {
+  position: absolute;
+  right: var(--sp-3);
+  top: 44px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-2);
+}
+.vol input {
+  width: 160px;
+  accent-color: var(--gold);
 }

@@ -5,6 +5,7 @@
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { STAKES, type StakesId } from '../game/stakes.ts';
 import type { WalletView } from '../net/wallet.ts';
+import { stakeIcon } from './art.ts';
 import { busy, button, el } from './dom.ts';
 import { GAME_NAME, num, STAKES_NAME, VARIANT_NAME } from './text.ts';
 
@@ -48,6 +49,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
         stakes = s.id;
         paint();
       });
+      b.insertAdjacentHTML('afterbegin', stakeIcon(s.id));
       el('b', '', b, s.wallet ? `${STAKES_NAME[s.id]}档` : '娱乐');
       el('small', '', b, s.wallet ? `带 ${num(s.share)}` : '不算筹码');
     }

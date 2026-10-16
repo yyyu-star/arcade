@@ -1,0 +1,204 @@
+/* 雀馆的"成都茶馆"画面（DESIGN.md 第 7 节）。图都在 art.ts 里程序生成，启动时 installArt() 写成 --art-* 变量；
+ * 没写（或者变量是空的）时这里每一层都退回成渐变，不会露出破图。
+ * 只改背景、边框颜色、阴影，不改任何块的尺寸和位置：牌桌布局在 style.css 末尾，按几何调好了。
+ * 手机上不能卡：全是可平铺的小图和渐变，没有 filter、没有持续动画。 */
+.stage {
+  /* 中控盘四边的座位色：亮色和平时的暗色各写一份（不用 color-mix：iOS 16.2 以前不认，整条声明会失效） */
+  --art-seat0: var(--gold);
+  --art-seat0-dim: #7a5c24;
+  --art-seat1: #3cc8c0;
+  --art-seat1-dim: #22605a;
+  --art-seat2: #ef6a55;
+  --art-seat2-dim: #7a3226;
+  --art-seat3: #b28cf0;
+  --art-seat3-dim: #52407a;
+  --art-rim: 9px;
+  /* 呢子：斜纹 + 绒点两层不同周期的小图叠出不重复的织感，底下是原来的绿呢渐变 */
+  background:
+    var(--art-felt, linear-gradient(transparent, transparent)) 0 0 / 6px 6px,
+    var(--art-speck, linear-gradient(transparent, transparent)) 0 0 / 37px 37px,
+    radial-gradient(ellipse at 50% 45%, #187152 0%, var(--felt) 45%, var(--felt-dark) 100%);
+}
+
+/* ---------- 牌桌：木框和暗角 ----------
+ * 木框不能用 .table 的 border：border 会把所有绝对定位的块往里推。改用两个伪元素垫在最底下（z-index -1，
+ * .table 自己不是层叠上下文，它们落在舞台的层叠上下文里，在舞台的呢子之上、牌桌所有内容之下）。
+ * ::before 是一圈木头（mask 把中间挖空），::after 是框内的呢子边缘：内阴影让呢子看着凹下去，再加暗角和角落摆设。 */
+.table::before,
+.table::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.table::before {
+  inset: 0;
+  padding: var(--art-rim);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  background:
+    linear-gradient(#ffffff2e, transparent 2px, transparent calc(100% - 2px), #0008),
+    var(--art-wood, linear-gradient(#5b2e17, #3d1d0d)) 0 0 / 240px 40px,
+    #4a2414;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+/* 木框外沿的倒角高光：画在 .table 自己身上（在两个伪元素之上），一道亮边一道暗边就有厚度了 */
+.table {
+  box-shadow:
+    inset 0 1px 0 #ffd9a040,
+    inset 0 0 0 1px #1a0a04;
+}
+.table::after {
+  inset: var(--art-rim);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 0 1px #f3c86b55,
+    inset 0 0 0 2px #1a0a0480,
+    inset 0 8px 14px #0009,
+    inset 0 -4px 10px #0006;
+  background:
+    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 178px top -30px / 46px 94px no-repeat,
+    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 24px top 2px / 60px 56px no-repeat,
+    /* 暗角：中间亮、四周暗，眼睛自然落到牌河和中控盘 */
+    radial-gradient(ellipse 70% 75% at 50% 48%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+}
+/* 横屏的两盏/一碗夹在左右两家头像（离顶 70）和对家头像、副露之间的空处 */
+/* 竖屏：上方两角（对家头像在正中，两角空着） */
+[data-orient='port'] .table::after {
+  background:
+    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 14px top -24px / 54px 111px no-repeat,
+    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 12px top 6px / 66px 62px no-repeat,
+    radial-gradient(ellipse 80% 60% at 50% 45%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+}
+
+/* ---------- 中控盘 ----------
+ * 一块漆木圆角方盘：深红木底、一圈金线，中间一圈圈细纹像车削出来的盘面；四边的灯条按座位配色（座位不等于风位，所以不写东南西北），
+ * 平时是暗的，轮到谁谁亮起发光，胡了的变灰。 */
+.center {
+  border-color: #f3c86b66;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 22%, #ffffff26, transparent 70%),
+    repeating-radial-gradient(ellipse at 50% 50%, transparent 0 3px, #00000018 3px 4px),
+    radial-gradient(ellipse at 50% 40%, #6a2c1a, #3a140b 70%, #250b05);
+  box-shadow:
+    inset 0 0 0 3px #00000055,
+    inset 0 0 0 4px #f3c86b40,
+    inset 0 1px 0 4px #ffd9a020,
+    0 2px 0 #1a0a04,
+    0 6px 14px #000a;
+}
+.center .wall {
+  text-shadow: 0 2px 0 #0009;
+}
+.center .wall-label,
+.center .round {
+  color: #f6e7c4;
+  text-shadow: 0 1px 0 #0009;
+}
+.center .dir {
+  --c: var(--art-seat0);
+  --d: var(--art-seat0-dim);
+  background: var(--d);
+  border-radius: var(--r-pill);
+  box-shadow:
+    inset 0 1px 0 #ffffff26,
+    0 0 0 1px #0006;
+  transition:
+    background-color var(--t-mid),
+    box-shadow var(--t-mid);
+}
+.center .dir.r1 {
+  --c: var(--art-seat1);
+  --d: var(--art-seat1-dim);
+}
+.center .dir.r2 {
+  --c: var(--art-seat2);
+  --d: var(--art-seat2-dim);
+}
+.center .dir.r3 {
+  --c: var(--art-seat3);
+  --d: var(--art-seat3-dim);
+}
+.center .dir.on {
+  background: var(--c);
+  box-shadow:
+    inset 0 1px 0 #fff8,
+    0 0 0 1px #0006,
+    0 0 10px var(--c);
+}
+.center .dir.done {
+  background: #3a3a3a;
+  box-shadow: inset 0 1px 2px #000a;
+}
+
+/* ---------- 选桌页：茶馆的板壁、竹帘、两盏灯笼、一碗茶和几张牌 ----------
+ * 都是 .screen.lobby 的背景层，不占位置、不挡按钮；background-attachment: local 让它们跟着内容一起滚走。
+ * 板壁那张图自己往下渐变成透明，叠在舞台的呢子上没有接缝。 */
+.screen.lobby {
+  background:
+    var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
+    var(--art-lantern, linear-gradient(transparent, transparent)) left 6% top 4px / 70px 144px no-repeat,
+    var(--art-lantern, linear-gradient(transparent, transparent)) right 6% top 4px / 70px 144px no-repeat,
+    var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 172px) 22px / 100px 94px no-repeat,
+    var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 176px) 24px / 110px 89px no-repeat,
+    radial-gradient(ellipse 260px 120px at 50% 70px, #ffb24d26, transparent 70%) no-repeat,
+    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+  background-attachment: local;
+}
+[data-orient='port'] .screen.lobby {
+  background:
+    var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
+    var(--art-lantern, linear-gradient(transparent, transparent)) left 4px top 4px / 54px 111px no-repeat,
+    var(--art-lantern, linear-gradient(transparent, transparent)) right 4px top 4px / 54px 111px no-repeat,
+    var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 132px) 30px / 84px 79px no-repeat,
+    var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 134px) 34px / 92px 74px no-repeat,
+    radial-gradient(ellipse 220px 110px at 50% 70px, #ffb24d26, transparent 70%) no-repeat,
+    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+  background-attachment: local;
+}
+/* 标题在板壁上：金字压一道深色投影，像刻出来描金 */
+.screen.lobby .lobby-head h1 {
+  text-shadow:
+    0 3px 0 #3a1608,
+    0 0 18px #ffb24d55;
+}
+/* 档位卡片：像一块块小木牌，图标在名字上面 */
+.stake .art-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+}
+.stake {
+  background:
+    linear-gradient(#ffffff0d, transparent 40%),
+    linear-gradient(#2a120ab0, #1a0a05c0);
+  border-color: #f3c86b33;
+}
+.stake.on {
+  background:
+    linear-gradient(#f3c86b40, #f3c86b14),
+    linear-gradient(#2a120ab0, #1a0a05c0);
+}
+
+/* ---------- 好友房等候页、弹窗：同一套窗棂底纹 ---------- */
+.screen.room {
+  background:
+    var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
+    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+  background-attachment: local;
+}
+.dialog {
+  border-color: #f3c86b40;
+  background:
+    var(--art-lattice, linear-gradient(transparent, transparent)) 0 0 / 40px 40px,
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 #ffffff1a,
+    inset 0 0 0 4px #00000030,
+    inset 0 0 0 5px #f3c86b26,
+    var(--sh-3);
+}

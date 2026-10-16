@@ -1,179 +1,276 @@
 // 程序生成的麻将牌面：不用图片和网络字体，每种牌只生成一次。
 // kind：0–8 万，9–17 筒，18–26 条；-1 为牌背。
+//
+// 光影只用渐变和半透明叠层，不用 filter：feGaussianBlur 一类在手机上每张牌都要单独光栅化，一桌上百张会掉帧。
+// 重复的图形（饼、竹子）放进 <defs> 用 <use> 引用，每张牌只带自己用到的那几个，data URL 控制在 4 KB 内。
+// 牌最小画到 22×31 像素（约 0.37 倍），细节只做到"缩小后糊成一团也不影响认牌"的程度：
+// 认牌靠颜色块、个数和排布，花纹和高光是给大尺寸看的。
 
 const FONT = `'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC','Microsoft YaHei',sans-serif`;
-const BLUE = '#1f5fa8';
-const GREEN = '#1f8a4c';
-const RED = '#c0262d';
-const BACK_GREEN = '#1f7a5a';
+const RED = '#c4232b';
 
 const NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
 const SUITS = ['万', '筒', '条'];
 
-const DEFS =
-  `<defs><linearGradient id="ivory" x1="0" y1="0" x2="0" y2="1">` +
-  `<stop offset="0" stop-color="#fffdf4"/><stop offset="1" stop-color="#ece4cc"/></linearGradient>` +
-  `<pattern id="lattice" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
-  `<path d="M0 0H10M0 0V10" stroke="#2f9a74" stroke-width="1.2" fill="none"/></pattern></defs>`;
+type Color = 'b' | 'g' | 'r';
+// 每种颜色三档：亮面、本色、暗面。渐变从左上亮到右下暗，像光从左上打下来
+const TONES: Record<Color, [string, string, string]> = {
+  b: ['#5b9be0', '#1d5aa6', '#0d3466'],
+  g: ['#4fb67a', '#1a8048', '#0b4f2b'],
+  r: ['#f0646a', '#c4232b', '#7d1117'],
+};
 
-// 底部一条墨绿"厚度"：先画整块绿，再在上面盖略矮的象牙白正面
+// 牌身用到的渐变：象牙白正面、绿色厚度、倒角描边、左上高光
+const BODY_DEFS =
+  `<linearGradient id='iv' x1='0' y1='0' x2='.35' y2='1'><stop offset='0' stop-color='#fffef9'/>` +
+  `<stop offset='.55' stop-color='#f7f0dc'/><stop offset='1' stop-color='#e4d7b4'/></linearGradient>` +
+  `<linearGradient id='th' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#2e9a6e'/>` +
+  `<stop offset='.5' stop-color='#17694d'/><stop offset='1' stop-color='#0a3a2b'/></linearGradient>` +
+  `<linearGradient id='bv' x1='0' y1='0' x2='.2' y2='1'><stop offset='0' stop-color='#fff' stop-opacity='.95'/>` +
+  `<stop offset='.5' stop-color='#fff' stop-opacity='0'/><stop offset='1' stop-color='#7a6334' stop-opacity='.45'/></linearGradient>` +
+  `<radialGradient id='hl' cx='.25' cy='.12' r='.7'><stop offset='0' stop-color='#fff' stop-opacity='.75'/>` +
+  `<stop offset='1' stop-color='#fff' stop-opacity='0'/></radialGradient>`;
+
+// 牌身：外面一整块绿（露出底部那截就是"厚度"），中间一道象牙白夹层，再盖正面；
+// 正面四周一圈渐变描边当倒角（上亮下暗），绿色厚度上一道浅线当它的棱
 const BODY =
-  `<rect x="1" y="1" width="58" height="82" rx="6" fill="${BACK_GREEN}" stroke="#0f3d2e" stroke-width="1.5"/>` +
-  `<rect x="2.5" y="2.5" width="55" height="73" rx="5" fill="url(#ivory)" stroke="#b9ae8c" stroke-width="0.8"/>`;
+  `<rect x='.7' y='.7' width='58.6' height='82.6' rx='6.6' fill='url(#th)' stroke='#06281d' stroke-width='1'/>` +
+  `<path d='M5 79.6H55' stroke='#8fe0bb' stroke-opacity='.35' stroke-width='1' stroke-linecap='round'/>` +
+  `<rect x='1.4' y='1.4' width='57.2' height='75.6' rx='5.9' fill='#d9cba3'/>` +
+  `<rect x='1.6' y='1.4' width='56.8' height='74' rx='5.7' fill='url(#iv)'/>` +
+  `<rect x='2.3' y='2.1' width='55.4' height='72.6' rx='5' fill='url(#hl)' stroke='url(#bv)' stroke-width='1.4'/>`;
 
-const BACK =
-  `<rect x="1" y="1" width="58" height="82" rx="6" fill="${BACK_GREEN}" stroke="#0f3d2e" stroke-width="1.5"/>` +
-  `<rect x="6" y="6" width="48" height="72" rx="5" fill="url(#lattice)" stroke="#a6e0c8" stroke-width="2"/>` +
-  `<rect x="14" y="26" width="32" height="32" rx="6" fill="${BACK_GREEN}" stroke="#a6e0c8" stroke-width="2"/>`;
-
-function wan(n: number): string {
-  const t = (y: number, size: number, fill: string, ch: string) =>
-    `<text x="30" y="${y}" font-size="${size}" font-weight="700" fill="${fill}" text-anchor="middle" font-family="${FONT}">${ch}</text>`;
-  return t(37, 32, '#1b2a4a', NUMS[n] ?? '') + t(69, 32, RED, '萬');
-}
-
-// 同心圆饼：外圈有色、内圈白、中心点有色，缩小后仍能分出圈层
-function pip(x: number, y: number, r: number, c: string): string {
+// 饼：单位半径 10，用时按 translate + scale 摆放。
+// 先画一个往右下偏的淡影子让饼"浮"在牌面上，外圈本色渐变、象牙白环、细色环、中心点，再加一抹高光
+function pipGrad(c: Color): string {
   return (
-    `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}" stroke="#12304f" stroke-opacity=".35" stroke-width=".8"/>` +
-    `<circle cx="${x}" cy="${y}" r="${(r * 0.62).toFixed(2)}" fill="#fffdf4"/>` +
-    `<circle cx="${x}" cy="${y}" r="${(r * 0.32).toFixed(2)}" fill="${c}"/>`
+    `<radialGradient id='q${c}' cx='.35' cy='.3' r='.8'><stop offset='0' stop-color='${TONES[c][0]}'/>` +
+    `<stop offset='.55' stop-color='${TONES[c][1]}'/><stop offset='1' stop-color='${TONES[c][2]}'/></radialGradient>`
   );
 }
 
-function bigPip(): string {
-  const x = 30;
-  const y = 38;
-  let s = `<circle cx="${x}" cy="${y}" r="21" fill="${BLUE}"/><circle cx="${x}" cy="${y}" r="16.5" fill="#fffdf4"/>`;
-  s += `<circle cx="${x}" cy="${y}" r="13" fill="${GREEN}"/><circle cx="${x}" cy="${y}" r="8.5" fill="#fffdf4"/>`;
-  // 花瓣：绕一圈的红点，给"大饼"一点花纹
-  for (let i = 0; i < 8; i++) {
-    const a = (i * Math.PI) / 4;
-    s += `<circle cx="${(x + 10.8 * Math.cos(a)).toFixed(2)}" cy="${(y + 10.8 * Math.sin(a)).toFixed(2)}" r="1.9" fill="#fffdf4"/>`;
+function pipDef(c: Color): string {
+  return (
+    pipGrad(c) +
+    `<g id='p${c}'><circle cx='.7' cy='1' r='10' fill='#4a3a18' fill-opacity='.2'/>` +
+    `<circle r='10' fill='url(#q${c})'/><circle r='6.8' fill='#fffaee'/>` +
+    `<circle r='5' fill='none' stroke='${TONES[c][1]}' stroke-width='1.1'/>` +
+    `<circle r='2.9' fill='url(#q${c})'/>` +
+    `<ellipse cx='-4.6' cy='-6.6' rx='2.6' ry='1.2' transform='rotate(-35 -4.6 -6.6)' fill='#fff' fill-opacity='.6'/></g>`
+  );
+}
+
+// 竹子：横向渐变（按颜色只定义一次，objectBoundingBox 随各种尺寸伸缩）做出圆柱的明暗，两端圆头，中间一道竹节（加宽的深色箍 + 下面一道亮线），
+// 上下两截各有一道淡竹纹。按"颜色 + 高 + 宽"各定义一次
+function stickDef(id: string, c: Color, h: number, w: number): string {
+  const x = -w / 2;
+  const y = -h / 2;
+  const [hi, , lo] = TONES[c];
+  return (
+    `<g id='${id}'><rect x='${x + 0.6}' y='${y + 0.8}' width='${w}' height='${h}' rx='${w * 0.45}' fill='#4a3a18' fill-opacity='.18'/>` +
+    `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='${w * 0.45}' fill='url(#s${c})' stroke='${lo}' stroke-width='.7'/>` +
+    `<path d='M${x + 2.2} ${y + h * 0.25}h${w - 4.4}M${x + 2.2} ${y + h * 0.75}h${w - 4.4}' stroke='${lo}' stroke-opacity='.45' stroke-width='.8' stroke-linecap='round'/>` +
+    `<rect x='${x - 0.8}' y='-1.4' width='${w + 1.6}' height='2.8' rx='1.4' fill='${lo}'/>` +
+    `<path d='M${x + 1} 1.9h${w - 2}' stroke='${hi}' stroke-width='.8' stroke-linecap='round'/>` +
+    `<rect x='${x + 1.5}' y='${y + 2}' width='1.4' height='${h - 4}' rx='.7' fill='#fff' fill-opacity='.45'/></g>`
+  );
+}
+
+function stickGrad(c: Color): string {
+  const [hi, mid, lo] = TONES[c];
+  return (
+    `<linearGradient id='s${c}'><stop offset='0' stop-color='${lo}'/><stop offset='.32' stop-color='${hi}'/>` +
+    `<stop offset='.6' stop-color='${mid}'/><stop offset='1' stop-color='${lo}'/></linearGradient>`
+  );
+}
+
+/** 一张牌面：defs 里只放这张用到的饼、竹子，正文是若干 <use> */
+class Face {
+  defs = '';
+  body = '';
+  private seen = new Set<string>();
+
+  need(key: string, make: () => string): void {
+    if (this.seen.has(key)) return;
+    this.seen.add(key);
+    this.defs += make();
   }
-  s += `<circle cx="${x}" cy="${y}" r="5.2" fill="${RED}"/><circle cx="${x}" cy="${y}" r="1.8" fill="#fffdf4"/>`;
+
+  pip(x: number, y: number, r: number, c: Color): this {
+    this.need('p' + c, () => pipDef(c));
+    this.body += `<use href='#p${c}' transform='translate(${x} ${y}) scale(${+(r / 10).toFixed(3)})'/>`;
+    return this;
+  }
+
+  stick(x: number, y: number, h: number, c: Color, w = 9): this {
+    const id = `t${c}${h}${String(w).replace('.', '')}`;
+    this.need('s' + c, () => stickGrad(c));
+    this.need(id, () => stickDef(id, c, h, w));
+    this.body += `<use href='#${id}' x='${x}' y='${y}'/>`;
+    return this;
+  }
+}
+
+function wan(n: number): string {
+  // 字下面先压一层往右下偏的白字，像刻进牌面里的字口反光；描一道同色细边让小尺寸时笔画不发虚
+  const t = (y: number, size: number, fill: string, ch: string) =>
+    `<text x='30.7' y='${y + 0.8}' font-size='${size}' font-weight='700' text-anchor='middle' font-family="${FONT}" fill='#fff' fill-opacity='.9'>${ch}</text>` +
+    `<text x='30' y='${y}' font-size='${size}' font-weight='700' text-anchor='middle' font-family="${FONT}" fill='${fill}' stroke='${fill}' stroke-width='1' stroke-linejoin='round'>${ch}</text>`;
+  return t(37, 34, '#14213d', NUMS[n] ?? '') + t(70, 33, RED, '萬');
+}
+
+// 一筒（大饼）：多层同心圆加一圈花瓣，比普通的饼多两层，缩小后仍是"一个大圆"
+function bigPip(f: Face): string {
+  // 大饼只借三种颜色的渐变，不带整只小饼
+  f.defs = pipGrad('b') + pipGrad('g') + pipGrad('r');
+  let s =
+    `<circle cx='30.8' cy='39.2' r='22' fill='#4a3a18' fill-opacity='.2'/>` +
+    `<circle cx='30' cy='38' r='22' fill='url(#qb)'/><circle cx='30' cy='38' r='18' fill='#fffaee'/>` +
+    `<circle cx='30' cy='38' r='16.6' fill='none' stroke='#1d5aa6' stroke-width='.8' stroke-dasharray='1.6 1.6'/>` +
+    `<circle cx='30' cy='38' r='14.2' fill='url(#qg)'/><circle cx='30' cy='38' r='9.6' fill='#fffaee'/>`;
+  // 花瓣：绿环上一圈象牙白小点。用"长度 0 的虚线 + 圆头"一笔画出 12 个点，比 12 个 circle 省一半字节
+  s += `<circle cx='30' cy='38' r='11.9' fill='none' stroke='#fffaee' stroke-width='2.6' stroke-linecap='round' stroke-dasharray='0 6.231'/>`;
+  s +=
+    `<circle cx='30' cy='38' r='6.4' fill='url(#qr)'/><circle cx='30' cy='38' r='2.4' fill='#fffaee'/>` +
+    `<ellipse cx='19' cy='24' rx='6' ry='2.2' transform='rotate(-38 19 24)' fill='#fff' fill-opacity='.55'/>`;
   return s;
 }
 
-function tong(n: number): string {
-  const P = (x: number, y: number, r: number, c: string) => pip(x, y, r, c);
+function tong(n: number, f: Face): void {
   switch (n) {
-    case 0: return bigPip();
-    case 1: return P(30, 21, 12, GREEN) + P(30, 55, 12, RED);
-    case 2: return P(16, 18, 10.5, BLUE) + P(30, 38, 10.5, RED) + P(44, 58, 10.5, GREEN);
-    case 3: return P(18, 22, 11, BLUE) + P(42, 22, 11, GREEN) + P(18, 54, 11, GREEN) + P(42, 54, 11, BLUE);
-    case 4: return P(17, 20, 10, BLUE) + P(43, 20, 10, GREEN) + P(17, 56, 10, GREEN) + P(43, 56, 10, BLUE) + P(30, 38, 10, RED);
-    case 5: {
-      let s = '';
-      for (const x of [18, 42]) s += P(x, 15, 9.5, GREEN);
-      for (const x of [18, 42]) for (const y of [40, 61]) s += P(x, y, 9.5, RED);
-      return s;
-    }
-    case 6: {
-      let s = P(13, 13, 8.5, GREEN) + P(30, 20, 8.5, GREEN) + P(47, 27, 8.5, GREEN);
-      for (const x of [18, 42]) for (const y of [45, 62]) s += P(x, y, 8.5, RED);
-      return s;
-    }
-    case 7: {
-      let s = '';
-      for (const x of [20, 40]) for (const y of [13, 29, 45, 61]) s += P(x, y, 8.2, y < 38 ? GREEN : x === 20 ? BLUE : GREEN);
-      return s;
-    }
-    default: {
-      let s = '';
-      const cols = [BLUE, RED, GREEN];
-      [15, 30, 45].forEach((x, i) => {
-        for (const y of [17, 38, 59]) s += P(x, y, 8.5, cols[i] ?? RED);
+    case 0: f.body = bigPip(f); return;
+    case 1: f.pip(30, 21, 13.5, 'g').pip(30, 55, 13.5, 'b'); return;
+    case 2: f.pip(16.5, 17.5, 12, 'b').pip(30, 38, 12, 'r').pip(43.5, 58.5, 12, 'g'); return;
+    case 3: f.pip(18, 22, 11, 'b').pip(42, 22, 11, 'g').pip(18, 54, 11, 'g').pip(42, 54, 11, 'b'); return;
+    case 4: f.pip(17, 20, 10, 'b').pip(43, 20, 10, 'g').pip(17, 56, 10, 'g').pip(43, 56, 10, 'b').pip(30, 38, 10, 'r'); return;
+    case 5:
+      for (const x of [18, 42]) f.pip(x, 15, 9.5, 'g');
+      for (const y of [40, 61]) for (const x of [18, 42]) f.pip(x, y, 9.5, 'r');
+      return;
+    case 6:
+      f.pip(13, 13, 8.5, 'g').pip(30, 20, 8.5, 'g').pip(47, 27, 8.5, 'g');
+      for (const y of [45, 62]) for (const x of [18, 42]) f.pip(x, y, 8.5, 'r');
+      return;
+    case 7:
+      for (const y of [13, 29, 45, 61]) for (const x of [20, 40]) f.pip(x, y, 8.2, y < 38 ? 'b' : 'g');
+      return;
+    default:
+      (['b', 'r', 'g'] as const).forEach((c, i) => {
+        for (const y of [17, 38, 59]) f.pip(15 + i * 15, y, 8.5, c);
       });
-      return s;
-    }
   }
 }
 
-// 单根竹子：圆角长条 + 中间横节 + 一道高光
-function stick(x: number, y: number, h: number, c: string, w = 9): string {
-  const x0 = x - w / 2;
-  const y0 = y - h / 2;
-  return (
-    `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="3.5" fill="${c}" stroke="#0d3b22" stroke-opacity=".5" stroke-width=".8"/>` +
-    `<rect x="${x0 + 1.6}" y="${y0 + 2}" width="1.8" height="${h - 4}" rx=".9" fill="#fff" fill-opacity=".35"/>` +
-    `<rect x="${x0 - 0.8}" y="${y - 1.2}" width="${w + 1.6}" height="2.4" rx="1.1" fill="#0d3b22" fill-opacity=".75"/>`
-  );
-}
-
+// 一条：侧身站在一截竹枝上的小鸟。认它靠"绿身子 + 红尾巴 + 黄嘴"三大块，羽毛线条只是锦上添花
 function bird(): string {
   return (
-    // 尾羽
-    `<path d="M30 54 L19 71 L26 66 L30 74 L34 66 L41 71 Z" fill="${RED}" stroke="#7a1519" stroke-width=".8" stroke-linejoin="round"/>` +
-    `<path d="M30 54 L24 68 L30 62 L36 68 Z" fill="${GREEN}"/>` +
-    // 翅膀与身体
-    `<ellipse cx="30" cy="42" rx="12.5" ry="15" fill="${GREEN}" stroke="#0d3b22" stroke-width="1"/>` +
-    `<path d="M30 30 C15 32 12 48 20 56 C21 46 25 38 30 36 Z" fill="#14683a"/>` +
-    `<path d="M30 30 C45 32 48 48 40 56 C39 46 35 38 30 36 Z" fill="#14683a"/>` +
-    `<ellipse cx="30" cy="46" rx="5" ry="8" fill="${RED}"/>` +
+    `<defs><linearGradient id='bd' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#4fb67a'/>` +
+    `<stop offset='1' stop-color='#0b4f2b'/></linearGradient></defs>` +
+    // 尾羽三片，扇形往右下展开
+    `<path d='M37 50Q53 54 57 66Q48 62 36 57Z' fill='#1a8048' stroke='#0b4f2b' stroke-width='.7'/>` +
+    `<path d='M36 53Q51 63 52 76Q43 68 34 58Z' fill='${RED}' stroke='#7d1117' stroke-width='.7'/>` +
+    `<path d='M34 56Q41 69 38 78Q33 69 31 59Z' fill='#e8a317' stroke='#8a5a00' stroke-width='.7'/>` +
+    // 竹枝
+    `<rect x='9' y='63' width='34' height='4.4' rx='2.2' fill='#1a8048' stroke='#0b4f2b' stroke-width='.7'/>` +
+    `<path d='M24 63.4v3.6' stroke='#0b4f2b' stroke-width='1.2'/><path d='M14 61Q10 56 13 52Q16 57 14 61Z' fill='#4fb67a'/>` +
+    // 腿
+    `<path d='M25 57l-1.5 7M30 58l.5 6' stroke='#a8740c' stroke-width='1.4' stroke-linecap='round'/>` +
+    // 身子：头朝左的水滴形，红胸
+    `<path d='M24 28C13 31 12 47 20 55C27 61 39 58 40 49C41 40 34 30 24 28Z' fill='url(#bd)' stroke='#0b4f2b' stroke-width='.9'/>` +
+    `<path d='M17 34C12 42 15 52 22 56C20 48 20 40 17 34Z' fill='${RED}'/>` +
+    // 翅膀和两道羽线
+    `<path d='M26 36C36 35 43 43 40 53C33 53 27 47 26 36Z' fill='#0e5c33' stroke='#06331b' stroke-width='.7'/>` +
+    `<path d='M29 41Q35 43 37 49M28 46Q32 48 34 52' stroke='#4fb67a' stroke-width='.8' fill='none' stroke-linecap='round'/>` +
     // 头、冠、嘴、眼
-    `<circle cx="30" cy="20" r="7.5" fill="${GREEN}" stroke="#0d3b22" stroke-width="1"/>` +
-    `<path d="M27 14 L30 7 L33 14 Z" fill="${RED}"/>` +
-    `<path d="M36 20 L43 22.5 L36 25 Z" fill="#e8a317" stroke="#8a5a00" stroke-width=".6" stroke-linejoin="round"/>` +
-    `<circle cx="32.5" cy="19" r="2" fill="#fff"/><circle cx="33" cy="19" r="1" fill="#111"/>`
+    `<circle cx='22' cy='22' r='8' fill='url(#bd)' stroke='#0b4f2b' stroke-width='.9'/>` +
+    `<path d='M18 15L19 7L22.5 13L26 7.5L25.5 15Z' fill='${RED}' stroke='#7d1117' stroke-width='.6' stroke-linejoin='round'/>` +
+    `<path d='M14.6 20.5L7.5 23.2L14.6 26Z' fill='#f2b42a' stroke='#8a5a00' stroke-width='.6' stroke-linejoin='round'/>` +
+    `<circle cx='19.6' cy='20.6' r='2.4' fill='#fff'/><circle cx='19.1' cy='20.6' r='1.2' fill='#111'/>` +
+    `<ellipse cx='25' cy='17' rx='2.4' ry='1.1' transform='rotate(-30 25 17)' fill='#fff' fill-opacity='.45'/>`
   );
 }
 
-function tiao(n: number): string {
-  const G = GREEN;
+function tiao(n: number, f: Face): void {
   switch (n) {
-    case 0: return bird();
-    case 1: return stick(30, 21, 28, G) + stick(30, 55, 28, G);
-    case 2: return stick(30, 21, 28, G) + stick(19, 55, 28, G) + stick(41, 55, 28, G);
-    case 3: return stick(19, 21, 28, G) + stick(41, 21, 28, G) + stick(19, 55, 28, G) + stick(41, 55, 28, G);
-    case 4: return stick(17, 21, 28, G) + stick(43, 21, 28, G) + stick(17, 55, 28, G) + stick(43, 55, 28, G) + stick(30, 38, 28, RED);
-    case 5: {
-      let s = '';
-      for (const x of [14, 30, 46]) for (const y of [21, 55]) s += stick(x, y, 28, G);
-      return s;
-    }
-    case 6: {
-      let s = stick(30, 15, 18, RED);
-      for (const x of [14, 30, 46]) for (const y of [38, 60]) s += stick(x, y, 20, G);
-      return s;
-    }
-    case 7: {
+    case 0: f.body = bird(); return;
+    case 1: f.stick(30, 21, 28, 'g').stick(30, 55, 28, 'g'); return;
+    case 2: f.stick(30, 21, 28, 'g').stick(19, 55, 28, 'g').stick(41, 55, 28, 'g'); return;
+    case 3: f.stick(19, 21, 28, 'g').stick(41, 21, 28, 'g').stick(19, 55, 28, 'g').stick(41, 55, 28, 'g'); return;
+    case 4: f.stick(17, 21, 28, 'g').stick(43, 21, 28, 'g').stick(17, 55, 28, 'g').stick(43, 55, 28, 'g').stick(30, 38, 28, 'r'); return;
+    case 5:
+      for (const y of [21, 55]) for (const x of [14, 30, 46]) f.stick(x, y, 28, 'g');
+      return;
+    case 6:
+      f.stick(30, 15, 18, 'r');
+      for (const y of [38, 60]) for (const x of [14, 30, 46]) f.stick(x, y, 20, 'g');
+      return;
+    case 7:
       // 8 条传统是 M/W 形，这里取清楚优先：四列两行
-      let s = '';
-      for (const x of [12, 24, 36, 48]) for (const y of [21, 55]) s += stick(x, y, 28, G, 8.5);
-      return s;
-    }
-    default: {
-      let s = '';
+      for (const y of [21, 55]) for (const x of [12, 24, 36, 48]) f.stick(x, y, 28, 'g', 8.5);
+      return;
+    default:
       [14, 30, 46].forEach((x, i) => {
-        for (const y of [17, 38, 59]) s += stick(x, y, 19, i === 1 ? RED : G);
+        for (const y of [17, 38, 59]) f.stick(x, y, 19, i === 1 ? 'r' : 'g');
       });
-      return s;
-    }
   }
 }
+
+// 牌背：墨绿底，同样的倒角高光；一圈细金边框，框里淡淡的菱格纹，中间一枚八角徽记（两个错开 45° 的方块 + 圆心），
+// 纯几何、不是任何真实商标。缩小后只剩"深绿 + 中间一个浅色徽"
+// 牌背和牌墙共用的一套渐变和菱格：grid 是菱格的边长（按各自 viewBox 的单位），让缩到屏幕上的格子疏密差不多
+function backDefs(grid: number): string {
+  return (
+    `<defs><linearGradient id='bk' x1='0' y1='0' x2='.4' y2='1'><stop offset='0' stop-color='#2a8a66'/>` +
+    `<stop offset='.5' stop-color='#17614a'/><stop offset='1' stop-color='#0b3a2c'/></linearGradient>` +
+    `<linearGradient id='au' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#f3dc9a'/><stop offset='1' stop-color='#b48a3c'/></linearGradient>` +
+    `<pattern id='lt' width='${grid}' height='${grid}' patternUnits='userSpaceOnUse' patternTransform='rotate(45)'>` +
+    `<path d='M0 0H${grid}M0 0V${grid}' stroke='#7fd3ad' stroke-opacity='.28' stroke-width='${grid / 8}' fill='none'/></pattern>` +
+    `<radialGradient id='hl' cx='.25' cy='.12' r='.7'><stop offset='0' stop-color='#fff' stop-opacity='.35'/>` +
+    `<stop offset='1' stop-color='#fff' stop-opacity='0'/></radialGradient>` +
+    `<linearGradient id='sd' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#fbf5e4'/><stop offset='1' stop-color='#cdbd92'/></linearGradient></defs>`
+  );
+}
+
+const BACK =
+  backDefs(7) +
+  `<rect x='.7' y='.7' width='58.6' height='82.6' rx='6.6' fill='url(#bk)' stroke='#06281d' stroke-width='1'/>` +
+  `<rect x='2' y='2' width='56' height='80' rx='5.4' fill='url(#hl)' stroke='#fff' stroke-opacity='.22' stroke-width='1'/>` +
+  `<rect x='6.5' y='6.5' width='47' height='71' rx='4' fill='url(#lt)' stroke='url(#au)' stroke-width='1.3'/>` +
+  `<rect x='9' y='9' width='42' height='66' rx='2.6' fill='none' stroke='#e7cf8a' stroke-opacity='.45' stroke-width='.6'/>` +
+  `<circle cx='30' cy='42' r='15' fill='#0e4a37' stroke='url(#au)' stroke-width='1.4'/>` +
+  `<rect x='21' y='33' width='18' height='18' fill='none' stroke='url(#au)' stroke-width='1.6'/>` +
+  `<rect x='21' y='33' width='18' height='18' transform='rotate(45 30 42)' fill='none' stroke='url(#au)' stroke-width='1.6'/>` +
+  `<circle cx='30' cy='42' r='5' fill='url(#au)'/><circle cx='30' cy='42' r='1.8' fill='#0e4a37'/>`;
 
 function face(kind: number): string {
   const n = kind % 9;
   if (kind < 9) return wan(n);
-  if (kind < 18) return tong(n);
-  return tiao(n);
+  const f = new Face();
+  if (kind < 18) tong(n, f);
+  else tiao(n, f);
+  return (f.defs ? `<defs>${f.defs}</defs>` : '') + f.body;
 }
 
 /** 一张牌的完整 SVG 字符串（含牌身），viewBox="0 0 60 84"；kind = -1 画成牌背 */
 export function tileSvg(kind: number): string {
-  const inner = kind < 0 || kind > 26 || !Number.isInteger(kind) ? BACK : BODY + face(kind);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 84">${DEFS}${inner}</svg>`;
+  const inner = kind < 0 || kind > 26 || !Number.isInteger(kind) ? BACK : `<defs>${BODY_DEFS}</defs>${BODY}${face(kind)}`;
+  return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 84'>${inner}</svg>`;
 }
 
 const cache = new Map<number, string>();
+
+// 只转义 data URL 里真正有歧义的字符（引号、%、#、尖括号和非 ASCII），
+// 比 encodeURIComponent 整串转义小一半多；属性一律单引号，放进 CSS 的 url("…") 里不冲突
+function svgUrl(svg: string): string {
+  return 'data:image/svg+xml,' + svg.replace(/["%#<>\u0080-\uffff]/g, encodeURIComponent);
+}
 
 /** 同上但做成 data URI，模块内缓存，每种只生成一次 */
 export function tileUrl(kind: number): string {
   const key = kind >= 0 && kind <= 26 && Number.isInteger(kind) ? kind : -1;
   let u = cache.get(key);
   if (!u) {
-    u = 'data:image/svg+xml;utf8,' + encodeURIComponent(tileSvg(key));
+    u = svgUrl(tileSvg(key));
     cache.set(key, u);
   }
   return u;
@@ -182,6 +279,38 @@ export function tileUrl(kind: number): string {
 /** 牌背 */
 export function backUrl(): string {
   return tileUrl(-1);
+}
+
+// 牌墙里的一张：比手里的牌小得多（对家一张约 16×24、左右两家约 24×12 像素），只留"墨绿背 + 金边 + 中间一个小菱徽"，
+// 底下露一截象牙白的牌身厚度：一张挨一张排起来，厚度连成一条浅色的边，看得出是一墩墩立着的牌。
+// 金边离边缘留了空，相邻两张之间自然有一道深缝，不用另画分隔线
+const WALL = {
+  // 对家：竖着立的牌，viewBox 32×48（屏幕上 16×24 的两倍，方便写坐标）
+  h:
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 48'>${backDefs(4)}` +
+    `<rect x='.5' y='.5' width='31' height='47' rx='3.2' fill='url(#sd)' stroke='#06281d' stroke-width='1'/>` +
+    `<path d='M3 44.6H29' stroke='#fff' stroke-opacity='.7' stroke-width='.8' stroke-linecap='round'/>` +
+    `<rect x='.5' y='.5' width='31' height='39' rx='3.2' fill='url(#bk)' stroke='#06281d' stroke-width='1'/>` +
+    `<rect x='1.4' y='1.4' width='29.2' height='37.2' rx='2.5' fill='url(#hl)' stroke='#fff' stroke-opacity='.2' stroke-width='.7'/>` +
+    `<rect x='4' y='4' width='24' height='32' rx='1.8' fill='url(#lt)' stroke='url(#au)' stroke-width='1'/>` +
+    `<path d='M16 13.5L22.5 20L16 26.5L9.5 20Z' fill='#0e4a37' stroke='url(#au)' stroke-width='1.1'/>` +
+    `<circle cx='16' cy='20' r='2.2' fill='url(#au)'/></svg>`,
+  // 左右两家：侧着看的牌，viewBox 48×24（屏幕上 24×12 的两倍），厚度同样露在下沿
+  v:
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 24'>${backDefs(4)}` +
+    `<rect x='.5' y='.5' width='47' height='23' rx='2.6' fill='url(#sd)' stroke='#06281d' stroke-width='1'/>` +
+    `<path d='M3 21.2H45' stroke='#fff' stroke-opacity='.7' stroke-width='.7' stroke-linecap='round'/>` +
+    `<rect x='.5' y='.5' width='47' height='17' rx='2.6' fill='url(#bk)' stroke='#06281d' stroke-width='1'/>` +
+    `<rect x='1.3' y='1.3' width='45.4' height='15.4' rx='2' fill='url(#hl)' stroke='#fff' stroke-opacity='.2' stroke-width='.6'/>` +
+    `<rect x='3.5' y='3.2' width='41' height='11.6' rx='1.4' fill='url(#lt)' stroke='url(#au)' stroke-width='.9'/>` +
+    `<path d='M24 5L28 9L24 13L20 9Z' fill='#0e4a37' stroke='url(#au)' stroke-width='.9'/>` +
+    `<circle cx='24' cy='9' r='1.3' fill='url(#au)'/></svg>`,
+};
+const wallCache: Partial<Record<'h' | 'v', string>> = {};
+
+/** 牌墙里的一张立体牌背：'h' 对家（宽:高 = 16:24），'v' 左右两家（24:12）；每种只生成一次 */
+export function wallUrl(side: 'h' | 'v'): string {
+  return (wallCache[side] ??= svgUrl(WALL[side]));
 }
 
 /** 中文名：'一万' '五筒' '七条' */

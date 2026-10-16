@@ -79,10 +79,10 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
           break;
         case 'swapped':
           fx.banner(v.me?.seat ?? 0, SWAP_DIR[e.dir]!, 'center');
-          play('click');
+          play('swap');
           break;
         case 'que':
-          play('click');
+          play('que');
           break;
         case 'draw':
           if (e.seat === v.me?.seat) play('draw');
@@ -109,7 +109,7 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
           // 喊完"胡！"再亮牌；一炮多响一个接一个亮
           const ms = e.fan >= 2 ? HU_BIG_MS : HU_MS;
           fx.overlay(huCard(v, e, names[e.seat] ?? '', text), ms, 600 + shown * (HU_MS + 200));
-          if (e.fan >= 2) window.setTimeout(() => play('win'), 900 + shown * (HU_MS + 200));
+          if (e.fan >= 2) window.setTimeout(() => play('big'), 900 + shown * (HU_MS + 200));
           shown++;
           break;
         }

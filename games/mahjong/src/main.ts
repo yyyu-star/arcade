@@ -18,19 +18,24 @@ import { GUIDE_KEY, showGuide, showRules } from './view/guide.ts';
 import { Comms, type CommsEvent, type CommsHost } from './view/comms.ts';
 import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
-import { play, setSound, unlockAudio } from './view/sound.ts';
+import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, num, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
 import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
+import './view/art.css';
+import { installArt } from './view/art.ts';
+import { wallUrl } from './view/tiles.ts';
 
 // ---------- 设置 ----------
 
 const PREFS_KEY = 'mahjong.prefs';
 interface Prefs {
   sound: boolean;
+  /** 总音量 0–1（静音另算：sound 关着时一点声音都不出） */
+  volume: number;
   fast: boolean;
   stakes: StakesId;
   opts: XzOpts;
@@ -39,9 +44,10 @@ interface Prefs {
 function loadPrefs(): Prefs {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
-    return { sound: p.sound !== false, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
+    const vol = typeof p.volume === 'number' && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8;
+    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
   } catch {
-    return { sound: true, fast: false, stakes: 'fun', opts: { ...DEFAULT_OPTS } };
+    return { sound: true, volume: 0.8, fast: false, stakes: 'fun', opts: { ...DEFAULT_OPTS } };
   }
 }
 const prefs = loadPrefs();
@@ -53,6 +59,12 @@ function savePrefs(): void {
   }
 }
 setSound(prefs.sound);
+setVolume(prefs.volume);
+// 牌桌、选桌页的画（art.css 用的 --art-* 变量）
+installArt();
+// 牌墙的立体牌背：只生成一次，写成变量给 style.css 的 .opp-hand .back 用
+document.documentElement.style.setProperty('--wall-h', `url("${wallUrl('h')}")`);
+document.documentElement.style.setProperty('--wall-v', `url("${wallUrl('v')}")`);
 
 // ---------- 骨架 ----------
 
@@ -71,11 +83,39 @@ const speedBtn = button('icon', top, '', () => {
   paintTop();
   if (solo) solo.speed = prefs.fast ? 0.5 : 1;
 });
+// 声音：点"声"打开一个小面板（音量滑块 + 静音），再点或点别处收起
 const soundBtn = button('icon', top, '', () => {
+  volBox.hidden = !volBox.hidden;
+});
+const volBox = el('div', 'vol', stage);
+volBox.hidden = true;
+const volRange = el('input', '', volBox) as HTMLInputElement;
+volRange.type = 'range';
+volRange.min = '0';
+volRange.max = '100';
+volRange.value = String(Math.round(prefs.volume * 100));
+volRange.setAttribute('aria-label', '音量');
+volRange.addEventListener('input', () => {
+  prefs.volume = Number(volRange.value) / 100;
+  setVolume(prefs.volume);
+  if (prefs.volume > 0 && !prefs.sound) {
+    prefs.sound = true;
+    setSound(true);
+  }
+  paintTop();
+});
+volRange.addEventListener('change', () => {
+  savePrefs();
+  play('button');
+});
+const muteBtn = button('act soft', volBox, '', () => {
   prefs.sound = !prefs.sound;
   setSound(prefs.sound);
   savePrefs();
   paintTop();
+});
+document.addEventListener('pointerdown', (e) => {
+  if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
 button('icon', top, '规则', () => showRules(stage));
 const shareBtn = button('pill share', top, '叫朋友', () => void busy(shareBtn, share));
@@ -85,7 +125,8 @@ const screen = el('div', 'screen', stage);
 function paintTop(): void {
   speedBtn.textContent = prefs.fast ? '快' : '慢';
   speedBtn.title = prefs.fast ? '电脑出牌快' : '电脑出牌慢';
-  soundBtn.textContent = prefs.sound ? '声' : '静';
+  soundBtn.textContent = prefs.sound && prefs.volume > 0 ? '声' : '静';
+  muteBtn.textContent = prefs.sound ? '静音' : '开声';
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -103,6 +144,11 @@ function toast(text: string): void {
 
 watchViewport(app, stage, () => {});
 document.addEventListener('pointerdown', unlockAudio, { capture: true });
+// 按钮点按一律轻响一下（手牌出牌有自己的声音，不在这里）
+document.addEventListener('click', (e) => {
+  const b = (e.target as Element | null)?.closest('button');
+  if (b && !b.disabled) play('button');
+});
 
 // ---------- 钱包 ----------
 
@@ -580,6 +626,7 @@ const soloUi = {
     }, TURBO ? 50 : 1_400 * (prefs.fast ? 0.5 : 1));
   },
   settled(r: WalletReply): void {
+    if (r.ok) play('chips');
     const box = document.querySelector('.settle-note');
     const text = r.ok
       ? `已结回钱包${r.credited !== undefined ? ` ${num(r.credited)}` : ''}${r.capped ? `；今天单机实盘赢够了，多出的 ${num(r.capped)} 没进钱包，好友房不限` : ''}`

@@ -109,6 +109,8 @@ export class TableUi<V extends TableView, A> {
   private frame: Frame<V> | null = null;
   private selected: Tile[] = [];
   private riverLen = [0, 0, 0, 0];
+  /** 最近一次打牌的座位（-1 是这一局还没人打） */
+  private lastDiscard = -1;
   /** 自己打的那张从手里哪儿飞出去（下一帧落到河里时用）；只是画面，不影响计时和规则 */
   private flyFrom: { tile: Tile; rect: DOMRect } | null = null;
   /** 上一帧摸到的牌：新摸的那张落下来一下 */
@@ -158,11 +160,16 @@ export class TableUi<V extends TableView, A> {
   render(frame: Frame<V>): void {
     const fresh = this.frame?.v.round !== frame.v.round;
     this.frame = frame;
-    if (fresh) this.riverLen = [0, 0, 0, 0];
+    if (fresh) {
+      this.riverLen = [0, 0, 0, 0];
+      this.lastDiscard = -1;
+    }
     const v = frame.v;
     // 选中的牌已经不在手里（打出去了、换掉了）就清掉
     const hand = v.me?.hand ?? [];
     this.selected = this.selected.filter((t) => hand.includes(t));
+    // 全桌最近打出的那张描一圈：这一步谁的牌河多了一张就是谁打的；没人打牌的步子（摸牌、碰杠）沿用上一次
+    for (let s = 0; s < 4; s++) if (v.seats[s]!.river.length === this.riverLen[s]! + 1) this.lastDiscard = s;
     for (let s = 0; s < 4; s++) {
       const r = this.rel(s);
       this.drawBadge(s, r);
@@ -269,6 +276,7 @@ export class TableUi<V extends TableView, A> {
       if (x.taken) e.classList.add('taken');
       if (i >= this.riverLen[seat]! && !(one && this.fly(e, r, x.tile))) e.classList.add('fresh');
       if (v.claim && v.claim.from === seat && v.claim.tile === x.tile) e.classList.add('hot');
+      else if (seat === this.lastDiscard && i === river.length - 1 && !x.taken) e.classList.add('last');
     });
     this.riverLen[seat] = river.length;
   }
@@ -504,7 +512,7 @@ export class TableUi<V extends TableView, A> {
         clock.classList.toggle('low', left <= 5);
         if (mine && s === this.me && left <= 5 && left > 0 && left !== ticked) {
           ticked = left;
-          play('tick');
+          play('countdown');
         }
       }
     };

@@ -478,7 +478,9 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - **渲染层：DOM + CSS + SVG**，不用 Phaser/WebGL。麻将的画面是静止的牌和少量动画，DOM 足够；还省掉 WebGL 上下文丢失、显存这一类 iOS 的坑。
   AGENTS.md 第 4 节里和画布有关的"渲染倍数封顶 2"在这里不适用（没有画布），其余几条照做：高度按 `visualViewport`、双指放大时不重排、safe-area 带兜底值。
 - **牌面全部程序生成**（`src/view/tiles/`）：一张 SVG 模板，万字用系统字体写"一二三…九"加红色"萬"，筒画圆圈、条画竹节，一条画一只简笔小鸟；牌背纯色加花纹。没有外部素材，来源写在 `ASSETS.md`。
-- 头像：按名字算颜色和图形的 SVG；牌桌：CSS 渐变绿呢。
+- 头像（`avatar.ts`）：六个电脑性格各一张手绘 SVG，按名字前缀认（好友房实盘带编号的也认），真人按名字算底色写首字；牌桌、选桌页的画在 `art.ts`（SVG 小纹理平铺，启动时写成 `--art-*` 变量）和 `art.css`。
+  主题是成都茶馆：墨绿呢子、木框、红漆中控盘（四边座位色，轮到谁亮）、竹帘、灯笼、盖碗。不用 filter、没有持续动画，全部程序生成。
+- 音效（`sound.ts`）：WebAudio 现合成，每种动作一个声音；总音量 `setVolume`（存在 `mahjong.prefs`），静音时 `play` 和给共用包的 `audioOut` 都不出声；同一种短时间连发会丢，最多同时 8 个。
 - **主题和按钮**（0.7.0，`src/view/style.css` 开头）：颜色、间距（4 的倍数）、字号、圆角、阴影、动效时长都是 CSS 变量，组件只用这些刻度；
   牌桌上各块的绝对位置按牌桌几何定，是例外。所有能点的（`.act`、`.pill`、`.chip`、`.stake`、`.link`、聊天面板里的）共用一套状态：
   悬停（有鼠标时）亮一点、按下沉一点、禁用变淡、键盘焦点金边、发请求时转圈（`dom.ts` 的 `busy`，挂 `aria-busy`，转着再点不发第二次）。
