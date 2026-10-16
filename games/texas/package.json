@@ -1,7 +1,7 @@
 {
   "name": "texas",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "德州扑克：单机对电脑和好友房，筹码跨场保留（无任何现金价值）",
   "scripts": {
