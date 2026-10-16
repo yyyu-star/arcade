@@ -204,7 +204,10 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
   // 电脑按"像人"的节奏想，动画正常速度：6 人桌一手常要二三十秒
   const deadline = Date.now() + hands * 40_000;
   for (;;) {
-    if (Date.now() > deadline) throw new Error('playing took too long');
+    if (Date.now() > deadline) {
+      await shot(page, 'too-long');
+      throw new Error(`playing took too long (hand ${await handText(page)})`);
+    }
     const no = await handText(page);
     if (no > hands) return;
     if (await page.locator('.next-hand').isVisible()) {

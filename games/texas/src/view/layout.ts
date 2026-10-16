@@ -90,7 +90,9 @@ export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
   const f = felt(g);
   // 我的：底边在底牌上面一点（.bet.mine 按底边摆），往上长不碰底池
   if (mine) return { x: f.cx, y: p.y - 100 };
-  const k = g.tall ? 0.5 : 0.42;
+  // 竖屏桌子窄、座位挤：顶上的放在名牌正下方，两边的放在名牌朝桌心那一侧、底牌下面，不碰动作签、底牌和名牌（0.10.0 审阅）
+  if (g.tall) return isTop(p, g) ? { x: p.x, y: p.y + 104 } : { x: p.x + (p.x < f.cx ? 1 : -1) * 124, y: p.y + 44 };
+  const k = 0.42;
   return { x: p.x + (f.cx - p.x) * k, y: p.y + (f.cy - p.y) * k + 6 };
 }
 

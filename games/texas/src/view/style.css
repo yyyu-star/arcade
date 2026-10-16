@@ -291,11 +291,12 @@ body::before {
 .dealer {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 24px; height: 24px;
-  border-radius: 12px;
+  width: 26px; height: 26px;
+  border-radius: 13px;
   background: radial-gradient(circle at 35% 30%, #fff, #ddd 60%, #aaa);
   color: #333;
-  font-size: 13px;
+  /* 手机横屏也不小于 11 px（按 --ui 放大） */
+  font-size: max(13px, calc(11px * var(--ui)));
   font-weight: 900;
   display: grid;
   place-items: center;
@@ -1045,6 +1046,8 @@ body::before {
 .stage.tall .hud .hand-no { margin-right: auto; }
 .stage.tall .fun-panel { top: 108px; bottom: auto; left: var(--s-3); right: var(--s-3); width: auto; }
 .stage.tall .where { display: none; }
+/* 竖屏桌心窄，下注筹码会压到水印上：不画水印 */
+.stage.tall .felt-mark { display: none; }
 /* 底下的拇指区：三个主按钮铺满一行，快捷下注、赔率在上面，和主按钮之间多留一截，别误触 */
 .stage.tall :is(.actions, .pre, .between) { left: var(--s-3); right: var(--s-3); bottom: var(--s-4); }
 .stage.tall .actions { align-items: stretch; gap: var(--s-2); }

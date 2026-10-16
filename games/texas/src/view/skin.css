@@ -311,3 +311,8 @@ html, body, body::before { background: var(--night); }
   -webkit-text-stroke: .6px rgba(94, 62, 10, .55);
   filter: drop-shadow(0 2px 0 #4a3008) drop-shadow(0 6px 10px rgba(0, 0, 0, .65));
 }
+
+/* 手机平板、减少动画时：上面两个一直转、一直呼吸的光改成静止的（老 iPhone 上一直重绘吃 CPU）；桌面保留 */
+@media (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .seat.acting::after, .seat.win::before { animation: none; }
+}
