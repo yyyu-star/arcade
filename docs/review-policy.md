@@ -16,6 +16,8 @@
 - 维护者用仓库所有者的账号合并，所以 PR 的合并人总是仓库所有者（部署前 `tools/verify-main.sh` 只认这样的合并）。
 - **守门代理用的令牌不含 Deployments、Environments、Secrets、Administration 权限**：它批准不了部署、读不到也改不了 secret 和环境、改不了仓库设置。
   production 环境要求仓库所有者批准才执行，管理员也不能绕过；守门代理就算想批准也做不到。
+- 守门代理的令牌**有 Actions 写权限**：批准 fork 的 CI 运行要用它。因此它也能重跑、取消、手动触发流程（包括对 main 触发部署流程），
+  但部署作业仍然停在 production 环境等仓库所有者批准，它自己发布不了；维护者批准前核对这次运行是不是自己预期的那次合并（提交、流程、模块）。
 
 ## 2. 一个 PR 怎么走
 
@@ -88,7 +90,10 @@
 - 改了构建和测试配置：`vite.config.*`、`vitest.config.*`、`tsconfig*.json`、`playwright` 配置之类；
 - 改了模块里 `tools/`、`scripts/` 下的脚本（构建、打包、冒烟脚本在 CI 里执行）；
 - 改了任何隐藏文件（`.gitignore`、`.nvmrc` 等；新增隐藏文件是第 3 节的红线）；
-- 改了任何 wrangler 配置文件（模块根目录的 `wrangler.jsonc`，以及测试用的 `wrangler*.jsonc`），包括 `vars` 里的开关和额度；
+- 改了任何 wrangler 配置文件（模块根目录的 `wrangler.jsonc`，以及测试用的 `wrangler*.jsonc`），包括 `vars` 里的开关和额度
+  （新的 `vars` 名、`compatibility_flags` 要维护者加进 `tools/deploy-allowlist.json`）；
+- 新增或改了静态资源目录里的 `_headers`、`_redirects`（包括构建时生成的）：它们不是代码，会作为资源配置随资源一起上传，
+  能改响应头（CSP、缓存）和跳转；平台的对整个站点生效，游戏的对自己路径下的资源生效；
 - **新增游戏**：新游戏要在 `tools/workers.json` 登记 Worker 名（维护者先确认 Cloudflare 账户里没有同名的 Worker）、加部署流程、在平台登记、配好钱包和保留昵称，这些由维护者按 [新游戏开发指南](new-game.md) 第 5 节做；
 - 改了钱包、实盘、联机房间的计费或额度，或者新调用了平台的 `/api` 接口；
 - 改了 D1 迁移；
@@ -106,7 +111,12 @@
   再从里面拷出白名单字段生成最终配置（main 指向打包产物、assets 指向资源目录、平台填正式库的 id），读回来再查一遍才部署。构建期间怎么改配置都影响不到部署。
 - **wrangler 的运行环境**：新建的空目录、`--env-file /dev/null`（不读任何 `.env`）、只传必需的环境变量、`CLOUDFLARE_API_BASE_URL` 写死成官方地址。
 - **PR 上的快速检查**（`tools/check-deploy-config.mjs`）提前拦下 `.env`、`.npmrc`、`wrangler.json`/`.toml`、`.wrangler/`、名单外隐藏文件、符号链接和白名单外的配置。
-- **人工闸门**：只部署经 PR、由仓库所有者合并的提交（`tools/verify-main.sh`）；deploy 作业还要维护者在 production 环境上批准才执行。
+- **人工闸门**：只部署经 PR、由仓库所有者合并的提交（`tools/verify-main.sh`），而且只部署 main 的最新提交（旧运行重跑会失败，
+  要部署就对 main 手动运行该模块的流程）；deploy 作业还要维护者在 production 环境上批准才执行。
+- **打包方式写死**：最终配置固定 `no_bundle: true`、`find_additional_modules: false`、`upload_source_maps: false`，入口复制到只有它的目录、
+  去掉末尾的 `sourceMappingURL` 注释，所以只上传那一个文件（细节见 `tools/deployer/lib.mjs` 的 `FINAL_BUNDLE_FLAGS`）。
+- **钉死的工具**：第三方 Actions 钉在完整的提交 SHA 上，wrangler 钉在 `tools/deployer/` 的 lockfile 上（升级见 `tools/deployer/README.md`）；
+  PR 改了 `tools/` 或 `.github/workflows/` 时，`Check isolation` 会拿开盘把整条部署路径用 `deploy.mjs --dry-run` 走一遍。
 
 **残余风险**：
 
@@ -114,6 +124,9 @@
   最稳妥的是给本项目单独开一个 Cloudflare 账户（需要单独的域名），令牌只管这个账户；要不要这样做由仓库所有者决定。
 - 打包产物（Worker 代码和静态资源）本身就是模块代码，部署后在站点上以玩家身份运行；它能做什么取决于审阅（第 4 节"账号安全"），部署流程管不了。
 - GitHub Actions 的缓存能被跑模块代码的作业写，所以 deploy 作业不用缓存；以后改流程时别给 deploy 作业加 `cache`。
+- 游戏 Worker 通过 `ARCADE` 服务绑定调平台的默认 `fetch` 入口时，请求头完全由游戏代码决定，能伪造 `cf-connecting-ip`、`Origin` 等头，
+  而平台按 `cf-connecting-ip` 算 IP 哈希（限流、防刷）、按 `Origin` 判断写请求。这是应用层的风险，部署检查管不了：审游戏 Worker 时
+  看它转给平台的请求有没有改写或伪造这些头（钱包走 `WalletService` 入口，身份由 `props.game` 固定，不受影响）。
 
 ## 8. 标签
 

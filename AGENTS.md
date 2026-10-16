@@ -58,7 +58,7 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 ## 2. 拆分与单独部署
 
 - **单独部署**：每个模块的流程只部署自己的 Worker，一个模块的部署不会动到其他模块。正式环境只由 main 上经 PR 合并的提交触发部署
-  （或在 GitHub Actions 里对 main 手动重跑该模块的流程），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
+  （或在 GitHub Actions 里对 main 手动运行该模块的流程；只部署 main 的最新提交，旧提交的运行重跑也会在核对这一步失败），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
 - **部署流程的结构**（为什么这样见 [docs/review-policy.md](docs/review-policy.md) 第 7 节）：test 作业跑模块代码（不拿凭证），用 `wrangler deploy --dry-run --outdir` 打包后上传 artifact；
   deploy 作业不 checkout 模块代码，只取 `tools/` 和模块的 `wrangler.jsonc`，用 `tools/deployer/` 里钉死的 wrangler 由 `deploy.mjs` 检查后 `--no-bundle` 部署。
   所以部署用的配置就是模块根目录那份 `wrangler.jsonc`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。

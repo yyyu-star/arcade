@@ -82,7 +82,9 @@ Repository settings, kept in sync with this section:
 - **Merging**: squash merge only (the pull request title becomes the commit message); branches are deleted after merge.
 - **`production` environment**: restricted to `main`, with **required reviewers = the repository owner** (administrators cannot bypass it).
   Every deploy job stops in *waiting* until a maintainer reviews the run and approves it in Actions — check that the run belongs to the merge
-  you expect (commit, workflow, module) before approving. It holds `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `SITE_HOST` and `D1_DATABASE_ID`.
+  you expect (commit, workflow, module) before approving. Only the latest commit on `main` is deployed: if another pull request was merged while a run
+  was queued or waiting, that run fails its "latest commit" step; do not re-run old runs — start the module's workflow on `main` manually
+  (*Run workflow*), which deploys the current head. It holds `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `SITE_HOST` and `D1_DATABASE_ID`.
   The hostname and database ID are secrets so they are masked in the public Actions logs; the repository itself names no domain.
 - **Merging and publishing are maintainer-only.** The automated reviewer never merges and never approves deployments; its token has no
   Deployments, Environments, Secrets or Administration permission.
@@ -99,7 +101,11 @@ Repository settings, kept in sync with this section:
   contain `.env*`, `.npmrc`, `wrangler.json`, `wrangler.toml`, `.wrangler/`, unlisted hidden files or symlinks; each module's `wrangler.jsonc` may only
   deploy to its own Worker — named after the module and listed in `tools/workers.json` — with no routes, domains, account ids, limits, log
   destinations or resources beyond the per-key allowlisted bindings, and Durable Object migrations may only create classes.
-  Only maintainers add names to `tools/workers.json`, after checking that no Worker with that name already exists in the account.
+  `vars` names and `compatibility_flags` must be listed per module in `tools/deploy-allowlist.json`; the platform's secret names and `SITE_ORIGIN` are never allowed as `vars`.
+  Only maintainers add names to `tools/workers.json` (after checking that no Worker with that name already exists in the account) and to `tools/deploy-allowlist.json`.
+- **Pinned tooling**: third-party actions are pinned to full commit SHAs, and the deployer's wrangler version is fixed in `tools/deployer/` (upgrade steps in
+  [tools/deployer/README.md](tools/deployer/README.md)). Pull requests that touch `tools/` or `.github/workflows/` also run the whole deploy path for one game
+  with `deploy.mjs --dry-run` (no credentials) in `Check isolation`.
 - **Residual risk**: the deploy token is account-wide. The safest setup is a separate Cloudflare account (with its own domain) for this project;
   that is the repository owner's call. See [docs/review-policy.md](docs/review-policy.md) section 7.
 - **Deploy guard**: before deploying, `tools/verify-main.sh` checks that every commit on `main` since `TRUSTED_BASE` is a GitHub-generated squash merge of a pull request, merged by the repository owner.

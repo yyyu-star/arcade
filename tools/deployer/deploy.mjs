@@ -8,7 +8,8 @@
  *     只当数据读，用钉死的 wrangler 解析后按白名单查（lib.mjs）；
  *   - 构建作业交来的 artifact（worker/<入口名>.js + assets/）：构建作业跑的是模块代码，产物可能被改成任何样子，
  *     这里只当数据：查目录结构（只许普通文件，不许符号链接、隐藏文件、多余的东西），不执行里面的任何东西，
- *     打包产物原样作为 Worker 代码上传（--no-bundle）。
+ *     打包好的入口复制到工作目录（去掉末尾的 sourceMappingURL 注释）后作为唯一的 Worker 模块上传（--no-bundle，
+ *     不找附加模块、不传 source map，见 lib.mjs 的 FINAL_BUNDLE_FLAGS）。
  * 最终配置由这里从审过的 wrangler.jsonc 逐字段拷出白名单里的内容生成（main 指向打包产物、assets 指向资源目录、
  * D1 填上正式库的 id），写成纯 JSON 后再用钉死的 wrangler 读回来查一遍，通过了才部署；路由、域名、SITE_ORIGIN 用命令行注入。
  *
@@ -23,11 +24,28 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { REPO_ROOT, checkConfig, checkNormalized, checkSourceConfig, moduleInfo, readConfigStrict } from './lib.mjs';
+import { FINAL_BUNDLE_FLAGS, REPO_ROOT, checkConfig, checkNormalized, checkSourceConfig, moduleInfo, readConfigStrict } from './lib.mjs';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * 去掉入口末尾的 //# sourceMappingURL=（以及旧写法 //@）注释。从末尾往前看的规则照抄 wrangler 4.151 的 getSourceMappingUrl：
+ * 跳过空行，碰到既不是 //# 也不是 //@ 开头的行就停。
+ * 为什么去掉而不是只查它指向哪里：upload_source_maps 已经关掉，这行本来就不起作用；去掉以后不管 wrangler 哪条路径
+ * （上传、本地堆栈）都没有可以跟着去读的文件路径，也不用再判断 ../、绝对路径、data: 之类的写法算不算合规。
+ */
+function stripSourceMapComment(text) {
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (!line.startsWith('//#') && !line.startsWith('//@')) break;
+    if (/^\/\/[#@]\s*source(Mapping)?URL=/.test(line)) lines.splice(i, 1);
+  }
+  return lines.join('\n');
+}
 
 function fail(msg) {
   console.error(`::error::deploy：${msg}`);
@@ -89,7 +107,8 @@ for (const name of readdirSync(artifact)) if (!wantTop.includes(name)) problems.
 for (const name of wantTop) if (!existsSync(join(artifact, name)) || !lstatSync(join(artifact, name)).isDirectory()) problems.push(`缺少 ${name}/`);
 const workerDir = join(artifact, 'worker');
 if (existsSync(workerDir) && lstatSync(workerDir).isDirectory()) {
-  // wrangler --dry-run --outdir 的输出：入口、它的 source map、一份说明。多出来的模块（wasm 之类）--no-bundle 不会上传，出现了说明打包方式变了，先停下
+  // wrangler --dry-run --outdir 的输出：入口、它的 source map、一份说明。部署只用入口（复制出去，见下面第 6 步），别的都不上传；
+  // 多出来的文件（wasm、附加模块之类）说明打包方式变了，先停下
   const allowed = new Set([entryName, `${entryName}.map`, 'README.md']);
   for (const name of readdirSync(workerDir)) if (!allowed.has(name)) problems.push(`worker/${name}：打包产物只许有 ${[...allowed].join('、')}`);
   if (!existsSync(join(workerDir, entryName))) problems.push(`缺少打包好的入口 worker/${entryName}`);
@@ -114,12 +133,16 @@ const configDir = join(work, 'config');
 const homeDir = join(work, 'home');
 mkdirSync(configDir, { recursive: true });
 mkdirSync(homeDir, { recursive: true });
+// 入口单独复制到一个只有它的目录：即使附加模块的查找被打开，这个目录里也没有别的东西可上传
+const bundleDir = join(work, 'bundle');
+mkdirSync(bundleDir);
+writeFileSync(join(bundleDir, entryName), stripSourceMapComment(readFileSync(join(workerDir, entryName), 'utf8')));
 const expect = {
-  main: join(workerDir, entryName),
+  main: join(bundleDir, entryName),
   assets: source.assets ? join(artifact, 'assets') : undefined,
   migrations: migrationsDir,
 };
-const final = structuredClone(source);
+const final = { ...structuredClone(source), ...FINAL_BUNDLE_FLAGS };
 delete final.$schema;
 final.main = expect.main;
 if (final.assets) final.assets.directory = expect.assets;
@@ -143,6 +166,7 @@ const env = {
   TMPDIR: process.env.RUNNER_TEMP || process.env.TMPDIR || '/tmp',
   CI: 'true',
   WRANGLER_SEND_METRICS: 'false',
+  WRANGLER_SEND_ERROR_REPORTS: 'false',
   CLOUDFLARE_API_BASE_URL: API_BASE,
   ...(dryRun ? {} : { CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID }),
 };

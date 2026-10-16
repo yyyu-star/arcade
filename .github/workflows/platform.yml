@@ -32,10 +32,10 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: platform/.nvmrc
           cache: npm
@@ -59,7 +59,7 @@ jobs:
         run: npm run smoke
       - name: 冒烟失败时上传截图
         if: failure() && hashFiles('platform/tools/smoke.ts') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: platform-smoke-shots
           path: platform/shots
@@ -67,7 +67,7 @@ jobs:
           if-no-files-found: ignore
       - name: 上传产物
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: platform-bundle
           path: ${{ runner.temp }}/artifact
@@ -93,7 +93,7 @@ jobs:
         working-directory: .
     steps:
       # 只取维护者管的 tools/、平台审过的 wrangler.jsonc 和 D1 迁移（都只当数据读）；平台的代码、package.json、node_modules 一概不进这个作业
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -108,14 +108,27 @@ jobs:
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
         run: bash tools/verify-main.sh "${{ github.sha }}"
+      # 只部署 main 的最新提交：排队或等批准期间又合并了新的 PR，这次运行的提交就旧了，部署它会把线上退回旧版本。
+      # 失败时不重跑这次运行：对 main 手动运行本流程（workflow_dispatch），部署的就是最新提交（见 CONTRIBUTING.md）
+      - name: 只部署 main 的最新提交
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          head=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          if [ "$head" != "$SHA" ]; then
+            echo "::error::有更新的合并（main 现在是 $head，这次运行是 $SHA），旧运行不部署；要部署就对 main 手动运行本流程"
+            exit 1
+          fi
       # 不用缓存：缓存能被跑模块代码的作业写
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
       - name: 装钉死版本的 wrangler（tools/deployer，不跑安装脚本）
         working-directory: tools/deployer
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: platform-bundle
           path: ${{ runner.temp }}/artifact

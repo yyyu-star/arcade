@@ -74,7 +74,13 @@ const checked = [];
 for (const mod of targets) {
   errors.push(...checkFiles(mod));
   if (mod.startsWith('packages/')) continue; // 共用包不部署，只查文件
-  const info = moduleInfo(mod);
+  let info;
+  try {
+    info = moduleInfo(mod);
+  } catch {
+    errors.push(`${mod}：不是合规的模块路径（可部署的只有 platform 和 games/<id>，id 只许小写字母开头的小写字母、数字和 -，它同时是 Worker 名和存储前缀）`);
+    continue;
+  }
   const file = join(ROOT, mod, 'wrangler.jsonc');
   if (!existsSync(file)) {
     if (info.isPlatform) errors.push('platform：没有 wrangler.jsonc');

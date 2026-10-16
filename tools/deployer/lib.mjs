@@ -7,6 +7,7 @@
  *
  * 白名单的思路：只放行本仓库现在真用到的字段和绑定，每种绑定逐键列出；别的（KV、R2、队列、tail_consumers、limits、
  * observability 的 destinations、DO 迁移里的 transferred/deleted/renamed_classes……）一律拒绝，真需要时由维护者放宽这里。
+ * vars 名（按模块）、compatibility_flags 和全局拒绝的 vars 名单独放在 tools/deploy-allowlist.json，同样由维护者改。
  */
 import { lstatSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -15,6 +16,8 @@ import { experimental_readRawConfig, unstable_readConfig } from 'wrangler';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKERS_FILE = join(REPO_ROOT, 'tools', 'workers.json');
+/** vars 名、兼容开关的白名单和全局拒绝的 vars 名（维护者管） */
+const ALLOWLIST_FILE = join(REPO_ROOT, 'tools', 'deploy-allowlist.json');
 
 /** 平台 Worker 公开的 RPC 入口（platform/worker 里 extends WorkerEntrypoint 的类）。新增入口时由维护者加进来 */
 export const KNOWN_ENTRYPOINTS = new Set(['WalletService']);
@@ -33,7 +36,16 @@ const WHY_NOT = {
   limits: '不许改 CPU、子请求上限', tail_consumers: '不许把日志转给别的 Worker', logpush: '不许推日志',
   no_bundle: '打包方式由部署流程决定', find_additional_modules: '只上传部署流程认可的打包产物',
   rules: '只上传部署流程认可的打包产物', base_dir: '只上传部署流程认可的打包产物',
+  upload_source_maps: 'source map 不上传（由部署流程关掉）',
 };
+/**
+ * 部署流程写进最终配置、并要求 wrangler 读回来正好是这些值的打包开关（源配置里不许写，见 WHY_NOT）：
+ *   no_bundle：产物已经由构建作业打好，原样上传；
+ *   find_additional_modules：wrangler 4.151 在 --no-bundle 时这一项没写就默认打开（noBundleWorker 的默认参数），
+ *     会把入口所在目录里按规则匹配到的 .js/.mjs/.wasm/.txt/.html/.sql 等文件全部当作附加模块上传；
+ *   upload_source_maps：打开时 wrangler 会按入口末尾的 sourceMappingURL 去读文件一起上传，这个路径由不可信的构建作业决定。
+ */
+export const FINAL_BUNDLE_FLAGS = Object.freeze({ no_bundle: true, find_additional_modules: false, upload_source_maps: false });
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const BINDING = /^[A-Z][A-Z0-9_]*$/;
@@ -41,6 +53,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function allowedWorkers() {
   return JSON.parse(readFileSync(WORKERS_FILE, 'utf8')).workers;
+}
+
+function allowlist() {
+  return JSON.parse(readFileSync(ALLOWLIST_FILE, 'utf8'));
 }
 
 /** 模块路径（相对仓库根）→ { mod, id, isPlatform }；不是可部署的模块就抛错 */
@@ -118,18 +134,29 @@ export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, exp
   // —— 顶层字段 ——
   for (const key of Object.keys(c)) {
     if (COMMON_KEYS.has(key) || (isPlatform && PLATFORM_KEYS.has(key))) continue;
+    if (stage === 'final' && key in FINAL_BUNDLE_FLAGS) continue;
     if (key === '$schema' && stage === 'final') continue;
     bad(`不许用 ${key}（${WHY_NOT[key] ?? '不在 tools/deployer/lib.mjs 的白名单里；确实需要时由维护者放宽'}）`);
   }
   if (stage === 'final' && '$schema' in c) bad('最终配置里不该有 $schema');
+  if (stage === 'final') {
+    for (const [k, v] of Object.entries(FINAL_BUNDLE_FLAGS)) if (c[k] !== v) bad(`${k} 必须是 ${v}，现在是 ${JSON.stringify(c[k])}`);
+  }
+  const allow = allowlist();
 
   if (c.name !== id) bad(`name 必须是 "${id}"（模块 id），现在是 ${JSON.stringify(c.name)}`);
   if (!allowedWorkers().includes(id)) bad(`Worker "${id}" 不在 tools/workers.json 的名单里：新 Worker 由维护者确认账户里没有同名的之后再加`);
   if (c.workers_dev !== false) bad('workers_dev 必须写成 false（只经站点的域名访问）');
   if (c.preview_urls !== false) bad('preview_urls 必须写成 false（预览地址绕过网关）');
   if (typeof c.compatibility_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.compatibility_date)) bad('compatibility_date 必须是 YYYY-MM-DD');
-  if ('compatibility_flags' in c && !(Array.isArray(c.compatibility_flags) && c.compatibility_flags.every((f) => typeof f === 'string' && /^[a-z0-9_]+$/.test(f)))) {
-    bad('compatibility_flags 必须是小写标识符的数组');
+  // 兼容开关会改变运行时的行为（比如 nodejs_compat 打开 Node API），只许名单里的
+  if ('compatibility_flags' in c) {
+    if (!Array.isArray(c.compatibility_flags)) bad('compatibility_flags 必须是数组');
+    else for (const f of c.compatibility_flags) {
+      if (!allow.compatibility_flags.includes(f)) {
+        bad(`compatibility_flags 里的 ${JSON.stringify(f)} 不在 tools/deploy-allowlist.json 的名单里（现在只许 ${allow.compatibility_flags.join('、') || '不写'}；新增由维护者加）`);
+      }
+    }
   }
   if ('$schema' in c && typeof c.$schema !== 'string') bad('$schema 必须是字符串');
 
@@ -166,11 +193,14 @@ export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, exp
     if ('head_sampling_rate' in o && typeof o.head_sampling_rate !== 'number') bad('observability.head_sampling_rate 必须是数字');
   }
 
-  // —— 环境变量：普通的 JSON 值；SITE_ORIGIN 只由部署流程注入 ——
+  // —— 环境变量：只许名单里的名字，值是普通的 JSON 值。平台的 Secret 名和 SITE_ORIGIN 任何模块都不许写：
+  //    vars 和 Secret 同名时会互相覆盖（比如写一个 ADMIN_TOKEN 把正式的令牌换成已知值），SITE_ORIGIN 只由部署流程注入 ——
   if ('vars' in c && isPlainObject(c.vars)) {
+    const names = Object.hasOwn(allow.vars, id) ? allow.vars[id] : [];
     for (const [k, v] of Object.entries(c.vars)) {
-      if (!BINDING.test(k)) bad(`vars.${k}：变量名必须是大写标识符`);
       if (k === 'SITE_ORIGIN') bad('vars 里不许写 SITE_ORIGIN：正式站的地址由部署流程注入');
+      else if (allow.forbiddenVars.includes(k)) bad(`vars 里不许写 ${k}：它是平台的 Secret 名，同名的 vars 会顶替 Secret`);
+      else if (!names.includes(k)) bad(`vars.${k} 不在 tools/deploy-allowlist.json 里 ${id} 的名单（现在只许 ${names.join('、') || '没有'}；新增由维护者加）`);
       if (!['string', 'number', 'boolean'].includes(typeof v) && !isPlainObject(v)) bad(`vars.${k} 只许字符串、数字、布尔或对象`);
     }
   } else if ('vars' in c) bad('vars 必须是对象');
@@ -253,6 +283,7 @@ export function checkNormalized(file, { id, isPlatform, label }) {
   }
   if (n.name !== id) bad(`name 是 ${JSON.stringify(n.name)}`);
   if (n.configPath !== file) bad(`wrangler 读的是 ${n.configPath}，不是 ${file}`);
+  for (const [k, v] of Object.entries(FINAL_BUNDLE_FLAGS)) if (n[k] !== v) bad(`${k} 是 ${JSON.stringify(n[k])}，必须是 ${v}`);
   if (n.route || n.routes?.length) bad('不该有路由');
   if (n.workers_dev !== false || n.preview_urls !== false) bad('workers_dev / preview_urls 必须是 false');
   if (n.durable_objects?.bindings?.some((d) => d.script_name || d.environment)) bad('Durable Object 指向了别的 Worker');

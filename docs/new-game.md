@@ -35,7 +35,7 @@ games/<id>/
 └─ .gitignore
 ```
 
-隐藏文件只许有 `.gitignore`、`.nvmrc`；不要提交 `.env*`、`.npmrc`、`.wrangler/`、`wrangler.json`、`wrangler.toml`、符号链接（部署配置检查会拦，见第 4 节）。
+隐藏文件只许有 `.gitignore`、`.nvmrc`、`.dev.vars.example`（和 `tools/check-deploy-config.mjs` 的名单一致）；不要提交 `.env*`、`.npmrc`、`.wrangler/`、`wrangler.json`、`wrangler.toml`、符号链接（部署配置检查会拦，见第 4 节）。
 
 `package.json` 里写 `"license": "MIT"`；依赖共用包写 `"arcade-kit": "file:../../packages/arcade-kit"`（唯一允许指向模块外的路径）。
 
@@ -77,7 +77,7 @@ npm run build
   指向平台 `arcade` 的服务绑定 `ARCADE`、钱包 `WALLET`（`entrypoint` 只许 `WalletService`，`props` 只许 `{ "game": "<id>" }`）；
 - Durable Object 的 `migrations` 只许 `tag`、`new_classes`、`new_sqlite_classes`（不许转移、删除、改名类）；`observability` 不许 `destinations`；
 - 不许 KV、R2、队列、D1、别的 Worker 的 Durable Object、`tail_consumers`；确实需要时在 issue 里和维护者商量；
-- `vars` 里不写 `SITE_ORIGIN`（正式部署注入，本地不设时按请求自己的 origin）；
+- `vars` 里不写 `SITE_ORIGIN`（正式部署注入，本地不设时按请求自己的 origin）；`vars` 名和 `compatibility_flags` 只许 `tools/deploy-allowlist.json` 里给这个游戏列的，新增由维护者加；
 - 只用 `\n` 换行，配置里不写 `__proto__` 和 `\u` 转义。
 
 ## 5. 上线要经过的几步（维护者负责模块外的部分）
@@ -85,7 +85,7 @@ npm run build
 1. **游戏 PR**（你开）：只改 `games/<id>/`。CI 跑独立性检查、部署配置检查和你的测试。
    第一次的 PR 会因为 Worker 名还不在名单里，部署配置检查不通过——这是预期的，守门代理会把它升级给维护者。
 2. **维护者登记**（不需要你做）：
-   - 确认 Cloudflare 账户里没有同名的 Worker，把 `<id>` 加进 `tools/workers.json`；
+   - 确认 Cloudflare 账户里没有同名的 Worker，把 `<id>` 加进 `tools/workers.json`，把它用到的 `vars` 名加进 `tools/deploy-allowlist.json`；
    - 从 `game-kaipan.yml`（不用共用包）或 `game-mahjong.yml`（用共用包）复制一份 `.github/workflows/game-<id>.yml`，只改名字和路径
      （test 作业打包、deploy 作业 sparse-checkout 本模块的 `wrangler.jsonc`、用 `tools/deployer/deploy.mjs` 部署，这些结构不动）；
    - 在平台的 `platform/src/games.ts` 登记（名字、介绍、封面、路径、状态），放封面；云存档、排行榜、钱包的游戏白名单都从这份登记派生；
