@@ -43,7 +43,7 @@ function setup() {
   const emotes: [number, number, number | undefined][] = [];
   const statuses: string[] = [];
   const client = new RoomClient<{ card: number }>({
-    url: 'wss://game.test/rooms/123456/ws',
+    url: 'wss://game.example.com/rooms/123456/ws',
     clientVersion: 3,
     onMessage: (m) => got.push(m),
     onEmote: (seat, id, to) => emotes.push([seat, id, to]),
@@ -84,7 +84,7 @@ describe('重连', () => {
 
   it('URL 带客户端版本；异常断开（1006）按退避重连，进了房间（收到 welcome）后退避清零', () => {
     const t = setup();
-    expect(t.ws().url).toBe('wss://game.test/rooms/123456/ws?cv=3');
+    expect(t.ws().url).toBe('wss://game.example.com/rooms/123456/ws?cv=3');
     t.ws().open();
     t.ws().drop(1006);
     expect(t.statuses.at(-1)).toBe('reconnecting:1006');

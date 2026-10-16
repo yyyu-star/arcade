@@ -1,5 +1,5 @@
 /**
- * 测试和本机试用的假平台钱包（0.8.0，不部署）：游戏的 workerd 测试、冒烟、本机 `wrangler dev` 里代替平台的钱包，各游戏共用这一份。
+ * 测试和本地试用的假平台钱包（0.8.0，不部署）：游戏的 workerd 测试、冒烟、本地 `wrangler dev` 里代替平台的钱包，各游戏共用这一份。
  *
  * 只复刻游戏碰得到的接口形状和关键规则，不复刻平台的细枝末节（计量、熔断档、流水、战绩怎么存、管理员调规则）：
  * - `WalletService`：游戏经服务绑定调的四个方法（docs/platform-backend.md 5.9"给游戏的 RPC"）。绑定的 `props.game` 必须写，
@@ -11,7 +11,7 @@
  *   收下的记在 `FakeBank.stats` 里给测试核对；
  * - `walletHttp`：浏览器的 `GET /api/wallet`、`POST /api/wallet/relief`（15.9），认平台的会话 cookie，cookie 的值就当 userId。
  *
- * 平台改了钱包接口（参数、错误码、规则），平台 PR 的描述里写"影响 kit/testing"，由主线安排 kit 跟上；一个 PR 只改一个模块。
+ * 平台改了钱包接口（参数、错误码、规则），平台 PR 的描述里写"影响 kit/testing"，由维护者安排 kit 跟上；一个 PR 只改一个模块。
  *
  * 游戏怎么接：测试 Worker 的主模块 `export { FakeBank, WalletService } from 'arcade-kit/testing'`，wrangler 配置里
  * 加 DO 绑定 `FAKE_BANK`（class_name `FakeBank`），`WALLET` 服务绑定指回这个 Worker 自己：

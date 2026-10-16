@@ -18,7 +18,7 @@ function gateEnv(me: () => Response, gate?: string) {
   };
 }
 
-const home = (cookie = true) => new Request('https://game.test/games/x/?room=123456&a=b', { headers: cookie ? { cookie: `${SESSION_COOKIE}=abc` } : {} });
+const home = (cookie = true) => new Request('https://game.example.com/games/x/?room=123456&a=b', { headers: cookie ? { cookie: `${SESSION_COOKIE}=abc` } : {} });
 
 describe('loginGate', () => {
   it('登录了：回页面，带上平台续期的 Set-Cookie，不缓存', async () => {
@@ -62,13 +62,13 @@ describe('loginGate', () => {
 });
 
 describe('json、readJson', () => {
-  const post = (body: string, headers: Record<string, string> = {}) => new Request('https://game.test/x', { method: 'POST', body, headers });
+  const post = (body: string, headers: Record<string, string> = {}) => new Request('https://game.example.com/x', { method: 'POST', body, headers });
 
   it('readJson：要带 content-length 且 1 到 maxBytes 字节才读，不是 JSON 回 null', async () => {
     expect(await readJson(post('{"a":1}', { 'content-length': '7' }), 64)).toEqual({ a: 1 });
     expect(await readJson(post('{"a":1}', { 'content-length': '7' }), 6)).toBeNull();
     expect(await readJson(post('nope', { 'content-length': '4' }), 64)).toBeNull();
-    expect(await readJson(new Request('https://game.test/x'), 64)).toBeNull();
+    expect(await readJson(new Request('https://game.example.com/x'), 64)).toBeNull();
   });
 
   it('json：带状态码、Set-Cookie，不缓存', async () => {

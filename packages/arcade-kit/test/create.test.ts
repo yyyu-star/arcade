@@ -7,7 +7,7 @@ import { CLOSE, CLOSE_REASON } from '../src/protocol.ts';
 function fakeFetch(reply: () => Response) {
   const got: Request[] = [];
   const f = ((input: RequestInfo | URL, init?: RequestInit) => {
-    got.push(new Request(new URL(String(input), 'https://game.test/games/x/'), init));
+    got.push(new Request(new URL(String(input), 'https://game.example.com/games/x/'), init));
     return Promise.resolve(reply());
   }) as typeof fetch;
   return { f, got };

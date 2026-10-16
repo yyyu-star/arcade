@@ -6,7 +6,8 @@
  * - 200 且 user 不为 null 才认，拿 user.id 和昵称交给房间；200 且 user 为 null 是"没登录"；
  * - 其他状态码、不是 JSON、缺字段、超时、绑定不存在都是"平台暂时不可用"：同样拒绝（fail-closed），但和"没登录"分开，
  *   进房时回 1013（稍后再试，客户端会重连），不回 4401（不重连），平台抖一下不至于把正在打牌的人踢走；
- * - 地址必须写正式域名，平台只认 SITE_ORIGIN 的主机名；
+ * - 地址按请求自己的 origin 拼（`<请求的 origin>/api/me`，0.9.0）：游戏和平台挂在同一个站点下，平台按主机名认是不是本站；
+ *   kit 里不写死站点地址，测试或特殊部署可以用 meUrl 覆盖；
  * - 平台续期或清掉失效会话时回的 Set-Cookie 原样带回来（setCookie），游戏的登录闸门、自己的接口在放行和"没登录"时转给浏览器，
  *   只玩游戏、不回平台页的人 cookie 也能续上（15.8）。进房用不上，不转。
  *
@@ -17,10 +18,16 @@
  */
 import { hasSessionCookie, type Identity } from './internal';
 
-export const ME_URL = 'https://game.yyyu.org/api/me';
+/** 平台"我是谁"接口的路径；完整地址按请求的 origin 拼（meUrlOf） */
+export const ME_PATH = '/api/me';
+
+/** 这个请求所在站点的 /api/me 地址 */
+export function meUrlOf(request: Request): string {
+  return new URL(ME_PATH, request.url).href;
+}
 
 export interface WhoIsOptions {
-  /** 默认正式域名的 /api/me */
+  /** 默认是请求所在站点的 /api/me（meUrlOf） */
   meUrl?: string;
   timeoutMs?: number;
 }
@@ -36,7 +43,7 @@ export async function whoIs(request: Request, arcade: Fetcher | undefined, opts:
   if (!hasSessionCookie(request.headers.get('cookie'))) return { error: 'anonymous', setCookie: [] };
   if (!arcade) return UNAVAILABLE;
   try {
-    const res = await arcade.fetch(opts.meUrl ?? ME_URL, {
+    const res = await arcade.fetch(opts.meUrl ?? meUrlOf(request), {
       headers: {
         cookie: request.headers.get('cookie') ?? '',
         'cf-connecting-ip': request.headers.get('cf-connecting-ip') ?? '',
@@ -59,7 +66,8 @@ export async function whoIs(request: Request, arcade: Fetcher | undefined, opts:
 /**
  * WebSocket 不受同源策略管，别的网站的页面也能往这里连（浏览器会带上能带的 cookie）：升级请求的 Origin 必须是本站。
  * 没带 Origin 的（不是浏览器）也拒绝。
+ * 本站默认就是请求自己的 origin（0.9.0：kit 不写死站点地址）；部署时想更严，可以传 siteOrigin（比如由 SITE_ORIGIN 变量注入）
  */
-export function sameOrigin(request: Request, siteOrigin: string): boolean {
-  return request.headers.get('origin') === siteOrigin;
+export function sameOrigin(request: Request, siteOrigin?: string): boolean {
+  return request.headers.get('origin') === (siteOrigin ?? new URL(request.url).origin);
 }

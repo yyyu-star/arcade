@@ -1,6 +1,8 @@
 # arcade-kit
 
-小游戏共用的联机底座（私有包，总仓库 `packages/arcade-kit`）。各联机游戏（德州、掼蛋、麻将等）的好友房都用它：房间、开房进房、浏览器连接、协议和每天的额度；规范见仓库根 `docs/platform-backend.md` 第 4 节。
+小游戏共用的联机底座：Cloudflare Durable Object 房间、开房进房、浏览器连接、消息协议和每天的额度，各联机游戏（德州、掼蛋、麻将等）的好友房都用它。房间规范见仓库根 `docs/platform-backend.md` 第 4 节。
+
+## 功能
 
 | 入口 | 用在哪 | 做什么 |
 |---|---|---|
@@ -11,7 +13,7 @@
 | `arcade-kit/meter` | 游戏 Worker（Durable Object） | 计量 `RoomMeter`（0.2.0）：每天的写入额度、按人和全站的开房名额，游戏原样导出、绑成 `METER` 就行；`meterReport` / `meterLevel`（0.3.0）给房间以外的 DO 记写入、问门槛 |
 | `arcade-kit/game` | 两边、规则测试 | 规则接口 `RoomGame`；`snapshotBytes`：算进房快照最大有多大，游戏在自己的测试里断言上限 |
 | `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台马上连、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案 |
-| `arcade-kit/testing` | 游戏的测试、本机试用 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
+| `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 
 包里直接发 TypeScript 源码（不另外构建），游戏用 vite / wrangler 打包时一起编译。
@@ -57,7 +59,7 @@
      | 状态 | error | 意思 | 页面可以说 |
      |---|---|---|---|
      | 401 | `login` | 没登录 | 先登录再来 |
-     | 403 | `forbidden` | 不是本站页面 | 从 game.yyyu.org 打开 |
+     | 403 | `forbidden` | 不是本站页面 | 从游戏大厅打开 |
      | 409 | `has_room` | 这个人已经有一个开着的房间，`code` 是它的码 | 你已经有一个房间了，先回去（给"回到房间"按钮） |
      | 429 | `daily_limit` | 这个人今天开房次数用完了 | 今天开房次数用完了，明天再来 |
      | 503 | `busy` | 今天联机的人太多（写入到了 busyWrites，或全站开房数到了） | 今天联机的人太多了，明天再来，单机照常玩 |
@@ -101,18 +103,18 @@
 - **默认文案** `createText(error, overrides?)`、`closeText(code, reason?, overrides?)`：开房失败、断开时给玩家看的话，只写各游戏通用的说法（表在 `ROOM_TEXT`）。
   游戏按 key 换掉个别措辞，比如 `{ roomClosed: '房间关了，桌上的筹码已经结回钱包', quota: '……这一手打完先散了……' }`。
   key 有两类：开房错误码，以及 `CLOSE` 里的名字，外加 `quota`、`other`。房间拒了某个操作（`ErrorMsg`）的话跟游戏规则走，不在这里。
-- **假平台钱包** `arcade-kit/testing`：只给游戏的 workerd 测试、冒烟和本机 `wrangler dev` 用，不进线上代码（它依赖 `cloudflare:workers`，也不能进浏览器包）。
+- **假平台钱包** `arcade-kit/testing`：只给游戏的 workerd 测试、冒烟和本地 `wrangler dev` 用，不进线上代码（它依赖 `cloudflare:workers`，也不能进浏览器包）。
   - 复刻的范围：平台钱包的接口形状和关键规则，即带入、结回、放弃、只结一次、余额够这次才能带、操作 id 去重、按 `ref` 分份、到期退回、client 每天净赢上限、小结 `stats` 的上限、补给（5.9、5.10、15.9）。
     计量、熔断档、流水、战绩怎么存这些不复刻。
   - 规则数取平台默认值（`NEW_BALANCE`、`RELIEF_TO`、`WIN_UNITS`、`TIERS`）。
   - 测试辅助：`FakeBank` 的 `calls`、`writes` 数调了几次、写了几次；`stats` 记结回带的小结；`setBalance` 造余额。
-  - **平台改了钱包接口，平台 PR 的描述里写"影响 kit/testing"，由主线安排 kit 跟上**（一个 PR 只改一个模块）。
+  - **平台改了钱包接口，平台 PR 的描述里写"影响 kit/testing"，由维护者安排 kit 跟上**（一个 PR 只改一个模块）。
   - 接法：测试 Worker 的主模块 `export { FakeBank, WalletService } from 'arcade-kit/testing'`，wrangler 配置加 DO 绑定 `FAKE_BANK`（`FakeBank`）。
     `WALLET` 绑回这个测试 Worker 自己：
     ```jsonc
     "services": [{ "binding": "WALLET", "service": "<测试 Worker 名>", "entrypoint": "WalletService", "props": { "game": "<游戏 id>" } }]
     ```
-    本机假平台（假的 `ARCADE`）里先 `const r = await walletHttp(request, env); if (r) return r;` 接住 `/api/wallet*`。
+    本地的假平台（假的 `ARCADE`）里先 `const r = await walletHttp(request, env); if (r) return r;` 接住 `/api/wallet*`。
 
 **游戏从自己那份迁过来**：每个游戏一个 PR，升到 kit 0.8.0（`npm install` 刷新 lockfile）。
 
@@ -278,14 +280,14 @@
 
 各游戏的额度在自己的 `wrangler.jsonc` 的 `KIT_QUOTA` 里，总账见仓库根 `docs/platform-backend.md` 4.7。
 
-## 第一版没做的（以后按需加）
+## 还没做的（以后按需加）
 
 - 人机验证；跨游戏的统一房间登记（5.3）。开房名额现在由每个游戏的计量各管各的（上面"每天的额度"），开放注册前看一眼门槛够不够紧；
 - Ed25519 入场票；观战（没入座的人现在能连、只看公开信息，最多 4 条连接）；
 - 回放记录、终局导出；
 - 用 `ctx.abort()` 强制正在打的房间换新代码；`cpu_ms` 要按各游戏的规则在房间里实测再定（4.4）；
 
-## 开发
+## 本地开发
 
 ```bash
 cd packages/arcade-kit
@@ -294,3 +296,38 @@ npm test        # 类型检查 + vitest（本地 workerd 里跑真的 Durable Ob
 ```
 
 测试用的游戏 Worker 在 `test/worker.ts`（一个最小的"比大小"规则；0.3.0 的可选接口用 `test/ledger.ts` 的"记账桌"和假银行测），平台的 `/api/me` 用假的服务绑定代替（`vitest.config.ts`），假钱包 `WALLET` 绑回测试 Worker 自己导出的 `WalletService`（`test/wrangler.jsonc`）。
+测试里的站点一律是保留的示例域名 `game.example.com`。`demo/` 是一个能在浏览器里点的小例子。
+
+## 部署
+
+kit 自己不部署，也没有 Worker：发的是 TypeScript 源码，游戏经 `package.json` 的 `"arcade-kit": "file:../../packages/arcade-kit"` 依赖它，打包进游戏自己的 Worker 和页面。
+CI 的 `pkg-arcade-kit.yml` 只跑测试；kit 改动时依赖它的游戏的流程也会跑一遍测试。用 kit 的游戏要准备这些（写在游戏自己的 `wrangler.jsonc` 里，整体部署见仓库根 README 的部署一节）：
+
+- 绑定：`ROOM`（游戏的房间 DO）、`METER`（`RoomMeter`）、`ARCADE`（到平台 Worker 的服务绑定，`/api/me` 认人走它）；
+- 变量：`KIT_QUOTA`（可选，改每天的额度门槛，见上面"每天的额度"）；`SITE_ORIGIN`（可选，0.9.0）：Origin 只认这个站点。
+  不设就认请求自己的 origin（游戏和平台挂在同一个站点下，浏览器从哪个站点打开、连的就是哪个），想更严的在部署时注入，再由游戏传给 `acceptCreate` / `acceptJoin` 的 `siteOrigin`；
+- kit 里不写死站点地址：同站校验默认用请求的 origin，`/api/me` 按请求的 origin 拼地址、经 `ARCADE` 绑定去问。
+
+## 目录结构
+
+```
+packages/arcade-kit/
+├─ src/
+│  ├─ room.ts        房间基类 GameRoom（Durable Object）
+│  ├─ worker.ts      开房 acceptCreate、进房 acceptJoin、登录闸门 loginGate、json / readJson
+│  ├─ auth.ts        经平台 /api/me 认人 whoIs、同站校验 sameOrigin
+│  ├─ meter.ts       每天的额度计量 RoomMeter
+│  ├─ game.ts        规则接口 RoomGame、snapshotBytes
+│  ├─ client.ts      浏览器连接器 RoomClient、createRoom、默认文案
+│  ├─ protocol.ts    消息类型、关闭码、协议版本
+│  ├─ rng.ts         ChaCha20 随机数
+│  ├─ fun.ts、fun-art.ts  快捷短语、表情、道具的画面层
+│  ├─ testing.ts     假平台钱包（只给测试和本地开发）
+│  └─ internal.ts    内部地址、身份头（不在 exports 里）
+├─ test/             vitest（workerd），测试用的游戏 Worker 和 wrangler 配置
+└─ demo/             浏览器里的小例子
+```
+
+## 许可证
+
+MIT，见仓库根的 `LICENSE`。

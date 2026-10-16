@@ -26,7 +26,7 @@ export interface Identity {
 
 /**
  * 房间 fetch 只认这个主机名：kit 自己拼的内部地址（acceptJoin）。游戏 Worker 要是把浏览器的原始请求直接转进来，
- * 地址是 game.yyyu.org，一律拒绝，浏览器自己带的 x-kit-user 头就不可能被当成身份。
+ * 地址是站点自己的域名，一律拒绝，浏览器自己带的 x-kit-user 头就不可能被当成身份。
  */
 export const KIT_HOST = 'arcade-kit.internal';
 

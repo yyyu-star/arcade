@@ -133,7 +133,7 @@ describe('假钱包的 RPC（5.9）', () => {
 
 describe('假钱包的浏览器接口（15.9）', () => {
   const get = (path: string, sid: string | null, init: RequestInit = {}) =>
-    walletHttp(new Request(`https://game.test${path}`, { ...init, headers: { ...(sid ? { cookie: `${SESSION_COOKIE}=${sid}` } : {}), ...(init.headers ?? {}) } }), env);
+    walletHttp(new Request(`https://game.example.com${path}`, { ...init, headers: { ...(sid ? { cookie: `${SESSION_COOKIE}=${sid}` } : {}), ...(init.headers ?? {}) } }), env);
 
   it('别的路径回 null；没登录 401；看钱包带档位表和规则', async () => {
     expect(await get('/api/me', 'x')).toBeNull();

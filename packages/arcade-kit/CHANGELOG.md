@@ -1,9 +1,21 @@
 # 更新日志
 
+## 0.9.0
+
+- **kit 里不再写死站点地址**（开源整改）：
+  - 删掉导出的 `SITE_ORIGIN`、`ME_URL` 两个常量。没有游戏用到它们，游戏原来的写法不用改。
+  - 同站校验 `sameOrigin(request, siteOrigin?)` 的第二个参数变成可选：不给就认请求自己的 origin。
+    `acceptCreate` / `acceptJoin` 的 `siteOrigin` 不给时也一样；给了（比如部署时注入的 `SITE_ORIGIN` 变量）就只认给的。
+  - `whoIs`、`loginGate`、`acceptCreate`、`acceptJoin` 问 `/api/me` 时，地址按请求的 origin 拼（新导出 `ME_PATH`、`meUrlOf`），照旧经 `ARCADE` 服务绑定；`meUrl` 仍可覆盖。
+  - 默认文案 `ROOM_TEXT.forbidden` 改成"请从游戏大厅打开"，不写域名；注释里的域名也去掉了。
+- 测试里的站点换成保留的示例域名 `game.example.com`。`test/worker.ts` 不再传 `siteOrigin`、`meUrl`，直接测默认值；另加两条测试：`sameOrigin` 不给站点时的行为、`meUrl` 覆盖。
+- README 按统一结构整理：简介、功能、本地开发、部署（游戏要准备的绑定和变量）、目录结构、许可证（MIT）。
+  `package.json` 加了 `"license": "MIT"`。去掉了只对维护者自己环境成立的说法。
+
 ## 0.8.0
 
-- **几个游戏各抄一份的通用部分收进 kit**（主线收尾审计：两个游戏的假钱包 97% 相同，开房、登录闸门大段重复）。只加不改，已有接口行为不变：
-  - `arcade-kit/testing`（新入口）：假平台钱包 `WalletService`、`FakeBank`、`walletHttp`，只给测试和本机试用。
+- **几个游戏各抄一份的通用部分收进 kit**（代码审阅：两个游戏的假钱包 97% 相同，开房、登录闸门大段重复）。只加不改，已有接口行为不变：
+  - `arcade-kit/testing`（新入口）：假平台钱包 `WalletService`、`FakeBank`、`walletHttp`，只给测试和本地试用。
     - 只复刻接口形状和关键规则：带入、结回、放弃、只结一次、余额够这次、op 去重、按 ref 分份、到期退回、client 每天净赢上限、stats 上限、补给（docs/platform-backend.md 5.9、5.10、15.9）。
     - 规则数用平台现行默认值（净赢 10 份、补给看余额加桌上的）。
     - 不维护游戏名单，只核对 `props.game` 和参数一致，以后加游戏不用改它。
@@ -109,7 +121,7 @@
 
 ## 0.2.0（2026-10-14）
 
-好友房要正式放出来，先把额度管住（所有者："好友房需要放出来，让大家可以玩，但是需要控制额度"）。免费版 DO 每天整个账户 10 万行写入（docs 4.7），
+好友房要正式放出来，先把额度管住（维护者："好友房需要放出来，让大家可以玩，但是需要控制额度"）。免费版 DO 每天整个账户 10 万行写入（docs 4.7），
 4 真人一局约 1,133 行，不管的话一天九十来局就会把所有游戏的联机一起打停。
 
 - **安全（阻塞修复）：开局随机从 32 位种子换成 256 位熵**。0.1.x 的房间用 `crypto.getRandomValues(new Uint32Array(1))` 生成种子，只有约 43 亿种，

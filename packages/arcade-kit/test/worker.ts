@@ -36,9 +36,9 @@ export interface Env {
   WALLET_BARE: Service<WalletService>;
 }
 
-export const SITE = 'https://game.test';
-export const ME_URL = `${SITE}/api/me`;
-const GATE: GateOptions = { siteOrigin: SITE, meUrl: ME_URL };
+export const SITE = 'https://game.example.com';
+// 不给 siteOrigin、meUrl：测的就是默认值（按请求自己的 origin，0.9.0）
+const GATE: GateOptions = {};
 
 /** 每人 3 张暗牌（1–99），按座位轮流出一张；全出完结束。手牌只有自己看得到。 */
 export interface ToyState {

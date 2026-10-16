@@ -17,7 +17,7 @@ import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, is
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
 
 export interface RoomClientOptions<V> {
-  /** 房间的 WebSocket 地址（游戏 Worker 的路径，如 wss://game.yyyu.org/games/<id>/rooms/123456/ws） */
+  /** 房间的 WebSocket 地址（游戏 Worker 的路径，如 wss://<站点>/games/<id>/rooms/123456/ws） */
   url: string;
   /** 页面的版本号，房间据此判断要不要让旧页面刷新 */
   clientVersion?: number;
@@ -341,7 +341,7 @@ export async function createRoom(url: string | URL, opts: unknown, fetchImpl: ty
  */
 export const ROOM_TEXT = {
   login: '登录过期了，刷新一下页面',
-  forbidden: '请从 game.yyyu.org 打开',
+  forbidden: '请从游戏大厅打开',
   has_room: '你同时开着的房间太多了，先离开几个再开',
   daily_limit: '今天开房的次数用完了，明天再来',
   busy: '今天联机的人太多了，明天再来，单机照常玩',

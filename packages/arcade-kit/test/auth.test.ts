@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sameOrigin, whoIs } from '../src/auth.ts';
 import { SESSION_COOKIE } from '../src/internal.ts';
 
-const req = (headers: Record<string, string> = {}) => new Request('https://game.test/rooms/123456/ws', { headers });
+const req = (headers: Record<string, string> = {}) => new Request('https://game.example.com/rooms/123456/ws', { headers });
 /** 带着平台会话 cookie 的请求（没有它 whoIs 根本不问平台） */
 const signedIn = () => req({ cookie: `other=1; ${SESSION_COOKIE}=abc` });
 
@@ -25,8 +25,15 @@ describe('whoIs', () => {
     const { fetcher, got } = fakeArcade(() => Response.json({ user: { id: 'u1', displayName: '小王' } }));
     const me = await whoIs(req({ cookie: `${SESSION_COOKIE}=abc`, 'cf-connecting-ip': '1.2.3.4', 'x-kit-user': 'forged', authorization: 'x' }), fetcher);
     expect(me).toEqual({ user: { userId: 'u1', name: '小王' }, setCookie: [] });
-    expect(got[0]!.url).toBe('https://game.yyyu.org/api/me');
+    // 地址按请求自己的 origin 拼（0.9.0：kit 不写死站点）
+    expect(got[0]!.url).toBe('https://game.example.com/api/me');
     expect([...got[0]!.headers.keys()].sort()).toEqual(['cf-connecting-ip', 'cookie']);
+  });
+
+  it('meUrl 可以覆盖默认地址', async () => {
+    const { fetcher, got } = fakeArcade(() => Response.json({ user: null }));
+    await whoIs(signedIn(), fetcher, { meUrl: 'https://platform.example.com/api/me' });
+    expect(got[0]!.url).toBe('https://platform.example.com/api/me');
   });
 
   it('没带平台会话 cookie：直接算没登录，不问平台（别的 cookie、空值、名字只是相近的都不算）', async () => {
@@ -89,9 +96,16 @@ describe('whoIs', () => {
 
 describe('sameOrigin', () => {
   it('只认完全相同的 Origin；没带的也拒绝', () => {
-    expect(sameOrigin(req({ origin: 'https://game.test' }), 'https://game.test')).toBe(true);
-    expect(sameOrigin(req({ origin: 'https://game.test.evil.com' }), 'https://game.test')).toBe(false);
-    expect(sameOrigin(req({ origin: 'null' }), 'https://game.test')).toBe(false);
-    expect(sameOrigin(req(), 'https://game.test')).toBe(false);
+    expect(sameOrigin(req({ origin: 'https://game.example.com' }), 'https://game.example.com')).toBe(true);
+    expect(sameOrigin(req({ origin: 'https://game.example.com.evil.com' }), 'https://game.example.com')).toBe(false);
+    expect(sameOrigin(req({ origin: 'null' }), 'https://game.example.com')).toBe(false);
+    expect(sameOrigin(req(), 'https://game.example.com')).toBe(false);
+  });
+
+  it('不给站点就认请求自己的 origin（0.9.0）；给了就只认给的', () => {
+    expect(sameOrigin(req({ origin: 'https://game.example.com' }))).toBe(true);
+    expect(sameOrigin(req({ origin: 'https://evil.example.org' }))).toBe(false);
+    expect(sameOrigin(req())).toBe(false);
+    expect(sameOrigin(req({ origin: 'https://game.example.com' }), 'https://other.example.com')).toBe(false);
   });
 });

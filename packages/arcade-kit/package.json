@@ -1,7 +1,8 @@
 {
   "name": "arcade-kit",
   "private": true,
-  "version": "0.8.0",
+  "license": "MIT",
+  "version": "0.9.0",
   "type": "module",
   "description": "小游戏共用的联机底座：Durable Object 房间基类、每日额度计量、ChaCha20 随机数、经平台 /api/me 认身份、浏览器连接器、消息协议",
   "exports": {

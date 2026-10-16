@@ -8,14 +8,11 @@
  * 平台暂时不可用是 1013（稍后再试），客户端按退避重连。
  * 这是普通 Worker，不是房间，没有 ctx.acceptWebSocket，只能用 server.accept()；连接接受了马上关，不留着。
  */
-import { ME_URL, sameOrigin, whoIs } from './auth';
+import { sameOrigin, whoIs } from './auth';
 import { CLOSE, type CreateError, ROOM_CODE_RE } from './protocol';
 import { identityHeader, type Identity, KIT_HOST, newRoomCode, roomStub } from './internal';
 import type { MeterEnv } from './meter';
 import type { CreateOutcome } from './room';
-
-/** 正式站点：Origin 只认它。 */
-export const SITE_ORIGIN = 'https://game.yyyu.org';
 
 /**
  * 游戏 Worker 的绑定名固定：房间 ROOM，平台 ARCADE（登录闸门已经用这个名字），计量 METER、门槛 KIT_QUOTA（0.2.0，meter.ts）。
@@ -27,9 +24,12 @@ export interface KitEnv extends MeterEnv {
 }
 
 export interface GateOptions {
-  /** 默认 SITE_ORIGIN；测试里换成测试域名 */
+  /**
+   * Origin 只认这个站点（比如 https://<你的站点>）。不给就认请求自己的 origin（0.9.0）：浏览器从哪个站点打开页面、连的就是哪个站点，
+   * 别的网站的页面带来的 Origin 对不上。游戏可以把部署时注入的 SITE_ORIGIN 变量传进来，设了就按它
+   */
   siteOrigin?: string;
-  /** 默认正式域名的 /api/me */
+  /** 默认是请求所在站点的 /api/me */
   meUrl?: string;
 }
 
@@ -50,8 +50,8 @@ export interface CreateOptions extends GateOptions {
  */
 export async function acceptCreate(request: Request, env: KitEnv, opts: CreateOptions = {}): Promise<Response> {
   if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
-  if (!sameOrigin(request, opts.siteOrigin ?? SITE_ORIGIN)) return fail(403, 'forbidden');
-  const who = await whoIs(request, env.ARCADE, { meUrl: opts.meUrl ?? ME_URL });
+  if (!sameOrigin(request, opts.siteOrigin)) return fail(403, 'forbidden');
+  const who = await whoIs(request, env.ARCADE, opts.meUrl ? { meUrl: opts.meUrl } : {});
   if ('error' in who) return who.error === 'anonymous' ? fail(401, 'login') : fail(503, 'unavailable');
   const me = who.user;
   for (let i = 0; i < 5; i++) {
@@ -87,8 +87,8 @@ function fail(status: number, error: CreateError, code?: string): Response {
 export async function acceptJoin(request: Request, env: KitEnv, code: string, opts: GateOptions = {}): Promise<Response> {
   if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('websocket only', { status: 426 });
   if (!ROOM_CODE_RE.test(code)) return refuse(CLOSE.noRoom, 'no room');
-  if (!sameOrigin(request, opts.siteOrigin ?? SITE_ORIGIN)) return refuse(CLOSE.forbidden, 'bad origin');
-  const who = await whoIs(request, env.ARCADE, { meUrl: opts.meUrl ?? ME_URL });
+  if (!sameOrigin(request, opts.siteOrigin)) return refuse(CLOSE.forbidden, 'bad origin');
+  const who = await whoIs(request, env.ARCADE, opts.meUrl ? { meUrl: opts.meUrl } : {});
   if ('error' in who) return who.error === 'anonymous' ? refuse(CLOSE.unauthorized, 'login first') : refuse(CLOSE.tryLater, 'try later');
   const me = who.user;
   // 新建请求，只带认好的身份和客户端版本；浏览器带来的 x-kit-user 之类的头一律不转
@@ -105,7 +105,7 @@ function refuse(code: number, reason: string): Response {
   return new Response(null, { status: 101, webSocket: pair[0] });
 }
 
-/** 登录闸门要的绑定：页面的静态资源 ASSETS、平台 ARCADE；GATE 写 "off" 时不拦（本机试页面用） */
+/** 登录闸门要的绑定：页面的静态资源 ASSETS、平台 ARCADE；GATE 写 "off" 时不拦（本地开发试页面用） */
 export interface GateEnv {
   ASSETS: Fetcher;
   ARCADE?: Fetcher;
@@ -113,7 +113,7 @@ export interface GateEnv {
 }
 
 export interface LoginGateOptions {
-  /** 默认正式域名的 /api/me */
+  /** 默认是请求所在站点的 /api/me */
   meUrl?: string;
   /** 平台连不上时回的整页 HTML（503）；默认一个不带游戏名的通用页，游戏可以换成自己的标题和配色 */
   downPage?: string;
@@ -136,7 +136,7 @@ a{color:#f3c86b}</style></head>
  */
 export async function loginGate(request: Request, env: GateEnv, opts: LoginGateOptions = {}): Promise<Response> {
   if (env.GATE === 'off') return env.ASSETS.fetch(request);
-  const who = await whoIs(request, env.ARCADE, { meUrl: opts.meUrl ?? ME_URL });
+  const who = await whoIs(request, env.ARCADE, opts.meUrl ? { meUrl: opts.meUrl } : {});
   if ('user' in who) return withCookies(await env.ASSETS.fetch(request), who.setCookie);
   if (who.error === 'anonymous') {
     const url = new URL(request.url);
