@@ -13,7 +13,7 @@ arcade/
 ├─ AGENTS.md / CLAUDE.md   本文件（总规范）
 ├─ README.md               总览：有哪些模块、怎么开发、怎么部署
 ├─ CONTRIBUTING.md         合作指南：分支、PR、审阅、合并、部署、回滚
-├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）
+├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）、table-fun.md（牌桌互动规范：三个牌桌游戏共用）
 ├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh（部署前核对）
 ├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
@@ -153,7 +153,7 @@ dev 和 preview 监听 0.0.0.0，方便同一局域网里的手机、平板直�
 - 游戏代码按安全敏感代码审：它和平台同一个站点，浏览器里能以登录玩家的身份调平台 `/api`。
 - **Cloudflare 的发布只由维护者（主线）做**：守门代理永远不合并 PR、不批准部署，它的令牌不含 Deployments、Environments、Secrets、Administration 权限。
 - 带 D1 迁移的改动，发布顺序是：迁移 → 平台 → 游戏（分成几个 PR 依次合并）。
-- 线上出问题时，对出问题的 PR 开 revert PR，快速审阅后由维护者合并并批准部署，重新部署上一版。不直接推 main 修线上。
+- 线上出问题时默认往前修：开修复 PR，快速审阅后由维护者合并并当场批准部署（不等发布批次）；只有伤到数据、钱包的事故才对出问题的 PR 开 revert PR。不直接推 main 修线上。
 
 ## 6. 多人、多代理协作
 
