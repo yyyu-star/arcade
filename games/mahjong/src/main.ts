@@ -14,7 +14,7 @@ import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
 import { busy, button, el } from './view/dom.ts';
-import { GUIDE_KEY, showGuide, showRules } from './view/guide.ts';
+import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { Comms, type CommsEvent, type CommsHost } from './view/comms.ts';
 import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
@@ -466,6 +466,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
     const st = stakesOf(rv.stakes)!;
     title.textContent = `好友房 ${s.code} · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`;
     table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => online?.play(a));
+    rotateTip(stage);
     lastPrompt = false;
     fame = [];
     comms = newComms(
@@ -653,6 +654,7 @@ function playSolo(s: Solo): void {
     const err = s.act(a as XzAction);
     if (err && err !== 'busy') play('click');
   });
+  rotateTip(stage);
   lastPrompt = false;
   fame = [];
   comms?.destroy();

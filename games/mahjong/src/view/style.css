@@ -643,10 +643,10 @@ button {
   --sm-h: 38px;
 }
 .stage[data-orient='port'] {
-  --lg-w: 36px;
-  --lg-h: 50px;
-  --md-w: 28px;
-  --md-h: 39px;
+  --lg-w: 37px;
+  --lg-h: 52px;
+  --md-w: 26px;
+  --md-h: 36px;
   --sm-w: 26px;
   --sm-h: 36px;
 }
@@ -1132,8 +1132,8 @@ button {
 .my-hand .tile.ban::after {
   content: '';
   position: absolute;
-  inset: 0 0 6px 0;
-  border-radius: 6px;
+  inset: 0;
+  border-radius: 11% / 8%;
   background: #0b1f18a0;
 }
 /* 缺门的牌：底下一道红线，提醒先打掉 */
@@ -1512,7 +1512,7 @@ button {
  * 对家右上、上家左上），中控盘在正中，四个牌河围着它：上下两块 8 张一行、宽 240，左右两块 6 张一行、宽 180，
  * 左右两块躲开上下两块的横向范围（牌河多到第 4 行也不压）。竖着从对家一排（到 52）到我抬起的牌（426）：上牌河 3 行、中控盘、下牌河 3 行
  * 正好塞下。碰杠胡过浮在手牌右上方、下家头像左边。 */
-[data-orient='land'] .badge.r0 { left: 14px; bottom: 98px; }
+[data-orient='land'] .badge.r0 { left: 14px; bottom: 98px; max-width: 194px; }
 [data-orient='land'] .badge.r1 { right: 14px; bottom: 98px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
 [data-orient='land'] .badge.r2 { right: 14px; top: 14px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
 [data-orient='land'] .badge.r3 { left: 14px; top: 14px; }
@@ -1527,7 +1527,8 @@ button {
 [data-orient='land'] .river.r3 { left: 196px; top: 175px; width: 180px; flex-direction: row-reverse; }
 [data-orient='land'] .river.r1 { left: 624px; top: 175px; width: 180px; }
 [data-orient='land'] .bar { right: 176px; bottom: 96px; height: 64px; }
-[data-orient='land'] .comms { left: 16px; bottom: 14px; }
+/* 互动按钮在自己头像右边（名牌最长约 194），不进手牌那一排 */
+[data-orient='land'] .comms { left: 212px; bottom: 102px; }
 [data-orient='land'] .banner.r0 { left: 50%; top: 66%; }
 [data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
 [data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
@@ -1546,11 +1547,13 @@ button {
   --c: calc(537px - var(--cut, 0px) / 2);
   --spread: calc((200px - var(--cut, 0px)) / 4);
 }
-[data-orient='port'] .badge.r0 { left: 8px; bottom: 74px; }
-[data-orient='port'] .badge.r1 { right: 8px; bottom: 74px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
+[data-orient='port'] .badge.r0 { left: 8px; bottom: 84px; max-width: 190px; }
+[data-orient='port'] .badge.r1 { right: 8px; bottom: 84px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
 [data-orient='port'] .badge.r2 { right: 8px; top: 8px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
 [data-orient='port'] .badge.r3 { left: 8px; top: 8px; }
-[data-orient='port'] .side.r0 { left: 50%; bottom: 12px; transform: translateX(-50%); gap: 8px; }
+/* 手牌一排左右只留 8：手机竖屏每张牌尽量大（37 宽，摸的那张隔 10） */
+[data-orient='port'] .side.r0 { left: 50%; bottom: 12px; transform: translateX(-50%); gap: 6px; }
+[data-orient='port'] .my-hand .tile.drawn { margin-left: 10px; }
 [data-orient='port'] .side.r2 { left: 50%; top: 72px; transform: translateX(-50%); }
 [data-orient='port'] .side.r1 { right: 10px; top: var(--c); transform: translateY(-50%); }
 [data-orient='port'] .side.r3 { left: 10px; top: var(--c); transform: translateY(-50%); }
@@ -1567,8 +1570,9 @@ button {
 [data-orient='port'] .river.r0 { left: 213px; top: calc(var(--c) + 62px + var(--spread)); width: 134px; }
 [data-orient='port'] .river.r3 { left: 100px; top: calc(var(--c) - 74px); width: 108px; flex-direction: row-reverse; }
 [data-orient='port'] .river.r1 { left: 352px; top: calc(var(--c) - 74px); width: 108px; }
-[data-orient='port'] .bar { left: 50%; bottom: 136px; height: 64px; transform: translateX(-50%); justify-content: center; }
-[data-orient='port'] .comms { left: 186px; bottom: 74px; }
+[data-orient='port'] .bar { left: 50%; bottom: 146px; height: 64px; transform: translateX(-50%); justify-content: center; }
+/* 头像右边、手牌抬起来（离底 78）也碰不到 */
+[data-orient='port'] .comms { left: 204px; bottom: 84px; }
 /* 竖屏面板往上展开时整块抬到浮着的按钮（离底 136–200）上面，不盖按钮 */
 [data-orient='port'] .comms .comms-panel { margin-bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }
@@ -1577,8 +1581,8 @@ button {
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
 [data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
 [data-orient='port'] .banner.center { left: 50%; top: 46%; }
-[data-orient='port'] .bubble.r0 { left: 30px; bottom: 134px; }
-[data-orient='port'] .bubble.r1 { right: 30px; bottom: 134px; }
+[data-orient='port'] .bubble.r0 { left: 30px; bottom: 144px; }
+[data-orient='port'] .bubble.r1 { right: 30px; bottom: 144px; }
 [data-orient='port'] .bubble.r2 { right: 30px; top: 68px; }
 [data-orient='port'] .bubble.r3 { left: 30px; top: 68px; }
 [data-orient='port'] .lobby-head h1 { font-size: 46px; }
@@ -1913,4 +1917,51 @@ button {
 .vol input {
   width: 160px;
   accent-color: var(--gold);
+}
+
+/* 竖屏第一次进牌桌的"横过来玩更舒服"（view/guide.ts）：顶上居中一小条，手机图标转一下，点击穿透 */
+.rotate-tip {
+  position: absolute;
+  left: 50%;
+  top: 300px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-pill);
+  background: #000000c0;
+  color: #fff3d6;
+  font-size: var(--fs-lg);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: rotate-tip-in 3s ease-in-out forwards;
+}
+.rotate-tip svg {
+  width: 40px;
+  height: 40px;
+  animation: rotate-tip-turn 1.2s ease-in-out 0.3s 2;
+}
+@keyframes rotate-tip-in {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes rotate-tip-turn {
+  50%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-tip svg {
+    animation: none;
+  }
 }

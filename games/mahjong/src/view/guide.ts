@@ -50,3 +50,25 @@ export function showRules(parent: HTMLElement): void {
     button('act soft', box, '再看一遍新手说明', () => showGuide(parent));
   });
 }
+
+/** 竖屏第一次进牌桌：提示一句"横过来玩更舒服"（竖屏手牌每张只有二十几像素），3 秒自己消失，只出一次 */
+export const ROTATE_KEY = 'mahjong.hint.rotate';
+const ROTATE_MS = 3_000;
+
+export function rotateTip(stage: HTMLElement): void {
+  if (stage.dataset.orient !== 'port') return;
+  try {
+    if (localStorage.getItem(ROTATE_KEY)) return;
+    localStorage.setItem(ROTATE_KEY, '1');
+  } catch {
+    return;
+  }
+  const tip = el('div', 'rotate-tip', stage);
+  tip.setAttribute('role', 'status');
+  // 一部手机从竖着转到横着，旁边一道弧形箭头
+  tip.innerHTML =
+    '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="16" y="6" width="16" height="28" rx="3" fill="none" stroke="currentColor" stroke-width="3"/>' +
+    '<path d="M10 30a16 16 0 0 0 20 12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 37l4 5-6 2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  el('span', '', tip, '横过来玩更舒服');
+  window.setTimeout(() => tip.remove(), ROTATE_MS);
+}

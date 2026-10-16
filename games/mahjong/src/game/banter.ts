@@ -25,8 +25,6 @@ const REVENGE_MAX = 2;
 const SCENE_LOSER = 400;
 const SCENE_WINNER = 300;
 const HAND_MAX = 2;
-/** 同一个电脑两次"被扔后回应"至少隔这么久（不然连扔几下它回一串） */
-const REACT_GAP_MS = 2_500;
 const FUN_MULT = { lively: 1.5, normal: 1, cool: 0.3 } as const;
 
 // kit 的 STICKERS、PROPS 顺序（game/emotes.ts 说明为什么不 import kit 的 fun），test/emotes.test.ts 对得上
@@ -87,7 +85,6 @@ export type Cast = readonly (Persona | null)[];
 export class Banter {
   private readonly last = new Map<number, number>();
   /** 被扔后上次回应的时间、回敬的时间（20 秒窗口） */
-  private readonly reacted = new Map<number, number>();
   private readonly revenges = new Map<number, number[]>();
   /** 这一手电脑主动互动了几次 */
   private handActs = 0;
@@ -173,10 +170,8 @@ export class Banter {
   }
 
   private replyProp(p: Persona, from: number, id: number, to: number, now: number): Act | null {
-    const lastReact = this.reacted.get(to);
-    if (lastReact !== undefined && now - lastReact < REACT_GAP_MS) return null;
+    // 每一下都按 60% 掷（规范第 4 节）：不另设间隔——道具本来就有 1.5 秒冷却，再加间隔连着扔就有一半没反应
     if (!this.roll(to, this.fun(p, REACT_CHANCE))) return null;
-    this.reacted.set(to, now);
     const after = 800 + this.pick(to, 1_200);
     const kind = id - PROP_BASE;
     if (!HOSTILE.has(id)) {

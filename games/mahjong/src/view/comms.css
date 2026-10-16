@@ -23,9 +23,60 @@
   width: 280px;
   max-height: min(300px, 46vh);
 }
-/* 横屏：手牌那一行的左端在按钮正上方一点，面板整个抬高一截，不压到最左边的手牌 */
+/* 横屏：面板是从底边弹出的一条（"互动"按钮右边到下家头像左边），一行横着滑；
+ * 竖着放不下——左下角上面是上家的牌河和竖排，开着时只盖自己的手牌，发完就收 */
 [data-orient='land'] .comms .comms-panel {
-  margin-bottom: 22px;
+  position: absolute;
+  left: 128px;
+  bottom: -94px;
+  width: 540px;
+  max-height: none;
+  height: 100px;
+  overflow: hidden;
+  padding: 8px 10px;
+  background: #102a20;
+  animation: mj-up 0.16s ease-out;
+}
+@keyframes mj-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+[data-orient='land'] .comms .comms-tabs {
+  margin-bottom: 6px;
+}
+[data-orient='land'] .comms .comms-tabs .chip {
+  min-height: 26px;
+  padding: 0 12px;
+}
+[data-orient='land'] .comms .comms-body {
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 52px;
+  scrollbar-width: thin;
+}
+[data-orient='land'] .comms .comms-body > *,
+[data-orient='land'] .comms .comms-body .to-row {
+  flex: none;
+}
+[data-orient='land'] .comms .comms-body .to-row {
+  width: auto;
+  flex-wrap: nowrap;
+  padding: 0 8px 0 0;
+  border-bottom: 0;
+  border-right: 1px solid #ffffff1a;
+}
+[data-orient='land'] .comms .comms-body .aim,
+[data-orient='land'] .comms .comms-body .set-row {
+  width: auto;
+  white-space: nowrap;
+}
+[data-orient='land'] .comms .comms-body .pic {
+  width: 48px;
+  height: 48px;
 }
 .comms-body .to-row .chip {
   min-height: 36px;
@@ -140,17 +191,36 @@
 }
 
 /* 第一次进牌桌的提示气泡：金边，小一点 */
+/* 首次提示：头像旁一个小气泡，尖角指着头像（--ax 是尖角离气泡左边多远，comms.ts 写） */
 .fun-hint {
-  padding: 6px 12px;
-  border-radius: var(--r-pill);
-  background: #7a2416f0;
-  border: 2px solid var(--gold);
-  color: #ffe9b0;
-  font-size: var(--fs-sm);
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: #fff3d6;
+  color: #5a2a10;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 700;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: var(--sh-2);
+  box-shadow: 0 2px 6px #0008;
   animation: mj-in 0.2s ease-out;
+}
+.fun-hint::after {
+  content: '';
+  position: absolute;
+  left: var(--ax, 50%);
+  margin-left: -6px;
+  border: 6px solid transparent;
+}
+.fun-hint.below::after {
+  bottom: 100%;
+  border-bottom-color: #fff3d6;
+  border-top-width: 0;
+}
+.fun-hint.above::after {
+  top: 100%;
+  border-top-color: #fff3d6;
+  border-bottom-width: 0;
 }
 
 /* 好玩图层里的小效果（图层本身点击穿透） */

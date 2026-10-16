@@ -104,7 +104,8 @@ export class Comms {
     this.panel = el('div', 'comms-panel', this.root);
     this.panel.hidden = true;
     window.addEventListener('resize', this.onResize);
-    this.later(() => this.firstHint(0), 1_500);
+    // 竖屏第一次进来顶上先有 3 秒"横过来玩更舒服"（view/guide.ts），等它收了再提示
+    this.later(() => this.firstHint(0), 3_200);
   }
 
   destroy(): void {
@@ -372,7 +373,8 @@ export class Comms {
   private firstHint(tries: number): void {
     if (this.off || readFlag(HINT_KEY)) return;
     const me = this.host.me();
-    const seats = this.others();
+    // 挑一个电脑，优先上面两个角的（离手牌和按钮远）
+    const seats = this.others().sort((a, b) => this.host.avatarRect(a).top - this.host.avatarRect(b).top);
     const seat = seats.find((s) => this.host.isBot?.(s)) ?? seats[0];
     const r = seat === undefined || me === null ? null : this.host.avatarRect(seat);
     if (!r?.width) {
@@ -383,6 +385,10 @@ export class Comms {
     writeFlag(HINT_KEY, true);
     const tip = el('div', 'fun-hint', document.body, '点头像扔道具');
     this.place(tip, seat!);
+    // 小气泡的尖角指着头像：气泡在头像下面尖角朝上，在上面朝下，横着对准头像中间
+    const t = tip.getBoundingClientRect();
+    tip.classList.add(t.top > r.top ? 'below' : 'above');
+    tip.style.setProperty('--ax', `${Math.max(12, Math.min(t.width - 12, r.left + r.width / 2 - t.left))}px`);
     this.later(() => tip.remove(), HINT_SHOW_MS);
   }
 

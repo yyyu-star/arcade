@@ -201,3 +201,48 @@ describe('扔道具的画面账', () => {
     expect(u.hit(0, 2, 3_600).revenge).toBe(false);
   });
 });
+
+describe('被扔后的回应（docs/table-fun.md 第 4 节）', () => {
+  /** 单机里冲一个电脑扔 20 次番茄（每次隔 1.6 秒，道具冷却 1.5 秒），数它回应、回敬了几次 */
+  function throw20(seed: number, name: string): { react: number; revenge: number } {
+    const b = new Banter(seed);
+    const c = cast(name, '熊猫哥', '板凳儿');
+    let react = 0;
+    let revenge = 0;
+    for (let i = 0; i < 20; i++) {
+      const r = b.reply(c, 0, propId('tomato'), 1, 10_000 + i * 1_600);
+      if (!r) continue;
+      react++;
+      if (r.id >= propId('tomato') && r.to === 0) revenge++;
+      expect(r.after).toBeGreaterThanOrEqual(800);
+      expect(r.after).toBeLessThanOrEqual(2_000);
+    }
+    return { react, revenge };
+  }
+  const avg = (name: string, f: 'react' | 'revenge'): number => {
+    let sum = 0;
+    for (let s = 1; s <= 200; s++) sum += throw20(s, name)[f];
+    return sum / 200;
+  };
+
+  test('普通性格：20 次里平均回应约 12 次（60%），单次一场在合理区间', () => {
+    expect(avg('熊猫哥', 'react')).toBeGreaterThan(10.8);
+    expect(avg('熊猫哥', 'react')).toBeLessThan(13.2);
+    for (let s = 1; s <= 50; s++) {
+      const n = throw20(s, '熊猫哥').react;
+      expect(n).toBeGreaterThanOrEqual(5);
+      expect(n).toBeLessThanOrEqual(19);
+    }
+  });
+
+  test('互动性格乘上去：爱闹 ×1.5（90%）、高冷 ×0.3（18%）', () => {
+    expect(avg('幺妹儿', 'react')).toBeGreaterThan(16.5);
+    expect(avg('盖碗儿', 'react')).toBeGreaterThan(2.4);
+    expect(avg('盖碗儿', 'react')).toBeLessThan(4.8);
+  });
+
+  test('回敬：回应里约 25%，但 20 秒里最多 2 次（20 次扔 32 秒，最多 4 次）', () => {
+    for (let s = 1; s <= 50; s++) expect(throw20(s, '熊猫哥').revenge).toBeLessThanOrEqual(4);
+    expect(avg('熊猫哥', 'revenge')).toBeGreaterThan(1.5);
+  });
+});
