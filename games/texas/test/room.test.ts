@@ -246,6 +246,26 @@ describe('座位换人', () => {
     expect(G.view(s, 2).buying[2]).toBe(false);
   });
 
+  it('加注后马上离座，别人都弃了：没人跟的那一注留在池里归赢家，不退给已经结回封上的他，房间里不搁结不回去的钱（0.3.3）', () => {
+    let s = seatedAll(['human', 'human', 'human']);
+    const seat = G.turn(s)!;
+    const to = G.view(s, seat).legal!.minTo;
+    s = act(s, seat, { t: 'raise', to });
+    const stack = s.t.seats[seat]!.stack;
+    s = G.seated!(s, seat, 'ai');
+    expect(credits(s).map(strip)).toEqual([{ id: expect.stringMatching(/^c/), seat, kind: 'credit', amount: stack }]);
+    s = settleAll(s);
+    const pot = s.t.seats.reduce((a, x) => a + x.total, 0);
+    // 剩下两个人：轮到的弃牌，最后一个人拿走整个池子（含他那一注）
+    const folder = G.turn(s)!;
+    s = act(s, folder, { t: 'fold' });
+    const winner = [0, 1, 2].find((i) => i !== seat && i !== folder)!;
+    expect(s.t.lastHand).toMatchObject({ byFold: true, uncalled: null, pots: [{ amount: pot, winners: [{ seat: winner, won: pot }] }] });
+    conserve(s.t);
+    expect(s.owed[seat]).toBe(0);
+    expect(credits(s)).toEqual([]);
+  });
+
   it('离座（0.2.4 立即结算）：这一手当场弃牌，桌上剩下的马上结回，投进池子的留着；别人打完这一手电脑再坐进来；马上又回来的买新的一份', () => {
     let s = seatedAll(['human', 'human', 'ai']);
     const seat = G.turn(s)!;
@@ -481,9 +501,12 @@ describe('随机走很多步（座位换人、买入被拒、补码、收场）'
       expect(s.t.bank).toBe(0);
       // 每一份都结回了，钱包里不留"桌上那一份"
       expect([...open.keys()]).toEqual([]);
-      // 结回去的 = 扣的 ± 和电脑之间的输赢；至少不会凭空多出一整份买入以上（只防写错）
-      expect(credited).toBeGreaterThanOrEqual(0);
+      // 没有搁着结不回去的（0.3.3：封上以后又攒到的会随房间删掉，等于丢了）
+      expect(s.owed).toEqual(new Array<number>(s.owed.length).fill(0));
+      expect(s.held).toEqual(new Array<number>(s.held.length).fill(0));
+      // 扣的 = 结回的 + 输给电脑的：牌桌清空时庄家净投入 house 是负的，就是电脑从真人那里赢走的（0.3.3）
       expect(debited).toBeGreaterThan(0);
+      expect(debited - credited + s.t.house!).toBe(0);
     }
   });
 });

@@ -56,7 +56,9 @@ describe('说话的分寸', () => {
     const zero = liveEndText(rec({ credited: 0, bp: 0 }), false);
     expect(zero.head).toBe('结回 0 筹码（−2,000）');
     expect(zero.body).toContain('别往心里去');
-    expect(zero.body).toContain('2,000');
+    // 补给额是平台的设置（管理员可调），文案不写死数字
+    expect(zero.body).toContain('每天能领补给');
+    expect(zero.body).not.toMatch(/补到 [\d,]+/);
     expect(zero.body).toContain('娱乐模式');
     // 输了不推荐更高的档位
     for (const t of [small.body, zero.body]) expect(t).not.toMatch(/大档|豪华|更高/);

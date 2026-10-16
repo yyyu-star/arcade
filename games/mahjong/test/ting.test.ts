@@ -38,3 +38,28 @@ describe('听牌提示', () => {
     expect(tingOf(XZ.view(s, 1), null)).toBeNull();
   });
 });
+
+describe('自审 C7', () => {
+  it('四张都在自己手里和碰杠里的那种不提示听', () => {
+    const s = RON();
+    const k5 = kinds('5p')[0]!;
+    const t = (k: string, copy: number) => kinds(k)[0]! * 4 + copy;
+    // 1 号：碰了 5p，手里 123m456m789m 加第 4 张 5p 单钓（0 号手里那张 5p 拿掉，免得重复）
+    s.players[0]!.hand = s.players[0]!.hand.filter((x) => x >> 2 !== k5);
+    s.players[1]!.hand = [...['1m', '2m', '3m', '4m', '5m', '6m', '7m', '8m', '9m'].map((k) => t(k, 1)), t('5p', 3)];
+    s.players[1]!.melds = [{ kind: 'pon', tiles: [t('5p', 0), t('5p', 1), t('5p', 2)], from: 0 }];
+    expect(tingOf(XZ.view(s, 1), null)).toBeNull();
+    // 轮到 1 号、手里 14 张（多摸一张 9p）：打 9p 还是单钓 5p，四张都是自己的，不提示；
+    // 打掉第 4 张 5p 以后那张进了河、不算自己的了，和规则（tenpaiKinds 按打之后的手）一样不排除——这时手里也没有 5p，本来就听不了 5p
+    const s14 = structuredClone(s);
+    s14.players[1]!.hand = [...s14.players[1]!.hand, t('9p', 1)].sort((x, y) => x - y);
+    s14.turn = 1;
+    s14.phase = 'turn';
+    s14.claim = null;
+    s14.drawn = t('9p', 1);
+    expect(tingOf(XZ.view(s14, 1), t('9p', 1))).toBeNull();
+    // 碰的换成 6p：单钓 5p 照提示（剩 0 张也提示，只是画暗）
+    s.players[1]!.melds = [{ kind: 'pon', tiles: [t('6p', 0), t('6p', 1), t('6p', 2)], from: 0 }];
+    expect(tingOf(XZ.view(s, 1), null)?.map((w) => w.kind)).toEqual([k5]);
+  });
+});

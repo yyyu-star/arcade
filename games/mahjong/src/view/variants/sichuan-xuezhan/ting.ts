@@ -23,7 +23,9 @@ export function tingOf(v: XzView, discard: Tile | null): Wait[] | null {
   if (hand.length % 3 !== 1) return null;
   const q = s.que;
   if (q >= 0 && hand.some((t) => suitOf(kindOf(t)) === q)) return null;
-  const ks = waits(countsOf(hand), s.melds.length, SHAPE, SUITED_KINDS.filter((k) => suitOf(k) !== q));
+  // 四张都在自己手里和碰杠里的那种不算听（胡不了的叫不算叫）。和规则的 tenpaiKinds 一样按打之后的手算：打掉的那张进了河，不算"自己的"
+  const own = countsOf([...hand, ...s.melds.flatMap((m) => m.tiles)]);
+  const ks = waits(countsOf(hand), s.melds.length, SHAPE, SUITED_KINDS.filter((k) => suitOf(k) !== q && own[k]! < 4));
   if (!ks.length) return null;
   // 打出去的那张也算自己的（落到河里就看得见了），所以用打之前的整手
   const mine = countsOf(me.hand);

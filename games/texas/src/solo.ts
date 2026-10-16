@@ -170,7 +170,16 @@ export class Solo {
       ? await this.d.wallet.buyin(p.op, this.s.id, this.s.table.stakes, p.amount)
       : await this.d.wallet.cashout(p.op, this.s.id, p.amount, keepalive, this.s.practice ? undefined : settleStats(this.s.fame ?? NO_FAME, p.amount - this.stats.buyin, stakesOf(this.s.table.stakes).max));
     if (!r.ok) {
-      if (r.error === 'offline' || r.error === 'unavailable' || r.error === 'busy' || r.error === 'internal') return r.error;
+      const retry =
+        r.error === 'offline' ||
+        r.error === 'unavailable' ||
+        r.error === 'internal' ||
+        // 结回回 busy（平台停服档）留着再办；带入回 busy 是平台停了带入、钱没扣，当明确拒了
+        // （0.3.3：原来也当连不上，一整天每 15 秒重试，这期间连娱乐局都开不了）
+        (r.error === 'busy' && p.t === 'cashout') ||
+        // 结回时登录过期、没过 CSRF：钱包没收到，这一桌留在本机，登录后再结（0.3.3：原来当明确拒了，整桌筹码就丢了）
+        (p.t === 'cashout' && (r.error === 'login' || r.error === 'forbidden'));
+      if (retry) return r.error;
       // 钱包明确拒了：买入作罢；结算被拒（比如那一桌已经在别的设备上放弃了）也只能作罢，这一桌就没了
       this.s.pending = null;
       if (p.t === 'cashout') this.d.store.removeItem(SESSION_KEY);

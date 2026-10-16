@@ -61,11 +61,7 @@ export class Session {
   /** 首屏完成 */
   ready = false;
   /** 启动时读档的提示（旧版本存档 / 存档损坏），开始菜单显示一次后清空 */
-  notice: 'legacy' | 'corrupt' | 'restored' | null = null;
-  /** 旧存档来自哪个版本（'0.1' / '0.2' / '0.3a' / '0.4a'），配合 notice 显示 */
-  legacyFrom: string | null = null;
-  /** 读档时找回了被 0.4.0-alpha.1 备份走的 0.3 进度（当前局面就是它），配合 notice 显示 */
-  restored = false;
+  notice: 'legacy' | 'corrupt' | null = null;
   /** ?debug=1：浮层显示隐藏信息，这个会话里的局都不计入档案 */
   debugSession = false;
   /** 启动时档案读坏了（已备份并重建），开始菜单提示一次 */

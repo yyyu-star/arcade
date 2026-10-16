@@ -441,10 +441,13 @@ async function run(browser: Browser): Promise<void> {
   // 2. 旧版本存档提示
   {
     const legacy = JSON.stringify({ format: 3, appVersion: '0.2.0', savedAt: '2026-10-01T00:00:00Z', state: {} });
-    const ctx = await openPage(browser, 'legacy', '', { storage: { 'kaipan.save': legacy } });
+    const ctx = await openPage(browser, 'legacy', '', { storage: { 'kaipan.save': legacy, 'kaipan.save.v0.2': legacy, 'kaipan.terms.v04': '[]', 'kaipan.records': '{"version":2}' } });
     await ctx.page.waitForTimeout(200);
     await shot(ctx, '04-legacy-notice');
     expect('notice:ok' in (await controls(ctx)), '应弹出旧存档提示');
+    // 0.6.15：旧存档清掉、不再备份；当年留下的备份 key 启动时清掉
+    const left = await ctx.page.evaluate(() => ['kaipan.save', 'kaipan.save.v0.2', 'kaipan.terms.v04', 'kaipan.records'].filter((k) => localStorage.getItem(k) !== null));
+    expect(left.length === 0, `旧存档和旧备份 key 应清掉（还剩 ${left.join('、')}）`);
     await click(ctx, 'notice:ok');
     await ctx.page.context().close();
   }
