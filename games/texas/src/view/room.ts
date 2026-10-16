@@ -81,9 +81,12 @@ export class RoomPanel {
       setText(x.name, info.kind === 'empty' ? '空位' : (info.name ?? '玩家'));
       toggle(x.sit, 'hidden', info.kind !== 'empty' || !used);
     });
-    toggle(this.startBtn, 'hidden', !s.host);
+    // 坐着的人都给"开打"（0.3.5）：房间不下发谁是房主，房主换了设备、页面被顶掉后本机不知道自己是房主，按钮一藏房间就只能干等；
+    // 不是房主的点了由 kit 回 not_host，提示一句。没坐下的看"等房主开打"
+    const canStart = s.host || mine !== null;
+    toggle(this.startBtn, 'hidden', !canStart);
     this.startBtn.disabled = mine === null || s.status !== 'open';
-    toggle(this.waitNote, 'hidden', s.host);
+    toggle(this.waitNote, 'hidden', canStart);
   }
 }
 

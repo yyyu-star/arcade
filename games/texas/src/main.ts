@@ -342,7 +342,7 @@ async function me(): Promise<void> {
 async function refreshWallet(): Promise<void> {
   const r = await getWallet();
   wallet = r.ok ? r.wallet : null;
-  walletNote = r.ok ? null : walletError(r.error, r.retryAfter);
+  walletNote = r.ok ? null : walletError(r.error, r.retryAfter, 'api');
   drawTop();
 }
 
@@ -420,7 +420,7 @@ async function relief(): Promise<void> {
   if (r.ok) {
     wallet = r.wallet;
     play('chip');
-  } else walletNote = walletError(r.error, r.retryAfter);
+  } else walletNote = walletError(r.error, r.retryAfter, 'api');
   drawLobby();
 }
 
@@ -975,7 +975,30 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', hidden);
 window.addEventListener('focus', () => void cloud?.recheck());
-window.addEventListener('storage', (e) => cloud?.onStorage({ key: e.key, newValue: e.newValue }));
+window.addEventListener('storage', (e) => {
+  cloud?.onStorage({ key: e.key, newValue: e.newValue });
+  if (e.key === SESSION_KEY) otherTab();
+});
+
+/**
+ * 另一个标签页动了本机这一桌单机（0.3.5）：两个页面各打各的、各自存盘会互相覆盖，一边离桌了另一边再离桌就对不上。
+ * 这一页在牌桌上就停下回标题页、说一句；在标题页就按存盘重读，"接着打"接的是最新的那一桌
+ */
+function otherTab(): void {
+  if (online || busy) return;
+  const atTable = solo !== null && stage.classList.contains('at-table');
+  solo?.stop();
+  if (atTable) {
+    stopCountdown();
+    closeDialog();
+    walletNote = '这一桌在另一个页面打开了：在那边接着打，或者关掉那边再回来';
+  }
+  const s = Solo.load(localStorage, cloud.userId());
+  solo = s ? new Solo(s, deps) : null;
+  // 标题页上开着的弹窗（结算、补给）不关，只重画
+  if (atTable) showLobby();
+  else drawLobby();
+}
 
 // ---------- 好友房（DESIGN.md 6） ----------
 
@@ -1142,9 +1165,10 @@ function summaryRows(s: OnlineState, leaving: boolean): RoomSummaryRow[] | null 
 }
 
 /** 回到大厅（离开、房间关了） */
-function exitRoom(note: string | null): void {
+/** keep：被别的页面顶掉（4001）时不清本机记着的房间（0.3.5）：那条记录是另一个页面还在用的，清了它刷新后就不知道自己是房主 */
+function exitRoom(note: string | null, keep = false): void {
   online = null;
-  saveRoom(null);
+  if (!keep) saveRoom(null);
   stage.classList.remove('in-room', 'at-table');
   toggle(backSeatBtn, 'hidden', true);
   toggle(spectate, 'hidden', true);
@@ -1205,7 +1229,7 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     if (code === CLOSE.noRoom || code === CLOSE.roomClosed) forgetRoom();
     // 房间关了是这一场打完了：给每个人的输赢；别的（被顶掉、连不上）只说一句
     const rows = code === CLOSE.roomClosed ? summaryRows(o.state, false) : null;
-    exitRoom(null);
+    exitRoom(null, code === CLOSE.replaced);
     if (rows) void roomSummary(stage, '这一场', text, rows, tally.titles(rows));
     else void dialog(stage, '好友房', text, [{ label: '好', value: 'ok', primary: true }]);
   },
@@ -1280,7 +1304,7 @@ function drawRoom(s: OnlineState): void {
   // 买入被钱包拒了：钱包的数可能变了（比如别处已经结回），刷新一下，座位上面那块按新的数说
   if (v.refused && v.refused !== lastRefused) {
     void refreshWallet().then(() => online && drawRoom(online.state));
-    if (seated) toast(`没补上：${walletError(v.refused)}`);
+    if (seated) toast(`没补上：${walletError(v.refused, undefined, 'room')}`);
   }
   lastRefused = v.refused;
 
@@ -1325,7 +1349,7 @@ function drawRebuy(v: RoomView | null): void {
   }
   const can = affordable(st.max, st.bb);
   rebuyAmount = poor && can >= st.min && can < st.max ? can : null;
-  setText(rebuyText, poor ? `${walletError('no_funds')}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）` : `没带上桌：${walletError(v.refused!)}`);
+  setText(rebuyText, poor ? `${walletError('no_funds')}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）` : `没带上桌：${walletError(v.refused!, undefined, 'room')}`);
   toggle(rebuyWallet, 'hidden', !poor);
   setText(rebuyBtn, `带入 ${chips(rebuyAmount ?? st.max)} 上桌`);
 }

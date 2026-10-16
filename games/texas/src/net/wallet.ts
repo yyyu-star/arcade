@@ -75,16 +75,19 @@ export const walletApi: WalletApi = {
 
 /**
  * 给玩家看的一句话：照 docs/platform-backend.md 15.10 的对照表（平台 0.10.2），出了什么事、怎么办，不只回一个错误码。
- * retryAfter：/api 限次（rate_limited）时平台给的秒数
+ * retryAfter：/api 限次（rate_limited）时平台给的秒数。
+ * where：在哪收到的（0.3.5）。单机的钱包 RPC 照表说"娱乐局照常玩"；好友房里没有娱乐模式，不提它；
+ * 看钱包、领补给走的是 /api，busy 按 /api 那张表说"先只能看、不能改"
  */
-export function walletError(e: string, retryAfter?: number): string {
+export function walletError(e: string, retryAfter?: number, where: 'solo' | 'room' | 'api' = 'solo'): string {
   switch (e) {
     case 'no_funds':
       return '钱包里的筹码不够，少带一点，或者去大厅领补给';
     case 'limit':
-      return '今天开局太多了，明早 0 点恢复；桌上的照常结回，娱乐模式照常玩';
+      return where === 'room' ? '今天开局太多了，明早 0 点恢复；桌上的照常结回' : '今天开局太多了，明早 0 点恢复；桌上的照常结回，娱乐模式照常玩';
     case 'busy':
-      return '服务器今天有点忙，先不能带筹码开局；娱乐模式照常玩，明早恢复';
+      if (where === 'api') return '服务器今天有点忙，先只能看、不能改，明早恢复';
+      return where === 'room' ? '服务器今天有点忙，先不能带筹码上桌，明早恢复' : '服务器今天有点忙，先不能带筹码开局；娱乐模式照常玩，明早恢复';
     case 'login':
       return '登录过期了，刷新一下页面';
     case 'at_table':

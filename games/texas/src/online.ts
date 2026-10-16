@@ -202,7 +202,8 @@ export function errorText(code: string): string {
     case 'seat_closed':
       return '这一局用不到这个座位，坐前面的';
     case 'not_host':
-      return '只有房主能开打';
+      // 坐着的人都有"开打"按钮（0.3.5：房主换了设备、页面被顶掉后，本机不知道自己是房主，按钮不能藏）
+      return '只有开房的人能开打，等他点一下';
     case 'cannot_rebuy':
       return '已经是满的了，或者补码还在路上';
     case 'room_over':

@@ -545,7 +545,10 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await hp.locator('.rw-seat.taken').nth(2).waitFor();
   await shot(hp, 'room-wait-host');
   await shot(bp, 'room-wait-phone');
-  if (!(await ap.locator('.rw-wait').isVisible()) || (await ap.locator('.rw-go .start').isVisible())) throw new Error('guest should wait for the host');
+  // 坐着的人都有"开打"（0.3.5）：不是房主的点了，房间回 not_host，冒一句，还在等
+  await ap.locator('.rw-go .start').click();
+  await ap.locator('.toast.on', { hasText: '只有开房的人能开打' }).waitFor({ timeout: 5_000 });
+  if (!(await ap.locator('.rw-seat.me').isVisible())) throw new Error('guest should still be waiting after not_host');
 
   await hp.locator('.rw-go .start').click();
   for (const p of [hp, ap, bp]) await p.locator('.seat.me .card.up').first().waitFor({ timeout: 20_000 });
