@@ -235,6 +235,20 @@ button {
   border: 0;
   text-align: center;
 }
+/* 单独部署时的昵称框（好友房里别人看到的名字） */
+.nick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+.nick input {
+  width: 150px;
+  font-size: 16px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 0;
+}
 .link {
   border: 0;
   background: none;

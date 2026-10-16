@@ -1,5 +1,7 @@
 /**
  * mahjong Worker：路由 <站点>/games/mahjong*，部署时注入（README 的部署一节；DESIGN.md 第 4、6 节）。
+ * 两种部署（kit 0.10，由 env 决定）：本站有平台绑定 ARCADE、WALLET 和 GATE=login（部署工具补的），认平台的账号；
+ * 单独部署（wrangler.jsonc 原样）没有平台：首页和开房发游客 cookie，站点根 / 转到 /games/mahjong/，没有钱包，实盘一律拒绝（no_wallet）。
  * - 首页三个路径过 kit 的登录闸门 loginGate（docs/platform-backend.md 15.8）：登录了放行；没登录 302 到 /login?next=<原路径和查询>（平台 0.10.1，5.7），
  *   房间链接 ?room=123456 登录完原样带回来；平台不可用回 503 页；GATE=off 时不拦；
  * - /games/mahjong/api/stake/* 是单机实盘的带入、结回（client 模式）：经服务绑定 WALLET 调平台钱包；结回带的小结 stats 原样转发，不改不补（5.10）；
@@ -11,17 +13,19 @@
  */
 import { whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
-import { acceptCreate, acceptJoin, json, loginGate, readJson } from 'arcade-kit/worker';
+import type { GuestOptions } from 'arcade-kit/guest';
+import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { PERSONAS } from '../src/ai/personas.ts';
 import type { SettleStats } from '../src/core/match/index.ts';
 import { stakesOf, type TierId } from '../src/game/stakes.ts';
+import { GAME } from './game.ts';
 import type { MahjongRoom } from './room.ts';
 
 export { RoomMeter } from 'arcade-kit/meter';
 export { MahjongRoom } from './room.ts';
 
-export const GAME = 'mahjong' as const;
-/** ref、op 的格式（平台同样的检查，这里先挡掉，免得白调一次） */
-export const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
+/** ref、op 的格式（平台同样的检查，这里先挡掉，免得白调一次）。入口模块只导出 default 和 DO 类（见 game.ts） */
+const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 type Mode = 'server' | 'client';
 interface Base {
@@ -41,8 +45,10 @@ export interface PlatformWallet {
 
 export interface Env extends MeterEnv {
   ASSETS: Fetcher;
+  /** 平台（认人）：本站部署时由部署工具绑上，单独部署没有 */
   ARCADE?: Fetcher;
-  WALLET: PlatformWallet;
+  /** 平台钱包：同上；没有时单机和好友房的实盘都不开 */
+  WALLET?: PlatformWallet;
   ROOM: DurableObjectNamespace<MahjongRoom>;
   /** off 以外（包括没配）都要登录 */
   GATE?: string;
@@ -59,6 +65,9 @@ const MAX_BODY = 1_024;
 /** 单机那一份的到期退回：平台最长 24 小时（一直没结回来的原样退回） */
 const SOLO_HOLD_MS = 24 * 3_600_000;
 
+/** 单独部署时的游客：开房、进房、首页三处同一个设置；昵称不许冒充电脑（"火锅婆婆1"这种带编号的也挡住） */
+const GUEST: GuestOptions = { reserved: PERSONAS.map((p) => p.name) };
+
 /** 平台钱包的错误码 → HTTP 状态；没列的（busy、internal……）按 503，页面当"可能没到"留着操作 id 重发 */
 const STATUS: Record<string, number> = {
   limit: 429,
@@ -74,20 +83,24 @@ const STATUS: Record<string, number> = {
 
 export default {
   async fetch(request, env): Promise<Response> {
+    const root = standaloneRoot(request, env, GAME);
+    if (root) return root;
     const url = new URL(request.url);
     const path = url.pathname;
     const site = env.SITE_ORIGIN ?? url.origin;
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
-    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE });
+    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST });
     if (path.startsWith(STAKE)) return stake(request, env, site, path.slice(STAKE.length));
     if (path === ROOMS) {
       const opts = await roomOpts(request);
       if (opts === BAD) return json({ error: 'bad_options' }, 400);
-      return acceptCreate(request, env, { siteOrigin: site, options: opts });
+      // 没有钱包就开不了实盘房（页面上本来就不给选，这里挡住手写的请求）
+      if (!env.WALLET && stakesOf((opts as { stakes?: unknown } | undefined)?.stakes)?.wallet) return json({ error: 'no_wallet' }, 409);
+      return acceptCreate(request, env, { siteOrigin: site, options: opts, guest: GUEST });
     }
     const join = JOIN.exec(path);
-    if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: site });
+    if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: site, guest: GUEST });
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
@@ -112,6 +125,9 @@ async function roomOpts(request: Request): Promise<unknown> {
 async function stake(request: Request, env: Env, site: string, sub: string): Promise<Response> {
   if (sub !== 'buyin' && sub !== 'settle') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method' }, 405);
+  // 单独部署：没有钱包，单机实盘也没有
+  if (!env.WALLET) return json({ error: 'no_wallet' }, 409);
+  const wallet = env.WALLET;
   if (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== site) return json({ error: 'forbidden' }, 403);
   const b = (await readJson(request, MAX_BODY)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
   const id = (x: unknown): x is string => typeof x === 'string' && WALLET_ID.test(x);
@@ -126,8 +142,8 @@ async function stake(request: Request, env: Env, site: string, sub: string): Pro
   try {
     r =
       sub === 'buyin'
-        ? await env.WALLET.buyin({ ...base, tier: tier!.id as TierId, amount, until: Date.now() + SOLO_HOLD_MS })
-        : await env.WALLET.settle({ ...base, amount, ...(b.stats === undefined ? {} : { stats: b.stats as SettleStats }) });
+        ? await wallet.buyin({ ...base, tier: tier!.id as TierId, amount, until: Date.now() + SOLO_HOLD_MS })
+        : await wallet.settle({ ...base, amount, ...(b.stats === undefined ? {} : { stats: b.stats as SettleStats }) });
   } catch (e) {
     // 连不上平台：请求可能到了，页面留着操作 id 重发
     console.error('mahjong: wallet unreachable', e instanceof Error ? e.message : e);

@@ -2,11 +2,11 @@
  * 页面入口：选桌页、好友房的等人页、牌桌，接钱包、单机、好友房、声音和看得见的区域。
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
-import { createRoom } from 'arcade-kit/client';
+import { createRoom, detectPlatform, withNickname } from 'arcade-kit/client';
 import { DEFAULT_OPTS, TURN_MS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
-import { createError, Online, type OnlineState } from './online.ts';
+import { createError, Online, roomUrl, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { AI_URGE_MS, Banter, highlightsOf, momentsOf, type Act, type Cast, type Highlight } from './game/banter.ts';
 import { PHRASE_COUNT } from './game/emotes.ts';
@@ -110,6 +110,8 @@ let wallet: WalletView | null = null;
 let walletNote: string | null = null;
 
 async function refreshWallet(): Promise<void> {
+  // 单独部署没有平台钱包：不问，实盘也不摆
+  if (standalone) return;
   const r = await getWallet();
   if (r.ok && r.wallet) {
     wallet = r.wallet;
@@ -123,15 +125,45 @@ async function refreshWallet(): Promise<void> {
 }
 
 let myName = '我';
-async function loadMe(): Promise<void> {
+/**
+ * 单独部署（没有平台，kit 的 detectPlatform 回 false）：没有登录、钱包和实盘，"大厅"回游戏首页，好友房用游客身份（昵称自己填，存 NICK_KEY）。
+ * 平台暂时连不上（unknown）照有平台处理：实盘按钱包连不上不给选，和原来一样
+ */
+let standalone = false;
+const NICK_KEY = 'mahjong.nick';
+function nick(): string {
   try {
-    const r = await fetch('/api/me', { credentials: 'same-origin' });
-    const b = (await r.json()) as { user?: { displayName?: string } | null };
-    if (b.user?.displayName) myName = b.user.displayName;
+    return localStorage.getItem(NICK_KEY) ?? '';
   } catch {
-    // 没登录（开发时）就叫"我"
+    return '';
   }
 }
+function setNick(name: string): void {
+  try {
+    if (name) localStorage.setItem(NICK_KEY, name);
+    else localStorage.removeItem(NICK_KEY);
+  } catch {
+    // 存不上就这一次有效
+  }
+  myName = name || '我';
+}
+
+async function loadMe(): Promise<void> {
+  const p = await detectPlatform();
+  if (p.platform === false) {
+    standalone = true;
+    myName = nick() || '我';
+    home.href = './';
+    home.querySelector('span')!.textContent = '首页';
+    if (prefs.stakes !== 'fun') prefs.stakes = 'fun';
+    return;
+  }
+  const name = p.platform === true ? (p.user as { displayName?: unknown } | null)?.displayName : undefined;
+  if (typeof name === 'string' && name) myName = name;
+}
+
+/** 开房、进房的地址：单独部署时带上昵称（服务端会清洗，不合格就叫"游客1234"） */
+const withNick = (url: string): string => (standalone ? withNickname(url, nick()) : url);
 
 function showError(text: string, fix?: string): void {
   dialog(stage, 'error', (box) => {
@@ -178,6 +210,7 @@ function lobby(friends = false): void {
     onRoom: (stakes, opts) => void openRoom(stakes, opts),
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
     friends,
+    ...(standalone ? { standalone: { nick: nick(), onNick: setNick } } : {}),
   });
 }
 
@@ -289,7 +322,7 @@ async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
     if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
     if (wallet.balance <= 0) return showError(walletError('no_funds').text, 'less');
   }
-  const r = await createRoom('rooms', { variant: 'sichuan-xuezhan', stakes, rules: opts });
+  const r = await createRoom(withNick('rooms'), { variant: 'sichuan-xuezhan', stakes, rules: opts });
   if ('error' in r) return showError(createError(r.error), r.error === 'login' ? 'refresh' : undefined);
   enterRoom(r.code, true);
 }
@@ -313,7 +346,7 @@ function enterRoom(code: string, host: boolean, from: { seat: number; sit: boole
   screen.className = 'screen room';
   screen.replaceChildren();
   el('p', 'room-hint', screen, '正在进房……');
-  online = new Online(code, onlineUi);
+  online = new Online(code, onlineUi, { url: withNick(roomUrl(code)) });
   paintTop();
 }
 
@@ -483,7 +516,7 @@ async function rematch(b: HTMLButtonElement): Promise<void> {
   const opts = online?.state.opts;
   if (!online || !opts) return;
   b.disabled = true;
-  const r = await createRoom('rooms', opts);
+  const r = await createRoom(withNick('rooms'), opts);
   if ('error' in r) {
     b.disabled = false;
     return toast(createError(r.error));
@@ -740,14 +773,14 @@ home.addEventListener('click', (e) => {
   if (online) {
     e.preventDefault();
     void leaveRoom().then(() => {
-      if (!online) location.href = '/';
+      if (!online) location.href = home.href;
     });
     return;
   }
   if (!solo || solo.save.state.phase === 'over') return;
   e.preventDefault();
   void leave().then(() => {
-    if (!solo) location.href = '/';
+    if (!solo) location.href = home.href;
   });
 });
 
@@ -755,7 +788,9 @@ home.addEventListener('click', (e) => {
 
 void (async () => {
   paintTop();
-  await Promise.all([loadMe(), refreshWallet()]);
+  // 先看有没有平台：单独部署时不去问钱包
+  await loadMe();
+  await refreshWallet();
   // 朋友发来的房间链接（登录后平台按 next 原样带回来）、刷新：直接进房。
   // 平台大厅的"好友房"按钮带 ?online=1：直接摆出开房、进房（用完就从地址栏去掉，刷新不再亮）
   const q = new URLSearchParams(location.search);

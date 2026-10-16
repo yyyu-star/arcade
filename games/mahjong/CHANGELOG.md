@@ -1,5 +1,12 @@
 # 雀馆（games/mahjong）更新日志
 
+## 0.6.0（未发布）
+
+能不带平台单独部署：任何人都能把雀馆部署到自己的 Cloudflare 账户（README 里的 Deploy to Cloudflare 按钮，或者 `npm run deploy`）。
+- 共用包改从 npm 装（`@yyyu-star/arcade-kit@^0.10.1`）；`wrangler.jsonc` 改成独立配置（不写平台绑定和 `GATE`，开着 `workers_dev`），本站部署时由部署工具补上，本站行为不变。
+- 没有平台时：首页不拦登录、发游客 cookie，站点根转到 `/games/mahjong/`；选桌页只有娱乐，多一个好友房昵称框（不许冒充电脑的名字）；"大厅"改成"首页"。
+- 没有钱包时单机和好友房的实盘接口一律回 `no_wallet`。
+
 ## 0.5.0（未发布）
 
 互动全覆盖：单机和好友房一样热闹，电脑也会说话、扔东西。

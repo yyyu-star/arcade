@@ -1,18 +1,20 @@
-// mahjong Worker 正式配置（DESIGN.md 第 4、6 节）：页面 + 登录闸门 + 单机带入结回（转平台钱包）+ 好友房。
-// 部署只走 .github/workflows/game-mahjong.yml（main 上经 PR 合并的提交）：先 npm run build:cf 把页面打到 dist-cf/games/mahjong/，再 wrangler deploy。
-// 路由（<站点>/games/mahjong、<站点>/games/mahjong/*）和 SITE_ORIGIN 不写在这里，由部署时注入，见 README 的部署一节。
+// mahjong Worker 的独立配置（DESIGN.md 第 4、6 节，仓库根 docs/new-game.md 第 4、7 节）：页面 + 单机 + 好友房，不要平台也能部署
+// （npm run deploy 或 README 里的 Deploy to Cloudflare 按钮，得到 <名字>.<子域>.workers.dev；没有平台时认游客 cookie，没有钱包和实盘）。
+// 本站正式部署时由仓库的部署工具（tools/deployer，按 tools/workers.json）补上平台绑定 ARCADE、WALLET 和 GATE=login，关掉 workers_dev，
+// 注入路由（<站点>/games/mahjong、<站点>/games/mahjong/*）和 SITE_ORIGIN；这些都不写在这里。
 {
   "name": "mahjong",
   "main": "worker/main.ts",
   "compatibility_date": "2026-10-01",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    // 只有这些先过 Worker：首页（登录闸门）、单机带入结回、开房进房；其余静态资源直接回。/api/*（含 /api/wallet）由平台的路由接
-    "run_worker_first": ["/games/mahjong", "/games/mahjong/", "/games/mahjong/index.html", "/games/mahjong/api/stake/*", "/games/mahjong/rooms", "/games/mahjong/rooms/*"]
+    // 只有这些先过 Worker：站点根（独立部署时转到 /games/mahjong/）、首页（登录闸门 / 发游客 cookie）、单机带入结回、开房进房；
+    // 其余静态资源直接回。/api/*（含 /api/wallet）在本站由平台的路由接，独立部署时没有
+    "run_worker_first": ["/", "/games/mahjong", "/games/mahjong/", "/games/mahjong/index.html", "/games/mahjong/api/stake/*", "/games/mahjong/rooms", "/games/mahjong/rooms/*"]
   },
   "durable_objects": {
     "bindings": [
@@ -21,14 +23,7 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter"] }],
-  "services": [
-    // 认人（/api/me）
-    { "binding": "ARCADE", "service": "arcade" },
-    // 平台钱包（docs/platform-backend.md 5.9）：平台按 props.game 认是哪个游戏
-    { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "mahjong" } }
-  ],
   "vars": {
-    "GATE": "login",
     // 每天的 DO 写入预算（DESIGN.md 第 9 节，一房约 800 行）：到 busy 不开新房，到 stop 收场。
     // 每人开房同时 5 个、每天 100 个（和德州一样不卡人）；全站上限照 kit 默认
     "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 }

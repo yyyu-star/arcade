@@ -1,7 +1,7 @@
 {
   "name": "mahjong",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "license": "MIT",
   "description": "雀馆：一套麻将引擎 + 多个玩法，第一个玩法川麻·血战到底；单机对电脑和好友房，筹码无任何现金价值",
@@ -10,16 +10,18 @@
     "build": "tsc --noEmit && vite build",
     "build:cf": "tsc --noEmit && vite build --outDir dist-cf/games/mahjong --emptyOutDir",
     "preview": "vite preview",
+    "deploy": "npm run build:cf && wrangler deploy",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/worker",
     "test:worker": "vitest run -c vitest.worker.config.ts",
     "test": "npm run typecheck && vitest run && vitest run -c vitest.worker.config.ts",
     "dev:worker": "wrangler dev -c test/wrangler.smoke.jsonc -c test/arcade.dev.jsonc --ip 0.0.0.0 --port 0",
     "sim": "node scripts/sim.ts",
     "smoke": "node scripts/smoke.ts",
-    "smoke:room": "node scripts/smoke-room.ts"
+    "smoke:room": "node scripts/smoke-room.ts",
+    "smoke:standalone": "node scripts/smoke-standalone.ts"
   },
   "dependencies": {
-    "arcade-kit": "file:../../packages/arcade-kit"
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.2",

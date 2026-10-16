@@ -6,7 +6,8 @@
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { AI_DELAY_MS, mahjongRoom, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import { RoomTalk, talkSeed } from '../src/room/talk.ts';
-import { GAME, type Env } from './main.ts';
+import { GAME } from './game.ts';
+import type { Env } from './main.ts';
 
 /**
  * 限额：一场 8 局约 40 分钟，16 局加上等人能到两个小时，寿命给 4 小时；
@@ -38,11 +39,14 @@ export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, 
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {
     // 电脑座位没有钱包；规则只给真人座位记钱包的事，到这里是写错了
     if (!userId || e.stakes === 'fun') return { ok: false, error: 'no_user' };
+    // 单独部署没有钱包（开房时已经挡住实盘，这里兜底：按带入被拒处理，不去重试）
+    if (!this.env.WALLET) return { ok: false, error: 'no_wallet' };
+    const wallet = this.env.WALLET;
     const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: `${e.ref}-${e.id}` };
     const r =
       e.kind === 'debit'
-        ? await this.env.WALLET.buyin({ ...base, tier: e.stakes, amount: e.amount, until: Date.now() + HOLD_MS })
-        : await this.env.WALLET.settle({ ...base, amount: e.amount, ...(e.stats ? { stats: e.stats } : {}) });
+        ? await wallet.buyin({ ...base, tier: e.stakes, amount: e.amount, until: Date.now() + HOLD_MS })
+        : await wallet.settle({ ...base, amount: e.amount, ...(e.stats ? { stats: e.stats } : {}) });
     if (r.ok) {
       if (r.statsIgnored) console.error('mahjong room: stats ignored', r.statsIgnored);
       return { ok: true };

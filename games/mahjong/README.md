@@ -19,7 +19,7 @@
 
 ## 本地开发
 
-需要 Node 22（见 `.nvmrc`）。依赖共用包 `packages/arcade-kit`（`file:` 引用），在本仓库里直接 `npm ci` 就行。
+需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
 
 ```bash
 npm ci
@@ -35,31 +35,36 @@ npm run build:cf && npm run dev:worker  # 本地整套（Worker + 页面 + 假�
 node scripts/capture.ts se-port 40      # 截图到 shots/，并报互相压住的元素（land|port|se-land|se-port）
 ```
 
-## 部署
+## 单独部署这个游戏（不要平台）
 
-正式部署由仓库的 `.github/workflows/game-mahjong.yml` 在 main 上经 PR 合并后自动完成，整体做法见仓库根 README 的部署一节。
-本模块依赖共用包（`file:../../packages/arcade-kit`），共用包发布到 npm 之前不提供一键部署按钮。
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/mahjong)
 
-本模块要的东西：
+点上面的按钮，或者 fork 后在这个目录里 `npm ci && npx wrangler login && npm run deploy`（`deploy` = `build:cf` 再 `wrangler deploy`），
+部署到自己的 Cloudflare 账户，得到 `https://mahjong.<你的子域>.workers.dev`，打开后转到 `/games/mahjong/`。`wrangler.jsonc` 就是这份独立配置，不用改。
+
+| 有 | 没有 |
+|---|---|
+| 单机对三个电脑（娱乐） | 登录：任何人打开就能玩，身份是游客 cookie |
+| 好友房：开房、进房、断线重连、托管、再来一场，选桌页填个昵称（不填就是"游客"加 4 位数字） | 钱包和实盘（单机、好友房都只有娱乐） |
+| 交流、名场面、称号（只显示在本局结算里） | 战绩、排行榜、称号墙（这些在平台上） |
+| 浏览器本地存档（接着打上一场） | 云存档 |
+
+页面用 kit 的 `detectPlatform()` 判断有没有平台：没有时藏起钱包和实盘，"大厅"改成回游戏首页。好友房的额度照 `KIT_QUOTA`（DESIGN.md 第 9 节）。
+
+## 部署（本站）
+
+本站的正式部署由仓库的 `.github/workflows/game-mahjong.yml` 在 main 上经 PR 合并后完成，整体做法见仓库根 README 的部署一节。
+部署工具（`tools/deployer`，按 `tools/workers.json`）在这份独立配置上补上平台的东西，模块里不写：
 
 | 类型 | 名字 | 说明 |
 |---|---|---|
-| 路由 | `<站点>/games/mahjong`、`<站点>/games/mahjong/*` | 不写在 `wrangler.jsonc` 里，部署时用 `--route` 注入 |
+| 路由 | `<站点>/games/mahjong`、`<站点>/games/mahjong/*` | 部署时注入，同时关掉 `workers_dev` |
 | 服务绑定 | `ARCADE` → Worker `arcade` | 平台，认人（`/api/me`）；要先部署平台 |
 | 服务绑定 | `WALLET` → `arcade` 的 `WalletService`，`props.game = "mahjong"` | 平台钱包（实盘带入、结回） |
-| Durable Object | `ROOM`（`MahjongRoom`）、`METER`（`RoomMeter`） | 好友房、kit 的计量 |
-| 变量 | `GATE` | `login`：首页要登录；`off`：不拦（只在本地试页面用） |
-| 变量 | `KIT_QUOTA` | 每天的写入预算和开房名额（DESIGN.md 第 9 节） |
-| 变量（可选） | `SITE_ORIGIN` | 同站校验认的 origin，比如 `https://<站点>`；不设就按请求自己的 origin |
-| CI 的 secret | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`SITE_HOST` | 放在 GitHub 环境 `production`；`SITE_HOST` 是站点主机名（不带协议），没设部署直接失败 |
+| 变量 | `GATE = "login"`、`SITE_ORIGIN` | 首页要登录；同站校验认的 origin |
 
-手动部署（在本仓库里，先部署好平台；`SITE_HOST` 换成自己的站点主机名，Cloudflare 凭证用环境变量）：
-
-```bash
-cd games/mahjong
-npm ci && npm run build:cf
-npx wrangler deploy --route "$SITE_HOST/games/mahjong" --route "$SITE_HOST/games/mahjong/*" --var "SITE_ORIGIN:https://$SITE_HOST"
-```
+模块自己的：Durable Object `ROOM`（`MahjongRoom`）、`METER`（`RoomMeter`），变量 `KIT_QUOTA`（每天的写入预算和开房名额）。
+没有 `ARCADE` 时首页和开房发游客 cookie（kit 的独立模式）；`GATE` 是 `login` 却没有 `ARCADE` 时一律拒绝，不会悄悄变成人人可进。
 
 ## 目录结构
 

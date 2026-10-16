@@ -1,6 +1,6 @@
 /**
  * 选桌页（docs/economy.md 第 1 节，各游戏一个样子）：先选玩法，再选"娱乐 / 实盘"，实盘选档位；规则设置折起来。
- * 钱包连不上时实盘不可选，娱乐照常。
+ * 钱包连不上时实盘不可选，娱乐照常。单独部署（没有平台）时只有娱乐，好友房上面多一个昵称框。
  */
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { STAKES, type StakesId } from '../game/stakes.ts';
@@ -23,6 +23,8 @@ export interface LobbyProps {
   onJoin?(code: string): void;
   /** 从平台大厅的"好友房"按钮进来（?online=1，和德州、掼蛋同一个约定）：开房、进房那一块滚到看得见、亮一下 */
   friends?: boolean;
+  /** 单独部署：没有钱包和实盘；好友房里别人看到的昵称自己填 */
+  standalone?: { nick: string; onNick(name: string): void };
 }
 
 export function renderLobby(box: HTMLElement, p: LobbyProps): void {
@@ -38,7 +40,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   const pick = el('div', 'stakes', box);
   const paint = (): void => {
     pick.replaceChildren();
-    for (const s of STAKES) {
+    for (const s of p.standalone ? STAKES.filter((x) => !x.wallet) : STAKES) {
       const off = s.wallet && (!p.wallet || p.wallet.balance <= 0);
       const b = button(`stake${s.id === stakes ? ' on' : ''}${off ? ' off' : ''}`, pick, '', () => {
         if (off) return;
@@ -53,6 +55,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   const note = el('div', 'wallet-note', box);
   if (p.wallet) note.textContent = `钱包 ${num(p.wallet.balance)} 筹码（无任何现金价值）。实盘最多输掉带进去的，一场最多赢 3 份。`;
   else if (p.walletNote) note.textContent = p.walletNote;
+  else if (p.standalone) note.textContent = '这是单独部署的雀馆：没有账号和钱包，单机、好友房都按娱乐打。';
 
   const more = el('details', 'rules-opts', box);
   el('summary', '', more, '规则设置');
@@ -85,6 +88,15 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   const go = el('div', 'go-row', box);
   button('act go big', go, '单机开打', () => p.onSolo(stakes, opts));
   const room = p.onRoom ? button('act big', go, '开房间叫朋友', () => p.onRoom!(stakes, opts)) : null;
+  if (p.standalone) {
+    const row = el('label', 'nick', box);
+    el('span', '', row, '好友房里的昵称');
+    const input = el('input', '', row) as HTMLInputElement;
+    input.maxLength = 12;
+    input.placeholder = '不填就叫"游客"';
+    input.value = p.standalone.nick;
+    input.addEventListener('change', () => p.standalone!.onNick(input.value.trim()));
+  }
   if (p.onJoin) {
     const join = el('form', 'join', box);
     const input = el('input', '', join) as HTMLInputElement;
