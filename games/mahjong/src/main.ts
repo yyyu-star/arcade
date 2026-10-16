@@ -20,7 +20,8 @@ import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { GAME_NAME, HIGHLIGHT_NAME, num, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
+import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
+import { LEVELS, type Level } from './ai/venues.ts';
 import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
@@ -38,6 +39,8 @@ interface Prefs {
   volume: number;
   fast: boolean;
   stakes: StakesId;
+  /** 单机娱乐的难度：第一次玩默认新手 */
+  level: Level;
   opts: XzOpts;
 }
 
@@ -45,9 +48,10 @@ function loadPrefs(): Prefs {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
     const vol = typeof p.volume === 'number' && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8;
-    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
+    const level = LEVELS.includes(p.level as Level) ? (p.level as Level) : 'easy';
+    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
   } catch {
-    return { sound: true, volume: 0.8, fast: false, stakes: 'fun', opts: { ...DEFAULT_OPTS } };
+    return { sound: true, volume: 0.8, fast: false, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
   }
 }
 const prefs = loadPrefs();
@@ -248,6 +252,7 @@ function lobby(friends = false): void {
     wallet,
     walletNote,
     stakes: prefs.stakes,
+    level: prefs.level,
     opts: prefs.opts,
     canResume: loadSolo() !== null,
     onSolo: startSolo,
@@ -260,8 +265,9 @@ function lobby(friends = false): void {
   });
 }
 
-async function startSolo(stakes: StakesId, opts: XzOpts): Promise<void> {
+async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.level): Promise<void> {
   prefs.stakes = stakes;
+  prefs.level = level;
   prefs.opts = opts;
   savePrefs();
   // 上一场实盘还没结回钱包：先结了再开，不然新的一场会盖掉它的存档（自审 C1）
@@ -273,7 +279,7 @@ async function startSolo(stakes: StakesId, opts: XzOpts): Promise<void> {
   }
   const st = stakesOf(stakes)!;
   let chips = st.share;
-  if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips), soloUi));
+  if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level), soloUi));
   await refreshWallet();
   if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
   chips = Math.min(st.share, wallet.balance);
@@ -649,7 +655,7 @@ function playSolo(s: Solo): void {
   screen.className = 'screen game';
   screen.replaceChildren();
   const st = stakesOf(s.stakes)!;
-  title.textContent = `${VARIANT_NAME['sichuan-xuezhan']} · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`;
+  title.textContent = `${VARIANT_NAME['sichuan-xuezhan']} · ${st.wallet ? `实盘 ${num(st.share)}` : `娱乐·${LEVEL_NAME[s.save.level ?? 'easy']}`}`;
   table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => {
     const err = s.act(a as XzAction);
     if (err && err !== 'busy') play('click');

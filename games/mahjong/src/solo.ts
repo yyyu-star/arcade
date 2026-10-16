@@ -9,7 +9,7 @@
 import { stream } from 'arcade-kit/rng';
 import { AIS } from './ai/index.ts';
 import { PERSONAS } from './ai/personas.ts';
-import { seatPlan, venueOf } from './ai/venues.ts';
+import { seatPlan, venueOf, type Level } from './ai/venues.ts';
 import type { SettleStats } from './core/match/index.ts';
 import { sichuanXuezhan as XZ, view, type XzAction, type XzOpts, type XzState, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import type { SeatKind } from './core/variants/types.ts';
@@ -26,6 +26,8 @@ export interface SoloSave {
   id?: string;
   state: XzState;
   stakes: StakesId;
+  /** 娱乐的难度（0.10.0 起；之前的存档没有，按新手） */
+  level?: Level;
   names: string[];
   /** 实盘：钱包里这一份的号；结回的操作号和小结（先存再发，重发用同一个） */
   ref: string | null;
@@ -79,15 +81,15 @@ function persist(s: SoloSave, own: boolean): void {
 }
 
 /** 开一场：密钥浏览器现生成；chips 是实盘带进来的（不够一份时可以少带） */
-export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: string | null, chips: number): SoloSave {
+export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: string | null, chips: number, level: Level = 'easy'): SoloSave {
   const st = stakesOf(stakes)!;
   const key = [...crypto.getRandomValues(new Uint32Array(8))];
   // 三个电脑按场地挑性格、各配这一场的状态；0 号座位是自己（性格、状态用不上）
-  const plan = seatPlan(stream(key, 'persona'), venueOf('solo', stakes), 3);
+  const plan = seatPlan(stream(key, 'persona'), venueOf('solo', stakes, true, level), 3);
   const personas = [0, ...plan.personas];
   const tunes = [{ mood: 0, soft: 0 }, ...plan.tunes];
   const state = XZ.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, tunes, chips: [chips, st.share, st.share, st.share] }) as XzState;
-  return { v: 1, id: randomId(), state, stakes, names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
+  return { v: 1, id: randomId(), state, stakes, ...(st.wallet ? {} : { level }), names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
 }
 
 /**

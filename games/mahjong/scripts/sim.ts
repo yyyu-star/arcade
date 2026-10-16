@@ -28,7 +28,7 @@ interface Style {
 const styles = new Map<number, Style>();
 
 for (const venue of venues) {
-  const st = stakesOf(venue.slice(5) as StakesId)!;
+  const st = stakesOf(venue.split(':')[1] as StakesId)!;
   for (const proxy of [PLAYER, NOVICE]) {
     const nets: number[] = [];
     const mins: number[] = [];
