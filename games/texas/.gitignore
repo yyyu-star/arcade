@@ -6,6 +6,6 @@ shots/
 .vite/
 .wrangler/
 
-# 本机试正式配置用（正式配置见 wrangler.jsonc）
+# 本地试正式配置用（正式配置见 wrangler.jsonc）
 wrangler.local.jsonc
 .dev.vars

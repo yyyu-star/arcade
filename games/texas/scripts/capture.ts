@@ -1,5 +1,5 @@
 /**
- * 连拍（DESIGN.md 0.2 体验第 5 条）：看节奏不能只看静态截图。本机起页面（vite，端口由系统分配），单机娱乐桌自动打，
+ * 连拍（DESIGN.md 0.2 体验第 5 条）：看节奏不能只看静态截图。本地起页面（vite，端口由系统分配），单机娱乐桌自动打，
  * 每隔固定毫秒截一张，再拼成带时间的大图（一张 4×4），逐帧看一手从发牌、下注、翻牌到结束、下一手的全过程。
  *
  *   node scripts/capture.ts [--out 目录] [--every 300] [--secs 40] [--device desk|phone|both] [--auto] [--size 6] [--peek] [--read] [--journal] [--mix]

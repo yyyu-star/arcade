@@ -153,6 +153,10 @@ describe('单机的带入、结回（经服务绑定调平台钱包，client 模
     expect((await post('solo/buyin', u, b, { 'x-arcade': '0' })).status).toBe(403);
     expect((await post('solo/buyin', u, b, { origin: 'https://evil.example' })).status).toBe(403);
     expect((await post('solo/buyin', u, b, { origin: '' })).status).toBe(403);
+    // 设了 SITE_ORIGIN 就只认它，请求自己的站点也不行
+    const headers = { 'content-type': 'application/json', 'x-arcade': '1', origin: SITE, cookie: `__Host-sid=${u}` };
+    const init = { method: 'POST', headers, body: JSON.stringify(b) };
+    expect((await call('/api/solo/buyin', { SITE_ORIGIN: 'https://other.example.com' }, init)).status).toBe(403);
     expect(await usage(u)).toEqual({ calls: 0, writes: 0 });
   });
 

@@ -90,7 +90,7 @@ export class Lobby {
     this.resumeBox = el('div', 'banner resume', panel);
     this.resumeText = el('span', '', this.resumeBox);
     button(this.resumeBox, 'go', '接着打', () => h.resume());
-    // 另一台设备上的那一桌这里不给放弃：看不到那边还剩多少（主线 2026-10-15 定）
+    // 另一台设备上的那一桌这里不给放弃：看不到那边还剩多少（2026-10-15 定）
     this.orphanBox = el('div', 'banner orphan', panel);
     this.orphanText = el('span', '', this.orphanBox);
     // 好友房不自动进（0.2.3）：横幅点了才回去
@@ -234,7 +234,7 @@ export class Lobby {
     this.startBtn.disabled = busy || !ok || !!resume;
     const room = this.s.room;
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
-    // （0.3.0 所有者："不要给我再设乱七八糟的限制"）
+    // （0.3.0：好友房不设多余的限制）
     this.openBtn.disabled = busy || !wallet || (bal ?? 0) < st.min;
     this.openBtn.title = !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
     this.joinBtn.disabled = busy || this.codeIn.value.length !== 6;

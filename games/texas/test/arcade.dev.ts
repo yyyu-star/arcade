@@ -1,5 +1,5 @@
 /**
- * 本机试 Worker 时代替平台的假 arcade（冒烟、`npm run dev:worker`），不部署：
+ * 本地试 Worker 时代替平台的假 arcade（冒烟、`npm run dev:worker`），不部署：
  * cookie __Host-sid=<id> 就认作这个人，没有就是没登录；钱包用 arcade-kit/testing（RPC 和浏览器的 /api/wallet*）。
  */
 import { walletHttp, type FakeEnv } from 'arcade-kit/testing';

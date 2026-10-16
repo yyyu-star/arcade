@@ -139,7 +139,7 @@ describe('电脑的难度', () => {
     const lux = style('lux', 6, 6, 500, six);
     console.log(`6 人桌入池 / 翻牌前加注（%）小桌 ${fmt(small)}`);
     console.log(`                           豪华桌 ${fmt(lux)}`);
-    // 0.3.0 起的目标（主线定的区间，DESIGN.md 4.6）：原来老好 32–44、慢慢 ≤ 13；没人加注时不再卡底池赔率以后，各性格按新区间重新调
+    // 0.3.0 起的目标（DESIGN.md 4.6 定的区间）：原来老好 32–44、慢慢 ≤ 13；没人加注时不再卡底池赔率以后，各性格按新区间重新调
     const [wen, abiao, laohao, manman] = small;
     expect(laohao!.vpip).toBeGreaterThanOrEqual(45);
     expect(laohao!.vpip).toBeLessThanOrEqual(65);

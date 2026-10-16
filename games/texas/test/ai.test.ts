@@ -44,7 +44,7 @@ describe('电脑', () => {
 
   it('CPU：单次决策 p99 < 2 ms，一批（真人两次说话之间）p99 < 10 ms', () => {
     // 豪华桌最费：翻牌后要按对手的范围重抽底牌（equity.ts 的 floors）。
-    // 量的是墙上时间：本机整套并行跑、机器忙的时候，一次抖动就能把 p99 顶过线（CI 上约 0.5 ms / 3.5 ms）。
+    // 量的是墙上时间：本地整套并行跑、机器忙的时候，一次抖动就能把 p99 顶过线（CI 上约 0.5 ms / 3.5 ms）。
     // 最多量 3 遍、各取最好的：代码真变慢了三遍都过不了线，偶发的抖动不会三遍都赶上（0.3.5 前偶发超时）
     const p99 = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.99)]!;
     let best = { decide: Infinity, batch: Infinity };

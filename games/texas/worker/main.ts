@@ -1,5 +1,5 @@
 /**
- * texas Worker：路由 game.yyyu.org/games/texas*（DESIGN.md 10）。
+ * texas Worker：挂在站点的 /games/texas* 下（DESIGN.md 10；路由部署时注入，见 README 的部署一节）。
  * - 首页三个路径过登录闸门（15.8，kit 0.8.0 的 loginGate）：登录了放行，没登录 302 到 /login?next=<原路径和查询参数>（平台 0.10.1），平台不可用回德州自己的 503 页；GATE=off 时不拦；
  * - /games/texas/api/solo/* 是单机的带入、结回（5.4）：经服务绑定 WALLET 调平台钱包（client 模式）；看钱包、领补给页面直接走平台的 /api/wallet；
  * - /games/texas/rooms（开房）、/games/texas/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（6）；
@@ -8,7 +8,7 @@
  *
  * 带入、结回要过两道：CSRF（X-Arcade: 1 且 Origin 是本站）、登录；额度、每日上限、写入次数都由平台钱包管（docs/economy.md 第 3、4 节）。
  */
-import { whoIs, type WhoIs } from 'arcade-kit/auth';
+import { sameOrigin, whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
 import { acceptCreate, acceptJoin, json, loginGate, readJson } from 'arcade-kit/worker';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
@@ -27,8 +27,8 @@ export interface Env extends MeterEnv {
   ROOM: DurableObjectNamespace<TexasRoom>;
   /** off 以外（包括没配）都要登录 */
   GATE?: string;
-  /** 写请求的 Origin 必须是它 */
-  SITE_ORIGIN: string;
+  /** 写请求的 Origin 只认它（正式站由部署流程注入）；没设就认请求自己的 origin（kit 0.9.0） */
+  SITE_ORIGIN?: string;
 }
 
 const BASE = '/games/texas';
@@ -82,7 +82,7 @@ async function roomOpts(request: Request): Promise<unknown> {
 async function solo(request: Request, env: Env, sub: string): Promise<Response> {
   if (sub !== 'buyin' && sub !== 'cashout') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method' }, 405);
-  if (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== env.SITE_ORIGIN) return json({ error: 'forbidden' }, 403);
+  if (request.headers.get('x-arcade') !== '1' || !sameOrigin(request, env.SITE_ORIGIN)) return json({ error: 'forbidden' }, 403);
   const b = (await readJson(request, MAX_BODY)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
   const id = (x: unknown): x is string => typeof x === 'string' && WALLET_ID.test(x);
   const amount = b?.amount;

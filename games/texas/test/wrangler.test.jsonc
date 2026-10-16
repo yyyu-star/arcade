@@ -17,7 +17,6 @@
   "services": [{ "binding": "WALLET", "service": "texas-test", "entrypoint": "WalletService", "props": { "game": "texas" } }],
   "vars": {
     "GATE": "login",
-    "SITE_ORIGIN": "https://game.yyyu.org",
     "KIT_QUOTA": { "busyWrites": 15000, "stopWrites": 20000 }
   }
 }

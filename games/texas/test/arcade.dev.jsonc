@@ -1,4 +1,4 @@
-// 本机试 Worker 用的假平台（冒烟、npm run dev:worker），不部署
+// 本地试 Worker 用的假平台（冒烟、npm run dev:worker），不部署
 {
   "name": "arcade",
   "main": "./arcade.dev.ts",

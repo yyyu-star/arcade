@@ -235,7 +235,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
   resume: (s) => sync({ ...s, t: deal(s.t) }),
   // 一手和一手之间没人要出手：等人坐下、补码、回来，或者买入到账（kit 0.3.2）
   waiting: (s) => s.t.phase === 'idle' && !s.t.hold,
-  // 桌上一个真人都没有了、也没有买入在路上（0.2.4 所有者："立即结算"）：这一场打完，kit 马上还开房名额，办完结回再关房。
+  // 桌上一个真人都没有了、也没有买入在路上（0.2.4：离开就"立即结算"）：这一场打完，kit 马上还开房名额，办完结回再关房。
   // 不再让电脑自己一直打下去：原来要等"10 分钟没真人连着"，房主每次被送回来重新连上，房间就一直关不掉。
   // 这一手已经由 sync 替电脑打完了（停着或空闲）
   over: (s) => !s.kinds.includes('human') && !s.fx.some((e) => e.kind === 'debit') && s.t.toAct === null,
@@ -332,7 +332,7 @@ const openingSeat = (s: RoomState): number | null => s.fx.find((e) => e.kind ===
 const buying = (s: RoomState, seat: number): boolean => s.held[seat]! > 0 || debiting(s, seat);
 
 /**
- * 补码：桌上不满一份就能补到满（0.3.0 所有者："不要给我再设乱七八糟的限制"；原来要输光了才能补）；
+ * 补码：桌上不满一份就能补到满（0.3.0：好友房不设多余的限制；原来要输光了才能补）；
  * 或者坐下（开局、中途、接管）时带入被拒了、还没坐上牌桌：再带一次（0.2.5，原来被拒以后就卡在空座位上）
  */
 const canRebuy = (s: RoomState, seat: number): boolean => {

@@ -1,5 +1,5 @@
 /**
- * 冒烟（AGENTS.md 第 4 节）：真的 Worker（页面 + 登录闸门 + 钱包）跑在本机 wrangler dev 里，平台换成 test/arcade.dev.ts；
+ * 冒烟（AGENTS.md 第 4 节）：真的 Worker（页面 + 登录闸门 + 钱包）跑在本地 wrangler dev 里，平台换成 test/arcade.dev.ts；
  * 浏览器里平台的 /api/me、/api/saves 由这里代答。跑一遍主流程，控制台和页面报错一律算失败。
  *
  *   npm run build:cf && npm run smoke [-- --hands 30] [--shots 目录]
@@ -165,7 +165,7 @@ async function assertAutoNext(page: Page): Promise<void> {
 }
 
 /** 自动打到第 n 手打完；大多跟注过牌，偶尔加注、弃牌，让各条路都走到。一手打完点"下一手"（第一次先核对不点不发、再试一次自动下一手） */
-/** 加注面板盖住了几个座位的头像或名牌（#65） */
+/** 加注面板盖住了几个座位的头像或名牌（单机打磨时加的检查） */
 const coveredSeats = (page: Page): Promise<number> =>
   page.evaluate(() => {
     const r = document.querySelector('.raise-panel')!.getBoundingClientRect();
@@ -218,7 +218,7 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
       const r = k++ % 11;
       if (r === 3 && (await page.locator('.act.raise:not(.hidden)').isVisible())) {
         await page.locator('.act.raise').click();
-        // 加注面板不能盖住任何座位（#65）：被盖住的座位要挪到面板上方（挪的动画 0.18 秒）
+        // 加注面板不能盖住任何座位：被盖住的座位要挪到面板上方（挪的动画 0.18 秒）
         // 机器忙时挪座位的动画会拖：最多等 1.5 秒挪完，还盖着才算失败（截一张留证）
         let covered = 0;
         for (let i = 0; i < 6; i++) {
@@ -628,7 +628,7 @@ async function main(): Promise<void> {
   const state = mkdtempSync(join(tmpdir(), 'texas-smoke-'));
   const worker = await startWorker(port, state);
   const base = `http://localhost:${port}`;
-  // 本机的守卫环境里 zygote 拉不起 GPU 子进程，浏览器会直接退出；不用 zygote 就好（CI 上加不加都一样）
+  // 有的沙箱环境里 zygote 拉不起 GPU 子进程，浏览器会直接退出；不用 zygote 就好（CI 上加不加都一样）
   const browser = await chromium.launch({ args: ['--no-zygote', '--disable-gpu'] });
   try {
     const only = opt('only', '');

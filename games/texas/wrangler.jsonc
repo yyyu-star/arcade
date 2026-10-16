@@ -1,15 +1,12 @@
 // texas Worker 正式配置（DESIGN.md 第 10 节）：页面 + 登录闸门 + 单机带入结回（转平台钱包）+ 好友房。
 // 部署只走 .github/workflows/game-texas.yml（main 上经 PR 合并的提交）：先 npm run build:cf 把页面打到 dist-cf/games/texas/，再 wrangler deploy。
+// 路由（<站点>/games/texas 和 <站点>/games/texas/*）和 SITE_ORIGIN 不写在这里，由部署时注入，见 README 的部署一节；workers_dev 关着，没有路由时外面访问不到。
 {
   "name": "texas",
   "main": "worker/main.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [
-    { "pattern": "game.yyyu.org/games/texas", "zone_name": "yyyu.org" },
-    { "pattern": "game.yyyu.org/games/texas/*", "zone_name": "yyyu.org" }
-  ],
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
@@ -33,10 +30,9 @@
   ],
   "vars": {
     "GATE": "login",
-    "SITE_ORIGIN": "https://game.yyyu.org",
     // 德州每天的 DO 写入预算（DESIGN.md 第 7 节）：到 busy 不开新房，到 stop 收场。
-    // 每人开房（0.2.4 所有者："不要设置这些限制"）：同时 5 个、每天 100 个；全站上限照 kit 默认（防账单的不放宽）。
-    // 嘲讽、表情、道具（0.3.0 所有者："不要让用户有感知，可以后台控制，设置为 1s"）：每座位每秒补 1 个令牌、最多攒 3 个，客户端排队静默发
+    // 每人开房（0.2.4 维护者定：不让玩家感到限制）：同时 5 个、每天 100 个；全站上限照 kit 默认（防账单的不放宽）。
+    // 嘲讽、表情、道具（0.3.0：玩家感觉不到，可以后台调）：每座位每秒补 1 个令牌、最多攒 3 个，客户端排队静默发
     "KIT_QUOTA": { "busyWrites": 15000, "stopWrites": 20000, "roomsPerUser": 5, "dailyRoomsPerUser": 100, "emoteMs": 1000, "emoteBurst": 3 }
   }
 }
