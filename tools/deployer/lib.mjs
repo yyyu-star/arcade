@@ -8,6 +8,10 @@
  * 白名单的思路：只放行本仓库现在真用到的字段和绑定，每种绑定逐键列出；别的（KV、R2、队列、tail_consumers、limits、
  * observability 的 destinations、DO 迁移里的 transferred/deleted/renamed_classes……）一律拒绝，真需要时由维护者放宽这里。
  * vars 名（按模块）、compatibility_flags 和全局拒绝的 vars 名单独放在 tools/deploy-allowlist.json，同样由维护者改。
+ *
+ * 游戏和平台的关系不由游戏自己写：模块里的 wrangler.jsonc 是能单独部署的独立配置（没有平台也能跑，kit 0.10.0 的独立模式），
+ * 本站要接平台的游戏由维护者在 tools/workers.json 里声明（"platform": ["ARCADE", "WALLET"]），deploy.mjs 按声明补上规范形式的
+ * 服务绑定和 GATE=login（platformOverlay）。这样游戏代码改不了自己以什么身份接平台：绑定的形状由这里写死，模块只能不写或写得一模一样。
  */
 import { lstatSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -19,8 +23,15 @@ const WORKERS_FILE = join(REPO_ROOT, 'tools', 'workers.json');
 /** vars 名、兼容开关的白名单和全局拒绝的 vars 名（维护者管） */
 const ALLOWLIST_FILE = join(REPO_ROOT, 'tools', 'deploy-allowlist.json');
 
-/** 平台 Worker 公开的 RPC 入口（platform/worker 里 extends WorkerEntrypoint 的类）。新增入口时由维护者加进来 */
-export const KNOWN_ENTRYPOINTS = new Set(['WalletService']);
+/**
+ * 游戏接平台用的服务绑定，规范形式写死在这里（tools/workers.json 只写名字）。新增一种（比如平台多了一个 RPC 入口）由维护者加：
+ *   ARCADE：平台默认的 fetch 入口，游戏经它问 /api/me 认人（kit 的 whoIs、loginGate、acceptCreate/acceptJoin）；
+ *   WALLET：平台钱包的 RPC 入口 WalletService，props.game 固定成本游戏的 id，平台按它只让这个游戏动自己那一份（docs/platform-backend.md 5.9）。
+ */
+const PLATFORM_BINDINGS = {
+  ARCADE: () => ({ binding: 'ARCADE', service: 'arcade' }),
+  WALLET: (id) => ({ binding: 'WALLET', service: 'arcade', entrypoint: 'WalletService', props: { game: id } }),
+};
 
 /** 所有模块都可以用的顶层字段 */
 const COMMON_KEYS = new Set([
@@ -50,9 +61,61 @@ const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const BINDING = /^[A-Z][A-Z0-9_]*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-export function allowedWorkers() {
-  return JSON.parse(readFileSync(WORKERS_FILE, 'utf8')).workers;
+/**
+ * tools/workers.json：允许部署的 Worker 和它们跟平台的关系（维护者管）。格式不对直接抛错，不猜。
+ * 返回 Map<Worker 名, { isPlatform, platform: string[] }>，platform 是要补的平台绑定名（按 PLATFORM_BINDINGS 的顺序）。
+ */
+export function workerRegistry() {
+  const file = JSON.parse(readFileSync(WORKERS_FILE, 'utf8'));
+  const bad = (msg) => { throw new Error(`tools/workers.json：${msg}`); };
+  if (!isPlainObject(file.workers)) bad('workers 必须是对象（Worker 名 → 它和平台的关系）');
+  const out = new Map();
+  for (const [name, w] of Object.entries(file.workers)) {
+    if (!/^[a-z][a-z0-9-]*$/.test(name)) bad(`Worker 名 ${JSON.stringify(name)} 不合规`);
+    if (!isPlainObject(w)) bad(`${name} 必须是对象`);
+    for (const k of Object.keys(w)) if (k !== 'role' && k !== 'platform') bad(`${name} 里不认识 ${k}（只许 role、platform）`);
+    const isPlatform = w.role === 'platform';
+    if ('role' in w && !isPlatform) bad(`${name}.role 只许 "platform"`);
+    if (isPlatform !== (name === 'arcade')) bad('平台只能是 arcade，而且 arcade 必须写 "role": "platform"');
+    const list = w.platform ?? [];
+    if (!Array.isArray(list) || list.some((b) => !Object.hasOwn(PLATFORM_BINDINGS, b)) || new Set(list).size !== list.length) {
+      bad(`${name}.platform 只许不重复的 ${Object.keys(PLATFORM_BINDINGS).join('、')}`);
+    }
+    if (isPlatform && list.length) bad('平台自己不接平台');
+    // 钱包要先认人，kit 的 GATE=login 也要 ARCADE：声明了平台关系就一定有 ARCADE
+    if (list.length && !list.includes('ARCADE')) bad(`${name}.platform 写了别的就必须有 ARCADE`);
+    out.set(name, { isPlatform, platform: Object.keys(PLATFORM_BINDINGS).filter((b) => list.includes(b)) });
+  }
+  return out;
+}
+
+/** 声明了平台关系的游戏，最终配置里应该恰好有的服务绑定（规范形式，按 PLATFORM_BINDINGS 的顺序）；没声明的是空数组 */
+export function platformServices(id) {
+  return (workerRegistry().get(id)?.platform ?? []).map((b) => PLATFORM_BINDINGS[b](id));
+}
+
+/** 两个绑定是不是一模一样（键的顺序不算）。只比 JSON 能表达的值，配置本来就是 JSON */
+const sameJson = (a, b) => {
+  const norm = (v) => (Array.isArray(v) ? v.map(norm) : isPlainObject(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, norm(v[k])])) : v);
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+};
+
+/**
+ * 本站部署时叠加在模块配置上的东西（deploy.mjs 生成最终配置用；不改入参，返回新对象）：
+ *   - 所有模块：workers_dev、preview_urls 一律 false（本站只经站点域名访问，workers.dev 和预览地址都绕过网关）；
+ *   - 声明了平台关系的游戏：services 换成规范形式的平台绑定，vars.GATE 盖成 "login"（kit 0.10.0：有 GATE=login 却没 ARCADE 时 fail-closed，
+ *     不会退成游客模式）。模块里已经写了的绑定必须和规范形式一模一样，这一点由 checkConfig 的 source 阶段先查过。
+ */
+export function platformOverlay(source, id) {
+  const out = { ...structuredClone(source), workers_dev: false, preview_urls: false };
+  const services = platformServices(id);
+  if (services.length) {
+    out.services = services;
+    out.vars = { ...(out.vars ?? {}), GATE: 'login' };
+  }
+  return out;
 }
 
 function allowlist() {
@@ -67,8 +130,6 @@ export function moduleInfo(mod) {
   if (g) return { mod: m, id: g[1], isPlatform: false };
   throw new Error(`${mod} 不是可部署的模块（只认 platform 和 games/<id>）`);
 }
-
-const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * 用钉死的 wrangler 读一份配置（.json 或 .jsonc），读之前先拒掉会让解析器之间出分歧的写法。
@@ -115,7 +176,8 @@ export function readConfigStrict(file, label = file) {
  * 按白名单检查一份已读出的配置。
  *   stage = 'source'：仓库里模块根目录的 wrangler.jsonc；路径相对 baseDir（模块目录）解析，必须留在模块里；
  *   stage = 'final' ：部署流程生成的最终配置；main、assets.directory、migrations_dir 必须正好等于 expect 里给的绝对路径，
- *                     D1 必须带上正式库的 id。
+ *                     D1 必须带上正式库的 id；workers_dev 必须是 false；声明了平台关系的游戏必须恰好有那几个绑定、GATE=login。
+ * 游戏的源配置是独立配置：可以不写服务绑定和 GATE、workers_dev 可以是 true（单独部署要 workers.dev 地址），由部署流程补齐、关掉。
  */
 export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, expect = {} }) {
   const errors = [];
@@ -145,8 +207,20 @@ export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, exp
   const allow = allowlist();
 
   if (c.name !== id) bad(`name 必须是 "${id}"（模块 id），现在是 ${JSON.stringify(c.name)}`);
-  if (!allowedWorkers().includes(id)) bad(`Worker "${id}" 不在 tools/workers.json 的名单里：新 Worker 由维护者确认账户里没有同名的之后再加`);
-  if (c.workers_dev !== false) bad('workers_dev 必须写成 false（只经站点的域名访问）');
+  let registry;
+  try {
+    registry = workerRegistry();
+  } catch (e) {
+    return [...errors, `${label}：${e.message}`];
+  }
+  const declared = registry.get(id);
+  if (!declared) bad(`Worker "${id}" 不在 tools/workers.json 的名单里：新 Worker 由维护者确认账户里没有同名的之后再加`);
+  else if (declared.isPlatform !== Boolean(isPlatform)) bad(`tools/workers.json 里 ${id} 的 role 和模块对不上`);
+  const linked = (declared?.platform ?? []).map((b) => PLATFORM_BINDINGS[b](id));
+  // 游戏的源配置可以开 workers.dev（单独部署用），本站部署时由 platformOverlay 关掉；平台和最终配置必须是 false
+  if (stage === 'source' && !isPlatform) {
+    if ('workers_dev' in c && typeof c.workers_dev !== 'boolean') bad('workers_dev 必须是布尔');
+  } else if (c.workers_dev !== false) bad('workers_dev 必须写成 false（只经站点的域名访问）');
   if (c.preview_urls !== false) bad('preview_urls 必须写成 false（预览地址绕过网关）');
   if (typeof c.compatibility_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.compatibility_date)) bad('compatibility_date 必须是 YYYY-MM-DD');
   // 兼容开关会改变运行时的行为（比如 nodejs_compat 打开 Node API），只许名单里的
@@ -196,7 +270,9 @@ export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, exp
   // —— 环境变量：只许名单里的名字，值是普通的 JSON 值。平台的 Secret 名和 SITE_ORIGIN 任何模块都不许写：
   //    vars 和 Secret 同名时会互相覆盖（比如写一个 ADMIN_TOKEN 把正式的令牌换成已知值），SITE_ORIGIN 只由部署流程注入 ——
   if ('vars' in c && isPlainObject(c.vars)) {
-    const names = Object.hasOwn(allow.vars, id) ? allow.vars[id] : [];
+    const names = Object.hasOwn(allow.vars, id) ? [...allow.vars[id]] : [];
+    // 接平台的游戏最终一定有 GATE（部署流程加的），名单里没列也放行
+    if (stage === 'final' && linked.length && !names.includes('GATE')) names.push('GATE');
     for (const [k, v] of Object.entries(c.vars)) {
       if (k === 'SITE_ORIGIN') bad('vars 里不许写 SITE_ORIGIN：正式站的地址由部署流程注入');
       else if (allow.forbiddenVars.includes(k)) bad(`vars 里不许写 ${k}：它是平台的 Secret 名，同名的 vars 会顶替 Secret`);
@@ -204,21 +280,31 @@ export function checkConfig(c, { mod, id, isPlatform, stage, baseDir, label, exp
       if (!['string', 'number', 'boolean'].includes(typeof v) && !isPlainObject(v)) bad(`vars.${k} 只许字符串、数字、布尔或对象`);
     }
   } else if ('vars' in c) bad('vars 必须是对象');
+  // GATE=login 一定要有 ARCADE：kit 在这种情况下 fail-closed，整个游戏都进不去
+  if (!isPlatform && !linked.some((s) => s.binding === 'ARCADE') && isPlainObject(c.vars) && c.vars.GATE === 'login') {
+    bad('vars.GATE 是 "login"，但 tools/workers.json 没给它声明 ARCADE：没有平台时 kit 会拒绝所有人');
+  }
+  if (stage === 'final' && linked.length && c.vars?.GATE !== 'login') bad('接平台的游戏最终配置里 vars.GATE 必须是 "login"');
 
-  // —— 服务绑定：只许指向平台 arcade；钱包只能以自己的身份记账 ——
+  // —— 服务绑定：只许 tools/workers.json 给这个游戏声明的平台绑定，而且必须和规范形式（PLATFORM_BINDINGS）一模一样；
+  //    钱包的 props.game 也在规范形式里，游戏冒充不了别的游戏。源配置可以不写（独立配置），最终配置必须恰好是声明的那几个 ——
   if ('services' in c) {
     if (isPlatform) bad('平台不许有服务绑定');
     else if (!Array.isArray(c.services)) bad('services 必须是数组');
-    else for (const [i, s] of c.services.entries()) {
-      const where = `services[${i}]`;
-      if (!onlyKeys(s, ['binding', 'service', 'entrypoint', 'props'], where)) continue;
-      if (!(typeof s.binding === 'string' && BINDING.test(s.binding))) bad(`${where}.binding 必须是大写标识符`);
-      if (s.service !== 'arcade') bad(`${where}（${s.binding}）只能指向平台 arcade，现在指向 ${JSON.stringify(s.service)}`);
-      if ('entrypoint' in s && !KNOWN_ENTRYPOINTS.has(s.entrypoint)) bad(`${where}.entrypoint 只许 ${[...KNOWN_ENTRYPOINTS].join('、')}，现在是 ${JSON.stringify(s.entrypoint)}`);
-      if ('props' in s && onlyKeys(s.props, ['game'], `${where}.props`) && s.props.game !== id) bad(`${where}.props.game 必须是 "${id}"（不能冒充别的游戏）`);
-      if (s.entrypoint === 'WalletService' && s.props?.game !== id) bad(`${where}：钱包绑定必须带 props.game = "${id}"`);
+    else {
+      const seen = new Set();
+      for (const [i, s] of c.services.entries()) {
+        const where = `services[${i}]`;
+        const name = isPlainObject(s) ? s.binding : undefined;
+        const want = linked.find((w) => w.binding === name);
+        if (!want) bad(`${where}（${JSON.stringify(name)}）不是 tools/workers.json 给 ${id} 声明的平台绑定（现在声明的：${linked.map((w) => w.binding).join('、') || '没有'}；服务绑定只由维护者在那里声明）`);
+        else if (!sameJson(s, want)) bad(`${where}（${name}）必须和规范形式完全一样：${JSON.stringify(want)}，现在是 ${JSON.stringify(s)}（也可以不写，部署时补）`);
+        else if (seen.has(name)) bad(`${where}：${name} 写了两次`);
+        seen.add(name);
+      }
+      if (stage === 'final' && seen.size !== linked.length) bad(`最终配置的服务绑定必须恰好是 ${linked.map((w) => w.binding).join('、')}`);
     }
-  }
+  } else if (stage === 'final' && linked.length) bad(`最终配置缺服务绑定 ${linked.map((w) => w.binding).join('、')}`);
 
   // —— Durable Object：只许本 Worker 自己的类 ——
   if ('durable_objects' in c && onlyKeys(c.durable_objects, ['bindings'], 'durable_objects')) {
@@ -286,6 +372,12 @@ export function checkNormalized(file, { id, isPlatform, label }) {
   for (const [k, v] of Object.entries(FINAL_BUNDLE_FLAGS)) if (n[k] !== v) bad(`${k} 是 ${JSON.stringify(n[k])}，必须是 ${v}`);
   if (n.route || n.routes?.length) bad('不该有路由');
   if (n.workers_dev !== false || n.preview_urls !== false) bad('workers_dev / preview_urls 必须是 false');
+  // 声明了平台关系的游戏：wrangler 眼里也恰好是这几个绑定、GATE=login（规范形式的逐键比较在 checkConfig 里做过）
+  const linked = isPlatform ? [] : platformServices(id);
+  const got = (n.services ?? []).map((s) => `${s.binding}:${s.service}:${s.entrypoint ?? ''}:${JSON.stringify(s.props ?? null)}`).sort();
+  const want = linked.map((s) => `${s.binding}:${s.service}:${s.entrypoint ?? ''}:${JSON.stringify(s.props ?? null)}`).sort();
+  if (JSON.stringify(got) !== JSON.stringify(want)) bad(`服务绑定是 ${JSON.stringify(got)}，应该是 ${JSON.stringify(want)}`);
+  if (linked.length && n.vars?.GATE !== 'login') bad('vars.GATE 必须是 "login"');
   if (n.durable_objects?.bindings?.some((d) => d.script_name || d.environment)) bad('Durable Object 指向了别的 Worker');
   if (n.services?.some((s) => s.service !== 'arcade' || s.environment)) bad('服务绑定指向了别的 Worker');
   if (n.migrations?.some((m) => m.renamed_classes?.length || m.deleted_classes?.length || m.transferred_classes?.length)) bad('DO 迁移里有改名、删除或转移');

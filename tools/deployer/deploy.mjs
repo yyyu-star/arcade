@@ -12,6 +12,8 @@
  *     不找附加模块、不传 source map，见 lib.mjs 的 FINAL_BUNDLE_FLAGS）。
  * 最终配置由这里从审过的 wrangler.jsonc 逐字段拷出白名单里的内容生成（main 指向打包产物、assets 指向资源目录、
  * D1 填上正式库的 id），写成纯 JSON 后再用钉死的 wrangler 读回来查一遍，通过了才部署；路由、域名、SITE_ORIGIN 用命令行注入。
+ * 模块的 wrangler.jsonc 是能单独部署的独立配置；本站的东西由这里叠加（lib.mjs 的 platformOverlay）：workers_dev、preview_urls 关掉，
+ * tools/workers.json 给这个游戏声明了平台关系的，补上规范形式的 ARCADE / WALLET 服务绑定和 GATE=login。
  *
  * wrangler 的运行环境：工作目录是新建的空目录（只有最终配置），--env-file 指向 /dev/null（wrangler 4.151 只在没给 --env-file 时
  * 才读当前目录的 .env/.env.local），环境变量只传必需的几个，CLOUDFLARE_API_BASE_URL 写死成官方地址，HOME 也换成新建的空目录。
@@ -24,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { FINAL_BUNDLE_FLAGS, REPO_ROOT, checkConfig, checkNormalized, checkSourceConfig, moduleInfo, readConfigStrict } from './lib.mjs';
+import { FINAL_BUNDLE_FLAGS, REPO_ROOT, checkConfig, checkNormalized, checkSourceConfig, moduleInfo, platformOverlay, readConfigStrict } from './lib.mjs';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -126,7 +128,7 @@ if (isPlatform) {
   }
 }
 
-// —— 6. 生成最终配置：只拷白名单检查过的字段，路径换成产物的绝对路径 ——
+// —— 6. 生成最终配置：只拷白名单检查过的字段，叠加本站的平台绑定和开关，路径换成产物的绝对路径 ——
 const work = resolve(args.work);
 if (existsSync(work)) fail(`工作目录 ${work} 已存在：必须是新建的空目录`);
 const configDir = join(work, 'config');
@@ -142,7 +144,7 @@ const expect = {
   assets: source.assets ? join(artifact, 'assets') : undefined,
   migrations: migrationsDir,
 };
-const final = { ...structuredClone(source), ...FINAL_BUNDLE_FLAGS };
+const final = { ...platformOverlay(source, id), ...FINAL_BUNDLE_FLAGS };
 delete final.$schema;
 final.main = expect.main;
 if (final.assets) final.assets.directory = expect.assets;

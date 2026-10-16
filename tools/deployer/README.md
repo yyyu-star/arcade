@@ -7,9 +7,11 @@
 
 - `deploy.mjs`：部署作业唯一执行的程序。按白名单检查审过的 `wrangler.jsonc` 和构建作业交来的产物（只当数据），生成最终配置
   （打包开关写死、入口复制到只有它的目录），用钉死的 wrangler 读回来再查一遍，然后 `wrangler deploy --no-bundle`；平台先迁移 D1。
+  模块的 `wrangler.jsonc` 是能单独部署的独立配置，本站的东西由它叠加：`workers_dev`、`preview_urls` 关掉；`tools/workers.json` 给游戏声明了
+  `"platform": ["ARCADE", "WALLET"]` 的，补上规范形式的服务绑定（`lib.mjs` 的 `PLATFORM_BINDINGS`）和 `GATE: "login"`。
   `--dry-run` 只跑到 `wrangler deploy --dry-run`，不连 Cloudflare，本机和 PR 上的预跑都用它。
 - `lib.mjs`：读配置和白名单检查，PR 上的 `tools/check-deploy-config.mjs` 和 `deploy.mjs` 共用。vars 名和兼容开关的名单在
-  `tools/deploy-allowlist.json`，Worker 名单在 `tools/workers.json`。
+  `tools/deploy-allowlist.json`，Worker 名单和它们跟平台的关系在 `tools/workers.json`。
 - `pack.mjs`：构建作业的最后一步，把打包产物和静态资源摆成 deploy.mjs 认的目录结构（不做把关）。
 
 ## 为什么钉死 wrangler

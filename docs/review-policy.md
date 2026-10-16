@@ -95,6 +95,8 @@
 - 新增或改了静态资源目录里的 `_headers`、`_redirects`（包括构建时生成的）：它们不是代码，会作为资源配置随资源一起上传，
   能改响应头（CSP、缓存）和跳转；平台的对整个站点生效，游戏的对自己路径下的资源生效；
 - **新增游戏**：新游戏要在 `tools/workers.json` 登记 Worker 名（维护者先确认 Cloudflare 账户里没有同名的 Worker）、加部署流程、在平台登记、配好钱包和保留昵称，这些由维护者按 [新游戏开发指南](new-game.md) 第 5 节做；
+- **平台关系**：改 `tools/workers.json` 里某个游戏的 `platform`（接不接平台、接哪几个绑定），或者改 `tools/deployer/lib.mjs` 里绑定的规范形式，
+  都只由维护者做：它决定游戏 Worker 在本站以什么身份调平台（认人、钱包记到哪个游戏名下）。游戏的 PR 在 `wrangler.jsonc` 里新加服务绑定会被部署配置检查拒绝；
 - 改了钱包、实盘、联机房间的计费或额度，或者新调用了平台的 `/api` 接口；
 - 改了 D1 迁移；
 - 代理拿不准的任何情况。
@@ -109,6 +111,9 @@
 - **钉死的 wrangler**：部署只用 `tools/deployer/` 里锁定版本的 wrangler（`npm ci --ignore-scripts`），不用模块自己的 `node_modules`。
 - **配置来自审过的提交**：`tools/deployer/deploy.mjs` 用钉死 wrangler 自己的解析器读 `wrangler.jsonc`，按白名单检查（`tools/deployer/lib.mjs`），
   再从里面拷出白名单字段生成最终配置（main 指向打包产物、assets 指向资源目录、平台填正式库的 id），读回来再查一遍才部署。构建期间怎么改配置都影响不到部署。
+- **平台绑定由部署工具补**：模块的 `wrangler.jsonc` 是能单独部署的独立配置；接平台的 `ARCADE`、`WALLET` 服务绑定按 `tools/workers.json` 的声明、
+  以 `lib.mjs` 里写死的规范形式补进最终配置，同时 `GATE` 定成 `"login"`、`workers_dev` 关掉。模块里写了这些绑定的必须和规范形式一模一样，
+  写了没声明的服务绑定一律拒绝，所以游戏改不了自己接平台的方式（比如拿别的游戏名记账）。
 - **wrangler 的运行环境**：新建的空目录、`--env-file /dev/null`（不读任何 `.env`）、只传必需的环境变量、`CLOUDFLARE_API_BASE_URL` 写死成官方地址。
 - **PR 上的快速检查**（`tools/check-deploy-config.mjs`）提前拦下 `.env`、`.npmrc`、`wrangler.json`/`.toml`、`.wrangler/`、名单外隐藏文件、符号链接和白名单外的配置。
 - **人工闸门**：只部署经 PR、由仓库所有者合并的提交（`tools/verify-main.sh`），而且只部署 main 的最新提交（旧运行重跑会失败，

@@ -9,7 +9,7 @@
  *        把令牌发给别人），.npmrc 能换掉装包的源；
  *      - 符号链接：能让检查看到的和实际读到的不是同一个文件；
  *   2. 每个可部署模块根目录的 wrangler.jsonc 用钉死版本的 wrangler 解析，按白名单检查（Worker 名 = 模块 id 且在 tools/workers.json、
- *      只许本模块自己的 DO、指向 arcade 的服务绑定、平台自己的 D1，迁移只许新建类，不许路由、limits、日志外发……，细则见 lib.mjs）。
+ *      只许本模块自己的 DO、tools/workers.json 给它声明的平台绑定（规范形式，可以不写）、平台自己的 D1，迁移只许新建类，不许路由、limits、日志外发……，细则见 lib.mjs）。
  *      还没有 wrangler.jsonc 的游戏（设计、规则核心阶段）跳过。
  * 只查模块根目录的 wrangler.jsonc（部署用的那一份）；test/ 等目录下给本地测试用的配置不部署，不查（新增要维护者审，见 docs/review-policy.md）。
  *
