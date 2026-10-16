@@ -4,7 +4,8 @@
 import type { RoomTexts } from 'arcade-kit/client';
 import type { FanId } from '../core/variants/sichuan-xuezhan/index.ts';
 import type { HighlightId } from '../game/banter.ts';
-import type { StakesId } from '../game/stakes.ts';
+import type { Level } from '../ai/venues.ts';
+import type { StakesId, TierId } from '../game/stakes.ts';
 
 export const GAME_NAME = '雀馆';
 export const VARIANT_NAME: Record<string, string> = { 'sichuan-xuezhan': '川麻·血战到底' };
@@ -86,6 +87,17 @@ export const HIGHLIGHT_NAME: Record<HighlightId, string> = {
 };
 
 export const STAKES_NAME: Record<StakesId, string> = { fun: '娱乐', small: '小', mid: '中', big: '大', lux: '豪华' };
+
+/** 娱乐的三个难度（docs/balance.md 第 3、5 节，四个游戏一样的叫法） */
+export const LEVEL_NAME: Record<Level, string> = { easy: '新手', normal: '普通', hard: '高手' };
+/** 选档卡片上：电脑多强（1–4 颗星）、适合谁。实盘档越大电脑越强 */
+export const STARS: Record<Level | TierId, number> = { easy: 1, normal: 2, hard: 3, small: 1, mid: 2, big: 3, lux: 4 };
+export const LEVEL_FOR: Record<Level, string> = { easy: '第一次玩', normal: '会打了', hard: '想挑战' };
+/**
+ * 一局大约几分钟（真人速度）：模拟器按自己每个决定 3 秒、电脑 1.2 秒、每局另加 20 秒估，8 局 p50 约 18 分钟（DESIGN.md 4.1）；
+ * 卡片上按选的局数乘出来
+ */
+export const MINUTES_PER_ROUND = 2.25;
 
 /** 换三张的方向 */
 export const SWAP_DIR = ['换给下家', '换给对家', '换给上家'] as const;

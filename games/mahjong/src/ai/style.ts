@@ -1,7 +1,7 @@
 /**
  * 电脑这一手按什么打（DESIGN.md 第 5 节）：性格是底子，再叠三层，都只用这个座位看得见的东西：
  * 1. 这一场的状态（Tune.mood）：每个参数在性格的 swing 范围里浮动，同一个性格不同场次不一样；
- * 2. 场地的手软（Tune.soft）：新手场多打错、少防守、读牌粗、少碰少杠；
+ * 2. 场地的手软（Tune.soft）：新手场多打错、少防守、读牌粗、少碰少杠、少做大牌；
  * 3. 局面：落后了追（贪一点、防守松一点），领先了稳（防守紧），快输光了保命，刚点了炮输一大把会上头（看 temper），
  *    最后一局还落后就搏一把。都是按公开的筹码和每局小结算的，别人的手牌一张不看。
  * 没有随机数：浮动由 mood 和参数编号算出来（同一场同一结果）。
@@ -42,16 +42,18 @@ function wobble(mood: number, i: number): number {
 /** 只叠状态和手软（不看局面）：模拟器统计"这一场的性格"用 */
 export function moodStyle(p: Persona, t: Tune): Style {
   const m = (i: number, span = MOOD_RANGE): number => (t.mood === 0 ? 0 : (wobble(t.mood, i) * span * p.swing) / 1_000_000);
-  const soft = clamp(t.soft);
+  // 手软最多 1500（娱乐新手档）：防守压到 0、读牌和功力没了、四成多的决定打错、真人的小胡放过三成多
+  const soft = clamp(t.soft, 0, 1_500);
   const sharp = clamp(t.sharp ?? 0);
   return {
     defense: clamp(((p.defense + m(0)) * (1_500 - soft)) / 1_500),
-    greed: clamp(p.greed + m(1)),
+    // 手软的也少做大牌（新手档的电脑像人一样弱：不刻意防守、不憋清一色）
+    greed: clamp(((p.greed + m(1)) * (1_000 - soft / 2)) / 1_000),
     // 手软的也少碰少杠（慢一点，真人更容易先胡）
     kanLove: clamp(((p.kanLove + m(2)) * (1_000 - soft / 2)) / 1_000),
     pon: clamp(((p.pon + m(3)) * (1_000 - soft / 2)) / 1_000),
     // 手紧的少打错、读牌更准
-    slip: clamp(((p.slip + m(4, p.slip / 2 + 20)) * (1_000 - sharp)) / 1_000 + soft / 4, 0, 450),
+    slip: clamp(((p.slip + m(4, p.slip / 2 + 20)) * (1_000 - sharp)) / 1_000 + soft / 4, 0, 500),
     reads: clamp(((p.reads + m(5) + sharp / 2) * (1_000 - soft)) / 1_000),
     soft,
     skill: clamp(((p.skill + sharp) * (1_000 - soft)) / 1_000),

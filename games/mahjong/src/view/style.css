@@ -240,6 +240,22 @@ button {
 .stake.off {
   opacity: 0.35;
 }
+/* 选档：娱乐三个难度一排、实盘四档一排，每排上面一行小标题 */
+.stakes-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.stakes-label {
+  font-size: var(--fs-sm);
+  opacity: 0.75;
+}
+.stake .stars {
+  font-size: var(--fs-sm);
+  letter-spacing: 1px;
+  color: var(--gold);
+}
 .wallet-note {
   font-size: var(--fs-sm);
   line-height: 1.5;

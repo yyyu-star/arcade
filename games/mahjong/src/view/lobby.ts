@@ -3,21 +3,24 @@
  * 钱包连不上时实盘不可选，娱乐照常。单独部署（没有平台）时只有娱乐，好友房上面多一个昵称框。
  */
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
-import { STAKES, type StakesId } from '../game/stakes.ts';
+import { LEVELS, type Level } from '../ai/venues.ts';
+import { STAKES, type StakesId, type TierId } from '../game/stakes.ts';
 import type { WalletView } from '../net/wallet.ts';
 import { stakeIcon } from './art.ts';
 import { busy, button, el } from './dom.ts';
-import { GAME_NAME, num, STAKES_NAME, VARIANT_NAME } from './text.ts';
+import { GAME_NAME, LEVEL_FOR, LEVEL_NAME, MINUTES_PER_ROUND, num, STAKES_NAME, STARS, VARIANT_NAME } from './text.ts';
 
 export interface LobbyProps {
   wallet: WalletView | null;
   /** 钱包连不上的原因（显示一句话） */
   walletNote: string | null;
   stakes: StakesId;
+  /** 娱乐的难度（第一次玩是新手） */
+  level: Level;
   opts: XzOpts;
   canResume: boolean;
   /** 开单机、开房间要先问钱包和服务器：按钮转圈直到回来 */
-  onSolo(stakes: StakesId, opts: XzOpts): Promise<void>;
+  onSolo(stakes: StakesId, opts: XzOpts, level: Level): Promise<void>;
   onResume(): void;
   onRules(): void;
   /** 好友房：没有时不显示 */
@@ -32,6 +35,7 @@ export interface LobbyProps {
 export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   box.replaceChildren();
   let stakes = p.stakes;
+  let level = p.level;
   const opts: XzOpts = { ...p.opts };
   const head = el('div', 'lobby-head', box);
   el('h1', '', head, GAME_NAME);
@@ -39,19 +43,38 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   el('div', 'ver', box, `v${__MAHJONG_VERSION__}`);
   if (p.canResume) button('act go big', box, '接着打上一场', p.onResume);
 
-  const pick = el('div', 'stakes', box);
+  // 每档一张卡（docs/balance.md 第 5 节，四个游戏一样）：电脑多强（星）、一场约多久、一场最多赢 / 最多输。娱乐三个难度一排，实盘四档一排
+  const pick = el('div', 'stakes-box', box);
+  const card = (row: HTMLElement, on: boolean, off: boolean, icon: StakesId, name: string, stars: number, lines: string[], choose: () => void): void => {
+    const b = button(`stake${on ? ' on' : ''}${off ? ' off' : ''}`, row, '', () => {
+      if (off) return;
+      choose();
+      paint();
+    });
+    b.insertAdjacentHTML('afterbegin', stakeIcon(icon));
+    el('b', '', b, name);
+    const star = el('span', 'stars', b, '★'.repeat(stars) + '☆'.repeat(4 - stars));
+    star.setAttribute('aria-label', `电脑 ${stars} 星`);
+    for (const l of lines) el('small', '', b, l);
+  };
   const paint = (): void => {
     pick.replaceChildren();
-    for (const s of p.standalone ? STAKES.filter((x) => !x.wallet) : STAKES) {
-      const off = s.wallet && (!p.wallet || p.wallet.balance <= 0);
-      const b = button(`stake${s.id === stakes ? ' on' : ''}${off ? ' off' : ''}`, pick, '', () => {
-        if (off) return;
-        stakes = s.id;
-        paint();
+    const mins = `约 ${Math.round((MINUTES_PER_ROUND * opts.rounds) / 5) * 5} 分钟`;
+    el('div', 'stakes-label', pick, '娱乐 · 不算筹码');
+    const fun = el('div', 'stakes', pick);
+    for (const l of LEVELS) {
+      card(fun, stakes === 'fun' && level === l, false, 'fun', LEVEL_NAME[l], STARS[l], [mins, LEVEL_FOR[l]], () => {
+        stakes = 'fun';
+        level = l;
       });
-      b.insertAdjacentHTML('afterbegin', stakeIcon(s.id));
-      el('b', '', b, s.wallet ? `${STAKES_NAME[s.id]}档` : '娱乐');
-      el('small', '', b, s.wallet ? `带 ${num(s.share)}` : '不算筹码');
+    }
+    const tiers = p.standalone ? [] : STAKES.filter((x) => x.wallet);
+    if (!tiers.length) return;
+    el('div', 'stakes-label', pick, '实盘 · 用钱包里的筹码');
+    const real = el('div', 'stakes', pick);
+    for (const s of tiers) {
+      const off = !p.wallet || p.wallet.balance <= 0;
+      card(real, s.id === stakes, off, s.id, `${STAKES_NAME[s.id]}档`, STARS[s.id as TierId], [mins, `最多赢 ${num(s.share * 3)}`, `最多输 ${num(s.share)}`], () => (stakes = s.id));
     }
   };
   paint();
@@ -73,7 +96,8 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
       });
     }
   };
-  row('局数', [4, 8, 16].map((n) => [`${n} 局`, () => opts.rounds === n, () => (opts.rounds = n as 4 | 8 | 16)]));
+  // 局数改了，卡片上的"约多久"跟着变
+  row('局数', [4, 8, 16].map((n) => [`${n} 局`, () => opts.rounds === n, () => ((opts.rounds = n as 4 | 8 | 16), paint())]));
   row('封顶', [3, 4, 5].map((n) => [`${n} 番`, () => opts.cap === n, () => (opts.cap = n as 3 | 4 | 5)]));
   row('换三张', [
     ['换', () => opts.swap, () => (opts.swap = true)],
@@ -89,7 +113,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   ]);
 
   const go = el('div', 'go-row', box);
-  const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, opts)));
+  const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, opts, level)));
   const room = p.onRoom ? button('act big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, opts))) : null;
   if (p.standalone) {
     const row = el('label', 'nick', box);

@@ -7,7 +7,7 @@ import { stream } from 'arcade-kit/rng';
 import { describe, expect, test } from 'vitest';
 import { PERSONAS, STRONGEST } from '../src/ai/personas.ts';
 import { moodStyle, styleOf } from '../src/ai/style.ts';
-import { seatPlan, venueOf, VENUES } from '../src/ai/venues.ts';
+import { LEVELS, seatPlan, venueOf, VENUES } from '../src/ai/venues.ts';
 import { decide } from '../src/ai/xuezhan.ts';
 import { sichuanXuezhan as XZ, view, type XzState, type XzView } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import { NEUTRAL_TUNE } from '../src/core/variants/types.ts';
@@ -33,6 +33,8 @@ function toTurn(s0: XzState): XzState {
 
 describe('场地', () => {
   test('每个场地都有表；好友房不计输赢的实盘档按娱乐', () => {
+    for (const l of LEVELS) expect(VENUES[venueOf('solo', 'fun', true, l)]).toBeDefined();
+    expect(venueOf('solo', 'fun')).toBe('solo:fun:easy');
     for (const st of ['fun', 'small', 'mid', 'big', 'lux'] as const) {
       expect(VENUES[venueOf('solo', st)]).toBeDefined();
       expect(VENUES[venueOf('room', st)]).toBeDefined();
@@ -41,16 +43,25 @@ describe('场地', () => {
     expect(venueOf('room', 'fun')).toBe('room:fun');
   });
 
-  test('新手场偏弱：娱乐、小档手软、没有火锅婆婆；档位越高越强，豪华档火锅婆婆最常见、没有新手', () => {
-    for (const v of ['solo:fun', 'solo:small', 'room:fun']) {
+  test('难度往上逐档变强（docs/balance.md 第 2、3 节）：娱乐新手、普通和实盘小档、中档手软、没有火锅婆婆；手软逐档变小，最难的两个手紧、火锅婆婆最多', () => {
+    for (const v of ['solo:fun:easy', 'solo:fun:normal', 'solo:small', 'solo:mid', 'room:fun']) {
       expect(VENUES[v]!.soft).toBeGreaterThan(0);
       expect(VENUES[v]!.weights[STRONGEST]).toBeLessThanOrEqual(1);
     }
-    const order = ['solo:fun', 'solo:small', 'solo:mid', 'solo:big', 'solo:lux'].map((v) => VENUES[v]!);
-    for (let i = 1; i < order.length; i++) expect(order[i]!.soft).toBeLessThanOrEqual(order[i - 1]!.soft);
-    const lux = VENUES['solo:lux']!.weights;
-    expect(lux[STRONGEST]).toBe(Math.max(...lux));
-    expect(lux[BANDENG]).toBe(0);
+    for (const order of [
+      ['solo:fun:easy', 'solo:fun:normal', 'solo:fun:hard'],
+      ['solo:small', 'solo:mid', 'solo:big'],
+    ]) {
+      const vs = order.map((v) => VENUES[v]!);
+      for (let i = 1; i < vs.length; i++) expect(vs[i]!.soft).toBeLessThan(vs[i - 1]!.soft);
+    }
+    // 最难的两个（娱乐高手、实盘豪华）靠手紧和火锅婆婆变难：豪华档手软一点点是为了让认真打的人大约打平（DESIGN.md 4.1）
+    for (const v of ['solo:fun:hard', 'solo:lux']) {
+      expect(VENUES[v]!.sharp).toBeGreaterThan(0);
+      expect(VENUES[v]!.weights[STRONGEST]).toBe(Math.max(...VENUES[v]!.weights));
+      expect(VENUES[v]!.weights[BANDENG]).toBe(0);
+    }
+    expect(VENUES['solo:fun:easy']!.weights[BANDENG]).toBe(Math.max(...VENUES['solo:fun:easy']!.weights));
     // 好友房实盘一律最强、不手软
     for (const st of ['small', 'mid', 'big', 'lux']) {
       expect(VENUES[`room:${st}`]!.weights.filter((w) => w > 0)).toHaveLength(1);
@@ -92,20 +103,32 @@ describe('这一场的状态和局面', () => {
     expect(soft.reads).toBeLessThan(hard.reads);
   });
 
-  test('手紧（大档、豪华档）：少打错、读牌准、功力高；旧存档没有 sharp 按 0', () => {
+  test('手紧（豪华档、娱乐高手）：少打错、读牌准、功力高；旧存档没有 sharp 按 0', () => {
     const p = PERSONAS[1]!;
     const plain = moodStyle(p, { mood: 0, soft: 0 });
     expect(moodStyle(p, { mood: 0, soft: 0, sharp: 0 })).toEqual(plain);
-    const sharp = moodStyle(p, { mood: 0, soft: 0, sharp: VENUES['solo:lux']!.sharp! });
+    const sharp = moodStyle(p, { mood: 0, soft: 0, sharp: VENUES['solo:fun:hard']!.sharp! });
     expect(sharp.slip).toBeLessThan(plain.slip);
     expect(sharp.reads).toBeGreaterThan(plain.reads);
     expect(sharp.skill).toBeGreaterThan(plain.skill);
     expect(moodStyle(PERSONAS[STRONGEST]!, NEUTRAL_TUNE).skill).toBe(1_000);
-    // 只有大档、豪华档手紧，豪华更紧；新手场、好友房都没有
-    expect(VENUES['solo:lux']!.sharp!).toBeGreaterThan(VENUES['solo:big']!.sharp!);
-    for (const [id, v] of Object.entries(VENUES)) if (id !== 'solo:big' && id !== 'solo:lux') expect(v.sharp ?? 0).toBe(0);
+    // 只有最难的两个场地手紧；新手场、好友房都没有
+    const sharpOnes = Object.entries(VENUES)
+      .filter(([, v]) => (v.sharp ?? 0) > 0)
+      .map(([id]) => id)
+      .sort();
+    expect(sharpOnes).toEqual(['solo:fun:hard', 'solo:lux']);
     expect(seatPlan(stream(KEY, 'persona'), 'solo:lux', 3).tunes.every((t) => t.sharp === VENUES['solo:lux']!.sharp)).toBe(true);
     expect(seatPlan(stream(KEY, 'persona'), 'solo:mid', 3).tunes.every((t) => !('sharp' in t))).toBe(true);
+  });
+
+  test('手软到 1500（娱乐新手）：防守 0、读牌和功力 0、打错多，但不超过一半', () => {
+    const s = moodStyle(PERSONAS[STRONGEST]!, { mood: 0, soft: VENUES['solo:fun:easy']!.soft });
+    expect(s.soft).toBe(1_400);
+    expect(s.reads).toBe(0);
+    expect(s.skill).toBe(0);
+    expect(s.slip).toBeLessThanOrEqual(500);
+    expect(moodStyle(PERSONAS[STRONGEST]!, { mood: 0, soft: 9_999 }).soft).toBe(1_500);
   });
 
   test('局面：落后了贪、领先了稳、快输光了保命；刚点炮输了一大把会上头', () => {
