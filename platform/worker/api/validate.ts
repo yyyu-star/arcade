@@ -26,6 +26,7 @@ export const RESERVED_PERSONAS: Readonly<Record<string, readonly string[]>> = {
   // 前 6 个 2026-10-14 德州上线前先加上，后 4 个随德州 0.2.0 加（2026-10-15）
   texas: ['稳哥', '阿飙', '老好', '慢慢', '算盘', '江湖', '虎子', '老鹰', '叨叨', '小白'],
   mahjong: ['幺妹儿', '熊猫哥', '盖碗儿', '兔头哥', '火锅婆婆', '板凳儿'], // 0.10.9，麻将上线前先加上
+  racing: ['嘟嘟', '慢半拍', '冲冲', '跟屁虫', '刹车王', '弯道王', '精算师'], // 0.10.22，飞驰上线前先加上
 };
 const PERSONA_NAMES = new Set(Object.values(RESERVED_PERSONAS).flat());
 /** 昵称里出现就拒绝的词：冒充电脑、官方。 */

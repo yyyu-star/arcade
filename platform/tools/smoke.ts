@@ -469,6 +469,10 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   // 麻将的好友房（0.10.16）
   const mahjong = friend.page.locator('.card', { hasText: '雀馆' }).getByRole('link', { name: '好友房' });
   check((await mahjong.getAttribute('href')) === '/games/mahjong/?online=1', '麻将"好友房"应该指向 /games/mahjong/?online=1');
+  // 《飞驰》先登记成"即将上线"（0.10.22）：只有"敬请期待"，不给进入游戏和好友房
+  const racing = friend.page.locator('.card', { hasText: '飞驰' });
+  await racing.getByText('敬请期待').waitFor();
+  check((await racing.getByRole('link').count()) === 0, '"即将上线"的飞驰卡片不该有能点的链接');
   for (const img of await friend.page.locator('.card__cover').all()) {
     await img.scrollIntoViewIfNeeded();
     await img.evaluate((el: HTMLImageElement) => el.decode());

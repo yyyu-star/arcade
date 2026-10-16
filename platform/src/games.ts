@@ -96,6 +96,20 @@ export const GAMES: readonly GameEntry[] = [
     // 麻将 PR③ 起认 ?online=1 直接进好友房；之前打开的是选桌页，那里本来就有"好友房"入口（维护者 2026-10-16）
     online: { label: '好友房', query: 'online=1' },
   },
+  {
+    // 外部贡献者的游戏（0.10.22 先登记成"即将上线"：游戏的 PR 合并、线上验证后再改 playable）
+    id: 'racing',
+    name: '飞驰',
+    tagline: '回合制卡牌赛车：换挡、控热、抢弯道',
+    desc: '出牌换挡、算好热量，过弯超速就会打滑，跟车还能吃尾流。三条赛道，和性格各异的电脑比，也能开好友房，叫朋友一起来。',
+    tags: ['赛车', '卡牌', '好友房'],
+    cover: '/covers/racing.webp',
+    path: '/games/racing/',
+    devUrl: 'http://localhost:5177/',
+    status: 'coming',
+    repo: 'yyyu-star/arcade',
+    online: { label: '好友房', query: 'online=1' },
+  },
 ];
 
 /** 登记过的游戏 id：接口的游戏白名单（云存档、分数榜、钱包），只从上面这一份派生 */
