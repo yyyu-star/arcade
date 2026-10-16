@@ -459,8 +459,10 @@ const soloUi = {
   },
   roundEnd(v: XzView, names: string[]): void {
     const unit = stakesOf(solo?.stakes)?.wallet ? '' : ' 分';
+    // 停一下再弹结算：这期间回了选桌、又开了新的一场，就不弹到新牌桌上（自审 C8）
+    const mine = solo;
     window.setTimeout(() => {
-      if (!solo) return;
+      if (!solo || solo !== mine) return;
       if (v.phase === 'over') {
         dialog(stage, 'end', (box) => {
           box.appendChild(roundSummary(v, names, unit));
