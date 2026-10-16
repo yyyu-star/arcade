@@ -97,7 +97,7 @@ export const GAMES: readonly GameEntry[] = [
     online: { label: '好友房', query: 'online=1' },
   },
   {
-    // 外部贡献者的游戏（0.10.22 先登记成"即将上线"：游戏的 PR 合并、线上验证后再改 playable）
+    // 外部贡献者的游戏（0.10.22 先登记成"即将上线"，0.10.24 游戏线上验证后改成能玩）
     id: 'racing',
     name: '飞驰',
     tagline: '回合制卡牌赛车：换挡、控热、抢弯道',
@@ -106,7 +106,7 @@ export const GAMES: readonly GameEntry[] = [
     cover: '/covers/racing.webp',
     path: '/games/racing/',
     devUrl: 'http://localhost:5177/',
-    status: 'coming',
+    status: 'playable',
     repo: 'yyyu-star/arcade',
     online: { label: '好友房', query: 'online=1' },
   },
