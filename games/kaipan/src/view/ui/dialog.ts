@@ -8,6 +8,7 @@ import { addGlyph, addPaper } from './art.ts';
 import { bindTooltip, type TipContent } from './tooltip.ts';
 import { addText } from './text.ts';
 import { viewOf } from '../viewport.ts';
+import { group } from '../../core/format.ts';
 
 /** 场景数据里的标记：有对话框打开时，场景的快捷键暂停响应。 */
 export const OVERLAY_FLAG = 'overlayOpen';
@@ -144,7 +145,7 @@ export function moneyShort(v: number, sign = false): string {
   const trim = (x: number): string => String(Math.round(x * 10) / 10);
   if (a >= 1e8) return `${s}¥${trim(a / 1e8)}亿`;
   if (a >= 1e4) return `${s}¥${trim(a / 1e4)}万`;
-  return `${s}¥${Math.round(a).toLocaleString('en-US')}`;
+  return `${s}¥${group(Math.round(a))}`;
 }
 
 /**

@@ -82,8 +82,12 @@ export class MarketScreen {
     const mood = last ? last.market.mood : s.mood;
     const sig = `${s.seed}:${last?.day ?? -1}:${moves.length}`;
     // 天气 + 大盘
-    this.weather.destroy();
-    this.weather = addGlyph(this.scene, SCREEN.x + 18, SCREEN.y + 16, MOOD_GLYPH[mood], 24);
+    // 0.9.1 交易场景一天里 render 好几次（买卖、展开收起都调）：天气图标和前三名没变就不重建（每次重建都要重新栅格化几段文字）
+    if (mood !== this.weatherMood) {
+      this.weatherMood = mood;
+      this.weather.destroy();
+      this.weather = addGlyph(this.scene, SCREEN.x + 18, SCREEN.y + 16, MOOD_GLYPH[mood], 24);
+    }
     const mret = last ? last.market.ret : (moves[moves.length - 1] ?? 0);
     this.mkt.setText(`${MOOD_NAME[mood]} ${moves.length ? pctArrow(mret) : ''}`);
     setColor(this.mkt, moves.length ? mixLight(signColor(mret)) : COLOR.screenText);
@@ -95,11 +99,12 @@ export class MarketScreen {
     this.sparkLabel.setText(moves.length ? `近${moves.length}天 ${pctArrow(sumMoves(moves))}` : '还没开盘');
     this.sig = sig;
     // 风口热度榜前三（按昨天热度变化）
-    this.board.removeAll(true);
     const cards = themeBoard(s);
     const top = [...cards].sort((a, b) => b.lastDelta - a.lastDelta).slice(0, 3);
+    const bsig = top.map((c) => `${c.id}:${Math.round(c.lastDelta)}`).join('|');
     const bx = SCREEN.x + 194;
-    top.forEach((c, i) => {
+    if (bsig !== this.boardSig) this.board.removeAll(true);
+    (bsig === this.boardSig ? [] : top).forEach((c, i) => {
       const yy = SCREEN.y + 40 + i * 17;
       const medal = this.scene.add.circle(bx + 6, yy, 6, [0xffd23f, 0xd8dde6, 0xd99a5a][i] ?? 0xffffff).setStrokeStyle(1, 0x000000, 0.4);
       const n = addText(this.scene, bx + 6, yy, `${i + 1}`, { size: 9, bold: true, color: COLOR.ink, originX: 0.5, originY: 0.5 });
@@ -109,6 +114,7 @@ export class MarketScreen {
       const dv = addText(this.scene, SCREEN.x + SCREEN.w - 10, yy, d === 0 ? '→0' : `${d > 0 ? '↑' : '↓'}${Math.abs(d)}`, { size: 13, bold: true, num: true, color: d === 0 ? 0x8fa6bd : mixLight(signColor(d)), originX: 1, originY: 0.5 });
       this.board.add([medal, n, ic, nm, dv]);
     });
+    this.boardSig = bsig;
     // 跑马灯内容：风口热度变化、连板个股、大盘
     const q: { icon: string | null; text: string; color: number }[] = [];
     for (const c of cards) {
@@ -132,6 +138,8 @@ export class MarketScreen {
   }
 
   private tapeSig = '';
+  private boardSig = '';
+  private weatherMood: string | null = null;
 
   private makeItem(it: { icon: string | null; text: string; color: number }, x: number): Phaser.GameObjects.Container {
     const yy = SCREEN.y + SCREEN.h - 16;

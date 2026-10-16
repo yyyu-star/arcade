@@ -13,7 +13,7 @@ const LOBBY_URL = '/';
 const HOME_URL = './';
 
 /** 「大厅」按钮去哪儿 */
-export function lobbyUrl(): string {
+function lobbyUrl(): string {
   return standalone() ? HOME_URL : LOBBY_URL;
 }
 

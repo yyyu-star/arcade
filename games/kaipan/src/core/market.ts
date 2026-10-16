@@ -25,7 +25,7 @@ export function clamp(x: number, lo: number, hi: number): number {
 }
 
 /** [lo, hi] 上的均匀数。 */
-export function uniform(rng: Rng, lo: number, hi: number): number {
+function uniform(rng: Rng, lo: number, hi: number): number {
   return lo + (hi - lo) * rng.next();
 }
 
@@ -75,7 +75,7 @@ export function baseRules(): Rules {
 }
 
 /** 难度 1..level 的定义（高等级包含低等级的全部约束）。 */
-export function difficultyMods(level: number): typeof DIFFICULTIES {
+function difficultyMods(level: number): typeof DIFFICULTIES {
   const lv = clampDifficulty(level);
   return DIFFICULTIES.filter((d) => d.level <= lv);
 }
@@ -290,7 +290,7 @@ export function settleTheme(t: ThemeState, dH: number, mr: MarketRules, rng: Rng
 }
 
 /** 新题材（预跑前）：冷门，热度 5..25。 */
-export function newTheme(id: ThemeId, rng: Rng): ThemeState {
+function newTheme(id: ThemeId, rng: Rng): ThemeState {
   const heat = uniformInt(rng, 5, 25);
   const hi = stageDays('cold', id)[1];
   return { id, heat, history: [heat], stage: 'cold', lastStage: 'cold', left: uniformInt(rng, 1, hi), sure: false, boost: null };
@@ -335,7 +335,7 @@ export function newStock(seed: string, id: string, role: keyof typeof BALANCE.ro
   return { id, price, move: 0, boards: 0, history: [], warnings: 0, uncap: 0, delisted: false };
 }
 
-export interface MoveInput {
+interface MoveInput {
   seed: string;
   day: number;
   state: GameState;
@@ -508,7 +508,7 @@ export function moveStocks(inp: MoveInput): StockMove[] {
  * - 跟涨（follow）：同风口大哥涨停、小弟涨 ≥ BALANCE.track.follow。
  * 归因：大盘 + 风口（行业相对大盘）+ 个股自身（相对行业）+ 涨跌停截断，之和等于当天涨跌。不掷随机数。
  */
-export function moveStocksTrack(inp: MoveInput, tape: Readonly<RealMarket>, i: number): StockMove[] {
+function moveStocksTrack(inp: MoveInput, tape: Readonly<RealMarket>, i: number): StockMove[] {
   const { state: s, rules } = inp;
   const T = BALANCE.track;
   const out: StockMove[] = [];

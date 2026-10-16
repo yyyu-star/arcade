@@ -1,10 +1,32 @@
 import { defineConfig } from 'vitest/config';
+import { readdirSync, rmSync } from 'node:fs';
 import pkg from './package.json' with { type: 'json' };
+
+// 股票素材的 parts/ 是 tools/art 的中间产物，运行时只读 manifest.json 和 <id>/<face>.svg，构建产物里不带
+function dropStockParts() {
+  let stocks = '';
+  return {
+    name: 'kaipan-drop-stock-parts',
+    apply: 'build' as const,
+    configResolved(c: { root: string; build: { outDir: string } }) {
+      stocks = `${c.build.outDir.startsWith('/') ? '' : `${c.root}/`}${c.build.outDir}/assets/art/v3/stocks`;
+    },
+    // closeBundle 在 public 目录拷进 outDir 之后
+    closeBundle() {
+      try {
+        for (const name of readdirSync(stocks)) rmSync(`${stocks}/${name}/parts`, { recursive: true, force: true });
+      } catch {
+        /* 没有 stocks 目录就算了 */
+      }
+    },
+  };
+}
 
 // 开发和预览服务监听所有网卡，同一局域网里的手机、平板能直接打开测试。
 export default defineConfig({
   // 相对路径：构建产物放在任意目录或子路径下都能直接访问
   base: './',
+  plugins: [dropStockParts()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),

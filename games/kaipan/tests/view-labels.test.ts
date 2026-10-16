@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE, baseBill, createRun, dispatch, runSummary, titleFor, totalDays } from '../src/core/index.ts';
 import {
   ABOUT_CONTROLS,
-  TUTORIAL_TEXT,
   TURN_LABEL,
   aboutRules,
   billLine,
@@ -13,7 +12,6 @@ import {
   dayLabel,
   endSubtitle,
   holdText,
-  recordRows,
   sellKey,
   shortItemName,
   stText,
@@ -101,26 +99,11 @@ describe('画面文案：结束页与关于', () => {
     expect(titleFor(false, 2, 0, { money: 50_000, start: 100_000 })).toBe('新韭菜');
   });
 
-  it('本地纪录：没玩过显示破折号', () => {
-    const rows = recordRows({ bestMonths: -1, bestAccount: 0, peakAccount: 0, wins: 0, runs: 0 });
-    expect(rows.map((r) => r[0])).toEqual(['bestMonths', 'bestAccount', 'peakAccount', 'wins']);
-    expect(rows[0]?.[2]).toBe('—');
-    expect(recordRows({ bestMonths: 12, bestAccount: 200_000, peakAccount: 250_000, wins: 1, runs: 3 })[3]?.[2]).toBe('1 / 3 局');
-  });
-
   it('玩法简介的数字来自 core', () => {
     const text = aboutRules().join('');
     expect(text).toContain(`大约 ${Math.round(totalDays() / 12)} 个交易日`);
     expect(text).toContain(`能同时拿 ${BALANCE.slots} 只股票`);
     expect(text).toContain(String(Math.round(baseBill(1))).slice(0, 1));
     expect(ABOUT_CONTROLS.length).toBeGreaterThan(2);
-  });
-
-  it('教程每一步都有话，且只有一两句', () => {
-    for (const [k, t] of Object.entries(TUTORIAL_TEXT)) {
-      expect(t.length, k).toBeGreaterThan(10);
-      expect(t.length, k).toBeLessThanOrEqual(70);
-      expect((t.match(/[。！？]/g) ?? []).length, k).toBeLessThanOrEqual(2);
-    }
   });
 });

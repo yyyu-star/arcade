@@ -7,6 +7,7 @@ import { askUser, boardDateOpen, readBoard, submitScoreAs, type BoardDeps, type 
 import type { RecordResult } from '../platform/profile.ts';
 import { standalone } from '../platform/mode.ts';
 import { cloudUserId } from './cloudSync.ts';
+import { sound } from './sound.ts';
 
 /** 这一局在排行榜上的状态（结束页显示一行） */
 export type RunBoard =
@@ -155,6 +156,7 @@ async function send(runId: string, boardId: string, score: number): Promise<void
   // 交上了（odd 多半也交上了）：这个榜之前读的都过时了，这时打开面板要重读
   if (result.kind === 'ok' || result.kind === 'odd') dropBoardCache(boardId);
   if (result.kind !== 'ok') return;
+  sound.cue({ type: 'rewardShow' });
   // 再读一次全站榜告诉玩家排第几（读榜不写库），读到的放进缓存
   const r = await loadBoard(boardId, 'all', true);
   if (r.kind === 'ok') set(runId, { state: 'done', boardId, score, result, rank: r.me ? r.me.rank : undefined });

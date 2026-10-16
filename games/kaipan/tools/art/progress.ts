@@ -320,23 +320,6 @@ function codexCard(): string {
   ));
 }
 
-/** 未解锁：深色问号卡（同 codex_card 尺寸），不做九宫格拉伸 */
-function codexUnknown(): string {
-  let dots = '';
-  for (let y = 18; y < 150; y += 14) for (let x = 16 + ((y / 14) % 2) * 7; x < 112; x += 14) dots += `<circle cx="${x}" cy="${y}" r="1.6"/>`;
-  const q = 'M44 64Q44 44 60 44Q78 44 78 60Q78 72 66 77Q60 80 60 90V94';
-  return svgDoc(120, 160, grained(frag(
-    `<rect x="7" y="9" width="108" height="146" rx="16" fill="${INK}" fill-opacity="0.2"/>` +
-      `<rect x="4" y="4" width="108" height="146" rx="16" fill="#4a3d58"/>` +
-      `<g fill="#6a5a7a">${dots}</g>` +
-      `<rect x="12" y="12" width="92" height="130" rx="11" fill="none" stroke="#7a6a8a" stroke-width="2.4" stroke-dasharray="6 5"/>` +
-      `<path d="${q}" fill="none" stroke="${INK}" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>` +
-      `<path d="${q}" fill="none" stroke="#ffd23f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="60" cy="114" r="8" fill="#ffd23f" stroke="${INK}" stroke-width="4"/>` +
-      `<path d="${sparkleD(92, 30, 6)}" fill="#fff1a8" stroke="${INK}" stroke-width="1.8"/><path d="${sparkleD(26, 128, 5)}" fill="#fff1a8" stroke="${INK}" stroke-width="1.6"/>` +
-      `<rect x="4" y="4" width="108" height="146" rx="16" fill="none" stroke="${INK}" stroke-width="3.2"/>`,
-  ), 0.07, [0, 0, 120, 160]));
-}
-
 /** 新解锁角标：红色爆炸贴 + 白色感叹号 */
 function codexNew(): string {
   const d = starD(16, 16, 15, 0.72, 10, -90);
@@ -375,7 +358,6 @@ export const CODEX_UI: Record<string, () => string> = {
   codex_tab: () => codexTab(false),
   codex_tab_active: () => codexTab(true),
   codex_card: codexCard,
-  codex_unknown: codexUnknown,
   codex_new: codexNew,
   codex_lock: codexLock,
   progress_track: progressTrack,

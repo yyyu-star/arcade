@@ -27,7 +27,7 @@ import { addGlyph, addImage, addPaper, addPill, addSlice, addTile } from '../ui/
 import { Button } from '../ui/button.ts';
 import { addSpark, type Spark } from '../ui/spark.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
-import { addText } from '../ui/text.ts';
+import { addText, fitWidth } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { fluffNote, makeFluff, shortLine, toneOf, type Fluff } from './chatFluff.ts';
 import { storyBeat } from './storyArcs.ts';
@@ -493,7 +493,7 @@ export class ChatView3 {
     }
     // 互相回复：气泡里先是一条灰色引用（「老王：大消费，不急」），下面是回复
     const quote = addText(sc, BUBBLE_X + 20, y + 23, f.quote, { size: 10, color: COLOR.muted });
-    while (quote.width > BUBBLE_W - 36 && Array.from(quote.text).length > 3) quote.setText(`${Array.from(quote.text).slice(0, -2).join('')}…`);
+    fitWidth(quote, BUBBLE_W - 36, 2);
     const qbg = sc.add.rectangle(BUBBLE_X + 10, y + 22, quote.width + 16, 16, 0xf1e7da, 1).setOrigin(0, 0).setRounded(4);
     const bar = sc.add.rectangle(BUBBLE_X + 12, y + 24, 3, 12, COLOR.edge, 1).setOrigin(0, 0);
     const text = addText(sc, BUBBLE_X + 12, y + 42, f.text, { size: 13, wrap: BUBBLE_W - 20, lineSpacing: 2 });
@@ -623,7 +623,7 @@ export class ChatView3 {
       reasonX += 16;
     }
     const reason = addText(sc, reasonX, ry + (flat ? 1 : 0), shortLine(r.text, r.stock.name, 12), { size: flat ? 11 : 12, color: COLOR.ink });
-    while (reason.width > rx + rw - reasonX - 4 && Array.from(reason.text).length > 2) reason.setText(`${Array.from(reason.text).slice(0, -2).join('')}…`);
+    fitWidth(reason, rx + rw - reasonX - 4, 1);
     root.add(reason);
 
     // 卡身（按钮以外）：悬停看全文和数据，点一下打开股票详情
@@ -791,7 +791,7 @@ export class ChatView3 {
       const when = addText(this.scene, 8, 11, `${ago}天前`, { size: 10, color: COLOR.muted, originY: 0.5 });
       const t = addText(this.scene, 8 + when.width + 5, 11, `${name}：${themeById(w.theme).name} ${sign > 0 ? '↑' : sign < 0 ? '↓' : '→'}${w.days}天`, { size: 11, bold: true, color: ink, originY: 0.5 });
       const tRoom = room - when.width - 5;
-      while (t.width > tRoom && t.text.length > 4) t.setText(`${Array.from(t.text).slice(0, -2).join('')}…`);
+      fitWidth(t, tRoom, 3);
       const bg = this.scene.add.rectangle(0, 0, CW, 22, 0xfff3d6).setOrigin(0, 0).setRounded(8).setStrokeStyle(1.5, COLOR.gold, 1);
       const node = this.scene.add.container(CX, y, [bg, when, t, r]);
       bg.setInteractive();
@@ -920,11 +920,6 @@ export class ChatView3 {
     t.setPosition(label.width + 22, 4);
     const node = this.scene.add.container(CX, 0, [bg, pill, label, t]).setVisible(false);
     return { node, h };
-  }
-
-  /** 兼容旧调用：只有吐槽。 */
-  async comments(anim: Animator, list: Comment[], gap = 260): Promise<void> {
-    await this.afterClose(anim, list, [], gap);
   }
 
   /** 群主的名字旁边带一个「群主」小签（文案里说"群主"，群里显示的是网名）。 */

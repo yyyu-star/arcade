@@ -206,7 +206,7 @@ export function checkSegment(raw: unknown, themeIds: readonly ThemeId[]): string
  * 行业超额收益（pp）的指数均摊：ex[i] = smooth × e[i] + (1 − smooth) × ex[i − 1]。
  * 只是把每天的超额收益摊到之后几天（总和不变，末尾没摊完的部分除外），让风口像 0.3 一样有惯性。
  */
-export function smoothExcess(sector: readonly number[], market: readonly number[], smooth: number): number[] {
+function smoothExcess(sector: readonly number[], market: readonly number[], smooth: number): number[] {
   const out: number[] = [];
   let prev = 0;
   for (let i = 0; i < sector.length; i++) {

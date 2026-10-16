@@ -1,6 +1,7 @@
 import { FEEL_LABEL, chatView, holdingCards, stockById, themeById, type GameState } from '../core/index.ts';
 import { touched } from '../platform/localChange.ts';
 import { defaultStore, type KeyValueStore } from '../platform/settings.ts';
+import { ellipsize, group } from '../core/format.ts';
 
 /**
  * 分步教程的进度与触发条件（纯逻辑，不依赖 Phaser，可单测）。
@@ -153,12 +154,8 @@ interface TutorialCard {
 export const TUTORIAL_LINE_MAX = 15;
 
 /** 名字太长时截短（保证整句不超过上限）。 */
-function clip(name: string, n: number): string {
-  return [...name].length <= n ? name : `${[...name].slice(0, n - 1).join('')}…`;
-}
-
 function money(v: number): string {
-  return `¥${Math.round(v).toLocaleString('en-US')}`;
+  return `¥${group(Math.round(v))}`;
 }
 
 function pct(v: number): string {
@@ -172,7 +169,7 @@ function pct(v: number): string {
  */
 export function tutorialCard(step: TutorialStep, s: Readonly<GameState>, stockId: string | null = null, scheme: 'cn' | 'intl' = 'cn'): TutorialCard {
   const last = s.lastDay;
-  const name = (id: string, n: number): string => clip(stockById(id).name, n);
+  const name = (id: string, n: number): string => ellipsize(stockById(id).name, n);
   switch (step) {
     case 'goal':
       return { line: '月底前，凑够要还的钱', chips: [{ icon: 'glyph:house', text: money(s.bill.amount), tone: 'accent' }, { icon: 'glyph:arrow_up', text: '买变火的', tone: 'up' }] };
@@ -201,7 +198,7 @@ export function tutorialCard(step: TutorialStep, s: Readonly<GameState>, stockId
         if (big && Math.abs(Math.round(big.dH)) >= 1) {
           const d = Math.round(big.dH);
           chips.push({ icon: `theme:${big.id}`, text: `热度${d > 0 ? '+' : ''}${d}`, tone: d > 0 ? 'up' : 'down' });
-          if (!mine) line = `${clip(themeById(big.id).name, 4)}热度${d > 0 ? '涨' : '跌'}，股票跟着${d > 0 ? '涨' : '跌'}`;
+          if (!mine) line = `${ellipsize(themeById(big.id).name, 4)}热度${d > 0 ? '涨' : '跌'}，股票跟着${d > 0 ? '涨' : '跌'}`;
         }
       }
       if (chips.length === 0) chips.push({ icon: 'glyph:arrow_up', text: '热度↑', tone: 'up' }, { icon: 'glyph:arrow_up', text: '股价↑', tone: 'up' });

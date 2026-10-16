@@ -7,7 +7,7 @@
 import { formatMoney, formatPoints, type RunSummary } from '../core/index.ts';
 import { artRef, stockKey } from './assets.ts';
 import { chips } from './liveText.ts';
-import { arrowOf, COLOR, FONT, FONT_NUM, signColor } from './theme.ts';
+import { arrowOf, COLOR, css, FONT, FONT_NUM, signColor } from './theme.ts';
 
 const POSTER_W = 1080;
 const POSTER_H = 1350;
@@ -67,8 +67,6 @@ export function posterContent(sum: Readonly<RunSummary>, rank?: number | null): 
     shareTitle: sum.daily ? `开盘每日挑战${rank ? ` · 今天第 ${rank} 名` : ''}，同一局你来试试` : '开盘 · 我的这一局',
   };
 }
-
-const css = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   g.beginPath();

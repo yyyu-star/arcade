@@ -13,6 +13,7 @@ import { goLobby, lobbyLabel } from './view/lobby.ts';
 import { live, lobbyConfirm, startLive } from './view/live.ts';
 import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
 import { startGame } from './view/game.ts';
+import { throttleWhenIdle } from './view/idleFps.ts';
 import { initInputMode, onInputModeChange } from './view/input.ts';
 import { installFocus } from './view/ui/focus.ts';
 import { applySettingsToOptions, type ViewOptions } from './view/options.ts';
@@ -87,6 +88,7 @@ if (!fromUrl && !params.debug) startLive(session.state);
 // 档案读坏了会就地备份重建，开始菜单提示一次
 session.profileNotice = loadProfile().notice === 'corrupt';
 const game = startGame(session, 'app', { toTitle: !fromUrl });
+throttleWhenIdle(game, session);
 // 手机平板上画布按看得见的区域铺（iOS Safari 的地址栏、标签栏不压画面），尺寸一变让 Phaser 重新量；别的走 CSS 的 100dvh
 if (LOW_MEMORY) {
   fitViewport(() => {

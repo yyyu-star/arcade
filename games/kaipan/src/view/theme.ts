@@ -78,16 +78,8 @@ export const FONT =
 /** 数字用等宽感更强的字体（滚动时不抖），回退到中文字体。 */
 export const FONT_NUM = '"Consolas", "Menlo", "DejaVu Sans Mono", "Microsoft YaHei", "Droid Sans Fallback", monospace';
 
-let scheme: ColorScheme = 'cn';
-
-/** 当前配色的说明文字。 */
-export function schemeLabel(): string {
-  return scheme === 'cn' ? '红涨绿跌' : '绿涨红跌';
-}
-
 /** 切换涨跌配色：cn 红涨绿跌，intl 绿涨红跌。 */
 export function applyColorScheme(next: ColorScheme): void {
-  scheme = next;
   COLOR.up = next === 'cn' ? RED : GREEN;
   COLOR.down = next === 'cn' ? GREEN : RED;
 }

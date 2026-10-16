@@ -1,6 +1,7 @@
 import { formatMoney, formatPoints, friendById, stockById, themeById, type DayReport, type HoldingMove, type RetPart } from '../core/index.ts';
 import { bestHighlight } from './tempoText.ts';
 import { moneyWord } from './labels.ts';
+import { ellipsize } from '../core/format.ts';
 
 /**
  * 收盘小结（F1）的文字：只用当天已经揭晓的 DayReport（归因 parts / amount、账户层效果），不碰真实阶段。纯函数，可单测。
@@ -159,8 +160,7 @@ export function headlineOf(r: DayReport, total = r.account.after - r.account.bef
 /** 拆解条的短标签：规则层说明的第一个词组（「运气（每天都有的小起伏）让它涨了 5.1%」→「运气」），整句放悬停提示。 */
 export function shortPart(label: string, max = 8): string {
   const head = (label.split(/[（(：:，,；;]/)[0] ?? label).trim();
-  const chars = Array.from(head);
-  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : head || label;
+  return ellipsize(head, max) || label;
 }
 
 /** 拆解条：每一项一行（说明 + 数值），按影响大小排，值为 0 的不列。 */

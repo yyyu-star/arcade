@@ -339,6 +339,7 @@ export class EndScene extends BaseScene {
       if (!blob) return;
       const done = (text: string): void => {
         if (!b.scene) return;
+        sound.ui(text === '没存上' ? 'denied' : text === '晒战绩' ? 'close' : 'select');
         b.setLabel(text);
         this.time.delayedCall(1800, () => b.scene && b.setLabel('晒战绩'));
       };

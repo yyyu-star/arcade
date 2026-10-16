@@ -218,7 +218,7 @@ export function dayMarketRules(s: Readonly<GameState>): MarketRules {
 }
 
 /** 股灾那个月的突发账单 id（不参加平时的随机突发账单）。 */
-export const CRASH_BILL_ID = 'bailout';
+const CRASH_BILL_ID = 'bailout';
 
 /** "股灾"从第几级开始。 */
 export const CRASH_LEVEL = 6;

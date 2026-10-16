@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { CloudState, CloudView } from '../../platform/cloud.ts';
 import { cloudView, onCloudChange } from '../cloudSync.ts';
-import { COLOR } from '../theme.ts';
+import { COLOR, css } from '../theme.ts';
 import { addText } from './text.ts';
 import { HIT_MIN } from './button.ts';
 import { bindTooltip, pinTooltip } from './tooltip.ts';
@@ -78,7 +78,7 @@ export class CloudBadge extends Phaser.GameObjects.Container {
     g.fillStyle(look.color, 1);
     puff(0);
     this.drawMark(v.state);
-    this.word.setText(look.word).setColor(`#${look.color.toString(16).padStart(6, '0')}`);
+    this.word.setText(look.word).setColor(css(look.color));
     this.spin?.stop();
     this.spin = null;
     this.mark.setAngle(0);

@@ -4,10 +4,11 @@
  */
 import { liveReturn } from '../core/liveTiers.ts';
 import type { LiveRecord } from '../platform/live.ts';
+import { group } from '../core/format.ts';
 
 /** 筹码数：千分位（不用 toLocaleString：各浏览器的分隔符不一样） */
 export function chips(n: number): string {
-  return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return group(Math.trunc(n));
 }
 
 /** 带正负号的差额：+120 / −360（减号用全角的 −，和游戏里的钱一致） */

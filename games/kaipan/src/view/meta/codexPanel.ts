@@ -748,7 +748,7 @@ export function achievementBadge(scene: Phaser.Scene, x: number, y: number, tier
 }
 
 /**
- * 没解锁的卡：深紫底、一层小点、描边，配色照素材 ui/codex_unknown。
+ * 没解锁的卡：深紫底、一层小点、描边，配色沿用原来那张问号卡素材。
  * 和解锁卡的九宫格素材对齐：素材四周留 4 的透明边，底下 8 里有一道阴影，所以卡身是 (4, 4) 起 (w-8)×(h-12)。
  */
 function lockedCard(s: Phaser.Scene, w: number, h: number): Phaser.GameObjects.Graphics {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DAILY_RULES, DAILY_WIN_BASE, dailyBoardId, dailyScore, dailyScoreView, dailySegmentId, dailySetup, hashSeed, pickSegmentId, type GameState, type RunSummary } from '../src/core/index.ts';
 import { DAILY_SEGMENTS } from '../src/core/content/dailySegments.ts';
-import { boardDateOpen, cleanName, readBoard, shiftDate, submitScore, type BoardDeps, type SubmitResult } from '../src/platform/board.ts';
+import { boardDateOpen, askUser, cleanName, readBoard, shiftDate, submitScoreAs, type BoardDeps, type SubmitResult } from '../src/platform/board.ts';
 import { KEEPALIVE_BYTES, keepaliveLeft, resetKeepalive } from '../src/platform/keepalive.ts';
 import type { RecordResult } from '../src/platform/profile.ts';
 import { BOARD_CACHE_MS, boardBeforeLeave, boardCheck, loadBoard, retryRun, runBoard, setBoardDeps, submitRun, warmBoardUser } from '../src/view/dailyBoard.ts';
@@ -16,6 +16,11 @@ interface Call {
   url: string;
   init: RequestInit;
   body: unknown;
+}
+
+/** 先认人（页面没记着账号就问平台）再交分 */
+async function submitScore(d: BoardDeps, boardId: string, score: number): Promise<SubmitResult> {
+  return submitScoreAs(d, d.userId() ?? (await askUser(d)), boardId, score);
 }
 
 function fake(reply: (c: Call) => Response | Promise<Response>, userId: string | null = 'u1') {

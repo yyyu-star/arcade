@@ -8,7 +8,7 @@
  */
 import { getSettings, type Settings } from '../../platform/settings.ts';
 import { AudioEngine, type EngineStats } from './engine.ts';
-import { busLevels, shouldSchedule } from './logic.ts';
+import { audible, busLevels, shouldSchedule } from './logic.ts';
 import { mountSoundboard } from './soundboard.ts';
 import type { AudioApi, Cue, Mood } from './types.ts';
 
@@ -112,8 +112,14 @@ class RealtimeAudio {
 
   private cue(c: Cue): void {
     if (!this.engine || !this.ctx || this.paused || this.disposed) return;
-    // 某些浏览器会在切后台/来电后把上下文置为 suspended/interrupted：静默尝试恢复
-    if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => {});
+    // 静音 / 总音量 0：一点声音都不出（音乐的总线增益另由 applySettings 压到 0）
+    if (!audible(this.settings)) return;
+    // 某些浏览器会在切后台/来电后把上下文置为 suspended/interrupted：尝试恢复，但这一声丢掉。
+    // 暂停中的上下文时钟不走，排进去的音效会在恢复的一瞬间全部一起响。
+    if (this.ctx.state !== 'running') {
+      void this.ctx.resume().catch(() => {});
+      return;
+    }
     this.engine.cue(c);
   }
 

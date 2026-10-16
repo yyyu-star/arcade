@@ -89,11 +89,6 @@ function systemPill(): Frag {
   return frag(`<rect x="1" y="1" width="94" height="26" rx="13" fill="#e9d9bf" fill-opacity="0.9"/>`);
 }
 
-/** 未读红点 / 战绩角标 20×20 */
-function dot(): Frag {
-  return frag(`<circle cx="10" cy="10" r="8.5" fill="#ff5d5d" stroke="${INK}" stroke-width="2.4"/>${line('M7 6.5q2 -1.6 4 -1', '#ffffff', 1.6, ' stroke-opacity="0.8"')}`);
-}
-
 export function build(write: (rel: string, data: string) => void): number {
   const list: [string, number, number, Frag][] = [
     ['phone_frame', 360, 720, phoneFrame()],
@@ -104,7 +99,6 @@ export function build(write: (rel: string, data: string) => void): number {
     ['bubble_right', 64, 48, bubble('right', '#ffe28a')],
     ['bubble_card', 96, 96, bubbleCard()],
     ['system_pill', 96, 28, systemPill()],
-    ['badge_dot', 20, 20, dot()],
   ];
   for (const [name, w, h, f] of list) write(`chat/${name}.svg`, svgDoc(w, h, f));
   return list.length;

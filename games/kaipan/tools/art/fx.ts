@@ -7,7 +7,7 @@
  *   firework_star 24×24、firework_dot 12×12（白色，运行时着色）、firework_trail 8×40
  *   raincloud 128×80、raindrop 10×16 跌停雨云（带愁眉）
  *   link_beam 128×24（横向三段拉伸：两端各 16px 不拉伸）、link_spark 32×32 龙头带动连线
- *   coin 32×32、coin_edge 8×32（翻转帧）、sparkle 16×16
+ *   coin 32×32、sparkle 16×16
  *   tide 256×48（横向无缝平铺，退潮的潮水）
  */
 import { INK, TEAR, WHITE, type Frag, ellipseD, frag, hiArc, merge, rng, shape, smoothClosed, sparkleD, starD, svgDoc } from './lib/svg.ts';
@@ -115,10 +115,6 @@ function coin(): Frag {
   );
 }
 
-function coinEdge(): Frag {
-  return frag(`<rect x="1.5" y="2" width="5" height="28" rx="2.5" fill="#e8a020" stroke="${INK}" stroke-width="2"/><path d="M4 6v20" stroke="#fff1a0" stroke-width="1.2"/>`);
-}
-
 function sparkle(): Frag {
   return frag(`<path d="${sparkleD(8, 8, 7)}" fill="#ffffff"/>`);
 }
@@ -153,7 +149,6 @@ export function build(write: (rel: string, data: string) => void): number {
     ['link_beam', 128, 24, linkBeam()],
     ['link_spark', 32, 32, linkSpark()],
     ['coin', 32, 32, coin()],
-    ['coin_edge', 8, 32, coinEdge()],
     ['sparkle', 16, 16, sparkle()],
     ['tide', 256, 48, tide()],
   ];

@@ -8,11 +8,8 @@ import {
   itemById,
   MAX_DIFFICULTY,
   MIN_DIFFICULTY,
-  stockById,
-  themeById,
   type BillView,
   type Dir,
-  type GameState,
   type RunSummary,
   type StockCard,
   type TopBar,
@@ -20,7 +17,7 @@ import {
 } from '../core/index.ts';
 import type { RunBoard } from './dailyBoard.ts';
 import { FEEL_CYCLE, TURN_WORD } from './glossary.ts';
-import { FEEL_LABEL } from '../core/index.ts';
+import { ellipsize } from '../core/format.ts';
 
 /**
  * 界面文案与纯计算（不依赖 Phaser，可单测）。涉及规则的数字一律从 core 取。
@@ -155,16 +152,6 @@ export function endSubtitle(s: RunSummary): string {
   return trade ? `${s.month} 月要还的钱没还上：${trade}${bills && s.billMoney ? `，${bills}` : ''}` : `${s.month} 月要还的钱没还上，游戏结束`;
 }
 
-/** 本地纪录的行：[字段, 标题, 数值]。 */
-export function recordRows(r: { bestMonths: number; bestAccount: number; peakAccount: number; wins: number; runs: number }): [string, string, string][] {
-  return [
-    ['bestMonths', '最多还上', r.bestMonths < 0 ? '—' : `${r.bestMonths} 个月`],
-    ['bestAccount', '通关时最多有', r.bestAccount > 0 ? formatMoney(r.bestAccount) : '—'],
-    ['peakAccount', '历史最高账户', r.peakAccount > 0 ? formatMoney(r.peakAccount) : '—'],
-    ['wins', '通关次数', `${r.wins} / ${r.runs} 局`],
-  ];
-}
-
 /** 关于面板里的玩法简介（数字来自 core）。 */
 export function aboutRules(): string[] {
   return [
@@ -189,81 +176,11 @@ export const ABOUT_TOUCH_CONTROLS: [string, string][] = [
   ['跳过动画', '点屏幕任意处'],
 ];
 
-/**
- * 分步教程每一步的话（一两句，像朋友说话，不说教）。键见 view/tutorial.ts 的 TutorialStep。
- * 这是没有当天数据时的说法；有数据时用 tutorialText() 结合当天的真实结果讲。
- */
-export const TUTORIAL_TEXT: Record<'goal' | 'chat' | 'rec' | 'open' | 'colors' | 'heat' | 'chain' | 'boards' | 'sell' | 'bill', string> = {
-  goal: '你的任务：每个月底还上一笔钱。办法：买正在变火的风口里的股票，等它涨。',
-  colors: '红色是涨，绿色是跌（设置里可以反过来）。',
-  chat: '这是群聊。群友每天都会说某个风口今天涨还是跌，名字旁写着「新来的」或「说对 3/5」：他这局说对了几次、一共说了几次。',
-  rec: '挑哪只？看左边看板，挑"要火"的风口里的股票，点它的「买入」，它就进到你的持仓格里。',
-  open: '买好了就点「开盘」，看看今天涨还是跌。',
-  heat: '左边是风口看板。热度涨，这个风口的股票就涨；热度跌，股票就跌。',
-  chain: '带头大哥涨停时，同一个风口的小弟也会跟着多涨一点。这叫大哥带小弟。',
-  boards: '连着几天都涨停，叫连续涨停。越连越猛，但随时可能没封住，一下子掉下来。',
-  sell: '这只今天能卖了（今天买的要等明天才能卖）。觉得它要凉了，就点「卖出」，这一格变回现金。',
-  bill: '月底到了，账户里自动扣掉这个月要还的钱，还不上就游戏结束。这个月挺过来了，挑一样奖励吧。',
-};
-
 /** 赚亏一句话：「赚了 ¥5,890」「亏了 ¥1,200」「没赚没亏」。 */
 export function moneyWord(delta: number): string {
   const v = Math.round(delta);
   if (v === 0) return '没赚没亏';
   return v > 0 ? `赚了 ${formatMoney(v)}` : `亏了 ${formatMoney(-v)}`;
-}
-
-/** 带符号的整数：+15 / -8。 */
-function signed(n: number): string {
-  const v = Math.round(n);
-  return v > 0 ? `+${v}` : `${v}`;
-}
-
-/**
- * 结合当天真实结果的教程说法（只用已经揭晓的结果：昨天的热度变化、涨跌、涨停；不碰真实阶段）。
- * 没有可用的数据时退回 TUTORIAL_TEXT。
- */
-export function tutorialText(step: keyof typeof TUTORIAL_TEXT, s: Readonly<GameState>, stockId: string | null = null, opts: { scheme?: 'cn' | 'intl' } = {}): string {
-  const last = s.lastDay;
-  const themeName = (id: string): string => themeById(id as never).name;
-  if (step === 'goal') {
-    return `你的任务：每个月底还上一笔钱（这个月 ${formatMoney(s.bill.amount)}）。办法：买正在变火的风口里的股票，等它涨。`;
-  }
-  if (step === 'rec') return `挑哪只？看左边看板，挑「${FEEL_LABEL.warming}」的风口里的股票，点它的「买入」，它就进到你的持仓格里。`;
-  if (step === 'colors') return opts.scheme === 'intl' ? '绿色是涨，红色是跌（设置里可以换成红涨绿跌）。' : '红色是涨，绿色是跌（设置里可以反过来）。';
-  if (step === 'heat' && last && last.themes.length > 0) {
-    // 先讲自己手里的：它昨天涨跌了多少、最大的原因是什么；再看看板上动得最多的风口
-    const mine = [...last.holdings].filter((x) => x.stockId).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
-    let own = '';
-    if (mine) {
-      const top = [...(mine.parts ?? [])].sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0];
-      const how = Math.abs(mine.ret) < 0.05 ? '没怎么动' : mine.ret > 0 ? `涨了 ${formatPoints(mine.ret, 1, false)}` : `跌了 ${formatPoints(-mine.ret, 1, false)}`;
-      own = `你的${stockById(mine.stockId).name}昨天${how}${top ? `，主要是因为：${top.label}` : ''}。`;
-    }
-    const ownTheme = mine ? stockById(mine.stockId).theme : null;
-    const big = [...last.themes].filter((t) => t.id !== ownTheme).sort((a, b) => Math.abs(b.dH) - Math.abs(a.dH))[0];
-    const other = big && Math.abs(Math.round(big.dH)) >= 3 ? `再看左边：${themeName(big.id)}热度 ${signed(big.dH)}，它的股票都跟着${big.dH > 0 ? '涨' : '跌'}了。` : '左边看板是各个风口的热度：热度涨，股票就涨。';
-    if (own || other) return `${own}${other}`;
-  }
-  if (step === 'chain' && last && stockId) {
-    const link = last.chains.find((c) => c.held.includes(stockId));
-    const st = stockById(stockId);
-    const mv = last.stocks.find((x) => x.id === stockId);
-    if (link && mv && mv.chain > 0) {
-      return `${stockById(link.leader).name}是带头大哥，昨天涨停了，同风口的小弟${st.name}也跟着多涨了 ${formatPoints(mv.chain)}。这叫大哥带小弟。`;
-    }
-  }
-  if (step === 'boards' && last && stockId) {
-    const mv = last.stocks.find((x) => x.id === stockId);
-    const st = stockById(stockId);
-    if (mv?.blown) return `${st.name}昨天本来涨停了，收盘前又被砸下来，这叫涨停没封住。连得越久，摔得越疼。`;
-    if (mv && mv.boards >= 2) return `${st.name}已经连续涨停 ${mv.boards} 天了！越连越猛，但随时可能没封住，一下子掉下来。`;
-  }
-  if (step === 'sell' && stockId) {
-    const st = stockById(stockId);
-    return `${st.name}今天能卖了（今天买的要等明天才能卖）。觉得它要凉了，就点「卖出」，这一格变回现金。`;
-  }
-  return TUTORIAL_TEXT[step];
 }
 
 // ================================================================ 0.3.0 长线：人设、难度、每日挑战、图鉴、成就、档案
@@ -390,28 +307,11 @@ export function revealShown(e: { short?: boolean; ret: number; move: number; ste
   return e.short ? e.ret : (e.steps[0]?.value ?? e.move) - e.stock.chain;
 }
 
-/**
- * 0.5 群聊气泡与推荐卡上的短话（≤10 字）：第一句够短就用第一句；否则按逗号拆开，跳过太短的称呼（「家人们」）
- * 和与 skip 相同的词（推荐理由开头的股票名），取第一个像样的分句；还长就截断。
- */
-export function chatShort(text: string, skip = ''): string {
-  const t = text.replace(/^【[^】]*】/, '').replace(/（[^）]*）|\([^)]*\)/g, '').trim();
-  const len = (x: string): number => Array.from(x).length;
-  const cut = (x: string): string => (len(x) > 10 ? `${Array.from(x).slice(0, 9).join('')}…` : x);
-  const sentences = t.split(/[。！？!?\n]/).map((x) => x.trim()).filter(Boolean);
-  const first = sentences[0] ?? t;
-  if (len(first) <= 10 && len(first) > 3 && !first.startsWith(skip || '\u0000')) return first;
-  const clauses = t.split(/[，,。！!？?；;：:\n]/).map((x) => x.trim()).filter(Boolean);
-  const good = clauses.find((c) => c !== skip && len(c) > 3) ?? clauses.find((c) => c !== skip) ?? first;
-  return cut(good);
-}
-
 /** 气泡里的短话：取第一句；还长就取第一个逗号前；再长截到 16 字。 */
 export function shortHint(text: string): string {
   const first = (text.split(/[。！？\n]/)[0] ?? text).trim();
   const clause = Array.from(first).length > 16 ? (first.split('，')[0] ?? first) : first;
-  const chars = Array.from(clause);
-  return chars.length > 16 ? `${chars.slice(0, 15).join('')}…` : clause;
+  return ellipsize(clause, 16);
 }
 
 

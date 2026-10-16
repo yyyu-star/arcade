@@ -16,6 +16,7 @@ import { addText, setColor } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { tipOnButton, wanShort } from './bits.ts';
 import { phoneLayout } from '../viewport.ts';
+import { ellipsize } from '../../core/format.ts';
 
 const W = 1200;
 const H = 660;
@@ -49,12 +50,6 @@ const DESKTOP: Geo = { w: W, h: H, cardW: CARD_W, cardH: CARD_H, cardGap: CARD_G
  * 字号不变，只是收紧间距。
  */
 const PHONE_GEO: Geo = { w: 940, h: 430, cardW: 170, cardH: 100, cardGap: 10, cardsY: 64, badge: 48, badgesY: 250, personaY: 182, diffY: 322, side: 24 };
-
-/** 超过 n 字截短。 */
-function clip(t: string, n: number): string {
-  const cs = [...t];
-  return cs.length <= n ? t : `${cs.slice(0, n - 1).join('')}…`;
-}
 
 /** 人设立绘（缺素材时画一个带首字的圆，不出烂图）。 */
 export function addPortrait(scene: Phaser.Scene, x: number, y: number, p: Pick<PersonaView, 'id' | 'name'>, locked: boolean, w = 150): Phaser.GameObjects.GameObject[] {
@@ -442,7 +437,7 @@ export class SetupPanel extends Dialog {
     }
     if (this.live) {
       this.refreshLive();
-      if (p) this.personaDesc.setText(clip(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
+      if (p) this.personaDesc.setText(ellipsize(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
       return;
     }
     this.diffText.setText(this.levelShort(this.difficulty));
@@ -450,7 +445,7 @@ export class SetupPanel extends Dialog {
     const d = difficultiesView()[this.difficulty - 1];
     if (d) {
       const t = this.levelText(d.level, d.desc, d.detail);
-      this.diffDesc.setText(clip(t.desc === this.levelShort(this.difficulty) ? (t.detail ?? t.desc) : t.desc, 48));
+      this.diffDesc.setText(ellipsize(t.desc === this.levelShort(this.difficulty) ? (t.detail ?? t.desc) : t.desc, 48));
       // 叠加的几级：一排小徽章（第 1 级时写「最普通的市场」）
       this.stack.removeAll(true);
       const s = this.scene;
@@ -463,7 +458,7 @@ export class SetupPanel extends Dialog {
         this.stack.add(addText(s, 28, 0, '最普通的市场', { size: TYPE.label, color: COLOR.muted, originY: 0.5 }));
       }
     }
-    if (p) this.personaDesc.setText(clip(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
+    if (p) this.personaDesc.setText(ellipsize(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
     const b = this.profile.best[bestKey(this.persona, this.difficulty)];
     this.best.setText(!b || b.runs === 0 ? '—' : b.wins > 0 ? `${b.wins}/${b.runs} · ${wanShort(b.bestAccount)}` : `${b.bestMonths}/12`);
   }

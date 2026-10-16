@@ -4,8 +4,15 @@ function trimZeros(s: string): string {
   return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
 }
 
-function group(n: number): string {
+/** 整数加千分位（不用 toLocaleString：各浏览器的分隔符不一样）。 */
+export function group(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/** 超过 max 个字符就截成 max-1 个字加「…」（按字符数，多字节字符算一个）。 */
+export function ellipsize(text: string, max: number): string {
+  const cs = Array.from(text);
+  return cs.length > max ? `${cs.slice(0, max - 1).join('')}…` : text;
 }
 
 /** 保留 2 位小数，整数部分加千分位。 */

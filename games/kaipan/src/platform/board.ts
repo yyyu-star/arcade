@@ -4,6 +4,7 @@
  * 平台每人每天只收 50 次交分（所有游戏合计）：一局只在结束时交一次，什么情况都不自动重试。
  */
 import { keepaliveSend } from './keepalive.ts';
+import { ellipsize } from '../core/format.ts';
 
 const GAME_ID = 'kaipan';
 
@@ -84,11 +85,6 @@ function failure(res: Res): { kind: 'busy' } | { kind: 'offline' } | { kind: 'ou
   return { kind: 'offline' };
 }
 
-/** 页面认的账号：云同步确认过的（或提前问好的）；没有就自己问一次 /api/me。null = 没登录，'fail' = 没问到 */
-async function whoami(d: BoardDeps): Promise<string | null | 'fail'> {
-  return d.userId() ?? askUser(d);
-}
-
 /** 问一次 /api/me。null = 没登录，'fail' = 没问到 */
 export async function askUser(d: BoardDeps): Promise<string | null | 'fail'> {
   const res = await call(d, 'GET', '/api/me');
@@ -96,14 +92,6 @@ export async function askUser(d: BoardDeps): Promise<string | null | 'fail'> {
   const user = res.body.user;
   if (user === null) return null;
   return isObj(user) && typeof user.id === 'string' ? user.id : 'fail';
-}
-
-/**
- * 交一次分（一局结束时，每局只交一次）。带上页面认的账号：别的标签页换了号，平台回 wrong_user、不记分、不占次数。
- * 不重试：429、busy、wrong_user 重试也没用；连不上由玩家点"重试"。
- */
-export async function submitScore(d: BoardDeps, boardId: string, score: number): Promise<SubmitResult> {
-  return submitScoreAs(d, await whoami(d), boardId, score);
 }
 
 /** 账号已经问好了（askUser 的结果）再交：问完和发出交分之间没有别的等待 */
@@ -148,9 +136,7 @@ export async function readBoard(d: BoardDeps, boardId: string, scope: Scope): Pr
 /** 别人的昵称：只留可见字符，最多 12 个字（平台限制了长度，这里再兜一次，免得撑破画面） */
 export function cleanName(x: unknown): string {
   const s = typeof x === 'string' ? x.replace(/[\p{C}]/gu, '').trim() : '';
-  const chars = Array.from(s);
-  if (chars.length === 0) return '无名氏';
-  return chars.length > 12 ? `${chars.slice(0, 11).join('')}…` : s;
+  return s === '' ? '无名氏' : ellipsize(s, 12);
 }
 
 /** YYYY-MM-DD 加减几天（按日历算，不看时区）。 */

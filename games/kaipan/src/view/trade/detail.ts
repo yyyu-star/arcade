@@ -8,7 +8,7 @@ import { addGlyph, addImage, addPill } from '../ui/art.ts';
 import { Dialog } from '../ui/dialog.ts';
 import { addSpark } from '../ui/spark.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
-import { MIN_TEXT_SIZE, addText } from '../ui/text.ts';
+import { MIN_TEXT_SIZE, addText, fitWidth } from '../ui/text.ts';
 import { hideTooltip } from '../ui/tooltip.ts';
 import { friendCalls, marketMoves, preCount, stockMoves, streakOf, sumMoves, themeHeat, toLevels, vsMarket, vsWord } from './tape.ts';
 
@@ -110,7 +110,7 @@ export function openStockDetail(scene: Phaser.Scene, s: Readonly<GameState>, id:
       r.add(addText(scene, 68, y + 6, `${rec.friend.name} · ${recordText(rec.friend.record)}`, { size: 12, bold: true, color: COLOR.accentDark }));
     } else r.add(addGlyph(scene, 46, y + 22, 'horn', 28));
     const t = addText(scene, 68, y + 24, rec.text, { size: 13, color: COLOR.ink });
-    while (t.width > 540 && t.text.length > 4) t.setText(`${Array.from(t.text).slice(0, -2).join('')}…`);
+    fitWidth(t, 540, 3);
     r.add(t);
   }
   return d;
@@ -193,7 +193,7 @@ export function openFriendDetail(scene: Phaser.Scene, s: Readonly<GameState>, fr
     r.add(scene.add.rectangle(24, y, 592, 40, 0xfff3d6, 1).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.gold, 1));
     r.add(addImage(scene, 44, y + 20, `theme:${m.theme}`, 24));
     const t = addText(scene, 64, y + 20, `今天：${m.text}`, { size: 13, color: COLOR.ink, originY: 0.5 });
-    while (t.width > 540 && t.text.length > 4) t.setText(`${Array.from(t.text).slice(0, -2).join('')}…`);
+    fitWidth(t, 540, 3);
     r.add(t);
   }
   void formatMoney;

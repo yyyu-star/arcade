@@ -1,4 +1,5 @@
 import type { Glyph } from '../assets.ts';
+import { ellipsize } from '../../core/format.ts';
 
 /**
  * 0.5.1 群聊热闹元素（纯画面装饰，不进规则层）：表情包贴纸、群友互相回复、撤回、拍一拍。
@@ -225,5 +226,5 @@ export function shortLine(text: string, skip = '', max = 16): string {
   if (joined && len(joined) > 4) return joined;
   if (fit) return fit;
   const base = clauses[0] ?? t;
-  return len(base) > max ? `${Array.from(base).slice(0, max - 1).join('')}…` : base;
+  return ellipsize(base, max);
 }

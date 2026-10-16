@@ -276,7 +276,7 @@ export class SettingsPanel extends Dialog {
         [false, '关闭'],
       ] as const
     ).map(([on, label], i) => {
-      const b = new Button(this.scene, x + i * 88, y - this.btnH / 2, { width: 80, height: this.btnH, label, fontSize: 14, sound: 'select' });
+      const b = new Button(this.scene, x + i * 88, y - this.btnH / 2, { width: 80, height: this.btnH, label, fontSize: 14, sound: 'toggle' });
       b.setHandler(() => set(on));
       this.box.add(b);
       this.named[`settings:${name}-${on ? 'on' : 'off'}`] = b;

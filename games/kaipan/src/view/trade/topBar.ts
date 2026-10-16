@@ -126,6 +126,7 @@ export class TopBarView {
   private readonly goalTag: Phaser.GameObjects.Container;
   private readonly hourglass: Phaser.GameObjects.Image;
   private readonly daysLeft: Phaser.GameObjects.Text;
+  private lastDaysLeft: number | null = null;
   private readonly houseIcon: Phaser.GameObjects.Image;
   private goalSig = '';
   private readonly items: Phaser.GameObjects.Container;
@@ -350,6 +351,9 @@ export class TopBarView {
     const mt = this.tempo ? monthThemeView(s) : null;
     const st = billStatus(b);
     const alarm = st.status === 'short' || st.status === 'credit';
+    // 月底倒数：最后 3 天每少一天响一下（不够还时更急）；只在天数变小时响，开局、换月、读档不响
+    if (this.lastDaysLeft !== null && b.daysLeft < this.lastDaysLeft && b.daysLeft >= 1 && b.daysLeft <= 3) sound.ui(alarm ? 'denied' : 'toggle');
+    this.lastDaysLeft = b.daysLeft;
     if (mt) {
       // 上：本月目标 X / Y · 还剩 N 天（boss 月带红签）；下：进度条 + 这个月要还多少
       const g = goalShort(mt.goal);

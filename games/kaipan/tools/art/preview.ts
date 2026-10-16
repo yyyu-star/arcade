@@ -238,7 +238,7 @@ function atlasBlock(): string {
     .filter((x): x is { g: 'game' | 'meta'; note: '对局用，首屏加载' | '长线界面用，进对应界面再载'; at: AtlasJson } => x !== null);
   if (loaded.length === 0) return '<p class="desc">还没有烘焙：node tools/art/bake.ts</p>';
   // 用 CSS 背景从图集页里取帧（按 2× 烘焙，显示时缩一半）
-  const want = ['stocks/ai_blue/calm', 'stocks/ai_blue/blink', 'stocks/st_ghost/limitdown', 'items/longtou', 'items/rumor_mill', 'avatars/qunzhu_smug', 'difficulty/8', 'achievements/frame_gold', 'personas/mom', 'fx/flame', 'ui/codex_unknown'];
+  const want = ['stocks/ai_blue/calm', 'stocks/ai_blue/blink', 'stocks/st_ghost/limitdown', 'items/longtou', 'items/rumor_mill', 'avatars/qunzhu_smug', 'difficulty/8', 'achievements/frame_gold', 'personas/mom', 'fx/flame'];
   let samples = '';
   for (const name of want) {
     for (const { g, at } of loaded) {
@@ -317,7 +317,7 @@ const CSS_NEW = `
 .cgrid{display:flex;flex-wrap:wrap;gap:12px;background:#f3e6d0;border:3px solid #3a2634;border-radius:0 16px 16px 16px;padding:14px}
 .ccard{position:relative;width:120px;height:160px;border-style:solid;border-width:24px;border-image:url(${A}ui/codex_card.svg) 24 fill / 24px stretch;display:flex;flex-direction:column;align-items:center;margin:0}
 .ccard .cc-head{position:absolute;top:-18px;font-size:12px;font-weight:700;white-space:nowrap}.ccard img{margin-top:4px}.ccard .cc-sub{font-size:11px;color:#7a6470}
-.ccard.unknown{border:0;background:url(${A}ui/codex_unknown.svg) 0 0/100% 100%}.ccard .newb{position:absolute;right:-6px;top:-6px;width:32px;height:32px}
+.ccard.unknown{border:0;background:#4a3d58}.ccard .newb{position:absolute;right:-6px;top:-6px;width:32px;height:32px}
 .cprog{display:flex;gap:10px;align-items:center;margin:12px 0;font-size:13px}.ptrack{position:relative;width:320px;height:20px;border-style:solid;border-width:0 12px;border-image:url(${A}ui/progress_track.svg) 0 12 fill / 0 12px stretch}
 .pfill{position:absolute;left:-12px;top:0;height:20px;border-style:solid;border-width:0 12px;border-image:url(${A}ui/progress_fill.svg) 0 12 fill / 0 12px stretch}
 .afr{position:relative;background:repeating-conic-gradient(#eadfcc 0 25%,#fffaf0 0 50%) 0 0/16px 16px;border:1px solid #d9c4a2}.afr div{position:absolute}
@@ -678,7 +678,7 @@ export function build(): number {
 <div class="fxbox"><img class="c fw-big" src="${A}fx/firework_burst.svg" alt="">${fwStars}<div class="cap">firework_*（涨停烟花）</div></div>
 <div class="fxbox"><img class="c cloud-big" src="${A}fx/raincloud.svg" alt="" style="top:34%">${drops}<div class="cap">raincloud / raindrop（跌停雨云）</div></div>
 <div class="fxbox" style="grid-column:span 2"><div class="link"><img class="mini" src="${A}stocks/ai_leader/limitup.svg" alt=""><div class="beam"><img class="spark" src="${A}fx/link_spark.svg" alt=""></div><img class="mini" src="${A}stocks/ai_follower/happy.svg" alt=""></div><div class="cap">link_beam（三段拉伸）+ link_spark（龙头带动跟风）</div></div>
-<div class="fxbox"><img class="c coin-spin" src="${A}fx/coin.svg" alt="">${coinsUp}<div class="cap">coin / coin_edge（金币）</div></div>
+<div class="fxbox"><img class="c coin-spin" src="${A}fx/coin.svg" alt="">${coinsUp}<div class="cap">coin（金币）</div></div>
 <div class="fxbox"><div class="c" style="width:200px;height:48px;background:url(${A}fx/tide.svg) repeat-x 0 0/128px 48px;animation:tide 2.4s linear infinite"></div><div class="cap">tide（退潮潮水，横向平铺）</div></div>
 </div></section>
 

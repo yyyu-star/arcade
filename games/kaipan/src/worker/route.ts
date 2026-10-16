@@ -12,7 +12,7 @@ const HOME = '/games/kaipan/';
  * 0.8.0 单独部署到 workers.dev 时游戏仍挂在 /games/kaipan/（资源都按这个路径打包），站点根 / 302 过去，带上查询串。
  * 本站的 / 是平台首页，不归开盘管（本站部署时也没有这条路由），所以只在单独部署时转。
  */
-export function standaloneRoot(req: Request, env: Env): Response | null {
+function standaloneRoot(req: Request, env: Env): Response | null {
   const url = new URL(req.url);
   if (!isStandalone(env) || url.pathname !== '/') return null;
   return new Response(null, { status: 302, headers: { Location: HOME + url.search, 'Cache-Control': 'no-store' } });

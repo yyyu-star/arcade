@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, dispatch, type GameState, type HoldingMove, type RetPart } from '../src/core/index.ts';
 import { newbieHint, streak } from '../src/view/hints.ts';
-import { TUTORIAL_TEXT, moneyWord, recordText, tutorialText } from '../src/view/labels.ts';
+import { moneyWord, recordText } from '../src/view/labels.ts';
 import { hintsOn, loadViewPrefs, saveViewPrefs } from '../src/view/meta/prefs.ts';
 import { breakdownOf, headlineOf, reasonOf, recapOf } from '../src/view/recap.ts';
 import type { KeyValueStore } from '../src/platform/settings.ts';
@@ -141,19 +141,5 @@ describe('新手提示', () => {
     expect(hintsOn(loadViewPrefs(st), 10)).toBe(true);
     saveViewPrefs({ hints: 'off', recap: 'brief' }, st);
     expect(loadViewPrefs(st)).toEqual({ hints: 'off', recap: 'brief', autoQuiet: true });
-  });
-});
-
-describe('教程结合当天的真实结果', () => {
-  it('第二天讲热度时，说出昨天的热度变化和自己那只的涨跌', () => {
-    const s = day('tut-1', 1);
-    const t = tutorialText('heat', s);
-    expect(t).not.toBe(TUTORIAL_TEXT.heat);
-    expect(t).toMatch(/热度 [+-]\d+/);
-  });
-  it('没有数据时用通用说法', () => {
-    const s = day('tut-2', 0);
-    expect(tutorialText('heat', s)).toBe(TUTORIAL_TEXT.heat);
-    expect(tutorialText('chat', s)).toBe(TUTORIAL_TEXT.chat);
   });
 });

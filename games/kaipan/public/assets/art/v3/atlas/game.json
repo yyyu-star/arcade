@@ -2,13 +2,11 @@
   "textures": [
     {"image":"game-0.webp","format":"RGBA8888","size":{"w":2048,"h":2048},"scale":2,
       "frames": [
-        {"filename":"chat/badge_dot","frame":{"x":593,"y":937,"w":40,"h":40},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":40,"h":40},"sourceSize":{"w":40,"h":40},"display":{"w":20,"h":20}},
         {"filename":"chat/bubble_left","frame":{"x":1423,"y":225,"w":128,"h":96},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":128,"h":96},"sourceSize":{"w":128,"h":96},"display":{"w":64,"h":48}},
         {"filename":"chat/bubble_right","frame":{"x":1017,"y":984,"w":128,"h":96},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":128,"h":96},"sourceSize":{"w":128,"h":96},"display":{"w":64,"h":48}},
         {"filename":"chat/chat_header","frame":{"x":905,"y":225,"w":256,"h":128},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":256,"h":128},"sourceSize":{"w":256,"h":128},"display":{"w":128,"h":64}},
         {"filename":"chat/phone_notch","frame":{"x":905,"y":88,"w":240,"h":56},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":240,"h":56},"sourceSize":{"w":240,"h":56},"display":{"w":120,"h":28}},
         {"filename":"chat/system_pill","frame":{"x":1233,"y":1396,"w":192,"h":56},"rotated":false,"trimmed":false,"spriteSourceSize":{"x":0,"y":0,"w":192,"h":56},"sourceSize":{"w":192,"h":56},"display":{"w":96,"h":28}},
-        {"filename":"fx/coin_edge","frame":{"x":2031,"y":654,"w":14,"h":60},"rotated":false,"trimmed":true,"spriteSourceSize":{"x":1,"y":2,"w":14,"h":60},"sourceSize":{"w":16,"h":64},"display":{"w":8,"h":32}},
         {"filename":"fx/firework_burst","frame":{"x":645,"y":738,"w":253,"h":242},"rotated":false,"trimmed":true,"spriteSourceSize":{"x":0,"y":10,"w":253,"h":242},"sourceSize":{"w":256,"h":256},"display":{"w":128,"h":128}},
         {"filename":"fx/firework_dot","frame":{"x":1445,"y":1677,"w":20,"h":20},"rotated":false,"trimmed":true,"spriteSourceSize":{"x":2,"y":2,"w":20,"h":20},"sourceSize":{"w":24,"h":24},"display":{"w":12,"h":12}},
         {"filename":"fx/firework_star","frame":{"x":2003,"y":1289,"w":44,"h":42},"rotated":false,"trimmed":true,"spriteSourceSize":{"x":2,"y":2,"w":44,"h":42},"sourceSize":{"w":48,"h":48},"display":{"w":24,"h":24}},
@@ -443,5 +441,5 @@
       ]
     }
   ],
-  "meta": {"app":"tools/art/bake.ts","group":"game","version":1,"source":"public/assets/art/v3/","scale":2,"frames":422,"pages":5,"maxPageSize":2048,"gutter":1,"spacing":2,"untrimmedDirs":["chat","ui"],"encoding":{"type":"webp","quality":1,"encoder":"chromium canvas","note":"近无损（canvas 预乘带来 ≤2/255 误差）"},"quantize":null,"pageHashes":["sha256:a977a18d03091c933ba764716d13b47a92a9454b6d288e110600b802d35a589d","sha256:c62a8b6a398e03d0e67fcbaebbc460e782c5482656ec70ba1262067128df1329","sha256:c95da0bfdaa3fc90894e19c88178ade897a7098f373bbfc5825eb76ee4858a50","sha256:1922b50e9e4a8f471ab2d481f3981e41446d899fffdeafe9f1f6a6fc3c3e166d","sha256:366dc6c8b89aa612b7407dbbaa6e343e6773cbbba9307e4fec9017e4fbbbe5b1"],"note":"frame/sourceSize 为 2× 像素；display 为 SVG 原生尺寸，按它 setDisplaySize"}
+  "meta": {"app":"tools/art/bake.ts","group":"game","version":1,"source":"public/assets/art/v3/","scale":2,"frames":420,"pages":5,"maxPageSize":2048,"gutter":1,"spacing":2,"untrimmedDirs":["chat","ui"],"encoding":{"type":"webp","quality":1,"encoder":"chromium canvas","note":"近无损（canvas 预乘带来 ≤2/255 误差）"},"quantize":null,"pageHashes":["sha256:4e204d10eefb965310c493c1ca4d44bcb3ad546f14d4daf40b52f909fad6f3fb","sha256:c62a8b6a398e03d0e67fcbaebbc460e782c5482656ec70ba1262067128df1329","sha256:c95da0bfdaa3fc90894e19c88178ade897a7098f373bbfc5825eb76ee4858a50","sha256:1922b50e9e4a8f471ab2d481f3981e41446d899fffdeafe9f1f6a6fc3c3e166d","sha256:366dc6c8b89aa612b7407dbbaa6e343e6773cbbba9307e4fec9017e4fbbbe5b1"],"note":"frame/sourceSize 为 2× 像素；display 为 SVG 原生尺寸，按它 setDisplaySize"}
 }

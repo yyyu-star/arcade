@@ -14,6 +14,7 @@ import { iconChip, moneyShort } from '../ui/dialog.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { addText } from '../ui/text.ts';
 import { phoneLayout, viewOf } from '../viewport.ts';
+import { ellipsize } from '../../core/format.ts';
 
 /** 0.5 节奏与反馈的画面小件：本月看点卡、屏幕中部的大字（高光、连击）、盖章。文字小工具在 ../tempoText.ts。 */
 
@@ -83,11 +84,6 @@ function goalBadge(kind: GoalKind, target: number): { big: string; label: string
   }
 }
 
-/** 超过 n 字的句子截短（加省略号）。 */
-function clipText(t: string, n: number): string {
-  const cs = [...t];
-  return cs.length <= n ? t : `${cs.slice(0, n - 1).join('')}…`;
-}
 
 /** 附加说明（"名目：正文（+¥x）"）拆成短标题和金额；完整原句放悬停。 */
 export function extraChip(text: string): { head: string; money: string | null } {
@@ -144,7 +140,7 @@ export function monthCard(
   if (info.intro) {
     const strip = scene.add.rectangle(pad, y, colW, 34, boss ? 0x46305a : 0xfff6dc).setOrigin(0, 0).setRounded(10).setStrokeStyle(1.5, boss ? COLOR.gold : COLOR.edge, 1);
     const q = addGlyph(scene, pad + 18, y + 17, 'horn', 20);
-    const introT = addText(scene, pad + 34, y + 17, clipText(info.intro, 30), { size: TYPE.label, color: ink, originY: 0.5 });
+    const introT = addText(scene, pad + 34, y + 17, ellipsize(info.intro, 30), { size: TYPE.label, color: ink, originY: 0.5 });
     body.push(strip, q, introT);
     y += 42;
   }
@@ -298,7 +294,7 @@ function shoutGlyph(title: string): Glyph {
 function shoutBits(sub: string): { name: string; nums: string[] } {
   const nums = sub.match(/[+-]?¥[\d,.]+(?:万|亿)?|[+-]?\d+(?:\.\d+)?%|\d+\s?(?:连板|天|次|连红)/g) ?? [];
   const head = sub.split(/[，,。：:！!\s]/)[0] ?? '';
-  const name = /\d/.test(head) ? '' : [...head].length > 8 ? `${[...head].slice(0, 7).join('')}…` : head;
+  const name = /\d/.test(head) ? '' : ellipsize(head, 8);
   return { name, nums: nums.slice(0, 3).map((x) => x.replace(/\s/g, '')) };
 }
 

@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-<defs><linearGradient id="f" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="64"><stop offset="0" stop-color="#162131"/><stop offset="1" stop-color="#0f1620"/></linearGradient></defs>
-<rect x="3" y="3" width="58" height="58" rx="4" fill="url(#f)" stroke="#6f87a6" stroke-width="1.6" stroke-opacity="0.9"/>
-<rect x="6" y="6" width="52" height="52" rx="2" fill="none" stroke="#6f87a6" stroke-width="0.8" stroke-opacity="0.28"/>
-<path d="M3 12.5h58" stroke="#6f87a6" stroke-width="0.8" stroke-opacity="0.22" fill="none"/>
-<path d="M6 17V6h11M47 6h11v11M58 47v11H47M17 58H6V47" stroke="#8fb0d6" stroke-width="2" fill="none" stroke-linecap="square" stroke-opacity="0.9"/>
-<path d="M9 9h3v3H9zM52 9h3v3h-3zM52 52h3v3h-3zM9 52h3v3H9z" fill="#8fb0d6" fill-opacity="0.55"/>
-</svg>

@@ -53,6 +53,11 @@ export function busLevels(s: Pick<Settings, 'masterVolume' | 'sfxVolume' | 'musi
   };
 }
 
+/** 设置下是否有可能出声：静音或总音量为 0 时一律不发声（连音效节点都不创建）。 */
+export function audible(s: Pick<Settings, 'masterVolume' | 'muted'>): boolean {
+  return !s.muted && volumeToGain(s.masterVolume) > 0;
+}
+
 /** 改设置时的增益斜坡时长（秒），≥ 30 ms 防爆音。 */
 export const LEVEL_RAMP = 0.05;
 

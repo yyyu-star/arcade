@@ -37,7 +37,7 @@ function firstDay(month: number): number {
 }
 
 /** 抽主题用的行情信息：这个月大盘真实累计涨跌、最大单日跌幅（放大后 pp）。 */
-export function monthCtx(month: number, difficulty: number, real: Readonly<RealMarket> | null, ext: boolean): MonthThemeCtx {
+function monthCtx(month: number, difficulty: number, real: Readonly<RealMarket> | null, ext: boolean): MonthThemeCtx {
   let mret = 0;
   let mmin = 0;
   if (real) {
