@@ -72,9 +72,9 @@ async function play(page: Page, name: string): Promise<boolean> {
  * 单机的互动（kit 的 table-fun，开发服务器上 main.ts 把组件挂在 window.__fun、流水在 window.__funLog）：
  * 点一个电脑的头像，菜单里 8 个道具 + 3 句点名 + 屏蔽他，扔第二个道具（菜单收起）；点自己的头像，12 个表情里发一个；
  * "互动"按钮的面板里点名说一句。按控件的屏幕中心点（kit 的 controls()），流水里要有扔道具、表情、短语三行。
- * 截一张头像菜单开着的图（shots/smoke-land-menu.png）
+ * 截一张头像菜单开着的图（shots/smoke-<land/port>-menu.png 和 -panel.png），面板要整个在屏幕里
  */
-async function soloComms(page: Page): Promise<void> {
+async function soloComms(page: Page, name: string): Promise<void> {
   type Box = { x: number; y: number; w: number; h: number };
   const controls = (): Promise<Record<string, Box>> => page.evaluate(() => (window as unknown as { __fun: { controls(): Record<string, Box> } }).__fun.controls());
   const tap = async (key: string): Promise<void> => {
@@ -90,7 +90,7 @@ async function soloComms(page: Page): Promise<void> {
   const props = menu.filter((k) => /^fun:prop\d/.test(k)).length;
   const named = menu.filter((k) => /^fun:named\d/.test(k)).length;
   if (props !== 8 || named !== 3 || !menu.includes('fun:block')) throw new Error(`头像菜单不是 8 个道具 + 3 句点名 + 屏蔽他：${props}、${named}`);
-  await page.screenshot({ path: `${root}shots/smoke-land-menu.png` });
+  await page.screenshot({ path: `${root}shots/smoke-${name}-menu.png` });
   await tap('fun:prop1');
   await page.waitForTimeout(1_700);
   await tap('fun:seat0');
@@ -99,6 +99,10 @@ async function soloComms(page: Page): Promise<void> {
   await tap('fun:sticker2');
   await page.waitForTimeout(1_200);
   await tap('fun:button');
+  // 面板整个在屏幕里（kit 的面板固定 440 宽，竖屏靠 style.css 收窄）
+  const out = await page.evaluate(() => [...document.querySelectorAll('.atf-box')].some((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight; }));
+  if (out) throw new Error('互动面板伸出屏幕');
+  await page.screenshot({ path: `${root}shots/smoke-${name}-panel.png` });
   await tap('fun:tab:phrase');
   await tap('fun:phrase0');
   await page.waitForTimeout(300);
@@ -136,7 +140,7 @@ for (const [name, viewport] of [
   await page.click('.home');
   await page.waitForSelector('text=接着打');
   await page.click('text=接着打');
-  if (name === 'land') await soloComms(page);
+  await soloComms(page, name);
   if (!(await play(page, name))) errors.push('一场里没出现过胡牌亮牌');
   await page.screenshot({ path: `${root}shots/smoke-${name}.png` });
   // 回选桌，再看一眼规则表
