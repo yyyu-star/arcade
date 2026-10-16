@@ -122,7 +122,7 @@ export function RegistrationSwitch() {
 
 const RULE_TEXT: Record<keyof WalletRules, { label: string; hint: string }> = {
   reliefTo: { label: '每日补给补到', hint: '钱包加桌上的不到这个数时，每天能领一次，补到这个数；0 就是不发补给' },
-  winUnits: { label: '单机实盘每天最多赢几份', hint: '每个游戏单算，份按当天带过的最高档；好友房不限' },
+  winUnits: { label: '单机实盘每天最多赢几份', hint: '每个游戏单算，份按当天带上桌最多的那一份（不超过档位的一份）；好友房不限' },
   newBalance: { label: '新号送多少', hint: '只管以后第一次用钱包的人，已有的钱包不变' },
   adminAdjustMax: { label: '管理员单次最多加减', hint: '防手滑多打几个 0' },
 };

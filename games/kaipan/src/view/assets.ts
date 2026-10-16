@@ -39,7 +39,6 @@ const SCENE_LAYERS = [
   'sky_bull', 'sky_flat', 'sky_bear', 'city', 'haze_bear', 'rain', 'lightning', 'lightning_2', 'lightning_3',
   'wall', 'desk', 'steam', 'cat', 'cat_tail', 'cat_zzz', 'ambient_bull', 'ambient_flat', 'ambient_bear', 'lamp_light', 'monitor_glow',
 ] as const;
-type SceneLayer = (typeof SCENE_LAYERS)[number];
 
 const FRIEND_IDS = ['xiaoli', 'laowang', 'zhangjie', 'qunzhu', 'laozhao', 'dav', 'neimu', 'zhuchang', 'kongjun'] as const;
 export type AvatarFace = 'normal' | 'smug' | 'awkward';

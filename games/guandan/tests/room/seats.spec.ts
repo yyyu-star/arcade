@@ -9,12 +9,18 @@ import { Table } from './table.ts';
 
 beforeEach(() => freezeClock());
 
-/** 发一条入座/离座，等房间回音（新的状态，或者一条错误）；返回错误码，成功为 null */
+/**
+ * 发一条入座/离座，等房间对这一条的回音：一条错误，或者 you.seat 变成要的样子（入座 = 那个座位，离座 = null）；返回错误码，成功为 null。
+ * 入座、离座不带 moveId，不能按 ack 认；也不能拿"发完以后的第一条消息"当回音——上一步的广播可能还在路上（CI 上偶发：
+ * 把上一次离座的广播当成了"换座位"的回音，读成成功）
+ */
 async function send(conn: Conn, msg: { t: 'sit'; seat: number } | { t: 'leave' }): Promise<string | null> {
   const n = conn.msgs.length;
   conn.send(msg);
-  await conn.waitFor(() => conn.msgs.length > n, msg.t);
-  const m = conn.msgs.slice(n).find((x) => x.t === 'error');
+  const want = msg.t === 'sit' ? msg.seat : null;
+  const reply = () => conn.msgs.slice(n).find((x) => x.t === 'error' || ((x.t === 'state' || x.t === 'welcome') && x.you.seat === want));
+  await conn.waitFor(() => reply() !== undefined, msg.t);
+  const m = reply();
   return m && m.t === 'error' ? m.code : null;
 }
 

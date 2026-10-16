@@ -20,7 +20,7 @@ export const ACE = 14;
 /** 顺子类里 A 可作 1：点数 1 映射回 A。 */
 export const natRank = (r: number): number => (r === 1 ? ACE : r);
 
-export const DECK_SIZE = 108;
+const DECK_SIZE = 108;
 export const HAND_SIZE = 27;
 
 /** 点数：2..14，小王 16，大王 17。 */

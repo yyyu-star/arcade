@@ -103,7 +103,10 @@ export interface GameDay {
   cin: number;
   /** client 模式结回的：净赢 = cout − cin */
   cout: number;
-  /** 当天在这个游戏带入过的最高档的一份；0 是今天还没带入过 */
+  /**
+   * 当天在这个游戏"一份"的大小，取带入过的各份里最大的那个；每一份按 min(档位的一份, 这一份实际带上桌的) 算（stakeUnit，平台 0.12.1）。
+   * 0 是今天还没带入过。单机的带入额由浏览器定，按整档算的话带 1 筹码进豪华档，当天上限就成了 200 万
+   */
   top: number;
 }
 
@@ -342,7 +345,7 @@ export function normalize(s0: WalletState, now: number): { s: WalletState; expir
       if (st.mode !== 'client') continue;
       const g = gameDay(s, st.game);
       g.cin += st.amount;
-      g.top = Math.max(g.top, TIERS[st.tier]);
+      g.top = Math.max(g.top, stakeUnit(st));
     }
   }
   let expired = false;
@@ -419,6 +422,9 @@ export function apply(
   return { state: s, result: out };
 }
 
+/** 一份按多大算（每日净赢上限的单位）：档位的一份，但不超过这一份实际带上桌的（补码累计后） */
+const stakeUnit = (st: Stake): number => Math.min(TIERS[st.tier], st.amount);
+
 /** 在 s 上就地改（s 是 normalize 出来的副本）。 */
 function step(s: WalletState, cmd: Cmd, now: number, rules: WalletRules): OpResult | { error: WalletError } {
   switch (cmd.t) {
@@ -449,7 +455,8 @@ function step(s: WalletState, cmd: Cmd, now: number, rules: WalletRules): OpResu
       const g = gameDay(s, cmd.game);
       g.in += cmd.amount;
       if (cmd.mode === 'client') g.cin += cmd.amount;
-      g.top = Math.max(g.top, unit);
+      // 补码累计后的这一份（新开的就是这次带的）
+      g.top = Math.max(g.top, stakeUnit(s.stakes[key]!));
       return {};
     }
     case 'settle': {
@@ -462,9 +469,9 @@ function step(s: WalletState, cmd: Cmd, now: number, rules: WalletRules): OpResu
       const g = gameDay(s, cmd.game);
       let credited = cmd.amount;
       if (cmd.mode === 'client') {
-        // 结回后净赢（cout − cin）不超过 winUnits 份；份按今天带入过的最高档（隔天结回的那一份也算上它自己的档）。
-        // 带上桌的那一份总能拿回来，上限只管赢的部分
-        const cap = rules.winUnits * Math.max(g.top, unit);
+        // 结回后净赢（cout − cin）不超过 winUnits 份；份按今天带入过的最大一份（隔天结回的那一份也算上它自己），
+        // 每一份是 min(档位的一份, 实际带上桌的)，上限跟着真冒的风险走。带上桌的那一份总能拿回来，上限只管赢的部分
+        const cap = rules.winUnits * Math.max(g.top, stakeUnit(st));
         const room = Math.max(st.amount, cap + g.cin - g.cout);
         credited = Math.min(cmd.amount, room);
         g.cout += credited;

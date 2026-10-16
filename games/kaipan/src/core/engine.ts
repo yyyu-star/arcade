@@ -11,7 +11,6 @@ import {
   BILL_NAMES,
   COLLATERAL_IDS,
   EXT_REACT_LINES,
-  collateralById,
   collateralTerms,
   EVENTS,
   GEAR_INTEREST_BILL,
@@ -80,7 +79,6 @@ import type {
   Comment,
   DayReport,
   Feel,
-  FriendState,
   GameEvent,
   GameState,
   Holding,
@@ -1931,7 +1929,3 @@ export function replay(seed: string, actions: readonly Action[], setup: RunSetup
   return state;
 }
 
-/** 本局的友人列表里有没有某人（查询、机器人常用）。 */
-export function friendIn(s: Readonly<GameState>, id: string): FriendState | undefined {
-  return s.friends.find((f) => f.id === id);
-}

@@ -188,7 +188,7 @@ describe('0.5 月度主题、高光、连击', () => {
       let quiet = 0;
       let done = 0;
       for (let k = 0; k < 20; k++) {
-        playRun(`rhythm-${k}`, botByName('smart'), null, (s, evs) => {
+        playRun(`rhythm-${k}`, botByName('smart'), null, (_s, evs) => {
           for (const e of evs) {
             if (e.type === 'dayClosed') {
               const t = e.report.tempo;

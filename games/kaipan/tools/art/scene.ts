@@ -6,7 +6,7 @@
  * 窗洞：x 420–860，y 56–336。天色、城市、雨只在窗洞里可见，但都画满全画布，方便做视差平移。
  */
 import {
-  INK, type Frag, darken, ellipseD, frag, grained, hiArc, lighten, merge, rng, rrectD, shape, smoothClosed, starD, svgDoc,
+  INK, type Frag, ellipseD, frag, grained, merge, rng, rrectD, shape, smoothClosed, svgDoc,
 } from './lib/svg.ts';
 
 const W = 1280;
@@ -27,8 +27,6 @@ function cloud(cx: number, cy: number, s: number, fill: string, shade: string, s
     [-60, 10], [-56, -8], [-38, -18], [-20, -34], [6, -36], [26, -22], [46, -26], [62, -10], [64, 10],
   ];
   const d = smoothClosed(pts.map(([x, y]) => [cx + x * s, cy + y * s] as [number, number]), 0.9);
-  const flat = `M${cx - 60 * s} ${cy + 10 * s}`;
-  void flat;
   return shape(d, { fill, shade, shadeOffset: [0, -7 * s], sw });
 }
 
@@ -382,8 +380,6 @@ function steam(): Frag {
 
 // ---------------------------------------------------------------- 猫
 
-const CAT = { cx: 980, cy: 540 };
-
 function catBody(): Frag {
   const fur = '#ffb766';
   const parts: Frag[] = [];
@@ -486,16 +482,3 @@ export function build(write: (rel: string, data: string) => void): number {
   for (const [name, f] of files) write(`scene/${name}.svg`, doc(f));
   return files.length;
 }
-
-export const SCENE_ANCHORS = {
-  window: WIN,
-  catTailPivot: [1066, 556],
-  cat: CAT,
-  monitorScreen: { x: 472, y: 362, w: 336, h: 180 },
-  lampHead: [300, 430],
-};
-
-void darken;
-void lighten;
-void hiArc;
-void starD;

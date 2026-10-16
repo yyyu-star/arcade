@@ -350,18 +350,40 @@ describe('client 模式的每日上限（economy.md 第 4 节）', () => {
     expect(g.cout - g.cin).toBe(20_000);
   });
 
-  it('份按当天带入过的最高档算；server 模式（好友房）不受限；别的游戏单算', async () => {
+  it('份按当天最大的一份算（这里带满了一份中档）；server 模式（好友房）不受限；别的游戏单算', async () => {
     const u = await registerUser();
     const uid = u.user.id;
     await buyin(uid, { tier: 'mid', amount: 1 });
     await settle(uid, { amount: 1 });
     await buyin(uid, { tier: 'mid', ref: 'ref-000002', amount: 10_000 });
-    // 最高档是中档（一份 10,000）：上限 100,000；带入 10,001、结回 1，最多再进 110,000
+    // 最大的一份是带满的中档 10,000：上限 100,000；带入 10,001、结回 1，最多再进 110,000
     expect(await settle(uid, { ref: 'ref-000002', amount: 150_000 })).toMatchObject({ credited: 110_000, capped: 40_000 });
     await buyin(uid, { game: 'texas', ref: 'room-0001', mode: 'server' });
     expect(await settle(uid, { game: 'texas', ref: 'room-0001', mode: 'server', amount: 40_000 })).toMatchObject({ credited: 40_000 });
     await buyin(uid, { game: 'guandan', ref: 'solo-0001' });
     expect(await settle(uid, { game: 'guandan', ref: 'solo-0001', amount: 8_000 })).toMatchObject({ credited: 8_000 });
+  });
+
+  it('一份按实际带上桌的算、不超过档位的一份（0.12.1）：带 1 筹码进豪华档，当天上限是 10 筹码，不是 200 万', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    await buyin(uid, { tier: 'lux', amount: 1 });
+    // 净赢最多 10 × 1：带上桌的 1 加 10，只进 11
+    expect(await settle(uid, { amount: 1_000_000 })).toMatchObject({ ok: true, credited: 11, capped: 999_989, wallet: { caps: { kaipan: { net: 10, cap: 10 } } } });
+    // 补码累计后按累计的算：1 + 49,999 = 50,000，上限 500,000（这一份带了多少就冒多大的险）
+    await patchState(uid, (s) => {
+      s.balance = 300_000;
+    });
+    await buyin(uid, { tier: 'lux', ref: 'ref-000002', amount: 1 });
+    expect(await buyin(uid, { tier: 'lux', ref: 'ref-000002', amount: 49_999 })).toMatchObject({ ok: true });
+    expect((await state(uid)).today.games.kaipan!.top).toBe(50_000);
+    // 整份带入不变：豪华档带满 200,000，一份就是 200,000
+    await buyin(uid, { game: 'texas', tier: 'lux', ref: 'ref-000003', amount: 200_000 });
+    expect((await state(uid)).today.games.texas!.top).toBe(200_000);
+    // 带得比一份多不可能（buyin 每次最多一份），补码超过一份时也只按档位的一份算
+    await buyin(uid, { game: 'guandan', tier: 'small', ref: 'ref-000004', amount: 2_000 });
+    await buyin(uid, { game: 'guandan', tier: 'small', ref: 'ref-000004', amount: 2_000 });
+    expect((await state(uid)).today.games.guandan!.top).toBe(2_000);
   });
 
   it('放弃、到期退回把带入减回去：不能靠"带入再放弃"把上限撑大', async () => {
@@ -409,7 +431,8 @@ describe('client 模式的每日上限（economy.md 第 4 节）', () => {
     advance(20 * 60_000); // 掼蛋那一份到期
     await wallet.view(uid);
     const t = (await state(uid)).today.games;
-    expect([t.kaipan!.cin, t.kaipan!.back, t.kaipan!.top]).toEqual([0, 5_000, 10_000]);
+    // 跨零点那一份只带了 5,000：今天的一份按 5,000 算，不按中档的整份（0.12.1）
+    expect([t.kaipan!.cin, t.kaipan!.back, t.kaipan!.top]).toEqual([0, 5_000, 5_000]);
     expect([t.guandan!.cin, t.guandan!.back]).toEqual([0, 2_000]);
     // 今天开盘按中档算上限：最多净赢 100,000（带入的 5,000 已经减回去了）
     await buyin(uid, { tier: 'mid', ref: 'ref-000002', amount: 10_000 });

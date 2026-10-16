@@ -28,11 +28,6 @@ export function realMarketPct(real: Readonly<RealMarket>, i: number): number {
   return (real.market[i] ?? 0) / 100;
 }
 
-/** 行业当天相对所有行业平均的超额收益（pp，未放大，按 smooth 均摊过的）。 */
-export function realExcessPct(real: Readonly<RealMarket>, theme: ThemeId, i: number): number {
-  return real.themes[theme]?.ex[i] ?? 0;
-}
-
 /**
  * 风口当天的涨跌（pp，不含加成）：行业超额收益按这一段的典型幅度归一后乘 themeK（再乘 0.3 的题材振幅），
  * 所以不管哪一年、哪个行业，风口的起落幅度都和 0.3 差不多；方向、节奏、相对大小都是真实的。

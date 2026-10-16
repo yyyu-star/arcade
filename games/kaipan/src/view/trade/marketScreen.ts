@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { stockCard, themeBoard, type GameState, type Mood } from '../../core/index.ts';
 import type { Glyph } from '../assets.ts';
 import { pctArrow } from '../labels.ts';
-import { COLOR, PHONE, THEME_COLOR, signColor } from '../theme.ts';
+import { COLOR, PHONE, signColor } from '../theme.ts';
 import { addGlyph, addImage } from '../ui/art.ts';
 import { addSpark, type Spark } from '../ui/spark.ts';
 import { addText, setColor } from '../ui/text.ts';
@@ -38,7 +38,6 @@ export class MarketScreen {
   private tapeQueue: { icon: string | null; text: string; color: number }[] = [];
   private tapeNext = 0;
   private readonly idle: boolean;
-  private state: GameState | null = null;
   private sig = '';
 
   constructor(scene: Phaser.Scene, idle: boolean) {
@@ -76,7 +75,6 @@ export class MarketScreen {
 
   /** 按状态刷新（同一天重复调用不重画走势动画）。 */
   render(s: GameState): void {
-    this.state = s;
     const moves = marketMoves(s, 20);
     const last = s.lastDay;
     const mood = last ? last.market.mood : s.mood;

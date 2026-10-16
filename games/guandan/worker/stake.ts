@@ -9,7 +9,7 @@
  * 409 no_wallet 没绑钱包（单独部署）、503 平台或钱包连不上（这时页面当作"钱包暂时忙"）。
  */
 import { sameOrigin, whoIs } from 'arcade-kit/auth';
-import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, validSoloResult, type TierId } from '../src/stake/index.ts';
+import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, soloRefTier, validSoloResult, type TierId } from '../src/stake/index.ts';
 import { STAKE_PATH } from '../src/net/version.ts';
 import type { Fetcher } from './gate.ts';
 
@@ -82,7 +82,7 @@ async function handleStake(request: Request, env: StakeEnv, action: string): Pro
   if (action === 'buyin') {
     const tier = body['tier'];
     if (!isTier(tier)) return reply({ ok: false, error: 'bad_request' }, 400);
-    const ref = soloRef(randomHex());
+    const ref = soloRef(tier, randomHex());
     // 钱包最长给 24 小时（超过按 24 小时算）；页面按回来的 until 判断过没过期
     const until = Date.now() + SOLO_HOURS * 3_600_000;
     extra = { ref, tier, share: TIERS[tier], until };
@@ -91,8 +91,9 @@ async function handleStake(request: Request, env: StakeEnv, action: string): Pro
     const ref = body['ref'];
     if (!isSoloRef(ref)) return reply({ ok: false, error: 'bad_request' }, 400);
     if (action === 'settle') {
-      // 档位由页面带来（页面存着这一场的档位）：带错了只会被钱包按"超过带入 + 20 份"拒掉，或者落在每日上限里，economy.md 定了不防作弊
-      const { tier, points, deals, stats } = body;
+      // 档位按 ref 里编的算（ref 是带入时 Worker 生成的），页面带来的不信；只有 0.12.1 以前带入的旧 ref（没编档位，24 小时内过期）才用页面带的
+      const { points, deals, stats } = body;
+      const tier = soloRefTier(ref) ?? body['tier'];
       if (!isTier(tier) || !validSoloResult(points, deals)) return reply({ ok: false, error: 'bad_request' }, 400);
       const amount = payout(tier, points as number);
       // 页面报的战绩小结原样转给平台（5.10：游戏的接口不改、不补，平台校验）；没带就不带

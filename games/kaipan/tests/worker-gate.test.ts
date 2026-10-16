@@ -5,7 +5,6 @@ import worker from '../src/worker/index.ts';
 
 /** 0.5.6 登录闸门：平台的 /api/me 用假的服务绑定代替。 */
 
-const HOME = 'https://game.example.com/games/kaipan/';
 
 function assets(): Fetcher & { calls: Request[] } {
   const calls: Request[] = [];

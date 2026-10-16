@@ -254,7 +254,7 @@ async function main(): Promise<void> {
     await host.page.click('#ol-start');
     for (const c of clients) await until(c, '进牌桌', "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
     await shot(clients[1]!, '52-online-iphone-table');
-    // 快捷短语：1 号点开聊天、选第 1 句；房主那边（画面上 1 号在右手边，是画面座位 1）冒气泡
+    // 快捷短语：1 号点开互动按钮（fun:button）、选第 1 句；房主那边（画面上 1 号在右手边，是画面座位 1）冒气泡
     const say = clients[1]!;
     const chat = (await say.page.evaluate(() => window.__game!.controls()))['fun:button']!;
     await say.page.mouse.click(chat.x, chat.y);
@@ -416,9 +416,9 @@ async function main(): Promise<void> {
     }
     await until(solo, '电脑说了一句', "g.fxLog.some((l) => /^(短语|电脑|表情) [123]:|^道具 [123]>/.test(l))", 90_000);
     await solo.page.waitForTimeout(600);
-    await shot(solo, '59-online-bot-banter');
-    const banter = await solo.page.evaluate(() => window.__game!.fxLog.filter((l) => /^(短语|电脑|表情) [123]:|^道具 [123]>/.test(l)));
-    notes.push(`好友房电脑互动：冲三个电脑扔番茄，电脑这边 ${banter.length} 条（${banter.slice(0, 4).join('、')}）`);
+    await shot(solo, '59-online-bot-fun');
+    const botFun = await solo.page.evaluate(() => window.__game!.fxLog.filter((l) => /^(短语|电脑|表情) [123]:|^道具 [123]>/.test(l)));
+    notes.push(`好友房电脑互动：冲三个电脑扔番茄，电脑这边 ${botFun.length} 条（${botFun.slice(0, 4).join('、')}）`);
     await solo.context.close();
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));

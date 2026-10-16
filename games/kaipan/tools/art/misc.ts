@@ -2,7 +2,7 @@
  * 其他界面贴图：账单卡、印章、持仓卡框、纸面板、按钮、标签、角色小徽章。
  * 印章和账单上不写字，文字由画面层叠加（见 README 的文字区域约定）。
  */
-import { INK, WHITE, type Frag, darken, frag, grainDef, grained, hiArc, lighten, merge, rrectD, shape, sparkleD, starD, svgDoc } from './lib/svg.ts';
+import { INK, WHITE, type Frag, darken, frag, grained, hiArc, merge, rrectD, shape, starD, svgDoc } from './lib/svg.ts';
 
 function line(d: string, color: string, w: number, extra = ''): string {
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
@@ -168,7 +168,3 @@ export function build(write: (rel: string, data: string) => void): number {
   for (const [name, w, h, f] of list) write(`ui/${name}.svg`, svgDoc(w, h, f));
   return list.length;
 }
-
-void grainDef;
-void lighten;
-void sparkleD;

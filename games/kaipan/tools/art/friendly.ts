@@ -9,15 +9,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { embed, resetEmbeds, stock, stockSpecs } from './keyart.ts';
-import { INK, WHITE, type Frag, darken, ellipseD, frag, grained, hiArc, lighten, merge, rrectD, shape, smoothClosed, sparkleD, starD, svgDoc } from './lib/svg.ts';
+import { INK, WHITE, darken, ellipseD, frag, grained, hiArc, lighten, merge, rrectD, shape, smoothClosed, sparkleD, starD, svgDoc } from './lib/svg.ts';
 
 const V3 = new URL('../../public/assets/art/v3/', import.meta.url).pathname;
 
 function line(d: string, color: string, w: number, extra = ''): string {
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
-}
-function rod(d: string, color: string, w: number): string {
-  return line(d, INK, w + 4) + line(d, color, w);
 }
 
 // ---------------------------------------------------------------- 风口状态图标（32×32）

@@ -53,7 +53,7 @@ import { ThemeBoardView } from '../trade/themeBoard.ts';
 import { TopBarView } from '../trade/topBar.ts';
 import { onTutorialChange } from '../tutorial.ts';
 import { BaseScene, setupCamera } from './BaseScene.ts';
-import { buysText, moneyWord, revealShown } from '../labels.ts';
+import { buysText, revealShown } from '../labels.ts';
 import { HintBubble } from '../trade/hintBubble.ts';
 import { RecapCard } from '../trade/recapCard.ts';
 import { quipBubble } from '../trade/quip.ts';
@@ -122,7 +122,6 @@ export class TradeScene extends BaseScene {
   private chat!: ChatView3;
   private openBtn!: Button;
   private monitor!: Phaser.GameObjects.Text;
-  private monitorSub!: Phaser.GameObjects.Text;
   /** 0.5.1 今日大盘屏 */
   private screen!: MarketScreen;
   private reward: RewardPanel | null = null;
@@ -188,7 +187,6 @@ export class TradeScene extends BaseScene {
     recordTape(s);
     this.screen = new MarketScreen(this, this.lively);
     this.monitor = this.screen.big;
-    this.monitorSub = this.screen.sub;
     // 详情卡（股票 / 风口 / 群友）打开时登记成当前对话框
     const onDetail = (d: Dialog): void => this.trackDialog(d);
     this.events.on(DETAIL_EVENT, onDetail);
@@ -867,18 +865,14 @@ export class TradeScene extends BaseScene {
   private async popup(make: (onOk: () => void) => { root: Phaser.GameObjects.Container; button: Button }): Promise<void> {
     const c = make(() => this.continueInput());
     this.continueBtn = c.button;
-    this.popupRect = c.button.rect();
     this.session.notify();
     // 0.5：不用点也会在几秒后自己收起（少打断一次）；点"知道了"可以马上收
     const timer = this.time.delayedCall(3200, () => this.continueInput());
     await this.waitContinue();
     timer.remove(false);
     this.continueBtn = null;
-    this.popupRect = null;
     c.root.destroy();
   }
-
-  private popupRect: Rect | null = null;
 
   /** 银行这一天的动作：打电话、收走东西（开盘结算或月底）。 */
   private async playBank(events: GameEvent[]): Promise<void> {

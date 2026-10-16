@@ -186,7 +186,7 @@ async function main(): Promise<void> {
     await click(page, 'tier:small');
     await until(page, '进场', "g.scene === 'table' && !!g.stake()?.save");
     const ref1 = await page.evaluate(() => window.__game!.stake()!.save!.ref);
-    assert(/^solo-[0-9a-f]{32}$/.test(ref1), `ref 的样子：${ref1}`);
+    assert(/^solo-(small|mid|big|lux)-[0-9a-f]{32}$/.test(ref1), `ref 的样子：${ref1}`);
     await until(page, '牌发好', 'g.idle');
     await shot(page, '20-table');
     await click(page, 'top0');

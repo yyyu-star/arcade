@@ -9,7 +9,6 @@
 export const INK = '#3a2634';
 /** 描边粗细（128 画布上 4px，缩到 96px 约 3px） */
 export const SW = 4;
-export const PAPER = '#fff4e2';
 export const WHITE = '#fffdf7';
 export const BLUSH = '#ff8fa3';
 export const TEAR = '#7fd3ff';

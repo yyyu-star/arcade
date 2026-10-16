@@ -25,6 +25,7 @@ import {
   soloOver,
   soloPoints,
   soloRef,
+  soloRefTier,
   validSoloResult,
   type RoomBook,
   type SoloMatch,
@@ -76,22 +77,31 @@ describe('钱包的 ref 和 op', () => {
   const hex16 = '0123456789abcdef';
 
   it('单机和好友房的 ref、op 都是 8–64 位的 [A-Za-z0-9_-]，不带冒号', () => {
-    const solo = soloRef(hex32);
+    const solo = soloRef('lux', hex32);
     const room = roomRef(hex16);
     const ids = [solo, soloOp(solo, 'in'), soloOp(solo, 'out'), soloOp(solo, 'refund'), room, seatOp(room, 0, 'in'), seatOp(room, 3, 'out')];
     for (const id of ids) expect(id, id).toMatch(WALLET_ID);
-    expect(soloOp(solo, 'refund')).toBe(`solo-${hex32}-refund`);
+    expect(soloOp(solo, 'refund')).toBe(`solo-lux-${hex32}-refund`);
     expect(seatOp(room, 2, 'in')).toBe(`gd-${hex16}-s2-in`);
     expect(Math.max(...ids.map((i) => i.length))).toBeLessThanOrEqual(64);
   });
 
   it('长度、字符不对就不给拼', () => {
-    expect(() => soloRef('abc')).toThrow();
-    expect(() => soloRef(hex32.toUpperCase())).toThrow();
+    expect(() => soloRef('mid', 'abc')).toThrow();
+    expect(() => soloRef('mid', hex32.toUpperCase())).toThrow();
+    expect(() => soloRef('huge' as never, hex32)).toThrow();
     expect(() => roomRef(hex32)).toThrow();
-    expect(isSoloRef(soloRef(hex32))).toBe(true);
-    expect(isSoloRef(`solo-${hex32}:in`)).toBe(false);
+    expect(isSoloRef(soloRef('mid', hex32))).toBe(true);
+    expect(isSoloRef(`solo-mid-${hex32}:in`)).toBe(false);
+    expect(isSoloRef(`solo-huge-${hex32}`)).toBe(false);
     expect(isSoloRef(42)).toBe(false);
+  });
+
+  it('单机 ref 里编着档位（0.12.2，结回按它算）；0.12.1 以前的旧 ref 照认、但没有档位', () => {
+    for (const t of ['small', 'mid', 'big', 'lux'] as const) expect(soloRefTier(soloRef(t, hex32))).toBe(t);
+    expect(isSoloRef(`solo-${hex32}`)).toBe(true);
+    expect(soloRefTier(`solo-${hex32}`)).toBeNull();
+    expect(soloRefTier(`gd-${hex16}`)).toBeNull();
   });
 });
 

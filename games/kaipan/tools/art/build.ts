@@ -93,10 +93,6 @@ const TASKS: Record<string, Task> = {
   stocks: buildStocks,
 };
 
-export function registerTask(name: string, t: Task): void {
-  TASKS[name] = t;
-}
-
 async function main(): Promise<void> {
   // 其余分组按需加载，避免互相依赖
   const extra: [string, string][] = [

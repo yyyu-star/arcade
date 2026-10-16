@@ -439,28 +439,6 @@ function bumpsD(pts: [number, number, number?][], k = 0.62): string {
   return d + 'Z';
 }
 
-function crescentD(c1: Pt, r1: number, c2: Pt, r2: number): string {
-  const outer: Pt[] = [];
-  const th0 = Math.atan2(c2[1] - c1[1], c2[0] - c1[0]);
-  for (let i = 0; i <= 72; i++) {
-    const a = th0 + (i / 72) * Math.PI * 2;
-    const p: Pt = [c1[0] + Math.cos(a) * r1, c1[1] + Math.sin(a) * r1];
-    if (Math.hypot(p[0] - c2[0], p[1] - c2[1]) > r2) outer.push(p);
-  }
-  let inner: Pt[] = [];
-  const ph0 = Math.atan2(c1[1] - c2[1], c1[0] - c2[0]);
-  for (let i = 0; i <= 72; i++) {
-    const a = ph0 - Math.PI + (i / 72) * Math.PI * 2;
-    const p: Pt = [c2[0] + Math.cos(a) * r2, c2[1] + Math.sin(a) * r2];
-    if (Math.hypot(p[0] - c1[0], p[1] - c1[1]) < r1) inner.push(p);
-  }
-  const last = outer[outer.length - 1]!;
-  const d0 = Math.hypot(inner[0]![0] - last[0], inner[0]![1] - last[1]);
-  const d1 = Math.hypot(inner[inner.length - 1]![0] - last[0], inner[inner.length - 1]![1] - last[1]);
-  if (d1 < d0) inner = inner.reverse();
-  return [...outer, ...inner].map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('') + 'Z';
-}
-
 function coinStack(x: number, y: number, n: number): string {
   let s = '';
   for (let i = 0; i < n; i++) {
@@ -1477,10 +1455,6 @@ function r2(n: number, q = 100): number {
 }
 
 // ---------------------------------------------------------------- 输出
-
-export interface StockLayerFiles {
-  [layer: string]: string;
-}
 
 export interface StockOut {
   id: string;

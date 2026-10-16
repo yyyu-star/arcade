@@ -1,3 +1,26 @@
+# Arcade · Guandan
+
+Guandan (掼蛋) — the four-player, two-deck partnership climbing game, from level 2 up to A. One of the games on the Arcade mini-game site, running on Cloudflare Workers.
+
+- **Full rules** in a pure, deterministic rules core (`src/core/`): every pattern including wild cards, tribute / refusal / return, *jiefeng*, level-ups and the A round; same seed + same actions = same game.
+- **Solo play** against three computer players with personalities, entirely in the browser: three fun difficulties (beginner / normal / expert) and four real-chip tables, tuned against two simulated player models (`docs/ai.md`). The computer only reads its own hand and public information.
+- **Friend rooms** via a six-digit code or an invite link (built on the shared `arcade-kit` room): reconnects, auto-play when someone is away, "play again"; the server never sends anyone else's cards.
+- **Table fun** — props, stickers and phrases, with computer players that react — from the shared `arcade-kit/table-fun` component.
+- **Play chips only**: chips live in the platform wallet and have no cash value; they cannot be bought, exchanged or transferred.
+- **Standalone deploy**: `wrangler.jsonc` deploys as-is without the platform (guest identity, solo and friend rooms, no wallet).
+
+```bash
+cd games/guandan && npm ci
+npm run dev        # page on :5174
+npm test           # vitest (npm run typecheck for types)
+npm run test:room  # friend-room tests on real Durable Objects in workerd
+npm run shot       # headless Chromium smoke test with screenshots
+```
+
+The rest of this README, the design documents (`docs/`) and the code comments are in Simplified Chinese. MIT licensed, see [LICENSE](LICENSE).
+
+---
+
 # 掼蛋（guandan）
 
 两副牌、四人、对家一队，从打 2 升到过 A 的掼蛋。单机和三个电脑打，也能开好友房四人联机；arcade 小游戏平台的一个独立模块，挂在平台的 `/games/guandan/` 下。
@@ -142,7 +165,7 @@ docs/        设计、规则核实、核心接口、实盘设计
 ## 素材
 
 全部图片素材由 `src/view/art/` 的代码生成（SVG），没有外部图片或音频文件；音效和背景音由 `src/view/audio.ts` 用 WebAudio 实时合成。
-好友房的表情包和互动道具（0.6.0）来自共用包 `arcade-kit/fun`：同样是手写 SVG 和 WebAudio 合成，来源见 `packages/arcade-kit/README.md`。
+牌桌互动的表情包和道具来自共用包 `arcade-kit/table-fun`（0.12.0 起，画法和音效在 `arcade-kit/fun`）：同样是手写 SVG 和 WebAudio 合成，来源见 `packages/arcade-kit/README.md`。
 
 唯一的外部素材是标题字体 `src/view/fonts/`：思源宋体 Noto Serif SC Bold（[notofonts/noto-cjk](https://github.com/notofonts/noto-cjk)，
 SIL Open Font License 1.1，可商用；版权声明和许可原文在 `src/view/fonts/OFL.txt`，版权行取自字体 name 表和上游 adobe-fonts/source-han-serif 的 LICENSE）的两个子集——`gd-title.woff2`（画布上的大字、横幅、弹窗标题，
@@ -162,4 +185,4 @@ pyftsubset NotoSerifSC-Bold.otf --text-file=src/view/fonts/svg-chars.txt --flavo
 
 ## 许可证
 
-MIT，见仓库根目录的 `LICENSE`。
+MIT，见本目录的 `LICENSE`（和仓库根目录的同一份，拆成独立仓库时跟着走）。

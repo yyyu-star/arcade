@@ -27,7 +27,7 @@ import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { dur, tweenP, wait } from '../anim.ts';
-import { PLACE_NAMES, fullSeatName, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
@@ -222,7 +222,7 @@ export class TableScene extends Phaser.Scene {
     this.btnPass = new Button(this, cx - 200, BUTTON_Y, 168, 60, '不要', 'wood', () => this.onPass(), 'pass');
     this.btnHint = new Button(this, cx, BUTTON_Y, 168, 60, '提示', 'gold', () => this.onHint(), 'hint');
     this.btnPlay = new Button(this, cx + 200, BUTTON_Y, 168, 60, '出牌', 'red', () => this.onPlay(), 'play');
-    // 16:9 的小手机上往右让一点：左边要放下我的头像和聊天按钮，两个都要 minHit() 宽（taunt.ts 按"理牌"的左边排聊天按钮）
+    // 16:9 的小手机上往右让一点：左边要放下我的头像和"互动"按钮，两个都要 minHit() 宽（buildFun 按"理牌"的左边排互动按钮）
     const mh = minHit();
     const sortX = Math.max(cx - 410, 60 + Math.max(72, mh) / 2 + Math.max(56, mh) + Math.max(138, mh) / 2);
     this.btnSort = new Button(this, sortX, BUTTON_Y + 4, 138, 52, '理牌', 'green', () => this.onSort(), 'sort');

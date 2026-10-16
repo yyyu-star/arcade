@@ -324,8 +324,7 @@ const CSS_NEW = `
 .page{background:repeating-conic-gradient(#3a2f47 0 25%,#2a2233 0 50%) 0 0/16px 16px;border:2px solid #3a2634;height:auto}
 `;
 
-function css(m: Manifest): string {
-  void m;
+function css(): string {
   return `
 *{box-sizing:border-box}
 body{margin:0;background:#2a2233;color:#3a2634;font-family:"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif;
@@ -630,7 +629,7 @@ export function build(): number {
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>《开盘》0.3.0 美术样张</title>
-<style>${css(m)}</style></head>
+<style>${css()}</style></head>
 <body>
 <header><h1>《开盘》0.3.0 美术样张</h1><p>Q 版股票小人 + 温暖的炒股小屋。全部为程序生成的原创 SVG（tools/art/），页面只用 CSS 动画。素材目录：public/assets/art/v3/</p></header>
 <nav><a href="#friendly">0.3.1 看得懂</a><a href="#keyart">标题主视觉</a><a href="#new14">新增 14 只</a><a href="#blink">眨眼</a><a href="#items">道具图标</a><a href="#personas">人设立绘</a><a href="#difficulty">难度徽记</a><a href="#achievements">成就</a><a href="#codex">图鉴界面</a><a href="#atlas">图集</a><a href="#scene">小屋场景</a><a href="#heroes">精做 6 只</a><a href="#cards">持仓卡</a><a href="#chat">群聊</a><a href="#roster">全部股票</a><a href="#avatars">群友头像</a><a href="#themes">题材徽记</a><a href="#fx">特效</a><a href="#bill">账单与印章</a></nav>

@@ -18,7 +18,7 @@ import { tutorialState } from '../view/tutorial.ts';
 
 type Pt = { x: number; y: number };
 
-export interface GameBridge {
+interface GameBridge {
   readonly ready: boolean;
   readonly scene: string | null;
   /** 牌桌没在播动画、电脑没在想；标题页总是 idle */

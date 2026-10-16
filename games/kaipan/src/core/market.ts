@@ -11,7 +11,6 @@ import type { RealMarket, Regime } from './segment.ts';
 import type { Dir, Feel, GameState, Mood, PersonaId, RunSetup, Stage, StockMove, StockState, ThemeId, ThemeState } from './types.ts';
 
 export const STAGES: readonly Stage[] = ['cold', 'sprout', 'ferment', 'rally', 'climax', 'ebb'];
-export const FEELS: readonly Feel[] = ['cold', 'warming', 'hot', 'overheated', 'cooling'];
 export const MOODS: readonly Mood[] = ['bull', 'flat', 'bear'];
 export const DIRS: readonly Dir[] = ['up', 'flat', 'down'];
 

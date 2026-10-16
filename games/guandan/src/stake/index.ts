@@ -49,18 +49,28 @@ export function payout(tier: TierId, points: number): number {
 // ───────────── 钱包的 ref 和 op（平台 5.9：8–64 位的 [A-Za-z0-9_-]） ─────────────
 
 export const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
-const SOLO_REF = /^solo-[0-9a-f]{32}$/;
+/**
+ * 单机 ref：`solo-<档位>-<32 位十六进制>`（0.12.2 起把档位编进去）。ref 由 Worker 生成，结回时按 ref 里的档位算结回额，
+ * 不信页面带来的档位——否则小档带入、报豪华档结回会按豪华档算（安全审计 2026-10-16，低危：钱包另有"不超过带入 + 20 份"兜着）。
+ * 0.12.1 以前的旧格式 `solo-<32 位十六进制>` 照旧认（没有档位，按页面带的算），带入最多 24 小时就过期，之后不会再有
+ */
+const SOLO_REF = /^solo-(?:(small|mid|big|lux)-)?[0-9a-f]{32}$/;
 const ROOM_REF = /^gd-[0-9a-f]{16}$/;
 
 export function isSoloRef(x: unknown): x is string {
   return typeof x === 'string' && SOLO_REF.test(x);
 }
 
-/** 单机：hex 是 128 位随机数（32 位十六进制） */
-export function soloRef(hex: string): string {
-  const ref = `solo-${hex}`;
-  if (!SOLO_REF.test(ref)) throw new Error(`单机 ref 要 32 位小写十六进制：${hex}`);
+/** 单机：hex 是 128 位随机数（32 位十六进制），带上这一份的档位 */
+export function soloRef(tier: TierId, hex: string): string {
+  const ref = `solo-${tier}-${hex}`;
+  if (!SOLO_REF.test(ref)) throw new Error(`单机 ref 要档位加 32 位小写十六进制：${tier} ${hex}`);
   return ref;
+}
+
+/** 单机 ref 里的档位；旧格式（没编档位）和不是单机 ref 的回 null */
+export function soloRefTier(ref: string): TierId | null {
+  return (SOLO_REF.exec(ref)?.[1] as TierId | undefined) ?? null;
 }
 
 export function soloOp(ref: string, kind: 'in' | 'out' | 'refund'): string {

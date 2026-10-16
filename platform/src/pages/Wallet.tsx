@@ -146,7 +146,7 @@ export function WalletPage() {
               {capsText(g, c)}
             </p>
           ))}
-          <p className="note">单机实盘每个游戏每天最多赢 {winUnits} 份（按今天带过的最高档算），好友房不限。</p>
+          <p className="note">单机实盘每个游戏每天最多赢 {winUnits} 份（一份按今天带上桌最多的那一次算），好友房不限。</p>
         </Panel>
       )}
       <Panel icon="coin" title="最近进出">

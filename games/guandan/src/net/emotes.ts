@@ -25,7 +25,7 @@ export const TAUNTS = [
   '等得花都谢了',
 ] as const;
 
-export const TAUNT_BASE = EMOTES.length;
+const TAUNT_BASE = EMOTES.length;
 export const STICKER_BASE = TAUNT_BASE + TAUNTS.length;
 export const STICKER_COUNT = 12;
 export const PROP_BASE = STICKER_BASE + STICKER_COUNT;

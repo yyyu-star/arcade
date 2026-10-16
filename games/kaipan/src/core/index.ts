@@ -83,7 +83,6 @@ export {
   daysLeftInMonth,
   dispatch,
   emptyStats,
-  friendIn,
   holdingBase,
   isBusy,
   isRankedSetup,
@@ -158,7 +157,6 @@ export {
 } from './labels.ts';
 export {
   DIRS,
-  FEELS,
   ITEM_IDS,
   MOODS,
   STAGES,
@@ -191,7 +189,6 @@ export {
   calendarView,
   chatView,
   currentCalendar,
-  eventNames,
   eventView,
   faceOf,
   friendView,
@@ -232,7 +229,7 @@ export type { Rng } from './rng.ts';
 export type * from './types.ts';
 export { REGIMES, REGIME_LABEL, THEME_REAL, checkSegment, pickSegmentId, realFromSegment } from './segment.ts';
 export type { RealMarket, Regime, Segment, SegmentEvent, SegmentIndex, SegmentIndexEntry, SegmentStats, SegmentStock, SegmentTheme } from './segment.ts';
-export { realDH, realExcessPct, realMarketPct, realMood, realNextStage, realSectorPct, realStockPct, tapeIndex, warmUpReal } from './real.ts';
+export { realDH, realMarketPct, realMood, realNextStage, realSectorPct, realStockPct, tapeIndex, warmUpReal } from './real.ts';
 // 0.5：个股照搬真实走势、情报从真实未来推算、月度主题与节奏
 export { bandDir, fitRoles, forwardRet, isTrack, stockTraits, trackMarketRet, trackMood, trackThemeRet } from './real.ts';
 export type { StockTraits } from './real.ts';
@@ -243,7 +240,6 @@ export type { MonthThemeDef, MonthThemeCtx } from './content/monthThemes.ts';
 export { assignTitles, displayTitle, segmentTitleAt, storyView } from './reveal.ts';
 export type { StoryView } from './reveal.ts';
 export { SEGMENT_TITLES } from './content/tales.ts';
-export { SECTOR_WORD } from './segment.ts';
 export {
   SIZES,
   SIZE_LABEL,

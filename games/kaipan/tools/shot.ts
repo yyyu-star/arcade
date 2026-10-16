@@ -25,11 +25,10 @@
  * 特定局面（龙头带动、涨停、跌停、月底、通关）先在 node 里用 core 推进找到，再用调试桥 loadState 交给画面。
  * 任何 console error / pageerror / 等待超时 / 断言失败都会以非零码退出。
  */
-import { readFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContextOptions, type Page, type Route } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
 import { SAVE_FORMAT } from '../src/platform/storage.ts';
-import { BALANCE, bankRisk, bankView, baseBill, chatView, createRun, dailyScore, dailySegmentId, dailySetup, dispatch, gearLevered, isBusy, liveSetup, replay, rngFor, runSummary, topBar, totalDays, type Action, type GameEvent, type GameState, type RunSetup, type Segment } from '../src/core/index.ts';
+import { BALANCE, bankRisk, bankView, baseBill, chatView, createRun, dailyScore, dailySegmentId, dailySetup, dispatch, gearLevered, isBusy, liveSetup, replay, rngFor, runSummary, topBar, totalDays, type Action, type GameEvent, type GameState, type RunSetup } from '../src/core/index.ts';
 import { emptyProfile, recordRun } from '../src/platform/profile.ts';
 import { presetProfile } from '../src/debug/profiles.ts';
 import { botByName, playRun, useExt, useMarket } from './bots.ts';
