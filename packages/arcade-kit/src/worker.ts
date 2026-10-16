@@ -188,13 +188,18 @@ export async function loginGate(request: Request, env: GateEnv, opts: LoginGateO
 }
 
 /**
- * 独立部署时站点根路径的跳转（0.10.0）：游戏挂在 `/games/<id>/`，单独部署到 workers.dev 时有人直接打开 `/`，302 到游戏首页（查询参数原样带上）。
- * 只在独立模式、路径正好是 `/` 时回跳转，其余回 null，游戏接着走自己的路由。要让 `/` 先过 Worker：`dist` 根上不能有 index.html，
- * 或者把 "/" 加进 wrangler.jsonc 的 `assets.run_worker_first`
+ * 独立部署时站点根上本该归平台的两个路径（0.10.0；`/api/me` 0.10.2）。只在独立模式下回话，其余回 null，游戏接着走自己的路由：
+ * - `/`：游戏挂在 `/games/<id>/`，单独部署到 workers.dev 时有人直接打开 `/`，302 到游戏首页（查询参数原样带上）；
+ * - `/api/me`：页面的 `detectPlatform` 开局问一次。回 200 `{ standalone: true }`（没有 `user`，认作没有平台），
+ *   不让它落到静态资源回 404：404 在浏览器控制台每次都是一条红的资源加载错误。
+ * 两个路径都要先过 Worker：把 "/"、"/api/me" 加进 wrangler.jsonc 的 `assets.run_worker_first`。
+ * 本站部署时它们由平台的路由接，到不了游戏 Worker；就算到了，有平台绑定时这里也回 null
  */
 export function standaloneRoot(request: Request, env: ModeEnv, gameId: string): Response | null {
   const url = new URL(request.url);
-  if (!isStandalone(env) || url.pathname !== '/' || !/^[a-z0-9-]+$/.test(gameId)) return null;
+  if (!isStandalone(env) || !/^[a-z0-9-]+$/.test(gameId)) return null;
+  if (url.pathname === '/api/me') return Response.json({ standalone: true }, { headers: { 'cache-control': 'no-store' } });
+  if (url.pathname !== '/') return null;
   return new Response(null, { status: 302, headers: { location: `/games/${gameId}/${url.search}`, 'cache-control': 'no-store' } });
 }
 

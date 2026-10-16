@@ -1,5 +1,12 @@
 # 更新日志
 
+## 0.10.2
+
+- `standaloneRoot` 独立模式下也接 `/api/me`：回 200 `{ standalone: true }`（没有 `user`，页面的 `detectPlatform` 认作没有平台）。
+  原来要靠它落到静态资源回 404，浏览器控制台每次打开页面都有一条红的资源加载错误（德州 0.7.0 先在游戏里这么做了，收进 kit）。
+  游戏要把 `"/api/me"` 加进 wrangler.jsonc 的 `assets.run_worker_first`；本站部署时 `/api/*` 由平台的路由接，到不了游戏 Worker，有平台绑定时这里也回 null。
+- 测试：独立模式回 200 且 `detectPlatform` 得到 `platform: false`；平台模式（有 `ARCADE` 或 `GATE: "login"`）、别的路径回 null。
+
 ## 0.10.1
 
 - **npm 上的包名是 `@yyyu-star/arcade-kit`**（发布令牌只对 `@yyyu-star` 作用域有权限；0.10.0 没有发布到 npm）。游戏按别名装：

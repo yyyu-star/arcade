@@ -5,6 +5,7 @@
 import { exports } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { identify } from '../src/auth.ts';
+import { detectPlatform } from '../src/client.ts';
 import { cleanNickname, guestCookieName, guestIdentity, isStandalone, mintGuestCookie, readGuestCookie } from '../src/guest.ts';
 import { SESSION_COOKIE } from '../src/internal.ts';
 import { CLOSE } from '../src/protocol.ts';
@@ -225,5 +226,16 @@ describe('loginGate、standaloneRoot：独立模式', () => {
     expect(standaloneRoot(new Request(`${SITE}/games/mahjong/`), {}, 'mahjong')).toBeNull();
     expect(standaloneRoot(new Request(`${SITE}/`), { ARCADE: {} }, 'mahjong')).toBeNull();
     expect(standaloneRoot(new Request(`${SITE}/`), { GATE: 'login' }, 'mahjong')).toBeNull();
+  });
+
+  it('standaloneRoot：独立模式下 /api/me 回 200 { standalone: true }（detectPlatform 认作没有平台，不落到 404）；平台模式不管', async () => {
+    const r = standaloneRoot(new Request(`${SITE}/api/me`), {}, 'mahjong');
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get('cache-control')).toBe('no-store');
+    const p = await detectPlatform({ fetchImpl: async () => r! });
+    expect(p).toEqual({ platform: false });
+    expect(standaloneRoot(new Request(`${SITE}/api/me`), { ARCADE: {} }, 'mahjong')).toBeNull();
+    expect(standaloneRoot(new Request(`${SITE}/api/me`), { GATE: 'login' }, 'mahjong')).toBeNull();
+    expect(standaloneRoot(new Request(`${SITE}/api/me/x`), {}, 'mahjong')).toBeNull();
   });
 });

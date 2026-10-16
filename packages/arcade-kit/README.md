@@ -359,8 +359,9 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 - **昵称**：NFKC 归一后只许字母（含汉字）、数字和空格 `_ - . ·`，1 到 12 个字；不能含保留词：kit 自带"电脑、机器人、游客、AI、bot……"（`RESERVED_NICKNAMES`），
   游戏把自己电脑人物的名字传进 `guest: { reserved: [...] }`。浏览器用 `withNickname(url, name)` 给开房、进房地址带上。
 - **站点根路径**：独立部署到 `workers.dev` 时游戏仍挂在 `/games/<id>/`。Worker 入口最前面加
-  `const root = standaloneRoot(request, env, '<id>'); if (root) return root;`，独立模式下 `/` 302 到 `/games/<id>/`（平台模式回 null，不管）。
-  `/` 要先到 Worker：静态资源根上不能有 `index.html`，或者把 `"/"` 加进 `assets.run_worker_first`。
+  `const root = standaloneRoot(request, env, '<id>'); if (root) return root;`，独立模式下 `/` 302 到 `/games/<id>/`，
+  `/api/me` 回 200 `{ standalone: true }`（0.10.2，页面的 `detectPlatform` 认作没有平台，控制台不冒 404）；平台模式回 null，不管。
+  这两个路径要先到 Worker：把 `"/"`、`"/api/me"` 加进 `assets.run_worker_first`。
 
 **独立配置的 wrangler.jsonc**（游戏仓库里放这一份；本站正式部署时由维护者的部署工具补上 `ARCADE`、`WALLET` 和 `GATE: "login"`、路由）：
 
@@ -370,7 +371,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
   "main": "worker/main.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,                    // 独立部署用 <name>.<子域>.workers.dev
-  "assets": { "directory": "./dist-cf", "binding": "ASSETS", "run_worker_first": ["/", "/games/<id>/", "/games/<id>/rooms", "/games/<id>/rooms/*"] },
+  "assets": { "directory": "./dist-cf", "binding": "ASSETS", "run_worker_first": ["/", "/api/me", "/games/<id>/", "/games/<id>/rooms", "/games/<id>/rooms/*"] },
   "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "Room" }, { "name": "METER", "class_name": "RoomMeter" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "RoomMeter"] }]
   // 不写 services（没有 ARCADE、WALLET），不写 GATE
