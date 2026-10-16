@@ -74,7 +74,7 @@ async function play(page: Page, name: string): Promise<boolean> {
  * "互动"按钮的面板里点名说一句。按控件的屏幕中心点（kit 的 controls()），流水里要有扔道具、表情、短语三行。
  * 截一张头像菜单开着的图（shots/smoke-<land/port>-menu.png 和 -panel.png），面板要整个在屏幕里
  */
-async function soloComms(page: Page, name: string): Promise<void> {
+async function soloFun(page: Page, name: string): Promise<void> {
   type Box = { x: number; y: number; w: number; h: number };
   const controls = (): Promise<Record<string, Box>> => page.evaluate(() => (window as unknown as { __fun: { controls(): Record<string, Box> } }).__fun.controls());
   const tap = async (key: string): Promise<void> => {
@@ -140,7 +140,7 @@ for (const [name, viewport] of [
   await page.click('.home');
   await page.waitForSelector('text=接着打');
   await page.click('text=接着打');
-  await soloComms(page, name);
+  await soloFun(page, name);
   if (!(await play(page, name))) errors.push('一场里没出现过胡牌亮牌');
   await page.screenshot({ path: `${root}shots/smoke-${name}.png` });
   // 回选桌，再看一眼规则表

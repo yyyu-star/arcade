@@ -15,7 +15,7 @@ import { stream } from 'arcade-kit/rng';
 import { isComplete, waits, type ShapeRules } from '../../hand/index.ts';
 import { payMany, payOne, type Payment } from '../../match/index.ts';
 import { distance, drawHead, drawTail, newWall, nextSeat, resolveClaims, wallLeft, type Answer, type ClaimKind, type KanType, type Meld, type RiverTile, type Wall } from '../../table/index.ts';
-import { buildWall, byTile, countsOf, kindOf, suitKinds, suitOf, type Suit, type Tile, type TileSet } from '../../tiles/index.ts';
+import { buildWall, byTile, countsOf, kindOf, suitOf, type Suit, type Tile, type TileSet } from '../../tiles/index.ts';
 import type { MatchSetup, SeatKind, Tune } from '../types.ts';
 import { NO_CONTEXT, scoreHand, unitOf, type FanItem, type WinContext } from './fan.ts';
 
@@ -193,7 +193,6 @@ export type XzAction =
 const sortHand = (p: XzPlayer): void => {
   p.hand.sort(byTile);
 };
-const queKinds = (q: Suit | -1): number[] => (q === -1 ? [] : suitKinds(q));
 export const hasQue = (p: XzPlayer): boolean => p.que >= 0 && p.hand.some((t) => suitOf(kindOf(t)) === p.que);
 const countKind = (tiles: readonly Tile[], k: number): number => tiles.reduce((a, t) => a + (kindOf(t) === k ? 1 : 0), 0);
 const unfinished = (s: XzState): number[] => s.players.map((_, i) => i).filter((i) => !s.players[i]!.won);

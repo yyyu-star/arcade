@@ -17,7 +17,7 @@ import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
-import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
+import { renderWaiting, roomNotice, shareRoom } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, VARIANT_NAME, walletError } from './view/text.ts';

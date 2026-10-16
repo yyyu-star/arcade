@@ -110,8 +110,9 @@ try {
   await a.goto(`${base}/?turbo`);
   await a.waitForSelector('.lobby-head');
   check(new URL(a.url()).pathname === '/games/mahjong/', '打开站点根落到游戏首页');
-  const stakes = await a.$$eval('.stakes .stake', (xs) => xs.map((x) => x.textContent));
-  check(stakes.length === 1 && /娱乐/.test(stakes[0] ?? ''), `选桌页只有娱乐（${stakes.join(' / ')}）`);
+  const labels = await a.$$eval('.stakes-label', (xs) => xs.map((x) => x.textContent ?? ''));
+  const stakes = await a.$$eval('.stakes .stake', (xs) => xs.length);
+  check(labels.length === 1 && /娱乐/.test(labels[0] ?? '') && stakes === 3, `选桌页只有娱乐的三个难度（${labels.join(' / ')}，${stakes} 张卡）`);
   check(((await a.textContent('.wallet-chip')) ?? '') === '', '顶栏没有钱包');
   check((await a.getAttribute('.home', 'href')) === './' && /首页/.test((await a.textContent('.home')) ?? ''), '"大厅"变成回游戏首页');
   await a.screenshot({ path: join(SHOTS, 'standalone-lobby.png') });
@@ -147,11 +148,9 @@ try {
   await a.click('button:text-is("开打")');
   await Promise.all([a.waitForSelector('.my-hand .tile', { timeout: 20_000 }), b.waitForSelector('.my-hand .tile', { timeout: 20_000 })]);
   check(true, '游客好友房开打');
-  // A 冲一个电脑扔个道具
-  await a.click('.comms-btn');
-  await a.click('.comms-tabs .chip:has-text("道具")');
-  await a.click('.comms-body .pic >> nth=0');
-  await a.click('.comms-body .act:not(:has-text("小王")) >> nth=0');
+  // A 冲一个电脑（座位 2）扔个道具：点头像，菜单里第一个道具（kit 的 table-fun）
+  await a.click('.atf-hot[data-seat="2"]');
+  await a.click('[data-key="fun:prop0"]');
   check(!!(await b.waitForSelector('.arcade-fun > *', { timeout: 4_000 }).catch(() => null)), 'A 扔的道具 B 看得到');
   for (let i = 0; i < 60; i++) {
     await Promise.all([step(a), step(b)]);

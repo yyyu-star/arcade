@@ -66,7 +66,7 @@ for (let i = 1; i <= steps; i++) {
 /** 牌桌上不同部分（各家的牌河、副露、手牌、头像、中间、操作条）有没有互相压住：按每张牌、每个按钮的框算 */
 async function overlaps(): Promise<string[]> {
   return page.evaluate(() => {
-    const parts = ['.center', '.bar > *', '.my-hand .tile', '.comms-btn'];
+    const parts = ['.center', '.bar > *', '.my-hand .tile', '.atf-btn'];
     for (let r = 0; r < 4; r++) parts.push(`.river.r${r} .tile`, `.melds.r${r} .tile`, `.badge.r${r}`, `.opp-hand.r${r} > *`);
     const boxes = parts.map((sel) => [...document.querySelectorAll(sel)].map((e) => e.getBoundingClientRect()).filter((b) => b.width > 0));
     const out: string[] = [];

@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { payMany } from '../src/core/match/index.ts';
-import { newWall } from '../src/core/table/index.ts';
 import { kindOf, tileOf, type Tile } from '../src/core/tiles/index.ts';
 import {
   NO_CONTEXT,
@@ -10,7 +9,6 @@ import {
   sichuanXuezhan as XZ,
   view,
   type WinContext,
-  type XzAction,
   type XzState,
 } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import type { Meld } from '../src/core/table/index.ts';

@@ -3,7 +3,7 @@
  */
 import { MAX_TITLES, type Payment, type SettleStats } from '../../match/index.ts';
 import { wallLeft, type ClaimKind, type Meld, type RiverTile } from '../../table/index.ts';
-import { kindOf, suitOf, type Suit, type Tile } from '../../tiles/index.ts';
+import type { Suit, Tile } from '../../tiles/index.ts';
 import { NEUTRAL_TUNE, type MatchResult, type Tune, type Variant, type VariantAi } from '../types.ts';
 import {
   actorsOf,

@@ -70,7 +70,7 @@ describe('选项', () => {
     expect(G.options!([])).toBeNull();
   });
 
-  test('交流的编号：14 句短语 + 12 张表情包 + 8 个道具', () => {
+  test('互动的编号：14 句短语 + 12 张表情包 + 8 个道具', () => {
     expect(G.emotes).toBe(EMOTES);
     expect(EMOTES).toBe(34);
   });

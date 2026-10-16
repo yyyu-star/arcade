@@ -26,7 +26,7 @@ export interface WaitingProps {
 }
 
 /** 开房时定下的规则，一行字 */
-export function rulesLine(o: RoomOpts | null): string {
+function rulesLine(o: RoomOpts | null): string {
   if (!o) return '';
   const st = stakesOf(o.stakes);
   const r = o.rules as XzOpts;

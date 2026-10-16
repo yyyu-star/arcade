@@ -215,7 +215,7 @@ try {
   check(freed, 'B 在等人页点"离开房间"，A 这边他的座位空出来');
   await joinAndStart(pa, pb, base, code);
   check(true, `娱乐房开打，两边进牌桌（${Math.round((Date.now() - t) / 1000)} 秒）`);
-  // 开局换三张时操作条最宽：截一张看"聊"按钮、自己的头像牌有没有压住它
+  // 开局换三张时操作条最宽：截一张看"互动"按钮、自己的头像牌有没有压住它
   await pa.screenshot({ path: join(SHOTS, 'room-start-a.png') });
   await pb.screenshot({ path: join(SHOTS, 'room-start-b.png') });
 
@@ -235,13 +235,13 @@ try {
   await hot(pa, 1);
   await key(pa, 'fun:prop0');
   check(!!(await pb.waitForSelector('.arcade-fun > *', { timeout: 4_000 }).catch(() => null)), 'A 冲 B 扔的道具 B 看得到');
-  await pb.screenshot({ path: join(SHOTS, 'room-comms-b.png') });
+  await pb.screenshot({ path: join(SHOTS, 'room-fun-b.png') });
   // 点名：A 点 B 的头像，菜单里的点名短语，B 看到气泡
   await sleep(1_700);
   await hot(pa, 1);
   await key(pa, 'fun:named0');
   check(!!(await pb.waitForSelector('.atf-bubble', { timeout: 4_000 }).catch(() => null)), 'A 点名 B 说的话 B 看得到');
-  await pa.screenshot({ path: join(SHOTS, 'room-comms-a.png') });
+  await pa.screenshot({ path: join(SHOTS, 'room-fun-a.png') });
   // B 屏蔽 A：A 再说 B 就看不到；解开以后照常
   await sleep(2_800);
   await hot(pb, 0);
