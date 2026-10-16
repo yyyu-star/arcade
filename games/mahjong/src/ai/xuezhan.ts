@@ -233,7 +233,7 @@ function decideClaim(v: XzView, p: Style): XzAction {
     const pairs = countsOf(me.hand).filter((x) => x >= 2).length;
     const skip = p.greed >= 800 && fan === 0 && v.wall > 30 && (Math.max(...n) >= 10 || pairs >= 4) && !v.claim!.rob;
     // 新手场的手软：真人打出来的 0 番小胡，偶尔放过去（牌墙还多时），让人有赢的感觉
-    const soft = p.soft > 0 && fan === 0 && v.wall > 20 && !v.claim!.rob && v.seats[v.claim!.from]!.kind === 'human' && noise(v, 1) * 8 < p.soft;
+    const soft = p.soft > 0 && fan === 0 && v.wall > 20 && !v.claim!.rob && v.seats[v.claim!.from]!.kind === 'human' && noise(v, 1) * 4 < p.soft;
     if (!skip && !soft) return { t: 'claim', w: c.w, c: 'ron' };
   }
   const dead = queKinds(seat.que);

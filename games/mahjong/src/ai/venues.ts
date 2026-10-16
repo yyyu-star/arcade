@@ -21,8 +21,8 @@ export interface Venue {
 
 //                                幺妹儿 熊猫哥 盖碗儿 兔头哥 火锅 板凳儿
 export const VENUES: Readonly<Record<string, Venue>> = {
-  'solo:fun': { weights: [4, 4, 1, 4, 0, 5], soft: 300 },
-  'solo:small': { weights: [4, 4, 1, 4, 0, 4], soft: 250 },
+  'solo:fun': { weights: [3, 2, 1, 3, 0, 6], soft: 500 },
+  'solo:small': { weights: [3, 3, 1, 3, 0, 5], soft: 420 },
   'solo:mid': { weights: [4, 3, 3, 4, 1, 1], soft: 100 },
   'solo:big': { weights: [2, 3, 3, 2, 4, 0], soft: 0 },
   'solo:lux': { weights: [0, 3, 0, 1, 8, 0], soft: 0 },
