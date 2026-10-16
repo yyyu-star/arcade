@@ -32,6 +32,17 @@ describe('架构约束', () => {
     for (const f of files('src/room')) expect(read(f), f).not.toMatch(/from '\.\.\/(view|net)\/|from '\.\.\/(main|solo)\.ts'/);
   });
 
+  it('页面启动先建云存档再画大厅（0.3.7）：画大厅要按 cloud.userId() 读记着的房间，反过来在好友房里刷新一打开就报错', () => {
+    const main = read('src/main.ts');
+    const boot = main.slice(main.indexOf('async function boot('));
+    const created = boot.indexOf('cloud = createCloud(');
+    expect(created).toBeGreaterThan(0);
+    for (const call of ['showLobby()', 'drawLobby()', 'savedRoom()', 'lastRoom()', 'cloud.']) {
+      const at = boot.indexOf(call);
+      if (at >= 0) expect(at, call).toBeGreaterThan(created);
+    }
+  });
+
   it('浏览器存储的键都在 store.ts 里，且以 texas. 开头（和平台、别的游戏同域，前缀是唯一的隔离）', () => {
     const keys = Object.values(KEYS).map((k) => (typeof k === 'function' ? k('u1') : k));
     expect(keys.length).toBeGreaterThanOrEqual(9);

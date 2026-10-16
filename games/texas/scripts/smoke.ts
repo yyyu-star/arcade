@@ -564,6 +564,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   log('fun: prop and taunt seen on the other screens');
 
   // 打到一半手机刷新：不自动进房（0.2.3），标题页有"回到房间"，点了回到原来的座位
+  // 带着房间记录启动页面不能报错（0.3.7：原来先画大厅、后建云存档，这里一刷新就是 pageerror、大厅画不出来；结尾的零报错核对会抓到）
   const half = Math.max(2, Math.floor(hands / 2));
   const phone = (async () => {
     await playRoom(bp, half - 1, 'phone', new Set([1]));

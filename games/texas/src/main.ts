@@ -252,8 +252,8 @@ function think(t: Table, seat: number): number {
 async function boot(): Promise<void> {
   window.addEventListener('pointerdown', unlockAudio, { once: true });
   window.addEventListener('keydown', unlockAudio, { once: true });
-  drawTop();
-  showLobby();
+  // 云存档先建好再画大厅（0.3.7）：画大厅要读本机记着的房间，按 cloud.userId() 认是不是这个账号的。
+  // 原来先画大厅、后建 cloud，刷新前在好友房里的（记着房间）一打开页面就报错、大厅画不出来
   cloud = createCloud({
     fetch: (...a) => fetch(...a),
     storage: localStorage,
@@ -262,6 +262,8 @@ async function boot(): Promise<void> {
     setTimeout: (f, ms) => window.setTimeout(f, ms),
     clearTimeout: (h) => window.clearTimeout(h as number),
   });
+  drawTop();
+  showLobby();
   cloud.onChange(drawCloud);
   await Promise.all([cloud.start(), refreshWallet()]);
   drawCloud();
