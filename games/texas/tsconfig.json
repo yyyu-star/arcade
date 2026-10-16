@@ -16,5 +16,5 @@
     "skipLibCheck": true
   },
   "include": ["src", "test", "scripts", "vite.config.ts", "vite-env.d.ts"],
-  "exclude": ["test/worker", "test/arcade.dev.ts", "test/dev-entry.ts"]
+  "exclude": ["test/worker", "test/standalone", "test/arcade.dev.ts", "test/dev-entry.ts"]
 }

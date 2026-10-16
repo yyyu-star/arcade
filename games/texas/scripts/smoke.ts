@@ -11,6 +11,8 @@
  * 手机刷新后不自动进房、点标题页的"回到房间"回到座位，第四个人接管电脑座位，都离开后房间结束、房主再点"开房间"开出新的（不 409）、
  * 都离开后结算页、结回钱包（--only room 只跑这段）。
  * 桌面那一段开"快"动画（0.55 倍）省时间；默认速度的节奏用 scripts/capture.ts 连拍看。
+ * 单独部署（--only standalone，不带 --only 时也跑）：原样的 wrangler.jsonc 另起一个 wrangler dev，不接假平台：站点根跳到游戏首页，
+ * 没有钱包、云存档、实盘，"大厅"回游戏首页；单机娱乐打两手、离桌；两个游客（一个带昵称）开好友房打两手、离开（DESIGN.md 10.1）。
  * 端口一律由系统分配（不占 5175 / 4175）。截图放在 --shots（默认系统临时目录下的 texas-shots）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -42,9 +44,13 @@ function freePort(): Promise<number> {
   });
 }
 
-async function startWorker(port: number, state: string): Promise<ChildProcess> {
+/** 平台模式用测试配置加假平台；单独部署用原样的 wrangler.jsonc（入口多导出了东西、配置写错，这里就起不来） */
+const PLATFORM_CONFIG = ['-c', 'test/wrangler.smoke.jsonc', '-c', 'test/arcade.dev.jsonc'];
+const STANDALONE_CONFIG = ['-c', 'wrangler.jsonc'];
+
+async function startWorker(port: number, state: string, config: string[]): Promise<ChildProcess> {
   const origin = `http://localhost:${port}`;
-  const p = spawn('npx', ['wrangler', 'dev', '-c', 'test/wrangler.smoke.jsonc', '-c', 'test/arcade.dev.jsonc', '--ip', '127.0.0.1', '--port', String(port), '--persist-to', state, '--var', `SITE_ORIGIN:${origin}`], {
+  const p = spawn('npx', ['wrangler', 'dev', ...config, '--ip', '127.0.0.1', '--port', String(port), '--persist-to', state, '--var', `SITE_ORIGIN:${origin}`], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
@@ -54,8 +60,9 @@ async function startWorker(port: number, state: string): Promise<ChildProcess> {
   p.stderr!.on('data', (d) => (out += d));
   for (let i = 0; i < 120; i++) {
     try {
+      // 平台模式没登录 302 到登录页，单独部署直接回页面
       const r = await fetch(`${origin}/games/texas/`, { redirect: 'manual' });
-      if (r.status === 302) return p;
+      if (r.status === 302 || r.status === 200) return p;
     } catch {
       // 还没起来
     }
@@ -638,22 +645,92 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await Promise.all([host.close(), a.close(), b.close(), d.close()]);
 }
 
-async function main(): Promise<void> {
+/** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
+async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
   const state = mkdtempSync(join(tmpdir(), 'texas-smoke-'));
-  const worker = await startWorker(port, state);
-  const base = `http://localhost:${port}`;
+  const worker = await startWorker(port, state, config);
+  try {
+    await run(`http://localhost:${port}`);
+  } finally {
+    if (worker.pid) process.kill(-worker.pid, 'SIGTERM');
+    rmSync(state, { recursive: true, force: true });
+  }
+}
+
+/** 单独部署：见文件头 */
+async function standalone(browser: Browser, base: string): Promise<void> {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true, nick: '小明' }));
+  });
+  const page = await ctx.newPage();
+  watch(page, 'alone');
+  await page.goto(`${base}/`);
+  if (new URL(page.url()).pathname !== '/games/texas/') throw new Error(`standalone: / should go to /games/texas/, got ${page.url()}`);
+  await page.locator('.nick-row').waitFor();
+  for (const sel of ['.lobby .wallet', '.lobby .mode', '.topbar .cloud']) if (await page.locator(sel).first().isVisible()) throw new Error(`standalone: ${sel} should be hidden`);
+  const home = await page.locator('.home').evaluate((a) => (a as HTMLAnchorElement).href);
+  if (home !== `${base}/games/texas/`) throw new Error(`standalone: "大厅" should go to the game, got ${home}`);
+  if (!(await page.locator('.friends .pill', { hasText: '开房间' }).isEnabled())) throw new Error('standalone: 开房间 should work without a wallet');
+  await shot(page, 'alone-lobby');
+
+  // 单机：只有娱乐
+  await page.locator('.tile', { hasText: '小桌' }).click();
+  await page.locator('.size', { hasText: /^4$/ }).click();
+  await page.locator('.lobby .start').click();
+  await skipTips(page);
+  await playUntil(page, 2, new Set()).catch(async (e: unknown) => {
+    await shot(page, 'debug-alone-solo');
+    throw e;
+  });
+  await shot(page, 'alone-solo');
+  await page.locator('.leave').click();
+  if (await page.locator('.dialog').isVisible({ timeout: 2_000 }).catch(() => false)) await page.locator('.d-btn.primary').click();
+  await summary(page, 'alone-solo-summary');
+
+  // 好友房：房主带昵称"小明"开房，手机点邀请链接进来（没填昵称，是"游客1234"）
+  await page.locator('.size', { hasText: /^4$/ }).click();
+  await page.locator('.friends .pill', { hasText: '开房间' }).click();
+  await page.locator('.rw-seat.me').waitFor({ timeout: 20_000 });
+  const code = ((await page.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
+  const phone = await browser.newContext(PHONE);
+  const pp = await phone.newPage();
+  watch(pp, 'alone-phone');
+  await pp.goto(`${base}/games/texas/?room=${code}`);
+  await pp.locator('.room-wait').waitFor();
+  await pp.locator('.rw-seat').nth(1).locator('.rw-sit').tap();
+  await pp.locator('.rw-seat.me').waitFor();
+  await page.locator('.rw-seat.taken').nth(1).waitFor();
+  const names = (await page.locator('.rw-name').allTextContents()).join('|');
+  if (!names.includes('小明') || !/游客\d{4}/.test(names)) throw new Error(`standalone room names: ${names}`);
+  if (!((await pp.locator('.rw-info').textContent()) ?? '').includes('筹码不算数')) throw new Error('standalone room info should say chips do not count');
+  await shot(page, 'alone-room-wait');
+  await page.locator('.rw-go .start').click();
+  await Promise.all([playRoom(page, 2, 'alone-host', new Set([2])), playRoom(pp, 2, 'alone-phone')]);
+  for (const p of [pp, page]) {
+    await p.locator('.leave').click();
+    if (await p.locator('.dialog').isVisible({ timeout: 2_000 }).catch(() => false)) await p.locator('.d-btn.primary').click();
+    await p.locator('.lobby').waitFor();
+  }
+  log('standalone: solo, guest room ok');
+  await Promise.all([ctx.close(), phone.close()]);
+}
+
+async function main(): Promise<void> {
   // 有的沙箱环境里 zygote 拉不起 GPU 子进程，浏览器会直接退出；不用 zygote 就好（CI 上加不加都一样）
   const browser = await chromium.launch({ args: ['--no-zygote', '--disable-gpu'] });
   try {
     const only = opt('only', '');
-    if (!only || only === 'desktop') await desktop(browser, base);
-    if (!only || only === 'mobile') await mobile(browser, base);
-    if (!only || only === 'room') await room(browser, base);
+    if (only !== 'standalone')
+      await withWorker(PLATFORM_CONFIG, async (base) => {
+        if (!only || only === 'desktop') await desktop(browser, base);
+        if (!only || only === 'mobile') await mobile(browser, base);
+        if (!only || only === 'room') await room(browser, base);
+      });
+    if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } finally {
     await browser.close();
-    if (worker.pid) process.kill(-worker.pid, 'SIGTERM');
-    rmSync(state, { recursive: true, force: true });
   }
   if (errors.length) {
     console.error(errors.join('\n'));

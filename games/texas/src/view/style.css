@@ -842,6 +842,8 @@ body::before {
   font-variant-numeric: tabular-nums;
 }
 .code-in::placeholder { font-size: 13px; letter-spacing: 0; color: #6f7b74; }
+.nick-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.nick-in { letter-spacing: 0; }
 .stage.in-room .lobby { display: none; }
 .room-wait {
   position: absolute;

@@ -1,18 +1,21 @@
-// texas Worker 正式配置（DESIGN.md 第 10 节）：页面 + 登录闸门 + 单机带入结回（转平台钱包）+ 好友房。
-// 部署只走 .github/workflows/game-texas.yml（main 上经 PR 合并的提交）：先 npm run build:cf 把页面打到 dist-cf/games/texas/，再 wrangler deploy。
-// 路由（<站点>/games/texas 和 <站点>/games/texas/*）和 SITE_ORIGIN 不写在这里，由部署时注入，见 README 的部署一节；workers_dev 关着，没有路由时外面访问不到。
+// texas Worker 的独立配置（DESIGN.md 第 10 节）：页面 + 单机 + 好友房，能原样单独部署（npm run deploy，或 README 里的 Deploy to Cloudflare 按钮），
+// 用 <name>.<子域>.workers.dev 打开，游客模式、没有钱包（10.1）。
+// 本站的正式部署只走 .github/workflows/game-texas.yml（main 上经 PR 合并的提交）：由部署工具（tools/deployer）在这份上补平台的东西——
+// ARCADE、WALLET 两个服务绑定和 GATE=login（tools/workers.json）、路由（<站点>/games/texas 和 <站点>/games/texas/*）、SITE_ORIGIN，
+// 并关掉 workers_dev。所以这里不写 services、不写 GATE。
 {
   "name": "texas",
   "main": "worker/main.ts",
   "compatibility_date": "2026-10-01",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    // 只有这些先过 Worker：首页（登录闸门）、单机带入结回、开房进房；其余静态资源直接回。/api/*（含 /api/wallet）由平台的路由接
-    "run_worker_first": ["/games/texas", "/games/texas/", "/games/texas/index.html", "/games/texas/api/solo/*", "/games/texas/rooms", "/games/texas/rooms/*"]
+    // 只有这些先过 Worker：站点根（单独部署时跳到 /games/texas/）、首页（登录闸门）、单机带入结回、开房进房；其余静态资源直接回。
+    // /api/*（含 /api/wallet）本站由平台的路由接；单独部署时 /api/me 由 Worker 答"没有平台"（页面据此藏起登录、钱包），别的落到静态资源回 404
+    "run_worker_first": ["/", "/api/me", "/games/texas", "/games/texas/", "/games/texas/index.html", "/games/texas/api/solo/*", "/games/texas/rooms", "/games/texas/rooms/*"]
   },
   "durable_objects": {
     "bindings": [
@@ -22,14 +25,7 @@
   },
   // 德州之前没部署过，一个 v1 就够；钱包是平台的，没有 Wallet
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] }],
-  "services": [
-    // 认人（/api/me）
-    { "binding": "ARCADE", "service": "arcade" },
-    // 平台钱包（docs/platform-backend.md 5.9）：平台按 props.game 认是哪个游戏
-    { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "texas" } }
-  ],
   "vars": {
-    "GATE": "login",
     // 德州每天的 DO 写入预算（DESIGN.md 第 7 节）：到 busy 不开新房，到 stop 收场。
     // 每人开房（0.2.4 维护者定：不让玩家感到限制）：同时 5 个、每天 100 个；全站上限照 kit 默认（防账单的不放宽）。
     // 嘲讽、表情、道具（0.3.0：玩家感觉不到，可以后台调）：每座位每秒补 1 个令牌、最多攒 3 个，客户端排队静默发

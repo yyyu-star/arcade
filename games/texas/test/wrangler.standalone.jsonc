@@ -1,0 +1,16 @@
+// 只给单独部署的测试用（vitest.standalone.config.ts）：和 wrangler.jsonc 一样没有 ARCADE、WALLET、GATE（DESIGN.md 10.1），
+// 入口是原样的 worker/main.ts（不经测试入口，入口多导出了东西时这里就起不来）；静态资源换成测试的假首页。不部署
+{
+  "name": "texas-standalone-test",
+  "main": "../worker/main.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./assets", "binding": "ASSETS" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "TexasRoom" },
+      { "name": "METER", "class_name": "RoomMeter" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] }],
+  "vars": { "KIT_QUOTA": { "busyWrites": 15000, "stopWrites": 20000 } }
+}

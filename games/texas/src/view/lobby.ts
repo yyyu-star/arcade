@@ -1,6 +1,7 @@
 /**
  * 标题页兼选桌：左边标题和一手同花顺，右边钱包、每日补给，先选"娱乐 / 实盘"（docs/economy.md 第 1 节），再选档位、人数、带多少。
  * 娱乐不碰钱包、随便玩；实盘从钱包带一份上桌、离桌结回。钱包常驻一行"无任何现金价值"（DESIGN.md 5.3）；钱包连不上时实盘不可选，娱乐照常。
+ * 单独部署（没有平台，10.1）：藏起钱包和"娱乐 / 实盘"，只有娱乐；好友房下面多一个昵称框。
  */
 import { STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
 import { MAX_SEATS } from '../core/table.ts';
@@ -58,6 +59,11 @@ export class Lobby {
   private readonly roomText: HTMLSpanElement;
   private readonly backBtn: HTMLButtonElement;
   private readonly friends: HTMLDivElement;
+  private readonly walletBox: HTMLDivElement;
+  private readonly nickRow: HTMLDivElement;
+  private readonly nickIn: HTMLInputElement;
+  /** 单独部署：没有钱包，只有娱乐 */
+  private alone = false;
   private stakes: StakesId = 'small';
   private size = 6;
   private mode: Mode = 'real';
@@ -80,7 +86,7 @@ export class Lobby {
     el('div', 'ver', hero, `v${__TEXAS_VERSION__}`);
 
     const panel = el('div', 'panel', this.root);
-    const wallet = el('div', 'wallet', panel);
+    const wallet = (this.walletBox = el('div', 'wallet', panel));
     el('span', 'w-label', wallet, '我的筹码');
     this.balance = el('span', 'w-balance', wallet, '…');
     this.reliefBtn = button(wallet, 'relief', '领今日补给', () => h.relief());
@@ -126,7 +132,7 @@ export class Lobby {
     this.slider.addEventListener('input', () => this.draw());
     this.buyAmt = el('span', 'buy-amt', buy);
     const go = el('div', 'go-row', panel);
-    this.startBtn = button(go, 'start', '坐下开打', () => this.h.start(this.stakes, this.size, Number(this.slider.value), this.mode === 'fun'));
+    this.startBtn = button(go, 'start', '坐下开打', () => this.h.start(this.stakes, this.size, Number(this.slider.value), this.fun()));
 
     // 好友房：开房用上面选的档位和人数，买入固定是这一档的满买入
     const fr = (this.friends = el('div', 'friends', panel));
@@ -142,12 +148,38 @@ export class Lobby {
       if (e.key === 'Enter' && !this.joinBtn.disabled) h.joinRoom(this.codeIn.value);
     });
     this.joinBtn = button(fr, 'pill', '进房间', () => h.joinRoom(this.codeIn.value));
+    // 单独部署时好友房里别人看到的名字（kit 的 ?name=，服务端清洗，不合格就是"游客1234"）；有平台时用平台的昵称，不显示
+    this.nickRow = el('div', 'nick-row hidden', panel);
+    el('span', 'label', this.nickRow, '昵称');
+    this.nickIn = el('input', 'code-in nick-in', this.nickRow);
+    Object.assign(this.nickIn, { type: 'text', maxLength: 12, placeholder: '好友房里显示的名字，可不填', autocomplete: 'nickname' });
+    this.nickIn.addEventListener('change', () => patchSettings({ nick: this.nickname() }));
 
     // 设置坏了就用默认的（readSettings 坏了给空）
     const saved = readSettings() as { stakes?: StakesId; size?: number; mode?: Mode };
     if (saved.stakes && STAKES.some((x) => x.id === saved.stakes)) this.stakes = saved.stakes;
     if (saved.size && saved.size >= 2 && saved.size <= MAX_SEATS) this.size = saved.size;
     if (saved.mode === 'fun' || saved.mode === 'real') this.mode = saved.mode;
+    if (typeof (saved as { nick?: unknown }).nick === 'string') this.nickIn.value = (saved as { nick: string }).nick;
+  }
+
+  /** 单独部署（开局时问过没有平台）：藏起钱包和实盘，露出昵称框 */
+  standalone(): void {
+    this.alone = true;
+    toggle(this.walletBox, 'hidden', true);
+    for (const b of this.modeBtns.values()) toggle(b, 'hidden', true);
+    toggle(this.nickRow, 'hidden', false);
+    this.draw();
+  }
+
+  /** 现在是不是娱乐：钱包连不上、单独部署时只有娱乐（记着的是实盘也一样，开桌按这个） */
+  private fun(): boolean {
+    return this.mode === 'fun' || !this.s.wallet || this.alone;
+  }
+
+  /** 单独部署时的昵称（没填是空的） */
+  nickname(): string {
+    return this.nickIn.value.trim();
   }
 
   update(s: LobbyState): void {
@@ -205,12 +237,12 @@ export class Lobby {
     if (orphan) setText(this.orphanText, `另一台设备上还有一桌没打完（带上桌 ${chips(orphan.amount)}）：回那台设备离桌就能结回；放着不管，24 小时后原样退回钱包`);
 
     // 钱包连不上：实盘不可选，娱乐照常
-    const fun = this.mode === 'fun' || !wallet;
+    const fun = this.fun();
     for (const [m, b] of this.modeBtns) {
       toggle(b, 'sel', (m === 'fun') === fun);
       b.disabled = m === 'real' && !wallet;
     }
-    setText(this.modeNote, fun ? '不碰钱包，筹码不算数，随便玩' : '从钱包带筹码上桌，离桌结回；最多输掉带上去的');
+    setText(this.modeNote, this.alone ? '筹码不算数，随便玩' : fun ? '不碰钱包，筹码不算数，随便玩' : '从钱包带筹码上桌，离桌结回；最多输掉带上去的');
     // 实盘新开一份只要钱包够这次带入（平台 0.10.2）：够这一档的最少买入就能开，不够一整份就少带一点
     for (const st of STAKES) {
       const t = this.tiles.get(st.id)!;
@@ -235,8 +267,9 @@ export class Lobby {
     const room = this.s.room;
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
     // （0.3.0：好友房不设多余的限制）
-    this.openBtn.disabled = busy || !wallet || (bal ?? 0) < st.min;
-    this.openBtn.title = !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
+    // 单独部署没有钱包：好友房的筹码不记账，不看钱包
+    this.openBtn.disabled = busy || (!this.alone && (!wallet || (bal ?? 0) < st.min));
+    this.openBtn.title = this.alone ? '' : !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
     this.joinBtn.disabled = busy || this.codeIn.value.length !== 6;
     toggle(this.roomBox, 'hidden', !room);
     if (room) {

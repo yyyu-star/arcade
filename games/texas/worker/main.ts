@@ -1,5 +1,7 @@
 /**
  * texas Worker：挂在站点的 /games/texas* 下（DESIGN.md 10；路由部署时注入，见 README 的部署一节）。
+ * 两种部署（kit 0.10 的 isStandalone，DESIGN.md 10.1）：本站由部署工具补上 ARCADE、WALLET 和 GATE=login，下面说的都是这种；
+ * 单独部署（wrangler.jsonc 原样，没有平台）认游客 cookie，没有钱包：单机实盘的接口回 404 no_wallet，好友房的筹码不记账，`/` 跳到 /games/texas/。
  * - 首页三个路径过登录闸门（15.8，kit 0.8.0 的 loginGate）：登录了放行，没登录 302 到 /login?next=<原路径和查询参数>（平台 0.10.1），平台不可用回德州自己的 503 页；GATE=off 时不拦；
  * - /games/texas/api/solo/* 是单机的带入、结回（5.4）：经服务绑定 WALLET 调平台钱包（client 模式）；看钱包、领补给页面直接走平台的 /api/wallet；
  * - /games/texas/rooms（开房）、/games/texas/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（6）；
@@ -10,7 +12,8 @@
  */
 import { sameOrigin, whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
-import { acceptCreate, acceptJoin, json, loginGate, readJson } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, isStandalone, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { PERSONAS } from '../src/ai/personas.ts';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
 import type { WalletReply } from '../src/net/wallet.ts';
 import { GAME, WALLET_ID, type PlatformWallet } from './platform.ts';
@@ -22,8 +25,8 @@ export { TexasRoom } from './room.ts';
 export interface Env extends MeterEnv {
   ASSETS: Fetcher;
   ARCADE?: Fetcher;
-  /** 平台钱包（服务绑定，entrypoint WalletService，props.game = texas） */
-  WALLET: PlatformWallet;
+  /** 平台钱包（服务绑定，entrypoint WalletService，props.game = texas）；单独部署没有 */
+  WALLET?: PlatformWallet;
   ROOM: DurableObjectNamespace<TexasRoom>;
   /** off 以外（包括没配）都要登录 */
   GATE?: string;
@@ -35,6 +38,11 @@ const BASE = '/games/texas';
 const SOLO = `${BASE}/api/solo/`;
 const ROOMS = `${BASE}/rooms`;
 const JOIN = /^\/games\/texas\/rooms\/([^/]+)\/ws$/;
+/**
+ * 单独部署时的游客（kit 0.10）：首页、开房、进房传同一份。电脑人物的名字不许当昵称（真人不能冒充电脑）；
+ * cookie 用 kit 默认的，同一个站点下单独部署的几个游戏共用一个游客身份
+ */
+const GUEST = { reserved: PERSONAS.map((p) => p.name) };
 /** 带入、结回的请求体都只有几十个字节 */
 const MAX_BODY = 1024;
 /** 单机那一份的到期退回：平台最长 24 小时（一直没结回来的原样退回） */
@@ -55,15 +63,20 @@ const STATUS: Record<string, number> = {
 
 export default {
   async fetch(request, env): Promise<Response> {
+    const root = standaloneRoot(request, env, 'texas');
+    if (root) return root;
     const url = new URL(request.url);
     const path = url.pathname;
+    // 页面开局问 /api/me 有没有平台（kit 的 detectPlatform）。单独部署时由这里答"没有"：2xx 的 JSON 里没有 user 就算没有平台，
+    // 不回 404 是免得每次打开页面控制台都冒一条红的。本站的 /api/* 由平台的路由接，到不了这里
+    if (path === '/api/me' && isStandalone(env)) return json({ standalone: true }, 200);
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
-    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE });
+    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST });
     if (path.startsWith(SOLO)) return solo(request, env, path.slice(SOLO.length));
-    if (path === ROOMS) return acceptCreate(request, env, { siteOrigin: env.SITE_ORIGIN, options: await roomOpts(request) });
+    if (path === ROOMS) return acceptCreate(request, env, { siteOrigin: env.SITE_ORIGIN, options: await roomOpts(request), guest: GUEST });
     const join = JOIN.exec(path);
-    if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: env.SITE_ORIGIN });
+    if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: env.SITE_ORIGIN, guest: GUEST });
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
@@ -81,6 +94,9 @@ async function roomOpts(request: Request): Promise<unknown> {
 /** 单机的带入（坐下、补码）、结回（离桌）：浏览器算的结果，平台按 client 模式记、每天的净赢有上限 */
 async function solo(request: Request, env: Env, sub: string): Promise<Response> {
   if (sub !== 'buyin' && sub !== 'cashout') return json({ error: 'not_found' }, 404);
+  // 单独部署没有钱包，也就没有实盘：页面本来就不显示，直接来调的说清楚
+  const wallet = env.WALLET;
+  if (!wallet) return json({ error: 'no_wallet' }, 404);
   if (request.method !== 'POST') return json({ error: 'method' }, 405);
   if (request.headers.get('x-arcade') !== '1' || !sameOrigin(request, env.SITE_ORIGIN)) return json({ error: 'forbidden' }, 403);
   const b = (await readJson(request, MAX_BODY)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
@@ -95,9 +111,9 @@ async function solo(request: Request, env: Env, sub: string): Promise<Response> 
   try {
     r =
       sub === 'buyin'
-        ? await env.WALLET.buyin({ ...base, tier: b.stakes as StakesId, amount, until: Date.now() + SOLO_HOLD_MS })
+        ? await wallet.buyin({ ...base, tier: b.stakes as StakesId, amount, until: Date.now() + SOLO_HOLD_MS })
         : // 这一份的小结（0.3.0，平台 0.10.0 settle.stats）：原样转发，不改、不补；不合格平台整份忽略、钱照常结
-          await env.WALLET.settle({ ...base, amount, ...(b.stats !== undefined ? { stats: b.stats } : {}) });
+          await wallet.settle({ ...base, amount, ...(b.stats !== undefined ? { stats: b.stats } : {}) });
   } catch (e) {
     // 连不上平台：请求可能到了，页面留着操作 id 重发
     console.error('texas: wallet unreachable', e instanceof Error ? e.message : e);

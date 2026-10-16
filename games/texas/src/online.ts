@@ -4,9 +4,10 @@
  * 房间说了算：页面只发意图（坐下、开打、出手、补码、离座），收到的状态整个替换本地的；断线重连拿全量快照整桌重画。
  * 一步里电脑接着出的几手是几帧，按顺序一帧一帧播（每帧带房间给的停顿）；落下太多（切回前台、重连）就不播了，直接摆最新的。
  */
-import { closeText as kitCloseText, createRoom as kitCreateRoom, createText, RoomClient, type ClientStatus, type CreateResult, type RoomTexts } from 'arcade-kit/client';
+import { closeText as kitCloseText, createRoom as kitCreateRoom, createText, RoomClient, withNickname, type ClientStatus, type CreateResult, type RoomTexts } from 'arcade-kit/client';
 import { EMOTE_ERRORS, type DownMsg, type RoomInfo, type You } from 'arcade-kit/protocol';
 import type { LastAct, RoomAction, RoomOpts, RoomView } from './room/rules.ts';
+import { site } from './site.ts';
 
 /** 页面的协议版本（房间的 minClientVersion 高于它就让刷新） */
 export const CLIENT_VERSION = 1;
@@ -62,11 +63,12 @@ export class Online {
   private readonly queue: { view: RoomView | null; delay: number; fresh: boolean }[] = [];
   private playing = false;
 
-  constructor(saved: SavedRoom, ui: OnlineUi, opts: { url?: string } = {}) {
+  /** name：单独部署时游客的昵称，带在进房地址上（kit 的 ?name=） */
+  constructor(saved: SavedRoom, ui: OnlineUi, opts: { url?: string; name?: string | null } = {}) {
     this.ui = ui;
     this.s = { code: saved.code, host: saved.host, opts: null, status: 'connecting', room: null, you: null, view: null, busy: false };
     this.client = new RoomClient<RoomAction, RoomView>({
-      url: opts.url ?? roomUrl(saved.code),
+      url: opts.url ?? withNickname(roomUrl(saved.code), opts.name),
       clientVersion: CLIENT_VERSION,
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, code, reason) => this.onStatus(st, code, reason),
@@ -180,17 +182,26 @@ export function roomUrl(code: string): string {
 
 export type { CreateResult } from 'arcade-kit/client';
 
-/** 开房（档位和人数这时就定下，进房的人都看得到）：成功回房间码；同时开着的房间到了上限时 error 是 has_room */
-export const createRoom = (opts: RoomOpts): Promise<CreateResult> => kitCreateRoom('rooms', opts);
+/**
+ * 开房（档位和人数这时就定下，进房的人都看得到）：成功回房间码；同时开着的房间到了上限时 error 是 has_room。
+ * name 是单独部署时游客的昵称（kit 的 ?name=，服务端清洗）；有平台时不带
+ */
+export const createRoom = (opts: RoomOpts, name?: string | null): Promise<CreateResult> => kitCreateRoom(withNickname('rooms', name), opts);
 
 /** kit 的默认说法里换掉德州自己的措辞：房间关了要说桌上的筹码结回钱包、收场是"这一手打完" */
 const TEXTS: RoomTexts = {
   roomClosed: '房间关了，桌上的筹码已经结回钱包',
   quota: '今天联机的人太多了，这一手打完先散了，桌上的筹码结回钱包，单机照常玩',
 };
+/** 单独部署没有钱包（DESIGN.md 10.1）：不提结回 */
+const STANDALONE_TEXTS: RoomTexts = {
+  roomClosed: '房间关了',
+  quota: '今天联机的人太多了，这一手打完先散了，单机照常玩',
+};
+const texts = (): RoomTexts => (site.standalone ? STANDALONE_TEXTS : TEXTS);
 
-export const createError = (e: string): string => createText(e, TEXTS);
-export const closeText = (code: number, reason?: string): string => kitCloseText(code, reason, TEXTS);
+export const createError = (e: string): string => createText(e, texts());
+export const closeText = (code: number, reason?: string): string => kitCloseText(code, reason, texts());
 
 /** 房间拒了一个操作：大多是"牌局已经变了"这类，按最新状态重来就行 */
 export function errorText(code: string): string {

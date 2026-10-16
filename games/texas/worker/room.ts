@@ -5,6 +5,7 @@
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { stream, type Entropy, type RandomStream } from 'arcade-kit/rng';
+import { isStandalone } from 'arcade-kit/worker';
 import { RNG } from '../src/core/table.ts';
 import { Banter, emoteOf, pokeOf, type Emote, type SeatLike } from '../src/fun/banter.ts';
 import { AI_DELAY_MS, texasRoom, TURN_MS, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
@@ -80,6 +81,8 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {
     // 电脑座位没有钱包；规则只给真人座位记钱包的事，到这里是写错了
     if (!userId) return { ok: false, error: 'no_user' };
+    // 单独部署没有钱包：好友房的筹码白送、不记账（游客模式，DESIGN.md 10.1）。本站丢了绑定不能这样，一律拒绝
+    if (!this.env.WALLET) return isStandalone(this.env) ? { ok: true } : { ok: false, error: 'unavailable' };
     const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: `${e.ref}-${e.id}` };
     const r =
       e.kind === 'debit'

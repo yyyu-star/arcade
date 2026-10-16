@@ -1,7 +1,9 @@
 /**
  * 页面入口：大厅（标题页）和牌桌两屏，接钱包、云存档、声音和看得见的区域。
+ * 单独部署（没有平台，DESIGN.md 10.1，site.ts）时不接钱包和云存档，"大厅"回游戏首页。
  * 规则在 src/core，流程在 solo.ts，这里只把它们和画面连起来。
  */
+import { detectPlatform } from 'arcade-kit/client';
 import { CLOSE } from 'arcade-kit/protocol';
 import { stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
@@ -10,6 +12,7 @@ import { createCloud, type Cloud } from './net/cloud.ts';
 import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
 import { OPENING_MS, PROP_BASE, STICKER_BASE, TAUNT_COUNT, TURN_MS, TWO_NOTE, type RoomView } from './room/rules.ts';
 import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, type WalletApi, type WalletReply, type WalletView } from './net/wallet.ts';
+import { site, twoText } from './site.ts';
 import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from './store.ts';
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
 import { ActionBar } from './view/actions.ts';
@@ -268,6 +271,12 @@ async function boot(): Promise<void> {
   window.addEventListener('keydown', unlockAudio, { once: true });
   // 云存档先建好再画大厅（0.3.7）：画大厅要读本机记着的房间，按 cloud.userId() 认是不是这个账号的。
   // 原来先画大厅、后建 cloud，刷新前在好友房里的（记着房间）一打开页面就报错、大厅画不出来
+  // 有没有平台（10.1），顺带拿昵称（平台的 /api/me）；问不到（平台抖了一下）按有平台算
+  const p = await detectPlatform();
+  site.standalone = p.platform === false;
+  const u = p.platform === true ? (p.user as { displayName?: unknown } | null) : null;
+  if (typeof u?.displayName === 'string' && u.displayName) myName = u.displayName;
+  if (site.standalone) standaloneUi();
   cloud = createCloud({
     fetch: (...a) => fetch(...a),
     storage: localStorage,
@@ -279,9 +288,8 @@ async function boot(): Promise<void> {
   drawTop();
   showLobby();
   cloud.onChange(drawCloud);
-  await Promise.all([cloud.start(), refreshWallet()]);
+  if (!site.standalone) await Promise.all([cloud.start(), refreshWallet()]);
   drawCloud();
-  await me();
 
   const s = Solo.load(localStorage, cloud.userId());
   if (s) {
@@ -332,17 +340,23 @@ async function settlePending(): Promise<void> {
   } else if (err) walletNote = walletError(err);
 }
 
-async function me(): Promise<void> {
-  try {
-    const r = await fetch('/api/me', { headers: { accept: 'application/json' } });
-    const b = (await r.json()) as { user?: { displayName?: string } | null };
-    if (b.user?.displayName) myName = b.user.displayName;
-  } catch {
-    // 拿不到昵称就叫"我"
-  }
+/** 单独部署：藏起云存档（登录）和钱包，"大厅"回游戏首页，几句说法换成不记账的 */
+function standaloneUi(): void {
+  home.href = hall();
+  toggle(cloudBtn, 'hidden', true);
+  toggle(walletChip, 'hidden', true);
+  setText(twoNote, twoText());
+  lobby.standalone();
 }
 
+/** "大厅"：有平台回平台首页；单独部署回游戏自己的首页 */
+const hall = (): string => (site.standalone ? './' : '/');
+
+/** 单独部署时好友房带的昵称；有平台时用平台的，不带 */
+const nickname = (): string | null => (site.standalone ? lobby.nickname() || null : null);
+
 async function refreshWallet(): Promise<void> {
+  if (site.standalone) return;
   const r = await getWallet();
   wallet = r.ok ? r.wallet : null;
   walletNote = r.ok ? null : walletError(r.error, r.retryAfter, 'api');
@@ -947,7 +961,8 @@ async function leave(): Promise<boolean> {
   if (!s) return true;
   const inHand = s.table.seats[ME]!.status === 'active';
   if (!s.busted && !s.closing) {
-    const ok = await dialog(stage, '离桌', inHand ? '这一手会弃牌，桌上的筹码带回钱包。' : '桌上的筹码带回钱包。', [
+    const back = s.session.practice ? '' : '桌上的筹码带回钱包。';
+    const ok = await dialog(stage, '离桌', inHand ? `这一手会弃牌。${back}` : back || '回大厅，这一桌就结束了。', [
       { label: '接着打', value: 'no' },
       { label: '离桌', value: 'yes', primary: true },
     ]);
@@ -1071,7 +1086,7 @@ home.addEventListener('click', (e) => {
   void leave().then((left) => {
     if (left && !solo) {
       cloud.flush();
-      location.href = '/';
+      location.href = hall();
     }
   });
 });
@@ -1152,7 +1167,7 @@ async function openRoom(stakes: StakesId, size: number): Promise<void> {
   // 一律开新的（0.2.4：同时能开 5 个，没真人的房间马上结束、还名额），不再把人送回旧房间
   busy = true;
   drawLobby();
-  const r = await createRoom({ stakes, size });
+  const r = await createRoom({ stakes, size }, nickname());
   busy = false;
   if ('code' in r && !('error' in r)) enterRoom({ code: r.code, userId: cloud.userId(), host: true, at: Date.now() });
   else {
@@ -1196,7 +1211,7 @@ function enterRoom(r: SavedRoom): void {
   stage.classList.add('in-room');
   closeDialog();
   // 换了房间、离开以后，旧连接还没播完的帧和状态回调一律不理
-  const o: Online = new Online(r, roomUi(() => online === o));
+  const o: Online = new Online(r, roomUi(() => online === o), { name: nickname() });
   online = o;
   drawRoom(o.state);
 }
@@ -1225,14 +1240,14 @@ async function leaveRoom(goHome: boolean): Promise<void> {
     exitRoom('你还坐在好友房里（掉线由电脑代打）：连上网后点"回到房间"再离开，桌上的筹码才会结回');
     if (goHome) {
       cloud.flush();
-      location.href = '/';
+      location.href = hall();
     }
     return;
   }
   const ok = await dialog(
     stage,
     '离开房间',
-    seated && playing ? '这一手弃牌，桌上的筹码马上结回钱包。' : seated ? '离开后座位空出来。' : '不看了？',
+    seated && playing ? (site.standalone ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
     [
       { label: '留下', value: 'no' },
       { label: '离开', value: 'yes', primary: true },
@@ -1252,7 +1267,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.titles(rows));
   if (goHome) {
     cloud.flush();
-    location.href = '/';
+    location.href = hall();
   }
 }
 
@@ -1539,7 +1554,8 @@ async function takeSeat(i: number): Promise<void> {
   const spectator = (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
   if (!spectator || info?.kind !== 'ai' || info.reserved) return showRead(i);
   const st = stakesOf(s.view.stakes);
-  const ok = await dialog(stage, '接管这个座位', `电脑这一手弃牌，下一手起你坐这里：从钱包带 ${chips(st.max)} 上桌，离开时结回钱包。`, [
+  const how = site.standalone ? `带 ${chips(st.max)} 上桌。` : `从钱包带 ${chips(st.max)} 上桌，离开时结回钱包。`;
+  const ok = await dialog(stage, '接管这个座位', `电脑这一手弃牌，下一手起你坐这里：${how}`, [
     { label: '算了', value: 'no' },
     { label: '坐下', value: 'yes', primary: true },
   ]);
@@ -1558,7 +1574,8 @@ async function roomRebuy(): Promise<void> {
   const add = Math.max(Math.min(full, seated ? st.bb : st.min), affordable(full, st.bb));
   const later = mine?.status !== 'out' && v.phase !== 'idle' ? '，这一手打完上桌' : '';
   const to = seated ? `补到 ${chips(mine.stack + add)}` : '上桌';
-  const ok = await dialog(stage, '补码', `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`, [
+  const msg = site.standalone ? `带 ${chips(add)} ${to}${later}。` : `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`;
+  const ok = await dialog(stage, '补码', msg, [
     { label: '算了', value: 'no' },
     { label: '补码', value: 'yes', primary: true },
   ]);

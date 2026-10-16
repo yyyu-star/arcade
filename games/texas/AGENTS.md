@@ -13,6 +13,8 @@
 - 筹码：钱包是平台的（服务绑定 `WALLET`，`props.game = "texas"`），单机 client 模式经 `worker/main.ts` 转、好友房 server 模式由 `TexasRoom.perform` 调；
   一份一个 ref、只结回一次，操作 id 平台去重；不能买、不能兑换、不能转让，界面写明"无任何现金价值"（DESIGN.md 第 5 节）。
 - 浏览器存储的键一律 `texas.` 前缀（8.5）。
-- 正式配置在 `wrangler.jsonc`，部署只走 `.github/workflows/game-texas.yml`（经 PR 合并后）。测试用 `test/wrangler.test.jsonc`，本地试用 gitignore 掉的 `wrangler.local.jsonc`。
+- `wrangler.jsonc` 是能单独部署的独立配置（没有平台：游客、没有钱包，DESIGN.md 10.1）；本站部署只走 `.github/workflows/game-texas.yml`（经 PR 合并后），由部署工具补平台绑定。
+  测试用 `test/wrangler.test.jsonc`（平台模式）和 `test/wrangler.standalone.jsonc`（单独部署），本地试平台模式用 gitignore 掉的 `wrangler.local.jsonc`。
+  Worker 入口 `worker/main.ts` 只导出 default 和两个 DO 类：别的具名导出会让 workerd 把它当入口、起不来（单独部署的测试先报）。
 - Worker、钱包和好友房的测试在 `test/worker/`（workerd，平台钱包换成 kit 的假钱包 `arcade-kit/testing`）：房间每步写几行用 kit 记的实测写入（`lastStepWrites` 等），调平台几次、平台写几行数假平台的计数，都断言；改了钱包或 Worker 就加测试并做反证。
 - 提交信息以 `texas:` 开头，分支 `texas/<说明>`；只暂存明确路径。

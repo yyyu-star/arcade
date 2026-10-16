@@ -1154,16 +1154,41 @@ games/texas/
 ├─ src/room/        好友房的规则（接 kit 的 RoomGame，纯函数，房间和页面共用）
 ├─ src/net/         钱包 wallet、云存档 cloud（连房间在 src/online.ts，用 kit 的 RoomClient）
 ├─ worker/          texas Worker：登录闸门、单机带入结回（转平台钱包）、好友房 TexasRoom DO
-├─ test/           规则、电脑的 vitest（Node）；test/worker/ 是 Worker、钱包、房间的 vitest（workerd，配置 test/wrangler.test.jsonc）
+├─ test/           规则、电脑的 vitest（Node）；test/worker/ 是 Worker、钱包、房间的 vitest（workerd，配置 test/wrangler.test.jsonc）；
+│                  test/standalone/ 是单独部署的（配置 test/wrangler.standalone.jsonc，入口就是 worker/main.ts）
 ├─ scripts/        smoke.ts（冒烟）  sim.ts + vs.ts（模拟，vs 是多线程部分）  capture.ts（连拍看节奏）  gen-preflop.ts（生成翻牌前胜率表）
-└─ wrangler.jsonc   正式配置（部署只走 `.github/workflows/game-texas.yml`）；本地试用 gitignore 掉的 wrangler.local.jsonc。
-                    不写路由和 zone（路由 `<站点>/games/texas`、`<站点>/games/texas/*` 与 SITE_ORIGIN 由部署流程用 GitHub production secret `SITE_HOST` 注入；没设 SITE_ORIGIN 时 Worker 认请求自己的来源，kit 0.9.0）；workers_dev、preview_urls: false；
-                    run_worker_first：首页三个路径、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*；
-                    绑定 ARCADE（服务）、WALLET（服务，arcade 的 WalletService，props.game = texas）、ROOM（类 TexasRoom）、METER（DO）；
-                    vars GATE、KIT_QUOTA {15000, 20000}；迁移 v1 TexasRoom + RoomMeter（new_sqlite_classes；发布前没部署过，不用分版本）
+└─ wrangler.jsonc   独立配置（0.7.0，10.1）：原样就能单独部署；本站的正式部署只走 `.github/workflows/game-texas.yml`，由部署工具在它上面补平台的东西。
+                    本地试平台模式用 gitignore 掉的 wrangler.local.jsonc。
+                    不写路由和 zone（本站的路由 `<站点>/games/texas`、`<站点>/games/texas/*` 与 SITE_ORIGIN 由部署流程用 GitHub production secret `SITE_HOST` 注入；没设 SITE_ORIGIN 时 Worker 认请求自己的来源，kit 0.9.0）；
+                    workers_dev: true（单独部署用 workers.dev，本站部署时关掉）、preview_urls: false；
+                    run_worker_first：/、/api/me（单独部署用）、首页三个路径、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*；
+                    绑定 ROOM（类 TexasRoom）、METER（DO）；不写 ARCADE、WALLET、GATE（本站部署时按 tools/workers.json 补：ARCADE 服务、WALLET 服务 arcade 的 WalletService、props.game = texas，GATE=login）；
+                    vars KIT_QUOTA {15000, 20000}；迁移 v1 TexasRoom + RoomMeter（new_sqlite_classes；发布前没部署过，不用分版本）
 ```
 
-**仓库级的事**（不在本模块里改）：
+### 10.1 单独部署（0.7.0）
+
+所有者要求"可以不需要平台直接部署单个游戏"：别人 fork 或点 Deploy to Cloudflare，就能把德州原样部署到自己的 `texas.<子域>.workers.dev`。
+同一份代码两种部署，由 env 决定（kit 0.10 的 `isStandalone`：没有 ARCADE、GATE 不是 login），代码里不分支部署目标：
+
+| | 本站（有平台） | 单独部署 |
+|---|---|---|
+| 认人 | 平台 `/api/me`（登录闸门，没登录去登录页） | kit 的游客 cookie（首页放行并补发，开房、进房认它）；昵称是页面带的 `?name=`，kit 清洗，10 个电脑的名字不许用（`GUEST.reserved`） |
+| 单机 | 娱乐、实盘 | 只有娱乐；`/games/texas/api/solo/*` 直接回 404 `no_wallet` |
+| 好友房 | 实盘，带入、结回走平台钱包 | 照常开房进房，带入直接办成、结回不办（`TexasRoom.perform` 没有 WALLET 时回 ok）：筹码不算数，离开就没了 |
+| 云存档、战绩同步、钱包、补给 | 有 | 没有（战绩只存在本机） |
+| 站点根 `/` | 平台的 | 跳到 `/games/texas/`（kit 的 `standaloneRoot`） |
+| "大厅"按钮 | 平台首页 `/` | 游戏自己的首页 `./` |
+
+- **页面怎么知道**：开局用 kit 的 `detectPlatform()` 问同域 `/api/me`（顺带拿平台昵称，替掉原来单独问的一次）。单独部署时 `/api/me` 由德州 Worker 答 200 `{ standalone: true }`
+  （没有 user 就算没有平台）：不回 404，免得每次打开页面控制台都冒一条红的。平台抖了一下（5xx、超时，`unknown`）按有平台算，和以前一样。结果记在 `src/site.ts`。
+- **安全**：本站有 ARCADE 绑定，游客 cookie 一律不认；绑定丢了（GATE=login 却没有 ARCADE）kit 按平台不可用拒绝，房间也不会因为没有 WALLET 就白给筹码（`perform` 只在单独部署时回 ok，否则回 `unavailable`）。
+- **真人至少两个**照旧（规则不分部署），说明换成不提实盘的一句。
+- 单独部署的额度照 `KIT_QUOTA`（同一份配置），计量照常。
+- 测试：`test/standalone/`（workerd，入口就是 `worker/main.ts`，入口多导出了具名常量时 workerd 起不来，这里先报）；冒烟 `--only standalone` 用原样的 `wrangler.jsonc` 起 `wrangler dev`。
+
+### 10.2 仓库级的事（不在本模块里改，发布前的记录）
+
 1. `.github/workflows/game-texas.yml`：从 `game-guandan.yml` 复制，`paths` 含 `games/texas/**` 和 `packages/arcade-kit/**`（P1 才依赖 kit，P0 可以先不含）；
 2. 根 `AGENTS.md` 端口表把"下一个游戏 5175 / 4175"改成 `games/texas`；
 3. 平台 `platform/src/games.ts` 登记和封面（0.1.0 发布当天）；

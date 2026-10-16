@@ -2,7 +2,7 @@
   "name": "texas",
   "private": true,
   "license": "MIT",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "description": "德州扑克：单机对电脑和好友房，筹码跨场保留（无任何现金价值）",
   "scripts": {
@@ -10,16 +10,17 @@
     "build": "tsc --noEmit && vite build",
     "build:cf": "tsc --noEmit && vite build --outDir dist-cf/games/texas --emptyOutDir",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p test/worker",
-    "test": "npm run typecheck && vitest run && vitest run -c vitest.worker.config.ts",
-    "test:worker": "vitest run -c vitest.worker.config.ts",
+    "deploy": "npm run build:cf && wrangler deploy",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/worker && tsc --noEmit -p test/standalone",
+    "test": "npm run typecheck && vitest run && vitest run -c vitest.worker.config.ts && vitest run -c vitest.standalone.config.ts",
+    "test:worker": "vitest run -c vitest.worker.config.ts && vitest run -c vitest.standalone.config.ts",
     "dev:worker": "wrangler dev -c wrangler.local.jsonc -c test/arcade.dev.jsonc --ip 0.0.0.0 --port ${TEXAS_WORKER:-0}",
     "sim": "node scripts/sim.ts",
     "gen:preflop": "node scripts/gen-preflop.ts",
     "smoke": "node scripts/smoke.ts"
   },
   "dependencies": {
-    "arcade-kit": "file:../../packages/arcade-kit"
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.2",

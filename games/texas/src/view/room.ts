@@ -3,7 +3,8 @@
  */
 import { stakesOf } from '../core/stakes.ts';
 import type { OnlineState } from '../online.ts';
-import { SEATS, TWO_NOTE } from '../room/rules.ts';
+import { SEATS } from '../room/rules.ts';
+import { site, twoText } from '../site.ts';
 import { el, setText, toggle } from './dom.ts';
 import { chips } from './text.ts';
 
@@ -44,7 +45,7 @@ export class RoomPanel {
       const sit = button(box, 'pill rw-sit', '坐这里', () => h.sit(i));
       this.seats.push({ box, name, sit });
     }
-    this.twoNote = el('div', 'rw-two hidden', this.root, TWO_NOTE);
+    this.twoNote = el('div', 'rw-two hidden', this.root);
     const go = el('div', 'rw-go', this.root);
     button(go, 'pill', '离开房间', () => h.leave());
     this.startBtn = button(go, 'start', '开打', () => h.start());
@@ -71,7 +72,10 @@ export class RoomPanel {
     const st = o ? stakesOf(o.stakes) : null;
     setText(
       this.info,
-      o && st ? `${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${o.size} 人。开打时每个坐下的人从钱包带 ${chips(st.max)} 上桌，离桌或房间关掉时结回去；空位由电脑补` : '',
+      o && st
+        ? `${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${o.size} 人。` +
+            (site.standalone ? `开打时每个坐下的人带 ${chips(st.max)} 上桌（筹码不算数）；空位由电脑补` : `开打时每个坐下的人从钱包带 ${chips(st.max)} 上桌，离桌或房间关掉时结回去；空位由电脑补`)
+        : '',
     );
     const size = o?.size ?? SEATS;
     const mine = s.you?.seat ?? null;
@@ -89,6 +93,7 @@ export class RoomPanel {
     const canStart = s.host || mine !== null;
     // 实盘好友房至少两个真人（0.4.0）：房间那边一个人开打也不发牌，按钮先灰掉，免得点了干坐着
     const humans = s.room!.seats.filter((x, i) => i < size && x.kind === 'human').length;
+    setText(this.twoNote, twoText());
     toggle(this.twoNote, 'hidden', humans >= 2);
     toggle(this.startBtn, 'hidden', !canStart);
     this.startBtn.disabled = mine === null || s.status !== 'open' || humans < 2;
