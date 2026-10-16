@@ -103,6 +103,16 @@ Repository settings, kept in sync with this section:
   destinations or resources beyond the per-key allowlisted bindings, and Durable Object migrations may only create classes.
   `vars` names and `compatibility_flags` must be listed per module in `tools/deploy-allowlist.json`; the platform's secret names and `SITE_ORIGIN` are never allowed as `vars`.
   Only maintainers add names to `tools/workers.json` (after checking that no Worker with that name already exists in the account) and to `tools/deploy-allowlist.json`.
+- **Standalone game configs, platform overlay**: a game's `wrangler.jsonc` is a standalone config that deploys without the platform (no service bindings,
+  no `GATE`, `workers_dev` may be on). Which games connect to the platform is declared by maintainers in `tools/workers.json`
+  (`"<id>": { "platform": ["ARCADE", "WALLET"] }`); `deploy.mjs` then adds the canonical `ARCADE` / `WALLET` bindings (shapes fixed in
+  `tools/deployer/lib.mjs`, `props.game` = the game's id), forces `vars.GATE = "login"` and `workers_dev` / `preview_urls = false`, and re-checks the result.
+  A module may still spell out these bindings during the transition, but only in exactly the canonical form; any other service binding is rejected.
+- **Publishing `arcade-kit` to npm** (package name `@yyyu-star/arcade-kit`; the npm token only covers that scope): only a maintainer publishes, from their own machine, from a merge commit on `main` — the npm token never goes into
+  GitHub. `git switch --detach origin/main && cd packages/arcade-kit && npm ci && npm test && npm publish` (the version must be the one in its
+  `package.json` / `CHANGELOG.md`, merged through a kit pull request). Then verify in an empty directory with `npm i arcade-kit@npm:@yyyu-star/arcade-kit@<version>`.
+  Games install it under the alias `arcade-kit` (`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`), so their `arcade-kit/...` imports stay unchanged.
+  Games move to a new kit version through their own pull requests; `pkg-arcade-kit.yml` already runs every game's tests against the packed kit.
 - **Pinned tooling**: third-party actions are pinned to full commit SHAs, and the deployer's wrangler version is fixed in `tools/deployer/` (upgrade steps in
   [tools/deployer/README.md](tools/deployer/README.md)). Pull requests that touch `tools/` or `.github/workflows/` also run the whole deploy path for one game
   with `deploy.mjs --dry-run` (no credentials) in `Check isolation`.

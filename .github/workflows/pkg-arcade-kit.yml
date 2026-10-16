@@ -1,6 +1,8 @@
 # 共用包 arcade-kit（packages/arcade-kit/）：只跑测试，不部署（它没有自己的 Worker，随用它的游戏一起打包部署）。
 # 测试在本地 workerd 里跑真的 Durable Object、WebSocket 休眠接口和闹钟（@cloudflare/vitest-plugin），不碰线上、不用凭证。
-# 拆成独立仓库时：去掉 paths 和 working-directory，把 packages/arcade-kit/ 前缀去掉即可。
+# games 作业（kit 兼容性）：把 kit 打成 npm 包（npm pack，和发到 npm 的是同一种东西），装进每个用 kit 的游戏（覆盖 file: 或 npm 上的版本）
+# 跑游戏自己的测试，发布前就知道这一版 kit 有没有把哪个游戏弄坏。没有凭证、不部署，只读游戏代码。
+# 拆成独立仓库时：去掉 paths 和 working-directory，把 packages/arcade-kit/ 前缀去掉，games 作业删掉（游戏各自升级 kit 时自己测）。
 name: Test arcade-kit
 on:
   push:
@@ -35,3 +37,45 @@ jobs:
       - run: node ../../tools/check-isolation.mjs
       - run: npm ci
       - run: npm test
+  games:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pkg-arcade-kit-games-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-kit/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            packages/arcade-kit/package-lock.json
+            games/*/package-lock.json
+      - name: 打包 kit（npm pack，和发布到 npm 的一样）
+        id: pack
+        run: |
+          npm ci --no-audit --no-fund
+          tgz=$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -1)
+          echo "tarball=$RUNNER_TEMP/$tgz" >> "$GITHUB_OUTPUT"
+      # 依赖了 arcade-kit 的游戏自动找出来，新游戏不用改这里。每个游戏先按自己的 lockfile 装，再用打出来的包覆盖 kit（--no-save，不改 lockfile）。
+      # 包名是 @yyyu-star/arcade-kit，游戏按别名 arcade-kit 引用：必须装成 "arcade-kit@file:<包>"，直接装 tarball 会多出一个 @yyyu-star/arcade-kit，游戏用的还是原来那份
+      - name: 每个用 kit 的游戏装上这个包，跑游戏自己的测试
+        working-directory: .
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          failed=""
+          for pkg in games/*/package.json; do
+            dir=$(dirname "$pkg")
+            node -e 'const p=require(process.argv[1]); process.exit({...p.dependencies,...p.devDependencies}["arcade-kit"]?0:1)' "./$pkg" || continue
+            echo "::group::$dir"
+            if (cd "$dir" && npm ci --no-audit --no-fund && npm install "arcade-kit@file:$TARBALL" --no-save --no-audit --no-fund && test ! -L node_modules/arcade-kit && npm test && npm run test:room --if-present); then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"; echo "::error::$dir 用这一版 kit 的测试没过"; failed="$failed $dir"
+            fi
+          done
+          if [ -n "$failed" ]; then echo "没过：$failed"; exit 1; fi

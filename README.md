@@ -73,25 +73,16 @@ Each module's README explains its own scripts, test tools and smoke tests.
 
 ## Deploy
 
+There are two ways to deploy: the **whole site** (platform + games, with accounts, wallet and leaderboards), or **just one game**
+on its own. Every game's `wrangler.jsonc` is a standalone config, so a game deploys without the platform; when the whole site is
+deployed, the maintainer-owned deployer adds the platform bindings on top.
+
+### Whole site (platform + games)
+
 Everything runs on **one hostname**: the platform Worker serves `/` and `/api/*`, and each game Worker is mounted on
 `/games/<id>/*` with a path route. Sharing one hostname lets every game reuse the platform's login cookie and `/api`
-without CORS. You need a Cloudflare account with a zone (domain) for that hostname.
-
-### Option 1 — Deploy to Cloudflare button
-
-1. **Platform first.** Click the button above. It copies `platform/` into a new repository in your GitHub account,
-   creates the D1 database, runs the migrations and deploys the `arcade` Worker. Fill in the secrets it asks for
-   (described in [`platform/.dev.vars.example`](platform/.dev.vars.example)).
-2. In the Cloudflare dashboard, add a **custom domain** to the `arcade` Worker (for example `games.example.com`).
-3. **Kaipan** can also be deployed with a button — see [`games/kaipan`](games/kaipan/). Add the routes
-   `<your-host>/games/kaipan` and `<your-host>/games/kaipan/*` to it afterwards.
-4. Guandan, Texas Hold'em and Mahjong depend on the shared [`packages/arcade-kit`](packages/arcade-kit/), which the
-   button cannot copy along; deploy them with option 2.
-
-### Option 2 — Fork and deploy with GitHub Actions
-
-This is how the repository itself is deployed. Each module has a workflow in `.github/workflows/` that tests on every
-pull request and deploys on `main`.
+without CORS. You need a Cloudflare account with a zone (domain) for that hostname. This is how the repository itself is
+deployed: each module has a workflow in `.github/workflows/` that tests on every pull request and deploys on `main`.
 
 1. Fork the repository and create an environment named **`production`** (Settings → Environments), restricted to `main`.
    In your fork, set `TRUSTED_BASE` in [`tools/verify-main.sh`](tools/verify-main.sh) to the commit you forked from —
@@ -107,9 +98,26 @@ pull request and deploys on `main`.
 
 3. Set the platform's own Worker secrets once with `npx wrangler secret put <NAME>` (list in `platform/.dev.vars.example`).
 4. Run the workflows — **platform first** (the games bind to its `arcade` Worker), then the games.
-   Routes and the site origin are injected at deploy time from `SITE_HOST`; nothing in the repository names a domain.
+   [`tools/workers.json`](tools/workers.json) declares which games connect to the platform; for those, `tools/deployer/deploy.mjs`
+   adds the `ARCADE` (login) and `WALLET` (wallet) service bindings, sets `GATE` to `"login"` and turns off `workers.dev`.
+   Routes and the site origin are injected from `SITE_HOST`; nothing in the repository names a domain.
 
 Deploys only run for commits that reached `main` through a merged pull request (`tools/verify-main.sh`).
+The button at the top deploys the platform alone (it creates the D1 database and asks for the secrets in
+[`platform/.dev.vars.example`](platform/.dev.vars.example)); games deployed with their own buttons are not connected to it.
+
+### Just one game
+
+No platform, no domain needed — the game gets a `https://<id>.<your-subdomain>.workers.dev` address.
+
+- **Deploy to Cloudflare button**: `https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
+  (replace `<id>` with `kaipan`, `guandan`, `texas` or `mahjong`). The button copies only that game's directory, so it works once
+  the game depends on the published `@yyyu-star/arcade-kit` from npm (aliased: `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`) instead of the in-repo copy; each game's README says whether its button is ready.
+- **From a fork**: `cd games/<id> && npm ci && npx wrangler login && npm run deploy`.
+
+A standalone game has single-player against the computer, friend rooms (players are identified by a guest cookie and pick a
+nickname with `?name=`) and local saves. It has no login, cloud saves, leaderboards or wallet. Details:
+[docs/new-game.md](docs/new-game.md) section 7.
 
 ## Architecture
 

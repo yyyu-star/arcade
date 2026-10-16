@@ -1,4 +1,10 @@
 {
-  "$comment": "允许本仓库部署的 Worker 名（= 模块 id，平台是 arcade）。只由维护者改：加新游戏前先确认 Cloudflare 账户里没有同名的 Worker。tools/check-deploy-config.mjs 按它检查。",
-  "workers": ["arcade", "kaipan", "guandan", "texas", "mahjong"]
+  "$comment": "允许本仓库部署的 Worker（名字 = 模块 id，平台是 arcade）和它们跟平台的关系。只由维护者改：加新游戏前先确认 Cloudflare 账户里没有同名的 Worker。platform 是本站部署时 tools/deployer/deploy.mjs 给这个游戏补上的平台绑定（规范形式写死在 tools/deployer/lib.mjs 的 PLATFORM_BINDINGS：ARCADE 认人、WALLET 钱包，写了 WALLET 必须有 ARCADE），补了就同时把 vars.GATE 定成 login；不写 platform 的游戏按它自己的独立配置部署（游客模式，不接平台）。游戏的 wrangler.jsonc 里不用写这些绑定，写了必须和规范形式一模一样，写了这里没声明的一律拒绝。",
+  "workers": {
+    "arcade": { "role": "platform" },
+    "kaipan": { "platform": ["ARCADE", "WALLET"] },
+    "guandan": { "platform": ["ARCADE", "WALLET"] },
+    "texas": { "platform": ["ARCADE", "WALLET"] },
+    "mahjong": { "platform": ["ARCADE", "WALLET"] }
+  }
 }

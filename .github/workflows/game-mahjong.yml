@@ -6,6 +6,8 @@
 #     重新检查产物和配置、注入路由和 SITE_ORIGIN 后部署（见 CONTRIBUTING.md）。
 # 拆成独立仓库时：去掉 paths 和 working-directory，把 games/mahjong/ 前缀去掉，并把 tools/deployer、tools/verify-main.sh 一起带走。
 name: Deploy mahjong
+# packages/arcade-kit/** 的触发：游戏现在经 file: 依赖仓库里的 kit 源码，kit 一改游戏的产物就变，要重新测试、部署。
+# 游戏换成 npm 上发布的 kit 版本以后，kit 改动不再影响游戏（兼容性由 pkg-arcade-kit.yml 的 games 作业测），删掉这两行。
 on:
   push:
     branches: [main]

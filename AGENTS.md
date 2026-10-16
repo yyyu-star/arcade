@@ -42,7 +42,10 @@ arcade/
    - 游戏之间：完全不交互；
    - 禁止直接读别的模块的源码、数据文件、构建产物、D1 或 DO。
 5. **线上资源各自独立**：
-   - 每个模块一个 Worker（Worker 名 = 模块 id；平台例外，叫 `arcade`），路由、绑定、Secret 都写在模块自己的 `wrangler.jsonc` 里；
+   - 每个模块一个 Worker（Worker 名 = 模块 id；平台例外，叫 `arcade`）。模块自己的 `wrangler.jsonc` 是**能单独部署的独立配置**：
+     游戏自己的资源（静态资源、自己的 Durable Object、`vars`）写在里面，不带平台也能部署成一个能玩的游戏（共用包 0.10.0 的独立模式：游客身份）；
+     接平台的服务绑定（`ARCADE`、`WALLET`）、`GATE: "login"`、路由、`SITE_ORIGIN` 由维护者的部署工具（`tools/deployer/deploy.mjs`）按 `tools/workers.json` 的声明在本站部署时补上，
+     游戏不用写（过渡期写了的必须和规范形式一模一样）；平台的 Secret 用 `wrangler secret put` 设，不进仓库；
    - 浏览器存储（localStorage、IndexedDB、Cache）的 key 一律加 `<游戏id>.` 前缀，比如开盘用 `kaipan.save`。平台自己的 key 用 `arcade.` 前缀（目前只有 sessionStorage 的 `arcade.reloaded`：平台 0.9.8 起，发版后分块加载失败时防重复重载；原来的 `arcade.beta` 平台 0.10.17 删了，启动时清掉旧值）。所有游戏和平台同域，前缀是唯一的隔离手段；
    - 游戏挂在 `/games/<id>/` 下，资源一律用相对路径，不假设自己在域名根；回大厅的入口例外，指向平台首页 `/`（平台的公开地址）；
    - 线上 Worker 数量 = 平台 1 个 + 每个游戏 1 个，**不另建测试或实验 Worker**（不设 staging）；需要临时实验时用完当天删除。
@@ -51,7 +54,7 @@ arcade/
    `working-directory` 指向模块目录。
 8. **版本号、更新日志各自独立**：模块自己的 `package.json` version 和 `CHANGELOG.md`；提交信息以模块名开头，例如 `kaipan: ...`、`platform: ...`。
 
-`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条；`tools/check-deploy-config.mjs` 检查第 5 条里部署相关的部分（Worker 名、不写路由域名、只用逐键白名单里的绑定，
+`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条；`tools/check-deploy-config.mjs` 检查第 5 条里部署相关的部分（Worker 名、不写路由域名、只用逐键白名单里的绑定、服务绑定只许 `tools/workers.json` 声明的规范形式，
 模块里不许有 `.env*`、`.npmrc`、`wrangler.json`/`wrangler.toml`、`.wrangler/`、名单外的隐藏文件和符号链接；白名单在 `tools/deployer/lib.mjs`，要先 `npm ci --ignore-scripts --prefix tools/deployer`）。
 CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍，失败就不能部署。新增约束时，同步加进这些脚本。
 
@@ -61,17 +64,21 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
   （或在 GitHub Actions 里对 main 手动运行该模块的流程；只部署 main 的最新提交，旧提交的运行重跑也会在核对这一步失败），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
 - **部署流程的结构**（为什么这样见 [docs/review-policy.md](docs/review-policy.md) 第 7 节）：test 作业跑模块代码（不拿凭证），用 `wrangler deploy --dry-run --outdir` 打包后上传 artifact；
   deploy 作业不 checkout 模块代码，只取 `tools/` 和模块的 `wrangler.jsonc`，用 `tools/deployer/` 里钉死的 wrangler 由 `deploy.mjs` 检查后 `--no-bundle` 部署。
-  所以部署用的配置就是模块根目录那份 `wrangler.jsonc`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。
+  所以部署用的配置就是模块根目录那份 `wrangler.jsonc` 加上 `deploy.mjs` 按 `tools/workers.json` 叠加的平台绑定、`GATE`、关掉的 `workers_dev`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。
+- **只部署一个游戏（不要平台）**：游戏的 `wrangler.jsonc` 本身就能部署（Deploy to Cloudflare 按钮或 fork 后 `npm run deploy`），得到一个 `workers.dev` 地址，
+  以游客身份玩、好友房照常；没有登录、云存档、排行榜、钱包实盘。步骤见 [docs/new-game.md](docs/new-game.md) 第 7 节。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
-  把 `file:` 共用包换成发布的版本。线上 Worker、路由、存储前缀都不用改。
+  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
 - **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
-  2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker）；
+  2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker），
+     要接平台（认人、钱包）的同时声明 `"platform": ["ARCADE", "WALLET"]`（只要认人就只写 `ARCADE`）；
      加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、打包和上传产物、`environment: production`、sparse-checkout、"只部署经 PR 合并的提交"那一步和 `deploy.mjs`）；
   3. 在平台的 `platform/src/games.ts` 里登记，并放一张封面（钱包、云存档、分数榜、保留用户名都从这份登记派生；想先接钱包再上大厅就先登记成 `status: 'coming'`）；
      游戏里电脑人物的名字同时登记进平台 `worker/api/validate.ts` 的 `RESERVED_PERSONAS`（真人昵称不许冒充电脑）。以后加、改电脑人物，
      在游戏自己的 PR 说明里写上名字，再开一个平台的 PR 补上；有每日挑战榜的，登记 `daily: true` 并在游戏的 `public/daily.json` 里写分数怎么显示（平台 0.10.18）；
-  4. 游戏的 `wrangler.jsonc` 关掉 `workers_dev` 和 `preview_urls`、不写 routes；部署时 `deploy.mjs` 注入 `--route "$SITE_HOST/games/<id>" --route "$SITE_HOST/games/<id>/*"` 和 `SITE_ORIGIN`（`SITE_HOST` 是 `production` 环境的 secret，没设就失败）；
+  4. 游戏的 `wrangler.jsonc` 写成独立配置：`preview_urls: false`，`workers_dev` 开着（单独部署要 `workers.dev` 地址），不写 routes、不写 `ARCADE`/`WALLET` 服务绑定和 `GATE`；
+     本站部署时 `deploy.mjs` 关掉 `workers_dev`，按 `tools/workers.json` 补上平台绑定和 `GATE: "login"`，注入 `--route "$SITE_HOST/games/<id>" --route "$SITE_HOST/games/<id>/*"` 和 `SITE_ORIGIN`（`SITE_HOST` 是 `production` 环境的 secret，没设就失败）；
   5. 在下面的端口表里登记开发端口；
   6. 做一个常驻的"回大厅"入口（左上角，小房子加"大厅"，指向 `/`）：任何界面两步内能回到大厅，对局中离开先确认一次并补传云存档，冒烟里点一次。
 

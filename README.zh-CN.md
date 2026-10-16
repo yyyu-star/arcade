@@ -72,20 +72,14 @@ npm run build               # 正式构建
 
 ## 部署
 
+两种部署方式：**整站**（平台 + 游戏，有账号、钱包、排行榜），或者**只部署一个游戏**。每个游戏的 `wrangler.jsonc` 都是独立配置，
+不带平台也能部署；部署整站时，由维护者管的部署工具在上面补上接平台的绑定。
+
+### 整站（平台 + 游戏）
+
 所有东西挂在**同一个主机名**下：平台 Worker 负责 `/` 和 `/api/*`，每个游戏的 Worker 用路径路由挂在 `/games/<id>/*`。
 同一个主机名，游戏就能直接共用平台的登录 cookie 和 `/api`，没有跨域问题。你需要一个 Cloudflare 账号，以及这个主机名所在的域名（zone）。
-
-### 方式一：Deploy to Cloudflare 按钮
-
-1. **先部署平台**：点上面的按钮。它会把 `platform/` 复制成你 GitHub 账号下的新仓库，建好 D1 数据库、跑迁移、部署 `arcade` Worker。
-   按提示填好 secret（说明见 [`platform/.dev.vars.example`](platform/.dev.vars.example)）。
-2. 在 Cloudflare 控制台给 `arcade` Worker 加一个**自定义域名**（比如 `games.example.com`）。
-3. **开盘**也能用按钮部署，见 [`games/kaipan`](games/kaipan/)；部署完给它加路由 `<你的主机名>/games/kaipan` 和 `<你的主机名>/games/kaipan/*`。
-4. 掼蛋、德州、麻将依赖共用包 [`packages/arcade-kit`](packages/arcade-kit/)，按钮带不过去，请用方式二。
-
-### 方式二：fork 后用 GitHub Actions 部署
-
-本仓库自己就是这样部署的。每个模块在 `.github/workflows/` 里有一个流程：PR 上只测试，合并进 `main` 后部署。
+本仓库自己就是这样部署的：每个模块在 `.github/workflows/` 里有一个流程，PR 上只测试，合并进 `main` 后部署。
 
 1. fork 本仓库，新建名为 **`production`** 的环境（Settings → Environments），只允许 `main` 使用。
    在你的 fork 里把 [`tools/verify-main.sh`](tools/verify-main.sh) 的 `TRUSTED_BASE` 改成你 fork 时的那个提交：
@@ -101,9 +95,23 @@ npm run build               # 正式构建
 
 3. 平台 Worker 自己的 secret 用 `npx wrangler secret put <名字>` 设一次（清单在 `platform/.dev.vars.example`）。
 4. 运行部署流程：**先平台**（游戏要绑定它的 `arcade` Worker），再各个游戏。
-   路由和站点地址在部署时由 `SITE_HOST` 注入，仓库里不写任何域名。
+   哪些游戏接平台写在 [`tools/workers.json`](tools/workers.json)；对这些游戏，`tools/deployer/deploy.mjs` 补上 `ARCADE`（认人）、`WALLET`（钱包）两个服务绑定，
+   把 `GATE` 定成 `"login"`，关掉 `workers.dev`。路由和站点地址在部署时由 `SITE_HOST` 注入，仓库里不写任何域名。
 
 只有经 PR 合并进 `main` 的提交才会部署（`tools/verify-main.sh` 把关）。
+页首的按钮只部署平台（会建好 D1 数据库，按提示填 [`platform/.dev.vars.example`](platform/.dev.vars.example) 里的 secret）；用游戏自己的按钮部署的游戏不会接到它上面。
+
+### 只部署一个游戏
+
+不要平台，也不要域名：游戏会得到一个 `https://<id>.<你的子域>.workers.dev` 地址。
+
+- **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
+  （`<id>` 换成 `kaipan`、`guandan`、`texas` 或 `mahjong`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`）
+  （而不是仓库里的那份）才能用；能不能用看各游戏的 README。
+- **fork 后自己部署**：`cd games/<id> && npm ci && npx wrangler login && npm run deploy`。
+
+单独部署的游戏有：单机对电脑、好友房（身份是游客 cookie，昵称用地址上的 `?name=`）、浏览器本地存档；没有：登录、云存档、排行榜、钱包实盘。
+细节见 [docs/new-game.md](docs/new-game.md) 第 7 节。
 
 ## 架构
 

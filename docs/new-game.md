@@ -26,7 +26,7 @@
 ```
 games/<id>/
 ├─ package.json  package-lock.json  .nvmrc  tsconfig.json  vite.config.ts
-├─ wrangler.jsonc          部署配置（只许用部署配置检查允许的字段，见第 4 节）
+├─ wrangler.jsonc          独立的部署配置：不带平台也能单独部署（只许用部署配置检查允许的字段，见第 4 节）
 ├─ index.html  src/  public/
 ├─ src/core/               规则核心：纯函数，不碰 DOM、网络、Math.random、Date.now
 ├─ test/ 或 tests/         vitest；规则核心全覆盖，架构约束也写成测试
@@ -37,7 +37,9 @@ games/<id>/
 
 隐藏文件只许有 `.gitignore`、`.nvmrc`、`.dev.vars.example`（和 `tools/check-deploy-config.mjs` 的名单一致）；不要提交 `.env*`、`.npmrc`、`.wrangler/`、`wrangler.json`、`wrangler.toml`、符号链接（部署配置检查会拦，见第 4 节）。
 
-`package.json` 里写 `"license": "MIT"`；依赖共用包写 `"arcade-kit": "file:../../packages/arcade-kit"`（唯一允许指向模块外的路径）。
+`package.json` 里写 `"license": "MIT"`；依赖共用包写 npm 上发布的版本，按别名装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，包名是 `@yyyu-star/arcade-kit`，别名让代码里的 `arcade-kit/...` 不用改；命令行是 `npm i arcade-kit@npm:@yyyu-star/arcade-kit`。单独部署和 Deploy to Cloudflare 按钮只复制游戏目录，`file:` 路径带不过去），
+或者仓库内的 `"arcade-kit": "file:../../packages/arcade-kit"`（唯一允许指向模块外的路径，跟着仓库里最新的 kit 走，但不能单独部署）。
+脚本里要有 `deploy`：先构建出 `assets.directory` 指的目录再 `wrangler deploy`（比如 `"deploy": "npm run build:cf && wrangler deploy"`），单独部署和按钮都用它。
 
 ## 2. 写代码的规矩（摘要，细节见 AGENTS.md 第 4 节）
 
@@ -68,24 +70,64 @@ npm run build
 
 ## 4. 部署配置（wrangler.jsonc）
 
-正式站只由维护者发布：PR 合并后，`main` 上的部署流程构建打包，维护者批准后才部署。贡献者不需要、也拿不到 Cloudflare 凭证。
-部署时用的配置就是模块根目录这份 `wrangler.jsonc`（构建期间改它不起作用），它要能过部署配置检查（`node tools/check-deploy-config.mjs`，白名单在 `tools/deployer/lib.mjs`）：
+模块根目录的 `wrangler.jsonc` 是一份**独立配置**：别人拿到这个游戏目录，不要平台也能直接部署成一个能玩的游戏（第 7 节）。
+本站正式部署时，维护者管的部署工具（`tools/deployer/deploy.mjs`）在它上面叠加本站的东西，游戏自己不写：
 
-- `"name": "<id>"`，`"workers_dev": false`，`"preview_urls": false`；不写 `routes`、域名、`account_id`、`env`、`limits`；路由由部署流程按 `SITE_HOST` 注入；
+| 本站部署时补上的 | 怎么来的 |
+|---|---|
+| 服务绑定 `ARCADE`（认人）、`WALLET`（钱包，`props.game` 是本游戏 id） | 维护者在 `tools/workers.json` 给这个游戏声明 `"platform": ["ARCADE", "WALLET"]`，规范形式写死在 `tools/deployer/lib.mjs` |
+| `vars.GATE = "login"`（必须登录） | 声明了平台关系就强制，盖掉模块里的值 |
+| `workers_dev: false`、`preview_urls: false` | 本站只经站点域名访问，一律关掉 |
+| 路由 `<站点>/games/<id>`、`<站点>/games/<id>/*` 和 `SITE_ORIGIN` | 按 `production` 环境的 `SITE_HOST` 注入 |
+
+共用包 0.10.0 起按 env 自己判断：有 `ARCADE` 是平台模式（登录、钱包），没有 `ARCADE` 且 `GATE` 不是 `"login"` 是独立模式（游客）；
+`GATE: "login"` 却没有 `ARCADE` 时一律拒绝（fail-closed），所以部署工具在 `tools/workers.json` 没声明 `ARCADE` 的游戏上看到 `GATE: "login"` 会直接拒绝。
+
+它要能过部署配置检查（`node tools/check-deploy-config.mjs`，白名单在 `tools/deployer/lib.mjs`）：
+
+- `"name": "<id>"`，`"preview_urls": false`；`workers_dev` 写 `true`（单独部署要 `workers.dev` 地址；本站部署时会被关掉）；
+  不写 `routes`、域名、`account_id`、`env`、`limits`；
 - `main` 和 `assets.directory` 必须在模块目录里；构建产物放在 `assets.directory`（现有游戏是 `dist-cf/`），Worker 由 `wrangler deploy --dry-run` 打成一个文件；
 - 绑定只许：静态资源 `ASSETS`；本模块自己的 Durable Object（只写 `name`、`class_name`，房间 `ROOM`、计量 `METER`）；
-  指向平台 `arcade` 的服务绑定 `ARCADE`、钱包 `WALLET`（`entrypoint` 只许 `WalletService`，`props` 只许 `{ "game": "<id>" }`）；
+- **不写服务绑定和 `GATE`**。过渡期里已经写了 `ARCADE`、`WALLET` 的游戏，必须和规范形式一字不差
+  （`{ "binding": "ARCADE", "service": "arcade" }`、`{ "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "<id>" } }`），
+  别的服务绑定（包括 `tools/workers.json` 没给这个游戏声明的）一律拒绝；
 - Durable Object 的 `migrations` 只许 `tag`、`new_classes`、`new_sqlite_classes`（不许转移、删除、改名类）；`observability` 不许 `destinations`；
 - 不许 KV、R2、队列、D1、别的 Worker 的 Durable Object、`tail_consumers`；确实需要时在 issue 里和维护者商量；
 - `vars` 里不写 `SITE_ORIGIN`（正式部署注入，本地不设时按请求自己的 origin）；`vars` 名和 `compatibility_flags` 只许 `tools/deploy-allowlist.json` 里给这个游戏列的，新增由维护者加；
-- 只用 `\n` 换行，配置里不写 `__proto__` 和 `\u` 转义。
+- 只用 `\n` 换行，配置里不写 `__proto__` 和 `\u` 转义；
+- 独立模式下站点根 `/` 也要先到 Worker（kit 的 `standaloneRoot` 把它转到 `/games/<id>/`）：`assets.run_worker_first` 里加上 `"/"`，或者静态资源根上不放 `index.html`。
+
+一个例子（麻将的样子，注释省略）：
+
+```jsonc
+{
+  "name": "mahjong",
+  "main": "worker/main.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist-cf",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/", "/games/mahjong", "/games/mahjong/", "/games/mahjong/index.html", "/games/mahjong/api/stake/*", "/games/mahjong/rooms", "/games/mahjong/rooms/*"]
+  },
+  "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "MahjongRoom" }, { "name": "METER", "class_name": "RoomMeter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter"] }],
+  "vars": { "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 } }
+}
+```
 
 ## 5. 上线要经过的几步（维护者负责模块外的部分）
 
 1. **游戏 PR**（你开）：只改 `games/<id>/`。CI 跑独立性检查、部署配置检查和你的测试。
    第一次的 PR 会因为 Worker 名还不在名单里，部署配置检查不通过——这是预期的，守门代理会把它升级给维护者。
+   `wrangler.jsonc` 按第 4 节写成独立配置，不写平台绑定；PR 说明里写清这个游戏要不要接平台（只认人，还是认人加钱包）。
 2. **维护者登记**（不需要你做）：
-   - 确认 Cloudflare 账户里没有同名的 Worker，把 `<id>` 加进 `tools/workers.json`，把它用到的 `vars` 名加进 `tools/deploy-allowlist.json`；
+   - 确认 Cloudflare 账户里没有同名的 Worker，把 `<id>` 加进 `tools/workers.json`，要接平台的同时声明平台关系
+     （`"<id>": { "platform": ["ARCADE", "WALLET"] }`，只认人就只写 `ARCADE`；不写就按游戏自己的独立配置部署成游客模式）；
+     把它用到的 `vars` 名加进 `tools/deploy-allowlist.json`（`GATE` 由部署工具补，不用列）；
    - 从 `game-kaipan.yml`（不用共用包）或 `game-mahjong.yml`（用共用包）复制一份 `.github/workflows/game-<id>.yml`，只改名字和路径
      （test 作业打包、deploy 作业 sparse-checkout 本模块的 `wrangler.jsonc`、用 `tools/deployer/deploy.mjs` 部署，这些结构不动）；
    - 在平台的 `platform/src/games.ts` 登记（名字、介绍、封面、路径、状态），放封面；云存档、排行榜、钱包的游戏白名单都从这份登记派生；
@@ -106,3 +148,24 @@ npm run build
 - [ ] 只调用了这个游戏需要的平台 `/api`：游戏代码以登录玩家的身份运行，审阅时按能接触玩家账号的代码看
 
 PR 怎么被审、什么会被打回、什么要等维护者，见 [review-policy.md](review-policy.md)。
+
+## 7. 单独部署这个游戏（不要平台）
+
+每个游戏的 `wrangler.jsonc` 都是独立配置，任何人都能只部署一个游戏到自己的 Cloudflare 账户，不需要平台：
+
+- **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`。
+  按钮只把 `games/<id>/` 复制成你账户下的新仓库，所以游戏要依赖 npm 上的 `@yyyu-star/arcade-kit`（按别名 `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，不是 `file:`），并且有第 1 节说的 `deploy` 脚本
+  （按钮会自动带上 `package.json` 里的 `build`、`deploy` 脚本；Durable Object 按配置自动建）。
+- **fork 或拆出来的仓库**：在游戏目录里 `npm ci && npx wrangler login && npm run deploy`。
+
+部署完得到一个 `https://<id>.<你的子域>.workers.dev` 地址，打开后会转到 `/games/<id>/`。独立模式下：
+
+| 有 | 没有 |
+|---|---|
+| 单机对电脑 | 登录（任何人打开就能玩，身份是游客 cookie，昵称取地址上的 `?name=`，没带就是"游客"加 4 位数字） |
+| 好友房（开房、进房、断线重连、托管，额度照 `KIT_QUOTA`） | 云存档、排行榜、好友 |
+| 浏览器本地存档 | 平台钱包和实盘（筹码带入结回） |
+
+页面用 kit 的 `detectPlatform()` 判断有没有平台：没有时藏起登录、云存档、排行榜和实盘，"回大厅"改成回游戏首页。
+想要账号和钱包，就按仓库根 README 的"整站"方式把平台也部署上，再由部署工具补上平台绑定。
+
