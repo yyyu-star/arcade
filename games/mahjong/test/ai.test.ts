@@ -1,5 +1,6 @@
 /**
- * 电脑（DESIGN.md 第 5 节）：场地映射、这一场的状态和局面调整、确定性、不读牌、出手的耗时。
+ * 电脑（DESIGN.md 第 5 节）：场地映射、这一场的状态和局面调整、确定性、出手的耗时。
+ * 不读牌（多局面的反事实测试和阳性对照）在 fairness.test.ts，视图字段白名单在 match.test.ts，电脑能 import 什么在 arch.test.ts（DESIGN.md 5.4）。
  * 强弱和打法拉没拉开靠模拟器（scripts/sim.ts、stake-room.ts、strength.ts），结果在 DESIGN.md 4.1。
  */
 import { stream } from 'arcade-kit/rng';
@@ -111,20 +112,6 @@ describe('出手', () => {
     const s = toTurn(start());
     const v = view(s, s.turn);
     expect(decide(v)).toEqual(decide(structuredClone(v)));
-  });
-
-  test('不读牌：别人手里的牌换了，我看到的视图和决定都不变', () => {
-    const s = toTurn(start());
-    const me = s.turn;
-    const other = (me + 1) % 4;
-    const t = structuredClone(s);
-    // 别人手里的牌和牌墙对调（张数不变）：只有看不见的东西变了
-    const n = t.players[other]!.hand.length;
-    const swapped = t.wall.tiles.slice(t.wall.head, t.wall.head + n);
-    t.wall.tiles.splice(t.wall.head, n, ...t.players[other]!.hand);
-    t.players[other]!.hand = swapped;
-    expect(view(t, me)).toEqual(view(s, me));
-    expect(decide(view(t, me))).toEqual(decide(view(s, me)));
   });
 
   test('出手不慢：一整场里电脑每一次决定 p99 不到 20 毫秒', () => {
