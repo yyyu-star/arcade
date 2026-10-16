@@ -70,7 +70,8 @@
   font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--ink);
-  background: linear-gradient(180deg, #ffe9c7 0%, var(--paper) 40%);
+  /* 底色上铺一层很淡的小图案（public/bg.svg，不到 1 KB），远看是纸，近看有点街机厅的热闹 */
+  background: url('/bg.svg') 0 0 / 160px 160px, linear-gradient(180deg, #ffe9c7 0%, var(--paper) 40%);
   -webkit-text-size-adjust: 100%;
 }
 * { box-sizing: border-box; }
@@ -95,10 +96,15 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .narrow { max-width: var(--narrow); margin: 0 auto; display: flex; flex-direction: column; gap: var(--s-5); }
 .top { position: relative; margin-bottom: var(--s-8); display: flex; flex-direction: column; align-items: center; gap: var(--s-2); text-align: center; }
 .top__home { color: inherit; text-decoration: none; border-radius: var(--r-sm); }
-.top__logo { font-size: var(--fs-3xl); margin: 0; color: var(--accent); letter-spacing: 2px; text-shadow: 2px 2px 0 var(--line); }
+.top__logo { display: inline-flex; align-items: center; gap: var(--s-3); font-size: var(--fs-3xl); margin: 0; color: var(--accent); letter-spacing: 2px; text-shadow: 2px 2px 0 var(--line); }
+.logo-mark { flex: none; filter: drop-shadow(2px 2px 0 var(--line)); transform: rotate(-6deg); transition: transform 0.2s ease; }
+@media (hover: hover) {
+  .top__home:hover .logo-mark { transform: rotate(0deg) scale(1.06); }
+}
 .top__sub { margin: 0; color: var(--muted); }
 .foot { margin-top: var(--s-10); text-align: center; color: var(--muted); font-size: var(--fs-xs); }
 .foot a { color: inherit; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--s-1); }
+.foot__sound { font: inherit; display: inline-flex; align-items: center; gap: var(--s-1); min-height: var(--tap); padding: 0 var(--s-1); border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }
 
 /* 电脑和横屏：标题在左、按钮在右 */
 @media (min-width: 561px) {
@@ -121,6 +127,8 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .account__name { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account--chips { gap: 6px; }
 .coin { flex: none; color: var(--line); }
+.icon { flex: none; }
+.account .icon { color: var(--accent-deep); }
 @media (max-width: 560px) {
   /* 手机竖屏：顶栏放在标题上面一行；按钮收窄，头像只露头像（昵称留给读屏），管理员多一个"管理"也放得下 */
   .page { padding-left: max(var(--s-4), env(safe-area-inset-left, 0px)); padding-right: max(var(--s-4), env(safe-area-inset-right, 0px)); }
@@ -128,7 +136,10 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   .topbar .account { padding: 0 10px; font-size: 15px; }
   .topbar .account:has(.account__avatar) { padding: 0 6px; }
   .account__avatar + .account__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .top__logo { font-size: var(--fs-2xl); }
+  .top__logo { font-size: var(--fs-2xl); gap: var(--s-2); }
+  .logo-mark { width: 36px; height: 36px; }
+  /* 顶栏的小图标在手机上收起，字留着：五个按钮一行放得下 */
+  .topbar .icon { display: none; }
 }
 
 /* ---------- 按钮 ---------- */
@@ -221,21 +232,24 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .card__tagline { margin: 0; font-weight: 600; }
 .card__week { font-size: 15px; font-weight: 700; white-space: nowrap; }
 .card__desc { margin: 0; color: var(--muted); line-height: 1.6; font-size: var(--fs-sm); }
-.card__tags { list-style: none; padding: 0; margin: var(--s-1) 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+/* 标签和按钮一起贴着卡片底边：同一行卡片简介长短不一时，标签和按钮照样对齐 */
+.card__tags { list-style: none; padding: 0; margin: auto 0 0; padding-top: var(--s-1); display: flex; flex-wrap: wrap; gap: 6px; }
 .card__tags li { font-size: var(--fs-xs); line-height: 20px; padding: 0 var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-pill); background: var(--white); }
-.card__actions { margin-top: auto; padding-top: var(--s-2); display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.card__actions { padding-top: var(--s-2); display: flex; flex-wrap: wrap; gap: var(--s-3); }
 .card__play { min-width: 128px; }
-.card__icon { flex: none; }
+/* "今天 N 人玩过"：骑在封面和正文的分界线右边（0.10.26 起；原来压在封面右上角，挡住封面上的标题字），只盖住封面底边一小条 */
+.card__body { position: relative; }
 .card__playing {
-  position: absolute; top: var(--s-3); right: var(--s-3); z-index: 1;
-  display: inline-flex; align-items: center; gap: var(--s-1); padding: 3px var(--s-3) 3px var(--s-2);
-  border: var(--bw-thin) solid var(--line); border-radius: var(--r-pill); background: var(--white); color: var(--ink);
-  font-size: 13px; font-weight: 700; box-shadow: var(--sh-sm);
+  position: absolute; top: -15px; right: var(--s-4);
+  display: inline-flex; align-items: center; gap: var(--s-1); padding: 2px var(--s-3) 2px var(--s-2);
+  border: var(--bw-thin) solid var(--line); border-radius: var(--r-pill); background: var(--highlight-warm); color: var(--ink);
+  font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: var(--sh-sm);
 }
-.card__playing .card__icon { width: 16px; height: 16px; color: var(--accent); }
+.card__playing .icon { width: 16px; height: 16px; color: var(--accent-deep); }
 /* "更多小游戏"只是个占位，别占太大地方 */
 .card--placeholder { justify-content: center; min-height: 120px; border-style: dashed; box-shadow: none; background: transparent; }
-.card--placeholder .card__body { align-items: center; justify-content: center; }
+.card--placeholder .card__body { align-items: center; justify-content: center; text-align: center; }
+.card--placeholder .empty__art { opacity: 0.85; }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
   .card--placeholder { min-height: 88px; }
@@ -246,6 +260,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 /* ---------- 面板、表单 ---------- */
 .panel { background: var(--surface); border: var(--bw) solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-lg); padding: var(--s-5) var(--s-6) var(--s-6); }
 .panel__title { margin: 0 0 var(--s-4); font-size: var(--fs-xl); }
+.panel__title::after { content: ''; display: block; width: 32px; height: 4px; margin-top: 6px; border-radius: var(--r-pill); background: var(--accent); }
 .panel > .note { margin-bottom: var(--s-3); }
 .panel > .row { margin-top: var(--s-4); }
 @media (max-width: 560px) { .panel { padding: var(--s-4); } }
@@ -284,6 +299,9 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .prose ul { margin: 0; padding-left: 1.3em; }
 .prose p { margin: 0 0 var(--s-2); }
 .prose .promise { margin: 0 0 var(--s-4); padding: var(--s-3) var(--s-4); border: var(--bw) solid var(--line); border-radius: var(--r-md); background: var(--highlight); font-weight: 700; }
+/* 空列表：小插画加一句话 */
+.empty { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); padding: var(--s-4) 0; text-align: center; }
+.empty .note { max-width: 32em; }
 /* 页面切换时的"正在打开…"别一闪而过就跳：淡入 */
 .page-loading { animation: fade-in 0.3s ease 0.15s both; text-align: center; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -328,6 +346,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 
 /* ---------- 钱包 ---------- */
 .wallet__balance { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-1) 0 var(--s-2); font-size: 44px; font-weight: 800; line-height: 1.1; }
+.wallet__balance .coin { border-radius: 50%; background: radial-gradient(circle, rgb(255 200 61 / 55%) 0 40%, transparent 70%); filter: drop-shadow(2px 2px 0 var(--line)); }
 .wallet__relief { margin-top: var(--s-4); }
 .wallet__relief .note { margin: var(--s-2) 0 0; }
 .stake { border-width: var(--bw); }
@@ -367,9 +386,11 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 /* 自己那行加粗描边，但不让内容跟着挤 1 px：用内阴影补出第三条边 */
 .rank--me { background: var(--highlight-warm); box-shadow: inset 0 0 0 1px var(--line); }
 .rank__no { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-weight: 800; background: var(--soft); }
-.rank__no--1 { background: #f5c542; }
-.rank__no--2 { background: #cfd6dc; }
-.rank__no--3 { background: #e0a46a; }
+/* 前三名是奖牌：金银铜的渐变、一圈描边、上面一点高光 */
+.rank__no--1, .rank__no--2, .rank__no--3 { border: var(--bw-thin) solid var(--line); box-shadow: inset 0 -3px 0 rgb(0 0 0 / 15%), inset 0 3px 0 rgb(255 255 255 / 45%); }
+.rank__no--1 { background: radial-gradient(circle at 35% 30%, #fff1a8, #f5c542 55%, #d99a12); }
+.rank__no--2 { background: radial-gradient(circle at 35% 30%, #ffffff, #cfd6dc 55%, #9aa6b0); }
+.rank__no--3 { background: radial-gradient(circle at 35% 30%, #ffd9b0, #e0a46a 55%, #b4733a); }
 .rank__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 700; text-decoration: none; }
 .rank__me { margin-left: 6px; vertical-align: 1px; font-size: var(--fs-xs); line-height: 18px; padding: 0 6px; border-radius: 6px; background: var(--accent); color: var(--white); }
 .rank__value { font-weight: 800; }

@@ -9,7 +9,7 @@ import { GAMES } from '../games.ts';
 import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
-import { FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
 
 /** 按大厅的顺序排，大厅里没有的放最后 */
 const order = (id: string) => {
@@ -166,9 +166,7 @@ export function StatsPage() {
       <Panel title={mine ? '我的战绩' : `${data.user.displayName} 的战绩`}>
         {!mine && <FriendAction userId={data.user.userId} relation={data.relation} onChange={(relation) => setData({ ...data, relation })} />}
         {games.length === 0 ? (
-          <p className="note" data-testid="career-empty">
-            {mine ? '还没有战绩。带筹码玩一局单机实盘或好友房，这里就有了。' : '还没有战绩。'}
-          </p>
+          <Empty testId="career-empty">{mine ? '还没有战绩。带筹码玩一局单机实盘或好友房，这里就有了。' : '还没有战绩。'}</Empty>
         ) : (
           <>
             <p className="career__summary">

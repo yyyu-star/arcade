@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { SessionProvider } from './session.tsx';
+import { installTapSound } from './sound.ts';
 import { WalletProvider } from './wallet.tsx';
 import './styles.css';
 
@@ -11,6 +12,8 @@ try {
 } catch {
   // 隐私模式等用不了 localStorage：那也就没存过
 }
+
+installTapSound();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

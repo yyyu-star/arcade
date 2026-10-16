@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { GAMES, type GameEntry } from './games.ts';
-import { CoinIcon } from './icons.tsx';
+import { CoinIcon, EmptyArt, LogoMark, PeopleIcon, ShieldIcon, SpeakerIcon, TrophyIcon } from './icons.tsx';
+import { setSoundOn, soundOn, subscribeSound } from './sound.ts';
 import { onlineUrl, playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api } from './api.ts';
@@ -83,18 +84,6 @@ function pageFor(pathname: string): ComponentType | undefined {
   return ACCOUNT_PAGES[pathname];
 }
 
-/** 两个人的小图标（不用 emoji：没装 emoji 字体的设备会显示成方框）。 */
-function PeopleIcon() {
-  return (
-    <svg className="card__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-      <circle cx="9" cy="8" r="3.2" fill="currentColor" />
-      <circle cx="16.5" cy="9" r="2.6" fill="currentColor" opacity="0.6" />
-      <path d="M2.8 19.5c0-3.6 2.8-6 6.2-6s6.2 2.4 6.2 6z" fill="currentColor" />
-      <path d="M14.6 13.9c.6-.2 1.2-.3 1.9-.3 2.8 0 4.8 2 4.8 5.1h-5.1c-.1-1.9-.7-3.5-1.6-4.8z" fill="currentColor" opacity="0.6" />
-    </svg>
-  );
-}
-
 function GameCard({ game }: { game: GameEntry }) {
   const playable = game.status === 'playable';
   const { loading, slow, user, service } = useSession();
@@ -107,14 +96,15 @@ function GameCard({ game }: { game: GameEntry }) {
   const wnet = Object.hasOwn(week, game.id) ? week[game.id]! : null;
   return (
     <article className={`card${playable ? '' : ' card--coming'}`}>
-      {playable && playing > 0 && (
-        <span className="card__playing" data-testid={`playing-${game.id}`}>
-          <PeopleIcon />
-          今天 {playing} 人玩过
-        </span>
-      )}
       <img className="card__cover" src={game.cover} alt={`${game.name}封面`} width={800} height={450} loading="lazy" decoding="async" />
       <div className="card__body">
+        {/* 人数牌子骑在封面和正文的分界线上：原来压在封面右上角，挡住封面上的标题字 */}
+        {playable && playing > 0 && (
+          <span className="card__playing" data-testid={`playing-${game.id}`}>
+            <PeopleIcon />
+            今天 {playing} 人玩过
+          </span>
+        )}
         <h2 className="card__title">
           {game.name}
           {wnet !== null && (
@@ -197,6 +187,7 @@ function Home({ deleted }: { deleted: boolean }) {
         ))}
         <article className="card card--coming card--placeholder">
           <div className="card__body">
+            <EmptyArt />
             <h2 className="card__title">更多小游戏</h2>
             <p className="card__tagline">正在路上</p>
           </div>
@@ -286,13 +277,16 @@ function AccountButton() {
     <span className="topbar">
       {user.isAdmin && (
         <Link className="account" href="/admin">
+          <ShieldIcon />
           管理
         </Link>
       )}
       <Link className="account" href="/boards">
+        <TrophyIcon />
         排行
       </Link>
       <Link className="account" href="/friends">
+        <PeopleIcon />
         好友
       </Link>
       <WalletBadge />
@@ -317,6 +311,17 @@ function WalletBadge() {
   );
 }
 
+/** 页脚的声音开关：大厅点按的那一声"嗒"（src/sound.ts） */
+function SoundToggle() {
+  const on = useSyncExternalStore(subscribeSound, soundOn);
+  return (
+    <button className="foot__sound" type="button" data-sound-toggle aria-pressed={on} data-testid="sound-toggle" onClick={() => setSoundOn(!on)}>
+      <SpeakerIcon on={on} />
+      {on ? '声音：开' : '声音：关'}
+    </button>
+  );
+}
+
 export function App() {
   const loc = useLocation();
   const { service, refresh, loading, slow } = useSession();
@@ -325,7 +330,10 @@ export function App() {
     <div className={Page ? 'page page--narrow' : 'page'}>
       <header className="top">
         <Link className="top__home" href="/">
-          <h1 className="top__logo">小游戏街机厅</h1>
+          <h1 className="top__logo">
+            <LogoMark />
+            小游戏街机厅
+          </h1>
         </Link>
         <p className="top__sub">挑一个，开一局。</p>
         <AccountButton />
@@ -353,6 +361,8 @@ export function App() {
         全部游戏内容均为虚构 · 美术与音频为原创程序生成
         {' · '}
         <Link href="/privacy">隐私说明</Link>
+        {' · '}
+        <SoundToggle />
       </footer>
     </div>
   );

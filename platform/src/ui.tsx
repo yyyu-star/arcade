@@ -1,6 +1,7 @@
 /** 账号页面共用的小部件：输入框、提交按钮的忙碌和出错状态、恢复码卡片。 */
 import { useId, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react';
 import { errorText, type ErrorTexts } from './api.ts';
+import { EmptyArt } from './icons.tsx';
 import { useLeaveGuard } from './router.tsx';
 import { useSession } from './session.tsx';
 
@@ -157,5 +158,15 @@ export function Panel({ title, children }: { title: string; children: ReactNode 
       <h2 className="panel__title">{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** 空列表：一张小插画加一句话（排行榜、好友、战绩、流水还没有东西时） */
+export function Empty({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <div className="empty" data-testid={testId}>
+      <EmptyArt />
+      <p className="note">{children}</p>
+    </div>
   );
 }

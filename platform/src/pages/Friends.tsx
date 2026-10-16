@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation } from '../api.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Field, FormError, Panel, useWritable } from '../ui.tsx';
+import { Empty, Field, FormError, Panel, useWritable } from '../ui.tsx';
 
 /** "今天来过 / 昨天来过 / N 天前来过"（服务端按北京时间算天，不给精确时间）。 */
 function lastSeenText(days: number): string {
@@ -114,7 +114,7 @@ function Friends() {
       {data && (
         <Panel title={`好友（${data.friends.length}）`}>
           {data.friends.length === 0 ? (
-            <p className="note">还没有好友。把上面的好友链接发给朋友，对方点开就能加你。</p>
+            <Empty>还没有好友。把上面的好友链接发给朋友，对方点开就能加你。</Empty>
           ) : (
             <ul className="people">
               {data.friends.map((p) => (

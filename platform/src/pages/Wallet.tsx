@@ -10,7 +10,7 @@ import { LedgerList } from '../ledger.tsx';
 import { playUrl } from '../play.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
 import { useWallet } from '../wallet.tsx';
 import { CoinIcon } from '../icons.tsx';
 
@@ -150,7 +150,7 @@ export function WalletPage() {
         </Panel>
       )}
       <Panel title="最近进出">
-        {ledger.length > 0 ? <LedgerList entries={ledger} gameName={gameName} /> : <p className="note">还没有进出。</p>}
+        {ledger.length > 0 ? <LedgerList entries={ledger} gameName={gameName} /> : <Empty>还没有进出。</Empty>}
         <p className="note">只留最近 30 笔；10 月 16 日以前的没记下来。</p>
       </Panel>
     </>
