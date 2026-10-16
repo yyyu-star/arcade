@@ -10,7 +10,7 @@ import { PERSONAS } from '../src/ai/personas.ts';
 import { strength, TOP } from '../src/ai/preflop.ts';
 import { parseCards } from '../src/core/cards.ts';
 import { categoryOf, evalCards, HIGH_CARD } from '../src/core/eval.ts';
-import { STAKES, type StakesId } from '../src/core/stakes.ts';
+import { LEVEL_HOUSE, STAKES, type StakesId } from '../src/core/stakes.ts';
 import { isFail, newTable, PERSONA_COUNT, seatHouse } from '../src/core/table.ts';
 import { view, type View } from '../src/core/view.ts';
 import { runBots, runVs } from './bots.ts';
@@ -107,7 +107,7 @@ describe('电脑的难度', () => {
     expect(small).toBeGreaterThan(-25);
   });
 
-  it('同一批翻牌后被下注的局面，豪华桌的电脑弃得比小桌多（会看人）', () => {
+  it('同一批翻牌后被下注的局面，豪华桌那一档的电脑弃得比小桌那一档多（会看人；0.5.0 起按强弱档）', () => {
     // 从机器人对打里收集"翻牌后要跟注"的局面，换成各档的视图让电脑重新决定。整场输赢太吵，几十场比不出来，这里直接比决定
     const spots: View[] = [];
     runBots({
@@ -123,10 +123,10 @@ describe('电脑的难度', () => {
         }
       },
     });
-    const calls = (stakes: StakesId): number =>
-      spots.filter((v, i) => decide({ ...v, stakes }, stream(SEED, 'spot', i)).t !== 'fold').length;
-    const small = calls('small');
-    const lux = calls('lux');
+    const calls = (level: number): number =>
+      spots.filter((v, i) => decide({ ...v, level }, stream(SEED, 'spot', i)).t !== 'fold').length;
+    const small = calls(1);
+    const lux = calls(4);
     console.log(`翻牌后被下注 ${spots.length} 个局面：小桌不弃 ${small} 次，豪华桌 ${lux} 次`);
     expect(spots.length).toBe(800);
     expect(lux).toBeLessThan(small * 0.9);
@@ -148,10 +148,11 @@ describe('电脑的难度', () => {
     expect(abiao!.vpip).toBeLessThanOrEqual(45);
     expect(abiao!.pfr).toBeGreaterThanOrEqual(20);
     expect(abiao!.pfr).toBeLessThanOrEqual(32);
+    // 0.5.0 小桌改成新手档（整体松一点、带这一场的状态）：紧的两个放宽到 ≤ 27
     expect(wen!.vpip).toBeGreaterThanOrEqual(13);
-    expect(wen!.vpip).toBeLessThanOrEqual(23);
+    expect(wen!.vpip).toBeLessThanOrEqual(27);
     expect(manman!.vpip).toBeGreaterThanOrEqual(12);
-    expect(manman!.vpip).toBeLessThanOrEqual(22);
+    expect(manman!.vpip).toBeLessThanOrEqual(27);
     // 0.3.0 实打后：慢慢 59 手翻牌前一次没加过注（原来 2%）。拿 QQ+、AK 这类大牌开池要加，目标 4–6%
     expect(manman!.pfr).toBeGreaterThanOrEqual(4);
     expect(manman!.pfr).toBeLessThanOrEqual(7);
@@ -281,7 +282,7 @@ describe('电脑的难度', () => {
     expect(seers / hands).toBeGreaterThan(2);
   });
 
-  it('补位按档位的权重挑：小桌多来爱跟注、胆小、新手、话多的，豪华桌多来紧凶、会算、爱诈唬的', () => {
+  it('补位按强弱档的权重挑（单机按档位定强弱档，0.5.0）：小桌多来爱跟注、胆小、新手、话多的，豪华桌多来紧凶、会算、爱诈唬的', () => {
     // 两人桌只补一个电脑，看得出权重；9 人桌 8 个电脑只差两个
     const count = (stakes: StakesId): number[] => {
       const n = new Array<number>(PERSONA_COUNT).fill(0);
@@ -300,7 +301,7 @@ describe('电脑的难度', () => {
     // 叨叨 + 小白 对 虎子 + 老鹰
     expect(small[8]! + small[9]!).toBeGreaterThan(2 * (small[6]! + small[7]!));
     expect(lux[6]! + lux[7]!).toBeGreaterThan(3 * (lux[8]! + lux[9]!));
-    for (const st of STAKES) expect(st.house.length).toBe(PERSONA_COUNT);
+    for (const w of LEVEL_HOUSE) expect(w.length).toBe(PERSONA_COUNT);
   });
 
   it('猜范围：对手翻牌前加过注，同一手牌的胜率要低一截', () => {

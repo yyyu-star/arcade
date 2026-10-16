@@ -11,7 +11,7 @@ import { isMainThread, parentPort, Worker, workerData } from 'node:worker_thread
 import { PERSONAS } from '../src/ai/personas.ts';
 import { categoryOf, evalCards } from '../src/core/eval.ts';
 import { bluffer } from '../src/core/fame.ts';
-import { STAKES, stakesOf, type StakesId } from '../src/core/stakes.ts';
+import { LEVELS, ROOM_LEVEL, SOLO_LEVEL, STAKES, stakesOf, type StakesId } from '../src/core/stakes.ts';
 import { MAX_SEATS, PERSONA_COUNT, type LogEntry, type Table } from '../src/core/table.ts';
 import { runBots, runVs } from '../test/bots.ts';
 import { STRATEGIES } from '../test/strategies.ts';
@@ -22,10 +22,10 @@ const MIX_HANDS = 2_000;
 const CASH_OUT = 3;
 
 type Job =
-  | { kind: 'vs'; stakes: StakesId; strategy: string; size: number; from: number; to: number; persona?: number; humans: number; strong: boolean }
-  | { kind: 'mix'; stakes: StakesId; size: number; from: number; to: number };
+  | { kind: 'vs'; stakes: StakesId; strategy: string; size: number; from: number; to: number; persona?: number; humans: number; level?: number }
+  | { kind: 'mix'; stakes: StakesId; size: number; from: number; to: number; form: boolean };
 /** vs：每场的毫大盲；mix：每场每种性格的 [手数, 净赢筹码] */
-type Result = { mbb: number[]; personas: number[]; table: number[]; bluff: number[][] } | { rounds: [number, number][][]; style: number[][]; table: number[]; bluff: number[][] };
+type Result = { mbb: number[]; personas: number[]; table: number[]; bluff: number[][] } | { rounds: [number, number][][]; style: number[][]; table: number[]; bluff: number[][]; per: number[][][] };
 
 /**
  * 整桌的热闹程度（0.3.0）：打完的手数、看到翻牌的人次、摊牌的手数、底池合计（大盲）；
@@ -48,8 +48,11 @@ function work(j: Job): Result {
     const style = PERSONAS.map(() => new Array<number>(STYLE).fill(0));
     const table = new Array<number>(TABLE).fill(0);
     const bluff = PERSONAS.map(() => new Array<number>(BLUFF).fill(0));
+    // 每一场每种性格的 [发到牌, 入池, 翻牌前加注]（0.5.0）：看同一个性格场与场之间打法差多少
+    const per: number[][][] = [];
     for (let k = j.from; k < j.to; k++) {
       const personas = mixPersonas(k, j.size);
+      const cur = PERSONAS.map(() => [0, 0, 0]);
       // 每一步看新增的操作记录（一手的最后一个操作会随新的一手清掉，少数几条，不影响比例）
       let hand = -1;
       let seen = 0;
@@ -63,17 +66,18 @@ function work(j: Job): Result {
         stakes: j.stakes,
         personas,
         chaos: false,
+        form: j.form,
         cashOut: CASH_OUT,
         onStep: (t) => {
           track(t);
           if (t.handNo !== hand) {
-            for (const i of vpip) style[personas[i]!]![1]!++;
-            for (const i of pfr) style[personas[i]!]![2]!++;
+            for (const i of vpip) style[personas[i]!]![1]!++, cur[personas[i]!]![1]!++;
+            for (const i of pfr) style[personas[i]!]![2]!++, cur[personas[i]!]![2]!++;
             vpip = new Set();
             pfr = new Set();
             hand = t.handNo;
             seen = 0;
-            t.seats.forEach((s, i) => s.status !== 'out' && style[personas[i]!]![0]!++);
+            t.seats.forEach((s, i) => s.status !== 'out' && (style[personas[i]!]![0]!++, cur[personas[i]!]![0]!++));
           }
           let flop = t.log.slice(0, seen).some((e) => e.seat < 0);
           for (const e of t.log.slice(seen)) {
@@ -89,8 +93,9 @@ function work(j: Job): Result {
         },
       });
       rounds.push(st.byPersona.map((p) => [p.hands, p.net]));
+      per.push(cur);
     }
-    return { rounds, style, table, bluff };
+    return { rounds, style, table, bluff, per };
   }
   const mbb: number[] = [];
   const personas = new Array<number>(PERSONA_COUNT).fill(0);
@@ -105,7 +110,7 @@ function work(j: Job): Result {
       strategy: STRATEGIES[j.strategy]!,
       persona: j.persona,
       humans: j.humans,
-      strong: j.strong,
+      ...(j.level !== undefined ? { level: j.level } : {}),
       onStep: tableTracker(table, bluff),
     });
     mbb.push(r.mbb);
@@ -237,8 +242,9 @@ const meanSe = (xs: number[]): [number, number, number] => {
 };
 
 /**
- * npm run sim -- --vs [每格场数] [档位,...] [策略,...] [--persona=编号] [--size=人数] [--humans=玩家数] [--strong]
- * --humans、--strong（0.4.0，好友房）：前几个座位都是玩家、打印他们合起来的输赢；电脑一律最强（DESIGN.md 6.5）
+ * npm run sim -- --vs [每格场数] [档位,...] [策略,...] [--persona=编号] [--size=人数] [--humans=玩家数] [--level=0–5 | --room]
+ * --humans（0.4.0，好友房）：前几个座位都是玩家、打印他们合起来的输赢。
+ * 电脑的强弱档（0.5.0）：不给按单机的（SOLO_LEVEL），--room 按好友房的（ROOM_LEVEL），--level= 钉死一档（DESIGN.md 4.7、6.5）
  */
 export async function vsMain(args: string[]): Promise<void> {
   const sessions = Number(args[0] ?? 600);
@@ -251,14 +257,18 @@ export async function vsMain(args: string[]): Promise<void> {
   const h = process.argv.find((a) => a.startsWith('--humans='));
   const humans = h ? Number(h.slice(9)) : 1;
   if (!Number.isInteger(humans) || humans < 1 || humans >= size) throw new Error(`bad --humans ${h}`);
-  const strong = process.argv.includes('--strong');
+  const lv = process.argv.find((a) => a.startsWith('--level='));
+  const fixed = lv ? Number(lv.slice(8)) : undefined;
+  if (fixed !== undefined && !(Number.isInteger(fixed) && fixed >= 0 && fixed < LEVELS)) throw new Error(`bad ${lv}`);
+  const room = process.argv.includes('--room');
+  const levelOf = (st: StakesId): number => fixed ?? (room ? ROOM_LEVEL : SOLO_LEVEL)[st];
   const t0 = performance.now();
-  console.log(`\n${humans} 个玩家（合起来算）对 ${size - humans} 个${strong ? '最强的' : ''}电脑：每格 ${sessions} 场 × ${SESSION_HANDS} 手，${THREADS} 线程`);
+  console.log(`\n${humans} 个玩家（合起来算）对 ${size - humans} 个电脑（强弱档 ${fixed ?? (room ? '按好友房' : '按单机')}）：每格 ${sessions} 场 × ${SESSION_HANDS} 手，${THREADS} 线程`);
   console.log('档位    策略      每百手大盲（±1 标准误）  赢的场次   手数');
   for (const st of stakes) {
     const mix = new Array<number>(PERSONA_COUNT).fill(0);
     for (const sg of strategies) {
-      const parts = await fanout<{ mbb: number[]; personas: number[]; table: number[]; bluff: number[][] }>(sessions, (from, to) => ({ kind: 'vs', stakes: st, strategy: sg, size, from, to, persona, humans, strong }));
+      const parts = await fanout<{ mbb: number[]; personas: number[]; table: number[]; bluff: number[][] }>(sessions, (from, to) => ({ kind: 'vs', stakes: st, strategy: sg, size, from, to, persona, humans, level: levelOf(st) }));
       const xs = parts.flatMap((p) => p.mbb).map((x) => x / 1000);
       parts.forEach((p) => p.personas.forEach((n, i) => (mix[i]! += n)));
       const [mean, se, sd] = meanSe(xs);
@@ -279,7 +289,10 @@ export async function vsMain(args: string[]): Promise<void> {
 export async function mixMain(hands: number, stakes: StakesId, size = 6): Promise<void> {
   const n = Math.max(6, Math.ceil(hands / MIX_HANDS));
   const bb = stakesOf(stakes).bb;
-  const parts = await fanout<{ rounds: [number, number][][]; style: number[][]; table: number[]; bluff: number[][] }>(n, (from, to) => ({ kind: 'mix', stakes, size, from, to }));
+  // --no-form：电脑不抽这一场的状态（0.5.0 以前的样子），对照场与场之间的浮动
+  const form = !process.argv.includes('--no-form');
+  const parts = await fanout<{ rounds: [number, number][][]; style: number[][]; table: number[]; bluff: number[][]; per: number[][][] }>(n, (from, to) => ({ kind: 'mix', stakes, size, from, to, form }));
+  const per = parts.flatMap((p) => p.per);
   const rounds = parts.flatMap((p) => p.rounds);
   const total = rounds.length * MIX_HANDS;
   console.log(`\n性格对打：${size} 人桌 ${total} 手（${stakesOf(stakes).name}，${rounds.length} 场 × ${MIX_HANDS} 手，每场洗性格、换座位）`);
@@ -294,8 +307,11 @@ export async function mixMain(hands: number, stakes: StakesId, size = 6): Promis
     const [, se] = meanSe(on.map((r) => (r[i]![1] / bb / r[i]![0]) * 100));
     const [dealt, vpip, pfr, aggr, calls] = parts.reduce((a, x) => a.map((v, m) => v + x.style[i]![m]!), new Array<number>(STYLE).fill(0));
     const pct = (x: number): string => `${((x * 100) / dealt!).toFixed(0)}%`;
+    // 场与场之间（0.5.0）：这种性格上桌够 200 手的场次，入池率、翻牌前加注率的标准差（百分点）
+    const sessions = per.map((r) => r[i]!).filter((x) => x[0]! >= 200);
+    const sd = (m: number): string => (sessions.length > 2 ? meanSe(sessions.map((x) => (x[m]! * 100) / x[0]!))[2].toFixed(1) : '—');
     console.log(
-      `  ${p.name}  每百手 ${((net / bb / h) * 100).toFixed(1).padStart(6)} ± ${se.toFixed(1)} 个大盲（${h} 手）  入池 ${pct(vpip!)}、翻牌前加注 ${pct(pfr!)}、翻牌后下注加注 / 跟注 ${(aggr! / calls!).toFixed(1)}`,
+      `  ${p.name}  每百手 ${((net / bb / h) * 100).toFixed(1).padStart(6)} ± ${se.toFixed(1)} 个大盲（${h} 手）  入池 ${pct(vpip!)}（场间 ±${sd(1)}）、翻牌前加注 ${pct(pfr!)}（±${sd(2)}）、翻牌后下注加注 / 跟注 ${(aggr! / calls!).toFixed(1)}`,
     );
   });
 }

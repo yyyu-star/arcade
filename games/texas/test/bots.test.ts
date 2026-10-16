@@ -25,7 +25,8 @@ describe('机器人对打', () => {
     runBots({
       seed: seedOf(99),
       size: 6,
-      hands: 300,
+      // 0.5.0 小桌是新手档，一手里的步数少一点：300 手不到 1 万次
+      hands: 400,
       onStep: (t) => {
         for (let s = 0; s < t.seats.length; s++) {
           hidden(t, view(t, s), s);

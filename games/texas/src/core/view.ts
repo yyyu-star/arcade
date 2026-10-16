@@ -3,7 +3,7 @@
  * 不放：别人没亮的底牌、牌堆、种子；上一手里只有真的亮出来的牌（lastHand.shown）。
  */
 import type { Card } from './cards.ts';
-import { buildPots, legal, type HandResult, type Legal, type LogEntry, type Owner, type Phase, type Status, type Table } from './table.ts';
+import { buildPots, legal, levelOf, type HandResult, type Legal, type LogEntry, type Owner, type Phase, type Status, type Table } from './table.ts';
 import type { StakesId } from './stakes.ts';
 
 export interface SeatView {
@@ -15,6 +15,8 @@ export interface SeatView {
   status: Status;
   away: boolean;
   leaving: boolean;
+  /** 这个座位这一场公开的打法统计（0.5.0，SeatState.seen：发到牌、入池、翻牌前加注、翻牌后下注加注、翻牌后跟注）；还没有就不带 */
+  seen?: number[];
 }
 
 export interface View {
@@ -51,8 +53,11 @@ export interface View {
    * 只下发自己的，别人的不给；电脑据此松一点、凶一点，画面可以拿来配表情
    */
   tilt: number;
-  /** 电脑一律最强（0.4.0，好友房，规则的 strong）：电脑的功力按豪华桌算，不按这一桌的档位 */
-  strong?: boolean;
+  /** 这一桌电脑的强弱档（0.5.0，规则的 levelOf）：电脑按它定功力，不按档位 */
+  level: number;
+  /** 我这个座位这一场的状态和坐下时的筹码（0.5.0，SeatState.form / start）：只下发自己的，电脑据此浮动、看领先落后 */
+  form?: number[];
+  start?: number;
 }
 
 export function view(t: Table, me: number | null): View {
@@ -77,6 +82,7 @@ export function view(t: Table, me: number | null): View {
       status: s.status,
       away: s.away,
       leaving: s.leaving,
+      ...(s.seen ? { seen: [...s.seen] } : {}),
     })),
     pot: t.seats.reduce((a, s) => a + s.total, 0),
     pots: buildPots(
@@ -89,6 +95,8 @@ export function view(t: Table, me: number | null): View {
     log: t.log.map((e) => ({ ...e })),
     lastHand: t.lastHand && structuredClone(t.lastHand),
     tilt: me === null ? 0 : (t.seats[me]?.tilt ?? 0),
-    ...(t.strong ? { strong: true } : {}),
+    level: levelOf(t),
+    ...(me !== null && t.seats[me]?.form ? { form: [...t.seats[me]!.form!] } : {}),
+    ...(me !== null && t.seats[me]?.start ? { start: t.seats[me]!.start! } : {}),
   };
 }
