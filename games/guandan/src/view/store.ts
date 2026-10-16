@@ -21,12 +21,8 @@ export const KEYS = {
   room: 'guandan.room',
   /** 单机实盘这一场（stake.ts）：只在本机，不进云同步 */
   stake: 'guandan.stake',
-  /** 好友房点头像"屏蔽他"（table/taunt.ts）：sessionStorage，只对这个房间、这个标签页 */
-  blocked: 'guandan.blocked',
   /** 单独部署（没有平台）时好友房里的昵称（platform.ts、online.ts，0.8.0） */
   nick: 'guandan.nick',
-  /** 首次进牌桌冒过"点头像扔道具"的提示了（table/taunt.ts，0.11.0）：只出一次 */
-  hintFun: 'guandan.hint.fun',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */
@@ -246,31 +242,4 @@ export function rememberError(rec: unknown): void {
   const list = read<unknown[]>(KEYS.errors) ?? [];
   list.push(rec);
   write(KEYS.errors, list.slice(-20));
-}
-
-// ───────────── 屏蔽（好友房，sessionStorage） ─────────────
-
-/** 点"屏蔽他"屏蔽的人：真实座位和当时坐在那儿的名字（换了人就不算） */
-export interface BlockedSeat {
-  seat: number;
-  name: string | null;
-}
-
-/** 这个房间里屏蔽的人；别的房间记的、认不出的旧格式都不算 */
-export function getBlocked(code: string): BlockedSeat[] {
-  try {
-    const raw = JSON.parse(sessionStorage.getItem(KEYS.blocked) ?? 'null') as { code?: string; seats?: unknown[] } | null;
-    if (!raw || raw.code !== code || !Array.isArray(raw.seats)) return [];
-    return raw.seats.filter((b): b is BlockedSeat => !!b && typeof b === 'object' && typeof (b as BlockedSeat).seat === 'number');
-  } catch {
-    return [];
-  }
-}
-
-export function setBlocked(code: string, seats: BlockedSeat[]): void {
-  try {
-    sessionStorage.setItem(KEYS.blocked, JSON.stringify({ code, seats }));
-  } catch {
-    // 存不了（隐私模式）：只是刷新后不记得，算了
-  }
 }

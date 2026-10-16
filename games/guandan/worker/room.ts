@@ -5,8 +5,9 @@
  * 实盘房间去钱包办事（perform，docs/stake.md 第 3 节）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
-import { banterOnDeal, banterOnEmote, banterOnEvent, newBanter, victimOf, type BanterBot, type BanterOut } from '../src/net/banter.ts';
-import { banterBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
+import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunBot, type FunEvent } from 'arcade-kit/fun-logic';
+import { PHRASES, dealMoment, momentOf, victimOf } from '../src/net/fun-moments.ts';
+import { funBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
 import type { RoomOpts, StakeEffect } from '../src/net/stake.ts';
 import { CLIENT_VERSION } from '../src/net/version.ts';
 import { ROOM_HOURS } from '../src/stake/index.ts';
@@ -18,36 +19,38 @@ const TRANSIENT = new Set(['busy', 'internal']);
 export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, StakeEffect> {
   protected readonly game = guandanRoom;
   /**
-   * 电脑的互动（0.7.1，src/net/banter.ts）：冷却记录、电脑此刻的性格和状态都只放在内存里，不写存储（房间重启了从头记，无所谓）。
+   * 电脑的互动（0.12.0 起用 kit 的 botReact，和单机同一份规则）：冷却记录、电脑的性格只放在内存里，不写存储（房间重启了从头记，无所谓）。
    * bots 每一步按公开的牌局刷新一次，onEmote 拿它回嘴（kit 故意不给 onEmote 牌局状态）；这里绝不记任何真人短语。
-   * 随机用 Math.random：只决定说什么、不碰牌局，不需要复现。好友房里电脑不催人（房间只有一个闹钟），真人之间照旧有催促炸弹
+   * 随机用 Math.random、时间用 Date.now：只决定画面上说什么，不碰牌局，不需要复现。房间只有一个闹钟，反应立刻发，页面晚一点播
    */
-  private readonly banter = newBanter();
-  private bots: BanterBot[] = [];
+  private readonly fun = newBotState();
+  private bots: FunBot[] = [];
 
-  private botSay(outs: BanterOut[]): void {
-    for (const o of outs) this.botEmote(o.from, o.id, o.to);
-  }
-
-  /** 每一步广播完：看这一步的公开事件（谁炸了谁、谁头游、双下），电脑按性格说一句 */
-  protected override onStep(s: NetState): void {
-    this.bots = banterBots(s);
-    if (this.bots.length === 0) return;
-    const humans = (s.humans ?? []).flatMap((h, i) => (h ? [i] : []));
+  private react(ev: FunEvent, bots: readonly FunBot[]): void {
     const now = Date.now();
-    for (const e of s.ev) {
-      if (e.type === 'play') this.botSay(banterOnEvent(this.banter, e, victimOf(s.g.history), this.bots, humans, now, Math.random));
-      else if (e.type === 'finish') this.botSay(banterOnEvent(this.banter, e, -1, this.bots, humans, now, Math.random));
-      else if (e.type === 'dealEnd') this.botSay(banterOnDeal(this.banter, e.result, this.bots, now, Math.random, humans));
-      // 新的一副：电脑主动互动的次数（每副最多 2 次）从头算
-      else if (e.type === 'dealStart') banterOnEvent(this.banter, e, -1, this.bots, humans, now, Math.random);
+    for (const b of bots) {
+      const a: BotAction | null = botReact(ev, b, this.fun, now, Math.random);
+      if (a) for (const e of botEmoteIds(a, PHRASES.length)) this.botEmote(a.from, e.id, e.to);
     }
   }
 
-  /** 真人冲电脑扔东西、点名：被冲的电脑按性格回怼、装没看见或认怂 */
-  protected override onEmote(from: number, id: number, to?: number): void {
-    this.botSay(banterOnEmote(this.banter, from, id, to, this.bots, Date.now(), Math.random));
+  /** 每一步广播完：看这一步的公开事件（谁炸了谁、谁头游、双下），电脑按性格起哄 */
+  protected override onStep(s: NetState): void {
+    this.bots = funBots(s);
+    if (this.bots.length === 0) return;
+    for (const e of s.ev) {
+      const m = e.type === 'dealEnd' ? dealMoment(e.result) : momentOf(e, e.type === 'play' ? victimOf(s.g.history) : -1, s.g.dealNo);
+      if (m) this.react(m, this.bots);
+    }
   }
+
+  /** 真人冲电脑扔东西、点名：被冲的电脑按性格回应（表情加一句，有时扔回去） */
+  protected override onEmote(from: number, id: number, to?: number): void {
+    const ev = hitEvent(id, PHRASES.length, from, to);
+    const b = ev && this.bots.find((x) => x.seat === ev.to);
+    if (ev && b) this.react(ev, [b]);
+  }
+
   /**
    * 掼蛋一整局很长（打 A 不过会退回打 2）：tools/room-sim.ts 3000 局里 4 真人桌入站中位约 950 条，两次实测最多 3493、6052 条，
    * 步数最多 6655（按每手 3 秒约 5.5 小时）。底座默认的 3000 条、3 小时会把千分之几的长局中途关掉，这里放到 8000 条、8 小时；

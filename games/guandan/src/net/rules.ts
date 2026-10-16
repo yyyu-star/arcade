@@ -15,8 +15,9 @@ import { EMOTE_COUNT } from './emotes.ts';
 import type { RoomGame } from 'arcade-kit/game';
 import { canRebuy, parseRoomOpts, stakeBegin, stakeDeal, stakeFinish, stakeRebuy, stakeSeated, stakeSettled, stakeView, type RoomOpts, type StakeEffect, type StakeTable, type StakeView } from './stake.ts';
 import { type Entropy, stream } from 'arcade-kit/rng';
-import { decide, styleOf, type Difficulty, type PersonaId } from '../ai/index.ts';
-import type { BanterBot } from './banter.ts';
+import { decide, type Difficulty, type PersonaId } from '../ai/index.ts';
+import type { FunBot } from 'arcade-kit/fun-logic';
+import { TEMPER } from './fun-moments.ts';
 import { botFor } from '../ai/venue.ts';
 import {
   RULES_VERSION,
@@ -142,18 +143,16 @@ function roomBot(s: NetState, seat: number): { difficulty: Difficulty; persona?:
 }
 
 /**
- * 房间里的电脑此刻的性格和状态（0.7.1，电脑互动 net/banter.ts 用）：只算真电脑的座位（替掉线真人代打的不算，不替人说话），
- * 状态和出牌用的同一份（styleOf）。只读公开信息；0.6.0 以前开的局没有 humans，不互动
+ * 房间里的电脑和它们的互动性格（0.12.0 起给 kit 的 botReact）：只算真电脑的座位（替掉线真人代打的不算，不替人说话）。
+ * 0.6.0 以前开的局没有 humans，不互动
  */
-export function banterBots(s: NetState): BanterBot[] {
+export function funBots(s: NetState): FunBot[] {
   if (!s.humans) return [];
-  const out: BanterBot[] = [];
+  const out: FunBot[] = [];
   for (let seat = 0; seat < 4; seat++) {
     if (s.humans[seat]) continue;
-    const bot = roomBot(s, seat);
-    if (!bot.persona) continue;
-    const { form, tilt } = styleOf(viewFor(s.g, seat), bot.difficulty, bot.persona, formSeed(s.g));
-    out.push({ seat, persona: bot.persona, form, tilt });
+    const persona = roomBot(s, seat).persona;
+    if (persona) out.push({ seat, temper: TEMPER[persona] });
   }
   return out;
 }

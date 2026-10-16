@@ -290,18 +290,18 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await shot(ctx, '06-table-played');
 
   // 单机互动（0.7.1；0.11.0 按 docs/table-fun.md）：点阿强的头像扔个番茄，看到播出来；电脑回不回、怎么回按性格（随机），只记下来
-  await click(ctx, 'avatar3');
-  await until(ctx, '头像菜单', "'menu:prop0' in g.controls()");
-  await click(ctx, 'menu:prop0');
+  await click(ctx, 'fun:seat3');
+  await until(ctx, '头像菜单', "'fun:prop0' in g.controls()");
+  await click(ctx, 'fun:prop0');
   await until(ctx, '番茄扔出去', "g.fxLog.includes('道具 0>3:tomato')");
   await page.waitForTimeout(1800);
   await shot(ctx, '06b-solo-fun');
-  const reply = (await page.evaluate(() => window.__game!.fxLog)).filter((x) => /^(道具 3>|嘲讽 3:|表情 3:|短语 3:)/.test(x));
+  const reply = (await page.evaluate(() => window.__game!.fxLog)).filter((x) => /^(道具 3>|电脑 3:|表情 3:|短语 3:)/.test(x));
   notes.push(`单机互动：对阿强扔番茄，他${reply.length ? `回了 ${reply.join('、')}` : '装没看见'}`);
   // 点自己的头像发表情（0.11.0，docs/table-fun.md 第 1 节）
-  await click(ctx, 'avatar0');
-  await until(ctx, '表情面板', "'menu:sticker0' in g.controls()");
-  await click(ctx, 'menu:sticker0');
+  await click(ctx, 'fun:seat0');
+  await until(ctx, '表情面板', "'fun:sticker0' in g.controls()");
+  await click(ctx, 'fun:sticker0');
   await until(ctx, '表情发出去', "g.fxLog.includes('表情 0:smug')");
 
   // 点一张牌再点一次：选中又取消

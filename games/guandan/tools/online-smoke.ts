@@ -256,20 +256,20 @@ async function main(): Promise<void> {
     await shot(clients[1]!, '52-online-iphone-table');
     // 快捷短语：1 号点开聊天、选第 1 句；房主那边（画面上 1 号在右手边，是画面座位 1）冒气泡
     const say = clients[1]!;
-    const chat = (await say.page.evaluate(() => window.__game!.controls()))['chat']!;
+    const chat = (await say.page.evaluate(() => window.__game!.controls()))['fun:button']!;
     await say.page.mouse.click(chat.x, chat.y);
-    await until(say, '短语面板', "!!g.controls()['emote0']");
-    const e0 = (await say.page.evaluate(() => window.__game!.controls()))['emote0']!;
+    await until(say, '短语面板', "!!g.controls()['fun:phrase0']");
+    const e0 = (await say.page.evaluate(() => window.__game!.controls()))['fun:phrase0']!;
     await say.page.mouse.click(e0.x, e0.y);
     await until(host, '房主看到 1 号的短语', "g.fxLog.includes('短语 1:0')", 10_000);
     await until(say, '自己也看到自己的短语', "g.fxLog.includes('短语 0:0')", 10_000);
     await shot(host, '52b-online-emote');
     notes.push('快捷短语：1 号发"好牌！"，房主在右手边看到气泡');
     // 道具：1 号点房主的头像（1 号画面上房主在左手边，画面座位 3），扔番茄；两边都播到"1 号扔给 0 号"
-    const av = (await say.page.evaluate(() => window.__game!.controls()))['avatar3']!;
+    const av = (await say.page.evaluate(() => window.__game!.controls()))['fun:seat3']!;
     await say.page.mouse.click(av.x, av.y);
-    await until(say, '头像菜单', "!!g.controls()['menu:prop0']");
-    const tom = (await say.page.evaluate(() => window.__game!.controls()))['menu:prop0']!;
+    await until(say, '头像菜单', "!!g.controls()['fun:prop0']");
+    const tom = (await say.page.evaluate(() => window.__game!.controls()))['fun:prop0']!;
     await say.page.mouse.click(tom.x, tom.y);
     await until(host, '房主被扔番茄', "g.fxLog.includes('道具 1>0:tomato')", 10_000);
     await until(say, '扔的人也看到', "g.fxLog.includes('道具 0>3:tomato')", 10_000);
@@ -406,18 +406,18 @@ async function main(): Promise<void> {
     await solo.page.click('#ol-start');
     await until(solo, '进牌桌', "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
     for (const v of [3, 1, 2]) {
-      const a = (await solo.page.evaluate((k) => window.__game!.controls()[`avatar${k}`], v))!;
+      const a = (await solo.page.evaluate((k) => window.__game!.controls()[`fun:seat${k}`], v))!;
       await solo.page.mouse.click(a.x, a.y);
-      await until(solo, '头像菜单', "!!g.controls()['menu:prop0']");
-      const t = (await solo.page.evaluate(() => window.__game!.controls()))['menu:prop0']!;
+      await until(solo, '头像菜单', "!!g.controls()['fun:prop0']");
+      const t = (await solo.page.evaluate(() => window.__game!.controls()))['fun:prop0']!;
       await solo.page.mouse.click(t.x, t.y);
       await until(solo, `扔给 ${v} 号`, `g.fxLog.includes('道具 0>${v}:tomato')`, 10_000);
       await solo.page.waitForTimeout(1500);
     }
-    await until(solo, '电脑说了一句', "g.fxLog.some((l) => /^(短语|嘲讽|表情) [123]:|^道具 [123]>/.test(l))", 90_000);
+    await until(solo, '电脑说了一句', "g.fxLog.some((l) => /^(短语|电脑|表情) [123]:|^道具 [123]>/.test(l))", 90_000);
     await solo.page.waitForTimeout(600);
     await shot(solo, '59-online-bot-banter');
-    const banter = await solo.page.evaluate(() => window.__game!.fxLog.filter((l) => /^(短语|嘲讽|表情) [123]:|^道具 [123]>/.test(l)));
+    const banter = await solo.page.evaluate(() => window.__game!.fxLog.filter((l) => /^(短语|电脑|表情) [123]:|^道具 [123]>/.test(l)));
     notes.push(`好友房电脑互动：冲三个电脑扔番茄，电脑这边 ${banter.length} 条（${banter.slice(0, 4).join('、')}）`);
     await solo.context.close();
   } catch (e) {

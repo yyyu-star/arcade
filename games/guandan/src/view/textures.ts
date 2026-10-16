@@ -3,7 +3,6 @@
  * 直接改成目标像素，浏览器按矢量重画，不是位图放大），再 addCanvas。显示时用 setDisplaySize 回到世界尺寸。
  */
 import type Phaser from 'phaser';
-import { PROPS, STICKERS, propSvg, stickerSvg } from 'arcade-kit/fun';
 import {
   avatarSvg,
   cardBackSvg,
@@ -124,15 +123,6 @@ export async function bakeAll(scene: Phaser.Scene, onProgress: (p: number) => vo
   };
   // 分批并发，避免一次塞几百个解码任务卡住主线程
   for (let i = 0; i < jobs.length; i += 12) await Promise.all(jobs.slice(i, i + 12).map(step));
-}
-
-/** 好友房嘲讽面板里的表情、道具图（kit 的 SVG）：只有进了好友房才用，进房时再烘焙，单机不占内存 */
-export async function bakeFun(scene: Phaser.Scene): Promise<void> {
-  const jobs: Job[] = [
-    ...STICKERS.map((id) => ({ key: `fun:sticker:${id}`, svg: () => stickerSvg(id), w: 80, h: 80 })),
-    ...PROPS.map((id) => ({ key: `fun:prop:${id}`, svg: () => propSvg(id), w: 80, h: 80 })),
-  ];
-  await Promise.all(jobs.map((j) => bake(scene, j)));
 }
 
 /**

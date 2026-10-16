@@ -196,3 +196,8 @@ export function focusedAt(scene: Phaser.Scene): { x: number; y: number } | null 
   const r = rectOf(s.current);
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }
+
+/** 现在有没有弹窗（焦点层）开着：画布外的 DOM（牌桌互动）据此藏起来，免得挡住弹窗上的按钮 */
+export function hasLayer(scene: Phaser.Scene): boolean {
+  return (states.get(scene)?.layers.length ?? 0) > 0;
+}

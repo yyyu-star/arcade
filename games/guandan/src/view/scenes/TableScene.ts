@@ -54,8 +54,11 @@ import { banner, bigWord, burst, flash, rain, rays, shake } from '../table/fx.ts
 import { HandView } from '../table/hand.ts';
 import { BUTTON_Y, TOPBAR_H, seatAnchors } from '../table/layout.ts';
 import { SeatView } from '../table/seats.ts';
-import { Taunts, type FunChannel } from '../table/taunt.ts';
-import { banterOnDeal, banterOnEmote, banterOnEvent, banterOnSlow, newBanter, type BanterBot, type BanterOut } from '../../net/banter.ts';
+import { Nudges } from '../table/nudge.ts';
+import { TableFun, funItem, type FunSeat } from 'arcade-kit/table-fun';
+import { PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
+import { taunt } from '../../net/emotes.ts';
+import { hasLayer } from '../ui/focus.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { TrickView } from '../table/trick.ts';
 import { lobbyName, standalone } from '../platform.ts';
@@ -78,16 +81,16 @@ export class TableScene extends Phaser.Scene {
   private btnBack: Button | undefined;
   /** 记牌器（或收起后的小签）的中心，冒烟点它 */
   private counterAt: { x: number; y: number } | null = null;
-  /** 好友房的嘲讽、表情、道具（只在联机时有） */
-  private taunts: Taunts | null = null;
+  /** 牌桌互动（arcade-kit/table-fun，0.12.0）：头像菜单、面板、表情、道具、电脑反应；单机和好友房同一套 */
+  private fun: TableFun | null = null;
+  /** 互动的 DOM 层现在显示着没有（弹窗开着时藏起来；只在变了时写） */
+  private funShown = true;
+  /** 掼蛋自己多的：顺手提示、催促炸弹 */
+  private nudges: Nudges | null = null;
   /** 读秒嘀嗒：上一声对应的格子（同一格不重复响） */
   private tickSlot = -1;
   /** 好友房轮到我（标题闪、振动只在刚轮到时来一次） */
   private myNetTurn = false;
-  /** 单机：电脑互动的冷却记录（net/banter.ts）；我这一手从什么时候开始想（电脑催人用） */
-  private banter = newBanter();
-  private myTurnKey = '';
-  private myTurnSince = 0;
   /** 好友房：电脑发的、等出牌画面播完再放的（画面座位） */
   private botEmotes: { from: number; id: number; to: number | undefined }[] = [];
   /** 整局称号用：攒到第几副了（场景重开不清，新的一局从第 1 副重新攒） */
@@ -150,7 +153,9 @@ export class TableScene extends Phaser.Scene {
     this.overlay = null;
     this.overlayModal = null;
     // 场景重开（重连的全量快照）时旧的按钮、面板已经随场景销毁
-    this.taunts = null;
+    this.fun = null;
+    this.funShown = true;
+    this.nudges = null;
     this.botEmotes = [];
     this.following = false;
     this.botTimer = null;
@@ -172,9 +177,7 @@ export class TableScene extends Phaser.Scene {
       // 这一手的倒计时（房间给的截止时间）
       this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateClocks() });
     } else {
-      // 单机：我想太久时电脑催一下；标签页切到后台时正轮到我，标题闪
-      this.banter = newBanter();
-      this.time.addEvent({ delay: 500, loop: true, callback: () => this.tickSolo() });
+      // 单机：标签页切到后台时正轮到我，标题闪
       const onHide = (): void => {
         if (document.hidden && this.mySoloTurn()) flashTitle();
       };
@@ -196,7 +199,7 @@ export class TableScene extends Phaser.Scene {
     this.hand.onChange = () => this.refreshButtons();
     this.buildButtons(W);
     this.buildTopBar(W);
-    this.buildTaunts();
+    this.buildFun();
     audio.music('table');
 
     const evs = this.ses.lastEvents;
@@ -239,64 +242,72 @@ export class TableScene extends Phaser.Scene {
   }
 
   /**
-   * 嘲讽系统（table/taunt.ts）：聊天按钮、点头像、催促炸弹；动画在 kit 的 DOM 图层上，弹窗开着时藏起来。
-   * 好友房经房间转发；单机（0.7.1）在本地直接播，再交给电脑去回（net/banter.ts）
+   * 牌桌互动接 arcade-kit/table-fun（0.12.0，docs/table-fun.md 第 0 节）：菜单、面板、提示、冷却、电脑反应都在 kit 的 DOM 层里，
+   * 这里只给头像的屏幕矩形、名字、谁是电脑、性格、不能盖的地方（操作按钮和手牌）和发送通道。
+   * 好友房经房间转发（电脑在房间里按同一份 botReact 反应）；单机在本地播，电脑由 kit 按性格反应
    */
-  private buildTaunts(): void {
+  private buildFun(): void {
     const net = this.net;
-    const chan: FunChannel = net
-      ? {
-          seated: () => net.mySeat !== null,
-          send: (id, to) => net.emote(id, to),
-          scope: () => net.code,
-          who: (v) => {
-            const seat = (v + (net.mySeat ?? 0)) % 4;
-            return { seat, name: net.room?.seats[seat]?.name ?? null };
-          },
-        }
-      : {
-          seated: () => true,
-          send: (id, to) => {
-            this.taunts?.receive(ME, id, to);
-            this.playBanter(banterOnEmote(this.banter, ME, id, to, this.banterBots(), Date.now(), Math.random));
-          },
-          scope: () => 'solo',
-          who: (v) => ({ seat: v, name: fullSeatName(v) }),
-        };
-    const t = new Taunts({
-      scene: this,
-      chan,
-      seats: this.seats,
-      avatarRect: (seat) => this.screenRect(this.seats[seat]!.a),
-      busy: () => this.overlay !== null,
+    const W = worldW(this);
+    const mh = minHit();
+    // "互动"按钮夹在我的头像（中心 x 60）和"理牌"之间
+    const left = 60 + Math.max(72, mh) / 2;
+    const bw = Math.max(48, Math.min(Math.max(56, mh), this.btnSort.x - this.btnSort.width / 2 - left));
+    const bh = Math.max(64, mh);
+    const free = (): boolean => this.overlay === null && !hasLayer(this);
+    const seated = (): boolean => !net || net.mySeat !== null;
+    const send = (id: number, to?: number): void => {
+      if (net) net.emote(id, to);
+      else this.funIn(ME, id, to);
+    };
+    this.fun = new TableFun({
+      storageKey: 'guandan',
+      phrases: PHRASES,
+      named: [taunt('就这？'), taunt('等着瞧'), taunt('等得花都谢了')],
+      seats: () => this.seats.map((sv, v): FunSeat => {
+        const id = net ? seatIdentity[v] : null;
+        const persona = net ? id?.persona : this.ses.botStyle(v)?.persona;
+        return { rect: this.screenRect(sv.a), name: seatName(v), me: v === ME, bot: net ? !!id && !id.human : v !== ME, temper: persona ? TEMPER[persona] : 'normal' };
+      }),
+      avoid: () => [this.worldRect(0, BUTTON_Y - 40, W, worldH - BUTTON_Y + 40)],
+      button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
+      send,
+      canSend: () => seated() && free(),
+      enabled: () => getSettings().taunts,
+      scope: () => net?.code ?? 'solo',
+      localBots: !net,
+      sound: (p, phase) => audio.fun(p, phase),
+      onHit: (seat) => this.seats[seat]?.hit(),
       log: (line) => this.fxLog.push(line),
-      chatRight: this.btnSort.x - this.btnSort.width / 2,
     });
-    this.taunts = t;
-    this.events.once('shutdown', () => stopFlash());
+    this.nudges = new Nudges({ scene: this, seats: this.seats, canSend: () => seated() && free(), send, tipAt: { x: left + bw + 20, y: 340 } });
+    // 弹窗（结算、设置、确认框……）开着时互动层整个藏起来：DOM 层在画布上面，不藏会挡住弹窗上的按钮
+    this.time.addEvent({ delay: 200, loop: true, callback: () => this.syncFunShown() });
+    this.events.once('shutdown', () => {
+      this.fun?.destroy();
+      this.fun = null;
+      stopFlash();
+    });
   }
 
-  // ───────────── 单机里电脑的互动（net/banter.ts） ─────────────
-
-  /** 电脑座位此刻的性格和状态（好友房的电脑在房间里，这里不管） */
-  private banterBots(): BanterBot[] {
-    if (this.net) return [];
-    const out: BanterBot[] = [];
-    for (let s = 1; s < 4; s++) {
-      const st = this.ses.botStyle(s);
-      if (st) out.push({ seat: s, ...st });
-    }
-    return out;
+  private syncFunShown(): void {
+    const want = this.overlay === null && !hasLayer(this);
+    if (want === this.funShown || !this.fun) return;
+    this.funShown = want;
+    if (want) this.fun.show();
+    else this.fun.hide();
   }
 
-  /** 电脑要发的按它的反应时间播出来；设置里"互动：不看"时电脑一句也不发 */
-  private playBanter(outs: BanterOut[]): void {
-    if (this.net || !getSettings().taunts) return;
-    for (const o of outs) {
-      this.time.delayedCall(o.delay, () => {
-        if (this.alive && this.overlay === null) this.taunts?.receive(o.from, o.id, o.to);
-      });
-    }
+  /** 收到的（房间转发的、单机自己的）交给 kit 播；短语、表情配上掼蛋自己的提示音 */
+  private funIn(from: number, id: number, to?: number): void {
+    const it = funItem(id, PHRASES.length);
+    if (it && it.kind !== 'prop' && (from === ME || (getSettings().taunts && !this.fun?.isBlocked(from)))) audio.sfx(it.kind === 'sticker' ? 'sticker' : 'taunt');
+    this.fun?.receive(from, id, to);
+  }
+
+  /** 名场面交给 kit：单机里电脑按性格起哄（好友房的在房间里算） */
+  private funMoment(m: ReturnType<typeof dealMoment>): void {
+    if (m) this.fun?.moment(m);
   }
 
   private mySoloTurn(): boolean {
@@ -305,25 +316,16 @@ export class TableScene extends Phaser.Scene {
     return v.phase === 'play' && v.turn === ME;
   }
 
-  /** 单机每半秒：我想太久，最没耐心的电脑催一下（每一手最多一次） */
-  private tickSolo(): void {
-    if (!this.mySoloTurn() || this.overlay !== null || !getSettings().taunts) return;
-    const v = this.ses.view();
-    const key = `${v.dealNo}:${v.step}`;
-    const now = Date.now();
-    if (key !== this.myTurnKey) {
-      this.myTurnKey = key;
-      this.myTurnSince = now;
-      return;
-    }
-    this.playBanter(banterOnSlow(this.banter, ME, now - this.myTurnSince, key, this.banterBots(), now, Math.random));
+  /** 世界坐标的矩形 → 屏幕（CSS 像素）：画布的 CSS 矩形 × 世界到 CSS 的比例（相机 zoom 后画布高 = worldH） */
+  private worldRect(x: number, y: number, w: number, h: number): { left: number; top: number; width: number; height: number } {
+    const r = this.game.canvas.getBoundingClientRect();
+    const f = r.height / worldH;
+    return { left: r.left + x * f, top: r.top + y * f, width: w * f, height: h * f };
   }
 
   /** 头像（世界坐标）在屏幕上的矩形：画布的 CSS 矩形 × 世界到 CSS 的比例（相机 zoom 后画布高 = worldH） */
   private screenRect(a: { ax: number; ay: number; size: number }): { left: number; top: number; width: number; height: number } {
-    const r = this.game.canvas.getBoundingClientRect();
-    const f = r.height / worldH;
-    return { left: r.left + (a.ax - a.size / 2) * f, top: r.top + (a.ay - a.size / 2) * f, width: a.size * f, height: a.size * f };
+    return this.worldRect(a.ax - a.size / 2, a.ay - a.size / 2, a.size, a.size);
   }
 
   private setStatus(msg: string, warn = false): void {
@@ -761,7 +763,7 @@ export class TableScene extends Phaser.Scene {
       if (!Number.isInteger(e.from) || !Number.isInteger(e.id)) return;
       // 电脑的是房间看了这一步当场发的，比出牌的画面早到：排到手头这几帧播完再放，免得炸弹还没出来电脑就先显摆
       if (bot === '1' && (this.busy || (this.net?.queue.length ?? 0) > 0)) this.botEmotes.push(e);
-      else this.taunts?.receive(e.from, e.id, e.to);
+      else this.funIn(e.from, e.id, e.to);
       return;
     }
     this.noticeNetTurn();
@@ -808,15 +810,12 @@ export class TableScene extends Phaser.Scene {
     const t = this.net?.turnInfo();
     const now = Date.now();
     this.seats.forEach((sv, i) => sv.setClock(t && t.seat === i && t.deadline !== null ? Math.max(0, Math.ceil((t.deadline - now) / 1000)) : null));
-    // 弹窗关掉的路子很多（有的直接把 overlay 置空），图层的显隐在这里跟上；打开时 openOverlay 立刻藏
-    if (this.overlay === null) this.taunts?.layer.show();
-    else this.taunts?.layer.hide();
     // 电脑的互动：画面追上了再放（每 250 毫秒看一次，一次放一条）
     if (this.botEmotes.length && !this.busy && (this.net?.queue.length ?? 0) === 0) {
       const e = this.botEmotes.shift()!;
-      this.taunts?.receive(e.from, e.id, e.to);
+      this.funIn(e.from, e.id, e.to);
     }
-    this.taunts?.tickTurn(this.overlay === null && t ? t.seat : null, t ? `${t.seat}:${t.deadline}` : '');
+    this.nudges?.tickTurn(this.overlay === null && t ? t.seat : null, t ? `${t.seat}:${t.deadline}` : '');
     // 我的最后 5 秒：每秒"嗒"一声，最后 2 秒每半秒一声、升调
     const left = t && t.seat === ME && t.deadline !== null ? t.deadline - now : -1;
     if (left > 0 && left <= 5000) {
@@ -869,8 +868,9 @@ export class TableScene extends Phaser.Scene {
     this.overlay = kind;
     this.overlayModal = m;
     // 道具、表情在 DOM 图层上，会盖住 Phaser 画的弹窗：弹窗开着时藏起来
-    this.taunts?.closeAll();
-    this.taunts?.layer.hide();
+    this.fun?.closeAll();
+    this.nudges?.clearTip();
+    this.syncFunShown();
     this.cancelBot();
     this.refreshButtons();
   }
@@ -1237,8 +1237,6 @@ export class TableScene extends Phaser.Scene {
     const W = worldW(this);
     switch (e.type) {
       case 'dealStart': {
-        // 新的一副：电脑主动互动的次数（每副最多 2 次，net/banter.ts）从头算
-        banterOnEvent(this.banter, e, -1, this.banterBots(), [ME], Date.now(), Math.random);
         this.cancelBot();
         this.dealJiefeng = 0;
         if (e.dealNo === 1) {
@@ -1307,8 +1305,8 @@ export class TableScene extends Phaser.Scene {
           this.fxLog.push('名场面 炸上炸');
           toast(this, `名场面！${seatName(e.seat)} 炸上炸`, worldW(this) / 2, 300, COLOR.goldLight);
         }
-        this.taunts?.suggest(suggestFor(e, victim));
-        this.playBanter(banterOnEvent(this.banter, e, victim, this.banterBots(), [ME], Date.now(), Math.random));
+        this.nudges?.suggest(suggestFor(e, victim));
+        this.funMoment(momentOf(e, victim, this.ses.view().dealNo));
         break;
       }
       case 'pass':
@@ -1350,12 +1348,12 @@ export class TableScene extends Phaser.Scene {
         // 末游的电脑嘟囔一句（双下时两个人都说也不奇怪）
         if (e.place === 4) this.talk(e.seat, 'last');
         await this.seats[e.seat]!.setPlace(e.place, true);
-        this.taunts?.suggest(suggestFor(e, -1));
-        this.playBanter(banterOnEvent(this.banter, e, -1, this.banterBots(), [ME], Date.now(), Math.random));
+        this.nudges?.suggest(suggestFor(e, -1));
+        this.funMoment(momentOf(e, -1, this.ses.view().dealNo));
         break;
       }
       case 'dealEnd':
-        this.playBanter(banterOnDeal(this.banter, e.result, this.banterBots(), Date.now(), Math.random, [ME]));
+        this.funMoment(dealMoment(e.result));
         // 最后一手和名次章留在桌上看清楚，再弹结算
         await wait(this, 1500);
         break;
@@ -1881,7 +1879,11 @@ export class TableScene extends Phaser.Scene {
     put('prev', this.btnPrev);
     put('imback', this.btnBack);
     if (this.counterAt) out['counter'] = { ...this.counterAt, enabled: true, visible: true };
-    this.taunts?.controls(out);
+    // 互动（kit 的 DOM）：屏幕坐标换回世界坐标，冒烟和别的控件一样点
+    const cr = this.game.canvas.getBoundingClientRect();
+    const f = worldH / cr.height;
+    for (const [k, c] of Object.entries(this.fun?.controls() ?? {})) out[k] = { x: (c.x - cr.left) * f, y: (c.y - cr.top) * f, enabled: true, visible: true };
+    this.nudges?.controls(out);
     if (this.inviteBtn) out['invite'] = { x: this.inviteBtn.x, y: this.inviteBtn.y, enabled: true, visible: true };
     if (this.cloudBtn?.visible) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y, enabled: true, visible: true };
     put('lobby', this.lobbyBtn);

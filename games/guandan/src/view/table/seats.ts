@@ -4,7 +4,7 @@ import { PERSONAS, type Mood } from '../art/index.ts';
 import { dur, tweenP } from '../anim.ts';
 import { audio } from '../audio.ts';
 import { PLACE_NAMES, seatIdentity, seatName, seatPerson } from '../labels.ts';
-import { COLOR, TYPE, minHit } from '../theme.ts';
+import { COLOR, TYPE } from '../theme.ts';
 import { bubble, text, type BubbleTone } from '../ui/kit.ts';
 import type { SeatAnchor } from './layout.ts';
 
@@ -162,17 +162,6 @@ export class SeatView {
     c.setScale(0.4).setAlpha(0);
     this.scene.tweens.add({ targets: c, scale: 1, alpha: 1, duration: dur(220), ease: 'Back.easeOut' });
     this.scene.tweens.add({ targets: c, alpha: 0, y: y - 16, delay: dur(1800), duration: dur(300), onComplete: () => c.destroy() });
-  }
-
-  /** 点这个人的头像（0.6.0：别人的对他扔道具、发嘲讽、屏蔽；自己的打开嘲讽面板，手机上比小按钮好点） */
-  onTap(fn: () => void): void {
-    // 点按区域至少 minHit() 见方（我自己的头像只有 72，手机上不到 44 CSS 像素）；按贴图像素算，贴图缩放过
-    const k = this.avatar.scaleX;
-    const side = Math.max(this.a.size, minHit()) / k;
-    const fw = this.avatar.frame.width;
-    const fh = this.avatar.frame.height;
-    this.avatar.setInteractive({ hitArea: new Phaser.Geom.Rectangle((fw - side) / 2, (fh - side) / 2, side, side), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
-    this.avatar.on('pointerdown', fn);
   }
 
   /** 被道具打中：抖一下、缩一下，委屈一会儿（只是画面） */
