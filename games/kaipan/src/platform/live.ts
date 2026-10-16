@@ -86,7 +86,7 @@ interface LiveDeps {
   onChange?(): void;
 }
 
-/** 钱包回了这些就停在 settling、之后重试（主线审 #73：internal 是平台那边接住的任何异常，大多是暂时的） */
+/** 钱包回了这些就停在 settling、之后重试（internal 是平台那边接住的任何异常，大多是暂时的） */
 const RETRY_ERRORS = new Set(['busy', 'internal']);
 /** 正常的业务拒绝，按设计稿第 6 节的表各自处理；其余错误码都当成开盘自己的 bug */
 const REJECT_ERRORS = new Set(['no_funds', 'at_table', 'limit', 'expired', 'no_stake']);

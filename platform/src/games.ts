@@ -93,7 +93,7 @@ export const GAMES: readonly GameEntry[] = [
     devUrl: 'http://localhost:5176/',
     status: 'playable',
     repo: 'yyyu-star/arcade',
-    // 麻将 PR③ 起认 ?online=1 直接进好友房；之前打开的是选桌页，那里本来就有"好友房"入口（主线 2026-10-16）
+    // 麻将 PR③ 起认 ?online=1 直接进好友房；之前打开的是选桌页，那里本来就有"好友房"入口（维护者 2026-10-16）
     online: { label: '好友房', query: 'online=1' },
   },
 ];

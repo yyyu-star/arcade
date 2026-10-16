@@ -3,7 +3,7 @@
  *
  * 产物结构 dist-cf/games/kaipan/...，这样 Worker 静态资源能按 URL 路径直接找到文件；
  * _headers 移到 dist-cf/ 根目录并加上路径前缀，另写 _redirects 让根路径跳到游戏。
- * 本机的 npm run build / preview（4173）不受影响，仍是根路径。
+ * 本地的 npm run build / preview（4173）不受影响，仍是根路径。
  */
 import { build } from 'vite';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

@@ -1,9 +1,10 @@
 {
   "name": "arcade",
   "private": true,
-  "version": "0.10.19",
+  "version": "0.10.20",
   "type": "module",
   "description": "小游戏平台：主界面和 /api（账号、云存档、好友、排行榜），部署到 Cloudflare Workers",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "dev:api": "wrangler d1 migrations apply arcade --local && wrangler dev --ip 0.0.0.0 --port 5181 --local-upstream localhost:5181",
@@ -14,7 +15,8 @@
     "smoke": "tsc --noEmit -p tools && vite build && node tools/smoke.ts",
     "cover": "node tools/cover.ts",
     "admin": "node tools/admin.ts",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && npm run db:migrate && wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "react": "^19.3.0",
@@ -32,5 +34,33 @@
     "vite": "^8.3.4",
     "vitest": "^5.0.4",
     "wrangler": "^4.150.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "账号、存档、好友、钱包等数据（D1）。部署时自动建库，`npm run deploy` 会先按 `migrations/` 建表再部署。"
+      },
+      "PEPPER_PW": {
+        "description": "密码哈希的 pepper，格式 `<kid>:<随机串>`，比如 `k1:` 加上 `openssl rand -hex 24` 的输出。部署后不要随便改。"
+      },
+      "PEPPER_RC": {
+        "description": "恢复码哈希的 pepper，格式同 PEPPER_PW，另生成一个。"
+      },
+      "PEPPER_SID": {
+        "description": "会话 id 哈希的 pepper，格式同 PEPPER_PW，另生成一个。"
+      },
+      "PEPPER_IP": {
+        "description": "IP 哈希（只当限流计数的键，不存原始 IP）的 pepper，格式同 PEPPER_PW，另生成一个。"
+      },
+      "ADMIN_TOKEN": {
+        "description": "管理令牌，格式同 PEPPER_PW。给命令行工具 `npm run admin` 用：新站点没有账号、注册默认关着，第一个管理员要用它建（见 README 的部署一节）。"
+      },
+      "REGISTRATION": {
+        "description": "注册的总闸：`switch` = 听管理员在 /admin 里的开关（默认关）；别的值 = 一定关。"
+      },
+      "LIMITS": {
+        "description": "覆盖熔断阈值、限流上限的 JSON，只写要改的项；`{}` 用默认值。"
+      }
+    }
   }
 }

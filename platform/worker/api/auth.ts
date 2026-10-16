@@ -214,7 +214,7 @@ export async function logout(c: Ctx): Promise<Response> {
 /**
  * POST /api/auth/recover：设新密码、换新恢复码、注销所有会话，给当前设备发新会话；清零登录失败计数。
  * 不按用户名记失败、不锁：恢复码约 100 bit，按 IP 和全站每小时的上限已经猜不动；
- * 按用户名锁的话，知道用户名的人就能同时锁住登录和找回，"找回能解登录锁"的兜底就没了（主线 2026-10-14 定）。
+ * 按用户名锁的话，知道用户名的人就能同时锁住登录和找回，"找回能解登录锁"的兜底就没了（维护者 2026-10-14 定）。
  */
 export async function recover(c: Ctx): Promise<Response> {
   const { db, env, limits, now } = c;

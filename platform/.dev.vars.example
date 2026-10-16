@@ -1,12 +1,30 @@
-# 本地开发（wrangler dev）用的假 Secret：复制成 .dev.vars 即可，不要填真值。正式环境的 Secret 由主线用 wrangler secret put 设置。
-# 格式 <kid>:<随机串>，随机串至少 16 个字符。
+# 平台 Worker 的 Secret 一览。
+# - 本地开发（wrangler dev / npm run dev:api）：复制成 .dev.vars 即可用，下面的值都是本地专用的假值。
+# - 正式部署（含 Deploy to Cloudflare 按钮）：每一项都换成自己生成的随机值，绝不要用这里的值；
+#   用 wrangler secret put <名字> 设，或在按钮的部署页里填。生成随机串：openssl rand -hex 24
+#
+# pepper 的格式是 <kid>:<随机串>（kid 是自己起的短名字，比如 k1；随机串至少 16 个字符）。
+# 密码、恢复码、会话、IP 的哈希都要用到它们，部署后不要随便改；要换按 docs/platform-backend.md 5.1 先设 *_PREV。
+
+# 密码哈希的 pepper（必填）
 PEPPER_PW=dev:local-dev-pepper-pw-000000
+# 恢复码哈希的 pepper（必填）
 PEPPER_RC=dev:local-dev-pepper-rc-000000
+# 会话 id 哈希的 pepper（必填）
 PEPPER_SID=dev:local-dev-pepper-sid-00000
+# IP 哈希（限流计数用，不存原始 IP）的 pepper（必填）
 PEPPER_IP=dev:local-dev-pepper-ip-000000
-# 本地是 http://localhost:5181，Origin 检查要对得上
-SITE_ORIGIN=http://localhost:5181
-# 本机建号工具用的管理令牌（npm run admin -- --base=http://localhost:5181 …，令牌放环境变量 ARCADE_ADMIN_TOKEN）
+# 管理令牌，格式同上：给管理命令行工具 tools/admin.ts 用（建第一个管理员、开关注册）。
+# 不设也能部署，只是命令行工具用不了，管理只能在 /admin 页面里做（那就得先有管理员）。
 ADMIN_TOKEN=dev:local-dev-admin-token-000000
-# 本地想试注册就打开；不写按 wrangler.jsonc 的 closed
-# REGISTRATION=open
+
+# 以下可选，不设就按默认：
+# 紧急开关：normal（默认）/ readonly / off（docs/platform-backend.md 6.6）
+# API_MODE=normal
+# 换 pepper 时还要认的旧值：PEPPER_PW_PREV、PEPPER_RC_PREV、PEPPER_SID_PREV
+# PEPPER_PW_PREV=
+#
+# 不是 Secret、写在 wrangler.jsonc 的 vars 里（本地想改可以在这里覆盖）：
+# SITE_ORIGIN：站点地址，设了 /api 只认这个主机名；不设按请求自己的地址（本地 dev:api 不用设）
+# REGISTRATION：注册的总闸，"switch" = 听管理员在 /admin 里的开关；别的值 = 一定关
+# REGISTRATION=switch

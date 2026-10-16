@@ -35,7 +35,7 @@ describe('通用检查（15.1）', () => {
     const body = { username: 'alice', password: GOOD_PASSWORD, displayName: '小明' };
     for (const res of [
       await call('/api/auth/register', { body, csrf: false }),
-      await call('/api/auth/register', { body, origin: 'https://evil.yyyu.org' }),
+      await call('/api/auth/register', { body, origin: 'https://evil.example.com' }),
     ]) {
       expect(res.status).toBe(403);
       expect(await errorOf(res)).toBe('forbidden');

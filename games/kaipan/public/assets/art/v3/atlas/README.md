@@ -127,7 +127,7 @@ node tools/art/bake.ts --png      # 改输出 PNG（RGB 量化到 6 bit）
 node tools/art/bake.ts --png --lossless # 无损 PNG
 ```
 
-新增或修改 SVG（例如重新跑 `tools/art/build.ts`）之后执行一次。脚本用本机 playwright-core 的 Chromium
+新增或修改 SVG（例如重新跑 `tools/art/build.ts`）之后执行一次。脚本用开发依赖 playwright-core 的 Chromium
 离线渲染（不连网、不起服务）。
 
 ## 实现要点

@@ -1,6 +1,6 @@
 /**
  * public/_headers 的 CSP（docs/platform-backend.md 5.2）：本地冒烟拿不到 Cloudflare 注入的统计脚本，所以在这里锁住每条指令。
- * 只许 script-src 多出 Web Analytics 的脚本来源（所有者 2026-10-14 定"游戏站也要统计"；上报走同源，不用放），别的指令一个来源都不能多。
+ * 只许 script-src 多出 Web Analytics 的脚本来源（维护者 2026-10-14 定"游戏站也要统计"；上报走同源，不用放），别的指令一个来源都不能多。
  */
 import { describe, expect, it } from 'vitest';
 import headers from '../public/_headers?raw';

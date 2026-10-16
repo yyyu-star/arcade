@@ -1,6 +1,6 @@
 # 平台页面的安全头（docs/platform-backend.md 5.2）。只作用于静态资源（含单页回退的 /login、/me 等），/api 由 Worker 自己回。
 # CSP：脚本、样式、请求都只认同域；不许被别的网站嵌进框里；存恢复码图片用的 canvas 导出是 data:，所以 img-src 放 data: 和 blob:。
-# 例外只有 Cloudflare Web Analytics（所有者 2026-10-14 定"游戏站也要统计"）：yyyu.org 开了自动注入，
+# 例外只有 Cloudflare Web Analytics（维护者 2026-10-14 定"游戏站也要统计"）：站点所在的 zone 在 Cloudflare 开了自动注入，
 # Cloudflare 往 HTML 里插 static.cloudflareinsights.com 的 beacon 脚本，script-src 只多放这一个来源，不加 unsafe-inline。
 # 上报不用放：2026-10-14 线上实测自动注入上报到同源 /cdn-cgi/rum（POST 204），'self' 已含；cloudflareinsights.com 只有手动嵌入时才用，
 # 所以 connect-src 不放它（0.7.3 收回）。test/headers.test.ts 锁住。

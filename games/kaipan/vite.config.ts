@@ -1,8 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import pkg from './package.json' with { type: 'json' };
 
-// 监听所有网卡。在 Paseo 守卫内启动时只绑定在隔离区网卡上，
-// 需再执行 `paseo-svc publish 5173`，内网才能用 http://<本机 IP>:5173 访问。
+// 开发和预览服务监听所有网卡，同一局域网里的手机、平板能直接打开测试。
 export default defineConfig({
   // 相对路径：构建产物放在任意目录或子路径下都能直接访问
   base: './',
@@ -22,7 +21,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
-    // 对外发布的构建不带 sourcemap（体积减半，也不把源码直接给玩家）；本机排查时用 KP_SOURCEMAP=1 npm run build
+    // 对外发布的构建不带 sourcemap（体积减半，也不把源码直接给玩家）；排查时用 KP_SOURCEMAP=1 npm run build
     sourcemap: process.env.KP_SOURCEMAP === '1',
     rollupOptions: {
       output: {

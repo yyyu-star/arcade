@@ -1,5 +1,5 @@
 /**
- * 大厅上的"管理筹码"小窗口（0.9.4，所有者给朋友加减筹码）：只有管理员看得到。
+ * 大厅上的"管理筹码"小窗口（0.9.4，维护者给朋友加减筹码）：只有管理员看得到。
  * 查人 → 填数量（正数加、负数扣）和备注 → 确认一次 → 显示新余额；下面列全站最近 10 次调整。
  * 规则在服务端（worker/api/wallet.ts 的 admin 一步）：扣到 0 为止、不碰桌上那一份；单次上限管理员可调（钱包规则），超了服务端回的文案里带着现在的数。
  */
@@ -9,7 +9,7 @@ import { num, signed, timeText } from '../../format.ts';
 import { FormError } from '../../ui.tsx';
 
 
-/** "管理筹码"按钮，点了弹小窗口。只放在 /admin 最上面（所有者 0.9.7：外面重复了，只留管理页里的） */
+/** "管理筹码"按钮，点了弹小窗口。只放在 /admin 最上面（维护者 0.9.7：外面重复了，只留管理页里的） */
 export function AdminChipsButton({ className }: { className: string }) {
   const [open, setOpen] = useState(false);
   return (

@@ -5,7 +5,7 @@ import { SessionProvider } from './session.tsx';
 import { WalletProvider } from './wallet.tsx';
 import './styles.css';
 
-// 0.5.0 以前暗上线用的内测标记，?beta= 这套 0.10.17 删了：顺手清掉浏览器里还留着的（主线 2026-10-16 定）
+// 0.5.0 以前暗上线用的内测标记，?beta= 这套 0.10.17 删了：顺手清掉浏览器里还留着的（维护者 2026-10-16 定）
 try {
   localStorage.removeItem('arcade.beta');
 } catch {

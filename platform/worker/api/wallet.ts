@@ -21,7 +21,7 @@ export type TierId = keyof typeof TIERS;
 const MAX_BALANCE = 1_000_000_000_000;
 /**
  * 每人每天最多写几次（各游戏合计）。到了上限不能再带入、领补给；结回、放弃、到期退回不受限（economy.md 第 4 节）。
- * 0.10.2 从 200 放到 1,000（主线定）：只防脚本，正常玩碰不到；全站的钱包预算才是兜底
+ * 0.10.2 从 200 放到 1,000（维护者定）：只防脚本，正常玩碰不到；全站的钱包预算才是兜底
  */
 export const DAILY_WRITES = 1_000;
 /** 桌上那一份最长放多久（游戏给 until，超过的按这个算） */
@@ -63,7 +63,7 @@ const CAREER_KEYS = 8;
 export const DEFAULT_RULES: WalletRules = {
   // 小档一份
   reliefTo: 2_000,
-  // economy.md 第 4 节；0.10.2 从 3 份放到 10 份（主线定）
+  // economy.md 第 4 节；0.10.2 从 3 份放到 10 份（维护者定）
   winUnits: 10,
   newBalance: 10_000,
   // 防多打几个 0

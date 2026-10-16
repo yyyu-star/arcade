@@ -107,7 +107,7 @@ export function RegistrationSwitch() {
           <p className="note">{state.updatedAt ? `上次改动：${timeText(state.updatedAt)}` : '还没改过（默认关着）'}</p>
           {state.forcedOff && (
             <p className="note">
-              服务器上的注册总闸关着，这个开关暂时不起作用{state.switchOpen ? '（开关记的是"打开"，总闸放开后才生效）' : ''}。要放开总闸得改部署配置，找主线。
+              服务器上的注册总闸关着，这个开关暂时不起作用{state.switchOpen ? '（开关记的是"打开"，总闸放开后才生效）' : ''}。要放开总闸得改部署配置，找维护者。
             </p>
           )}
           <FormError text={error} />

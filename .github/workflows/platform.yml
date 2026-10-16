@@ -1,6 +1,7 @@
 # 平台（platform/）：只在平台有改动时构建并部署（平台不依赖共用包）到 Cloudflare Workers（arcade）。
 # PR 上只跑 test（不碰凭证）；deploy 只在 main 上跑，用 production 环境里的凭证（该环境只允许 main 部署），
-# 并先用 tools/verify-main.sh 核对 main 的历史都是经 PR、由所有者合并的——直接推送的提交不部署（见仓库根 CONTRIBUTING.md）。
+# 并先用 tools/verify-main.sh 核对 main 的历史都是经 PR、由维护者合并的——直接推送的提交不部署（见仓库根 CONTRIBUTING.md）。
+# 正式站的域名和 D1 的 id 只在 production 环境的 secret 里（SITE_HOST、D1_DATABASE_ID），见 platform/README.md 的部署一节。
 # 拆成独立仓库时：去掉 paths 和 working-directory，把 platform/ 前缀去掉即可。
 name: Deploy platform
 on:
@@ -73,7 +74,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: 只部署经 PR 合并、由所有者合并进 main 的历史
+      - name: 只部署经 PR 合并、由维护者合并进 main 的历史
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,14 +88,27 @@ jobs:
           cache-dependency-path: platform/package-lock.json
       - run: npm ci
       - run: npm run build
-      # 先迁移再部署：新代码依赖新表，反过来 /api 会 fail-closed 返回 503。迁移只增不删，旧代码碰上新表结构照常运行
-      - name: 应用 D1 迁移（正式库 arcade）
+      # 仓库里不写正式库的 id 和域名（都在 production 环境的 secret 里）。部署前生成带正式库 id 的部署配置（不进 Git），
+      # 迁移和部署都 -c 指向它；id 为空或不像 id 时 deploy-config.ts 直接失败——没有 id 的 D1，wrangler 会自己新建一个空库
+      - name: 生成部署配置（正式库）
         run: |
-          if [ -d migrations ]; then npx wrangler d1 migrations apply arcade --remote; fi
+          : "${SITE_HOST:?SITE_HOST 未设置}"
+          node tools/deploy-config.ts
+        env:
+          SITE_HOST: ${{ secrets.SITE_HOST }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      # 先迁移再部署：新代码依赖新表，反过来 /api 会 fail-closed 返回 503。迁移只增不删，旧代码碰上新表结构照常运行
+      - name: 应用 D1 迁移（正式库）
+        run: npx wrangler d1 migrations apply DB --remote -c wrangler.deploy.json
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - run: npx wrangler deploy
+      # 站点域名用 --domain 挂成自定义域名（和以前写在配置里的 custom_domain 路由一样），SITE_ORIGIN 让 /api 只认这个域名
+      - name: 部署
+        run: |
+          : "${SITE_HOST:?SITE_HOST 未设置}"
+          npx wrangler deploy -c wrangler.deploy.json --domain "$SITE_HOST" --var "SITE_ORIGIN:https://$SITE_HOST"
         env:
+          SITE_HOST: ${{ secrets.SITE_HOST }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -54,7 +54,7 @@ export function titlesJson(): Record<string, { name: string; desc: string }> {
 /**
  * 一局实盘的小结：1 局；资产涨了算赢；最大一把 = 结回 − 带入（亏了为 0）；称号 = 结局称号 + 打法；
  * 自定义数：bp（资产倍数，万分之几，取历史最大）、limitup（涨停天数，累加）。
- * quit：提前收手（0.6.8 主线定）——不是结局，不给结局称号（第 1 个月收手不该叫"新韭菜"），只报打法称号。
+ * quit：提前收手（0.6.8）——不是结局，不给结局称号（第 1 个月收手不该叫"新韭菜"），只报打法称号。
  */
 export function liveSettleStats(sum: Readonly<RunSummary>, stake: number, bp: number, quit = false): SettleStats {
   const titles = [quit ? undefined : END_TITLES[sum.title]?.id, STYLE_TITLES[sum.style.id] ? `s_${sum.style.id}` : undefined].filter((x): x is string => !!x);

@@ -1,6 +1,6 @@
 /**
  * 无头浏览器冒烟 + 截图：账号界面的主流程和各种出错提示（docs/platform-backend.md 5.2、5.7），
- * 0.5.0 起加上邀请制：注册关着、管理员建号、本机建号工具（tools/admin.ts）。
+ * 0.5.0 起加上邀请制：注册关着、管理员建号、管理命令行工具（tools/admin.ts）。
  *
  *   npm run smoke                 先构建，再跑；截图放 shots/（不进 Git）
  *   node tools/smoke.ts --out <目录>
@@ -211,7 +211,7 @@ async function waitForServer(): Promise<void> {
 // ---------- 场景 ----------
 
 const STAMP = Date.now().toString(36);
-/** 管理员（本机建号工具建）、朋友（管理员在界面上建，密码自动生成）、给管理员删的号。用户名最长 20 位。 */
+/** 管理员（管理命令行工具建）、朋友（管理员在界面上建，密码自动生成）、给管理员删的号。用户名最长 20 位。 */
 const ADMIN = `owner_${STAMP}`;
 const NAME = `smoke_${STAMP}`;
 const NAME2 = `smoke2_${STAMP}`;
@@ -232,7 +232,7 @@ async function login(page: Page, username: string, password: string): Promise<vo
   await page.locator('.account__name').waitFor();
 }
 
-/** 跑一次本机建号工具（和主线用的是同一个脚本），接口指向本地。 */
+/** 跑一次管理命令行工具（和维护者用的是同一个脚本），接口指向本地。 */
 function adminCli(args: string[], token = ADMIN_TOKEN): { code: number; out: string } {
   const r = spawnSync(process.execPath, ['tools/admin.ts', ...args, `--base=${BASE}`], {
     encoding: 'utf8',
@@ -310,9 +310,9 @@ async function anonymous(browser: Browser): Promise<void> {
   await ctx.close();
 }
 
-/** 本机建号工具：返回建好、又重设过一次的管理员密码。 */
+/** 管理命令行工具：返回建好、又重设过一次的管理员密码。 */
 function cli(): string {
-  console.log('本机建号工具：令牌不对 401；用对的令牌建管理员、列出账号；不打印令牌');
+  console.log('管理命令行工具：令牌不对 401；用对的令牌建管理员、列出账号；不打印令牌');
   const wrong = adminCli(['list'], 'smoke:wrong-token-0000000000');
   check(wrong.code === 1 && wrong.out.includes('401'), `令牌不对时应该 401 退出：\n${wrong.out}`);
   const made = adminCli(['create', ADMIN, '冒烟阿国', '--admin']);
@@ -335,6 +335,10 @@ function cli(): string {
     env: { ...process.env, ARCADE_ADMIN_TOKEN: ADMIN_TOKEN },
   });
   check(plain.status === 1 && plain.stderr.includes('只能是 https'), `--base 是外站 http 时应该拒绝：\n${plain.stderr}`);
+  // 没给站点地址：不猜默认地址，直接报错
+  const { ARCADE_BASE_URL: _unused, ...noBase } = process.env;
+  const missing = spawnSync(process.execPath, ['tools/admin.ts', 'list'], { encoding: 'utf8', env: { ...noBase, ARCADE_ADMIN_TOKEN: ADMIN_TOKEN } });
+  check(missing.status === 1 && missing.stderr.includes('不知道站点地址'), `没给 --base 也没设 ARCADE_BASE_URL 时应该报错：\n${missing.stderr}`);
   // 用户名按 NFKC 找：全角也认
   const fullwidth = adminCli(['reset', ADMIN.replace('o', 'Ｏ')]);
   check(fullwidth.code === 0 && fullwidth.out.includes('重设好了'), `全角用户名应该也能找到：\n${fullwidth.out}`);
@@ -965,7 +969,7 @@ async function mobile(browser: Browser): Promise<void> {
   // 注册开着、关着都成立的说法；不再说"只对受邀的朋友开放"
   await page.getByText('有账号、登录后才能玩。注册不一定一直开着，没开的时候，账号由管理员给朋友建。').waitFor();
   check((await page.getByText(/受邀/).count()) === 0, '隐私说明不该再说"受邀"');
-  // 积分和筹码那段（所有者 2026-10-14 定）：免费没充值、没有现金价值、不涉及线下财物、可能清零、包括德州扑克
+  // 积分和筹码那段（维护者 2026-10-14 定）：免费没充值、没有现金价值、不涉及线下财物、可能清零、包括德州扑克
   await page.getByRole('heading', { name: '积分和筹码' }).waitFor();
   for (const text of [
     /^这是朋友之间一起玩的娱乐小站：免费，也没有充值。$/,
@@ -1504,7 +1508,7 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
   for (const screen of ['desktop', 'portrait'] as const) {
     console.log(`管理筹码的小窗口（${screen}）：查人、加 5,000、确认一次、显示新余额和最近的调整`);
     const { ctx, page } = await newPage(browser, `管理筹码 ${screen}`, screen);
-    // 入口只在 /admin 页里（0.9.7，所有者：外面的按钮重复了）；大厅顶栏照旧一行、没有这个按钮
+    // 入口只在 /admin 页里（0.9.7，维护者：外面的按钮重复了）；大厅顶栏照旧一行、没有这个按钮
     await mockAdmin(page, { open: false, switchOpen: false, forcedOff: false, updatedAt: null });
     const target = { username: 'xiaoming_2026', displayName: '小明' };
     let recent = [{ ...target, at: Date.UTC(2026, 9, 15, 2, 0), amount: -500, note: '多给了', by: 'owner' }];
@@ -1642,7 +1646,7 @@ try {
   await ensurePortFree();
   server = startServer(state);
   await waitForServer();
-  // 这台机器没有 GPU 进程可用：GPU 放进浏览器进程里、用软件渲染；本机有代理环境变量，localhost 不能走代理
+  // 无头环境常常没有可用的 GPU 进程：GPU 放进浏览器进程里、用软件渲染；环境里设了代理变量时 localhost 也不能走代理
   browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
   // npm run smoke -- --only=<名字>：只跑其中一段（改界面时先跑相关的那段）；不带就全跑
   const only: Record<string, (b: Browser) => Promise<void>> = {

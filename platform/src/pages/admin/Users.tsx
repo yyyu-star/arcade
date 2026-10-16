@@ -87,7 +87,7 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
             {u.id === selfId ? (
               <p className="note">你自己的密码去"我的账号"改。</p>
             ) : u.role === 'admin' ? (
-              <p className="note">管理员账号要用本机建号工具来改。</p>
+              <p className="note">管理员账号要用管理命令行工具来改。</p>
             ) : (
               <div className="row">
                 <button className="btn btn--small" type="button" aria-expanded={open?.id === u.id && open.action === 'reset'} onClick={() => toggle(u.id, 'reset')}>

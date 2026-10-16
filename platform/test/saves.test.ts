@@ -251,7 +251,7 @@ describe('路径、登录与限流', () => {
     const res = await call('/api/saves/kaipan/a', { method: 'PUT', body: { baseRev: 0, data: 1 }, cookie: u.cookie, csrf: false });
     expect(res.status).toBe(403);
     expect(rowsWritten()).toBe(0);
-    const cross = await call('/api/saves/kaipan/a', { method: 'PUT', body: { baseRev: 0, data: 1 }, cookie: u.cookie, origin: 'https://evil.yyyu.org' });
+    const cross = await call('/api/saves/kaipan/a', { method: 'PUT', body: { baseRev: 0, data: 1 }, cookie: u.cookie, origin: 'https://evil.example.com' });
     expect(cross.status).toBe(403);
     expect(rowsWritten()).toBe(0);
   });
@@ -344,7 +344,7 @@ describe('预期账号（userId）', () => {
   });
 });
 
-describe('预期账号（userId）：和登录、档位的先后（#32 审阅补的回归）', () => {
+describe('预期账号（userId）：和登录、档位的先后（旧仓库 PR 32 审阅时补的回归）', () => {
   const putAs = (cookie: string | undefined, userId: unknown) =>
     call('/api/saves/kaipan/profile', { method: 'PUT', body: { baseRev: 0, data: { v: 1 }, userId }, cookie });
   const scoreAs = (cookie: string | undefined, userId: unknown) =>

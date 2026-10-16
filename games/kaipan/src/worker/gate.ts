@@ -8,7 +8,7 @@
  * - 经服务绑定 ARCADE 问平台 GET /api/me（只带 Cookie 和 cf-connecting-ip，3 秒超时）；
  * - 登录了放行，没登录 302 到 /login?from=kaipan；
  * - 平台下线、超时、非 200、不是 JSON、绑定不存在：一律不放行，回 503「过一会儿再来」。
- *   所有者的要求是"不希望其他人可以玩到"，所以宁可暂时谁都进不去，也不放进来（fail-closed）。
+ *   测试期的目标是"没受邀的人玩不到"，所以宁可暂时谁都进不去，也不放进来（fail-closed）。
  * GATE 写成 off / login 以外的值也按 login 处理：开关写错时往"关门"那边偏。
  *
  * 不依赖 @cloudflare/workers-types：下面只声明用到的那一点接口。
@@ -34,8 +34,6 @@ export interface Env {
 /** 要过闸门的路径，和 wrangler.jsonc 的 run_worker_first 保持一致（别的路径即使进来也直接放行给静态资源）。 */
 export const GATED_PATHS: readonly string[] = ['/games/kaipan', '/games/kaipan/', '/games/kaipan/index.html'];
 
-/** 经服务绑定调用时主机名不起作用，写全只是为了日志里看得懂。 */
-const ME_URL = 'https://game.yyyu.org/api/me';
 export const ME_TIMEOUT_MS = 3000;
 export const LOGIN_URL = '/login?from=kaipan';
 /** 只转发这两个头：Cookie 用来认人，cf-connecting-ip 给平台限流 */
@@ -67,7 +65,9 @@ export async function checkLogin(req: Request, env: Env, timeoutMs = ME_TIMEOUT_
     }, timeoutMs);
   });
   try {
-    const res = await Promise.race([arcade.fetch(new Request(ME_URL, { method: 'GET', headers, signal: ctrl.signal })), timeout]);
+    // 经服务绑定调用时主机名不起作用；按请求自己的 origin 拼，日志里看得懂，也不用在代码里写站点地址
+    const me = new URL('/api/me', req.url);
+    const res = await Promise.race([arcade.fetch(new Request(me, { method: 'GET', headers, signal: ctrl.signal })), timeout]);
     if (res === 'timeout' || res.status !== 200) return down;
     const body: unknown = await Promise.race([res.json(), timeout]);
     if (body === 'timeout' || body === null || typeof body !== 'object' || !('user' in body)) return down;

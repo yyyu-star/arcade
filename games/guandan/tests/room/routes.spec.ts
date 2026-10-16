@@ -46,10 +46,18 @@ describe('开房', () => {
     expect((await exports.default.fetch(ROOMS, { headers: { origin: SITE, cookie: cookie('u1') } })).status).toBe(405);
   });
 
-  it('不设 SITE_ORIGIN 时只认正式站 https://game.yyyu.org', async () => {
+  // 只认本站页面发起的开房：设了 SITE_ORIGIN（正式部署由工作流注入）就只认它；不设时 kit 按自己的默认判断，
+  // 这里只锁"和请求不是同一个站的一律 403"，不依赖 kit 的默认值是什么（arcade-kit 0.9.0 起不设就按请求自己的 origin）
+  it('设了 SITE_ORIGIN 就只认它，别的 origin（包括请求自己的）403', async () => {
     const req = (origin: string) => new Request(ROOMS, { method: 'POST', headers: { origin, cookie: cookie('u1') } });
-    expect((await call(req(SITE), { SITE_ORIGIN: undefined })).status).toBe(403);
-    expect((await call(req('https://game.yyyu.org'), { SITE_ORIGIN: undefined })).status).toBe(201);
+    expect((await call(req('https://other.test'), { SITE_ORIGIN: 'https://other.test' })).status).toBe(201);
+    expect((await call(req(SITE), { SITE_ORIGIN: 'https://other.test' })).status).toBe(403);
+  });
+
+  it('不设 SITE_ORIGIN 时，Origin 和请求不是同一个站的 403', async () => {
+    const req = (origin: string) => new Request(ROOMS, { method: 'POST', headers: { origin, cookie: cookie('u1') } });
+    expect((await call(req('https://evil.example'), { SITE_ORIGIN: undefined })).status).toBe(403);
+    expect((await call(new Request(ROOMS, { method: 'POST', headers: { cookie: cookie('u1') } }), { SITE_ORIGIN: undefined })).status).toBe(403);
   });
 
   it('房间路径下别的地址 404', async () => {

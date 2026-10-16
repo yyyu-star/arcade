@@ -158,7 +158,7 @@ describe('结回、放弃', () => {
     expect(saved(store)).toMatchObject({ step: 'done', kind: 'refund', credited: 2_000 });
   });
 
-  it('连不上、503、busy、internal 都停在 settling 之后重发（主线审 #73：internal 和 busy 一样）；no_user、401 等登录；重发的是同一个 ref', async () => {
+  it('连不上、503、busy、internal 都停在 settling 之后重发（internal 和 busy 一样）；no_user、401 等登录；重发的是同一个 ref', async () => {
     const { c, store, calls } = await playing(['offline', { status: 503, body: { ok: false, error: 'unavailable' } }, NO('busy'), NO('internal'), NO('no_user'), { status: 401, body: { ok: false, error: 'login' } }, OK({ credited: 2_100 })]);
     await c.finish('seed', 'settle', 10_500);
     const waits: unknown[] = [saved(store)?.wait];
