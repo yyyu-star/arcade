@@ -2,10 +2,11 @@
  * 页面入口：选桌页、好友房的等人页、牌桌，接钱包、单机、好友房、声音和看得见的区域。
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
+import { createRoom } from 'arcade-kit/client';
 import { DEFAULT_OPTS, TURN_MS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId, type TierId } from './game/stakes.ts';
 import { getWallet, randomId, soloBuyin, type WalletReply, type WalletView } from './net/wallet.ts';
-import { createError, createRoom, Online, type OnlineState } from './online.ts';
+import { createError, Online, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo } from './solo.ts';
@@ -243,7 +244,7 @@ async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
     if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
     if (wallet.balance <= 0) return showError(walletError('no_funds').text, 'less');
   }
-  const r = await createRoom({ variant: 'sichuan-xuezhan', stakes, rules: opts });
+  const r = await createRoom('rooms', { variant: 'sichuan-xuezhan', stakes, rules: opts });
   if ('error' in r) return showError(createError(r.error), r.error === 'login' ? 'refresh' : undefined);
   enterRoom(r.code, true);
 }
@@ -429,7 +430,7 @@ async function rematch(b: HTMLButtonElement): Promise<void> {
   const opts = online?.state.opts;
   if (!online || !opts) return;
   b.disabled = true;
-  const r = await createRoom(opts);
+  const r = await createRoom('rooms', opts);
   if ('error' in r) {
     b.disabled = false;
     return toast(createError(r.error));

@@ -1,5 +1,5 @@
 import type { Env as WorkerEnv } from '../../worker/main.ts';
-import type { FakeEnv } from '../fake-wallet.ts';
+import type { FakeEnv } from 'arcade-kit/testing';
 
 declare global {
   namespace Cloudflare {

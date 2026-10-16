@@ -1,5 +1,5 @@
 // 只给 Worker 和好友房的测试用（vitest.worker.config.ts），不部署；正式配置在 ../wrangler.jsonc。
-// 平台钱包换成假的（test/fake-wallet.ts）：WALLET 绑回这个 Worker 自己导出的 WalletService，props 和正式配置一样写 game。
+// 平台钱包换成假的（arcade-kit/testing）：WALLET 绑回这个 Worker 自己导出的 WalletService，props 和正式配置一样写 game。
 {
   "name": "mahjong-test",
   "main": "./worker/entry.ts",

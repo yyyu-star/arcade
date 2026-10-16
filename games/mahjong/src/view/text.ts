@@ -1,6 +1,7 @@
 /**
  * 给人看的字（AGENTS.md 第 4 节：中文、大白话、少术语）。游戏名只在这里定，所有者要换名字改 GAME_NAME 就行（DESIGN.md 第 0 节）。
  */
+import type { RoomTexts } from 'arcade-kit/client';
 import type { FanId } from '../core/variants/sichuan-xuezhan/index.ts';
 import type { StakesId } from '../game/stakes.ts';
 
@@ -120,15 +121,15 @@ export function walletError(code: string, retryAfter?: number): { text: string; 
   }
 }
 
-/** 好友房开房、进房的错误（kit 的 CreateError 和关闭码） */
-export const ROOM_ERROR: Record<string, string> = {
+/** 好友房开房失败、断开时的话：kit 的默认文案（ROOM_TEXT）里麻将说法不一样的几条 */
+export const ROOM_TEXTS: RoomTexts = {
   login: '先登录再来',
-  forbidden: '请从 game.yyyu.org 打开',
   has_room: '你开的房间太多了，先回去打完一个',
   daily_limit: '今天开房次数用完了，明天再来',
-  busy: '今天联机的人太多了，明天再来，单机照常玩',
-  unavailable: '暂时开不了房，稍后再试',
   bad_options: '房间设置不对，换一个再开',
+  roomClosed: '房间关了，桌上的筹码已经结回钱包',
+  quota: '今天联机的人太多了，这一局打完先散了，桌上的筹码结回钱包，单机照常玩',
+  noRoom: '没有这个房间：码不对，或者房间已经散了',
 };
 
 /**

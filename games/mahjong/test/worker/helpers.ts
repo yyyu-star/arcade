@@ -2,7 +2,7 @@
 import { runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
-import type { FakeBank } from '../fake-wallet.ts';
+import type { FakeBank } from 'arcade-kit/testing';
 
 export const SITE = 'https://game.yyyu.org';
 export const BASE = `${SITE}/games/mahjong`;

@@ -1,6 +1,6 @@
 /**
  * 好友房双浏览器冒烟（AGENTS.md 第 4 节）：真的 Worker + 页面跑在本机 wrangler dev 里，平台和平台钱包换成 test/arcade.dev.ts
- * （认 cookie __Host-sid，钱包用 test/fake-wallet.ts）。A 横屏 1280×720，B 竖屏 390×844，两个人用不同的 sid。
+ * （认 cookie __Host-sid，钱包用 arcade-kit/testing 的假钱包）。A 横屏 1280×720，B 竖屏 390×844，两个人用不同的 sid。
  *
  *   npm run build:cf && npm run smoke:room [-- --rounds 2] [--shots 目录]
  *

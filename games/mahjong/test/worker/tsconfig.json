@@ -15,5 +15,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["**/*.ts", "../../worker/**/*.ts", "../../src/game/stakes.ts", "../fake-wallet.ts", "../arcade.dev.ts", "../dev-entry.ts"]
+  "include": ["**/*.ts", "../../worker/**/*.ts", "../../src/game/stakes.ts", "../arcade.dev.ts", "../dev-entry.ts"]
 }

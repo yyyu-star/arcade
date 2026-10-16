@@ -1,5 +1,12 @@
 # 雀馆（games/mahjong）更新日志
 
+## 0.3.11（未发布）
+
+- 改用 arcade-kit 0.8.0 的通用部分，玩起来没变化：首页登录闸门换成 kit 的 `loginGate`（平台连不上时的 503 页还是雀馆自己的）、
+  Worker 的 `json` / `readJson` 用 kit 的；开房用 kit 的 `createRoom`，开房失败、断开的话用 kit 的默认文案，雀馆说法不同的几条照旧（`ROOM_TEXTS`）；
+  测试和本机试用的假钱包删掉自己那份，用 `arcade-kit/testing`。
+- 唯一看得出的差别：没登录时打开 `/games/mahjong/index.html`，登录完回到 `index.html`（原来回 `/games/mahjong/`），是同一个页面。
+
 ## 0.3.7（未发布）
 
 - 胡牌高光：有人胡了，喊完"胡！"牌桌中间亮出他的整手牌（碰杠、手牌，胡的那张描金），番型一条条弹出来，最后是合计几番。

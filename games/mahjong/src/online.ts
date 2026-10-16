@@ -5,10 +5,10 @@
  * 电脑接着出的几手是几帧，按顺序一帧一帧播（每帧带房间给的停顿）；落下太多（切回前台、重连）就不播了，直接摆最新的。
  * 房间码只在地址栏（?room=123456）：刷新原样回到房间，不另存（平台 0.10.1：登录跳转靠 next 带回来）。
  */
-import { RoomClient, type ClientStatus } from 'arcade-kit/client';
-import { CLOSE, CLOSE_REASON, type DownMsg, type RoomInfo, type You } from 'arcade-kit/protocol';
+import { closeText, createText, RoomClient, type ClientStatus } from 'arcade-kit/client';
+import type { DownMsg, RoomInfo, You } from 'arcade-kit/protocol';
 import type { RoomAction, RoomOpts, RoomView } from './room/rules.ts';
-import { ROOM_ERROR } from './view/text.ts';
+import { ROOM_TEXTS } from './view/text.ts';
 
 /** 页面的协议版本（房间的 minClientVersion 高于它就让刷新） */
 export const CLIENT_VERSION = 1;
@@ -137,7 +137,7 @@ export class Online {
     if (this.closed) return;
     this.s = { ...this.s, status: st };
     this.ui.draw(this.s, false);
-    if ((st === 'closed' || st === 'failed') && code !== undefined && code !== 1000) this.ui.ended(closeText(code, reason), code);
+    if ((st === 'closed' || st === 'failed') && code !== undefined && code !== 1000) this.ui.ended(closeText(code, reason, ROOM_TEXTS), code);
   }
 }
 
@@ -151,47 +151,8 @@ export function roomUrl(code: string): string {
   return u.toString();
 }
 
-export type CreateResult = { code: string } | { error: string };
-
-/** 开房（玩法、档位、规则这时就定下，进房的人都看得到）。每次都开一个新房间 */
-export async function createRoom(opts: RoomOpts): Promise<CreateResult> {
-  try {
-    const res = await fetch('rooms', { method: 'POST', headers: { 'x-arcade': '1', 'content-type': 'application/json' }, body: JSON.stringify({ opts }) });
-    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
-    if (res.ok && body.code) return { code: body.code };
-    return { error: res.status === 401 ? 'login' : (body.error ?? 'unavailable') };
-  } catch {
-    return { error: 'offline' };
-  }
-}
-
-export const createError = (e: string): string => (e === 'offline' ? '网络断了，连上再试' : (ROOM_ERROR[e] ?? ROOM_ERROR.unavailable!));
-
-export function closeText(code: number, reason?: string): string {
-  switch (code) {
-    case CLOSE.roomClosed:
-      return reason === CLOSE_REASON.quota ? '今天联机的人太多了，这一局打完先散了，桌上的筹码结回钱包，单机照常玩' : '房间关了，桌上的筹码已经结回钱包';
-    case CLOSE.replaced:
-      return '你在别的页面打开了这个房间，这里先断开';
-    case CLOSE.noRoom:
-      return '没有这个房间：码不对，或者房间已经散了';
-    case CLOSE.tooOld:
-      return '页面有新版本了，刷新一下';
-    case CLOSE.full:
-      return '这个房间看的人太多了，进不去';
-    case CLOSE.tooManyJoins:
-    case CLOSE.userQuota:
-      return '你在这个房间进出、操作太多次了，先歇一会儿';
-    case CLOSE.busy:
-      return ROOM_ERROR.busy!;
-    case CLOSE.unauthorized:
-      return '登录过期了，刷新一下页面';
-    case CLOSE.forbidden:
-      return ROOM_ERROR.forbidden!;
-    default:
-      return '和房间断开了';
-  }
-}
+/** 开房失败的话（开房本身用 kit 的 createRoom('rooms', opts)） */
+export const createError = (e: string): string => createText(e, ROOM_TEXTS);
 
 /** 房间拒了一个操作：大多是"牌局已经变了"这类，按最新状态重来就行（空串不提示） */
 export function errorText(code: string): string {

@@ -86,7 +86,7 @@ describe('登录闸门', () => {
     expect(res.headers.get('location')).toBe(`/login?next=${encodeURIComponent('/games/mahjong/?room=123456')}`);
     const anon = await call('/index.html', env(), { headers: { cookie: '__Host-sid=anon' } });
     expect(anon.status).toBe(302);
-    expect(anon.headers.get('location')).toBe(`/login?next=${encodeURIComponent('/games/mahjong/')}`);
+    expect(anon.headers.get('location')).toBe(`/login?next=${encodeURIComponent('/games/mahjong/index.html')}`);
     expect(anon.headers.getSetCookie().length).toBe(1);
   });
 

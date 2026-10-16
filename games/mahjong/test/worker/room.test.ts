@@ -11,7 +11,7 @@ import { stakesOf } from '../../src/game/stakes.ts';
 import type { RoomView } from '../../src/room/rules.ts';
 import type { XzView } from '../../src/core/variants/sichuan-xuezhan/index.ts';
 import type { MahjongRoom } from '../../worker/room.ts';
-import { NEW_BALANCE, type FakeBank } from '../fake-wallet.ts';
+import { NEW_BALANCE, type FakeBank } from 'arcade-kit/testing';
 import { BASE, freezeClock, SITE, walletOf } from './helpers.ts';
 
 type Msg = DownMsg<RoomView>;

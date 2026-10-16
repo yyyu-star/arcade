@@ -1,6 +1,6 @@
 /**
  * mahjong Worker：路由 game.yyyu.org/games/mahjong*（DESIGN.md 第 4、6 节）。
- * - 首页三个路径过登录闸门（docs/platform-backend.md 15.8）：登录了放行；没登录 302 到 /login?next=<原路径和查询>（平台 0.10.1，5.7），
+ * - 首页三个路径过 kit 的登录闸门 loginGate（docs/platform-backend.md 15.8）：登录了放行；没登录 302 到 /login?next=<原路径和查询>（平台 0.10.1，5.7），
  *   房间链接 ?room=123456 登录完原样带回来；平台不可用回 503 页；GATE=off 时不拦；
  * - /games/mahjong/api/stake/* 是单机实盘的带入、结回（client 模式）：经服务绑定 WALLET 调平台钱包；结回带的小结 stats 原样转发，不改不补（5.10）；
  * - /games/mahjong/rooms（开房）、/games/mahjong/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（第 6 节）；
@@ -11,7 +11,7 @@
  */
 import { whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
-import { acceptCreate, acceptJoin } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, json, loginGate, readJson } from 'arcade-kit/worker';
 import type { SettleStats } from '../src/core/match/index.ts';
 import { stakesOf, type TierId } from '../src/game/stakes.ts';
 import type { MahjongRoom } from './room.ts';
@@ -78,7 +78,7 @@ export default {
     const path = url.pathname;
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
-    if (path === `${BASE}/` || path === `${BASE}/index.html`) return home(request, env, url);
+    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE });
     if (path.startsWith(STAKE)) return stake(request, env, path.slice(STAKE.length));
     if (path === ROOMS) {
       const opts = await roomOpts(request);
@@ -102,20 +102,9 @@ async function roomOpts(request: Request): Promise<unknown> {
   if (request.method !== 'POST' || request.body === null) return undefined;
   const len = request.headers.get('content-length');
   if (len === '0') return undefined;
-  const b = await readJson(request);
+  const b = await readJson(request, MAX_BODY);
   if (b === null || typeof b !== 'object' || Array.isArray(b)) return BAD;
   return (b as { opts?: unknown }).opts;
-}
-
-async function home(request: Request, env: Env, url: URL): Promise<Response> {
-  if (env.GATE === 'off') return env.ASSETS.fetch(request);
-  const who = await whoIs(request, env.ARCADE);
-  if ('user' in who) return reply(await env.ASSETS.fetch(request), who.setCookie);
-  if (who.error === 'anonymous') {
-    const next = encodeURIComponent(`${BASE}/${url.search}`);
-    return reply(new Response(null, { status: 302, headers: { location: `/login?next=${next}` } }), who.setCookie);
-  }
-  return new Response(DOWN_PAGE, { status: 503, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'retry-after': '30' } });
 }
 
 /** 单机的带入（开场）、结回（一场打完或中途离开）：浏览器算的结果，平台按 client 模式记、每天的净赢有上限 */
@@ -123,7 +112,7 @@ async function stake(request: Request, env: Env, sub: string): Promise<Response>
   if (sub !== 'buyin' && sub !== 'settle') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method' }, 405);
   if (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== env.SITE_ORIGIN) return json({ error: 'forbidden' }, 403);
-  const b = (await readJson(request)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
+  const b = (await readJson(request, MAX_BODY)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
   const id = (x: unknown): x is string => typeof x === 'string' && WALLET_ID.test(x);
   const amount = b?.amount;
   if (!b || !id(b.op) || !id(b.session) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return json({ error: 'bad_request' }, 400);
@@ -151,30 +140,7 @@ function denied(who: Exclude<WhoIs, { user: unknown }>): Response {
   return who.error === 'anonymous' ? json({ error: 'login' }, 401, who.setCookie) : json({ error: 'unavailable' }, 503);
 }
 
-/** 读请求体在认人之前：必须带 content-length 且不超过 MAX_BODY 才读（分块传的大请求体不带长度，没登录的人也能让这里解析一大段） */
-async function readJson(request: Request): Promise<unknown> {
-  const len = request.headers.get('content-length');
-  const n = len === null ? NaN : Number(len);
-  if (!(n > 0 && n <= MAX_BODY)) return null;
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
-
-function json(body: unknown, status: number, setCookie: readonly string[] = []): Response {
-  return reply(Response.json(body, { status }), setCookie);
-}
-
-/** 带上平台的 Set-Cookie；按人回的内容一律不缓存 */
-function reply(res: Response, setCookie: readonly string[]): Response {
-  const out = new Response(res.body, res);
-  out.headers.set('cache-control', 'private, no-store');
-  for (const c of setCookie) out.headers.append('set-cookie', c);
-  return out;
-}
-
+/** 平台不可用时的 503 页（kit 的 loginGate 回它）：麻将自己的标题和配色 */
 const DOWN_PAGE = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>雀馆</title>
