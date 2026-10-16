@@ -199,6 +199,7 @@ function MyCode() {
           <button
             className="btn btn--primary"
             type="button"
+            aria-busy={busy}
             disabled={busy || !writable}
             onClick={() =>
               void run(async () => {
@@ -366,7 +367,7 @@ function Confirm({ label, button, action, onDone }: { label: string; button: str
         {label}
       </label>
       <FormError text={error} />
-      <button className="btn btn--danger" type="button" disabled={!sure || busy || !writable} onClick={() => void run(async () => (await action(), onDone()))}>
+      <button className="btn btn--danger" type="button" aria-busy={busy} disabled={!sure || busy || !writable} onClick={() => void run(async () => (await action(), onDone()))}>
         {busy ? '请稍等…' : button}
       </button>
     </div>

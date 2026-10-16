@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, errorText, type LeaderboardResponse, type ScoreBoard } from '../api.ts';
 import { type DailyFormat, loadDailyFormat } from '../daily.ts';
 import { signed } from '../format.ts';
-import { GAMES, type GameEntry } from '../games.ts';
+import { GAMES, type GameEntry, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Panel } from '../ui.tsx';
@@ -16,7 +16,7 @@ type Scope = 'all' | 'friends';
 type Tab = string;
 
 const PLAYABLE = GAMES.filter((g) => g.status === 'playable');
-const WEEK_BOARDS = [{ id: 'total', name: '总榜' }, ...PLAYABLE.map((g) => ({ id: g.id, name: g.name }))];
+const WEEK_BOARDS = [{ id: 'total', name: '总榜' }, ...WALLET_GAMES.filter((g) => g.status === 'playable').map((g) => ({ id: g.id, name: g.name }))];
 const DAILY_GAMES = PLAYABLE.filter((g) => g.daily);
 const TABS: (readonly [Tab, string])[] = [['week', '本周净赢'], ...DAILY_GAMES.map((g) => [g.id, `${g.name}每日`] as const), ['titles', '称号收集']];
 

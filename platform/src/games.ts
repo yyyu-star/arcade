@@ -40,6 +40,11 @@ export interface GameEntry {
    * 平台不做开关：游戏关掉联机时这个链接照样打开游戏首页。登录后才露（好友房要登录）
    */
   online?: { label: string; query: string };
+  /**
+   * 不用平台钱包的游戏（只有娱乐模式）写 false：排行榜的"本周净赢"不给它开标签，管理页的筹码趋势不给它开一列（都只会是空的）。
+   * 只管界面上的这两处；接口的白名单仍是 GAME_IDS
+   */
+  wallet?: false;
 }
 
 export const GAMES: readonly GameEntry[] = [
@@ -108,9 +113,14 @@ export const GAMES: readonly GameEntry[] = [
     devUrl: 'http://localhost:5177/',
     status: 'playable',
     repo: 'yyyu-star/arcade',
+    // 只有娱乐模式，不碰钱包（游戏 README）
+    wallet: false,
     online: { label: '好友房', query: 'online=1' },
   },
 ];
 
 /** 登记过的游戏 id：接口的游戏白名单（云存档、分数榜、钱包），只从上面这一份派生 */
 export const GAME_IDS: ReadonlySet<string> = new Set(GAMES.map((g) => g.id));
+
+/** 用平台钱包的游戏（界面上按游戏列筹码的地方用） */
+export const WALLET_GAMES: readonly GameEntry[] = GAMES.filter((g) => g.wallet !== false);

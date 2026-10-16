@@ -115,7 +115,7 @@ function FriendAction({ userId, relation, onChange }: { userId: string; relation
   const act = relation === 'pending_in' ? accept : add;
   return (
     <div className="row">
-      <button className="btn btn--primary" type="button" data-testid="add-friend" disabled={act.busy || !writable} onClick={() => void act.onSubmit()}>
+      <button className="btn btn--primary" type="button" data-testid="add-friend" aria-busy={act.busy} disabled={act.busy || !writable} onClick={() => void act.onSubmit()}>
         {act.busy ? '请稍等…' : relation === 'pending_in' ? '对方想加你，接受' : '加好友'}
       </button>
       <FormError text={act.error} />

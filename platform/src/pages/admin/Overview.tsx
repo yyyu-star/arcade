@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { type AdminOverview, api, errorText, type WalletDayStats } from '../../api.ts';
 import { FormError, Panel } from '../../ui.tsx';
-import { GAMES } from '../../games.ts';
+import { WALLET_GAMES } from '../../games.ts';
 import { chips, gameName } from './common.ts';
 
 /** 今日概况（0.10.7）：今天现算，加前 6 天的趋势。0.10.7 以前的记录没有人数，写"—"。 */
@@ -67,7 +67,7 @@ export function Overview() {
               <tr>
                 <th>日期</th>
                 <th>玩过</th>
-                {GAMES.map((g) => (
+                {WALLET_GAMES.map((g) => (
                   <th key={g.id}>{g.name}</th>
                 ))}
                 <th>带入</th>
@@ -80,7 +80,7 @@ export function Overview() {
                 <tr key={d.day}>
                   <td>{i === 0 ? '今天' : d.day.slice(5)}</td>
                   <td>{dash(d.active)}</td>
-                  {GAMES.map(({ id }) => (
+                  {WALLET_GAMES.map(({ id }) => (
                     <td key={id}>{d.games[id] ? dash(d.games[id]!.players) : 0}</td>
                   ))}
                   <td>{chips(sum(d, 'in'))}</td>

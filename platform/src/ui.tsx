@@ -63,7 +63,7 @@ export function useWritable(): boolean {
 export function SubmitButton({ busy, children, danger = false, disabled = false }: { busy: boolean; children: ReactNode; danger?: boolean; disabled?: boolean }) {
   const writable = useWritable();
   return (
-    <button className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`} type="submit" disabled={busy || disabled || !writable}>
+    <button className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`} type="submit" aria-busy={busy} disabled={busy || disabled || !writable}>
       {busy ? '请稍等…' : children}
     </button>
   );

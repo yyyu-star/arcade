@@ -257,7 +257,7 @@ function LobbyNudge() {
       {canRelief && (
         <div className="banner nudge" data-testid="nudge-relief">
           <span>筹码不多了，每天能领一次补给，{onTable ? '连桌上的' : ''}补到 {num(reliefTo)}</span>
-          <button className="btn btn--primary btn--small" type="button" disabled={relief.busy || !writable} onClick={() => void relief.onSubmit()}>
+          <button className="btn btn--primary btn--small" type="button" aria-busy={relief.busy} disabled={relief.busy || !writable} onClick={() => void relief.onSubmit()}>
             {relief.busy ? '请稍等…' : '领补给'}
           </button>
           <FormError text={relief.error} />
@@ -322,7 +322,7 @@ export function App() {
   const { service, refresh, loading, slow } = useSession();
   const Page = pageFor(loc.pathname);
   return (
-    <div className="page">
+    <div className={Page ? 'page page--narrow' : 'page'}>
       <header className="top">
         <Link className="top__home" href="/">
           <h1 className="top__logo">小游戏街机厅</h1>

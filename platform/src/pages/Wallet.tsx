@@ -121,7 +121,7 @@ export function WalletPage() {
         <p className="note">筹码无任何现金价值：不能买、不能换钱换物、不能转给别人。</p>
         {wallet.fresh && <p className="note">新号送的 {num(wallet.balance)}，第一次在游戏里用时到账。</p>}
         <div className="wallet__relief">
-          <button className="btn btn--primary" type="button" disabled={!!blocked || relief.busy || !writable} onClick={() => void relief.onSubmit()}>
+          <button className="btn btn--primary" type="button" aria-busy={relief.busy} disabled={!!blocked || relief.busy || !writable} onClick={() => void relief.onSubmit()}>
             {relief.busy ? '请稍等…' : `领每日补给（连桌上的补到 ${num(reliefTo)}）`}
           </button>
           {blocked && <p className="note" data-testid="relief-why">{blocked}</p>}

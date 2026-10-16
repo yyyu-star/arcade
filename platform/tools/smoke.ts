@@ -1179,6 +1179,8 @@ async function adminOverview(browser: Browser): Promise<void> {
     await page.getByText('德州扑克 6 人 · 带入 24,000 · 结回 21,000').waitFor();
     const trendOld = await page.getByTestId('trend').locator('tbody tr').nth(1).locator('td').nth(1).textContent();
     check(trendOld === '—', `0.10.7 以前的记录应该写"—"：${trendOld}`);
+    const trendHead = await page.getByTestId('trend').locator('thead th').allTextContents();
+    check(trendHead.includes('德州扑克') && !trendHead.includes('飞驰'), `趋势表按用钱包的游戏分列，不列飞驰：${trendHead.join(' ')}`);
     const user = page.getByTestId('user-xiaoming_2026');
     await user.getByTestId('user-wallet').getByText('余额 23,400 · 桌上 2,000 · 开盘 3 次、德州扑克 12 次').waitFor();
     await page.getByTestId('user-a_very_long_name_20').getByText('还没用过钱包').waitFor();
@@ -1321,6 +1323,8 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.getByRole('button', { name: '全部' }).click();
     await page.getByRole('button', { name: '掼蛋' }).click();
     await page.getByTestId('board-empty').waitFor();
+    // 不用钱包的游戏（飞驰，0.10.25）不开"本周净赢"的标签：只会是空的
+    check((await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '飞驰' }).count()) === 0, '本周净赢不该有飞驰的标签');
     await page.getByRole('link', { name: '开盘每日' }).click();
     await page.getByText('通关 · 3,820,000 元').waitFor();
     await page.getByText('撑了 7 个月').waitFor();
