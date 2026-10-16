@@ -1158,11 +1158,6 @@ button {
   height: 48px;
   pointer-events: none;
 }
-/* kit 0.11.1 的面板固定 440 宽，竖屏手机（390 宽）会伸出右边；kit 定位时已经把左边夹在 8px，这里只把宽度收进屏幕 */
-.atf-box {
-  max-width: calc(100vw - 16px);
-  box-sizing: border-box;
-}
 /* 碰杠胡过：大、醒目，浮在手牌右上方 */
 .bar .act {
   min-width: 84px;
