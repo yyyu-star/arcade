@@ -19,7 +19,7 @@ import { el, setText, toggle } from './dom.ts';
 import { betPos, boardPos, buttonPos, deckPos, felt, potPos, resultPos, seatPos, type Pt } from './layout.ts';
 import { play } from './sound.ts';
 import type { StickerId } from 'arcade-kit/fun';
-import { bluffer, stickerFor, Talk, type Moment } from './talk.ts';
+import { bluffer, putIn, stickerFor, Talk, type Moment } from './talk.ts';
 import { chips, handName, madeHand, personaName, personaStyle } from './text.ts';
 
 /** 画面上一个座位此刻的样子（和视图不完全一样：动画中途、一手的结尾要摆出规则已经翻过去的那一刻） */
@@ -83,6 +83,8 @@ export interface TableViewOpts {
   onSeat?: (seat: number) => void;
   /** 不看嘲讽和道具（0.3.0 总开关）：电脑说话也一起收起 */
   quiet?: () => boolean;
+  /** 这个座位被我屏蔽了（0.6.0：真人、电脑都能屏蔽）：电脑说话也不显示 */
+  muted?: (seat: number) => boolean;
   /** 电脑说话时配一个表情包（0.3.0，和真人发的同一套画法，kit 的 STICKERS） */
   sticker?: (seat: number, id: StickerId) => void;
   /** 催促炸弹按钮上的图（kit 的 bomb） */
@@ -380,28 +382,14 @@ export class TableView {
       if (r.byFold && lastBet?.seat === w && pot >= 10 * f.bb) return void this.speak(w, f.seats[w]!.persona, r.handNo, 'bluffWon');
       if (pot >= 40 * f.bb) return void this.speak(w, f.seats[w]!.persona, r.handNo, 'bigWin', true);
     }
-    // 输了大池子：这一手投进去 ≥ 40 个大盲、又没赢的电脑，偶尔嘟囔一句。
-    // 这时 f.seats[i].total 不一定还是本手的投入（筹码已分完），所以从 log 累加：
-    // 盲注、bet/raise 都是"这条街加到多少"（取代本街原值），call 是"本次跟了多少"（累加），公共牌（seat < 0）分街，每街结算一次
-    const put = new Map<number, number>();
-    let street = new Map<number, number>();
-    const settle = (): void => {
-      for (const [s, v] of street) put.set(s, (put.get(s) ?? 0) + v);
-      street = new Map();
-    };
-    for (const e of log) {
-      if (e.seat < 0) settle();
-      else if (e.act === 'sb' || e.act === 'bb' || e.act === 'bet' || e.act === 'raise') street.set(e.seat, e.amount);
-      else if (e.act === 'call') street.set(e.seat, (street.get(e.seat) ?? 0) + e.amount);
-    }
-    settle();
-    const loser = [...put].find(([s, v]) => v >= 40 * f.bb && !winners.has(s) && house(s));
+    // 输了大池子：这一手投进去 ≥ 40 个大盲、又没赢的电脑，偶尔嘟囔一句
+    const loser = [...putIn(log)].find(([s, v]) => v >= 40 * f.bb && !winners.has(s) && house(s));
     if (loser) this.speak(loser[0], f.seats[loser[0]]!.persona, r.handNo, 'bigLoss');
   }
 
   /** 头像旁边冒一句话，过一会儿自己消失 */
   private speak(seat: number, persona: number, handNo: number, m: Moment, must = false): void {
-    if (this.opts.quiet?.()) return;
+    if (this.opts.quiet?.() || this.opts.muted?.(seat)) return;
     const text = this.talk.line(seat, persona, handNo, m, must);
     if (!text) return;
     this.bubble(seat, text);

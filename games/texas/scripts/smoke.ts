@@ -272,6 +272,20 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   if ((await handText(page)) !== 0 || (await page.locator('.seat.me .card.up').count())) throw new Error('dealt before the tips were closed');
   await skipTips(page);
   await page.locator('.seat.me .card.up').first().waitFor();
+  // 单机也有嘲讽面板（0.6.0）：点 1 号电脑的头像扔一个番茄，面板里点名发一句；屏蔽全桌、再全放开
+  await page.locator('.seat[data-seat="1"] .avatar').click();
+  await page.locator('.read-card .rc-icon').first().click();
+  await page.locator('.arcade-fun > *').first().waitFor({ timeout: 5_000 });
+  await page.locator('.fun-btn').click();
+  await page.locator('.fp-say').first().click();
+  await page.locator('.speech', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
+  await shot(page, 'solo-fun');
+  await page.locator('.fun-btn').click();
+  await page.locator('.fp-mute-all', { hasText: '屏蔽全桌' }).click();
+  await page.locator('.fp-mute-all', { hasText: '全部取消屏蔽' }).click();
+  await page.locator('.fp-mute-all', { hasText: '屏蔽全桌' }).waitFor();
+  await page.locator('.fun-btn').click();
+  log('solo fun: prop, taunt, mute all');
   await playUntil(page, HANDS, new Set([1, 5, -1]), true);
   await shot(page, 'after-hands');
   // 补码：先歇一手，这一手打完牌桌停下，再补码、回来

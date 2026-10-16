@@ -32,6 +32,10 @@ describe('架构约束', () => {
     for (const f of files('src/room')) expect(read(f), f).not.toMatch(/from '\.\.\/(view|net)\/|from '\.\.\/(main|solo)\.ts'/);
   });
 
+  it('电脑的出牌决定拿不到嘲讽、表情、道具（0.6.0）：src/ai 和 bot.ts 不引用页面、网络和房间，只吃规则给的视图', () => {
+    for (const f of [...files('src/ai'), 'src/bot.ts']) expect(read(f), f).not.toMatch(/from '\.\.?\/(view|net|room)\/|from '\.\.?\/(main|solo|online)\.ts'|banter|emote/);
+  });
+
   it('页面启动先建云存档再画大厅（0.3.7）：画大厅要按 cloud.userId() 读记着的房间，反过来在好友房里刷新一打开就报错', () => {
     const main = read('src/main.ts');
     const boot = main.slice(main.indexOf('async function boot('));

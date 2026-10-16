@@ -4,7 +4,7 @@
  */
 import { CLOSE } from 'arcade-kit/protocol';
 import { stakesOf, type StakesId } from './core/stakes.ts';
-import type { Action, Table } from './core/table.ts';
+import type { Action, HandResult, LogEntry, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
 import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
@@ -14,16 +14,18 @@ import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from '
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
 import { ActionBar } from './view/actions.ts';
 import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
+import { AI_URGE_MS, Banter, REPLY_DELAY, type Out, type Poke } from './view/banter.ts';
 import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow } from './view/summary.ts';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
-import { createFunLayer, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type PropId } from 'arcade-kit/fun';
+import { createFunLayer, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type PropId, type StickerId } from 'arcade-kit/fun';
 import { loadFun, saveFun, suggest, TAUNTS } from './view/fun.ts';
 import { readLines, Reads, styleTag } from './view/reads.ts';
 import { RoomPanel } from './view/room.ts';
 import { funSound, play, setSound, unlockAudio } from './view/sound.ts';
 import { TableView } from './view/table.ts';
+import { putIn } from './view/talk.ts';
 import { chips, personaName } from './view/text.ts';
 import { handOver, showcase, showcaseText, Tally } from './view/titles.ts';
 import { watchViewport } from './view/viewport.ts';
@@ -73,8 +75,10 @@ const leaveBtn = el('button', 'pill leave', top, '离桌');
 leaveBtn.type = 'button';
 
 const screen = el('div', 'screen', stage);
-/** 好友房的乐子（0.3.0）：总开关、屏蔽了谁（本机 texas.fun） */
+/** 嘲讽、表情、道具（好友房 0.3.0，单机 0.6.0）：总开关、屏蔽了谁（本机 texas.fun） */
 const fun = loadFun(localStorage);
+/** 电脑的互动（0.6.0）：被招惹时回应、一手打完主动来一下、催想太久的真人 */
+const banter = new Banter();
 /** kit 的道具、表情层（挂在 body 上；德州弹窗开着时 CSS 收起） */
 const funLayer = createFunLayer();
 /**
@@ -87,10 +91,11 @@ const tableView = new TableView(screen, {
   pace,
   onSeat: (i) => void takeSeat(i),
   quiet: () => fun.off,
+  muted: (seat) => mutedSeat(seat),
   // 电脑说话配的表情包，和真人发的同一套（kit 的 STICKERS）
   sticker: (seat, id) => {
     const r = tableView.avatarRect(seat);
-    if (r && !fun.off) void showSticker(funLayer, onFace(r), id);
+    if (r && !fun.off && !mutedSeat(seat)) void showSticker(funLayer, onFace(r), id);
   },
   bombIcon: () => propSvg('bomb'),
 });
@@ -108,7 +113,7 @@ sitBtn.type = 'button';
 const backSeatBtn = el('button', 'pill go hidden', hud, '回到我的座位');
 backSeatBtn.type = 'button';
 const spectate = el('span', 'spectate hidden', hud, '点亮着蓝圈的电脑座位接管它，下一手起用你自己的筹码');
-// 好友房嘲讽（0.3.0）：左下角一个按钮开面板；一手打完按公开发生的事冒 1–2 句提示，一点就发。都在左下，不挡底牌和操作区
+// 嘲讽（好友房 0.3.0，单机 0.6.0 对电脑）：左下角一个按钮开面板；一手打完按公开发生的事冒 1–2 句提示，一点就发。都在左下，不挡底牌和操作区
 const funBtn = el('button', 'pill fun-btn hidden', hud, '嘲讽');
 // 开打以后也能叫人（0.3.0）：朋友点开链接看着，点亮着的电脑座位就能接管
 const inviteBtn = el('button', 'pill invite-btn hidden', hud, '叫朋友来');
@@ -138,6 +143,9 @@ const funOff = el('label', 'fp-off', funPanel);
 const funOffBox = el('input', '', funOff);
 funOffBox.type = 'checkbox';
 el('span', '', funOff, '不看嘲讽和道具（电脑说话也不看）');
+// 一键屏蔽桌上所有人（0.6.0）：真人按昵称、电脑按性格名记在本机；再点一次全放开
+const funMuteAll = el('button', 'fp-mute-all', funPanel);
+funMuteAll.type = 'button';
 let funTab: FunTab = 'taunt';
 let funTarget: number | null = null;
 // 两手之间（0.1.1）：单机一手打完停着，点"下一手"才发（开着"自动下一手"时倒数几秒自己发）；好友房是房间定的停顿，大家看同一个倒计时
@@ -342,6 +350,8 @@ async function refreshWallet(): Promise<void> {
 function showLobby(): void {
   stage.classList.remove('at-table');
   notMyTurn();
+  aiUrge('', null, 0);
+  toggle(funPanel, 'hidden', true);
   closeDialog();
   drawLobby();
 }
@@ -423,7 +433,11 @@ function enterTable(): void {
   const s = solo!;
   reads.clear();
   tally.clear();
+  banter.clear();
   stage.classList.add('at-table');
+  // 单机也有嘲讽面板（0.6.0）：对电脑扔道具、点名、发表情
+  toggle(funBtn, 'hidden', false);
+  toggle(funPanel, 'hidden', true);
   tableView.setup(s.table.seats.length, ME);
   tableView.show(view(s.table, ME));
   drawTop();
@@ -537,9 +551,14 @@ async function onStep(st: Step): Promise<void> {
   }
   const v = view(st.next, ME);
   bar.update(v, false);
-  // 轮到我了：提示音、振动、后台时标题闪（单机没有计时，不嘀嗒）
-  if (v.toAct === ME) myTurn(`s${v.handNo}:${v.log.length}`);
-  else notMyTurn();
+  // 轮到我了：提示音、振动、后台时标题闪（单机没有计时，不嘀嗒）；想太久电脑会催（0.6.0）
+  if (v.toAct === ME) {
+    myTurn(`s${v.handNo}:${v.log.length}`);
+    aiUrge(`s${v.handNo}:${v.log.length}`, ME, Date.now());
+  } else {
+    notMyTurn();
+    aiUrge('', null, 0);
+  }
 }
 
 /** 座位上是谁（看对手按它分开数：电脑换了性格、好友房换了人就重新数） */
@@ -554,19 +573,17 @@ function who(v: View): (i: number) => string {
 
 /** 点了别人的头像：弹这一场的数 */
 function showRead(i: number): void {
-  const v = online ? online.state.view : solo ? view(solo.table, ME) : null;
+  const v = curView();
   if (!v?.seats[i]) return;
   const r = reads.get(who(v)(i));
-  // 好友房里（0.3.0）：我坐着就能对他扔道具、点名嘲讽（电脑也行）；别的真人还能屏蔽（按昵称记在本机）
-  const s = online?.state;
-  const info = s?.room?.seats[i];
-  const me = s?.you?.seat ?? null;
+  // 我坐着就能对他扔道具、点名嘲讽（好友房 0.3.0；单机 0.6.0 对电脑）；别的人（真人、电脑都行，0.6.0）还能屏蔽，记在本机
+  const me = mySeat();
   const acts: { label: string; run: () => void; icon?: string }[] = [];
-  if (s && me !== null && i !== me && !fun.off) {
+  if (me !== null && i !== me && !fun.off && v.seats[i]!.owner !== 'none') {
     PROPS.forEach((k, n) => acts.push({ label: PROP_NAMES[k], icon: propSvg(k), run: () => sendFun(PROP_BASE + n, i) }));
     acts.push({ label: '嘲讽他', run: () => openFun('taunt', i) });
   }
-  const name = info?.kind === 'human' && i !== me ? info.name : null;
+  const name = i !== me ? funKey(v, i) : null;
   if (name) {
     const muted = fun.muted.includes(name);
     acts.push({ label: muted ? '取消屏蔽' : '屏蔽他', run: () => setMuted(name, !muted) });
@@ -574,7 +591,24 @@ function showRead(i: number): void {
   tableView.showCard(i, styleTag(r), readLines(r), acts);
 }
 
-// ---------- 好友房的乐子（0.3.0，DESIGN.md 13.4）：嘲讽、顺手提示、名场面、称号、屏蔽 ----------
+// ---------- 嘲讽、顺手提示、名场面、称号、屏蔽（好友房 0.3.0，DESIGN.md 13.4；单机和电脑的互动 0.6.0，13.5） ----------
+
+/** 现在桌上的视图（好友房、单机）和我坐的座位；不在桌上是 null */
+function curView(): View | null {
+  return online ? online.state.view : solo ? view(solo.table, ME) : null;
+}
+function mySeat(): number | null {
+  return online ? (online.state.you?.seat ?? null) : solo ? ME : null;
+}
+
+/** 屏蔽按什么记（0.6.0）：好友房的真人按昵称，电脑按性格名（真人昵称不许用电脑的名字，不会撞）；空座、旁观没有 */
+function funKey(v: View, i: number): string | null {
+  const s = v.seats[i];
+  if (!s || s.owner === 'none') return null;
+  if (s.owner === 'house') return personaName(s.persona);
+  const info = online?.state.room?.seats[i];
+  return info?.kind === 'human' && info.name ? info.name : null;
+}
 
 /** 座位上的人怎么称呼（名场面横幅、称号）：我是"你"，好友房真人用昵称，电脑用性格名 */
 function nameAt(v: View, i: number, me: number | null): string {
@@ -593,8 +627,101 @@ function handDone(prev: View, next: View, me: number | null): void {
   // 称号的数单机、好友房都记（0.3.0 实打后单机结算页也给称号）
   const key = who(prev);
   tally.observe(h.r, h.log, (i) => ({ key: key(i), name: i === me ? myName : nameAt(prev, i, null) }));
-  if (!online) return;
-  if (me !== null && !fun.off) showHints(suggest(h.r, h.log, me));
+  if (fun.off) return;
+  if (me !== null) showHints(suggest(h.r, h.log, me));
+  aiAfter(prev, h.r, h.log);
+}
+
+/**
+ * 一手打完，电脑记下这一手的输赢（情绪），赢了或输了大池子（≥ 20 个大盲）的电脑偶尔对对面来一下（0.6.0）。
+ * 输赢按公开的：投进去多少（操作记录）、分到多少（结果）
+ */
+function aiAfter(v: View, r: HandResult, log: readonly LogEntry[]): void {
+  const put = putIn(log);
+  const net = new Map<number, number>();
+  for (const [s, x] of put) net.set(s, -x);
+  for (const p of r.pots) for (const w of p.winners) net.set(w.seat, (net.get(w.seat) ?? 0) + w.won);
+  if (r.uncalled) net.set(r.uncalled.seat, (net.get(r.uncalled.seat) ?? 0) + r.uncalled.amount);
+  const house = (i: number): boolean => v.seats[i]?.owner === 'house';
+  for (const [s, x] of net) if (house(s)) banter.result(s, x / v.bb);
+  const ranked = [...net].sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const bottom = ranked[ranked.length - 1];
+  if (!top || !bottom || top[0] === bottom[0]) return;
+  const big = 20 * v.bb;
+  const out =
+    house(top[0]) && top[1] >= big
+      ? { seat: top[0], o: banter.after({ seat: top[0], persona: v.seats[top[0]]!.persona }, true, bottom[0]) }
+      : house(bottom[0]) && -bottom[1] >= big
+        ? { seat: bottom[0], o: banter.after({ seat: bottom[0], persona: v.seats[bottom[0]]!.persona }, false, top[0]) }
+        : null;
+  if (out?.o) aiDo(out.seat, out.o);
+}
+
+/** 桌上的电脑（谁、什么性格） */
+const houseSeats = (v: View): { seat: number; persona: number }[] => v.seats.flatMap((s, seat) => (s.owner === 'house' ? [{ seat, persona: s.persona }] : []));
+
+/**
+ * 真人 from 对 to 做了 id（嘲讽、表情、道具）：to 是电脑就看它回不回（0.6.0）；没点名的嘲讽随便一个电脑可能接话。
+ * 只看这件公开的事和电脑这一场的情绪；电脑的出牌决定拿不到这些
+ */
+function poke(from: number, id: number, to?: number): void {
+  const v = curView();
+  if (!v || fun.off) return;
+  let target = to;
+  if (target === undefined) {
+    if (id >= TAUNT_COUNT) return;
+    const hs = houseSeats(v).filter((s) => s.seat !== from);
+    if (!hs.length) return;
+    target = hs[Math.floor(Math.random() * hs.length)]!.seat;
+  }
+  const s = v.seats[target];
+  if (!s || s.owner !== 'house' || target === from) return;
+  const p: Poke | null = id < TAUNT_COUNT ? { taunt: id } : id < PROP_BASE ? stickerPoke(STICKERS[id - STICKER_BASE]) : propPoke(PROPS[id - PROP_BASE]);
+  const out = p && banter.react({ seat: target, persona: s.persona }, from, p);
+  if (out) aiDo(target, out);
+}
+const stickerPoke = (k: StickerId | undefined): Poke | null => (k ? { sticker: k } : null);
+const propPoke = (k: PropId | undefined): Poke | null => (k ? { prop: k } : null);
+
+/** 电脑做这一下：看一眼再回（REPLY_DELAY），到时候它还坐在那、没关总开关、没被我屏蔽才显示。只在本机画，不发给房间 */
+function aiDo(from: number, out: Out): void {
+  const [a, b] = REPLY_DELAY;
+  window.setTimeout(
+    () => {
+      const v = curView();
+      if (!v || fun.off || mutedSeat(from) || v.seats[from]?.owner !== 'house') return;
+      if ('say' in out) tableView.bubble(from, out.say);
+      else if ('sticker' in out) {
+        const r = tableView.avatarRect(from);
+        if (r) void showSticker(funLayer, onFace(r), out.sticker);
+      } else if ('taunt' in out) showFun(from, out.taunt, out.to);
+      else showFun(from, PROP_BASE + PROPS.indexOf(out.prop), out.to);
+    },
+    (a + Math.random() * (b - a)) * pace(),
+  );
+}
+
+/**
+ * 电脑催想太久的真人（0.6.0）：轮到 slow、他想了 AI_URGE_MS 还没出，桌上挑一个电脑扔炸弹或者说"快点吧"。
+ * 一个决定点（key）只排一次；不碰计时、不碰规则
+ */
+let aiUrgeTimer = 0;
+let aiUrgeKey = '';
+function aiUrge(key: string, slow: number | null, since: number): void {
+  if (key === aiUrgeKey) return;
+  aiUrgeKey = key;
+  window.clearTimeout(aiUrgeTimer);
+  if (slow === null) return;
+  aiUrgeTimer = window.setTimeout(
+    () => {
+      const v = curView();
+      if (!v || v.toAct !== slow || fun.off) return;
+      const u = banter.urge(slow, houseSeats(v));
+      if (u) aiDo(u.from, u.out);
+    },
+    Math.max(0, since + AI_URGE_MS - Date.now()),
+  );
 }
 
 let hintTimer = 0;
@@ -615,8 +742,12 @@ function showHints(ids: number[]): void {
  * to 是对哪个座位（点名嘲讽、扔道具、催促炸弹）
  */
 function sendFun(id: number, to: number | null = null): void {
-  if (!online) return;
-  online.emote(id, to ?? undefined);
+  // 单机（0.6.0）：没有房间，直接在本机画，再看电脑回不回；好友房等房间转发回来再画（showFun、poke 在 emote 里）
+  if (online) online.emote(id, to ?? undefined);
+  else if (solo) {
+    showFun(ME, id, to ?? undefined);
+    poke(ME, id, to ?? undefined);
+  } else return;
   toggle(funPanel, 'hidden', true);
   toggle(funHints, 'hidden', true);
 }
@@ -628,8 +759,9 @@ function openFun(tab: FunTab, target: number | null): void {
   funTarget = target;
   funOffBox.checked = fun.off;
   for (const [k, b] of fpTabs) toggle(b, 'sel', k === tab);
-  const v = online?.state.view;
+  const v = curView();
   setText(fpTo, target !== null && v ? `对 ${nameAt(v, target, null)}` : '');
+  drawMuteAll();
   funGrid.textContent = '';
   funGrid.className = `fp-grid ${tab}`;
   if (tab === 'taunt') {
@@ -663,11 +795,26 @@ function openFun(tab: FunTab, target: number | null): void {
 
 const PROP_NAMES: Record<PropId, string> = { tomato: '番茄', egg: '鸡蛋', stinkyEgg: '臭鸡蛋', slipper: '拖鞋', bomb: '炸弹', rose: '玫瑰', like: '点赞', cheers: '干杯' };
 
-/** 屏蔽了这个座位上的人（按昵称） */
-const mutedSeat = (seat: number): boolean => {
-  const name = online?.state.room?.seats[seat]?.name;
-  return !!name && fun.muted.includes(name);
-};
+/** 屏蔽了这个座位上的人（真人按昵称、电脑按性格名，funKey） */
+function mutedSeat(seat: number): boolean {
+  const v = curView();
+  const key = v ? funKey(v, seat) : null;
+  return !!key && fun.muted.includes(key);
+}
+
+/** 桌上除我以外能屏蔽的人 */
+function othersKeys(): string[] {
+  const v = curView();
+  const me = mySeat();
+  return v ? v.seats.flatMap((_, i) => (i === me ? [] : (funKey(v, i) ?? []))) : [];
+}
+
+function drawMuteAll(): void {
+  const keys = othersKeys();
+  const all = keys.length > 0 && keys.every((k) => fun.muted.includes(k));
+  setText(funMuteAll, all ? '全部取消屏蔽' : '屏蔽全桌');
+  toggle(funMuteAll, 'hidden', !keys.length);
+}
 
 /**
  * 房间转发来的嘲讽、表情、道具：关了总开关、屏蔽了发的人的不显示。
@@ -675,10 +822,10 @@ const mutedSeat = (seat: number): boolean => {
  */
 function showFun(seat: number, id: number, to?: number): void {
   if (fun.off || mutedSeat(seat)) return;
-  const v = online?.state.view;
+  const v = curView();
   if (id < TAUNT_COUNT) {
     const text = TAUNTS[id];
-    if (text) tableView.bubble(seat, to !== undefined && v ? `@${nameAt(v, to, online?.state.you?.seat ?? null)} ${text}` : text);
+    if (text) tableView.bubble(seat, to !== undefined && v ? `@${nameAt(v, to, mySeat())} ${text}` : text);
     return;
   }
   const from = tableView.avatarRect(seat);
@@ -694,10 +841,24 @@ function showFun(seat: number, id: number, to?: number): void {
 }
 
 function setMuted(name: string, on: boolean): void {
-  fun.muted = on ? [...fun.muted.filter((x) => x !== name), name] : fun.muted.filter((x) => x !== name);
-  saveFun(localStorage, fun);
+  muteKeys([name], on);
   toast(on ? `不看 ${name} 的嘲讽和道具了` : `又能看到 ${name} 的了`);
 }
+
+/** 记下或去掉屏蔽（最多记 50 个，新的在后面，多了丢最早的） */
+function muteKeys(keys: readonly string[], on: boolean): void {
+  const rest = fun.muted.filter((x) => !keys.includes(x));
+  fun.muted = on ? [...rest, ...keys].slice(-50) : rest;
+  saveFun(localStorage, fun);
+}
+
+funMuteAll.addEventListener('click', () => {
+  const keys = othersKeys();
+  const on = !keys.every((k) => fun.muted.includes(k));
+  muteKeys(keys, on);
+  drawMuteAll();
+  toast(on ? '桌上的人都屏蔽了：看不到他们的嘲讽、表情和道具' : '屏蔽都取消了');
+});
 
 funBtn.addEventListener('click', () => {
   if (!funPanel.classList.contains('hidden')) return void toggle(funPanel, 'hidden', true);
@@ -1051,6 +1212,7 @@ function enterRoom(r: SavedRoom): void {
   saveRoom({ ...r, at: Date.now() });
   reads.clear();
   tally.clear();
+  banter.clear();
   // 存不上：标题页只是不给"回到房间"
   writeJson(KEYS.lastRoom, { ...r, at: Date.now() });
   online?.close();
@@ -1155,6 +1317,7 @@ function exitRoom(note: string | null, keep = false): void {
   drawRebuy(null);
   for (const e of [funBtn, funPanel, funHints, inviteBtn]) toggle(e, 'hidden', true);
   drawUrge(null, null);
+  aiUrge('', null, 0);
   notMyTurn();
   roomPanel.draw(null);
   walletNote = note;
@@ -1196,7 +1359,10 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     if (mine()) toast(text);
   },
   emote: (seat, id, to) => {
-    if (mine()) showFun(seat, id, to);
+    if (!mine()) return;
+    showFun(seat, id, to);
+    // 真人点名电脑、对电脑扔东西：电脑在本机回（各台设备各回各的，和电脑说话一样）
+    poke(seat, id, to);
   },
   ended: (text, code) => {
     const o = online;
@@ -1289,6 +1455,9 @@ function drawRoom(s: OnlineState): void {
   const auto = bar.update(v, !s.busy && animating === 0 && s.status === 'open' && me !== null);
   if (auto) online!.act(auto);
   drawUrge(me, v.phase === 'idle' ? null : turn);
+  // 电脑催想太久的真人（0.6.0，我也算）：从这一步开始计（房间的期限减去一步的时长）
+  const slow = v.phase !== 'idle' && turn && turn.deadline != null && s.room?.seats[turn.seat]?.kind === 'human' && !s.room.seats[turn.seat]!.auto ? turn : null;
+  aiUrge(slow ? `r${slow.seat}:${slow.deadline}` : '', slow?.seat ?? null, slow ? slow.deadline! - TURN_MS : 0);
   // 画面播完、真轮到我了：提醒一次，按房间的期限在最后 5 秒嘀嗒（0.3.0）
   if (!s.busy && animating === 0) {
     if (!auto && me !== null && v.toAct === me && turn?.seat === me) {

@@ -5,6 +5,7 @@
  */
 
 import type { StickerId } from 'arcade-kit/fun';
+import type { LogEntry } from '../core/table.ts';
 
 /**
  * 自己推全下、跟别人的全下（跟到全下）、赢了大池子、诈唬成了（亮出来的，或者下了注别人都弃了）、诈唬被抓、输了大池子（投进去 40 个大盲以上没赢）。
@@ -13,7 +14,7 @@ import type { StickerId } from 'arcade-kit/fun';
 export type Moment = 'allin' | 'callAllin' | 'bigWin' | 'bluffWon' | 'caught' | 'bigLoss';
 
 /** 每种性格多爱说话（‰），顺序同 PERSONAS：稳哥、阿飙、老好、慢慢、算盘、江湖、虎子、老鹰、叨叨、小白 */
-const CHATTY = [150, 450, 350, 200, 150, 300, 550, 150, 900, 450];
+export const CHATTY = [150, 450, 350, 200, 150, 300, 550, 150, 900, 450];
 
 /** 台词按性格分；没写的那种时刻用 COMMON。大白话，不嘲弄人 */
 export const LINES: Partial<Record<Moment, string[]>>[] = [
@@ -160,6 +161,26 @@ export class Talk {
     this.lastSaid.set(`${seat}:${text}`, handNo);
     return text;
   }
+}
+
+/**
+ * 这一手每个座位投进去多少（从操作记录累加：盲注、bet/raise 是"这条街加到多少"，取代本街原值；call 是"本次跟了多少"，累加；公共牌分街）。
+ * 一手打完时座位上的 total 不一定还是本手的投入（筹码已分完），所以从记录算
+ */
+export function putIn(log: readonly LogEntry[]): Map<number, number> {
+  const put = new Map<number, number>();
+  let street = new Map<number, number>();
+  const settle = (): void => {
+    for (const [s, v] of street) put.set(s, (put.get(s) ?? 0) + v);
+    street = new Map();
+  };
+  for (const e of log) {
+    if (e.seat < 0) settle();
+    else if (e.act === 'sb' || e.act === 'bb' || e.act === 'bet' || e.act === 'raise') street.set(e.seat, e.amount);
+    else if (e.act === 'call') street.set(e.seat, (street.get(e.seat) ?? 0) + e.amount);
+  }
+  settle();
+  return put;
 }
 
 export { bluffer } from '../core/fame.ts';
