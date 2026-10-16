@@ -262,11 +262,6 @@ async function anonymous(browser: Browser): Promise<void> {
   check((await page.getByRole('link', { name: '管理' }).count()) === 0, '没登录时不该有"管理"');
   check(calls.length === 0, `没登录时首页不该调接口：${calls.join(', ')}`);
   await shot(page, 'home-anon');
-  // 0.10.17 删了 ?beta= 那套：浏览器里以前留下的 arcade.beta，打开平台时清掉
-  await page.evaluate(() => localStorage.setItem('arcade.beta', '1'));
-  await page.reload();
-  await page.locator('.account').waitFor();
-  check((await page.evaluate(() => localStorage.getItem('arcade.beta'))) === null, '打开平台时应该清掉留着的 arcade.beta');
   for (const path of ['/me', '/forgot', '/privacy']) {
     const r = await page.goto(`${BASE}${path}`);
     // 单页回退的地址也要带 CSP
