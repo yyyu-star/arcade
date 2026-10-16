@@ -286,6 +286,8 @@ export interface DifficultyDef {
   short?: string;
   /** 0.5：真实行情下的短话（缺省用 short） */
   realShort?: string;
+  /** 0.10.0 适合谁（选难度时那一行；高手之后的几级没有） */
+  who?: string;
 }
 
 /** 人设（0.3.0）。数值在 BALANCE.fx[id]。 */

@@ -206,10 +206,14 @@ export interface Balance {
 export interface LiveParams {
   /** 打几个月（从 1 月起） */
   months: number;
-  /** 常规月供和突发账单的倍数 */
-  billMult: number;
   /** 结回倍数的上限（economy.md：最多 3 倍） */
   cap: number;
+  /**
+   * 0.10.0 各档：billMult 是常规月供和突发账单的倍数（越往上生活费越高），
+   * lev 是资产涨跌算进筹码的倍数（资产涨 10%、lev 3 → 结回多 30%）。一局只有几个月，资产的起伏本来就小，
+   * 不放大的话会玩和不会玩的只差零点几成，赚也赚不到哪去（docs/design-live.md 第 3 节）。
+   */
+  tiers: Record<'small' | 'mid' | 'big' | 'lux', { billMult: number; lev: number }>;
 }
 
 /** 0.5：个股照搬真实走势。 */
@@ -528,8 +532,8 @@ export const BALANCE: Balance = {
     youzi: { account: 300_000, billMult: 3.25, surpriseMult: 3, qunzhuCred: -0.1, qunzhuWeight: 2 },
     // ---- 难度（逐级叠加）
     slow_bull: {},
-    choppy: { billMult: 1.03, failMult: 1, dHNoise: 8 },
-    bear_market: { bearBias: 0.18, fee: 0.6 },
+    choppy: { billMult: 1.03, failMult: 1, dHNoise: 8, realBill: 1.1, realNoise: 0.5 },
+    bear_market: { bearBias: 0.18, fee: 0.6, realBill: 1.04 },
     fake_news: { cred: 0, noise: 0.8, turnCred: 0 },
     regulation: { blowMult: 2, stWarnMult: 2, limitUp: 0.7 },
     market_crash: {},
@@ -597,7 +601,7 @@ export const BALANCE: Balance = {
     rebound: { dH: 6, days: 4 },
     crashReal: -150,
   },
-  track: { amp: 2, billMult: 0.8, regimeBill: { bull: 1.1, bubble: 1.25, flat: 0.95, bear: 0.9, crash: 0.95 }, moodBull: 1, blown: -5, wild: 7, follow: 3 },
+  track: { amp: 2, billMult: 0.5, regimeBill: { bull: 1.1, bubble: 1.25, flat: 0.95, bear: 0.9, crash: 0.95 }, moodBull: 1, blown: -5, wild: 7, follow: 3 },
   intel: {
     cred: {
       xiaoli: [0.7, 0.5],
@@ -627,8 +631,17 @@ export const BALANCE: Balance = {
     bigMove: 5,
     bigAcc: 3,
   },
-  // 实盘：半年、账单按平时的 25%（实测见 docs/design-live.md 第 3 节）
-  live: { months: 6, billMult: 0.25, cap: 3 },
+  // 实盘：5 个月，各档的账单和涨跌倍数（0.10.0 配平，实测见 docs/design-live.md 第 3 节）
+  live: {
+    months: 5,
+    cap: 3,
+    tiers: {
+      small: { billMult: 0.17, lev: 2.8 },
+      mid: { billMult: 0.18, lev: 3.5 },
+      big: { billMult: 0.18, lev: 4 },
+      lux: { billMult: 0.22, lev: 5 },
+    },
+  },
 };
 
 /** 某个内容的效果数值（缺省 0）。 */

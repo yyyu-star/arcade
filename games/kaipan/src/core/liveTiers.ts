@@ -20,7 +20,7 @@ export const LIVE_TIERS: readonly LiveTierDef[] = [
   { id: 'small', name: '小档', stake: 2_000, difficulty: 1 },
   { id: 'mid', name: '中档', stake: 10_000, difficulty: 2 },
   { id: 'big', name: '大档', stake: 50_000, difficulty: 3 },
-  { id: 'lux', name: '豪华档', stake: 200_000, difficulty: 4 },
+  { id: 'lux', name: '豪华档', stake: 200_000, difficulty: 3 },
 ];
 
 /** 结回倍数的上限（万分之几）：最多拿回 cap 份 */

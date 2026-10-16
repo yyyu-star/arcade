@@ -9,6 +9,7 @@
  * 标了「隐藏」的字段是画面不能显示的信息（题材真实阶段、今天预先掷好的行情等），
  * 详见 docs/core-api-0.3.md。
  */
+import type { LiveTier } from './liveTiers.ts';
 import type { RealMarket } from './segment.ts';
 
 export type ThemeId = 'ai' | 'newenergy' | 'consumer' | 'pharma' | 'finance' | 'lowalt' | 'gaming' | 'pig';
@@ -707,6 +708,10 @@ export interface RunSetup {
 export interface LiveRules {
   months: number;
   billMult: number;
+  /** 0.10.0：资产涨跌算进筹码的倍数；更早开的局没有，按 1 算 */
+  lev?: number;
+  /** 0.10.0：档位；更早开的局没有，按难度认（那时一档一个难度） */
+  tier?: LiveTier;
 }
 
 export interface GameState {

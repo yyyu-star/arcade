@@ -81,6 +81,8 @@ export interface DifficultyView {
   desc: string;
   /** 具体数字（画面悬停时显示）；这一级没有要补充的数字时为 null */
   detail: string | null;
+  /** 0.10.0 适合谁（新手 / 普通 / 高手三级有，后面的挑战级为 null） */
+  who: string | null;
   /** 1..level 全部约束（逐级叠加），按级排列 */
   all: { level: number; name: string; desc: string; detail: string | null }[];
 }
@@ -94,6 +96,7 @@ export function difficultyView(level: number): DifficultyView {
     name: d.name,
     desc: d.desc,
     detail: d.detail ?? null,
+    who: d.who ?? null,
     all: DIFFICULTIES.filter((x) => x.level <= lv).map((x) => ({ level: x.level, name: x.name, desc: x.desc, detail: x.detail ?? null })),
   };
 }

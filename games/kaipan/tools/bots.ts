@@ -252,6 +252,49 @@ function chaserBot(): Bot {
   };
 }
 
+/**
+ * 0.10.0 小白（docs/balance.md 第 1 节）：追最热的题材、不止损、不看消息真假。
+ * 群里谁说涨就信谁、谁说跌就卖；亏了也拿着等回本，只在题材明显凉透（降温、冷）时才卖；不押跌、不抵押、不加仓。
+ */
+function xiaobaiBot(): Bot {
+  return {
+    name: 'xiaobai',
+    act(s, rng) {
+      if (s.phase === 'reward') return pickRewardBy(s, (kind, id) => (kind === 'stock' ? (emptySlot(s) >= 0 ? 3 : 0.5) : kind === 'item' ? 1 + simpleItemPref(id) / 2 : 1) + rng.next());
+      if (s.phase === 'event') return { type: 'choose', option: s.event ? casualEvent(s.event.id, rng) : 1 };
+      const said = (theme: ThemeId): number => {
+        let v = 0;
+        for (const m of s.today.messages) if (m.theme === theme) v += m.claim === 'up' ? 1 : m.claim === 'down' ? -1 : 0;
+        return v;
+      };
+      if (s.today.ops < 2) {
+        for (const i of sellableSlots(s)) {
+          const h = s.slots[i];
+          if (!h) continue;
+          const theme = themeOfStock(h.stockId);
+          const feel = feelOf(s.themes[theme]?.history ?? []);
+          if (said(theme) < 0 || feel === 'cold' || (feel === 'cooling' && h.value >= 1)) return { type: 'sell', slot: i };
+        }
+      }
+      if (emptySlot(s) >= 0 && s.today.buysLeft > 0 && s.today.ops < 2) {
+        let best = -1;
+        let top = -Infinity;
+        s.today.recs.forEach((r, i) => {
+          if (!buyable(s, i)) return;
+          const theme = themeOfStock(r.stockId);
+          const v = (s.themes[theme]?.heat ?? 0) + said(theme) * 15;
+          if (v > top) {
+            top = v;
+            best = i;
+          }
+        });
+        if (best >= 0) return { type: 'buy', rec: best };
+      }
+      return { type: 'open' };
+    },
+  };
+}
+
 /** 无脑跟群主：买群主推荐的；群主说哪个题材跌，就卖哪个题材。 */
 function qunzhuBot(): Bot {
   return {
@@ -1579,6 +1622,8 @@ export const BOTS: Record<string, BotFactory> = {
   random: randomBot,
   follower: followerBot,
   chaser: chaserBot,
+  xiaobai: xiaobaiBot,
+  putong: () => ({ ...normalBot(), name: 'putong' }),
   normal: () => normalBot(),
   'normal-nomsg': () => normalBot(true),
   smart: () => dual(trackBot('smart', 'smart', normalBot()), new SmartBot({ name: 'smart', maxPerTheme: 2, sameThemeBonus: 0, oracle: false, short: true })),
@@ -1614,6 +1659,8 @@ export const BOT_DESC: Record<string, string> = {
   truster: '0.5 信靠谱群友：只听战绩好（带先验 ≥ 55%）的群友的推荐和消息，期望值决策；合成行情下同 normal',
   follower: '总是买推荐里的第一只，从不卖',
   chaser: '追最热的题材，热度下降就卖',
+  xiaobai: '0.10.0 小白（balance.md）：追最热的题材、谁说涨都信、说跌就卖，不止损、不押跌、不抵押',
+  putong: '0.10.0 普通（balance.md）：同 normal，简单合理的打法，会止损',
   normal: '普通人：看战绩、升温早期买、过热且看空就卖、两个题材',
   smart: '贝叶斯推断题材阶段 + 群友可信度，期望值决策（同题材最多 2 只）',
   'smart-focus1': 'smart，只拿 1 个题材（极端集中）',

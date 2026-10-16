@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAX_DIFFICULTY, THEME_IDS, dailyBoardId, difficultyView, liveSetup, personaView, stocksOf, type GameState, type LiveTier, type PersonaId } from '../../core/index.ts';
+import { BALANCE, MAX_DIFFICULTY, THEME_IDS, dailyBoardId, difficultyView, liveSetup, personaView, stocksOf, type GameState, type LiveTier, type PersonaId } from '../../core/index.ts';
 import { emptyProfile, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Profile } from '../../platform/profile.ts';
 import { hasSave } from '../../platform/storage.ts';
 import { APP_VERSION } from '../../platform/version.ts';
@@ -27,7 +27,7 @@ import { CloudBadge } from '../ui/cloudBadge.ts';
 import { WALLET_URL, goLobby } from '../lobby.ts';
 import { loadBoard } from '../dailyBoard.ts';
 import { live, livePlaying, onLiveChange } from '../live.ts';
-import { LIVE_GUARD, buyinFailText, chips, liveEndText, liveNoticeTitle } from '../liveText.ts';
+import { LIVE_GUARD, LIVE_MINUTES, buyinFailText, chips, liveEndText, liveNoticeTitle } from '../liveText.ts';
 import { hasLoginHint } from '../../platform/cloud.ts';
 import { standalone } from '../../platform/mode.ts';
 import { showBanner } from '../segments.ts';
@@ -77,7 +77,7 @@ export class TitleScene extends BaseScene {
     if (can) main.push(['continue', `继续 · ${livePlaying(this.session.state) ? '实盘 ' : ''}${this.session.state.month}月`, () => this.session.enterGame(), 'primary']);
     main.push(['quick', '快速开始', () => this.guardNew(() => this.startSetup(quick.persona, quick.difficulty)), can ? 'default' : 'primary']);
     main.push(['new', '新游戏', () => this.openSetup(), 'default']);
-    // 0.6.0 实盘：带一份筹码进场打半年（设计稿第 4 节）。0.8.0 单独部署没有平台钱包，不放这个按钮
+    // 0.6.0 实盘：带一份筹码进场打几个月（设计稿第 4 节）。0.8.0 单独部署没有平台钱包，不放这个按钮
     if (!standalone()) main.push(['live', '实盘', () => this.openLive(), 'default']);
     const more: Item[] = [
       ['help', '怎么玩', () => this.openHelp(), 'default'],
@@ -345,7 +345,7 @@ export class TitleScene extends BaseScene {
     const why = (): string | null =>
       this.session.debugSession || !this.session.persist ? '调试的时候不能玩实盘' : !hasLoginHint() ? '登录以后才能玩实盘' : null;
     b.setEnabled(why() === null).onDenied(why);
-    b.tooltip(() => ({ title: '实盘', body: why() ?? '带一份筹码进场打半年，按最后的资产结回。筹码只是游戏里的分数，无任何现金价值。' }));
+    b.tooltip(() => ({ title: '实盘', body: why() ?? `带一份筹码进场打 ${BALANCE.live.months} 个月（约 ${LIVE_MINUTES} 分钟），按最后的资产结回。筹码只是游戏里的分数，无任何现金价值。` }));
   }
 
   /** 点「实盘」：实盘没打完就问继续还是收手；否则先看一眼钱包，再打开实盘的开局面板 */

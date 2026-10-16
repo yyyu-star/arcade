@@ -20,8 +20,8 @@ describe('长线界面的文字', () => {
     expect(dailyDate(new Date(Date.UTC(2026, 0, 5, 15, 59)))).toBe('2026-01-05');
     expect(dailyDate(new Date(Date.UTC(2026, 0, 5, 16, 0)))).toBe('2026-01-06');
     expect(dailyDate(new Date(Date.UTC(2026, 11, 31, 16, 30)))).toBe('2027-01-01');
-    expect(levelLabel(1, '慢牛')).toBe('第 1 级·慢牛（最简单）');
-    expect(levelLabel(3, '熊出没')).toBe('第 3 级·熊出没（难度 3/8）');
+    expect(levelLabel(1, '新手')).toBe('第 1 级·新手（最简单）');
+    expect(levelLabel(3, '高手')).toBe('第 3 级·高手（难度 3/8）');
     expect(levelLabel(8, '末日')).toBe('第 8 级·末日（最难）');
     expect(dailyTag('2026-10-10')).toBe('每日挑战 10/10');
     expect(bestText(undefined)).toBe('还没玩过');

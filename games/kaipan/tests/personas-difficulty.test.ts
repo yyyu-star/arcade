@@ -142,7 +142,7 @@ describe('人设（5 个）', () => {
 describe('难度（市场环境 1..8）', () => {
   it('8 级，id 和名字固定，每级都有说明；第 1 级就是 M0 的数值', () => {
     expect(DIFFICULTIES.map((d) => d.id)).toEqual(['slow_bull', 'choppy', 'bear_market', 'fake_news', 'regulation', 'market_crash', 'inflation', 'doom']);
-    expect(DIFFICULTIES.map((d) => d.name)).toEqual(['慢牛', '震荡', '熊出没', '消息失真', '强监管', '股灾', '通胀', '末日']);
+    expect(DIFFICULTIES.map((d) => d.name)).toEqual(['新手', '普通', '高手', '消息失真', '强监管', '股灾', '通胀', '末日']);
     const views = difficultiesView();
     expect(views.map((v) => v.all.length)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     for (const v of views) expect(v.desc.length).toBeGreaterThan(2);

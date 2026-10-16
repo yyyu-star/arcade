@@ -35,6 +35,7 @@ import {
   stocksOf,
 } from './content/index.ts';
 import type { EventCtx, HoldingCtx, MarketRules, Rules } from './hooks.ts';
+import { isLiveTier } from './liveTiers.ts';
 import {
   MOODS,
   advanceStage,
@@ -1697,9 +1698,11 @@ function checkSetup(setup: RunSetup | null): void {
   }
   if (setup.account !== undefined && !(setup.account > 0)) throw new Error('开局账户要大于 0');
   if (setup.live !== undefined) {
-    const { months, billMult } = setup.live;
+    const { months, billMult, lev, tier } = setup.live;
     if (!Number.isInteger(months) || months < 1 || months > MONTHS) throw new Error(`实盘的月数要在 1..${MONTHS}`);
     if (!(billMult > 0 && billMult <= 1)) throw new Error('实盘的账单倍数要在 (0, 1]');
+    if (lev !== undefined && !(lev >= 1 && lev <= 10)) throw new Error('实盘的涨跌倍数要在 1..10');
+    if (tier !== undefined && !isLiveTier(tier)) throw new Error(`未知档位：${String(tier)}`);
     if (setup.daily !== undefined) throw new Error('每日挑战不能是实盘');
   }
 }

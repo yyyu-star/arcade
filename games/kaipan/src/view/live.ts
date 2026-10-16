@@ -41,7 +41,7 @@ export function liveStatsOf(s: Readonly<GameState>, quit = false): (bp: number, 
   return (bp, stake) => liveSettleStats(runSummary(s), stake, bp, quit);
 }
 
-/** 局面变了：实盘局一结束（打完半年、破产）就结回。Session 每一步都调。 */
+/** 局面变了：实盘局一结束（打完、破产）就结回。Session 每一步都调。 */
 export function liveOnState(s: Readonly<GameState>): void {
   // 0.6.5 顺带算好战绩小结（平台 5.10），跟着结回一起报
   if ((s.phase === 'won' || s.phase === 'lost') && isLive(s) && live.playing && live.record?.seed === s.seed) void live.finish(s.seed, 'settle', liveMultipleBp(s), liveStatsOf(s));

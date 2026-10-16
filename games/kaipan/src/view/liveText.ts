@@ -2,7 +2,8 @@
  * 0.6.0 实盘的文字（docs/design-live.md 第 5 节）：结算、确认框、开局失败的说法都在这里，测试按词表检查（不出现"回本""再来一把"之类）。
  * 只说事实、输了说安慰话，不催、不倒计时、不推荐更高的档位。不依赖 Phaser，测试直接读。
  */
-import { liveReturn } from '../core/liveTiers.ts';
+import { BALANCE } from '../core/balance.ts';
+import { LIVE_TIERS, liveReturn, type LiveTierDef } from '../core/liveTiers.ts';
 import type { LiveRecord } from '../platform/live.ts';
 import { group } from '../core/format.ts';
 
@@ -16,7 +17,30 @@ export function chipsDiff(n: number): string {
   return n > 0 ? `+${chips(n)}` : n < 0 ? `−${chips(-n)}` : '±0';
 }
 
-export const LIVE_RULE = '打半年，按最后的资产结回：赚了最多拿回 3 份，赔光就是这一份';
+export const LIVE_RULE = `打 ${BALANCE.live.months} 个月，资产涨跌按档位放大算进筹码：最多拿回 ${BALANCE.live.cap} 份，赔光就是这一份`;
+
+/**
+ * 0.10.0 选档的三件事（仓库根 docs/balance.md 第 5 节）：多难（1–4 颗星）、一局约多久、最多赢 / 最多输。
+ * 一局多久按模拟器的每步耗时估（tools/live.ts 的 STEP_SECONDS：5 个月约 15 分钟，看得仔细的人更久）。
+ */
+export const LIVE_MINUTES = '15–20';
+/** 娱乐一局（12 个月）约多久，估法同上 */
+export const FUN_MINUTES = '30–40';
+
+/** 资产涨跌算进筹码的倍数：3 / 2.8 */
+export function levText(lev: number): string {
+  return String(Math.round(lev * 10) / 10);
+}
+
+/** 一张档位卡上的字：几颗星（1–4）、最多赢 / 最多输多少筹码、涨跌按几倍算 */
+export function tierCard(t: Readonly<LiveTierDef>): { stars: number; win: string; lose: string; lev: string } {
+  return {
+    stars: LIVE_TIERS.findIndex((x) => x.id === t.id) + 1,
+    win: chips(t.stake * (BALANCE.live.cap - 1)),
+    lose: chips(t.stake),
+    lev: levText(BALANCE.live.tiers[t.id].lev),
+  };
+}
 export const LIVE_WALLET_NOTE = '无任何现金价值';
 
 /** 回大厅：实盘局不算退出，回来接着打完再结 */
@@ -63,7 +87,7 @@ export function buyinFailText(error: string, why?: 'offline' | 'login', code?: s
   }
 }
 
-/** 结算的说法：head 是一行大字（结回多少），body 是一两句话。won 是打满了半年（不是破产、不是提前收手）。 */
+/** 结算的说法：head 是一行大字（结回多少），body 是一两句话。won 是打满了（不是破产、不是提前收手）。 */
 export function liveEndText(r: Readonly<LiveRecord>, won: boolean): { head: string; body: string } {
   const bp = r.bp ?? 0;
   if (r.step === 'settling' || r.step === 'playing') {
@@ -84,11 +108,11 @@ export function liveEndText(r: Readonly<LiveRecord>, won: boolean): { head: stri
   const capped = r.capped ?? 0;
   const head = `结回 ${chips(got)} 筹码（${chipsDiff(got - r.stake)}）`;
   const times = `×${(bp / 10_000).toFixed(2)}`;
-  const span = won ? '半年下来' : '这局';
+  const span = won ? '几个月打下来' : '这局';
   let body: string;
   if (got === 0 && capped === 0) body = `这次本金赔光了。炒股本来就有赢有输，别往心里去。钱包每天能领补给，明天还能来玩；也可以去玩娱乐模式，不花筹码。`;
-  else if (got + capped < r.stake) body = `${span}小亏，资产 ${times}。行情有起有落，下次换个档位或换个打法试试。`;
-  else body = `${span}资产 ${times}。`;
+  else if (got + capped < r.stake) body = `${span}小亏，结回是带进来那一份的 ${times}。行情有起有落，下次换个档位或换个打法试试。`;
+  else body = `${span}，结回是带进来那一份的 ${times}。`;
   if (capped > 0) body += `\n今天单机实盘赢够了：这局多出的 ${chips(capped)} 筹码没进钱包，明天再来。`;
   return { head, body };
 }

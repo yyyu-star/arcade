@@ -49,7 +49,7 @@ describe('说话的分寸', () => {
   });
 
   it('赚了：大字写结回多少和差额；小亏说安慰话；赔光提明天的补给和娱乐模式', () => {
-    expect(liveEndText(rec({ credited: 2_120, bp: 10_600 }), true)).toEqual({ head: '结回 2,120 筹码（+120）', body: '半年下来资产 ×1.06。' });
+    expect(liveEndText(rec({ credited: 2_120, bp: 10_600 }), true)).toEqual({ head: '结回 2,120 筹码（+120）', body: '几个月打下来，结回是带进来那一份的 ×1.06。' });
     const small = liveEndText(rec({ credited: 1_640, bp: 8_200 }), true);
     expect(small.head).toBe('结回 1,640 筹码（−360）');
     expect(small.body).toContain('下次换个档位或换个打法试试');

@@ -24,6 +24,7 @@
  *   node tools/sim.ts --real-table --runs 520 [--per-segment]   真实行情难度表 + 各市况通关率（各段均匀覆盖）
  *   node tools/sim.ts --live --runs 540 [--bots normal,random] [--tiers small,mid] [--persona id]
  *                                                         0.6.0 实盘：各档、各机器人的结回倍数分布（设计稿 docs/design-live.md 第 3.3 节）
+ *   node tools/sim.ts --balance --runs 2000              0.10.0 配平：小白 / 普通在实盘四档、娱乐三档的结果和一局约几分钟（仓库根 docs/balance.md 第 6 节的表）
  */
 import {
   ACHIEVEMENTS,
@@ -51,6 +52,7 @@ import {
   type Segment,
   type Stage,
 } from '../src/core/index.ts';
+import { balanceTable } from './balance.ts';
 import { liveStats } from './live.ts';
 import { ARCHETYPES, BOT_DESC, BOTS, botByName, playRun, setRealMsg, useExt, useMarket, type Bot, type BotFactory } from './bots.ts';
 import { loadSegment, segmentForSeed, segmentIndex } from './segments-disk.ts';
@@ -671,7 +673,7 @@ function liveTable(runs: number, prefix: string): void {
   const bots = (arg('bots') ?? 'normal,truster,smart,random,follower,heavy,gambler').split(',');
   const persona = (arg('persona') ?? 'newbie') as PersonaId;
   const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
-  console.log(`实盘（${BALANCE.live.months} 个月、账单 ×${BALANCE.live.billMult}）结回倍数，每格 ${runs} 局，种子 ${prefix}-*，人设 ${persona}`);
+  console.log(`实盘（${BALANCE.live.months} 个月，各档账单和涨跌倍数见 BALANCE.live.tiers）结回倍数，每格 ${runs} 局，种子 ${prefix}-*，人设 ${persona}`);
   console.log(`  ${pad('档位', 8)}${pad('机器人', 10)}${pad('平均', 16)}${pad('赚的局', 9)}${pad('10%/50%/90%', 21)}${pad('结回0', 8)}${pad('0–2份内', 9)}封顶`);
   for (const tier of tiers) {
     for (const b of bots) {
@@ -768,6 +770,10 @@ function main(): void {
   if (flag('accept')) {
     accept(runs, prefix);
     if (flag('ach')) achReport();
+    return;
+  }
+  if (flag('balance')) {
+    balanceTable(runs);
     return;
   }
   if (flag('live')) {
