@@ -46,7 +46,9 @@ function post(action: string, body: unknown, headers: Record<string, string> = {
   });
 }
 
-const REF = `solo-${'ab'.repeat(16)}`;
+const REF = `solo-mid-${'ab'.repeat(16)}`;
+/** 0.12.1 以前带入的旧 ref：没编档位 */
+const OLD_REF = `solo-${'ab'.repeat(16)}`;
 
 describe('带入', () => {
   it('认人后拼 ref 和 op，带入一份、client 模式、24 小时后到期；回话带上 ref、档位、一份、到期时间和钱包', async () => {
@@ -60,7 +62,7 @@ describe('带入', () => {
     const { method, req } = w.calls[0]!;
     expect(method).toBe('buyin');
     expect(req).toMatchObject({ userId: 'u1', game: 'guandan', tier: 'mid', amount: 10_000, mode: 'client' });
-    expect(req['ref']).toMatch(/^solo-[0-9a-f]{32}$/);
+    expect(req['ref']).toMatch(/^solo-mid-[0-9a-f]{32}$/);
     expect(req['op']).toBe(`${req['ref']}-in`);
     expect(req['op']).toMatch(WALLET_ID);
     expect(req['until']).toBeGreaterThanOrEqual(before + SOLO_HOURS * 3_600_000);
@@ -102,6 +104,24 @@ describe('结回、放弃', () => {
     expect(w.calls[0]).toEqual({ method: 'settle', req: { userId: 'u1', game: 'guandan', ref: REF, amount: 11_500, mode: 'client', op: `${REF}-out` } });
   });
 
+  it('结回按 ref 里的档位算，不信页面带的（安全审计：小档带入报豪华档结回）', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    const small = `solo-small-${'cd'.repeat(16)}`;
+    await handle(post('settle', { ref: small, tier: 'lux', points: 3, deals: 8 }), env(w));
+    // 小档一份 2,000、每分 100：2,000 + 300；按豪华档会是 230,000
+    expect(w.calls[0]!.req).toMatchObject({ ref: small, amount: 2_300 });
+    // 页面不带档位也行
+    await handle(post('settle', { ref: small, points: -2, deals: 8 }), env(w));
+    expect(w.calls[1]!.req).toMatchObject({ amount: 1_800 });
+  });
+
+  it('旧 ref（0.12.1 以前带入、没编档位，最多 24 小时）照旧按页面带的档位结回；没带档位 400', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    await handle(post('settle', { ref: OLD_REF, tier: 'mid', points: 3, deals: 8 }), env(w));
+    expect(w.calls[0]!.req).toMatchObject({ ref: OLD_REF, amount: 11_500 });
+    expect((await handle(post('settle', { ref: OLD_REF, points: 3, deals: 8 }), env(w))).status).toBe(400);
+  });
+
   it('战绩小结（平台 0.10.0）原样转给钱包，不改、不补；没带就不带', async () => {
     const w = wallet(() => ({ ok: true, wallet: W }));
     const stats = { rounds: 8, wins: 5, best: 1500, titles: ['bomb_maniac'], sum: { bombs: 3, firsts: 2 } };
@@ -118,7 +138,7 @@ describe('结回、放弃', () => {
       { ref: REF, tier: 'mid', points: 1, deals: 9 },
       { ref: REF, tier: 'mid', points: 7, deals: 2 },
       { ref: REF, tier: 'mid', points: 1 },
-      { ref: REF, points: 1, deals: 1 },
+      { ref: OLD_REF, points: 1, deals: 1 },
       { ref: `${REF}:out`, tier: 'mid', points: 1, deals: 1 },
       { ref: 'gd-0123456789abcdef', tier: 'mid', points: 1, deals: 1 },
     ]) {

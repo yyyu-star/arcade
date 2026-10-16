@@ -99,7 +99,7 @@
    - 钱包连不上时，实盘整行灰掉，娱乐照常。
 2. 页面调掼蛋 Worker 的 `POST /games/guandan/api/stake/buyin`，带上 `{ tier }`。Worker 做的事：
    - 用请求里的 cookie 经 `ARCADE` 问平台 `/api/me` 认人（或者用 `arcade-kit/auth` 的 `whoIs`，房间也是这样认人），认不出就 401。
-   - 生成 `ref = solo-<32 位十六进制>`（随机 128 位），`until = 现在 + 24 小时`（单机可以中途关掉、改天接着打，最长 24 小时）。
+   - 生成 `ref = solo-<档位>-<32 位十六进制>`（随机 128 位；0.12.2 起编进档位，结回按 ref 里的档位算、不信页面带的），`until = 现在 + 24 小时`（单机可以中途关掉、改天接着打，最长 24 小时）。
    - 经钱包的服务绑定 `WALLET`（第 7 节）调
      `buyin({ userId, game: 'guandan', ref, tier, amount: 一份, until, mode: 'client', op: ref + '-in' })`。
    - 成功就把 `{ ref, tier, share, until }` 回给页面；被拒（`{ ok: false, error }`）把 `error` 和 `wallet` 原样回给页面，页面按 2.4 说成人话。
@@ -108,7 +108,7 @@
    - 电脑难度按 1.3 的表；规则选项固定成默认，实盘不让改规则。
 4. 每副结束，结算页多一行"这一副 +2 分（+1,000）"，本场合计也一直显示着。
 5. 一场打完，或者碰到封顶，页面调 `POST /games/guandan/api/stake/settle`，带上 `{ ref, points, deals }`。Worker 做的事：
-   - 检查 `|points| ≤ 20`、`deals ≤ 8`，算出结回额 `一份 + points × 一份/20`；
+   - 检查 `|points| ≤ 20`、`deals ≤ 8`，按 ref 里的档位算出结回额 `一份 + points × 一份/20`（页面带来的档位只用于 0.12.1 以前带入的旧 ref）；
    - 调 `settle({ userId, game: 'guandan', ref, amount: 结回额, mode: 'client', op: ref + '-out' })`；
    - 成功时钱包回 `credited`（实际进钱包的）和 `capped`（超出每日上限、没进的）。`capped > 0` 时页面照常显示这一场赢了多少，
      下面另写一句"今天掼蛋的进账到顶了，多出来的 3,000 这次不进钱包"（数字就是 `capped`）。
@@ -267,7 +267,7 @@ Worker 只检查数字是不是在规则允许的范围里，不在就回 400。
 
    | 场景 | ref | op |
    |---|---|---|
-   | 单机 | `solo-<32 位十六进制>`（37 位） | `<ref>-in` / `<ref>-out` / `<ref>-refund`（最长 44 位） |
+   | 单机 | `solo-<档位>-<32 位十六进制>`（最长 41 位；0.12.1 以前是 `solo-<32 位十六进制>`） | `<ref>-in` / `<ref>-out` / `<ref>-refund`（最长 48 位） |
    | 好友房 | `gd-<16 位十六进制>`（19 位） | `<ref>-s<座位>-in` / `<ref>-s<座位>-out`（25–26 位） |
 
    规则核心里写一个检查（`/^[A-Za-z0-9_-]{8,64}$/`），vitest 把这几种都过一遍。
@@ -285,7 +285,7 @@ Worker 只检查数字是不是在规则允许的范围里，不在就回 400。
    - 页面：选模式、选档、存档 `guandan.stake`、结算页、离开确认；
    - Worker：`/games/guandan/api/stake/{buyin,settle,refund}`，`WALLET` 用假的服务绑定测（被拒、`dup`、`capped`、`no_stake` 都要走一遍）。
    - **0.4.0 做了**（`tests/stake-worker.test.ts`、`tests/stake-view.test.ts`、`npm run stake-smoke`）。实现时多了两样：
-     结回的请求带上档位（页面存着；带错了只会被钱包按"超过带入 + 20 份"拒掉，或落在每日上限里）；
+     结回按 ref 里编的档位算（0.12.2；以前信页面带的档位，安全审计指出小档带入、报豪华档结回会按豪华档算，虽然钱包"超过带入 + 20 份"兜着，还是堵上了）；
      钱包里有一份不在本机的单机实盘（别的设备开的、进场的回话没收到）时，选档页可以原样退回，不用干等 24 小时。
 3. 好友房实盘：`options` / `begin` / `seated` / `effects` / `settled` / `closing`，加上房间的 `perform`。
    - 房间测试（workerd 真 DO）覆盖：开局带入、带入被拒、接管、离开、掉线托管、收场结回、同一笔办两次；
