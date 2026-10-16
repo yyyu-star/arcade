@@ -4,9 +4,13 @@
 
 ## Install
 
+Published on npm as **`@yyyu-star/arcade-kit`**. Install it under the alias `arcade-kit` so imports stay `arcade-kit/room`, `arcade-kit/worker`, …:
+
 ```bash
-npm i arcade-kit
+npm i arcade-kit@npm:@yyyu-star/arcade-kit
 ```
+
+(`package.json` then reads `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`.)
 
 Multiplayer toolkit for small turn-based games on Cloudflare Workers: a Durable Object room base class (`arcade-kit/room`),
 create/join entry points for your game Worker (`arcade-kit/worker`), a reconnecting browser client (`arcade-kit/client`),
@@ -50,7 +54,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 
 ## 游戏怎么接
 
-1. `package.json` 加依赖：仓库外 `npm i arcade-kit`；仓库内现在仍是 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用），以后各游戏改用 npm 上的版本。
+1. `package.json` 加依赖：仓库外 `npm i arcade-kit@npm:@yyyu-star/arcade-kit`（npm 上的包名是 `@yyyu-star/arcade-kit`，装成别名 `arcade-kit`，代码里照旧 `arcade-kit/room`）；仓库内现在仍是 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用），以后各游戏改用 npm 上的版本。
 2. 写规则：实现 `RoomGame<S, A, V>`（`begin`、`parse`、`apply`、`turn`、`view`、`ai`、`timeout`、`over`，可选 `actors`、`turnMs`、`breakPoint`），都是纯函数，浏览器和房间共用。
    - **开局用 `begin(entropy, rulesVersion)`**（0.2.0）：`entropy` 是房间现生成的 256 位熵（8 个 u32），当 `arcade-kit/rng` 的密钥发牌，
      后面每一副从同一把密钥分出的流里取：`shuffle(deck, stream(key, 'deal', 第几副))`。密钥放在自己的状态里（只在服务端），`view` 绝不能带上它。
