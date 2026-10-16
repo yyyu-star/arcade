@@ -31,6 +31,9 @@ export const PERSONAS: readonly Persona[] = [
   { name: '板凳儿', style: '新手：常打错，不太防守', defense: 50, greed: 100, kanLove: 600, slip: 300, reads: 0, level: 0 },
 ];
 
+/** 最强的性格（档最高的那个）：好友房实盘的电脑一律用它（DESIGN.md 第 4 节） */
+export const STRONGEST = PERSONAS.reduce((best, p, i) => (p.level > PERSONAS[best]!.level ? i : best), 0);
+
 /**
  * 按档位挑三个（或四个）不同的性格：level 是档位的序号（娱乐和小档 0、中档 1、大档 2、豪华 3）。
  * 档位越高，越挑"老练"的；小档里常有新手。

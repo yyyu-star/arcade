@@ -327,6 +327,13 @@ export const sichuanXuezhan: Variant<XzState, XzAction, XzView, XzOpts> = {
   over: (s) => s.phase === 'over',
   breakPoint: (s) => s.phase === 'end' || s.phase === 'over',
   result,
+  finish: (s) => {
+    if (s.phase === 'over') return s;
+    const next = structuredClone(s);
+    next.phase = 'over';
+    next.events = [{ e: 'over' }];
+    return next;
+  },
   seated: (s, seat, kind) => {
     const next = structuredClone(s);
     next.events = [];

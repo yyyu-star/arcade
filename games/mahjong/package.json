@@ -1,7 +1,7 @@
 {
   "name": "mahjong",
   "private": true,
-  "version": "0.3.12",
+  "version": "0.3.13",
   "type": "module",
   "license": "MIT",
   "description": "雀馆：一套麻将引擎 + 多个玩法，第一个玩法川麻·血战到底；单机对电脑和好友房，筹码无任何现金价值",

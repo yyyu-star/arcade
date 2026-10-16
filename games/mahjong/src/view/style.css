@@ -273,6 +273,10 @@ button {
   text-align: center;
   max-width: 640px;
 }
+.room-hint.warn {
+  color: var(--gold);
+  opacity: 1;
+}
 .room-seats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

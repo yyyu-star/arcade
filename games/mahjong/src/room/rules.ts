@@ -10,6 +10,12 @@
  * - 真人离座：马上把他手上的筹码（按"最多赢 3 份"截过）连同小结结回钱包，座位交给电脑，筹码归庄家接着打；
  * - 整场打完、桌上没真人了、房间要关：所有还在桌上的人结回。
  *
+ * 实盘至少两个真人（DESIGN.md 第 4 节）：好友房是来和朋友打的，不是来赢电脑的（电脑座位的钱归庄家）。
+ * - 开局时坐着的真人不到 2 个（旧页面、脚本绕过了页面的"开打"）：整场不计输赢、不碰钱包，按娱乐打（unrated）；
+ * - 开打以后还在下注的真人（筹码是他的、或者带入在路上）不到 2 个：这一场当场结束，桌上的筹码按那一刻的数结回（cut），
+ *   不会变成一个人对电脑赢实盘；
+ * - 实盘桌的电脑一律用最强的性格（STRONGEST），不按档位挑。
+ *
  * 再来一场：整场打完（结回已经排上）房间停 REMATCH_MS 等人点。谁点了，他的页面先开好新房间，把房间号发过来（next），
  * 这一间就算打完，所有人的页面跟过去；到点没人点也算打完。kit 打完就还开房名额。实盘的新房间不替谁扣：各人自己坐下、房主开打才带入。
  * 钱包的事记在状态里（effects），房间去办、办完写回（settled）；同一笔可能办两次，钱包按操作 id 去重。
@@ -21,7 +27,7 @@ import type { RoomEffect, RoomGame } from 'arcade-kit/game';
 import { ROOM_CODE_RE, type SeatKind as KitSeat } from 'arcade-kit/protocol';
 import { stream } from 'arcade-kit/rng';
 import { AIS } from '../ai/index.ts';
-import { pickPersonas } from '../ai/personas.ts';
+import { pickPersonas, STRONGEST } from '../ai/personas.ts';
 import { DEFAULT_VARIANT, variantOf, VARIANTS, type AnyVariant } from '../core/variants/index.ts';
 import type { SettleStats } from '../core/match/index.ts';
 import { EMOTES } from '../game/emotes.ts';
@@ -37,6 +43,8 @@ export const AI_DELAY_MS = 900;
 export const ROOM_RULES = 1;
 /** 整场打完等人点"再来一场"多久（房间停着，用 kit 的 pause，不另加定时器） */
 export const REMATCH_MS = 180_000;
+/** 实盘好友房至少几个真人 */
+export const MIN_HUMANS = 2;
 
 export interface RoomOpts {
   variant: string;
@@ -91,6 +99,10 @@ export interface RoomState {
   next: { code: string; by: number } | null;
   /** 整场打完、等"再来一场"到点了没人点 */
   ended: boolean;
+  /** 实盘档开局时真人不到 MIN_HUMANS：整场不计输赢、不碰钱包（部署前的房间没有这个字段，按 false） */
+  unrated?: boolean;
+  /** 实盘开打以后下注的真人不到 MIN_HUMANS，这一场当场结束了 */
+  cut?: boolean;
   /** 牌局走了几步（出牌、发下一局）：钱包到账、座位换人这些不算。页面按它判断 g 里的事件是不是新的，免得同一串动画放两遍 */
   n: number;
 }
@@ -122,6 +134,9 @@ export interface RoomView {
   done: boolean;
   closed: boolean;
   next: { code: string; by: number } | null;
+  /** 见 RoomState.unrated、cut */
+  unrated: boolean;
+  cut: boolean;
 }
 
 export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, WalletEffect> = {
@@ -144,7 +159,10 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     const v = VARIANTS[opts.variant]!;
     const st = stakesOf(opts.stakes)!;
     const kinds = Array.from({ length: SEATS }, (_, i) => setup?.seats[i] ?? 'ai');
-    const personas = pickPersonas(stream(entropy, 'persona'), st.level, SEATS);
+    // 实盘档：电脑一律最强；真人不到两个就不计输赢（页面会把"开打"灰掉，这里防旧页面、脚本）
+    const personas = st.wallet ? new Array<number>(SEATS).fill(STRONGEST) : pickPersonas(stream(entropy, 'persona'), st.level, SEATS);
+    const unrated = st.wallet && kinds.filter((k) => k === 'human').length < MIN_HUMANS;
+    const wallet = st.wallet && !unrated;
     const g = v.begin(entropy, opts.rules, kinds.map((k) => (k === 'human' ? 'human' : 'ai')), { share: st.share, base: baseOf(st.share), personas });
     const r = stream(entropy, 'room');
     let s: RoomState = {
@@ -153,22 +171,24 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
       g,
       ref: `r${hex(r.u32())}${hex(r.u32())}`,
       kinds,
-      own: kinds.map((k) => k === 'human' && !st.wallet),
+      own: kinds.map((k) => k === 'human' && !wallet),
       share: zeros(),
       inn: zeros(),
       sealed: new Array<boolean>(SEATS).fill(true),
       refused: new Array<string | null>(SEATS).fill(null),
       fx: [],
       nextId: 0,
-      opening: st.wallet,
+      opening: wallet,
       done: false,
       closed: false,
       next: null,
       ended: false,
+      unrated,
+      cut: false,
       n: 0,
     };
     kinds.forEach((k, i) => {
-      if (k === 'human' && st.wallet) s = buy(s, i, st.share);
+      if (k === 'human' && wallet) s = buy(s, i, st.share);
     });
     return sync(s);
   },
@@ -251,8 +271,8 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     }
     if (s.own[seat] || debiting(s, seat)) return sync(s);
     const st = stakesOf(s.stakes)!;
-    // 娱乐：坐下就是他的，从一份重新算
-    if (!st.wallet) return sync({ ...s, own: set(s.own, seat, true), g: v.restake(v.seated(s.g, seat, 'human'), seat, st.share) });
+    // 娱乐（含不计输赢的实盘档）：坐下就是他的，从一份重新算
+    if (!walletOf(s)) return sync({ ...s, own: set(s.own, seat, true), g: v.restake(v.seated(s.g, seat, 'human'), seat, st.share) });
     return sync(buy(s, seat, st.share));
   },
 
@@ -271,6 +291,8 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
       done: s.done,
       closed: s.closed,
       next: s.next ?? null,
+      unrated: !!s.unrated,
+      cut: !!s.cut,
     };
   },
 
@@ -330,6 +352,12 @@ function balanceOf(r: unknown): number {
   return typeof b === 'number' && Number.isSafeInteger(b) && b > 0 ? b : 0;
 }
 
+/** 这一桌碰钱包：实盘档，而且开局时真人够数 */
+const walletOf = (s: RoomState): boolean => stakesOf(s.stakes)!.wallet && !s.unrated;
+
+/** 还在下注的真人：筹码是他的，或者带入在路上 */
+const betting = (s: RoomState): number => s.kinds.filter((k, i) => k === 'human' && (s.own[i] || debiting(s, i))).length;
+
 const debiting = (s: RoomState, seat: number): boolean => s.fx.some((e) => e.seat === seat && e.kind === 'debit');
 
 /** 开局时还在等钱包回话的第一个座位 */
@@ -337,7 +365,7 @@ const openingSeat = (s: RoomState): number | null => s.fx.find((e) => e.kind ===
 
 /** 真人坐着、筹码不是他的、没有带入在路上：再带一次（被拒了、少带也不够的） */
 const canRebuy = (s: RoomState, seat: number): boolean =>
-  !s.closed && !s.done && s.kinds[seat] === 'human' && !s.own[seat] && !debiting(s, seat) && stakesOf(s.stakes)!.wallet;
+  !s.closed && !s.done && s.kinds[seat] === 'human' && !s.own[seat] && !debiting(s, seat) && walletOf(s);
 
 /** 从这个座位的人的钱包扣：上一份封上了就开新的一份 */
 function buy(s: RoomState, seat: number, amount: number): RoomState {
@@ -363,7 +391,7 @@ function credit(s: RoomState, seat: number, amount: number, stats?: SettleStats)
 
 /** 这个座位的人带着桌上的筹码走：实盘结回（娱乐只是不再是他的） */
 function settle(s: RoomState, seat: number): RoomState {
-  if (!stakesOf(s.stakes)!.wallet || s.inn[seat] === 0) return { ...s, own: set(s.own, seat, false) };
+  if (!walletOf(s) || s.inn[seat] === 0) return { ...s, own: set(s.own, seat, false) };
   const r = vOf(s).result(s.g).seats[seat]!;
   return credit(s, seat, Math.max(0, r.chips), r.stats);
 }
@@ -378,6 +406,8 @@ function sync(s0: RoomState, moving = false): RoomState {
   if (s.opening && !s.fx.some((e) => e.kind === 'debit')) s = { ...s, opening: false };
   if (s.opening) return s;
   const v = vOf(s);
+  // 实盘下注的真人不到两个了（有人离座、带入被拒）：这一场到此为止，下面按打完结回所有人
+  if (walletOf(s) && betting(s) < MIN_HUMANS) s = { ...s, g: v.finish(s.g), cut: true, n: s.n + 1 };
   const ai = aiOf(s);
   // 这一次是接着玩家的一步（n 变了）就把事件接在后面；从钱包到账、座位换人过来的，前面的事件是上一步的，不再带
   let moved = moving;
