@@ -14,7 +14,7 @@ import { sichuanXuezhan as XZ, type XzAction, type XzState, type XzView } from '
 import type { Tune, VariantAi } from '../src/core/variants/types.ts';
 import { baseOf } from '../src/game/stakes.ts';
 
-const base = { kanLove: 400, temper: 0, swing: 0, tempo: 1_000, talk: 0 };
+const base = { kanLove: 400, temper: 0, swing: 0, tempo: 1_000, talk: 0, skill: 0 };
 export const PLAYER: Persona = { ...base, name: '普通玩家', style: '', defense: 500, greed: 300, pon: 500, slip: 40, reads: 300, level: 1 };
 export const NOVICE: Persona = { ...base, name: '新手', style: '', defense: 100, greed: 150, kanLove: 600, pon: 750, slip: 200, reads: 0, level: 0 };
 

@@ -92,6 +92,22 @@ describe('这一场的状态和局面', () => {
     expect(soft.reads).toBeLessThan(hard.reads);
   });
 
+  test('手紧（大档、豪华档）：少打错、读牌准、功力高；旧存档没有 sharp 按 0', () => {
+    const p = PERSONAS[1]!;
+    const plain = moodStyle(p, { mood: 0, soft: 0 });
+    expect(moodStyle(p, { mood: 0, soft: 0, sharp: 0 })).toEqual(plain);
+    const sharp = moodStyle(p, { mood: 0, soft: 0, sharp: VENUES['solo:lux']!.sharp! });
+    expect(sharp.slip).toBeLessThan(plain.slip);
+    expect(sharp.reads).toBeGreaterThan(plain.reads);
+    expect(sharp.skill).toBeGreaterThan(plain.skill);
+    expect(moodStyle(PERSONAS[STRONGEST]!, NEUTRAL_TUNE).skill).toBe(1_000);
+    // 只有大档、豪华档手紧，豪华更紧；新手场、好友房都没有
+    expect(VENUES['solo:lux']!.sharp!).toBeGreaterThan(VENUES['solo:big']!.sharp!);
+    for (const [id, v] of Object.entries(VENUES)) if (id !== 'solo:big' && id !== 'solo:lux') expect(v.sharp ?? 0).toBe(0);
+    expect(seatPlan(stream(KEY, 'persona'), 'solo:lux', 3).tunes.every((t) => t.sharp === VENUES['solo:lux']!.sharp)).toBe(true);
+    expect(seatPlan(stream(KEY, 'persona'), 'solo:mid', 3).tunes.every((t) => !('sharp' in t))).toBe(true);
+  });
+
   test('局面：落后了贪、领先了稳、快输光了保命；刚点炮输了一大把会上头', () => {
     const p = PERSONAS[3]!;
     const s = toTurn(start([3, 3, 3, 3], [NEUTRAL_TUNE, NEUTRAL_TUNE, NEUTRAL_TUNE, NEUTRAL_TUNE]));

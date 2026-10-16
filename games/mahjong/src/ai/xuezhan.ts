@@ -4,7 +4,8 @@
  *
  * 打牌：向听数优先，同向听比有效牌（减去看得见的张数），再加牌型倾向（清一色、对对胡、七对）；
  * 别人像听牌、自己离胡还远时，按"危险度"挑：对那家是缺门的 > 场上见了三四张的 > 他打过的 > 生张。
- * 怎么打由 style.ts 叠出来：性格、这一场的状态、场地的手软、局面（领先落后、快输光、上头）。
+ * 怎么打由 style.ts 叠出来：性格、这一场的状态、场地的手软和手紧、局面（领先落后、快输光、上头）。
+ * 功力（skill）高的再细一层：听牌按番挑、定缺按牌型、"像不像听牌"按模拟量出来的表估（DESIGN.md 第 5 节"功力"）。
  * 没有随机数：要"偶尔打错"的性格用局面和这一场的状态算出来的数决定（同一局面同一选择）。
  */
 import { shanten, ukeire } from '../core/hand/index.ts';
@@ -96,18 +97,54 @@ export function chooseQue(hand: readonly Tile[]): Suit {
 }
 
 /**
+ * 有功力的定缺：三门各当一次缺，比剩下的牌离胡多近（向听），一样近再比有效牌、再比那门张数少。只看自己的牌和看得见的张数
+ */
+function chooseQueByShape(v: XzView): Suit {
+  const c = countsOf(v.me!.hand);
+  const visible = visibleCounts(v);
+  const n = suitCounts(v.me!.hand);
+  const rank = ([0, 1, 2] as Suit[]).map((q) => {
+    const dead = suitKinds(q);
+    const allowed = SUITED_KINDS.filter((k) => suitOf(k) !== q);
+    // 13 张的时候直接算；庄家 14 张先按最好的打法打掉一张（向听不看那一张）
+    const sh = shanten(c, 0, SHAPE, dead);
+    const u = v.me!.hand.length % 3 === 1 ? ukeire(c, 0, SHAPE, allowed, visible, dead).total : 0;
+    return { q, key: sh * 100_000 - u * 100 + n[q] };
+  });
+  return rank.sort((a, b) => a.key - b.key || a.q - b.q)[0]!.q;
+}
+
+/**
  * 每家离胡多近（0–1000）：看碰杠数、打了多少张、牌墙还剩多少。胡了的人是 0。
  * 只用公开信息；粗，但足够让防守型的电脑在中后盘收着打
  */
-function threats(v: XzView, reads: number): number[] {
+function threats(v: XzView, reads: number, skill: number): number[] {
   return v.seats.map((s, i) => {
     if (i === v.me!.seat || s.won) return 0;
     let t = s.melds.length * 220 + s.river.length * 45 + (108 - 53 - v.wall) * 6;
     // 会读牌的：看得出谁在做清一色（一胡就是大牌），提早当他听牌
     if (reads > 0 && flushSuit(s) >= 0) t += (350 * reads) / 1000;
-    return Math.min(1000, t);
+    t = Math.min(1000, t);
+    return skill > 0 ? (t * (1_000 - skill) + tenpaiOdds(s, reads) * skill) / 1_000 : t;
   });
 }
+
+/**
+ * 有功力的估计：这一家听牌的千分比，按模拟里量出来的表拟合（DESIGN.md 5 节"防守"；只用公开的副露数、弃牌数、刚打的是不是缺门）。
+ * 血战里听得快：没副露打到第 6 张约 36%、第 10 张约 50%；刚打出缺门的（手里多半还有缺门，不能胡）早期低得多。
+ * 再乘他这手大概多值钱：读得出清一色的按大牌算，防守只对值得防的人收紧
+ */
+function tenpaiOdds(s: XzView['seats'][number], reads: number): number {
+  const r = s.river.length;
+  let p = (900 * r) / (r + 9) + s.melds.length * 120;
+  const last = s.river.at(-1);
+  if (s.que >= 0 && last && suitOf(kindOf(last.tile)) === s.que) p = (p * (r + 2)) / (r + 9);
+  p = Math.min(900, p);
+  return reads > 0 && flushSuit(s) >= 0 ? Math.min(1_000, (p * (1_000 + reads)) / 1_000) : (p * VALUE_PLAIN) / 1_000;
+}
+
+/** 没读出大牌的那家，防守按这么多折算（千分比）：血战里自己放弃胡牌的代价常常比点一个小胡还大 */
+const VALUE_PLAIN = 500;
 
 /**
  * 这一家像不像在做清一色：明的副露全是一门（至少两组），弃牌里这一门很少。是就返回那一门，不是 -1。
@@ -122,7 +159,7 @@ function flushSuit(s: XzView['seats'][number]): number {
 }
 
 /** 打这张牌对 opp 有多危险（0–1000）；reads 是读牌的准头（性格） */
-function danger(v: XzView, k: number, opp: number, visible: readonly number[], mine: readonly number[], reads: number): number {
+function danger(v: XzView, k: number, opp: number, visible: readonly number[], mine: readonly number[], reads: number, skill: number): number {
   const s = v.seats[opp]!;
   if (suitOf(k) === s.que) return 0;
   const seen = visible[k]! + mine[k]!;
@@ -132,6 +169,14 @@ function danger(v: XzView, k: number, opp: number, visible: readonly number[], m
   const fs = reads > 0 ? flushSuit(s) : -1;
   if (fs >= 0) d = suitOf(k) === fs ? (d * (1000 + reads)) / 1000 : (d * (1000 - (reads * 7) / 10)) / 1000;
   if (s.river.some((r) => kindOf(r.tile) === k)) d = (d * 45) / 100;
+  // 有功力的：缺门以外的两门里，他打得多的那门他手里少、安全些，几乎不打的那门他在攒
+  if (skill > 0) {
+    const kept = s.river.filter((r) => suitOf(kindOf(r.tile)) !== s.que);
+    if (kept.length >= 4) {
+      const f = (kept.filter((r) => suitOf(kindOf(r.tile)) === suitOf(k)).length * 1_000) / kept.length;
+      d = (d * (1_000_000 + skill * (500 - f))) / 1_000_000;
+    }
+  }
   const r = rankOf(k);
   if (r === 1 || r === 9) d = (d * 70) / 100;
   else if (r === 2 || r === 8) d = (d * 85) / 100;
@@ -157,6 +202,47 @@ function shapeBonus(hand: readonly Tile[], discard: Tile, p: Style, melds: numbe
   return bonus;
 }
 
+/**
+ * 胡了大概几番（14 张的计数 c 加上副露）：只数常见的清一色、根、七对、对对胡、金钩钓，不枚举拆法。
+ * 比 scoreHand 粗（带幺九、将对不算），但快得多：只拿来比"听哪张更值"
+ */
+function fanGuess(c: readonly number[], melds: XzView['seats'][number]['melds']): number {
+  const all = c.slice();
+  for (const m of melds) for (const t of m.tiles) if (t !== HIDDEN) all[kindOf(t)]!++;
+  let suits = 0;
+  let gen = 0;
+  for (let k = 0; k < 34; k++) {
+    if (all[k]! > 0) suits |= 1 << suitOf(k);
+    if (all[k] === 4) gen++;
+  }
+  let fan = (suits & (suits - 1)) === 0 ? 2 : 0;
+  // 七对（四张一样算两对；龙七对 3 番含一根，和"七对 2 + 根"一样）
+  if (melds.length === 0 && c.reduce((a, n) => a + (n >> 1), 0) === 7) return fan + 2 + gen;
+  // 对对胡：手里只有一个对子、其余都是刻子
+  if (c.every((n) => n === 0 || n === 2 || n === 3) && c.filter((n) => n === 2).length === 1) fan += 1;
+  if (melds.length === 4) fan += 1;
+  return fan + gen;
+}
+
+/**
+ * 听牌的好坏（×10，和有效牌 × 10 同一个尺度）：有功力的不只数还剩几张，还按胡这张大概几番加权（番翻倍，2 番的一张顶 4 张 0 番的）。
+ * 只看自己的牌和看得见的张数
+ */
+function waitValue(v: XzView, c: number[], kinds: readonly number[], visible: readonly number[], skill: number): number {
+  const melds = v.seats[v.me!.seat]!.melds;
+  let plain = 0;
+  let rich = 0;
+  for (const k of kinds) {
+    const left = 4 - c[k]! - visible[k]!;
+    c[k]!++;
+    const fan = Math.min(fanGuess(c, melds), v.opts.cap, 4);
+    c[k]!--;
+    plain += left;
+    rich += left << fan;
+  }
+  return (plain * 10 * (1_000 - skill) + rich * 10 * skill) / 1_000;
+}
+
 function evalDiscards(v: XzView, p: Style): Eval[] {
   const me = v.me!;
   const seat = v.seats[me.seat]!;
@@ -169,7 +255,7 @@ function evalDiscards(v: XzView, p: Style): Eval[] {
   const opts = v.prompt!.discard!;
   const seen = new Set<number>();
   const out: Eval[] = [];
-  const threat = threats(v, p.reads);
+  const threat = threats(v, p.reads, p.skill);
   const maxThreat = Math.max(...threat);
   const mine = countsOf(hand);
   for (const t of opts) {
@@ -179,14 +265,15 @@ function evalDiscards(v: XzView, p: Style): Eval[] {
     const c = countsOf(hand);
     c[k]!--;
     const sh = shanten(c, melds, SHAPE, dead);
-    const u = ukeire(c, melds, SHAPE, allowed, visible, dead).total;
-    let score = -sh * 10_000 + u * 10 + shapeBonus(hand, t, p, melds);
+    const uk = ukeire(c, melds, SHAPE, allowed, visible, dead);
+    const u = uk.total;
+    let score = -sh * 10_000 + (sh === 0 && p.skill > 0 ? waitValue(v, c, uk.kinds, visible, p.skill) : u * 10) + shapeBonus(hand, t, p, melds);
     // 防守：有人像听牌、自己还没听时把危险度算进来。越稳的越早开始收（看起来"像听"的门槛低），
     // 一向听也肯为不点炮绕路；不防守的只在离胡还远时才管
     if (maxThreat > 700 - p.defense / 3 && sh >= 1) {
       let d = 0;
       threat.forEach((th, i) => {
-        if (th > 0) d += (danger(v, k, i, visible, mine, p.reads) * th) / 1000;
+        if (th > 0) d += (danger(v, k, i, visible, mine, p.reads, p.skill) * th) / 1000;
       });
       const weight = (p.defense * (sh >= 2 ? 30 : p.defense >= 600 ? 16 : 6)) / 1000;
       score -= d * weight;
@@ -294,7 +381,7 @@ export function decideAs(v: XzView, p: Style): XzAction {
   const pr = v.prompt;
   if (!me || !pr) throw new Error('ai: nothing to do');
   if (pr.swap) return { t: 'swap', tiles: chooseSwap(me.hand) };
-  if (pr.que) return { t: 'que', suit: chooseQue(me.hand) };
+  if (pr.que) return { t: 'que', suit: p.skill >= 500 ? chooseQueByShape(v) : chooseQue(me.hand) };
   if (pr.claim) return decideClaim(v, p);
   return decideTurn(v, p);
 }

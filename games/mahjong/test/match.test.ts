@@ -23,7 +23,7 @@ const VIEW_FIELDS = new Set([
   ...['seats[].won.items', 'seats[].won.items[]', 'seats[].won.items[].id', 'seats[].won.items[].fan', 'seats[].won.items[].n'],
   ...['seats[].stats', 'seats[].stats.rounds', 'seats[].stats.wins', 'seats[].stats.zimo', 'seats[].stats.pao', 'seats[].stats.gangs', 'seats[].stats.maxFan', 'seats[].stats.best', 'seats[].stats.flags', 'seats[].stats.flags[]'],
   // 自己：座位、手牌、刚摸的、换三张换出换进的、这一场的状态
-  ...['me', 'me.seat', 'me.hand', 'me.hand[]', 'me.drawn', 'me.swapOut', 'me.swapOut[]', 'me.swapIn', 'me.swapIn[]', 'me.tune', 'me.tune.mood', 'me.tune.soft'],
+  ...['me', 'me.seat', 'me.hand', 'me.hand[]', 'me.drawn', 'me.swapOut', 'me.swapOut[]', 'me.swapIn', 'me.swapIn[]', 'me.tune', 'me.tune.mood', 'me.tune.soft', 'me.tune.sharp'],
   // 自己现在能做什么
   ...['prompt', 'prompt.swap', 'prompt.que', 'prompt.discard', 'prompt.discard[]', 'prompt.zimo', 'prompt.kan', 'prompt.kan[]', 'prompt.claim', 'prompt.claim.w', 'prompt.claim.opts', 'prompt.claim.opts[]'],
   // 正在被声明的那张牌（公开）、我答过没有

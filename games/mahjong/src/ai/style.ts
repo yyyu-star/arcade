@@ -20,6 +20,8 @@ export interface Style {
   reads: number;
   /** 场地的手软，决定会不会放过真人打的小胡 */
   soft: number;
+  /** 功力（性格 + 场地的手紧，手软再往下压），见 xuezhan.ts */
+  skill: number;
   level: number;
 }
 
@@ -41,15 +43,18 @@ function wobble(mood: number, i: number): number {
 export function moodStyle(p: Persona, t: Tune): Style {
   const m = (i: number, span = MOOD_RANGE): number => (t.mood === 0 ? 0 : (wobble(t.mood, i) * span * p.swing) / 1_000_000);
   const soft = clamp(t.soft);
+  const sharp = clamp(t.sharp ?? 0);
   return {
     defense: clamp(((p.defense + m(0)) * (1_500 - soft)) / 1_500),
     greed: clamp(p.greed + m(1)),
     // 手软的也少碰少杠（慢一点，真人更容易先胡）
     kanLove: clamp(((p.kanLove + m(2)) * (1_000 - soft / 2)) / 1_000),
     pon: clamp(((p.pon + m(3)) * (1_000 - soft / 2)) / 1_000),
-    slip: clamp(p.slip + m(4, p.slip / 2 + 20) + soft / 4, 0, 450),
-    reads: clamp(((p.reads + m(5)) * (1_000 - soft)) / 1_000),
+    // 手紧的少打错、读牌更准
+    slip: clamp(((p.slip + m(4, p.slip / 2 + 20)) * (1_000 - sharp)) / 1_000 + soft / 4, 0, 450),
+    reads: clamp(((p.reads + m(5) + sharp / 2) * (1_000 - soft)) / 1_000),
     soft,
+    skill: clamp(((p.skill + sharp) * (1_000 - soft)) / 1_000),
     level: p.level,
   };
 }
@@ -86,5 +91,5 @@ export function styleOf(v: XzView, p: Persona): Style {
 
 /** 模拟器里的"代理玩家"：直接用固定的参数，不浮动、不看局面 */
 export function fixedStyle(p: Persona): Style {
-  return { defense: p.defense, greed: p.greed, kanLove: p.kanLove, pon: p.pon, slip: p.slip, reads: p.reads, soft: 0, level: p.level };
+  return { defense: p.defense, greed: p.greed, kanLove: p.kanLove, pon: p.pon, slip: p.slip, reads: p.reads, soft: 0, skill: p.skill, level: p.level };
 }
