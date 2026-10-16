@@ -38,10 +38,6 @@ export function setVolume(v: number): void {
   if (master && ctx) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.015);
 }
 
-export function getVolume(): number {
-  return volume;
-}
-
 /** 'interrupted' 是 iOS 特有的状态，lib.dom 的类型里没有，按字符串比 */
 function needsResume(c: AudioContext): boolean {
   const s = c.state as string;

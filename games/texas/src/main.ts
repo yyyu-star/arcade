@@ -23,7 +23,7 @@ import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow } from './view/summary.ts';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
-import { createFunLayer, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type PropId, type StickerId } from 'arcade-kit/fun';
+import { createFunLayer, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type PropId } from 'arcade-kit/fun';
 import { loadFun, saveFun, suggest, TAUNTS } from './view/fun.ts';
 import { readLines, Reads, styleTag } from './view/reads.ts';
 import { RoomPanel } from './view/room.ts';

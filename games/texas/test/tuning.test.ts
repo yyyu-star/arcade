@@ -10,7 +10,7 @@ import { PERSONAS } from '../src/ai/personas.ts';
 import { strength, TOP } from '../src/ai/preflop.ts';
 import { parseCards } from '../src/core/cards.ts';
 import { categoryOf, evalCards, HIGH_CARD } from '../src/core/eval.ts';
-import { LEVEL_HOUSE, STAKES, type StakesId } from '../src/core/stakes.ts';
+import { LEVEL_HOUSE, type StakesId } from '../src/core/stakes.ts';
 import { isFail, newTable, PERSONA_COUNT, seatHouse } from '../src/core/table.ts';
 import { view, type View } from '../src/core/view.ts';
 import { runBots, runVs } from './bots.ts';
