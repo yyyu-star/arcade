@@ -43,10 +43,11 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     rules(r) {
       r.billMult *= fx('choppy', 'billMult');
     },
-    // 0.10.0 配平：真实行情下这一级就是"普通"，群里的消息也跟着乱一些，小白和会看战绩的人差得没那么远（docs/balance.md 第 3 节）
-    realRules(r) {
+    // 0.10.0 配平：真实行情下这一级就是"普通"，群里的消息也跟着乱一些，小白和会看战绩的人差得没那么远（docs/balance.md 第 3 节）。
+    // 短局只有 5 个月，会看战绩的人本来就攒不出多大优势，不再加乱（docs/design-balance.md 第 3 节）
+    realRules(r, short) {
       r.billMult *= fx('choppy', 'realBill');
-      r.msgNoise = 1 - (1 - r.msgNoise) * (1 - fx('choppy', 'realNoise'));
+      if (!short) r.msgNoise = 1 - (1 - r.msgNoise) * (1 - fx('choppy', 'realNoise'));
     },
     market(r) {
       r.failMult *= fx('choppy', 'failMult');

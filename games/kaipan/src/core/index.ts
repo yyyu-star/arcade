@@ -91,6 +91,9 @@ export {
   replay,
   surprisePlan,
   runMonths,
+  shortGoal,
+  shortGoalFor,
+  shortSetup,
   totalDays,
   validate,
 } from './engine.ts';

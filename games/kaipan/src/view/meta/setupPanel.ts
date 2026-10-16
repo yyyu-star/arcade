@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LIVE_TIERS, difficultiesView, difficultyDef, liveTierById, personaById, personasView, type LiveTier, type PersonaId, type PersonaView } from '../../core/index.ts';
+import { BALANCE, LIVE_TIERS, difficultiesView, difficultyDef, liveTierById, personaById, personasView, shortGoalFor, type LiveTier, type PersonaId, type PersonaView } from '../../core/index.ts';
 import type { WalletView } from '../../platform/live.ts';
 import { FUN_MINUTES, LIVE_MINUTES, LIVE_RULE, LIVE_WALLET_NOTE, chips, tierCard } from '../liveText.ts';
 import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, type Profile } from '../../platform/profile.ts';
@@ -14,6 +14,7 @@ import { Button } from '../ui/button.ts';
 import { Dialog } from '../ui/dialog.ts';
 import { addText, setColor } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
+import { funSetup } from './prefs.ts';
 import { tipOnButton, wanShort } from './bits.ts';
 import { phoneLayout } from '../viewport.ts';
 import { ellipsize } from '../../core/format.ts';
@@ -92,9 +93,10 @@ export interface LiveAside {
 
 interface SetupOpts {
   profile: Profile;
-  initial: { persona: PersonaId; difficulty: number };
+  initial: { persona: PersonaId; difficulty: number; short: boolean };
   anim: Animator;
-  onStart: (persona: PersonaId, difficulty: number) => void;
+  /** short：0.10.0 短局（5 个月）还是完整一年 */
+  onStart: (persona: PersonaId, difficulty: number, short: boolean) => void;
   /** 0.5：这一局用真实行情（难度改用 realDesc / realDetail 的说法） */
   real?: boolean;
   /**
@@ -114,6 +116,8 @@ interface SetupOpts {
 export class SetupPanel extends Dialog {
   private persona: PersonaId;
   private difficulty: number;
+  /** 0.10.0 娱乐：短局还是完整一年 */
+  private short: boolean;
   private readonly profile: Profile;
   private readonly rings = new Map<string, Phaser.GameObjects.Shape>();
   private readonly personaMoney: Phaser.GameObjects.Text;
@@ -147,6 +151,7 @@ export class SetupPanel extends Dialog {
     const unlockedP = (id: PersonaId): boolean => isPersonaUnlocked(this.profile, id);
     this.persona = unlockedP(opts.initial.persona) ? opts.initial.persona : 'newbie';
     this.difficulty = isDifficultyUnlocked(this.profile, opts.initial.difficulty) ? opts.initial.difficulty : 1;
+    this.short = opts.initial.short;
 
     const people = personasView();
     const x0 = (W - (g.cardW * people.length + g.cardGap * (people.length - 1))) / 2;
@@ -165,6 +170,7 @@ export class SetupPanel extends Dialog {
       levels.forEach((d, i) => this.badge(d.level, d.name, 42 + slot * i + slot / 2, opts.anim));
     }
     if (opts.onMode) this.modeSwitch(opts.onMode);
+    if (!this.live) this.lengthSwitch();
     this.diffText = addText(scene, W / 2, g.diffY, '', { size: TYPE.title, color: COLOR.ink, originX: 0.5, originY: 0.5 });
     this.diffDesc = addText(scene, W / 2, g.diffY + (g === DESKTOP ? 26 : 23), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5 });
     this.stack = scene.add.container(g === DESKTOP ? 176 : 140, H - (g === DESKTOP ? 42 : 36));
@@ -180,7 +186,7 @@ export class SetupPanel extends Dialog {
     start.setHandler(() => {
       this.close();
       if (this.live) this.live.onStart(this.persona, this.tier);
-      else opts.onStart(this.persona, this.difficulty);
+      else opts.onStart(this.persona, this.difficulty, this.short);
     });
     if (this.live) start.onDenied(() => this.liveBlock());
     // 底部一排的中线：电脑 H-43（沿用原来的坐标），手机和开局按钮对齐
@@ -192,7 +198,7 @@ export class SetupPanel extends Dialog {
     const cup = addGlyph(scene, bx - 6, mid, 'trophy', 30);
     this.best = addText(scene, bx - 28, mid, '', { size: TYPE.label, bold: true, num: true, color: COLOR.muted, originX: 1, originY: 0.5 });
     const bestHit = scene.add.rectangle(bx - 190, mid - 19, 190, 40, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(bestHit, () => ({ x: this.inner.x + bx - 190, y: this.inner.y + mid - 19, w: 190, h: 40 }), () => ({ title: '这个组合的最好成绩', body: bestText(this.profile.best[bestKey(this.persona, this.difficulty)]) }));
+    bindTooltip(bestHit, () => ({ x: this.inner.x + bx - 190, y: this.inner.y + mid - 19, w: 190, h: 40 }), () => ({ title: '这个组合的最好成绩', body: bestText(this.profile.best[bestKey(this.persona, this.difficulty, this.short)]) }));
     this.inner.add([start, back, cup, this.best, bestHit]);
     // 实盘没有"这个组合的最好成绩"
     if (this.live) for (const o of [cup, this.best, bestHit]) o.setVisible(false);
@@ -204,7 +210,7 @@ export class SetupPanel extends Dialog {
         return p ? { title: '这一局实盘', body: `${p.name} · ${t.name} ${chips(t.stake)}\n带入以后一天内打完；放着不打，一天后本金原样退回。` } : null;
       }
       const d = difficultiesView()[this.difficulty - 1];
-      return p && d ? { title: '这一局', body: `${p.name} · ${levelLabel(d.level, d.name)}` } : null;
+      return p && d ? { title: '这一局', body: `${p.name} · ${levelLabel(d.level, d.name)} · ${this.short ? `短局 ${BALANCE.short.months} 个月` : '完整一年'}` } : null;
     });
     this.named['setup:start'] = start;
     this.named['setup:back'] = back;
@@ -332,6 +338,40 @@ export class SetupPanel extends Dialog {
     this.inner.add(c);
     this.rings.set(`d:${level}`, ring);
     this.named[`setup:diff:${level}`] = { center: () => ({ x: this.inner.x + cx, y: this.inner.y + BADGES_Y }) };
+  }
+
+  /**
+   * 0.10.0 娱乐：「短局 · 5 个月 | 完整一年」两段开关，放在标题行左边（标题和「娱乐 | 实盘」之间）。默认短局；
+   * 短局最后一个月月底多交一笔首付（这局的最终目标），说法在下面难度那一行。
+   */
+  private lengthSwitch(): void {
+    const s = this.scene;
+    const desk = this.g === DESKTOP;
+    const bw = desk ? 140 : 118;
+    const bh = desk ? 38 : 34;
+    const y = desk ? 18 : 12;
+    const x0 = desk ? 170 : 120;
+    const btns: Button[] = [];
+    ([[true, `短局 · ${BALANCE.short.months} 个月`], [false, '完整一年']] as const).forEach(([short, label], i) => {
+      const b = new Button(s, x0 + i * (bw + (desk ? 8 : 6)), y, { width: bw, height: bh, label, fontSize: desk ? 15 : 13 });
+      b.setSelected(short === this.short);
+      b.setHandler(() => {
+        if (short === this.short) return;
+        sound.ui('select');
+        this.short = short;
+        btns.forEach((x, k) => x.setSelected(k === i));
+        this.refresh();
+      });
+      b.tooltip(() => ({
+        title: short ? `短局 · ${BALANCE.short.months} 个月` : '完整一年',
+        body: short
+          ? `打 ${BALANCE.short.months} 个月，约 ${LIVE_MINUTES} 分钟；每月要还的钱少，最后一个月月底多交一笔首付，交得上就赢`
+          : `打满 12 个月，约 ${FUN_MINUTES} 分钟；每个月底还上账单，撑到年底就赢`,
+      }));
+      btns.push(b);
+      this.inner.add(b);
+      this.named[`setup:length:${short ? 'short' : 'full'}`] = b;
+    });
   }
 
   /** 「娱乐 | 实盘」两段开关，放在标题行正中。 */
@@ -469,7 +509,9 @@ export class SetupPanel extends Dialog {
     if (d) {
       const t = this.levelText(d.level, d.desc, d.detail);
       const desc = t.desc === this.levelShort(this.difficulty) ? (t.detail ?? t.desc) : t.desc;
-      this.diffDesc.setText(ellipsize(`${d.who ? `适合${d.who} · ` : ''}一局约 ${FUN_MINUTES} 分钟 · ${desc}`, 56));
+      const goal = shortGoalFor(funSetup({ persona: this.persona, difficulty: this.difficulty, short: this.short }));
+      const len = this.short ? `${BALANCE.short.months} 个月约 ${LIVE_MINUTES} 分钟 · 最后交首付 ${wanShort(goal)}` : `一年约 ${FUN_MINUTES} 分钟 · ${desc}`;
+      this.diffDesc.setText(ellipsize(`${d.who ? `适合${d.who} · ` : ''}${len}`, 56));
       // 叠加的几级：一排小徽章（第 1 级时写「最普通的市场」）
       this.stack.removeAll(true);
       const s = this.scene;
@@ -483,8 +525,8 @@ export class SetupPanel extends Dialog {
       }
     }
     if (p) this.personaDesc.setText(ellipsize(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
-    const b = this.profile.best[bestKey(this.persona, this.difficulty)];
-    this.best.setText(!b || b.runs === 0 ? '—' : b.wins > 0 ? `${b.wins}/${b.runs} · ${wanShort(b.bestAccount)}` : `${b.bestMonths}/12`);
+    const b = this.profile.best[bestKey(this.persona, this.difficulty, this.short)];
+    this.best.setText(!b || b.runs === 0 ? '—' : b.wins > 0 ? `${b.wins}/${b.runs} · ${wanShort(b.bestAccount)}` : `${b.bestMonths}/${this.short ? BALANCE.short.months : 12}`);
   }
 
   /** 实盘模式：钱包余额（或开不了的原因）、规则一句、开始按钮"带 2,000 进场"。 */
@@ -539,7 +581,7 @@ export class SetupPanel extends Dialog {
   }
 
   /** 当前选择（自动化用）。 */
-  get choice(): { persona: PersonaId; difficulty: number; tier: LiveTier | null } {
-    return { persona: this.persona, difficulty: this.difficulty, tier: this.live ? this.tier : null };
+  get choice(): { persona: PersonaId; difficulty: number; short: boolean; tier: LiveTier | null } {
+    return { persona: this.persona, difficulty: this.difficulty, short: this.short, tier: this.live ? this.tier : null };
   }
 }

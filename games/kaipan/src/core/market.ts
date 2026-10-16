@@ -8,7 +8,7 @@ import type { MarketRules, Rules } from './hooks.ts';
 import { isTrack, realMarketPct, realSectorPct, realStockPct } from './real.ts';
 import { rngFor, type Rng } from './rng.ts';
 import type { RealMarket, Regime } from './segment.ts';
-import type { Dir, Feel, GameState, Mood, PersonaId, Stage, StockMove, StockState, ThemeId, ThemeState } from './types.ts';
+import type { Dir, Feel, GameState, Mood, PersonaId, RunSetup, Stage, StockMove, StockState, ThemeId, ThemeState } from './types.ts';
 
 export const STAGES: readonly Stage[] = ['cold', 'sprout', 'ferment', 'rally', 'climax', 'ebb'];
 export const FEELS: readonly Feel[] = ['cold', 'warming', 'hot', 'overheated', 'cooling'];
@@ -90,11 +90,12 @@ export function rulesFor(
   persona: PersonaId = 'newbie',
   track: boolean | Regime = false,
   monthMod?: (r: Rules) => void,
+  short = false,
 ): Rules {
   const r = baseRules();
   for (const d of difficultyMods(difficulty)) {
     d.rules?.(r);
-    if (track) d.realRules?.(r);
+    if (track) d.realRules?.(r, short);
   }
   if (track) r.billMult *= BALANCE.track.billMult * (track === true ? 1 : BALANCE.track.regimeBill[track]);
   monthMod?.(r);
@@ -107,12 +108,17 @@ export function rulesFor(
   return r;
 }
 
+/** 这一局的账单整体打几折：实盘、娱乐短局按开局设置，完整一年不打折。 */
+export function runBillMult(setup: Readonly<RunSetup> | null): number {
+  return setup?.live?.billMult ?? setup?.short?.billMult ?? 1;
+}
+
 export function rulesOf(s: Readonly<GameState>): Rules {
   const cur = s.tempo?.cur;
   const mod = cur && cur.month === s.month && isMonthThemeId(cur.id) ? monthThemeById(cur.id).rules : undefined;
-  const r = rulesFor(s.items, s.difficulty, s.persona, s.real?.track ? s.real.regime : false, mod);
-  // 0.6.0 实盘：常规月供整体打折（突发账单在 surprisePlan 里打同样的折）
-  if (s.setup?.live) r.billMult *= s.setup.live.billMult;
+  const r = rulesFor(s.items, s.difficulty, s.persona, s.real?.track ? s.real.regime : false, mod, !!s.setup?.short);
+  // 0.6.0 实盘、0.10.0 娱乐短局：常规月供整体打折（突发账单在 surprisePlan 里打同样的折）
+  r.billMult *= runBillMult(s.setup);
   return r;
 }
 

@@ -155,6 +155,9 @@ export const BILL_NAMES: readonly string[] = [
 ];
 
 /** 突发账单的名目（一局 2–3 次，金额范围在 BALANCE.surprise.amounts[id]）。 */
+/** 0.10.0 娱乐短局：最后一个月月底的首付（这局的最终目标；不在随机突发账单里） */
+export const SHORT_GOAL_BILL = { id: 'down_payment', name: '攒了几个月的首付，今天要交' } as const;
+
 export const SURPRISE_BILLS: readonly { id: string; name: string }[] = [
   { id: 'vet', name: '猫把耳机线当面条吃了，进了宠物医院' },
   { id: 'toilet_phone', name: '手机掉进马桶，还是刚分期买的' },

@@ -1,9 +1,9 @@
-import { MAX_DIFFICULTY, MIN_DIFFICULTY, isPersonaId, type GameState, type PersonaId } from '../../core/index.ts';
+import { MAX_DIFFICULTY, MIN_DIFFICULTY, isPersonaId, shortSetup, type GameState, type PersonaId, type RunSetup } from '../../core/index.ts';
 import type { Profile, RecordResult } from '../../platform/profile.ts';
 import { defaultStore, type KeyValueStore } from '../../platform/settings.ts';
 
 /**
- * 画面自己的小记录（不进档案）：上次开局选的人设和难度（「快速开始」用）、图鉴里已经看过的条目（「新」角标用）。
+ * 画面自己的小记录（不进档案）：上次开局选的人设、难度和短局还是完整一年（「快速开始」用）、图鉴里已经看过的条目（「新」角标用）。
  * 读坏了就当没有，不报错。
  */
 
@@ -13,6 +13,13 @@ const VIEWED_KEY = 'kaipan.codex.viewed.v1';
 export interface LastSetup {
   persona: PersonaId;
   difficulty: number;
+  /** 0.10.0：短局（5 个月）还是完整一年；以前没记的、第一次玩都是短局 */
+  short: boolean;
+}
+
+/** 娱乐开局设置：短局按 BALANCE.short 抄进这局（shortSetup），完整一年只有人设和难度 */
+export function funSetup(s: Readonly<LastSetup>): RunSetup {
+  return s.short ? shortSetup(s.persona, s.difficulty) : { persona: s.persona, difficulty: s.difficulty };
 }
 
 export function loadLastSetup(store: KeyValueStore | null = defaultStore()): LastSetup {
@@ -21,9 +28,9 @@ export function loadLastSetup(store: KeyValueStore | null = defaultStore()): Las
     const persona = raw && typeof raw.persona === 'string' && isPersonaId(raw.persona) ? raw.persona : 'newbie';
     const d = Number(raw?.difficulty);
     const difficulty = Number.isInteger(d) && d >= MIN_DIFFICULTY && d <= MAX_DIFFICULTY ? d : MIN_DIFFICULTY;
-    return { persona, difficulty };
+    return { persona, difficulty, short: raw?.short !== false };
   } catch {
-    return { persona: 'newbie', difficulty: MIN_DIFFICULTY };
+    return { persona: 'newbie', difficulty: MIN_DIFFICULTY, short: true };
   }
 }
 

@@ -200,6 +200,13 @@ export interface Balance {
   tempo: TempoParams;
   /** 0.6.0 实盘模式（docs/design-live.md）：开局时写进这局的设置（RunSetup.live），之后改这里不影响已经开了的局 */
   live: LiveParams;
+  /** 0.10.0 娱乐短局（docs/design-balance.md）：开局时写进这局的设置（RunSetup.short） */
+  short: {
+    months: number;
+    billMult: number;
+    /** 最后一个月月底的"首付"占开局资产的比例，按难度 1..8（缺的按最后一个） */
+    goal: readonly number[];
+  };
 }
 
 /** 0.6.0 实盘模式的默认规则。 */
@@ -631,6 +638,8 @@ export const BALANCE: Balance = {
     bigMove: 5,
     bigAcc: 3,
   },
+  // 娱乐短局：5 个月、月供打折，最后交一笔首付（开局资产的几成，按难度）；0.10.0，实测见 docs/design-balance.md
+  short: { months: 5, billMult: 0.25, goal: [0.95, 1.05, 1.12] },
   // 实盘：5 个月，各档的账单和涨跌倍数（0.10.0 配平，实测见 docs/design-live.md 第 3 节）
   live: {
     months: 5,

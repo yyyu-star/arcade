@@ -702,6 +702,16 @@ export interface RunSetup {
   noChat?: boolean;
   /** 0.6.0 实盘模式：打几个月、账单倍数（开局时从 BALANCE.live 抄进来，存档自带）；娱乐局没有 */
   live?: LiveRules;
+  /** 0.10.0 娱乐短局：打几个月、账单倍数（开局时从 BALANCE.short 抄进来，存档自带）；完整一年的局、实盘、每日挑战没有 */
+  short?: ShortRules;
+}
+
+/** 0.10.0 娱乐短局这一局的规则。 */
+export interface ShortRules {
+  months: number;
+  billMult: number;
+  /** 最后一个月月底多交一笔"首付"：开局资产的几成（短局的最终目标，按难度定） */
+  goal: number;
 }
 
 /** 0.6.0 实盘这一局的规则。 */

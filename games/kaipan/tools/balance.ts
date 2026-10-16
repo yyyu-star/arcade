@@ -3,7 +3,7 @@
  * `npm run sim -- --balance --runs 2000` 打出第 6 节那张对照表；docs/design-live.md 第 3 节、design-balance 的数都从这里来。
  * 真实行情、段按局号均匀覆盖（和 tools/live.ts 一样），仓位 / 押跌 / 抵押都开，新手人设。
  */
-import { LIVE_TIERS, type LiveTier } from '../src/core/index.ts';
+import { BALANCE, LIVE_TIERS, shortSetup, type LiveTier } from '../src/core/index.ts';
 import { botByName, playRun } from './bots.ts';
 import { liveStats, timed, useLiveMarket, type LiveStats } from './live.ts';
 
@@ -18,15 +18,15 @@ export interface EntStats {
   minutes: number;
 }
 
-/** 娱乐局：某一难度、某个机器人打 runs 局，达成最终目标的比例 */
-export function entStats(level: number, bot: string, runs: number, prefix = 'ent'): EntStats {
+/** 娱乐局：某一难度、某个机器人打 runs 局，达成最终目标（撑到最后一个月）的比例；short 是 0.10.0 的短局 */
+export function entStats(level: number, bot: string, runs: number, prefix = 'ent', short = false): EntStats {
   useLiveMarket(prefix);
   const t = timed(botByName(bot)());
   let won = 0;
   let sec = 0;
   for (let i = 0; i < runs; i++) {
     t.reset();
-    const end = playRun(`${prefix}-${i}`, t.bot, { persona: 'newbie', difficulty: level });
+    const end = playRun(`${prefix}-${i}`, t.bot, short ? shortSetup('newbie', level) : { persona: 'newbie', difficulty: level });
     if (end.phase === 'won') won++;
     sec += t.seconds();
   }
@@ -85,14 +85,17 @@ export function balanceTable(runs: number): void {
   );
   console.log(`小档普通每小时：${((sp.mean - 1) * (60 / sp.minutes)).toFixed(2)} 份（一局约 ${sp.minutes.toFixed(1)} 分钟）`);
 
-  console.log(`\n娱乐（达成最终目标 = 撑过 12 个月；每格 ${runs} 局，种子 bal-*）\n`);
-  console.log('| 难度 | 模型 | 胜率 ± 2SE | 目标 | 约几分钟 |');
-  console.log('|---|---|---|---|---|');
-  for (const lv of [1, 2, 3]) {
-    const tg = ENT_TARGET[lv] as (typeof ENT_TARGET)[number];
-    for (const m of MODELS) {
-      const r = entStats(lv, m, runs, 'bal');
-      console.log(`| ${tg.name} | ${NAME[m]} | ${pct(r.win)} ± ${pct(r.se2)} ${ok(r.win, tg[m])} | ${range(tg[m], pct)} | ${r.minutes.toFixed(1)} |`);
+  console.log(`\n娱乐（达成最终目标 = 撑到最后一个月还完账单；每格 ${runs} 局，种子 bal-*）\n`);
+  console.log('| 一局 | 难度 | 模型 | 胜率 ± 2SE | 目标 | 约几分钟 |');
+  console.log('|---|---|---|---|---|---|');
+  for (const short of [true, false]) {
+    for (const lv of [1, 2, 3]) {
+      const tg = ENT_TARGET[lv] as (typeof ENT_TARGET)[number];
+      for (const m of MODELS) {
+        const r = entStats(lv, m, runs, 'bal', short);
+        const len = short ? `短局 ${BALANCE.short.months} 个月` : '完整一年';
+        console.log(`| ${len} | ${tg.name} | ${NAME[m]} | ${pct(r.win)} ± ${pct(r.se2)} ${ok(r.win, tg[m])} | ${range(tg[m], pct)} | ${r.minutes.toFixed(1)} |`);
+      }
     }
   }
 }

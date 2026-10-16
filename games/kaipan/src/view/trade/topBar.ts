@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BALANCE, bankView, billView, calendarView, formatMoney, fx, itemView, monthThemeView, runMonths, topBar, type GameState, type ItemView, type Mood } from '../../core/index.ts';
+import { BALANCE, bankView, billView, calendarView, formatMoney, fx, itemView, monthThemeView, runMonths, shortGoal, topBar, type GameState, type ItemView, type Mood } from '../../core/index.ts';
 import { goalShort, stamp } from './tempoFx.ts';
 import type { Animator } from '../fx/anim.ts';
 import { flashBox, floatText, pop } from '../fx/effects.ts';
@@ -185,9 +185,13 @@ export class TopBarView {
           ? `\n实盘：带了一份 ${chips(lv.stake)} 筹码进场，资产涨跌按 ${levText(rules.lev ?? 1)} 倍算进筹码；按现在的资产（扣掉借款）算结回约 ${chips(lv.value)}。` +
             `打完 ${rules.months} 个月按最后的资产结，最多拿回 ${BALANCE.live.cap} 份，赔光就是 0。`
           : '';
+      // 0.10.0 娱乐短局：最终目标（最后一个月月底的首付）开局就说清楚
+      const short = this.state.setup?.short;
+      const goal = shortGoal(this.state);
+      const shortLine = short && goal > 0 ? `\n短局：打 ${short.months} 个月，${short.months} 月底除了账单还要交一笔首付 ${formatMoney(goal)}，交得上就赢。` : '';
       return {
         title: `账户 · ${t.personaName}`,
-        body: `第 ${t.difficulty} 级${t.difficultyName}（${levelHint(t.difficulty)}）${t.daily ? ' · 每日挑战' : ''}\n你所有的钱，也是这一局的分数。买进的股票平分账户，空着的格子是现金。月底要从这里还钱，还不上，游戏就结束。${liveLine}`,
+        body: `第 ${t.difficulty} 级${t.difficultyName}（${levelHint(t.difficulty)}）${t.daily ? ' · 每日挑战' : ''}\n你所有的钱，也是这一局的分数。买进的股票平分账户，空着的格子是现金。月底要从这里还钱，还不上，游戏就结束。${liveLine}${shortLine}`,
       };
     });
 
