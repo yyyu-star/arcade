@@ -23,7 +23,7 @@ export function Overview() {
   const sum = (d: WalletDayStats, k: 'in' | 'out') => games(d).reduce((t, [, g]) => t + g[k], 0);
   const dash = (n: number | undefined) => (n === undefined ? '—' : chips(n));
   return (
-    <Panel title="今日概况">
+    <Panel icon="shield" title="今日概况">
       {error && <FormError text={error} />}
       {!data && !error && <p className="note">正在读取…</p>}
       {data && (

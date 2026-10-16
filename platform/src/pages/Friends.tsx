@@ -63,7 +63,7 @@ function useAction() {
 
 export function FriendsPage() {
   const gate = useGate('friends');
-  if (gate) return <Panel title="好友">{gate}</Panel>;
+  if (gate) return <Panel icon="people" title="好友">{gate}</Panel>;
   return <Friends />;
 }
 
@@ -98,12 +98,12 @@ function Friends() {
       <AddByCode />
       {loadError && <FormError text={loadError} />}
       {!data && !loadError && (
-        <Panel title="好友">
+        <Panel icon="people" title="好友">
           <p className="note">正在读取…</p>
         </Panel>
       )}
       {data && data.incoming.length > 0 && (
-        <Panel title={`想加你的人（${data.incoming.length}）`}>
+        <Panel icon="people" title={`想加你的人（${data.incoming.length}）`}>
           <ul className="people">
             {data.incoming.map((p) => (
               <Incoming key={p.userId} p={p} onChanged={reload} />
@@ -112,7 +112,7 @@ function Friends() {
         </Panel>
       )}
       {data && (
-        <Panel title={`好友（${data.friends.length}）`}>
+        <Panel icon="people" title={`好友（${data.friends.length}）`}>
           {data.friends.length === 0 ? (
             <Empty>还没有好友。把上面的好友链接发给朋友，对方点开就能加你。</Empty>
           ) : (
@@ -125,7 +125,7 @@ function Friends() {
         </Panel>
       )}
       {data && data.outgoing.length > 0 && (
-        <Panel title={`等对方接受（${data.outgoing.length}）`}>
+        <Panel icon="people" title={`等对方接受（${data.outgoing.length}）`}>
           <ul className="people">
             {data.outgoing.map((p) => (
               <Outgoing key={p.userId} p={p} onChanged={reload} />
@@ -134,7 +134,7 @@ function Friends() {
         </Panel>
       )}
       {blocks && blocks.length > 0 && (
-        <Panel title={`屏蔽的人（${blocks.length}）`}>
+        <Panel icon="people" title={`屏蔽的人（${blocks.length}）`}>
           <p className="note">屏蔽的人发来的请求你看不到，也加不了你。对方不会知道自己被屏蔽了。</p>
           <ul className="people">
             {blocks.map((p) => (
@@ -168,7 +168,7 @@ function MyCode() {
       if (!(e instanceof DOMException && e.name === 'AbortError')) void copyLink();
     });
   return (
-    <Panel title="我的好友码">
+    <Panel icon="people" title="我的好友码">
       <p className="code-big" data-testid="my-friend-code">
         {user!.friendCode}
       </p>
@@ -223,7 +223,7 @@ function MyCode() {
 function AddByCode() {
   const [code, setCode] = useState('');
   return (
-    <Panel title="加好友">
+    <Panel icon="people" title="加好友">
       <form
         className="form"
         onSubmit={(e) => {
@@ -388,7 +388,7 @@ export function FriendCodePage() {
   const loc = useLocation();
   const code = safeDecode(loc.pathname.slice('/f/'.length));
   const gate = useGate(`f/${code}`);
-  if (gate) return <Panel title="加好友">{gate}</Panel>;
+  if (gate) return <Panel icon="people" title="加好友">{gate}</Panel>;
   return <FriendCode key={code} code={code} />;
 }
 
@@ -420,10 +420,10 @@ function FriendCode({ code }: { code: string }) {
       去好友页
     </Link>
   );
-  if (look.state === 'loading') return <Panel title="加好友"><p className="note">正在查…</p></Panel>;
+  if (look.state === 'loading') return <Panel icon="people" title="加好友"><p className="note">正在查…</p></Panel>;
   if (look.state === 'missing') {
     return (
-      <Panel title="加好友">
+      <Panel icon="people" title="加好友">
         <p>没有找到这个好友码，可能对方换了新的。问问对方要一个新链接。</p>
         <div className="row">{toFriends}</div>
       </Panel>
@@ -431,7 +431,7 @@ function FriendCode({ code }: { code: string }) {
   }
   if (look.state === 'error') {
     return (
-      <Panel title="加好友">
+      <Panel icon="people" title="加好友">
         <FormError text={look.text} />
         <div className="row">{toFriends}</div>
       </Panel>
@@ -467,7 +467,7 @@ function FriendCode({ code }: { code: string }) {
     );
   }
   return (
-    <Panel title="加好友">
+    <Panel icon="people" title="加好友">
       <div className="people__row people__row--big">
         <Avatar name={user.displayName} />
         <span className="people__name">{user.displayName}</span>

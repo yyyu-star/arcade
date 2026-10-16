@@ -102,3 +102,34 @@ export function SpeakerIcon({ on }: { on: boolean }) {
     </svg>
   );
 }
+
+/** 钥匙：登录、找回密码 */
+export function KeyIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="12" r="4.5" fill="none" stroke="currentColor" strokeWidth="2.4" />
+      <path d="M12.5 12H21M18 12v3.5M21 12v2.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 一个人：账号 */
+export function UserIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="8" r="4" fill="currentColor" />
+      <path d="M4 20.5c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** 锁：账号安全、隐私 */
+export function LockIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" fill="none" stroke="currentColor" strokeWidth="2.4" />
+      <rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5" fill="currentColor" />
+      <circle cx="12" cy="15.5" r="1.7" fill="#fff" />
+    </svg>
+  );
+}

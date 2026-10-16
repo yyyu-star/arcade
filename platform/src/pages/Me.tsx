@@ -17,13 +17,13 @@ const dateText = (ms: number) => new Date(ms).toLocaleDateString('zh-CN', { year
 
 export function MePage() {
   const { loading, user, service } = useSession();
-  if (loading) return <Panel title="我的账号"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="user" title="我的账号"><p className="note">正在读取…</p></Panel>;
   // 停服、连不上时读不到账号（不是没登录）：顶上已有提示，这里别让人去登录
-  if (service === 'off') return <Panel title="我的账号"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
-  if (service === 'unreachable') return <Panel title="我的账号"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
+  if (service === 'off') return <Panel icon="user" title="我的账号"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
+  if (service === 'unreachable') return <Panel icon="user" title="我的账号"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
   if (!user) {
     return (
-      <Panel title="我的账号">
+      <Panel icon="user" title="我的账号">
         <p>还没登录。</p>
         <Link className="btn btn--primary" href="/login">
           去登录
@@ -34,7 +34,7 @@ export function MePage() {
   return (
     <>
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
-      <Panel title="我的账号">
+      <Panel icon="user" title="我的账号">
         <dl className="facts">
           <dt>昵称</dt>
           <dd>{user.displayName}</dd>
@@ -60,7 +60,7 @@ export function MePage() {
         <LogoutButton />
       </Panel>
       <Saves />
-      <Panel title="账号安全">
+      <Panel icon="lock" title="账号安全">
         <ChangePassword />
         <NewRecoveryCode />
         <LogoutOthers />
@@ -137,7 +137,7 @@ function Saves() {
     };
   }, []);
   return (
-    <Panel title="云存档">
+    <Panel icon="user" title="云存档">
       <p className="note">游戏里登录后，档案、战绩和新手教程进度会自动存到这里，换台设备也能接着玩。打到一半的那一局不存。</p>
       {savesPaused && (
         <p className="banner banner--inline" data-testid="saves-paused">

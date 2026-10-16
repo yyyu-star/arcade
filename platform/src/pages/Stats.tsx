@@ -143,10 +143,10 @@ export function StatsPage() {
     };
   }, [user, who]);
 
-  if (loading) return <Panel title="战绩"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
   if (!user) {
     return (
-      <Panel title="战绩">
+      <Panel icon="trophy" title="战绩">
         <p>登录以后才能看战绩。</p>
         <Link className="btn btn--primary" href={`/login?next=${encodeURIComponent(loc.pathname)}`}>
           去登录
@@ -154,8 +154,8 @@ export function StatsPage() {
       </Panel>
     );
   }
-  if (error) return <Panel title="战绩"><p className="note">{errorText(error, { not_found: '没有找到这个人' })}</p></Panel>;
-  if (!data) return <Panel title="战绩"><p className="note">正在读取…</p></Panel>;
+  if (error) return <Panel icon="trophy" title="战绩"><p className="note">{errorText(error, { not_found: '没有找到这个人' })}</p></Panel>;
+  if (!data) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
 
   const mine = data.relation === 'self';
   const games = Object.entries(data.games).sort(([a], [b]) => order(a) - order(b));
@@ -163,7 +163,7 @@ export function StatsPage() {
   const titles = games.reduce((t, [, c]) => t + c.titles.length, 0);
   return (
     <>
-      <Panel title={mine ? '我的战绩' : `${data.user.displayName} 的战绩`}>
+      <Panel icon="trophy" title={mine ? '我的战绩' : `${data.user.displayName} 的战绩`}>
         {!mine && <FriendAction userId={data.user.userId} relation={data.relation} onChange={(relation) => setData({ ...data, relation })} />}
         {games.length === 0 ? (
           <Empty testId="career-empty">{mine ? '还没有战绩。带筹码玩一局单机实盘或好友房，这里就有了。' : '还没有战绩。'}</Empty>
@@ -196,7 +196,7 @@ export function StatsPage() {
         )}
       </Panel>
       {games.length > 0 && (
-        <Panel title="称号墙">
+        <Panel icon="trophy" title="称号墙">
           {games.map(([g, c]) => (
             <TitleShelf key={g} game={g} earned={c.titles} />
           ))}

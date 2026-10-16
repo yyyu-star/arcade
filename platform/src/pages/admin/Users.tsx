@@ -17,7 +17,7 @@ export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
     onDone({ title: '账号建好了', username: r.user.username, password: r.password ?? password, recoveryCode: r.recoveryCode });
   });
   return (
-    <Panel title="给朋友建个账号">
+    <Panel icon="user" title="给朋友建个账号">
       <form className="form" onSubmit={onSubmit}>
         <Field label="用户名" hint="登录用，3–20 位小写字母、数字或下划线" name="username" autoComplete="off" autoCapitalize="none" spellCheck={false} required value={username} onChange={(e) => setUsername(e.target.value)} />
         <Field label="昵称" hint="别人看到的名字，2–12 个字，对方以后可以自己改" name="displayName" autoComplete="off" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -57,7 +57,7 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
   };
 
   return (
-    <Panel title={users ? `账号（${users.length}）` : '账号'}>
+    <Panel icon="user" title={users ? `账号（${users.length}）` : '账号'}>
       {error && <FormError text={error} />}
       {notice && <p className="ok" role="status">{notice}</p>}
       {!users && !error && <p className="note">正在读取…</p>}

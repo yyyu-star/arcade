@@ -23,7 +23,7 @@ export function WalletStats() {
   }, []);
   const sum = (d: WalletDayStats, k: 'in' | 'out' | 'back' | 'capped') => Object.values(d.games).reduce((a, g) => a + g[k], 0);
   return (
-    <Panel title="筹码统计">
+    <Panel icon="coin" title="筹码统计">
       {loadError && <FormError text={loadError} />}
       {!days && !loadError && <p className="note">正在读取…</p>}
       {days && days.length === 0 && <p className="note">还没有记录：每天凌晨 3 点多记一次前一天的。</p>}

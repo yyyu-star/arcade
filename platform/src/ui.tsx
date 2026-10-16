@@ -1,7 +1,7 @@
 /** 账号页面共用的小部件：输入框、提交按钮的忙碌和出错状态、恢复码卡片。 */
 import { useId, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react';
 import { errorText, type ErrorTexts } from './api.ts';
-import { EmptyArt } from './icons.tsx';
+import { CoinIcon, EmptyArt, KeyIcon, LockIcon, PeopleIcon, ShieldIcon, TrophyIcon, UserIcon } from './icons.tsx';
 import { useLeaveGuard } from './router.tsx';
 import { useSession } from './session.tsx';
 
@@ -151,11 +151,21 @@ export function RecoveryCodeCard({ code, username, onDone, doneText }: { code: s
   );
 }
 
-/** 页面外框：标题 + 卡片。 */
-export function Panel({ title, children }: { title: string; children: ReactNode }) {
+const PANEL_ICONS = { key: KeyIcon, user: UserIcon, lock: LockIcon, people: PeopleIcon, coin: CoinIcon, trophy: TrophyIcon, shield: ShieldIcon };
+
+/** 页面外框：标题（前面一个小图标，按这一块讲的是什么选）+ 卡片。 */
+export function Panel({ title, icon, children }: { title: string; icon?: keyof typeof PANEL_ICONS; children: ReactNode }) {
+  const Icon = icon && PANEL_ICONS[icon];
   return (
     <section className="panel">
-      <h2 className="panel__title">{title}</h2>
+      <h2 className="panel__title">
+        {Icon && (
+          <span className="panel__icon">
+            <Icon />
+          </span>
+        )}
+        {title}
+      </h2>
       {children}
     </section>
   );

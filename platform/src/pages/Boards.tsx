@@ -105,10 +105,10 @@ export function BoardsPage() {
     };
   }, [user, scope]);
 
-  if (loading) return <Panel title="排行榜"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="trophy" title="排行榜"><p className="note">正在读取…</p></Panel>;
   if (!user) {
     return (
-      <Panel title="排行榜">
+      <Panel icon="trophy" title="排行榜">
         <p>登录以后才能看排行榜。</p>
         <Link className="btn btn--primary" href="/login?next=%2Fboards">
           去登录
@@ -177,7 +177,7 @@ export function BoardsPage() {
     );
   }
   return (
-    <Panel title="排行榜">
+    <Panel icon="trophy" title="排行榜">
       {toggle}
       {tabs}
       {body}

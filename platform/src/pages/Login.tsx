@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
+import { LogoMark } from '../icons.tsx';
 import { safeNext } from '../next.ts';
 import { gameOfPath, playUrl, returnFriendPath, returnGame } from '../play.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
@@ -35,7 +36,7 @@ export function LoginPage() {
 
   if (fresh) {
     return (
-      <Panel title="注册好了">
+      <Panel icon="key" title="注册好了">
         <RecoveryCodeCard code={fresh.code} username={fresh.username} doneText={game ? `回到${game.name}` : '开始玩'} onDone={done} />
       </Panel>
     );
@@ -43,7 +44,7 @@ export function LoginPage() {
   if (user) {
     // 从游戏点"登录"过来、其实已经登录着（比如在别的页签登的）：给一个直接回游戏的按钮
     return (
-      <Panel title="已经登录了">
+      <Panel icon="key" title="已经登录了">
         <p className="note">
           你现在是 <strong>{user.displayName}</strong>。
         </p>
@@ -63,7 +64,8 @@ export function LoginPage() {
 
   if (registration !== 'open') {
     return (
-      <Panel title="登录">
+      <Panel icon="key" title="登录">
+        <Welcome />
         {game && <p className="note">登录后回到「{game.name}」，存档会自动同步。</p>}
         {back && <p className="note">登录后回到刚才那一页。</p>}
         <p className="note" data-testid="invite-only">
@@ -76,7 +78,8 @@ export function LoginPage() {
 
   const tabHref = (t: string) => `/login?${new URLSearchParams({ ...(from ? { from } : {}), ...(next ? { next } : {}), ...(t === 'register' ? { tab: t } : {}) })}`;
   return (
-    <Panel title={tab === 'login' ? '登录' : '注册'}>
+    <Panel icon="key" title={tab === 'login' ? '登录' : '注册'}>
+      <Welcome />
       {game && <p className="note">登录后回到「{game.name}」，存档会自动同步。</p>}
       {back && <p className="note">登录后回到刚才那一页。</p>}
       <nav className="tabs" aria-label="登录或注册">
@@ -89,6 +92,16 @@ export function LoginPage() {
       </nav>
       {tab === 'login' ? <LoginForm onDone={done} /> : <RegisterForm onDone={setFresh} />}
     </Panel>
+  );
+}
+
+/** 登录页顶上的欢迎：一台小街机加一句话 */
+function Welcome() {
+  return (
+    <div className="welcome">
+      <LogoMark size={64} />
+      <p>欢迎来街机厅，登录后挑一个开一局。</p>
+    </div>
   );
 }
 

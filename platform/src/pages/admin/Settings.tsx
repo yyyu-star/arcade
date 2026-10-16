@@ -41,7 +41,7 @@ export function NoticePanel() {
   });
 
   return (
-    <Panel title="大厅公告">
+    <Panel icon="shield" title="大厅公告">
       {loadError && <FormError text={loadError} />}
       {!state && !loadError && <p className="note">正在读取…</p>}
       {state && (
@@ -96,7 +96,7 @@ export function RegistrationSwitch() {
   });
 
   return (
-    <Panel title="开放注册">
+    <Panel icon="shield" title="开放注册">
       {loadError && <FormError text={loadError} />}
       {!state && !loadError && <p className="note">正在读取…</p>}
       {state && (
@@ -167,7 +167,7 @@ export function WalletRulesPanel() {
     setSaved(true);
   });
   return (
-    <Panel title="钱包规则">
+    <Panel icon="coin" title="钱包规则">
       {loadError && <FormError text={loadError} />}
       {!state && !loadError && <p className="note">正在读取…</p>}
       {state && (

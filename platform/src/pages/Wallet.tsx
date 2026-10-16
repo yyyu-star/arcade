@@ -79,12 +79,12 @@ export function WalletPage() {
     if (user) void refresh();
   }, [user, refresh]);
 
-  if (loading) return <Panel title="我的筹码"><p className="note">正在读取…</p></Panel>;
-  if (service === 'off') return <Panel title="我的筹码"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
-  if (service === 'unreachable') return <Panel title="我的筹码"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
+  if (loading) return <Panel icon="coin" title="我的筹码"><p className="note">正在读取…</p></Panel>;
+  if (service === 'off') return <Panel icon="coin" title="我的筹码"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
+  if (service === 'unreachable') return <Panel icon="coin" title="我的筹码"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
   if (!user) {
     return (
-      <Panel title="我的筹码">
+      <Panel icon="coin" title="我的筹码">
         <p>还没登录。</p>
         <Link className="btn btn--primary" href="/login">
           去登录
@@ -94,7 +94,7 @@ export function WalletPage() {
   }
   if (!wallet) {
     return (
-      <Panel title="我的筹码">
+      <Panel icon="coin" title="我的筹码">
         {error ? (
           <>
             <p className="note">{errorText(error)}</p>
@@ -113,7 +113,7 @@ export function WalletPage() {
   return (
     <>
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
-      <Panel title="我的筹码">
+      <Panel icon="coin" title="我的筹码">
         <p className="wallet__balance" data-testid="wallet-balance">
           <CoinIcon size={36} />
           {num(wallet.balance)}
@@ -128,7 +128,7 @@ export function WalletPage() {
           <FormError text={relief.error} />
         </div>
       </Panel>
-      <Panel title="桌上的筹码">
+      <Panel icon="coin" title="桌上的筹码">
         {wallet.stakes.length === 0 ? (
           <p className="note">没有筹码在桌上，都在钱包里。</p>
         ) : (
@@ -140,7 +140,7 @@ export function WalletPage() {
         )}
       </Panel>
       {caps.length > 0 && (
-        <Panel title="今天的实盘">
+        <Panel icon="coin" title="今天的实盘">
           {caps.map(([g, c]) => (
             <p key={g} className="note">
               {capsText(g, c)}
@@ -149,7 +149,7 @@ export function WalletPage() {
           <p className="note">单机实盘每个游戏每天最多赢 {winUnits} 份（按今天带过的最高档算），好友房不限。</p>
         </Panel>
       )}
-      <Panel title="最近进出">
+      <Panel icon="coin" title="最近进出">
         {ledger.length > 0 ? <LedgerList entries={ledger} gameName={gameName} /> : <Empty>还没有进出。</Empty>}
         <p className="note">只留最近 30 笔；10 月 16 日以前的没记下来。</p>
       </Panel>

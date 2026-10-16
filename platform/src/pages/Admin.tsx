@@ -29,8 +29,8 @@ export function AdminPage() {
     if (!loading && service !== 'off' && service !== 'unreachable' && !allowed) navigate('/', true);
   }, [loading, service, allowed]);
 
-  if (loading) return <Panel title="管理"><p className="note">正在读取…</p></Panel>;
-  if (service === 'off' || service === 'unreachable') return <Panel title="管理"><p className="note">现在连不上账号服务，过一会儿再来。</p></Panel>;
+  if (loading) return <Panel icon="shield" title="管理"><p className="note">正在读取…</p></Panel>;
+  if (service === 'off' || service === 'unreachable') return <Panel icon="shield" title="管理"><p className="note">现在连不上账号服务，过一会儿再来。</p></Panel>;
   if (!allowed) return null;
   if (card) {
     return (
@@ -43,7 +43,7 @@ export function AdminPage() {
     <>
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
       <Overview />
-      <Panel title="筹码">
+      <Panel icon="coin" title="筹码">
         <div className="admin-entry">
           <AdminChipsButton className="btn btn--primary" />
           <span className="note">给人加减筹码（正数加、负数扣），有记录。</span>

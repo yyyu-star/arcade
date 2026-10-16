@@ -60,7 +60,8 @@ function tap(confirm = false) {
   osc.frequency.setValueAtTime(from, t);
   osc.frequency.exponentialRampToValueAtTime(to, t + len);
   gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.08, t + 0.005);
+  // 音量压得很低：只是手指下的一点反馈，不吵
+  gain.gain.exponentialRampToValueAtTime(confirm ? 0.05 : 0.035, t + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
   osc.connect(gain).connect(ctx.destination);
   osc.start(t);

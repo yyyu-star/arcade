@@ -104,6 +104,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .top__sub { margin: 0; color: var(--muted); }
 .foot { margin-top: var(--s-10); text-align: center; color: var(--muted); font-size: var(--fs-xs); }
 .foot a { color: inherit; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--s-1); }
+.foot a, .foot__sound { vertical-align: middle; }
 .foot__sound { font: inherit; display: inline-flex; align-items: center; gap: var(--s-1); min-height: var(--tap); padding: 0 var(--s-1); border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }
 
 /* 电脑和横屏：标题在左、按钮在右 */
@@ -259,9 +260,19 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 
 /* ---------- 面板、表单 ---------- */
 .panel { background: var(--surface); border: var(--bw) solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-lg); padding: var(--s-5) var(--s-6) var(--s-6); }
-.panel__title { margin: 0 0 var(--s-4); font-size: var(--fs-xl); }
-.panel__title::after { content: ''; display: block; width: 32px; height: 4px; margin-top: 6px; border-radius: var(--r-pill); background: var(--accent); }
+/* 标题前一个小图标块，下面一小道橙色（背景画的，不占 flex 的位置） */
+.panel__title {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3);
+  margin: 0 0 var(--s-4); padding-bottom: 10px; font-size: var(--fs-xl);
+  background: linear-gradient(var(--accent), var(--accent)) left bottom / 32px 4px no-repeat;
+}
+.panel__icon { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--highlight-warm); color: var(--accent-deep); box-shadow: var(--sh-sm); }
+.panel__icon .coin { width: 20px; height: 20px; }
 .panel > .note { margin-bottom: var(--s-3); }
+/* 登录页顶上的欢迎：小街机后面一圈暖光 */
+.welcome { display: flex; align-items: center; gap: var(--s-4); margin: 0 0 var(--s-4); padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: radial-gradient(circle at 40px 50%, rgb(255 210 87 / 55%), transparent 90px), var(--highlight-warm); }
+.welcome p { margin: 0; font-weight: 700; }
+.welcome .logo-mark { width: 56px; height: 56px; }
 .panel > .row { margin-top: var(--s-4); }
 @media (max-width: 560px) { .panel { padding: var(--s-4); } }
 .form { display: flex; flex-direction: column; gap: var(--s-3); }

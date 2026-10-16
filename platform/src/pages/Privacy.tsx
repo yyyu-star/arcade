@@ -13,7 +13,7 @@ import { Panel } from '../ui.tsx';
 
 export function PrivacyPage() {
   return (
-    <Panel title="我们存了你什么">
+    <Panel icon="lock" title="我们存了你什么">
       <div className="prose">
         <p className="promise">我们不放广告，也不卖你的数据；除了下面"访问统计"里交给 Cloudflare 的匿名统计，不给别人。</p>
         {/* 注册开关开着、关着这句话都要成立（管理员随时开关，这页不跟着变） */}

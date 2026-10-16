@@ -19,14 +19,14 @@ export function ForgotPage() {
 
   if (fresh) {
     return (
-      <Panel title="密码改好了">
+      <Panel icon="key" title="密码改好了">
         <p className="note">旧的恢复码不能用了，别的设备也都退出了。下面是新的恢复码：</p>
         <RecoveryCodeCard code={fresh.code} username={fresh.username} doneText="回首页" onDone={() => navigate('/')} />
       </Panel>
     );
   }
   return (
-    <Panel title="忘了密码">
+    <Panel icon="key" title="忘了密码">
       <form className="form" onSubmit={onSubmit}>
         <p className="note">输入用户名和注册时拿到的恢复码，设一个新密码。</p>
         <Field label="用户名" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(e) => setUsername(e.target.value)} />
