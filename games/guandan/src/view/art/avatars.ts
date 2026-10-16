@@ -114,7 +114,7 @@ function headBase(k: Look, clothes: string, clothesDark: string): string {
 }
 
 /** 表情附加符号（问号、汗滴、泪痕、闪光），画在头像圆框之上，不被裁切 */
-export function moodExtraSvg(id: AvatarId, mood: Mood): string {
+function moodExtraSvg(id: AvatarId, mood: Mood): string {
   return features(mood, LOOK[id])[1];
 }
 

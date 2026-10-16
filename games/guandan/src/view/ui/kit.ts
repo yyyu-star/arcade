@@ -85,23 +85,7 @@ export function text(scene: Phaser.Scene, x: number, y: number, str: string, o: 
   return scene.add.text(x, y, str, style).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
 }
 
-/** 放不下就截短，末尾加"…"（长昵称）；返回同一个文字对象 */
-export function fitText(t: Phaser.GameObjects.Text, maxW: number): Phaser.GameObjects.Text {
-  const full = t.text;
-  if (t.width <= maxW) return t;
-  const chars = [...full];
-  let lo = 0;
-  let hi = chars.length;
-  // 二分找最长能放下的前缀：长名字逐字试要量几十次
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    t.setText(chars.slice(0, mid).join('') + '…');
-    if (t.width <= maxW) lo = mid;
-    else hi = mid - 1;
-  }
-  return t.setText(chars.slice(0, lo).join('') + '…');
-}
-
+/** 按比例调亮调暗（×f），和美术那边按 [-1,1] 往黑白拉的 shade 不同 */
 function shade(c: number, f: number): number {
   const r = Math.min(255, Math.max(0, Math.round(((c >> 16) & 255) * f)));
   const g = Math.min(255, Math.max(0, Math.round(((c >> 8) & 255) * f)));
@@ -115,7 +99,7 @@ export type ButtonStyle = Exclude<keyof typeof BUTTON, 'off'>;
  * 圆角按钮底板：漆面（0.10.0）。不用渐变填充（Canvas 渲染不支持），用几层叠出来：上半亮、下沿暗、顶上一道高光，金边外加一圈细亮线。
  * 按下时面板下沉 2、投影跟着收。
  */
-export function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
+function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
   g.clear();
   const dy = pressed ? 2 : 0;
   const top = -h / 2 + dy;

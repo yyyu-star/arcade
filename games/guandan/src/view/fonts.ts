@@ -7,8 +7,8 @@
 import titleUrl from './fonts/gd-title.woff2?url';
 import serifSvg from './fonts/gd-serif-svg.woff2?inline';
 
-export const TITLE_FAMILY = 'GD Title';
-export const SVG_SERIF_FAMILY = 'GD Serif';
+const TITLE_FAMILY = 'GD Title';
+const SVG_SERIF_FAMILY = 'GD Serif';
 
 /** 加载画布标题字体。最多等 timeout 毫秒；失败或超时就用系统字体，不挡启动。 */
 export async function loadTitleFont(timeout = 2500): Promise<boolean> {

@@ -45,7 +45,7 @@ const sameBox = (a: Box, b: Box): boolean => a.x === b.x && a.y === b.y && a.w =
  * 双指放大中返回 null：这时 visualViewport 只是放大镜的取景框，大小和偏移跟着手指走，iOS 上也没法可靠地还原成没放大的尺寸，
  * 调用方沿用上次的区域，不跟着动。
  */
-export function visibleBox(): Box | null {
+function visibleBox(): Box | null {
   const vv = window.visualViewport;
   if (vv && vv.scale > 1.01) return null;
   let x = 0;
@@ -63,7 +63,7 @@ export function visibleBox(): Box | null {
 
 let probe: HTMLElement | null = null;
 /** 安全区（刘海、圆角、Home 条）；没有 env() 的浏览器全是 0 */
-export function safeInsets(): { top: number; right: number; bottom: number; left: number } {
+function safeInsets(): { top: number; right: number; bottom: number; left: number } {
   if (!probe) {
     probe = document.createElement('div');
     probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;' +

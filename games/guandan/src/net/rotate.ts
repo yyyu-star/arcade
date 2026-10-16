@@ -83,7 +83,7 @@ export function rotateView(v: PlayerView, r: Rot): PlayerView {
   };
 }
 
-export function rotateEvent(e: GameEvent, r: Rot): GameEvent {
+function rotateEvent(e: GameEvent, r: Rot): GameEvent {
   switch (e.type) {
     case 'dealStart':
       return { ...e, declarer: r.team(e.declarer), levels: r.byTeam(e.levels) };
@@ -110,7 +110,7 @@ export function rotateEvent(e: GameEvent, r: Rot): GameEvent {
   }
 }
 
-export function rotatePreview(p: NextPreview | null, r: Rot): NextPreview | null {
+function rotatePreview(p: NextPreview | null, r: Rot): NextPreview | null {
   return p ? { anti: p.anti, payers: p.payers.map(r.seat), to: r.seat(p.to) } : null;
 }
 

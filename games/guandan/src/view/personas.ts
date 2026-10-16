@@ -105,7 +105,7 @@ export function lineFor(id: SeatId, sit: Situation, rand: () => number = Math.ra
 }
 
 /** 说话频率：老张、阿强话多，小美话少；手热、上头时话更多 */
-export const TALKATIVE: Record<SeatId, number> = { me: 0, laozhang: 0.45, xiaomei: 0.22, aqiang: 0.55 };
+const TALKATIVE: Record<SeatId, number> = { me: 0, laozhang: 0.45, xiaomei: 0.22, aqiang: 0.55 };
 
 export function talkChance(id: SeatId, form: number, tilt: number): number {
   return Math.min(0.9, TALKATIVE[id] * (1 + Math.max(0, form) * 0.4 + tilt * 0.6));

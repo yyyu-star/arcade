@@ -228,7 +228,7 @@ const ERROR_CODES: Record<string, string> = {
   '必须进贡手里最大的牌（红桃级牌除外）': 'bad_tribute',
 };
 
-export function errorCode(message: string): string {
+function errorCode(message: string): string {
   if (ERROR_CODES[message]) return ERROR_CODES[message]!;
   if (message.startsWith('还贡只能还')) return 'bad_return';
   if (message.includes('版本')) return 'rules_version';

@@ -1,4 +1,4 @@
-# 掼蛋的电脑：场地、性格、状态（0.7.0）
+# 掼蛋的电脑：场地、性格、状态（0.7.0 起，单机娱乐的较强档见 0.8.2）
 
 > 代码：`src/ai/persona.ts`（强弱、性格、状态、局面）、`src/ai/venue.ts`（场地 → 电脑）、`src/ai/bot.ts`（出牌）、
 > `src/view/personas.ts`（口吻、节奏）。数字都来自 `tools/ai-sim.ts`（`npm run ai-sim -- solo|room|style|time`），命令和原始输出在第 6 节。

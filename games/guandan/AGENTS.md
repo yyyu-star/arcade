@@ -6,12 +6,12 @@
 
 ```
 src/core/   规则核心（纯函数、确定性）：cards 牌与牌序、patterns 牌型/比大小/枚举、game 状态机与玩家视角、options 规则开关、rng
-src/ai/     电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、random 随机机器人（模拟基准）
+src/ai/     电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、memory 记牌（只用公开信息）、hints "提示"按钮的轮换列表、random 随机机器人（模拟基准）
 src/net/    联机（房间和页面共用，纯函数）：rules 把规则核心接成 arcade-kit 的 RoomGame、rotate 视角旋转（我总在下）、version 页面版本与房间、实盘路径、
             stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
-src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗（focus 画布里的键盘焦点）、art 程序生成 SVG、audio 合成音效、store 存储、
+src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选模式选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
@@ -19,10 +19,10 @@ worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Dura
 public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、_headers
 tests/      vitest；architecture.test.ts 检查 core/ai 的纯度；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
-            art-preview.ts / cover.ts 美术预览与封面；baseline-ai-<版本>/ 上一版电脑的副本（sim 的 prev 基准，不进产品包）；
+            art-preview.ts / cover.ts 美术预览与封面；baseline-ai/（0.1.0）和 baseline-ai-0.1.2/ 旧版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
             quota-smoke.ts 额度提示冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
-docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计（0.4.0 单机、0.5.0 好友房）
+docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计（0.4.0 单机、0.5.0 好友房）、ai.md 电脑的场地、性格、强弱数字
 ```
 
 ## 2. 规则核心的约束
@@ -40,7 +40,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 改电脑策略后跑 `npm run sim`（`--mode random|greedy|ai|easy-vs-hard|normal-vs-prev`），确认无非法动作、无死锁、难度梯度还在。
   改强弱、性格、场地表后跑 `npm run ai-sim -- solo|room|style`，把新数字写进 `docs/ai.md` 和 `docs/stake.md` 1.3、3.1（好友房实盘每档要"两个普通真人搭档期望加两倍标准误 ≤ 0"）。
   没给性格时 `decide` 就是难度预设本身（聪明提示、代打、`sim` 都靠这个），新加的打法参数默认 0、不改原来的行为。
-  发版时把这一版的 `src/ai` 复制成 `tools/baseline-ai-<版本>/`（改 import 路径），下一版用 `normal-vs-prev` 对比。
+  `normal-vs-prev` 现在对比的是 0.1.2 的电脑：之后的版本没再复制，强弱的改动用 `ai-sim` 的胜率表对比（docs/ai.md）。
+  要留新的基准，就把这一版的 `src/ai` 复制成 `tools/baseline-ai-<版本>/`（改 import 路径），再把 `sim.ts` 的 prev 指过去。
 
 ## 3. 画面层约定
 
@@ -53,6 +54,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   工具栏收起时的最大值，按它排顶栏会被地址栏盖住。`#app` 由 JS 钉成像素大小，CSS 里的 100vh/100dvh 只是 JS 跑之前的兜底（0.1.10）。
   尺寸没变不写、双指放大中不跟（`fitAppToViewport` 返回是否改了，改了才 `scale.refresh()`）。重建画面（换世界宽度 + `scene.restart`）会丢选牌、
   动画、弹层：触屏设备只在转屏时重建，电脑上宽度差 40 以上才重建；场景的 `canRebuild()` 为假（牌桌忙、有弹层、选着牌）时推迟到空闲。
+- 闲着时降帧（0.10.1，`idle.ts`）：4 秒没有点按、按键，牌桌不忙（`isBusy`），也没有一次性补间在播，帧率上限降到 31；一秒看一次，不要改成每帧看（会拖住场景时钟）。
+  `repeat: -1` 的装饰循环按 31 帧播，别在里面做重活。要 await 的动画一律走 `anim.ts` 的 `tweenP`、`wait`，或者自己包一层 `settle`：最多等"时长 + 500 毫秒"就当播完，动画出岔子也不卡牌局。
 - 内存（0.1.10，老 iPhone 2GB 内存超了 WebKit 直接杀页面）：iOS 上 `RENDER_SCALE` 封顶 2，2 倍时关 WebGL 多重采样；背景大图按世界宽度烘焙，
   换宽度后 `dropBackdrops` 删旧的；`guandan.boot` 记"前台开着"，被杀后下次自动降档（1 倍 → Canvas 渲染），换版本重置。
   量内存用 `node tools/mem.ts`（模拟 iPhone 8 / 8 Plus 横屏，按倍数列纹理、文字画布、主画布像素和 Chromium 进程 PSS）。
@@ -178,7 +181,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | key | 内容 |
 |---|---|
 | `guandan.save` | 进行中的整局：`{ v, state: GameState, difficulty, counted, dealsCounted }`；整局结束即删除 |
-| `guandan.settings` | 音量、背景音、动画速度、难度、地方规则、牌背 |
+| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、嘲讽和道具开关 |
 | `guandan.stats` | 战绩：局数、胜局、连胜、最高连胜、副数、头游次数 |
 | `guandan.tutorial` | 新手引导是否看过 |
 | `guandan.errors` | 最近 20 条未捕获错误（兜底面板写入） |

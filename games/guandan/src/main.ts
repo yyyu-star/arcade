@@ -12,6 +12,7 @@ import { audio } from './view/audio.ts';
 import { CloudSync } from './view/cloud.ts';
 import { LOW_MEMORY, appBox, fitAppToViewport, isIOS, markForeground, markRenderLost, webglUsable } from './view/device.ts';
 import { hideErrorPanel, installErrorHandler, showErrorPanel } from './view/errors.ts';
+import { installIdleLimiter } from './view/idle.ts';
 import { goLobby, inOnlineGame, leaveText, savedGameInProgress } from './view/lobby.ts';
 import { autoJoin, forgetRoom, openOnline } from './view/online.ts';
 import { mountRotateHint, setRotateLobbyLabel } from './view/orientation.ts';
@@ -133,6 +134,7 @@ try {
   game = new Phaser.Game({ ...config, type: Phaser.CANVAS });
 }
 app.game = game;
+installIdleLimiter(game);
 
 // WebGL 上下文被系统收回（iOS 内存紧张时会这样）：Phaser 会等它恢复。2 秒还没恢复先提示重新载入；
 // 恢复了就收起提示、不降档。只有一直没恢复（20 秒，或者没恢复就重新载入）才记一次降档，下次打开换省内存的画法；

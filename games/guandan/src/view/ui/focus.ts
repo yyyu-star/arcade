@@ -29,6 +29,8 @@ interface State {
   current: Entry | null;
   keyboard: boolean;
   ring: Phaser.GameObjects.Graphics | null;
+  /** 上次画框的位置：没变就不重画（postupdate 每帧都来） */
+  drawn: string;
 }
 
 const states = new Map<Phaser.Scene, State>();
@@ -37,7 +39,7 @@ let listening = false;
 function stateOf(scene: Phaser.Scene): State {
   let s = states.get(scene);
   if (!s) {
-    const st: State = { scene, entries: [], layers: [], current: null, keyboard: false, ring: null };
+    const st: State = { scene, entries: [], layers: [], current: null, keyboard: false, ring: null, drawn: '' };
     states.set(scene, st);
     scene.input.on('pointerdown', () => hideRing(st));
     scene.events.on('postupdate', () => st.keyboard && drawRing(st));
@@ -164,17 +166,22 @@ function onKey(ev: KeyboardEvent): void {
 
 function hideRing(s: State): void {
   s.keyboard = false;
+  s.drawn = '';
   s.ring?.setVisible(false);
 }
 
 function drawRing(s: State): void {
   const e = s.current;
   if (!e || !shown(e.obj)) {
+    s.drawn = '';
     s.ring?.setVisible(false);
     return;
   }
-  if (!s.ring || !s.ring.active) s.ring = s.scene.add.graphics().setDepth(99999);
   const r = rectOf(e);
+  const key = `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
+  if (key === s.drawn && s.ring?.active) return;
+  s.drawn = key;
+  if (!s.ring || !s.ring.active) s.ring = s.scene.add.graphics().setDepth(99999);
   const pad = 5;
   const rad = Math.min(16, (r.h + pad * 2) / 2);
   s.ring.clear().setVisible(true);

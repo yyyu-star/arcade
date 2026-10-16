@@ -45,7 +45,7 @@ export interface CloudDeps {
 }
 
 /** 排在前面的更该保（切后台只补传一个） */
-export const SLOT_ORDER: SyncSlot[] = ['stats', 'tutorial'];
+const SLOT_ORDER: SyncSlot[] = ['stats', 'tutorial'];
 export const DEBOUNCE_MS = 10_000;
 export const MIN_GAP_MS = 5 * 60_000;
 export const HIDE_GAP_MS = 3 * 60_000;

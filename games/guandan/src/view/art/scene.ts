@@ -6,7 +6,7 @@ import { cardBackSvg, cardFaceSvg } from './cards.ts';
 import { C, SERIF, cloudPath, esc, f, hashStr, hex, huiwenRow, prng, shade, suitShape, svg } from './common.ts';
 
 /** 把一段完整 SVG 去掉外壳、给 id 加前缀，便于嵌进另一张图（避免 id 冲突） */
-export function inlineSvg(src: string, prefix: string, x: number, y: number, w: number, h: number, extra = ''): string {
+function inlineSvg(src: string, prefix: string, x: number, y: number, w: number, h: number, extra = ''): string {
   const m = /<svg[^>]*viewBox="([^"]+)"[^>]*>([\s\S]*)<\/svg>$/.exec(src);
   if (!m) return '';
   const body = (m[2] ?? '').replace(/id="([^"]+)"/g, `id="${prefix}$1"`).replace(/url\(#([^)]+)\)/g, `url(#${prefix}$1)`);

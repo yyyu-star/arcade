@@ -171,7 +171,7 @@ export function errorText(code: string): string {
 }
 
 /** 房间接口的地址（同域） */
-export function roomsUrl(): string {
+function roomsUrl(): string {
   return `${ROOM_PATH}/rooms`;
 }
 

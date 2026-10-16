@@ -38,7 +38,7 @@ export function levelName(lv: number): string {
 
 export type SeatId = 'me' | 'laozhang' | 'xiaomei' | 'aqiang';
 /** 座位 → 人物：0 我（下）、1 下家老张（右）、2 对家小美（上）、3 上家阿强（左）。 */
-export const SEAT_PERSON: SeatId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
+const SEAT_PERSON: SeatId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
 
 /**
  * 联机时座位上坐的是谁（画面座位号，我 = 0）：真人用昵称、头像统一用"你"那张；电脑是老张、小美、阿强，

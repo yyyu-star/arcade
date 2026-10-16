@@ -5,6 +5,7 @@
  * 宽高比按实际可见区域算（device.ts 的 appBox，不用 screen 和 100vh）。
  * 画布按 RENDER_SCALE 倍的物理像素绘制，相机同倍数 zoom，文字和贴图按实际像素栅格化，FIT 缩放时只缩小不放大，字就不糊。
  */
+import { hex } from './art/common.ts';
 import { appBox, pickRenderScale } from './device.ts';
 
 export const COLOR = {
@@ -36,13 +37,12 @@ export const FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto
 export const FONT_TITLE = '"GD Title", "Noto Serif SC", "Songti SC", "STSong", "SimSun", "Noto Sans CJK SC", "Microsoft YaHei", serif';
 export const FONT_NUM = '"Arial Black", "Helvetica Neue", Arial, "DejaVu Sans", "Noto Sans CJK SC", sans-serif';
 
-export function css(c: number): string {
-  return `#${c.toString(16).padStart(6, '0')}`;
-}
+/** 0xRRGGBB → CSS 颜色串（和美术那边同一个函数） */
+export const css = hex;
 
 export const GAME_HEIGHT = 720;
 export const MIN_WIDTH = 1280;
-export const MAX_WIDTH = 1720;
+const MAX_WIDTH = 1720;
 
 /** 按窗口宽高比算世界宽度：16:9 及更窄时 1280（上下留边），更宽时加宽到最多 1720。 */
 export function worldWidthFor(w: number, h: number): number {

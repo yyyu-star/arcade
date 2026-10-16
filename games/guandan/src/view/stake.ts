@@ -39,7 +39,7 @@ export function loadStake(): StakeSave | null {
   return s;
 }
 
-export function writeStake(s: StakeSave): void {
+function writeStake(s: StakeSave): void {
   rawStore.write(STAKE_KEY, s);
 }
 
@@ -183,7 +183,7 @@ export async function refundStray(ref: string, deps: { fetcher?: typeof fetch; s
 }
 
 /** 实盘局的种子：浏览器里用 crypto 生成（2.1），不用 Math.random */
-export function stakeSeed(): string {
+function stakeSeed(): string {
   const b = crypto.getRandomValues(new Uint8Array(8));
   return `s${[...b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }

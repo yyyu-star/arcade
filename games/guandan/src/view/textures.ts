@@ -28,14 +28,14 @@ import { RENDER_SCALE } from './theme.ts';
 export const CARD_W = 100;
 export const CARD_H = 140;
 
-export const AVATARS: AvatarId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
-export const MOODS: Mood[] = ['normal', 'happy', 'sad', 'think', 'smug'];
-export const ICONS: IconName[] = [
+const AVATARS: AvatarId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
+const MOODS: Mood[] = ['normal', 'happy', 'sad', 'think', 'smug'];
+const ICONS: IconName[] = [
   'play', 'pass', 'hint', 'sort', 'undo', 'settings', 'rules', 'sound', 'mute', 'back',
   'stats', 'home', 'close', 'check', 'crown', 'bomb', 'cards', 'robot', 'speed', 'restart',
   'cloudOff', 'cloudCheck', 'cloudSync', 'cloudUp', 'cloudMerge', 'chat', 'invite',
 ];
-export const STAMPS: Record<string, string> = {
+const STAMPS: Record<string, string> = {
   头游: '#c8202a',
   二游: '#b0702a',
   三游: '#5a6a7a',

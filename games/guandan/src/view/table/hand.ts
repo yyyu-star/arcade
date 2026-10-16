@@ -7,7 +7,7 @@
 import Phaser from 'phaser';
 import { sortHand, type Card } from '../../core/index.ts';
 import { audio } from '../audio.ts';
-import { dur } from '../anim.ts';
+import { dur, settle } from '../anim.ts';
 import { worldH, worldW } from '../ui/kit.ts';
 import { CardView, HAND_H, HAND_W } from './card.ts';
 
@@ -238,7 +238,7 @@ export class HandView {
       return;
     }
     const step = dur(26);
-    await new Promise<void>((resolve) => {
+    await settle(new Promise<void>((resolve) => {
       list.forEach((c, i) => {
         const v = this.views.get(c)!;
         const s = this.slots.get(c)!;
@@ -269,7 +269,7 @@ export class HandView {
         });
       });
       if (list.length === 0) resolve();
-    });
+    }), list.length * step + dur(260) + 2 * dur(90));
   }
 
   get count(): number {
