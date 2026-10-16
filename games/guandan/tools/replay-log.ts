@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { cardName, dispatch, isBomb, viewFor, type Card, type GameState, type PlayRecord } from '../src/core/index.ts';
 import { decide, hintList } from '../src/ai/index.ts';
+import { soloSeeds } from '../src/view/session.ts';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -73,13 +74,14 @@ for (const d of ends) {
     }
     let line = '';
     if (e.seat === 0) {
-      const list = hintList(v, `${s.seed}|hint`);
+      // 和游戏里一样，电脑、提示拿的是按用途派生的数，不是牌局种子（session.ts 的 soloSeeds）
+      const list = hintList(v, soloSeeds(s.seed).hint);
       const first = list[0];
       const bombHint = first != null && isBomb(first);
       const shown = first === undefined ? '要不起' : first === null ? '建议不要' : nm(first.cards);
       if (all || at === n || bombHint) line = `提示首条 ${shown}${bombHint ? ' 【提示炸弹】' : ''}｜实际 ${rec(e)}`;
     } else {
-      const act = decide(v, { seed: `${s.seed}|bot`, difficulty: 'normal' });
+      const act = decide(v, { seed: soloSeeds(s.seed).ai, difficulty: 'normal' });
       const now = act?.type === 'play' ? nm(act.cards) : '不要';
       const changed = !same(now, rec(e));
       if (all || at === n || changed) line = `现在 ${now}｜当时 ${rec(e)}${changed ? ' *' : ''}`;

@@ -2,11 +2,12 @@
  * 调试跳转：用电脑把局面推进到指定阶段（全部走核心的 dispatch，打 A 的跳转除外——见下）。
  */
 import { decide } from '../ai/index.ts';
-import { createGame, dispatch, seatsToAct, viewFor, type GameEvent, type GameState, type Options } from '../core/index.ts';
+import { createGame, dispatch, hashSeed, seatsToAct, viewFor, type GameEvent, type GameState, type Options } from '../core/index.ts';
 
 function botStep(s: GameState): GameState {
   const seat = seatsToAct(s)[0]!;
-  const a = decide(viewFor(s, seat), { seed: `${s.seed}|jump`, difficulty: 'normal' });
+  // 和单机电脑一样不直接给牌局种子（session.ts 的 soloSeeds）
+  const a = decide(viewFor(s, seat), { seed: hashSeed(s.seed, 'jump'), difficulty: 'normal' });
   if (!a) throw new Error('jump: 电脑没有动作');
   const r = dispatch(s, a);
   if (r.error) throw new Error(`jump: ${r.error}`);

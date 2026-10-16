@@ -42,6 +42,17 @@ describe('架构约束：core、ai、stake 保持纯逻辑与确定性', () => {
     }
   });
 
+  // 电脑不看牌（0.8.1 AI 公平审计）：电脑的输入只有 viewFor 给的视图（PlayerView），碰不到完整状态；
+  // 发牌、首出的随机流（用途 'deal'、'firstLead'）只在 core 里，电脑里出现这两个名字就可能在重算别人的牌。行为上的检查在 tests/ai.test.ts 的反事实测试
+  it('ai 不引用完整牌局状态 GameState，也不碰发牌、首出的随机流', () => {
+    for (const [path, raw] of Object.entries(sources)) {
+      if (!path.includes('/ai/')) continue;
+      const code = stripComments(raw);
+      expect(/\bGameState\b/.test(code), `${path} 引用了 GameState`).toBe(false);
+      expect(/['"`](deal|firstLead)['"`]/.test(code), `${path} 出现了发牌或首出的随机流名`).toBe(false);
+    }
+  });
+
   it('ai、stake 只通过 core 的公开入口取规则', () => {
     for (const [path, raw] of Object.entries(sources)) {
       if (!path.includes('/ai/') && !path.includes('/stake/')) continue;

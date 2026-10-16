@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { BIG_JOKER, SMALL_JOKER, hint, isWild, makeCard, rankOf, viewFor, type Action, type Card, type GameState, type Play } from '../src/core/index.ts';
+import {
+  BIG_JOKER,
+  SMALL_JOKER,
+  createGame,
+  dispatch,
+  hashSeed,
+  hint,
+  isWild,
+  makeCard,
+  partnerOf,
+  playsBeating,
+  rankOf,
+  rngFor,
+  seatsToAct,
+  sortHand,
+  viewFor,
+  type Action,
+  type Card,
+  type GameState,
+  type Play,
+} from '../src/core/index.ts';
 import { decide, hintList, planHand, suggest } from '../src/ai/index.ts';
+import type { Venue } from '../src/ai/venue.ts';
+import { guandanRoom, testKey } from '../src/net/rules.ts';
+import { Session } from '../src/view/session.ts';
 import { beatableByOthers, bombPossible, buildMemory, isTop } from '../src/ai/memory.ts';
 import { C, act, pass, play, playState } from './helpers.ts';
 
@@ -417,5 +440,157 @@ describe('试玩回归：提示和电脑不犯低级错', () => {
     );
     s = play(s, 2, '♦2 ♣2 ♣3 ♣3 ♦4 ♠4');
     for (const d of ['normal', 'hard'] as const) expect(decide(viewFor(s, 3), { seed: 't', difficulty: d })).toEqual({ type: 'pass', seat: 3 });
+  });
+});
+
+/**
+ * 电脑不看别人的牌（反事实，0.8.1 AI 公平审计）：在电脑要做决定的每一刻，保持这个座位看得到的一切不变
+ * （自己的手牌、公开的出牌、每人几张、贡牌、自己参与的还贡牌），把另外三家没亮出来的牌重新分一遍（每人张数不变），再让电脑决定。
+ * 只看自己能看到的电脑，两边的决定必须一模一样；会偷看的电脑（阳性对照）同样的方法能抓出来。
+ * 走的是游戏里真正调用的函数：单机 Session.botAction（娱乐三档、实盘一档），好友房 guandanRoom.ai（房间里的电脑和替掉线真人代打）。
+ * 种子固定，每次跑的结果一样；想跑更多局把 DEALS 调大。为什么这样就能说明"不透"，见 README"电脑不看牌"一节。
+ */
+describe('电脑不看别人的牌（反事实）', () => {
+  /** 这个座位确切知道在谁手里的牌（自己的手牌之外）：交出后公开的贡牌、自己参与的还贡牌 */
+  function known(s: GameState, seat: number): Map<Card, number> {
+    const m = new Map<Card, number>();
+    for (const e of s.tribute?.entries ?? []) {
+      if (e.card !== null && e.to >= 0 && s.hands[e.to]!.includes(e.card)) m.set(e.card, e.to);
+      if (e.back !== null && (seat === e.from || seat === e.to) && s.hands[e.from]!.includes(e.back)) m.set(e.back, e.from);
+    }
+    return m;
+  }
+
+  /** 平行世界：另外三家没亮出来的牌洗一洗重新分；返回新状态和"真的换了牌没有" */
+  function parallel(s: GameState, seat: number, salt: string): { alt: GameState; changed: boolean } {
+    const others = [0, 1, 2, 3].filter((x) => x !== seat);
+    const k = known(s, seat);
+    const pool: Card[] = [];
+    const keep: Card[][] = [[], [], [], []];
+    for (const o of others) for (const c of s.hands[o]!) (k.get(c) === o ? keep[o]! : pool).push(c);
+    rngFor('parallel', salt).shuffle(pool);
+    const hands = s.hands.map((h) => [...h]);
+    let at = 0;
+    for (const o of others) {
+      const need = s.hands[o]!.length - keep[o]!.length;
+      hands[o] = sortHand([...keep[o]!, ...pool.slice(at, at + need)], s.level);
+      at += need;
+    }
+    return { alt: { ...s, hands }, changed: others.some((o) => hands[o]!.join() !== s.hands[o]!.join()) };
+  }
+
+  interface Tally {
+    points: number;
+    changed: number;
+    mismatch: number;
+  }
+  /** 一个决策点：真实世界和平行世界各决定一次，比较 */
+  function compare(t: Tally, s: GameState, seat: number, salt: string, decideIn: (st: GameState) => unknown): void {
+    const { alt, changed } = parallel(s, seat, salt);
+    // 平行世界对这个座位来说和原局一模一样（不然比较就没意义）
+    expect(JSON.stringify(viewFor(alt, seat))).toBe(JSON.stringify(viewFor(s, seat)));
+    t.points++;
+    if (changed) t.changed++;
+    if (JSON.stringify(decideIn(alt)) !== JSON.stringify(decideIn(s))) t.mismatch++;
+  }
+
+  /** 单机实盘的电脑：和 StakeSession 一样只换场地 */
+  class StakeLike extends Session {
+    constructor(st: GameState) {
+      super(st, [], 'normal');
+      this.persist = false;
+      this.scored = false;
+    }
+    protected override venue(): Venue {
+      return { kind: 'soloStake', tier: 'lux' };
+    }
+  }
+  const solo = (level: 'easy' | 'normal' | 'hard') => (st: GameState) => {
+    const x = new Session(st, [], level);
+    x.persist = false;
+    x.scored = false;
+    return x;
+  };
+
+  /** 单机一局按真实的 Session 打 DEALS 副，每个决策点都比较一次（座位 0 是代打的我） */
+  function walkSolo(make: (st: GameState) => Session, seed: string, t: Tally, extra?: (s: GameState, seat: number) => void): void {
+    let { state } = createGame(seed);
+    const ses = make(state);
+    while (state.phase !== 'gameOver' && state.dealNo <= DEALS) {
+      if (state.phase === 'dealEnd') {
+        state = dispatch(state, { type: 'nextDeal' }).state;
+        continue;
+      }
+      const seat = seatsToAct(state)[0]!;
+      compare(t, state, seat, `${seed}|${state.step}|${seat}`, (st) => {
+        ses.state = st;
+        return ses.botAction(seat);
+      });
+      extra?.(state, seat);
+      ses.state = state;
+      const r = dispatch(state, ses.botAction(seat)!);
+      if (r.error) throw new Error(r.error);
+      state = r.state;
+    }
+  }
+
+  const DEALS = 2;
+  const fresh = (): Tally => ({ points: 0, changed: 0, mismatch: 0 });
+
+  it('单机（娱乐三档、实盘豪华档）：几百个决策点，换掉别人的牌，电脑的决定一次都不变', () => {
+    const t = fresh();
+    walkSolo(solo('easy'), 'cf-easy', t);
+    walkSolo(solo('hard'), 'cf-hard', t);
+    walkSolo((st) => new StakeLike(st), 'cf-lux', t);
+    expect(t.points).toBeGreaterThan(300);
+    // 平行世界真的换了牌（只剩几张、全被看见时才会一样）
+    expect(t.changed / t.points).toBeGreaterThan(0.9);
+    expect(t.mismatch).toBe(0);
+  });
+
+  it('好友房（guandanRoom.ai：房间里的电脑带性格，替掉线真人代打的不带）：同样一次都不变', () => {
+    const t = fresh();
+    for (const [name, opts, seats] of [
+      ['cf-room', undefined, ['human', 'ai', 'ai', 'ai']],
+      ['cf-room-stake', { stake: 'small' }, ['human', 'ai', 'human', 'ai']],
+    ] as const) {
+      let s = guandanRoom.begin(testKey(name), guandanRoom.rulesVersion, { opts: guandanRoom.options!(opts)!, seats: [...seats] });
+      while (!guandanRoom.over(s) && s.g.dealNo <= DEALS) {
+        const seat = guandanRoom.actors(s).seats[0];
+        if (seat === undefined) break;
+        if (s.g.phase !== 'dealEnd') compare(t, s.g, seat, `${name}|${s.g.step}|${seat}`, (st) => guandanRoom.ai({ ...s, g: st }, seat));
+        const r = guandanRoom.apply(s, seat, guandanRoom.ai(s, seat));
+        if ('error' in r) throw new Error(r.error);
+        s = r;
+      }
+    }
+    expect(t.points).toBeGreaterThan(300);
+    expect(t.changed / t.points).toBeGreaterThan(0.9);
+    expect(t.mismatch).toBe(0);
+  });
+
+  it('阳性对照：会偷看的电脑，同样的方法抓得出来', () => {
+    // 偷看搭档：跟对手的牌时，搭档（还没不要）手里压得过就让给他
+    const peekPartner = (s: GameState, seat: number): Action | null => {
+      const v = viewFor(s, seat);
+      const a = decide(v, { seed: 'peek', difficulty: 'hard' });
+      const last = v.trick.last;
+      const p = partnerOf(seat);
+      if (!a || a.type !== 'play' || !last || last.seat % 2 === seat % 2 || s.finished.includes(p) || v.trick.passed[p]) return a;
+      return playsBeating(s.hands[p]!, last.play, s.level, s.options).length > 0 ? { type: 'pass', seat } : a;
+    };
+    // 随机流混进了全桌的牌（比如拿整个状态做种子）：用会犯错、换着出的新手阿强，随机数才看得出来
+    const peekRng = (s: GameState, seat: number): Action | null =>
+      decide(viewFor(s, seat), { seed: hashSeed(s.hands.flat().join(',')), difficulty: 'novice', persona: 'aqiang' });
+    const caught = { partner: fresh(), rng: fresh() };
+    walkSolo(solo('normal'), 'cf-control', fresh(), (s, seat) => {
+      if (s.phase !== 'play') return;
+      compare(caught.partner, s, seat, `ctl|${s.step}|${seat}`, (st) => peekPartner(st, seat));
+      compare(caught.rng, s, seat, `ctl|${s.step}|${seat}`, (st) => peekRng(st, seat));
+    });
+    // 偷看搭档只在"搭档压得过、平行世界里又压不过"时露馅，所以抓到的少（固定种子下 177 个点里 3 个），有就说明方法灵；
+    // 随机流混进全桌的牌，几乎每个要抽随机数的点都会变（177 个点里 32 个）
+    expect(caught.partner.mismatch).toBeGreaterThan(0);
+    expect(caught.rng.mismatch).toBeGreaterThan(caught.rng.points / 10);
   });
 });

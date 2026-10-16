@@ -4,10 +4,19 @@
  */
 import { decide, styleOf, type PersonaId } from '../ai/index.ts';
 import { botFor, type SoloLevel, type Venue } from '../ai/venue.ts';
-import { createGame, dispatch, eventsFor, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../core/index.ts';
+import { createGame, dispatch, eventsFor, hashSeed, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../core/index.ts';
 import { clearSave, getSettings, loadSave, recordDeal, recordGame, writeSave } from './store.ts';
 
 export const ME = 0;
+
+/**
+ * 单机电脑拿到的随机数：按用途从牌局种子派生（0.8.1，AI 公平审计），和好友房的 aiSeed、formSeed（src/net/rules.ts）同一个做法。
+ * 牌局种子能重算发牌（rngFor(种子, 'deal', 第几副)），交给电脑就说不清它有没有借此看别人的牌；派生出来的数和发牌、首出的流毫不相干。
+ * ai：出牌的随机流（电脑再按座位、步数分流）；form：这一场的状态；hint：给我的"提示"排序
+ */
+export function soloSeeds(seed: string): { ai: number; form: number; hint: number } {
+  return { ai: hashSeed(seed, 'solo-ai'), form: hashSeed(seed, 'solo-form'), hint: hashSeed(seed, 'solo-hint') };
+}
 
 export function randomSeed(): string {
   return Math.floor(Math.random() * 36 ** 6).toString(36).padStart(6, '0');
@@ -32,8 +41,8 @@ export interface TableSession {
   /** 这个座位要不要由本地的电脑出（联机时电脑在房间里出，只有托管我自己时才在本地算） */
   isBot(seat: number): boolean;
   botAction(seat: number): Action | null;
-  /** "提示"排序用的种子（联机时拿不到牌局种子） */
-  hintSeed(): string;
+  /** "提示"排序用的种子（联机时拿不到牌局种子；单机也不直接给，见 soloSeeds） */
+  hintSeed(): string | number;
   /** 一副结束时下一副谁进贡 */
   preview(): NextPreview | null;
   /** 我现在能不能出手（联机时还要等房间指到我、上一手的结果回来） */
@@ -110,8 +119,8 @@ export class Session implements TableSession {
     return { events: this.lastEvents, error: null };
   }
 
-  hintSeed(): string {
-    return `${this.state.seed}|hint`;
+  hintSeed(): number {
+    return soloSeeds(this.state.seed).hint;
   }
 
   preview(): NextPreview | null {
@@ -126,7 +135,8 @@ export class Session implements TableSession {
   botAction(seat: number): Action | null {
     // 代打时的我：最强、没性格；电脑按场地（docs/ai.md）：搭档、对手的强弱和性格，状态按这一局的种子
     const bot = seat === ME ? { difficulty: 'hard' as const } : botFor(this.venue(), seat);
-    return decide(viewFor(this.state, seat), { seed: `${this.state.seed}|bot`, match: this.state.seed, ...bot });
+    const s = soloSeeds(this.state.seed);
+    return decide(viewFor(this.state, seat), { seed: s.ai, match: s.form, ...bot });
   }
 
   /** 单机娱乐按设置里的难度；实盘按档位（StakeSession） */
@@ -137,7 +147,7 @@ export class Session implements TableSession {
   botStyle(seat: number): BotStyle | null {
     if (seat === ME) return null;
     const bot = botFor(this.venue(), seat);
-    const { form, tilt } = styleOf(viewFor(this.state, ME), bot.difficulty, bot.persona, this.state.seed, seat);
+    const { form, tilt } = styleOf(viewFor(this.state, ME), bot.difficulty, bot.persona, soloSeeds(this.state.seed).form, seat);
     return { persona: bot.persona, form, tilt };
   }
 
