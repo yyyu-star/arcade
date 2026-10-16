@@ -40,7 +40,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/rng` | 两边、规则核心 | ChaCha20（RFC 8439，0.2.0）：256 位密钥按"用途 + 序号"分流、拒绝采样的均匀整数、Fisher–Yates 洗牌；纯函数 |
 | `arcade-kit/meter` | 游戏 Worker（Durable Object） | 计量 `RoomMeter`（0.2.0）：每天的写入额度、按人和全站的开房名额，游戏原样导出、绑成 `METER` 就行；`meterReport` / `meterLevel`（0.3.0）给房间以外的 DO 记写入、问门槛 |
 | `arcade-kit/game` | 两边、规则测试 | 规则接口 `RoomGame`；`snapshotBytes`：算进房快照最大有多大，游戏在自己的测试里断言上限 |
-| `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台马上连、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
+| `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台和网络恢复时马上连、认得出静默死掉的连接（0.11.1）、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
 | `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 
@@ -117,6 +117,10 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
    - `onStatus('closed', 关闭码, 原因)`：按码提示（4401 去登录、4005 刷新页面、4503 今天人太多……）；4000 带原因 `CLOSE_REASON.quota`（0.2.0）是今天的额度满了、房间在这一副打完时收场，
      页面可以说"今天联机的人太多了，这一副打完先散了，单机照常玩"；`onStatus('failed')`：连着 20 次没进得了房间，提示"连不上"，用户点了调 `retry()`。
      退避和失败次数在收到 `welcome` 时才清零（被拒的连接也会先 open 再关）。
+   - 断线怎么认（0.11.1）：每 25 秒的心跳和每次切回前台都发一个 `ping`，`PONG_WAIT_MS`（8 秒）内什么都没收到（房间自动回的 `pong` 也算）就判这条连接死了，
+     不等 `close`、直接按 1006 重连——iOS 锁屏、切 App 后 socket 常常还显示 OPEN、也不触发 close。建连卡在 CONNECTING 超过 `CONNECT_MS`（10 秒）同样重连。
+     监听 `document` 的 `visibilitychange`、`window` 的 `pageshow` 和 `online`：网络恢复、切回前台时别等退避；从往返缓存（bfcache，`pageshow` 带 `persisted`）回来的页面旧连接一律作废。
+     测试和非浏览器环境可以传 `events`、`windowEvents` 注入事件源。
 
 ## 登录闸门、开房、假钱包（0.8.0）
 
@@ -344,6 +348,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
 - **只用 `ctx.acceptWebSocket`、一个闹钟**：所有到期时间（房间寿命 3 小时、没人 10 分钟、这一手 30 秒、掉线宽限 60 秒、电脑没算完、停够了（0.5.0））取最早的；
   只有比现在设的更早才 `setAlarm`（它也算一行写入），期限往后推时不动，到点醒来没到期再改。心跳 `ping`/`pong` 由运行时自动应答。
   闹钟时间以 `getAlarm()` 读到的为准；写完状态后广播出错，算好的闹钟照样设；闹钟里游戏代码出错，60 秒后再醒来重试。
+  `setAlarm` 自己出错（0.11.1）不往外抛：内存里记的闹钟改回"不知道"，下一个入口重新 `getAlarm()`、照常重排；出错的是闹钟里那一次，同样 60 秒后再醒来。
 - **每步最多写 2 行**：房间状态一行（到期时间、计数都在里面），外加需要时的 `setAlarm`。实测：
   - 开房 4 行：建表 2 行（SQLite 记建表也算写入，一个房间只这一次）+ 状态 1 行 + 闹钟 1 行；
   - 进房、出牌 1 行；到点醒来但还没到期只改闹钟 1 行；
@@ -358,6 +363,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
   - 超时代出：先用游戏的 `timeout`，被规则拒了改用 `ai`；还不行就记日志、这一手的期限推后 60 秒（不然闹钟会在当前时刻反复响、每次写一行）。
   - 同一个账号再连一次，旧连接 4001 让位。重连一律发全量快照，不补发漏掉的事件。
   - 客户端重发没确认的操作带原来的 `baseSeq`：牌局变过就回 `stale`，旧操作不会被套到新的一手上。有人进出不算牌局变了。
+  - 重复的 moveId 每个座位记最近 8 个（0.11.1，和座位一起存在状态那一行里，不多写）：连发 A、B 时 A 的 ack 丢了，补发 A 仍然只回 ack，不轮流的操作不会做第二遍。
 - **硬限制**（4.6）：
   - 单条入站消息 4 KB（1009）；每连接每秒 5 条、最多攒 10 条（1008）；房间一生 3,000 条入站消息；寿命 3 小时；没人 10 分钟——到了就关房间：
     断开所有人（4000）、删闹钟、删存储；

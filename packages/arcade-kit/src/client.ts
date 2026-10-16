@@ -1,14 +1,18 @@
 /**
  * 浏览器端连接器（docs/platform-backend.md 4.5）：
  * - 断线后按指数退避加随机抖动重连；房间每次都回全量快照（welcome），客户端整桌重画，不做增量修补；
- * - 页面从后台切回来（visibilitychange、pageshow）时立刻检查连接：iOS Safari、微信切后台会挂起连接；
+ * - 页面从后台切回来（document 的 visibilitychange、window 的 pageshow）、网络恢复（window 的 online）时立刻检查连接：iOS Safari、微信切后台会挂起连接；
+ *   从往返缓存（bfcache，pageshow 带 persisted）回来的页面，旧连接一律作废、马上重连（0.11.1）；
+ * - 静默死掉的连接（0.11.1）：iOS 锁屏、切 App 以后 socket 常常还是 OPEN、也不触发 close，发出去的石沉大海。
+ *   每次心跳（和切回前台）发 "ping" 以后等 PONG_WAIT_MS，这期间什么都没收到（连房间自动回的 "pong" 都没有）就判它死了：
+ *   不等 close，直接扔掉、按断线重连。建连卡在 CONNECTING 超过 CONNECT_MS 也一样。只看"收到过没有"，不比时钟，后台节流的计时器晚跑也不会误判；
  * - 收到 1008、1009 或 4000 段关闭码时不重连（违规、房间关了、被别处顶掉、版本太旧、没登录 4401、别的网站 4403）；
  * - 平台暂时不可用（1013）照常按退避重连；
  * - 连着 maxFailures 次（默认 20 次，约 4 分钟）都没进得了房间（没收到 welcome）就停下，状态变成 failed，由界面提示"连不上"、让用户点 retry()。
  *   退避和失败次数都在收到 welcome 时才清零，不在 onopen：被拒的连接也会先 open 再关，按 onopen 清零就会一直快速重连；
  * - 下行消息按 seq 去重，旧的丢掉；上行操作带 moveId 和 baseSeq（做决定时看到的 seq），没收到 ack 的在重连后原样重发：
  *   房间认得出重复的 moveId；牌局在那之后变过的，房间回 stale，不会把旧操作套到新的一手上；
- * - 心跳发纯文本 "ping"，房间由运行时自动回 "pong"，不唤醒房间。
+ * - 心跳发纯文本 "ping"，房间由运行时自动回 "pong"（setWebSocketAutoResponse），不唤醒房间。
  *
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
@@ -38,11 +42,17 @@ export interface RoomClientOptions<V> {
   random?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (t: unknown) => void;
-  /** 页面事件来源（document / window），没有就不监听 */
-  events?: { addEventListener(type: string, fn: () => void): void; removeEventListener(type: string, fn: () => void): void };
+  /** 页面事件来源：events 收 visibilitychange（默认 document），windowEvents 收 pageshow、online（默认 window，没给时用 events）；没有就不监听 */
+  events?: EventSourceLike;
+  windowEvents?: EventSourceLike;
   isHidden?: () => boolean;
   /** 连着几次没进得了房间（没收到 welcome；被拒的连接也会先 open 再关）就停下，默认 20 */
   maxFailures?: number;
+}
+
+export interface EventSourceLike {
+  addEventListener(type: string, fn: (ev?: unknown) => void): void;
+  removeEventListener(type: string, fn: (ev?: unknown) => void): void;
 }
 
 export interface WebSocketLike {
@@ -59,6 +69,10 @@ const OPEN = 1;
 const BASE_MS = 500;
 const MAX_MS = 15_000;
 const HEARTBEAT_MS = 25_000;
+/** 发了 ping 以后等多久没收到任何东西就判连接死了（0.11.1）。房间的自动回 pong 不经过游戏代码，正常几十毫秒就到 */
+export const PONG_WAIT_MS = 8_000;
+/** 建连最多等多久（0.11.1）：卡在 CONNECTING 的按一次失败算，重连 */
+export const CONNECT_MS = 10_000;
 /** 快捷短语太快时最多排几个（多的丢最早的） */
 const EMOTE_QUEUE = 2;
 
@@ -79,6 +93,10 @@ export class RoomClient<A = unknown, V = unknown> {
   private lastSeq = -1;
   private retryTimer: unknown = null;
   private beatTimer: unknown = null;
+  /** 探活（0.11.1）：发了 ping 还没收到任何东西；到点还是 true 就判死 */
+  private probing = false;
+  private probeTimer: unknown = null;
+  private connectTimer: unknown = null;
   /** 没收到 ack 的操作：重连后按原 moveId 重发 */
   private pending = new Map<string, UpMsg<A>>();
   private moveCounter = 0;
@@ -90,7 +108,12 @@ export class RoomClient<A = unknown, V = unknown> {
   private emoteQueue: { id: number; to?: number }[] = [];
   private emoteTimer: unknown = null;
   private readonly opts: Required<Pick<RoomClientOptions<V>, 'random' | 'setTimer' | 'clearTimer'>> & RoomClientOptions<V>;
-  private readonly onWake = () => this.wake();
+  private readonly onWake = () => this.wake(false);
+  /** pageshow 带 persisted：页面是从往返缓存里拿回来的，旧连接不能信 */
+  private readonly onPageShow = (ev?: unknown) => this.wake((ev as { persisted?: unknown } | undefined)?.persisted === true);
+  private readonly onOnline = () => this.wake(false);
+  private readonly doc: EventSourceLike | undefined;
+  private readonly win: EventSourceLike | undefined;
 
   constructor(opts: RoomClientOptions<V>) {
     this.opts = {
@@ -99,9 +122,12 @@ export class RoomClient<A = unknown, V = unknown> {
       clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
       ...opts,
     };
-    const ev = opts.events ?? (typeof document !== 'undefined' ? document : undefined);
-    ev?.addEventListener('visibilitychange', this.onWake);
-    ev?.addEventListener('pageshow', this.onWake);
+    this.doc = opts.events ?? (typeof document !== 'undefined' ? document : undefined);
+    // pageshow、online 只在 window 上派发，挂在 document 上永远收不到（0.11.0 以前就是这样）
+    this.win = opts.windowEvents ?? opts.events ?? (typeof window !== 'undefined' ? window : undefined);
+    this.doc?.addEventListener('visibilitychange', this.onWake);
+    this.win?.addEventListener('pageshow', this.onPageShow);
+    this.win?.addEventListener('online', this.onOnline);
     this.connect();
   }
 
@@ -163,9 +189,9 @@ export class RoomClient<A = unknown, V = unknown> {
   close(): void {
     this.setStatus('closed');
     this.clearTimers();
-    const ev = this.opts.events ?? (typeof document !== 'undefined' ? document : undefined);
-    ev?.removeEventListener('visibilitychange', this.onWake);
-    ev?.removeEventListener('pageshow', this.onWake);
+    this.doc?.removeEventListener('visibilitychange', this.onWake);
+    this.win?.removeEventListener('pageshow', this.onPageShow);
+    this.win?.removeEventListener('online', this.onOnline);
     this.ws?.close(1000, 'bye');
     this.ws = null;
   }
@@ -190,8 +216,14 @@ export class RoomClient<A = unknown, V = unknown> {
     url.searchParams.set('cv', String(this.opts.clientVersion ?? 0));
     const ws = new Impl(url.toString());
     this.ws = ws;
+    this.connectTimer = this.opts.setTimer(() => {
+      this.connectTimer = null;
+      if (this.ws === ws && ws.readyState !== OPEN) this.abandon(ws);
+    }, CONNECT_MS);
     ws.onopen = () => {
       if (this.ws !== ws) return;
+      if (this.connectTimer !== null) this.opts.clearTimer(this.connectTimer);
+      this.connectTimer = null;
       this.welcomed = false;
       this.setStatus('open');
       this.heartbeat();
@@ -199,7 +231,10 @@ export class RoomClient<A = unknown, V = unknown> {
       for (const msg of this.pending.values()) this.trySend(msg);
     };
     ws.onmessage = (ev) => {
-      if (this.ws !== ws || typeof ev.data !== 'string' || ev.data === PONG) return;
+      if (this.ws !== ws) return;
+      // 收到任何东西都说明连接活着
+      this.probing = false;
+      if (typeof ev.data !== 'string' || ev.data === PONG) return;
       let msg: DownMsg<V> | EmotedMsg;
       try {
         msg = JSON.parse(ev.data) as DownMsg<V> | EmotedMsg;
@@ -232,24 +267,53 @@ export class RoomClient<A = unknown, V = unknown> {
     };
     ws.onclose = (ev) => {
       if (this.ws !== ws) return;
-      const entered = this.status === 'open' && this.welcomed;
-      this.ws = null;
-      this.clearTimers();
-      if (this.status === 'closed') return;
-      if (isFinalClose(ev.code)) {
-        this.setStatus('closed', ev.code, ev.reason);
-        return;
-      }
-      // 升级被拒（4xx/5xx）时浏览器只给 1006，分不出原因；1013 是平台暂时不可用：一直进不了房间就停下，别无限重连
-      if (!entered && ++this.failures >= (this.opts.maxFailures ?? 20)) {
-        this.setStatus('failed', ev.code);
-        return;
-      }
-      this.scheduleRetry(ev.code);
+      this.lost(ev.code, ev.reason);
     };
     ws.onerror = () => {
       // 之后一定会有 onclose，在那里处理
     };
+  }
+
+  /** 这条连接断了（或者被判死了）：最终关闭码停下，没进过房间的累计失败次数，其余按退避重连 */
+  private lost(code: number, reason?: string): void {
+    const entered = this.status === 'open' && this.welcomed;
+    this.ws = null;
+    this.clearTimers();
+    if (this.status === 'closed') return;
+    if (isFinalClose(code)) {
+      this.setStatus('closed', code, reason);
+      return;
+    }
+    // 升级被拒（4xx/5xx）时浏览器只给 1006，分不出原因；1013 是平台暂时不可用：一直进不了房间就停下，别无限重连
+    if (!entered && ++this.failures >= (this.opts.maxFailures ?? 20)) {
+      this.setStatus('failed', code);
+      return;
+    }
+    this.scheduleRetry(code);
+  }
+
+  /** 不等 close 了：摘掉回调、关掉，按 1006（网络断了）走重连。死连接的 close 可能几分钟后才来，也可能不来 */
+  private abandon(ws: WebSocketLike): void {
+    if (this.ws !== ws) return;
+    ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+    try {
+      ws.close();
+    } catch {
+      // 已经坏了
+    }
+    this.lost(1006);
+  }
+
+  /** 发一个 ping，PONG_WAIT_MS 内什么都没收到就判死（已经在探就不重复发） */
+  private probe(): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== OPEN || this.probeTimer !== null) return;
+    this.probing = true;
+    this.trySend(PING);
+    this.probeTimer = this.opts.setTimer(() => {
+      this.probeTimer = null;
+      if (this.ws === ws && this.probing) this.abandon(ws);
+    }, PONG_WAIT_MS);
   }
 
   /** 带上这次的关闭码：游戏据此区分"网络断了"（1006）和"平台有点忙"（1013）。 */
@@ -262,34 +326,48 @@ export class RoomClient<A = unknown, V = unknown> {
     }, wait);
   }
 
-  /** 切回前台：没连着就别等退避，马上连；连着就发个心跳探一下（挂起的连接会因此报错断开，再走重连）。 */
-  private wake(): void {
+  /**
+   * 切回前台、网络恢复：
+   * - 连着：探一下活（静默死掉的会在 PONG_WAIT_MS 后判死、重连）；
+   * - 在等退避：别等了，马上连；
+   * - 有连接却不是 OPEN、也不在建连（CLOSING、CLOSED 却一直没等到 close，从往返缓存回来常见）：扔掉，马上连；
+   * - fresh（pageshow 带 persisted）：不管什么状态，旧连接一律扔掉重连。
+   */
+  private wake(fresh: boolean): void {
     if (this.status === 'closed' || this.status === 'failed' || this.opts.isHidden?.() || (typeof document !== 'undefined' && document.hidden)) return;
-    if (this.ws && this.ws.readyState === OPEN) {
-      this.trySend(PING);
+    const ws = this.ws;
+    if (ws && (fresh || (ws.readyState !== OPEN && ws.readyState !== 0))) {
+      // 扔掉以后按断线走一遍（状态、失败次数照常算），再立刻连，不等退避
+      this.abandon(ws);
+      this.reconnectNow();
       return;
     }
-    if (this.retryTimer !== null) {
-      this.opts.clearTimer(this.retryTimer);
-      this.retryTimer = null;
-      this.connect();
+    if (ws && ws.readyState === OPEN) {
+      this.probe();
+      return;
     }
+    if (!ws) this.reconnectNow();
+  }
+
+  /** 正在等退避的话，取消等待、马上连 */
+  private reconnectNow(): void {
+    if (this.retryTimer === null) return;
+    this.opts.clearTimer(this.retryTimer);
+    this.retryTimer = null;
+    this.connect();
   }
 
   private heartbeat(): void {
     this.beatTimer = this.opts.setTimer(() => {
-      this.trySend(PING);
+      this.probe();
       this.heartbeat();
     }, HEARTBEAT_MS);
   }
 
   private clearTimers(): void {
-    if (this.retryTimer !== null) this.opts.clearTimer(this.retryTimer);
-    if (this.emoteTimer !== null) this.opts.clearTimer(this.emoteTimer);
-    this.emoteTimer = null;
-    if (this.beatTimer !== null) this.opts.clearTimer(this.beatTimer);
-    this.retryTimer = null;
-    this.beatTimer = null;
+    for (const t of [this.retryTimer, this.emoteTimer, this.beatTimer, this.probeTimer, this.connectTimer]) if (t !== null) this.opts.clearTimer(t);
+    this.retryTimer = this.emoteTimer = this.beatTimer = this.probeTimer = this.connectTimer = null;
+    this.probing = false;
   }
 
   private trySend(msg: UpMsg<A> | typeof PING): void {

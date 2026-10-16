@@ -117,6 +117,8 @@ export const DEFAULT_LIMITS: RoomLimits = {
 
 /** 闹钟里出错时，过这么久再醒来重试（不用"马上"，免得每次都出错时连着计费）。 */
 const ALARM_RETRY_MS = 60_000;
+/** 每个座位记住最近几个做成的 moveId（0.11.1）：客户端断线时攒着没确认的操作，重连后原样补发 */
+const RECENT_MOVES = 8;
 
 /** 计量说的门槛在内存里记多久（不进新人时用；报数、还名额时顺便更新）。 */
 const LEVEL_TTL_MS = 30_000;
@@ -148,6 +150,11 @@ interface SeatState {
   auto: boolean;
   /** 这个座位最后一次做成的操作的 moveId（重发去重） */
   lastMoveId: string | null;
+  /**
+   * 最近做成的几个 moveId，新的在后（0.11.1，最多 RECENT_MOVES 个；旧房间的状态里没有，读到时当空的）。
+   * 只记最后一个不够：连发 A、B，A 的 ack 丢了，重连后补发 A，lastMoveId 已经是 B，不轮流的操作（free）就会被做第二遍
+   */
+  recentMoves?: string[];
 }
 
 interface Persist<S> {
@@ -389,13 +396,14 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       this.alarmAt = null;
       await this.entry(() => this.onAlarm());
       // 出错时状态可能没走到"重设闹钟"那一步：房间还在、又没有闹钟，就过一会儿再醒来，不然房间永远没人关
-      if (this.lastStepFailed && this.alarmAt === null && this.load()) {
+      // setAlarm 本身失败时 alarmAt 是 undefined（不知道），以存储里读到的为准（0.11.1）
+      if (this.lastStepFailed && this.load() && (this.alarmAt === undefined ? await this.ctx.storage.getAlarm() : this.alarmAt) === null) {
         this.alarmAt = Date.now() + ALARM_RETRY_MS;
         this.lastStepWrites++;
         this.totalWrites++;
         this.unmetered++;
         this.maxStepWrites = Math.max(this.maxStepWrites, this.lastStepWrites);
-        await this.ctx.storage.setAlarm(this.alarmAt);
+        await this.setAlarmSafely(this.alarmAt);
       }
     } catch (e) {
       console.error('room alarm failed', e instanceof Error ? e.message : e);
@@ -430,9 +438,24 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     this.totalWrites += this.writes;
     this.unmetered += this.writes;
     this.maxStepWrites = Math.max(this.maxStepWrites, this.writes);
-    if (at !== null) await this.ctx.storage.setAlarm(at);
+    if (at !== null && !(await this.setAlarmSafely(at))) this.lastStepFailed = true;
     await this.afterStep();
     return out;
+  }
+
+  /**
+   * 设闹钟；失败了不往外抛（0.11.1）。planAlarm 已经把 alarmAt 改成了新时间，失败时它就是错的：
+   * 留着的话以后 planAlarm 看"已经设了更早的"一直不重设，房间就没人收场。改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排
+   */
+  private async setAlarmSafely(at: number): Promise<boolean> {
+    try {
+      await this.ctx.storage.setAlarm(at);
+      return true;
+    } catch (e) {
+      console.error('room setAlarm failed', e instanceof Error ? e.message : e);
+      this.alarmAt = undefined;
+      return false;
+    }
   }
 
   // ---------- 计量（0.2.0） ----------
@@ -809,7 +832,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (seat === null) return this.reject(ws, 'not_seated', moveId);
     const s = st.seats[seat]!;
     // 重发的同一个操作：不再做一遍，只回 ack 和当前状态
-    if (s.lastMoveId === moveId) {
+    if (s.lastMoveId === moveId || s.recentMoves?.includes(moveId)) {
       const bound = this.boundOf(attachmentOf(ws)!.userId);
       return this.send(ws, this.stateMsg(seat, bound, [{ state: st.game, delay: 0 }], moveId));
     }
@@ -828,6 +851,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const out = this.step(seat, action, now, free);
     if (out) return this.reject(ws, out, moveId);
     s.lastMoveId = moveId;
+    s.recentMoves = [...(s.recentMoves ?? []), moveId].slice(-RECENT_MOVES);
     const auto = this.runAuto(now);
     if (seen !== null && auto.length === 0 && this.othersSee(seat) === seen) return this.commitQuiet(ws, seat, moveId);
     this.commit({ frames: [{ state: st.game, delay: 0 }, ...auto], ack: { ws, moveId } });

@@ -53,6 +53,16 @@ const lastView = (m: StateMsg<ToyView>) => m.frames.at(-1)!.view;
 const hands = async (code: string) => ((await inspect(code)).persist.game.hands as number[][]).map((h) => [...h]);
 const played = async (code: string) => ((await inspect(code)).persist.game.played as unknown[]).length;
 const alarmOf = (code: string) => runInDurableObject(stub(code), (_r: ToyRoom, s) => s.storage.getAlarm());
+/** 让房间接下来 n 次 setAlarm 抛错（模拟存储一时出错） */
+const failSetAlarm = (code: string, n: number) =>
+  runInDurableObject(stub(code), (_r: ToyRoom, state) => {
+    const real = state.storage.setAlarm.bind(state.storage);
+    let left = n;
+    state.storage.setAlarm = async (...args: Parameters<typeof real>) => {
+      if (left-- > 0) throw new Error('storage broke');
+      return real(...args);
+    };
+  });
 /** 把房间实例上的 limits / game 换掉（测试里调小上限、让游戏代码出错）。 */
 const patchRoom = (code: string, patch: Record<string, unknown>) =>
   runInDurableObject(stub(code), (room: ToyRoom) => {
@@ -190,6 +200,24 @@ describe('4 人入座、轮流出手', () => {
     expect(again.seq).toBe(first!.seq);
     expect(await played(code)).toBe(1);
     expect((await inspect(code)).last).toBe(0);
+  });
+
+  it('补发的 moveId 不是最后一个（0.11.1）：A 的 ack 丢了、之后又做成了 B，补发 A 仍然认得出是重复，只回 ack', async () => {
+    const { code, conns } = await fullTable();
+    await startAll(conns);
+    const baseA = conns[0]!.latestSeq();
+    const cardA = (await hands(code))[0]![0]!;
+    await play(conns, 0, 'move-a', cardA);
+    for (const seat of [1, 2, 3]) await play(conns, seat, `m${seat}`, (await hands(code))[seat]![0]!);
+    await play(conns, 0, 'move-b', (await hands(code))[0]![0]!);
+    const before = await played(code);
+    conns[0]!.act('move-a', { card: cardA }, baseA);
+    const again = await conns[0]!.until((m) => (m.t === 'state' && m.ack === 'move-a') || (m.t === 'error' && m.moveId === 'move-a'));
+    expect(again.t).toBe('state');
+    expect(await played(code)).toBe(before);
+    expect((await inspect(code)).last).toBe(0);
+    const seat0 = (await inspect(code)).persist.seats[0];
+    expect(seat0.recentMoves).toEqual(['move-a', 'move-b']);
   });
 
   it('baseSeq 过时（牌局在那之后变过）：stale，不做；只是有人进出（seq 变了、牌局没变）不算过时', async () => {
@@ -484,6 +512,27 @@ describe('只用一个闹钟', () => {
     // 重试的那次 setAlarm 也算一行
     expect((await inspect(code)).last).toBe(1);
     expect((await inspect(code)).persist).not.toBeNull();
+  });
+
+  it('setAlarm 自己出错（0.11.1）：不往外抛；闹钟改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排', async () => {
+    const { code, conns } = await fullTable();
+    await failSetAlarm(code, 1);
+    await startAll(conns);
+    // 开局要设的出牌超时（30 秒后）没设上，存储里还是开局前的那个
+    expect(await alarmOf(code)).not.toBe(Date.now() + 30_000);
+    expect((await inspect(code)).persist.status).toBe('playing');
+    // 下一个事件（随便谁进出、出牌）把闹钟补上。以前内存里记着"已经设了 30 秒后"，这里会跳过，房间就一直用错的闹钟
+    await play(conns, 0, 'after', (await hands(code))[0]![0]!);
+    expect(await alarmOf(code)).toBe(Date.now() + 30_000);
+  });
+
+  it('闹钟里重设闹钟失败（0.11.1）：过 60 秒再醒来，不会从此没有闹钟', async () => {
+    const { code, conns } = await fullTable();
+    await startAll(conns);
+    await failSetAlarm(code, 1);
+    advance(30_000);
+    expect(await runDurableObjectAlarm(stub(code))).toBe(true);
+    expect(await alarmOf(code)).toBe(Date.now() + 60_000);
   });
 
   it('开房碰到已经在的房间码（exists）：不清掉"每步最多写几行"的统计', async () => {

@@ -1,6 +1,6 @@
 /** 浏览器连接器（4.5）：退避加抖动、哪些关闭码不重连、切回前台马上连、seq 去重、没确认的操作重发。用假的 WebSocket 和计时器。 */
 import { describe, expect, it, vi } from 'vitest';
-import { backoffMs, RoomClient, type WebSocketLike } from '../src/client.ts';
+import { backoffMs, CONNECT_MS, PONG_WAIT_MS, RoomClient, type WebSocketLike } from '../src/client.ts';
 import type { DownMsg } from '../src/protocol.ts';
 
 class FakeWs implements WebSocketLike {
@@ -37,7 +37,7 @@ function setup() {
   FakeWs.all = [];
   const timers: { fn: () => void; ms: number; id: number }[] = [];
   let id = 0;
-  const listeners = new Map<string, () => void>();
+  const listeners = new Map<string, (ev?: unknown) => void>();
   let hidden = false;
   const got: DownMsg[] = [];
   const emotes: [number, number, number | undefined][] = [];
@@ -184,6 +184,101 @@ describe('重连', () => {
     t.ws().open();
     t.listeners.get('visibilitychange')!();
     expect(t.ws().sent).toContain('ping');
+  });
+
+  it('静默死掉的连接（0.11.1）：心跳发了 ping，8 秒内什么都没收到就扔掉重连；收到 pong 就不算', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(0));
+    // 活着的：pong 回来了，到点不动
+    t.fire(25_000);
+    expect(t.ws().sent.at(-1)).toBe('ping');
+    t.ws().onmessage?.({ data: 'pong' });
+    t.fire(PONG_WAIT_MS);
+    expect(FakeWs.all).toHaveLength(1);
+    expect(t.client.state).toBe('open');
+    // 死了的：iOS 锁屏后 readyState 还是 OPEN、不触发 close，ping 石沉大海
+    t.fire(25_000);
+    const dead = t.ws();
+    t.fire(PONG_WAIT_MS);
+    expect(t.statuses.at(-1)).toBe('reconnecting:1006');
+    expect(dead.onclose).toBeNull();
+    t.fire(375);
+    expect(FakeWs.all).toHaveLength(2);
+    // 死连接的 close 很久以后才来：不影响新连接
+    dead.onclose?.({ code: 1006 });
+    t.ws().open();
+    expect(t.client.state).toBe('open');
+  });
+
+  it('探活期间收到的任何消息都算活着（不只是 pong）', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(0));
+    t.fire(25_000);
+    t.ws().push(state(1));
+    t.fire(PONG_WAIT_MS);
+    expect(t.client.state).toBe('open');
+    expect(t.statuses).not.toContain('reconnecting:1006');
+  });
+
+  it('建连卡在 CONNECTING 超过 10 秒：按一次失败重连；按时连上的不动', () => {
+    const t = setup();
+    t.fire(CONNECT_MS);
+    expect(t.statuses.at(-1)).toBe('reconnecting:1006');
+    t.fire(375);
+    t.ws().open();
+    expect(t.timers.find((x) => x.ms === CONNECT_MS)).toBeUndefined();
+    expect(FakeWs.all).toHaveLength(2);
+  });
+
+  it('切回前台时连着：发 ping 探活，探不到就重连', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(0));
+    t.listeners.get('visibilitychange')!();
+    expect(t.ws().sent).toContain('ping');
+    t.fire(PONG_WAIT_MS);
+    expect(t.statuses.at(-1)).toBe('reconnecting:1006');
+  });
+
+  it('网络恢复（online）：等着重连的马上连，不等退避', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().drop(1006);
+    expect(FakeWs.all).toHaveLength(1);
+    t.listeners.get('online')!();
+    expect(FakeWs.all).toHaveLength(2);
+  });
+
+  it('从往返缓存回来（pageshow persisted）：旧连接哪怕看着是 OPEN 也扔掉、马上重连；普通的 pageshow 只探活', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(0));
+    t.listeners.get('pageshow')!({ persisted: false });
+    expect(FakeWs.all).toHaveLength(1);
+    expect(t.ws().sent).toContain('ping');
+    t.ws().onmessage?.({ data: 'pong' });
+    const old = t.ws();
+    t.listeners.get('pageshow')!({ persisted: true });
+    expect(FakeWs.all).toHaveLength(2);
+    expect(old.onmessage).toBeNull();
+    expect(t.timers.find((x) => x.ms === 375)).toBeUndefined();
+  });
+
+  it('切回前台时旧连接已经是 CLOSED 却一直没等到 close：扔掉、马上连', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(0));
+    t.ws().readyState = 3;
+    t.listeners.get('visibilitychange')!();
+    expect(FakeWs.all).toHaveLength(2);
+  });
+
+  it('close() 摘掉三个页面事件', () => {
+    const t = setup();
+    t.client.close();
+    expect([...t.listeners.keys()]).toEqual([]);
   });
 
   it('主动 close 后不再重连', () => {
