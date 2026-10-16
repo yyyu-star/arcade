@@ -36,12 +36,17 @@ export interface OnlineUi {
   ended(text: string, code: number): void;
 }
 
+/** 电脑短语跟在帧后面多等这么久 */
+const BOT_LAG_MS = 900;
+
 export class Online {
   private readonly client: RoomClient<RoomAction, RoomView>;
   private readonly ui: OnlineUi;
   private s: OnlineState;
   private readonly queue: { view: RoomView | null; delay: number; fresh: boolean }[] = [];
   private playing = false;
+  /** 电脑发的短语：房间在推完一批之后马上发，这时那一批的帧还没放完，等放完再显示（不然胡牌还没亮出来，电脑先得意上了） */
+  private readonly later: { seat: number; id: number; to?: number }[] = [];
   /** 主动离开了：还在路上的帧、状态变化一律不再画（不然离开后回到选桌页，排队的帧又画出一张牌桌盖上去） */
   private closed = false;
 
@@ -53,7 +58,10 @@ export class Online {
       clientVersion: CLIENT_VERSION,
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, c, reason) => this.onStatus(st, c, reason),
-      onEmote: (seat, id, to) => this.ui.emote(seat, id, to),
+      onEmote: (seat, id, to, bot) => {
+        if (!bot || (!this.playing && !this.queue.length)) return this.ui.emote(seat, id, to);
+        if (this.later.length < 6) this.later.push({ seat, id, ...(to !== undefined ? { to } : {}) });
+      },
     });
   }
 
@@ -92,6 +100,7 @@ export class Online {
   close(): void {
     this.closed = true;
     this.queue.length = 0;
+    this.later.length = 0;
     this.client.close();
   }
 
@@ -131,6 +140,12 @@ export class Online {
     }
     // 播的时候来了只改房间信息的消息（有人坐下、掉线）：最后再画一次
     if (!this.closed) this.ui.draw(this.s, false);
+    // 帧放完了：攒着的电脑短语稍等一下再出（胡牌的牌面先亮一会儿）
+    if (this.later.length && !this.closed) {
+      const list = this.later.splice(0);
+      await sleep(BOT_LAG_MS);
+      if (!this.closed) for (const e of list) this.ui.emote(e.seat, e.id, e.to);
+    }
   }
 
   private onStatus(st: ClientStatus, code?: number, reason?: string): void {

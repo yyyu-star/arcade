@@ -4,7 +4,8 @@
  */
 import type { XzView } from '../../../core/variants/sichuan-xuezhan/index.ts';
 import { el } from '../../dom.ts';
-import { FAN_NAME, PAY_KIND, signed, TITLE_NAME } from '../../text.ts';
+import type { Highlight } from '../../../game/banter.ts';
+import { FAN_NAME, HIGHLIGHT_NAME, PAY_KIND, signed, TITLE_NAME } from '../../text.ts';
 
 export function roundSummary(v: XzView, names: string[], unit: string): HTMLElement {
   const box = el('div', 'summary');
@@ -58,5 +59,13 @@ export function matchSummary(v: XzView, names: string[], unit: string): HTMLElem
     const titles = el('div', 'titles', row);
     for (const t of x.stats.titles ?? []) el('span', 'title', titles, TITLE_NAME[t] ?? t);
   });
+  return box;
+}
+
+/** 这一场的名场面（game/banter.ts 的 highlightsOf，从公开的胡牌里认出来的） */
+export function fameSummary(list: readonly Highlight[], names: string[]): HTMLElement {
+  const box = el('div', 'summary fame-list');
+  el('h2', '', box, '名场面');
+  for (const h of list.slice(-8)) el('div', 'flow', box, `第 ${h.round + 1} 局 · ${names[h.seat] ?? ''} ${HIGHLIGHT_NAME[h.id]}`);
   return box;
 }

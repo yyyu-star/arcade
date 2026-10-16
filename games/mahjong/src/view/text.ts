@@ -3,6 +3,7 @@
  */
 import type { RoomTexts } from 'arcade-kit/client';
 import type { FanId } from '../core/variants/sichuan-xuezhan/index.ts';
+import type { HighlightId } from '../game/banter.ts';
 import type { StakesId } from '../game/stakes.ts';
 
 export const GAME_NAME = '雀馆';
@@ -67,6 +68,21 @@ export const TITLE_NAME: Record<string, string> = {
   xz_heaven: '天胡',
   xz_earth: '地胡',
   xz_last_stand: '血战到底',
+};
+
+/** 名场面（game/banter.ts 的 highlightsOf） */
+export const HIGHLIGHT_NAME: Record<HighlightId, string> = {
+  multi2: '一炮双响',
+  multi3: '一炮三响',
+  gangkai: '杠上开花',
+  qianggang: '抢杠胡',
+  tianhu: '天胡',
+  dihu: '地胡',
+  haidi: '海底捞月',
+  longqidui: '龙七对',
+  qing: '清一色',
+  jingou: '金钩钓',
+  capped: '封顶',
 };
 
 export const STAKES_NAME: Record<StakesId, string> = { fun: '娱乐', small: '小', mid: '中', big: '大', lux: '豪华' };

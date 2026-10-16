@@ -8,18 +8,20 @@ import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
 import { createError, Online, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
+import { AI_URGE_MS, Banter, highlightsOf, momentsOf, type Act, type Cast, type Highlight } from './game/banter.ts';
+import { PHRASE_COUNT } from './game/emotes.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, showGuide, showRules } from './view/guide.ts';
-import { Comms, type CommsEvent } from './view/comms.ts';
+import { Comms, type CommsEvent, type CommsHost } from './view/comms.ts';
 import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, rulesLine, shareRoom } from './view/room.ts';
 import { play, setSound, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { GAME_NAME, num, PHRASES, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
-import { matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
+import { GAME_NAME, HIGHLIGHT_NAME, num, VARIANT_NAME, VOICES, walletError } from './view/text.ts';
+import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
@@ -157,6 +159,7 @@ function lobby(friends = false): void {
   online = null;
   comms?.destroy();
   comms = null;
+  stopSoloTalk();
   setRoomInUrl(null);
   table?.destroy();
   table = null;
@@ -299,6 +302,7 @@ function enterRoom(code: string, host: boolean, from: { seat: number; sit: boole
   online?.close();
   comms?.destroy();
   comms = null;
+  stopSoloTalk();
   table?.destroy();
   table = null;
   hosting = host;
@@ -384,16 +388,11 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
     title.textContent = `好友房 ${s.code} · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`;
     table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => online?.play(a));
     lastPrompt = false;
-    const t = table;
-    comms = new Comms(
-      screen,
-      {
-        me: () => online?.state.you?.seat ?? null,
-        avatarRect: (seat) => t.avatarRect(seat),
-        avatarEl: (seat) => t.avatarEl(seat),
-        bubble: (seat, text) => t.bubble(seat, text),
-        occupied: (seat) => (online?.state.room?.seats[seat]?.kind ?? 'empty') !== 'empty',
-      },
+    fame = [];
+    comms = newComms(
+      table,
+      () => online?.state.you?.seat ?? null,
+      (seat) => (online?.state.room?.seats[seat]?.kind ?? 'empty') !== 'empty',
       (id, to) => online?.emote(id, to),
     );
   }
@@ -416,7 +415,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   table.root.querySelector('.room-note')?.remove();
   const n = roomNotice(rv, seat, () => online?.rebuy());
   if (n) table.root.appendChild(n);
-  if (!replay) comms?.events(v.events.flatMap((e): CommsEvent[] => (e.e === 'hu' ? [{ e: 'hu', seat: e.seat, from: e.from }] : e.e === 'kan' ? [{ e: 'kan', seat: e.seat }] : [])));
+  if (!replay) publicMoments(v, seatMetas(s, g).map((x) => x.name));
   // 催促炸弹：别的真人一个人在想（轮到他打牌），想够 8 秒才冒出来
   const thinking = g.phase === 'turn' && g.turn !== seat && s.room!.seats[g.turn]?.kind === 'human' && turn?.deadline ? g.turn : null;
   comms?.urge(thinking, thinking === null ? 0 : turn!.deadline! - TURN_MS.turn);
@@ -435,6 +434,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
       dialog(stage, 'end', (box) => {
         box.appendChild(roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
+        if (fame.length) box.appendChild(fameSummary(fame, names));
         if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
         if (wallet) el('div', 'settle-note', box, '桌上的筹码已经结回钱包');
         else if (rv.unrated) el('div', 'settle-note', box, '实盘只有一个人，这一场不计输赢、没动钱包');
@@ -508,7 +508,8 @@ const soloUi = {
   frame(v: XzView, names: string[]): void {
     if (!table) return;
     table.render({ v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
-    chatter(v);
+    publicMoments(v, names);
+    soloTalk(v);
     alertTurn(v);
   },
   roundEnd(v: XzView, names: string[]): void {
@@ -521,6 +522,7 @@ const soloUi = {
         dialog(stage, 'end', (box) => {
           box.appendChild(roundSummary(v, names, unit));
           box.appendChild(matchSummary(v, names, unit));
+          if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
           const row = el('div', 'row', box);
           button('act soft', row, '回选桌', () => {
@@ -571,6 +573,22 @@ function playSolo(s: Solo): void {
     if (err && err !== 'busy') play('click');
   });
   lastPrompt = false;
+  fame = [];
+  comms?.destroy();
+  stopSoloTalk();
+  soloCast = s.save.state.kinds.map((k, i) => (k === 'ai' ? (PERSONAS[s.save.state.personas[i]!] ?? null) : null));
+  banter = new Banter((Math.random() * 2 ** 32) >>> 0);
+  comms = newComms(
+    table,
+    () => 0,
+    () => true,
+    (id, to) => {
+      // 单机没有房间：自己发的直接显示，被点名、被扔的电脑按性格回一下
+      comms?.receive(0, id, to);
+      const r = banter?.reply(soloCast, 0, id, to, Date.now());
+      if (r) soloAct(r, 900);
+    },
+  );
   s.resume();
   if (!localStorage.getItem(GUIDE_KEY)) showGuide(stage);
 }
@@ -605,30 +623,82 @@ function flashTitle(): void {
   document.addEventListener('visibilitychange', stop);
 }
 
+// ---------- 交流（单机、好友房同一套面板，见 view/comms.ts） ----------
+
+/** 这一场的名场面（一场的总结算里列出来） */
+let fame: Highlight[] = [];
+/** 单机电脑的互动（好友房的由房间发） */
+let banter: Banter | null = null;
+let soloCast: Cast = [];
+let soloUrgeTimer = 0;
+const soloTimers = new Set<number>();
+
+function newComms(t: TableUi<XzView, XzAction>, me: () => number | null, occupied: (seat: number) => boolean, send: (id: number, to?: number) => void): Comms {
+  const host: CommsHost = {
+    me,
+    avatarRect: (seat) => t.avatarRect(seat),
+    avatarEl: (seat) => t.avatarEl(seat),
+    bubble: (seat, text) => t.bubble(seat, text),
+    occupied,
+  };
+  return new Comms(screen, host, send);
+}
+
+function stopSoloTalk(): void {
+  banter = null;
+  window.clearTimeout(soloUrgeTimer);
+  soloUrgeTimer = 0;
+  for (const t of soloTimers) window.clearTimeout(t);
+  soloTimers.clear();
+}
+
+/** 两边都有的：给我换一组顺手提示，有名场面就挂横幅（胡牌的牌面先放完）、记进这一场 */
+function publicMoments(v: XzView, names: string[]): void {
+  comms?.events(v.events.flatMap((e): CommsEvent[] => (e.e === 'hu' ? [{ e: 'hu', seat: e.seat, from: e.from }] : e.e === 'kan' ? [{ e: 'kan', seat: e.seat }] : [])));
+  const hus = v.events.filter((e) => e.e === 'hu').length;
+  for (const h of highlightsOf(v.events, v.round, v.opts.cap)) {
+    fame.push(h);
+    comms?.banner(`${names[h.seat] ?? ''} ${HIGHLIGHT_NAME[h.id]}`, 600 + hus * 2_400);
+  }
+}
+
 /** 每个座位上一句说的什么：同一个人不连着说同一句 */
 const lastLine = new Map<number, string>();
 
-/** 电脑的台词：只由公开的事触发（胡了、点炮、杠、碰），和手牌无关；说不说、说什么按性格（话多的多说，口吻见 VOICES） */
-function chatter(v: XzView): void {
-  if (!table) return;
-  for (const e of v.events) {
-    let seat = -1;
-    let kind: 'hu' | 'pao' | 'kan' | 'pon' = 'hu';
-    let fallback: number[] = [];
-    if (e.e === 'hu' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'hu', [1, 8, 0]];
-    else if (e.e === 'hu' && e.from !== null && e.from !== 0) [seat, kind, fallback] = [e.from, 'pao', [10, 13, 2]];
-    else if (e.e === 'kan' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'kan', [5, 0]];
-    else if (e.e === 'pon' && e.seat !== 0) [seat, kind, fallback] = [e.seat, 'pon', [4, 6]];
-    if (seat < 0) continue;
-    const p = PERSONAS[v.seats[seat]!.persona];
-    // 碰是常事，少说；胡、点炮、杠按话多不多
-    if (Math.random() * 1_000 > (p?.talk ?? 450) * (kind === 'pon' ? 0.35 : 0.65)) continue;
-    const lines = (p && VOICES[p.name]?.[kind]) || fallback.map((i) => PHRASES[i]!);
-    const fresh = lines.filter((x) => x !== lastLine.get(seat));
-    const say = (fresh.length ? fresh : lines)[Math.floor(Math.random() * (fresh.length || lines.length))]!;
-    lastLine.set(seat, say);
-    window.setTimeout(() => table?.bubble(seat, say), 500);
+/** 单机：公开的事交给电脑看要不要接话，真人想太久了让急性子催一下 */
+function soloTalk(v: XzView): void {
+  if (!banter) return;
+  const now = Date.now();
+  const ms = momentsOf(v.events);
+  const h = v.history.at(-1);
+  if (h && v.events.some((e) => e.e === 'end')) ms.push({ k: 'round', net: h.net, chips: v.seats.map((x) => x.chips), share: v.share });
+  for (const a of banter.moments(soloCast, ms, now)) soloAct(a, a.voice ? 500 : 900, v);
+  // 轮到我、想了 12 秒还没动：催一下（只是画面和声音，单机本来就不限时）
+  const thinking = !!v.prompt && v.phase !== 'swap' && v.phase !== 'que';
+  if (!thinking) {
+    window.clearTimeout(soloUrgeTimer);
+    soloUrgeTimer = 0;
+  } else if (!soloUrgeTimer) {
+    soloUrgeTimer = window.setTimeout(() => {
+      const a = banter?.urge(soloCast, 0, Date.now());
+      if (a) soloAct(a, 0);
+    }, AI_URGE_MS);
   }
+}
+
+/** 电脑的一下：短语按性格换成它自己的口吻（VOICES），别的照编号显示 */
+function soloAct(a: Act, delay: number, v?: XzView): void {
+  const t = window.setTimeout(() => {
+    soloTimers.delete(t);
+    const p = v ? PERSONAS[v.seats[a.seat]!.persona] : undefined;
+    const lines = a.voice && a.id < PHRASE_COUNT && p ? VOICES[p.name]?.[a.voice] : undefined;
+    if (!lines?.length) return comms?.receive(a.seat, a.id, a.to);
+    const fresh = lines.filter((x) => x !== lastLine.get(a.seat));
+    const say = (fresh.length ? fresh : lines)[Math.floor(Math.random() * (fresh.length || lines.length))]!;
+    lastLine.set(a.seat, say);
+    comms?.say(a.seat, say);
+  }, delay);
+  soloTimers.add(t);
 }
 
 /** 好友房里离开：开打了先确认（实盘马上结回），座位交给电脑 */

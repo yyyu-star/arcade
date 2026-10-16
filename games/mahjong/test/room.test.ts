@@ -9,6 +9,7 @@ import type { XzState, XzView } from '../src/core/variants/sichuan-xuezhan/index
 import { STRONGEST } from '../src/ai/personas.ts';
 import { VENUES } from '../src/ai/venues.ts';
 import { EMOTES } from '../src/game/emotes.ts';
+import { RoomTalk } from '../src/room/talk.ts';
 import { mahjongRoom as G, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
 import { RON, tileIn } from './xz-table.ts';
@@ -405,5 +406,39 @@ describe('再来一场', () => {
   test('部署前存下的房间（没有 next、ended）照常打', () => {
     const { next: _n, ended: _e, ...old } = settleAll(begin(['human', 'human', 'ai', 'ai']));
     expect(G.over(old as RoomState)).toBe(false);
+  });
+});
+
+describe('好友房里电脑的互动（src/room/talk.ts）', () => {
+  test('电脑连着出手推好几步也不漏胡；只有电脑座位发，编号合法', () => {
+    // 一个只认事，一个认了再让电脑发（同一步只认一次）
+    const eye = new RoomTalk(9);
+    const talk = new RoomTalk(9);
+    let s = begin(['human', 'ai', 'ai', 'ai'], 'fun');
+    let hus = 0;
+    let kans = 0;
+    let acts = 0;
+    let now = 0;
+    // 每 5 步看一次（像 kit 一批推好几步，onStep 只看到最后一步）
+    for (let k = 0; !G.over(s) && k < 100_000; k++) {
+      s = drive(s, 5);
+      now += 10_000;
+      const ms = eye.watch(s);
+      hus += ms.filter((m) => m.k === 'hu').length;
+      kans += ms.filter((m) => m.k === 'kan').length;
+      for (const a of talk.step(s, now)) {
+        acts++;
+        expect(s.kinds[a.seat]).toBe('ai');
+        expect(a.id >= 0 && a.id < EMOTES).toBe(true);
+      }
+    }
+    const st = (s.g as XzState).history;
+    expect(hus).toBe(st.reduce((n, h) => n + h.wins.length, 0));
+    expect(kans).toBeGreaterThan(0);
+    expect(eye.watch(s)).toEqual([]);
+    // 真人冲电脑扔了东西：只有被冲着的电脑可能回
+    const r = talk.reply(0, EMOTES - 4, 1, now + 60_000);
+    if (r) expect(r.seat).toBe(1);
+    expect(acts).toBeGreaterThan(0);
   });
 });

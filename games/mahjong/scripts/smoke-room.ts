@@ -191,6 +191,9 @@ try {
   const ctxB = await newContext(browser, base, 'smokeB0002', { width: 390, height: 844 });
   const pa = await ctxA.newPage();
   const pb = await ctxB.newPage();
+  // 电脑由房间发的表情（kit 的 botEmote，消息带 bot: true）
+  let botEmotes = 0;
+  pa.on('websocket', (ws) => ws.on('framereceived', (f) => typeof f.payload === 'string' && f.payload.includes('"bot":true') && botEmotes++));
   pages.push(pa, pb);
   watch(pa, 'A');
   watch(pb, 'B');
@@ -230,9 +233,31 @@ try {
   await pa.click('.comms-body .pic >> nth=0');
   await pa.click('.comms-body .act:has-text("smokeB")');
   check(!!(await pb.waitForSelector('.arcade-fun > *', { timeout: 4_000 }).catch(() => null)), 'A 冲 B 扔的道具 B 看得到');
+  await pb.screenshot({ path: join(SHOTS, 'room-comms-b.png') });
+  // 点名（0.5.0）：A 挑 B 说一句，B 看到带 @ 的气泡；B 在设置里屏蔽 A，A 再说 B 就看不到，解开以后又看得到
+  await sleep(2_500);
+  await pa.click('.comms-btn');
+  await pa.click('.comms-tabs .chip:has-text("说一句")');
+  await pa.click('.comms-body .to-row .chip:has-text("smokeB")');
+  await pa.click('.comms-body .phrase:has-text("巴适得板！")');
+  const named = await pb.waitForSelector('.bubble:has-text("巴适得板")', { timeout: 4_000 }).catch(() => null);
+  check(!!named && (await named.textContent())!.startsWith('@'), 'A 点名 B 说的话 B 看得到（带 @名字）');
   await pa.screenshot({ path: join(SHOTS, 'room-comms-a.png') });
+  await pb.click('.comms-btn');
+  await pb.click('.comms-tabs .chip:has-text("设置")');
+  await pb.click('.comms-body .set-row:has-text("smokeA")');
+  await pb.click('.comms-btn');
+  await sleep(2_800);
+  await pa.click('.comms-btn');
+  await pa.click('.comms-body .to-row .chip:has-text("大家")');
+  await pa.click('.comms-body .phrase:has-text("安逸！")');
+  check(!(await pb.waitForSelector('.bubble:has-text("安逸！")', { timeout: 2_000 }).catch(() => null)), 'B 屏蔽了 A，A 说的 B 看不到');
+  await pb.click('.comms-btn');
+  await pb.click('.comms-body .set-row:has-text("smokeA")');
+  await pb.click('.comms-btn');
   await playUntil([A, B], () => A.round > ROUNDS && B.round > ROUNDS, 6 * 60_000, '娱乐房打局');
   check(true, `娱乐房打满 ${ROUNDS} 局（A 打出 ${A.discards} 张，B 打出 ${B.discards} 张，${Math.round((Date.now() - t) / 1000)} 秒）`);
+  check(botEmotes > 0, `电脑在好友房里由房间发表情（A 收到 ${botEmotes} 条）`);
   await pa.screenshot({ path: join(SHOTS, 'room-a.png') });
   await pb.screenshot({ path: join(SHOTS, 'room-b.png') });
   await leaveRoom(pb, 'B');

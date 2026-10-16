@@ -50,6 +50,13 @@ describe('规则核心和电脑', () => {
     }
   });
 
+  test('规则和电脑出牌不碰交流：不 import 互动、短语表情、画面（电脑的决策读不到任何人发的东西）', () => {
+    for (const f of PURE) {
+      const imports = [...code(f).matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]!);
+      for (const i of imports) expect(/\/(game\/(banter|emotes)|view\/)|^arcade-kit\/fun/.test(i), `${relative(ROOT, f)} → ${i}`).toBe(false);
+    }
+  });
+
   test('电脑只拿视图：不出现状态类型、不调规则的 apply', () => {
     for (const f of files(join(ROOT, 'ai'))) {
       const c = code(f);

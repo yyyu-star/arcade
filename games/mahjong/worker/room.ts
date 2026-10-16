@@ -1,9 +1,11 @@
 /**
- * 好友房（DESIGN.md 第 6 节）：kit 的房间 + 麻将的房间规则（src/room/rules.ts）。这里只做一件事：把规则记下的钱包的事交给平台钱包办（server 模式）。
+ * 好友房（DESIGN.md 第 6 节）：kit 的房间 + 麻将的房间规则（src/room/rules.ts）。这里做两件事：把规则记下的钱包的事交给平台钱包办（server 模式），
+ * 每一步之后让电脑按公开的事发个表情、真人冲电脑发了东西让它回一句（src/room/talk.ts，不碰牌局、不写存储）。
  * 带入、结回经服务绑定调平台，平台按操作 id 去重，房间重办不会多扣多给；每个座位同一时间只有一笔、一份只结回一次（规则保证）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { AI_DELAY_MS, mahjongRoom, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
+import { RoomTalk, talkSeed } from '../src/room/talk.ts';
 import { GAME, type Env } from './main.ts';
 
 /**
@@ -19,6 +21,19 @@ const RETRY = new Set(['busy', 'internal']);
 export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, RoomOpts, WalletEffect> {
   protected readonly game = mahjongRoom;
   protected override readonly limits = ROOM_LIMITS;
+  /** 电脑的互动只在内存里（被驱逐了重新记） */
+  private talk: RoomTalk | null = null;
+
+  protected override onStep(s: RoomState): void {
+    this.talk ??= new RoomTalk(talkSeed(s.ref));
+    for (const a of this.talk.step(s, Date.now())) this.botEmote(a.seat, a.id, a.to);
+  }
+
+  /** 真人冲电脑发了东西：被冲着的电脑按性格回一句（kit 只给座位和编号；不记下来，电脑出牌读不到） */
+  protected override onEmote(from: number, id: number, to?: number): void {
+    const a = this.talk?.reply(from, id, to, Date.now());
+    if (a) this.botEmote(a.seat, a.id, a.to);
+  }
 
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {
     // 电脑座位没有钱包；规则只给真人座位记钱包的事，到这里是写错了

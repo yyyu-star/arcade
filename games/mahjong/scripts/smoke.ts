@@ -68,6 +68,32 @@ async function play(page: Page, name: string): Promise<boolean> {
   throw new Error(`${name}: match did not finish`);
 }
 
+/**
+ * 单机也有交流面板：点名一个电脑说一句、冲它扔个番茄（它按性格回不回都行），设置里屏蔽它、关掉再打开总开关。
+ * 截一张图（shots/smoke-land-comms.png）
+ */
+async function soloComms(page: Page): Promise<void> {
+  await page.click('.comms-btn');
+  await page.click('.comms-body .to-row .chip >> nth=1');
+  await page.click('.comms-body .phrase:has-text("雄起！")');
+  await page.waitForSelector('.bubble:has-text("@")');
+  await page.click('.comms-btn');
+  await page.click('.comms-tabs .chip:has-text("道具")');
+  await page.click('.comms-body .pic >> nth=0');
+  await page.click('.comms-body .act >> nth=0');
+  // 等电脑回一下（性格定回不回）
+  await page.waitForTimeout(1_600);
+  await page.screenshot({ path: `${root}shots/smoke-land-comms.png` });
+  await page.click('.comms-btn');
+  await page.click('.comms-tabs .chip:has-text("设置")');
+  await page.click('.comms-body .set-row:has-text("屏蔽 ") >> nth=1');
+  await page.waitForSelector('.comms-body .set-row.on:has-text("屏蔽 ")');
+  await page.click('.comms-body .set-row:has-text("互动")');
+  await page.waitForSelector('text=打开互动');
+  await page.click('text=打开互动');
+  await page.click('.comms-btn');
+}
+
 // 平台大厅的"好友房"按钮带 ?online=1：开房、进房那一块亮起来，参数用完从地址栏去掉
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -96,6 +122,7 @@ for (const [name, viewport] of [
   await page.click('.home');
   await page.waitForSelector('text=接着打');
   await page.click('text=接着打');
+  if (name === 'land') await soloComms(page);
   if (!(await play(page, name))) errors.push('一场里没出现过胡牌亮牌');
   await page.screenshot({ path: `${root}shots/smoke-${name}.png` });
   // 回选桌，再看一眼规则表
