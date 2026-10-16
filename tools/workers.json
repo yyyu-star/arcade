@@ -1,0 +1,4 @@
+{
+  "$comment": "允许本仓库部署的 Worker 名（= 模块 id，平台是 arcade）。只由维护者改：加新游戏前先确认 Cloudflare 账户里没有同名的 Worker。tools/check-deploy-config.mjs 按它检查。",
+  "workers": ["arcade", "kaipan", "guandan", "texas", "mahjong"]
+}

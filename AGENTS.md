@@ -51,7 +51,7 @@ arcade/
    `working-directory` 指向模块目录。
 8. **版本号、更新日志各自独立**：模块自己的 `package.json` version 和 `CHANGELOG.md`；提交信息以模块名开头，例如 `kaipan: ...`、`platform: ...`。
 
-`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条，CI 每次推送都跑，失败就不能部署。新增约束时，同步加进这个脚本。
+`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条；`tools/check-deploy-config.mjs` 检查第 5 条里部署相关的部分（Worker 名、不写路由域名、只用允许的绑定）。CI 每个 PR 都跑，部署前再跑一次，失败就不能部署。新增约束时，同步加进这两个脚本。
 
 ## 2. 拆分与单独部署
 
@@ -59,9 +59,10 @@ arcade/
   （或在 GitHub Actions 里对 main 手动重跑该模块的流程）；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
   把 `file:` 共用包换成发布的版本。线上 Worker、路由、存储前缀都不用改。
-- **新增一个游戏**：
+- **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
-  2. 加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、`environment: production` 和"只部署经 PR 合并的提交"那一步）；
+  2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker）；
+     加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、`environment: production` 和"只部署经 PR 合并的提交"那一步）；
   3. 在平台的 `platform/src/games.ts` 里登记，并放一张封面（钱包、云存档、分数榜、保留用户名都从这份登记派生；想先接钱包再上大厅就先登记成 `status: 'coming'`）；
      游戏里电脑人物的名字同时登记进平台 `worker/api/validate.ts` 的 `RESERVED_PERSONAS`（真人昵称不许冒充电脑）。以后加、改电脑人物，
      在游戏自己的 PR 说明里写上名字，再开一个平台的 PR 补上；有每日挑战榜的，登记 `daily: true` 并在游戏的 `public/daily.json` 里写分数怎么显示（平台 0.10.18）；

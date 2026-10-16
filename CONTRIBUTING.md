@@ -13,6 +13,23 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
    credentials live only in the `production` environment, which only `main` can use. Never deploy production from your machine.
 3. **Every pull request is fully reviewed** and needs green CI before it is merged (squash merge only).
 
+## How the project works
+
+```
+you (fork) ──PR──▶ automated reviewer ──▶ CI ──▶ squash merge ──▶ deploy workflow ──▶ live site
+                        │                                   (only main, only via Actions)
+                        └─▶ needs-maintainer: platform, shared kit, tooling, new games
+```
+
+- **Anyone can contribute** through a fork and a pull request. You never need Cloudflare credentials:
+  develop locally (`npm run dev`, the fake wallet in `arcade-kit/testing`), and the deploy workflow publishes after merge.
+- **An automated reviewer** (an AI agent operating the maintainer account) patrols open pull requests on a schedule. It approves the CI run,
+  reviews the whole diff against [docs/review-policy.md](docs/review-policy.md), comments with concrete change requests, and squash-merges
+  pull requests that pass every check. It never touches credentials, deployment or repository settings, and it never edits your code.
+- **Maintainers** handle what the reviewer escalates (`needs-maintainer`): changes to `platform/`, `packages/`, `.github/`, `tools/`,
+  root documents, wallet/stake rules, migrations, and every **new game** (registering its Worker name, deploy workflow and lobby entry).
+- **Want to add a game?** Read [docs/new-game.md](docs/new-game.md) first (in Chinese) and open an issue with the game id you want.
+
 ## Workflow
 
 1. **Branch from the latest `main`**: `git switch -c <module>/<short-description> origin/main`, e.g. `kaipan/bank-button-contrast`.
@@ -25,7 +42,7 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
    - for UI changes, run the module's smoke test and look at the screenshots yourself;
    - for game releases, bump `package.json` `version` and add a `CHANGELOG.md` entry.
 4. **Open the pull request** with a title that starts with the module (`kaipan: …`, `platform: …`, `repo: …`) and fill in the template.
-5. **CI must be green**: `Check isolation` plus the `test` job of the changed module's workflow (pull requests only test and build — they never deploy or see credentials).
+5. **CI must be green**: `Check isolation` (module isolation + deploy configuration check) plus the `test` job of the changed module's workflow (pull requests only test and build — they never deploy or see credentials).
 6. **Review**: reviewers read the whole diff. Every comment is either addressed with a new commit on the same branch (no force pushes) or answered with a reason.
 7. **After merge** the module's workflow deploys it. Open the live game and check the version number, the main flow and that the console has no errors.
 
@@ -59,6 +76,10 @@ Repository settings, kept in sync with this section:
   The hostname and database ID are secrets so they are masked in the public Actions logs; the repository itself names no domain.
 - **Actions**: the default workflow token is read-only; workflows from first-time and external contributors need approval, and fork pull requests never receive secrets.
 - **Secret scanning and push protection** are on.
+- **Deploy configuration check** (`tools/check-deploy-config.mjs`, on every pull request and again before every deploy): each module's `wrangler.jsonc`
+  may only deploy to its own Worker — named after the module and listed in `tools/workers.json` — with no routes, domains, account ids or
+  resources beyond the allowed bindings. The deploy token is account-wide, so this keeps merged code away from anything else in the account.
+  Only maintainers add names to `tools/workers.json`, after checking that no Worker with that name already exists in the account.
 - **Deploy guard**: before deploying, `tools/verify-main.sh` checks that every commit on `main` since `TRUSTED_BASE` is a GitHub-generated squash merge of a pull request, merged by the repository owner.
   If someone pushes to `main` directly, the `Main guard` workflow opens an issue and deploys stop. To recover: review the push (revert it if needed),
   then open a pull request that moves `TRUSTED_BASE` to the full SHA of the last direct push. If credentials may have been exposed, rotate the Cloudflare token first.

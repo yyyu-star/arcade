@@ -64,6 +64,10 @@ jobs:
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
         run: bash tools/verify-main.sh "${{ github.sha }}"
+      # 部署前再查一次部署配置：只许部署到本仓库自己的 Worker、只用自己的资源（Worker 名单在 tools/workers.json，只由维护者改）
+      - name: 部署配置检查
+        working-directory: .
+        run: node tools/check-deploy-config.mjs games/kaipan
       - uses: actions/setup-node@v4
         with:
           node-version-file: games/kaipan/.nvmrc
