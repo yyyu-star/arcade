@@ -443,7 +443,8 @@ export class TableView {
     place(
       e,
       // 两边的贴着名牌往里摆：头像上面要放赢了多少（float），旁边是亮出来的牌
-      seat === this.me ? { x: p.x - 196, y: p.y + 34 } : side === 'below' ? { x: p.x, y: p.y + 92 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y + 58 },
+      // 我自己的放在头像左上（0.6.1：原来和头像一样高，盖住左下角的"歇一手""嘲讽"）
+      seat === this.me ? { x: p.x - 196, y: p.y - 30 } : side === 'below' ? { x: p.x, y: p.y + 92 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y + 58 },
     );
     window.setTimeout(() => e.remove(), 2_600 * this.opts.pace());
   }

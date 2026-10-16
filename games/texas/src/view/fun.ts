@@ -8,25 +8,9 @@ import type { HandResult, LogEntry } from '../core/table.ts';
 import { KEYS } from '../store.ts';
 import { bluffer } from './talk.ts';
 import { riverTurnaround } from './titles.ts';
+import { TAUNTS } from '../fun/taunts.ts';
 
-/** 编号就是下标：只能往后加，不能改顺序（发出去的是编号，新旧页面要对得上） */
-export const TAUNTS = [
-  '就这？',
-  '你在诈唬，我看出来了',
-  '跟啊，怕了？',
-  '谢谢老板',
-  '别墨迹，全下吧',
-  '运气而已，别骄傲',
-  '再来！',
-  '这把我让着你',
-  '稳住，别慌',
-  '这牌你也敢跟？',
-  '好牌，服了',
-  '手气来了挡不住',
-  '快点吧，花都谢了',
-  '下一把轮到我了',
-  '我就看看不说话',
-] as const;
+export { TAUNTS };
 
 const T = (s: (typeof TAUNTS)[number]): number => TAUNTS.indexOf(s);
 

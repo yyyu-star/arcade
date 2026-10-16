@@ -4,10 +4,10 @@
  */
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
-import type { DownMsg, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
+import type { DownMsg, EmotedMsg, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stakesOf } from '../../src/core/stakes.ts';
-import { SEATS, type RoomState, type RoomView } from '../../src/room/rules.ts';
+import { EMOTE_COUNT, PROP_BASE, SEATS, type RoomState, type RoomView } from '../../src/room/rules.ts';
 import { NEW_BALANCE } from 'arcade-kit/testing';
 import { ROOM_LIMITS, type TexasRoom } from '../../worker/room.ts';
 import { advance, BASE, freezeClock, SITE, statsOf, usage, walletOf } from './helpers.ts';
@@ -290,6 +290,85 @@ describe('开房、买入、打牌', () => {
     expect((await inspect(code)).persist).toBeNull();
     const w0end = await walletOf(ids[0]!);
     expect(w0end).toMatchObject({ stakes: [], balance: bal0 + chips0 });
+  });
+});
+
+describe('电脑的互动（0.6.1）', () => {
+  it('一手打完赢了大池子的电脑，房间替它广播一下（bot: true）：只从电脑座位发、编号在表里、点名桌上的人；同一手同一个结果；大家收到的一样，不写存储', async () => {
+    const { code, conns } = await table(2, { stakes: 'small', size: 4 });
+    await conns[0]!.see((x) => x.handNo >= 1);
+    const w0 = (await inspect(code)).total;
+    // 拿房间现在的状态拼一手"2 号电脑赢了 0 号 3,200（160 个大盲）"交给 onStep（不改房间的状态）：一手一手往后试，
+    // 每手按这一手的种子决定发不发；中间拨 11 秒，过了同一个电脑的冷却、座位的令牌桶也补上
+    const sent = await runInDurableObject(stub(code), (room: TexasRoom) => {
+      const r = room as unknown as { st: { game: RoomState }; onStep(s: RoomState): void };
+      const st = r.st.game;
+      const log = [
+        { seat: 0, act: 'raise' as const, amount: 600 },
+        { seat: 2, act: 'call' as const, amount: 600 },
+        { seat: -1, act: 'flop' as const, amount: 0 },
+        { seat: 2, act: 'bet' as const, amount: 1000 },
+        { seat: 0, act: 'call' as const, amount: 1000 },
+      ];
+      const base = st.t.lastHand?.handNo ?? st.t.handNo;
+      let n = 0;
+      for (let h = base + 1; h <= base + 40; h++) {
+        advance(11_000);
+        const lastHand = { handNo: h, board: [], shown: [], pots: [{ amount: 3_200, winners: [{ seat: 2, won: 3_200 }] }], uncalled: null, byFold: false };
+        r.onStep({ ...st, t: { ...st.t, lastHand, log } } as RoomState);
+        n++;
+      }
+      return n;
+    });
+    expect(sent).toBe(40);
+    const of = (c: Conn): EmotedMsg[] => (c.msgs as unknown[]).filter((m): m is EmotedMsg => (m as { t: string }).t === 'emote');
+    await conns[1]!.until((m) => (m as { t: string }).t === 'emote');
+    await sleep(50);
+    const bots = of(conns[0]!);
+    console.log(`texas room: ${bots.length} bot emotes in 40 big wins`);
+    expect(bots.length).toBeGreaterThan(2);
+    for (const m of bots) {
+      expect(m).toMatchObject({ bot: true, seat: 2 });
+      expect(m.id).toBeLessThan(EMOTE_COUNT);
+      if (m.to !== undefined) expect(m.to).toBe(0);
+    }
+    expect(of(conns[1]!)).toEqual(bots);
+    // 广播不写存储
+    expect((await inspect(code)).total).toBe(w0);
+  });
+});
+
+describe('电脑回应真人（0.6.1，kit 0.10.1 的 onEmote）', () => {
+  it('真人对电脑扔东西：电脑按性格回（房间替它发，bot: true，回给扔的人），大家收到的一样；对真人扔的电脑不插嘴；不写存储', async () => {
+    const { code, conns } = await table(2, { stakes: 'small', size: 4 });
+    await conns[0]!.see((x) => x.handNo >= 1);
+    const w0 = (await inspect(code)).total;
+    const of = (c: Conn): EmotedMsg[] => (c.msgs as unknown[]).filter((m): m is EmotedMsg => (m as { t: string }).t === 'emote');
+    // 0 号对 1 号（真人）扔 5 次番茄：电脑不回
+    for (let i = 0; i < 5; i++) {
+      advance(11_000);
+      conns[0]!.send({ t: 'emote', id: PROP_BASE, to: 1 });
+      await conns[1]!.until((m) => (m as { t: string }).t === 'emote' && of(conns[1]!).length >= i + 1);
+    }
+    await sleep(50);
+    expect(of(conns[1]!).filter((m) => m.bot)).toEqual([]);
+    // 0 号对 2 号电脑扔 20 次番茄，每次隔 11 秒（过冷却）
+    for (let i = 0; i < 20; i++) {
+      advance(11_000);
+      conns[0]!.send({ t: 'emote', id: PROP_BASE, to: 2 });
+      await sleep(5);
+    }
+    await sleep(100);
+    const bots = of(conns[0]!).filter((m) => m.bot);
+    console.log(`texas room: ${bots.length} AI replies to 20 tomatoes`);
+    expect(bots.length).toBeGreaterThan(3);
+    for (const m of bots) {
+      expect(m.seat).toBe(2);
+      expect(m.id).toBeLessThan(EMOTE_COUNT);
+      if (m.to !== undefined) expect(m.to).toBe(0);
+    }
+    expect(of(conns[1]!).filter((m) => m.bot)).toEqual(bots);
+    expect((await inspect(code)).total).toBe(w0);
   });
 });
 

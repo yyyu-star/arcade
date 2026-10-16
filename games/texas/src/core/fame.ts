@@ -124,3 +124,23 @@ export function settleStats(f: Fame, net: number, max: number): SettleStats {
     ...(Object.keys(sum).length ? { sum } : {}),
   };
 }
+
+/**
+ * 这一手每个座位投进去多少（从操作记录累加：盲注、bet/raise 是"这条街加到多少"，取代本街原值；call 是"本次跟了多少"，累加；公共牌分街）。
+ * 一手打完时座位上的 total 不一定还是本手的投入（筹码已分完），所以从记录算
+ */
+export function putIn(log: readonly LogEntry[]): Map<number, number> {
+  const put = new Map<number, number>();
+  let street = new Map<number, number>();
+  const settle = (): void => {
+    for (const [s, v] of street) put.set(s, (put.get(s) ?? 0) + v);
+    street = new Map();
+  };
+  for (const e of log) {
+    if (e.seat < 0) settle();
+    else if (e.act === 'sb' || e.act === 'bb' || e.act === 'bet' || e.act === 'raise') street.set(e.seat, e.amount);
+    else if (e.act === 'call') street.set(e.seat, (street.get(e.seat) ?? 0) + e.amount);
+  }
+  settle();
+  return put;
+}

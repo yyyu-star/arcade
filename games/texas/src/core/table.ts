@@ -19,7 +19,7 @@ export const MAX_SEATS = 9;
  * 随机数的用途（arcade-kit/rng 按"用途 + 序号"分流）：多算一次电脑的蒙特卡洛不会改变后面发的牌。
  * 测试断言这几个名字的哈希互不相同
  */
-export const RNG = { deal: 'deal', button: 'button', house: 'house', ai: 'ai', room: 'room' } as const;
+export const RNG = { deal: 'deal', button: 'button', house: 'house', ai: 'ai', room: 'room', banter: 'banter', reply: 'reply' } as const;
 const DECK: readonly Card[] = Array.from({ length: 52 }, (_, i) => i);
 /** 电脑每一场的状态里，松紧、激进最多偏多少（相对强度，0.5.0）：和每次决定的随机浮动（JITTER 80）同一个量级，叠起来一场里看得出来 */
 export const FORM_SWING = 90;

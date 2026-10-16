@@ -1,20 +1,60 @@
 /**
- * 电脑的互动（0.6.0，DESIGN.md 13.5）：被真人扔东西、点名时回应，一手打完按公开发生的事主动发一句、扔个道具，真人想太久时催一下。
- * 只在画面层，用 Math.random（可以换成别的，测试里换）：好友房里各台设备看到的可以不一样，和电脑说话（talk.ts）一样。
+ * 电脑的互动（0.6.0，DESIGN.md 13.5）：被真人扔东西、点名时回应，一手打完按公开发生的事主动来一下，真人想太久时催一下。
+ * 单机的页面和好友房的房间共用（0.6.1：好友房一手打完的那一下由房间替电脑广播，kit 的 botEmote，大家看到的一样）。
+ * 这里不碰随机和时间：随机数、钟都由调用方给（单机页面给 Math.random、performance.now；房间给带种子的流和手数），测试里换成固定的。
  * 电脑的出牌决定（src/ai）不引用这里、也拿不到这里的任何东西：互动不影响它怎么打（test/arch.test.ts 查）。
  * 触发只看公开的事（谁对谁扔了什么、谁赢了谁的大池子、轮到谁想了多久）；嘲讽只说牌局，不说人。
  */
-import type { PropId, StickerId } from 'arcade-kit/fun';
-import { TAUNTS } from './fun.ts';
-import { CHATTY } from './talk.ts';
+import { putIn } from '../core/fame.ts';
+import type { HandResult, LogEntry } from '../core/table.ts';
+import { PROP_BASE, STICKER_BASE } from '../room/rules.ts';
+import { tauntId as T } from './taunts.ts';
 
-/** 电脑这一下做什么：说一句（冒泡）、做个表情、发一句嘲讽短语（可以点名）、对谁扔个道具 */
-export type Out = { say: string } | { sticker: StickerId } | { taunt: number; to?: number } | { prop: PropId; to: number };
+/**
+ * kit/fun 的 STICKERS、PROPS 的顺序（emote 编号按它排，只往后加）。房间的代码不能引 kit/fun（它带着画面的类型），
+ * 所以这里抄一份，test/banter.test.ts 核对和 kit 的一样
+ */
+export const STICKER_ORDER = ['smug', 'doge', 'cry', 'sweat', 'shock', 'sly', 'love', 'angry', 'sleep', 'clap', 'lol', 'cool'] as const;
+export const PROP_ORDER = ['tomato', 'egg', 'stinkyEgg', 'slipper', 'bomb', 'rose', 'like', 'cheers'] as const;
+type StickerId = (typeof STICKER_ORDER)[number];
+type PropId = (typeof PROP_ORDER)[number];
+
+/** 每种性格多爱说话（‰），顺序同 PERSONAS：稳哥、阿飙、老好、慢慢、算盘、江湖、虎子、老鹰、叨叨、小白。电脑说话（view/talk.ts）也按它 */
+export const CHATTY = [150, 450, 350, 200, 150, 300, 550, 150, 900, 450];
+
+/** 能发进房间的：表情、嘲讽短语（可以点名）、对谁扔个道具（都换成 emote 编号，emoteOf） */
+export type Emote = { sticker: StickerId } | { taunt: number; to?: number } | { prop: PropId; to: number };
+/** 电脑这一下做什么：上面这些，或者说一句自己的话（冒泡；只在单机的页面上，房间发不了自由文本） */
+export type Out = { say: string } | Emote;
+
+/** 换成房间的 emote 编号（rules.ts 的编号表：短语、表情、道具） */
+export function emoteOf(e: Emote): { id: number; to?: number } {
+  if ('taunt' in e) return { id: e.taunt, ...(e.to !== undefined ? { to: e.to } : {}) };
+  if ('sticker' in e) return { id: STICKER_BASE + STICKER_ORDER.indexOf(e.sticker) };
+  return { id: PROP_BASE + PROP_ORDER.indexOf(e.prop), to: e.to };
+}
+
+/** 房间转发的 emote 编号换回"真人做了什么"（嘲讽、表情、道具）；编号不对回 null */
+export function pokeOf(id: number): Poke | null {
+  if (id < 0 || !Number.isInteger(id)) return null;
+  if (id < STICKER_BASE) return { taunt: id };
+  if (id < PROP_BASE) {
+    const k = STICKER_ORDER[id - STICKER_BASE];
+    return k ? { sticker: k } : null;
+  }
+  const k = PROP_ORDER[id - PROP_BASE];
+  return k ? { prop: k } : null;
+}
+
+/** 一手打完算这一手谁赢谁输用的：座位上是谁（电脑才互动）、什么性格 */
+export interface SeatLike {
+  owner: string;
+  persona: number;
+}
 
 /** 真人对电脑做了什么：嘲讽短语、表情、道具 */
 export type Poke = { taunt: number } | { sticker: StickerId } | { prop: PropId };
 
-const T = (s: (typeof TAUNTS)[number]): number => TAUNTS.indexOf(s);
 const HOSTILE: readonly PropId[] = ['tomato', 'egg', 'stinkyEgg', 'slipper', 'bomb'];
 
 /**
@@ -66,10 +106,20 @@ export class Banter {
 
   private rand: () => number;
   private now: () => number;
+  private talk: boolean;
 
-  constructor(rand: () => number = Math.random, now: () => number = () => performance.now()) {
+  /**
+   * rand：[0, 1) 的随机数；now：毫秒的钟。talk：能不能说自己的话（单机的页面能；房间只能发编号，自己的话换成意思相近的表情）
+   */
+  constructor(rand: () => number, now: () => number, talk = true) {
     this.rand = rand;
     this.now = now;
+    this.talk = talk;
+  }
+
+  /** 说一句自己的话；房间里（talk 为 false）换成 alt 这个表情 */
+  private say(text: string, alt: StickerId): Out {
+    return this.talk ? { say: text } : { sticker: alt };
   }
 
   /** 换桌、换人：全清 */
@@ -98,7 +148,7 @@ export class Banter {
     const p = ('sticker' in poke ? 0.2 : 0.45) + chatty * 0.5;
     if (this.rand() >= p) return null;
     this.lastSeat.set(who.seat, t);
-    if (friendly) return this.pick<Out>([[{ sticker: 'love' }, 3], [{ sticker: 'clap' }, 2], [{ prop: 'cheers', to: from }, 2], [{ say: '谢谢' }, 1]]);
+    if (friendly) return this.pick<Out>([[{ sticker: 'love' }, 3], [{ sticker: 'clap' }, 2], [{ prop: 'cheers', to: from }, 2], [this.say('谢谢', 'clap'), 1]]);
     const mood = this.mood.get(who.seat) ?? 0;
     const hot = tp.back > tp.meek;
     let back = tp.back;
@@ -122,16 +172,16 @@ export class Banter {
         [{ taunt: T('下一把轮到我了'), to: from }, 1],
       ]);
     }
-    if (kind === 'meek') return this.pick<Out>([[{ sticker: 'sweat' }, 2], [{ sticker: 'cry' }, 1], [{ say: this.one(tp.meekSay) }, 3]]);
+    if (kind === 'meek') return this.pick<Out>([[{ sticker: 'sweat' }, 2], [{ sticker: 'cry' }, 1], [this.say(this.one(tp.meekSay), 'sweat'), 3]]);
     // 装没看见：多半什么都不说，偶尔打个哈欠、嘀咕一句
-    return this.pick<Out | null>([[null, 3], [{ sticker: 'sleep' }, 2], [{ say: this.one(tp.shrugSay) }, 2]]);
+    return this.pick<Out | null>([[null, 3], [{ sticker: 'sleep' }, 2], [this.say(this.one(tp.shrugSay), 'sleep'), 2]]);
   }
 
   /**
    * 一手打完，电脑主动来一下（只看公开的结果）：赢了别人的大池子得意（点名"谢谢老板"、扔个干杯），
    * 输了大池子不服（点名"运气而已"、"再来！"）。won：这个电脑是赢的那个；other：对面（输给它的、赢了它的那个座位，没有就 null）
    */
-  after(seat: Seat, won: boolean, other: number | null): Out | null {
+  after(seat: Seat, won: boolean, other: number | null): Emote | null {
     const t = this.now();
     if (t - this.lastTable < TABLE_GAP_MS || t - (this.lastSeat.get(seat.seat) ?? -Infinity) < SEAT_GAP_MS) return null;
     const chatty = (CHATTY[seat.persona] ?? 300) / 1000;
@@ -140,12 +190,12 @@ export class Banter {
     this.lastSeat.set(seat.seat, t);
     const tp = TEMPER[seat.persona] ?? TEMPER[0]!;
     if (won)
-      return this.pick<Out>(
+      return this.pick<Emote>(
         other === null
           ? [[{ sticker: 'smug' }, 2], [{ taunt: T('手气来了挡不住') }, 1]]
           : [[{ taunt: T('谢谢老板'), to: other }, 3], [{ prop: 'cheers', to: other }, 1], [{ taunt: T('就这？'), to: other }, tp.back]],
       );
-    return this.pick<Out>(
+    return this.pick<Emote>(
       other === null
         ? [[{ sticker: 'angry' }, tp.back], [{ sticker: 'cry' }, tp.meek]]
         : [[{ taunt: T('运气而已，别骄傲'), to: other }, 2], [{ taunt: T('再来！'), to: other }, 2], [{ prop: 'like', to: other }, tp.shrug / 3]],
@@ -153,10 +203,32 @@ export class Banter {
   }
 
   /**
+   * 一手打完（只用公开的：投进去多少看操作记录，分到多少看结果）：记下每个电脑这一手的输赢（情绪）；
+   * 赢了或输了 ≥ 20 个大盲的电脑偶尔对对面来一下（after）。回谁、做什么；没有就 null
+   */
+  afterHand(seats: readonly SeatLike[], bb: number, r: HandResult, log: readonly LogEntry[]): { seat: number; out: Emote } | null {
+    const net = new Map<number, number>();
+    for (const [s, x] of putIn(log)) net.set(s, -x);
+    for (const p of r.pots) for (const w of p.winners) net.set(w.seat, (net.get(w.seat) ?? 0) + w.won);
+    if (r.uncalled) net.set(r.uncalled.seat, (net.get(r.uncalled.seat) ?? 0) + r.uncalled.amount);
+    const house = (i: number): boolean => seats[i]?.owner === 'house';
+    for (const [s, x] of net) if (house(s)) this.result(s, x / bb);
+    const ranked = [...net].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    const top = ranked[0];
+    const bottom = ranked[ranked.length - 1];
+    if (!top || !bottom || top[0] === bottom[0]) return null;
+    const big = 20 * bb;
+    const [seat, won, other] = house(top[0]) && top[1] >= big ? [top[0], true, bottom[0]] : house(bottom[0]) && -bottom[1] >= big ? [bottom[0], false, top[0]] : [-1, false, -1];
+    if (seat < 0) return null;
+    const out = this.after({ seat, persona: seats[seat]!.persona }, won, other);
+    return out && { seat, out };
+  }
+
+  /**
    * 真人 slow 想了 AI_URGE_MS 以上：桌上的电脑里挑一个出来催（话多、性子急的多），扔炸弹或者说"快点吧"。
    * 一个决定点只催一次由调用方管；这里只管冷却
    */
-  urge(slow: number, house: readonly Seat[]): { from: number; out: Out } | null {
+  urge(slow: number, house: readonly Seat[]): { from: number; out: Emote } | null {
     const t = this.now();
     if (t - this.lastTable < TABLE_GAP_MS) return null;
     const ready = house.filter((s) => s.seat !== slow && t - (this.lastSeat.get(s.seat) ?? -Infinity) >= SEAT_GAP_MS && (TEMPER[s.persona]?.urge ?? 0) > 0);
@@ -166,7 +238,7 @@ export class Banter {
     this.lastSeat.set(who.seat, t);
     return {
       from: who.seat,
-      out: this.pick<Out>([
+      out: this.pick<Emote>([
         [{ prop: 'bomb', to: slow }, 3],
         [{ taunt: T('快点吧，花都谢了'), to: slow }, 3],
         [{ taunt: T('别墨迹，全下吧'), to: slow }, 1],
