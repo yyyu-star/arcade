@@ -344,15 +344,15 @@ export class EndScene extends BaseScene {
       };
       void sharePoster(blob, `kaipan-${sum.seed}.png`, content.shareTitle).then((r) => done(r === 'shared' ? '分享了' : r === 'saved' ? '已保存' : r === 'failed' ? '没存上' : '晒战绩'));
     } });
-    b.setEnabled(false).setLabel('画海报…');
+    b.setLoading(true, '画海报');
     this.buttons.poster = b;
     const paint = (c: typeof content): void => {
       void renderPoster(c, posterArtFor(this.textures, c)).then((x) => {
         // 不带名次的那张晚于带名次的画完：不拿旧的盖掉新的
         if (x && (c === content || !blob)) blob = x;
         if (!b.scene || b.isEnabled()) return;
-        if (blob) b.setEnabled(true).setLabel('晒战绩');
-        else if (c === content) b.setLabel('画不出来');
+        if (blob) b.setLoading(false, '晒战绩').setEnabled(true);
+        else if (c === content) b.setLoading(false, '画不出来').setEnabled(false);
       });
     };
     paint(content);

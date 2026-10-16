@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { isTouch } from '../input.ts';
 import { sound } from '../sound.ts';
 import type { UiSound } from '../audio/index.ts';
-import { COLOR, PHONE } from '../theme.ts';
+import { COLOR, LOW_MEMORY, PHONE, RADIUS } from '../theme.ts';
 import type { Glyph } from '../assets.ts';
 import { addGlyph, addSlice, type Box } from './art.ts';
 import { MIN_TEXT_SIZE, addText, setColor, setWrap } from './text.ts';
+import { registerFocusable, unregisterFocusable, type Focusable } from './focus.ts';
 import { bindTooltip, type TipContent } from './tooltip.ts';
 
 /** primary 橙色大按钮（开盘）、buy 蓝色买入、default 纸面、ghost 低调、danger 红色。 */
@@ -30,8 +31,13 @@ interface ButtonOpts {
   hitPad?: { top: number; bottom: number };
 }
 
-/** 手机上点击区至少这么高（世界单位；844×390 上约 44px，手指点得准）。电脑上不撑。 */
-export const HIT_MIN = PHONE ? 50 : 0;
+/**
+ * 触屏上点击区至少这么大（世界单位）：手机 960×444 的世界在 844×390 上约 0.88 倍，50 ≈ 44px；
+ * 0.9.0 平板走电脑布局（1280×720 的世界在 1024 宽的 iPad 上 0.8 倍），56 ≈ 45px。有鼠标的电脑上不撑。
+ */
+export const HIT_MIN = PHONE ? 50 : LOW_MEMORY ? 56 : 0;
+/** 按下时文字和底板往下沉多少（纸面按钮正好压到底边上） */
+const SINK = 2;
 
 interface Look {
   fill: number;
@@ -51,11 +57,14 @@ const LOOK: Record<ButtonVariant, Look> = {
 const DISABLED: Look = { fill: 0xe9dfd2, stroke: 0xb9a9ad, text: 0x6e5966 };
 const SELECTED: Look = { fill: 0xffe3c2, stroke: COLOR.accentDark, text: COLOR.ink };
 
-/** 卡通按钮；坐标为左上角。 */
 /** 禁用的按钮被点时在场景上发的事件，参数是原因文字。 */
 export const DENIED_EVENT = 'kp:denied';
 
-export class Button extends Phaser.GameObjects.Container {
+/**
+ * 卡通按钮；坐标为左上角。状态：常态、悬停（亮一层）、按下（下沉）、禁用（灰）、选中、加载中（转圈、不能点）、
+ * 键盘焦点（蓝框，见 focus.ts）。
+ */
+export class Button extends Phaser.GameObjects.Container implements Focusable {
   private readonly bg: Box;
   private readonly lip: Phaser.GameObjects.Rectangle | null;
   private flat: Phaser.GameObjects.Rectangle | null = null;
@@ -64,6 +73,15 @@ export class Button extends Phaser.GameObjects.Container {
   private readonly key: Phaser.GameObjects.Text | null;
   private readonly sub: Phaser.GameObjects.Text | null;
   private readonly hit: Phaser.GameObjects.Rectangle;
+  /** 底板和文字：按下时一起下沉（厚边不动） */
+  private readonly face: Phaser.GameObjects.Container;
+  private ring: Phaser.GameObjects.Graphics | null = null;
+  private spinner: Phaser.GameObjects.Graphics | null = null;
+  private spin: Phaser.Tweens.Tween | null = null;
+  private loading = false;
+  private readonly icon: Phaser.GameObjects.Image | null;
+  /** 文字在没转圈时的横坐标（图标、快捷键让位之后） */
+  private labelX = 0;
   private readonly sound: UiSound | null;
   private readonly variant: ButtonVariant;
   private onClick: (() => void) | undefined;
@@ -82,7 +100,7 @@ export class Button extends Phaser.GameObjects.Container {
     this.variant = opts.variant ?? 'default';
     this.onClick = opts.onClick;
     const look = LOOK[this.variant];
-    const r = Math.min(12, opts.height / 2);
+    const r = Math.min(RADIUS.md, opts.height / 2);
     if (look.slice) {
       this.lip = null;
       this.bg = addSlice(scene, 0, 0, opts.width, opts.height, look.slice);
@@ -103,6 +121,7 @@ export class Button extends Phaser.GameObjects.Container {
     // 图标和文字作为一组居中
     const iconSize = Math.round(fs * 1.5);
     const icon = opts.icon ? addGlyph(scene, opts.width / 2 - this.label.width / 2 - 3, labelY, opts.icon, iconSize) : null;
+    this.icon = icon;
     if (icon) this.label.x += iconSize / 2 + 3;
     this.sub =
       opts.subLabel !== undefined
@@ -118,13 +137,18 @@ export class Button extends Phaser.GameObjects.Container {
       this.label.x = Math.max(this.label.width / 2 + 6, (opts.width - this.key.width - 10) / 2);
       if (this.sub) this.sub.x = this.label.x;
     }
+    this.labelX = this.label.x;
     this.sound = opts.sound === undefined ? 'click' : opts.sound;
     const even = Math.max(0, (HIT_MIN - (opts.height + 3)) / 2);
     const pad = PHONE && opts.hitPad ? opts.hitPad : { top: even, bottom: even };
     const padX = Math.max(0, (HIT_MIN - opts.width) / 2);
     this.hit = scene.add.rectangle(-padX, -pad.top, opts.width + padX * 2, opts.height + 3 + pad.top + pad.bottom, 0xffffff, 0.001).setOrigin(0, 0);
-    this.add([...(this.lip ? [this.lip] : []), ...(this.flat ? [this.flat] : []), this.bg, this.shine, ...(icon ? [icon] : []), this.label, ...(this.sub ? [this.sub] : []), ...(this.key ? [this.key] : []), this.hit]);
+    this.face = new Phaser.GameObjects.Container(scene, 0, 0, [...(this.flat ? [this.flat] : []), this.bg, this.shine, ...(icon ? [icon] : []), this.label, ...(this.sub ? [this.sub] : []), ...(this.key ? [this.key] : [])]);
+    this.add([...(this.lip ? [this.lip] : []), this.face, this.hit]);
     this.hit.setInteractive({ useHandCursor: true });
+    this.hit.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      if (this.clickable()) this.face.y = SINK;
+    });
     this.hit.on(Phaser.Input.Events.POINTER_OVER, () => {
       this.hovered = true;
       if (this.clickable()) sound.ui('hover');
@@ -132,6 +156,7 @@ export class Button extends Phaser.GameObjects.Container {
     });
     this.hit.on(Phaser.Input.Events.POINTER_OUT, () => {
       this.hovered = false;
+      this.face.y = 0;
       this.redraw();
     });
     this.hit.on(Phaser.Input.Events.POINTER_UP, (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
@@ -140,6 +165,11 @@ export class Button extends Phaser.GameObjects.Container {
     });
     this.redraw();
     scene.add.existing(this);
+    registerFocusable(this);
+    this.once(Phaser.GameObjects.Events.DESTROY, () => {
+      unregisterFocusable(this);
+      this.spin?.remove();
+    });
   }
 
   /** 像被点了一下（键盘快捷键也走这里，按钮会闪一下）。 */
@@ -154,9 +184,13 @@ export class Button extends Phaser.GameObjects.Container {
       return false;
     }
     if (this.sound) sound.ui(this.sound);
+    // 键盘快捷键按的也下沉一下、亮一下，看得出按到了哪个
     this.shine.setAlpha(0.35);
+    this.face.y = SINK;
     this.scene.time.delayedCall(90, () => {
-      if (this.active) this.redraw();
+      if (!this.active) return;
+      this.face.y = 0;
+      this.redraw();
     });
     this.onClick?.();
     return true;
@@ -177,6 +211,72 @@ export class Button extends Phaser.GameObjects.Container {
       this.redraw();
     }
     return this;
+  }
+
+  /**
+   * 加载中：等回话（画海报、看钱包）时转圈，不能点，外观不变灰；文字可以顺便换掉（比如「画海报」）。
+   * 关掉时文字恢复成 label（不给就保持现在的）。
+   */
+  setLoading(on: boolean, label?: string): this {
+    if (label !== undefined) this.setLabel(label);
+    if (this.loading === on) return this;
+    this.loading = on;
+    if (on) {
+      if (!this.spinner) {
+        const R = Math.max(5, Math.round(this.fontSize * 0.42));
+        this.spinner = this.scene.add.graphics();
+        this.spinner.lineStyle(2.5, this.labelColor(), 1).beginPath().arc(0, 0, R, 0, Math.PI * 1.5).strokePath();
+        this.face.add(this.spinner);
+      }
+      this.spin = this.scene.tweens.add({ targets: this.spinner, angle: 360, duration: 900, repeat: -1 });
+    } else {
+      this.spin?.remove();
+      this.spin = null;
+    }
+    this.placeSpinner();
+    this.redraw();
+    return this;
+  }
+
+  /** 有图标的按钮：转圈顶替图标的位置；没图标的：文字右移让出圈，文字和圈作为一组居中 */
+  private placeSpinner(): void {
+    if (!this.spinner) return;
+    this.spinner.setVisible(this.loading);
+    this.icon?.setVisible(!this.loading);
+    if (this.icon) {
+      this.spinner.setPosition(this.icon.x, this.icon.y);
+      return;
+    }
+    const R = Math.max(5, Math.round(this.fontSize * 0.42));
+    this.label.x = this.labelX + (this.loading ? R + 4 : 0);
+    this.spinner.setPosition(this.label.x - this.label.width / 2 - R - 6, this.label.y);
+  }
+
+  private labelColor(): number {
+    const base = LOOK[this.variant];
+    return base.slice && this.enabled ? base.text : (!this.enabled ? DISABLED : this.selected ? SELECTED : base).text;
+  }
+
+  /** 键盘焦点框（focus.ts 调）：比按钮大一圈的蓝框 */
+  setFocused(on: boolean): void {
+    if (on && !this.ring) {
+      const r = Math.min(RADIUS.md, this.ch / 2) + 3;
+      this.ring = this.scene.add.graphics();
+      this.ring.lineStyle(3, COLOR.info, 1).strokeRoundedRect(-4, -4, this.cw + 8, this.ch + 3 + 8, r);
+      this.addAt(this.ring, 0);
+    }
+    this.ring?.setVisible(on);
+    if (on) sound.ui('hover');
+  }
+
+  focusable(): boolean {
+    return this.clickable() && this.scene?.sys.isActive();
+  }
+
+  layer(): number {
+    let top: Phaser.GameObjects.Container = this;
+    while (top.parentContainer) top = top.parentContainer;
+    return top.depth;
   }
 
   isEnabled(): boolean {
@@ -200,6 +300,7 @@ export class Button extends Phaser.GameObjects.Container {
     if (this.label.text !== text) {
       this.label.setText(text).setFontSize(this.fontSize);
       this.fitLabel();
+      this.placeSpinner();
     }
     return this;
   }
@@ -260,7 +361,7 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   private clickable(): boolean {
-    if (!this.enabled || this.locked || !this.visible) return false;
+    if (!this.enabled || this.locked || this.loading || !this.visible) return false;
     // 父容器隐藏时也不可点
     let p = this.parentContainer;
     while (p) {
@@ -284,12 +385,13 @@ export class Button extends Phaser.GameObjects.Container {
     }
     this.shine.setAlpha(hover ? 0.18 : 0);
     this.lip?.setAlpha(this.enabled ? 0.85 : 0.3);
-    setColor(this.label, base.slice && this.enabled ? base.text : look.text);
+    setColor(this.label, this.labelColor());
+    this.label.setAlpha(this.loading ? 0.75 : 1);
     if (base.slice && this.enabled) this.label.setStroke('#3a2634', 3);
     else this.label.setStroke('#000000', 0);
     // 停用时小字用停用色里最深的那档（银行「N月开」以前是浅灰字落在灰底上，看不清）
     if (this.sub) setColor(this.sub, base.slice && this.enabled ? 0xffffff : this.enabled ? COLOR.muted : DISABLED.text);
-    if (this.hit.input) this.hit.input.cursor = this.clickable() ? 'pointer' : 'default';
-    this.key?.setVisible(this.enabled && !this.locked);
+    if (this.hit.input) this.hit.input.cursor = this.loading ? 'progress' : this.clickable() ? 'pointer' : 'default';
+    this.key?.setVisible(this.enabled && !this.locked && !this.loading);
   }
 }

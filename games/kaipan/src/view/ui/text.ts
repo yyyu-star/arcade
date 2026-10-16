@@ -95,6 +95,16 @@ export function setWrap(t: Phaser.GameObjects.Text, width: number): Phaser.GameO
   return t.setWordWrapCallback((s: string, obj: Phaser.GameObjects.Text) => cjkWrap(s, obj, width));
 }
 
+/** 单行文字比 room 宽时从尾巴上截字、补省略号（至少留 min 个字）；没截就原样返回。 */
+export function fitWidth(t: Phaser.GameObjects.Text, room: number, min = 2): Phaser.GameObjects.Text {
+  let cut = Array.from(t.text);
+  while (t.width > room && cut.length > min) {
+    cut = cut.slice(0, -1);
+    t.setText(`${cut.join('')}…`);
+  }
+  return t;
+}
+
 export function setColor(t: Phaser.GameObjects.Text, color: number): Phaser.GameObjects.Text {
   return t.setColor(css(color));
 }

@@ -16,6 +16,7 @@
 ```
 src/core/      规则核心（纯函数、确定性）；content/ 是内容表（股票、道具、事件、群友、月度主题、故事模板……）
 src/view/      Phaser 画面层：scenes/、trade/（交易界面）、meta/（图鉴、成就、开局等）、ui/、fx/、audio/
+               颜色、字号（TYPE）、间距和圆角（SPACE / RADIUS）在 theme.ts，新写和改动的布局从这里取；按钮的状态和键盘焦点见 ui/button.ts、ui/focus.ts
 src/platform/  浏览器存档、档案、设置、错误兜底、云存档（cloud.ts：只管同步，不认识具体数据；同步哪些槽在 view/cloudSync.ts）
 src/debug/     调试桥（截图脚本用 window.__game）
 tests/         vitest

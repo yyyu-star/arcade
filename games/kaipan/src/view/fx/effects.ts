@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR } from '../theme.ts';
+import { COLOR, RADIUS } from '../theme.ts';
 import { addText } from '../ui/text.ts';
 import type { Animator } from './anim.ts';
 import { viewOf } from '../viewport.ts';
@@ -66,6 +66,6 @@ export function shake(scene: Phaser.Scene, anim: Animator, ms = 160, intensity =
 /** 短暂的白色描边高光（道具触发、龙头涨停）：在 rect 处闪一下后销毁。 */
 export function flashBox(scene: Phaser.Scene, anim: Animator, x: number, y: number, w: number, h: number, color: number = COLOR.gold, depth = 140): void {
   if (anim.instant) return;
-  const r = scene.add.rectangle(x, y, w, h, color, 0.25).setOrigin(0, 0).setRounded(10).setStrokeStyle(4, color, 1).setDepth(depth);
+  const r = scene.add.rectangle(x, y, w, h, color, 0.25).setOrigin(0, 0).setRounded(RADIUS.md).setStrokeStyle(4, color, 1).setDepth(depth);
   anim.fx({ targets: r, alpha: { from: 1, to: 0 }, duration: 600, ease: 'Quad.easeOut' }, () => r.destroy());
 }

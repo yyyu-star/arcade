@@ -353,9 +353,11 @@ export class TitleScene extends BaseScene {
     if (this.canContinue() && livePlaying(this.session.state)) return this.guardNew(() => undefined);
     if (this.dialogOpen || this.opening) return;
     this.opening = true;
-    const close = showBanner('正在看钱包……');
+    // 0.9.0 等钱包回话时实盘按钮自己转圈（以前是顶上一条「正在看钱包」）
+    const btn = this.buttons.live;
+    btn?.setLoading(true);
     void Promise.all([live.retry().then(() => live.wallet()), ensureMetaArt(this.textures).catch(() => undefined)]).then(([w]) => {
-      close();
+      if (btn?.scene) btn.setLoading(false);
       this.opening = false;
       if (!this.sys.isActive() || this.dialogOpen) return;
       const wallet = w === 'login' ? null : w;

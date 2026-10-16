@@ -17,6 +17,8 @@ const PIC_W = 520;
 const PIC_H = 300;
 const PIC_X = (W - PIC_W) / 2;
 const PIC_Y = 70;
+/** 插图里画的部分到这里为止，下面是写标题的纸条 */
+const STRIP_TOP = 226;
 /**
  * 手机横屏（960×444）：插图原尺寸放左边，标题以外的一句话、要点签、翻页都挪到右栏；
  * 插图不缩小（图上纸条里的标题字也就不会变小）。
@@ -150,8 +152,8 @@ export class HelpPanel extends Dialog {
     const py0 = this.picY;
     if (hasArt(s.textures, key)) this.pageBox.add(addImage(s, px0 + PIC_W / 2, py0 + PIC_H / 2, key, PIC_W, PIC_H));
     else this.pageBox.add(this.sketch(p.id));
-    // 标题写在插图下方留白的纸条上（0–226 是画）
-    this.pageBox.add(addText(s, px0 + 24, py0 + 232, p.title, { size: 20, bold: true, color: COLOR.accentDark }));
+    // 标题写在插图下方留白的纸条上，上下居中（0–226 是画）
+    this.pageBox.add(addText(s, px0 + 24, py0 + (STRIP_TOP + PIC_H) / 2, p.title, { size: 20, bold: true, color: COLOR.accentDark, originY: 0.5 }));
     // 手机：一句话、要点签竖着放在插图右边一栏
     const colW = this.dw - 24 - PHONE_UI.rx;
     const colX = PHONE_UI.rx + colW / 2;

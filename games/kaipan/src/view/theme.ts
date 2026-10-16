@@ -188,6 +188,13 @@ export const RENDER_SCALE = ((): number => {
  */
 export const TYPE = { big: 28, title: 18, label: 13 } as const;
 
+/**
+ * 0.9.0 间距和圆角刻度（4 的倍数）：共用组件（按钮、弹窗、提示、高亮框）从这里取，新写和改动的布局也从这里取，不再写零散数字。
+ * 圆角：小标签和行高亮 sm、按钮和卡片 md、浮层 lg；九宫格素材自带圆角，不受这里管。
+ */
+export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
+export const RADIUS = { sm: 8, md: 12, lg: 16 } as const;
+
 /** 涨跌箭头（↑ / ↓ / 平），配合 signColor 用。 */
 export function arrowOf(v: number): string {
   return v > 0.004 ? '↑' : v < -0.004 ? '↓' : '–';

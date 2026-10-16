@@ -7,7 +7,7 @@ import { breakdownOf, moveWord, shortPart, shortWord, type DayWord, type Recap }
 import { pctArrow } from '../labels.ts';
 import { COLOR, TYPE, signColor } from '../theme.ts';
 import { addGlyph, addImage, addPill, addSlice } from '../ui/art.ts';
-import { addText } from '../ui/text.ts';
+import { addText, fitWidth } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { moneyShort } from '../ui/dialog.ts';
 import { extraChip } from './tempoFx.ts';
@@ -119,12 +119,7 @@ export class RecapCard {
       const hit = s.add.rectangle(cx, cy - 2, colW, 22, 0xffffff, 0.001).setOrigin(0, 0).setInteractive();
       bindTooltip(hit, () => ({ x: cx, y: cy - 2, w: colW, h: 22 }), () => ({ title: shortPart(r.label), body: r.label }));
       root.add(hit);
-      const room = colW - BAR - 54;
-      let cut = Array.from(r.label);
-      while (label.width > room && cut.length > 2) {
-        cut = cut.slice(0, -1);
-        label.setText(`${cut.join('')}…`);
-      }
+      fitWidth(label, colW - BAR - 54);
       const bw = Math.max(2, (BAR * Math.abs(r.value)) / max);
       const bx = cx + colW - 50 - BAR;
       root.add(s.add.rectangle(bx, cy + 3, BAR, 10, 0xeadcc8).setOrigin(0, 0).setRounded(5));
@@ -198,11 +193,7 @@ export class RecapCard {
       root.add(addGlyph(s, sx, y + 30, 'star', 22));
       const room = x + RECAP_RECT.w - PAD - 60 - (sx + 16) - (this.catBtn ? 32 : 0);
       const st = addText(s, sx + 16, y + 21, arrowize(r.star.replace(/^(今天|昨天)最精彩：/, '')), { size: 14, bold: true, color: COLOR.accentDark });
-      let cut = Array.from(st.text);
-      while (st.width > room && cut.length > 4) {
-        cut = cut.slice(0, -1);
-        st.setText(`${cut.join('')}…`);
-      }
+      fitWidth(st, room, 4);
       root.add(st);
     }
     // 每只一枚：小人头像 + 箭头数字 + 钱 + 最大原因（短签）+ 贡献小条（0.5.1 找回原因与占比）
@@ -249,11 +240,7 @@ export class RecapCard {
       // 按卡宽截（下面量宽度），不再统一砍到 8 个字：「大消费热度涨了 9」这种一眼要看完的不打省略号
       const why = shortPart(l.why.split('；')[0] ?? l.why, 16);
       const wt = addText(s, cx + 44, cy + 24, why, { size: 11, color: COLOR.muted });
-      let cut = Array.from(wt.text);
-      while (wt.width > cw - 50 && cut.length > 3) {
-        cut = cut.slice(0, -1);
-        wt.setText(`${cut.join('')}…`);
-      }
+      fitWidth(wt, cw - 50, 3);
       root.add(wt);
       // 谁说对了：单独一枚小签骑在卡片上沿右边（以前接在原因后面，窄卡里被截成"老王说…"）
       if (l.called) {

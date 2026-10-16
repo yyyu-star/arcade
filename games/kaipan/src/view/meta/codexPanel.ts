@@ -4,7 +4,7 @@ import type { Profile } from '../../platform/profile.ts';
 import { achFrameKey, achIconKey, avatarKey, hasArt, itemKey, stockKey } from '../assets.ts';
 import { CODEX_TABS, TIER_NAME } from '../labels.ts';
 import { sound } from '../sound.ts';
-import { COLOR, ITEM_KIND_COLOR, RARITY_COLOR, THEME_COLOR, TYPE, textOn } from '../theme.ts';
+import { COLOR, ITEM_KIND_COLOR, RARITY_COLOR, THEME_COLOR, RADIUS, TYPE, textOn } from '../theme.ts';
 import { addGlyph, addImage, addPill, addSlice } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { Dialog } from '../ui/dialog.ts';
@@ -296,9 +296,10 @@ export class CodexPanel extends Dialog {
       const c = s.add.container(x, y);
       const lit = this.lit[g].has(e.id);
       if (!lit) {
-        if (hasArt(s.textures, 'ui:codex_unknown')) c.add(addImage(s, cw / 2, ch / 2, 'ui:codex_unknown', (ch * 120) / 160, ch));
-        else c.add(s.add.rectangle(10, 0, cw - 20, ch, 0x4a3a46).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.ink, 1));
-        c.add(addText(s, cw / 2, ch - 16, '？？？', { size: 11, bold: true, color: 0xe8dde4, originX: 0.5, originY: 0.5 }));
+        // 0.9.0 没解锁的卡和解锁的一样大（以前用 120×160 的竖图，按高缩放后比解锁的窄一圈，一排卡宽窄不齐）
+        c.add(lockedCard(s, cw, ch));
+        c.add(addText(s, cw / 2, ch / 2 - 10, '?', { size: 44, bold: true, color: 0xffd23f, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 6 }));
+        c.add(addText(s, cw / 2, ch - 22, '？？？', { size: 11, bold: true, color: 0xe8dde4, originX: 0.5, originY: 0.5 }));
       } else {
         c.add(addSlice(s, 0, 0, cw, ch, 'codex_card'));
         const color = this.cardColor(e);
@@ -744,4 +745,19 @@ export function achievementBadge(scene: Phaser.Scene, x: number, y: number, tier
     c.add(img);
   }
   return c;
+}
+
+/**
+ * 没解锁的卡：深紫底、一层小点、描边，配色照素材 ui/codex_unknown。
+ * 和解锁卡的九宫格素材对齐：素材四周留 4 的透明边，底下 8 里有一道阴影，所以卡身是 (4, 4) 起 (w-8)×(h-12)。
+ */
+function lockedCard(s: Phaser.Scene, w: number, h: number): Phaser.GameObjects.Graphics {
+  const [x, y, bw, bh] = [4, 4, w - 8, h - 12];
+  const g = s.add.graphics();
+  g.fillStyle(COLOR.ink, 0.2).fillRoundedRect(x + 3, y + 4, bw, bh, RADIUS.md);
+  g.fillStyle(0x4a3d58, 1).fillRoundedRect(x, y, bw, bh, RADIUS.md);
+  g.fillStyle(0x6a5a7a, 1);
+  for (let yy = y + 10; yy < y + bh - 8; yy += 12) for (let xx = x + 10 + ((yy / 12) % 2) * 6; xx < x + bw - 8; xx += 12) g.fillCircle(xx, yy, 1.4);
+  g.lineStyle(3, COLOR.ink, 1).strokeRoundedRect(x, y, bw, bh, RADIUS.md);
+  return g;
 }

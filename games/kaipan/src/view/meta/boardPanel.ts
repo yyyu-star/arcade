@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import type { BoardResult, Scope } from '../../platform/board.ts';
 import { loadBoard } from '../dailyBoard.ts';
 import { boardScoreText } from '../labels.ts';
-import { COLOR, TYPE } from '../theme.ts';
+import { COLOR, SPACE, TYPE } from '../theme.ts';
 import { Button } from '../ui/button.ts';
 import { Dialog } from '../ui/dialog.ts';
-import { addText } from '../ui/text.ts';
+import { addText, fitWidth } from '../ui/text.ts';
 import { phoneLayout } from '../viewport.ts';
 
 /** 电脑、手机横屏各一套：面板宽高、每页几行、行高、第一行的 y、"我"那一行和翻页键的 y */
@@ -112,8 +112,16 @@ export class BoardPanel extends Dialog {
       const medal = e.rank <= 3 ? [0xe8b33a, 0xa9b4c0, 0xc58a5a][e.rank - 1]! : null;
       if (medal !== null) this.rows.add(s.add.circle(66, cy, 13, medal));
       this.rows.add(addText(s, 66, cy, `${e.rank}`, { size: TYPE.label + 1, bold: true, num: true, color: medal !== null ? COLOR.paper : COLOR.ink, originX: 0.5, originY: 0.5 }));
-      this.rows.add(addText(s, 98, cy, e.isMe ? `${e.displayName}（我）` : e.displayName, { size: TYPE.label + 1, bold: e.isMe, color: COLOR.ink, originY: 0.5 }));
-      this.rows.add(addText(s, G.w - 44, cy, boardScoreText(e.score), { size: TYPE.label + 1, bold: true, num: true, color: COLOR.ink, originX: 1, originY: 0.5 }));
+      const score = addText(s, G.w - 44, cy, boardScoreText(e.score), { size: TYPE.label + 1, bold: true, num: true, color: COLOR.ink, originX: 1, originY: 0.5 });
+      // 昵称最长能有十几个字：截到分数左边留一格，不压住分数
+      const name = addText(s, 98, cy, e.displayName, { size: TYPE.label + 1, bold: e.isMe, color: COLOR.ink, originY: 0.5 });
+      const room = score.x - score.width - SPACE.md - 98;
+      if (e.isMe) {
+        const tag = addText(s, 0, cy, '（我）', { size: TYPE.label + 1, bold: true, color: COLOR.ink, originY: 0.5 });
+        fitWidth(name, room - tag.width);
+        this.rows.add(tag.setX(98 + name.width));
+      } else fitWidth(name, room);
+      this.rows.add([name, score]);
     });
     // 我：不在这一页（或不在前 50）时单独一行；我和第 50 名同分但来得晚时，名次 ≤ 50 却不在列表里，也按这一行显示
     const listed = r.entries.some((e) => e.isMe);

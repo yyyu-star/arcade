@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { addBackdrop } from '../fx/effects.ts';
 import { sound } from '../sound.ts';
 import { COLOR, TYPE } from '../theme.ts';
-import { Button } from './button.ts';
+import { Button, HIT_MIN } from './button.ts';
 import type { Glyph } from '../assets.ts';
 import { addGlyph, addPaper } from './art.ts';
 import { bindTooltip, type TipContent } from './tooltip.ts';
@@ -41,8 +41,9 @@ export class Dialog extends Phaser.GameObjects.Container {
     const underline = scene.add.rectangle(x + 28, y + 54, Math.min(w - 56, head.width + 24), 4, COLOR.accent).setOrigin(0, 0).setRounded(2);
     const close = addText(scene, x + w - 24, y + 14, '×', { size: 30, color: COLOR.muted, originX: 1 }).setInteractive({ useHandCursor: true });
     close.on(Phaser.Input.Events.POINTER_UP, () => this.close());
-    // 只有 × 字形能点时手指很难点中：垫一块 44×44 的透明点击区（电脑上鼠标点得准，也无妨）
-    const closeHit = scene.add.rectangle(x + w - 24 - close.width / 2, y + 14 + close.height / 2, 44, 44, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+    // 只有 × 字形能点时手指很难点中：垫一块透明点击区，至少 44，触屏上和按钮一样按 HIT_MIN 撑（手机 44 的世界单位只有约 39px）
+    const closeSide = Math.max(44, HIT_MIN);
+    const closeHit = scene.add.rectangle(x + w - 24 - close.width / 2, y + 14 + close.height / 2, closeSide, closeSide, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
     closeHit.on(Phaser.Input.Events.POINTER_UP, () => this.close());
     this.inner = scene.add.container(x, y);
     this.add([backdrop, panel, hitPanel, head, underline, closeHit, close, this.inner]);

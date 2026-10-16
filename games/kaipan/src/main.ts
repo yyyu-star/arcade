@@ -14,6 +14,7 @@ import { live, lobbyConfirm, startLive } from './view/live.ts';
 import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
 import { startGame } from './view/game.ts';
 import { initInputMode, onInputModeChange } from './view/input.ts';
+import { installFocus } from './view/ui/focus.ts';
 import { applySettingsToOptions, type ViewOptions } from './view/options.ts';
 import { Session, randomSeed } from './view/session.ts';
 import { sound } from './view/sound.ts';
@@ -24,6 +25,7 @@ installErrorHandler();
 // 手机竖屏时提示横过来（提示层左上角也有「大厅」，一局进行中先问一次）；触屏设备不显示键盘提示
 mountRotateHint({ inRun: () => session.sceneKey === 'trade', confirm: () => lobbyConfirm(session.state), go: () => goLobby() });
 initInputMode();
+installFocus();
 
 // 旧版本留在本机的备份 key 一次性清掉（只清 LEGACY_KEYS，当前的存档、档案、设置不碰）
 clearLegacyKeys();

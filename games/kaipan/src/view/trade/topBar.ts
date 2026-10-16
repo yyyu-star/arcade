@@ -23,13 +23,14 @@ import { chips } from '../liveText.ts';
 
 /**
  * 顶栏各块的位置。电脑是 1264×56 的一条；手机横屏（0.5.5）是 952×46，各块收窄、两行字往上提，字号不低于 13。
+ * 0.9.0 账户上面那行小字离顶边留出 4 以上（以前贴着边）。
  * goalX：有月度目标时「目标 + 要还的钱」那一块的左边（账户那一列收窄到 accW）；billLeft：没有目标时那一块的左边。
  */
 const TB = PHONE
   ? {
       calIcon: { x: 22, y: 18, s: 22 }, day: { x: 38, y: 5, size: 16 }, calPill: { x: 10, y: 29, h: 18 }, calTextX: 18, row2Y: 38,
       calHit: { x: 6, y: 4, w: 180, h: 44 }, flagsRight: 182, flagY: 29,
-      accLabel: { x: 216, y: 6 }, wallet: { x: 200, y: 32, s: 24 }, account: { x: 216, y: 21, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
+      accLabel: { x: 216, y: 8 }, wallet: { x: 200, y: 32, s: 24 }, account: { x: 216, y: 22, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
       goalX: 392, billLeft: 416, billRight: 640, billBox: { y: 6, h: 40 }, hourglass: { x: 604, y: 16, s: 18 }, daysLeft: { x: 616, y: 16 },
       billY: 5, billNoteY: 27, goalIconY: 17, goalWordY: 38, goalBarY: 35, goalBarW: 90, houseY: 38, houseNoGoalY: 28, billTitleSize: 17,
       itemsX: 646, itemsY: 4, itemsW: 214, itemsWExt: 146, rowIconY: 23, rowChipY: 23, row2Y0: 11, row2H: 23, row2Icon: 21,
@@ -39,7 +40,7 @@ const TB = PHONE
   : {
       calIcon: { x: 36, y: 24, s: 26 }, day: { x: 54, y: 12, size: TYPE.title }, calPill: { x: 26, y: 37, h: 20 }, calTextX: 34, row2Y: 47,
       calHit: { x: 20, y: 8, w: 250, h: 52 }, flagsRight: 290, flagY: 37,
-      accLabel: { x: 330, y: 10 }, wallet: { x: 312, y: 34, s: 28 }, account: { x: 330, y: 24, size: TYPE.big }, accHit: { x: 296, y: 8, w: 232, h: 52 }, accWideW: 280,
+      accLabel: { x: 330, y: 13 }, wallet: { x: 312, y: 35, s: 28 }, account: { x: 330, y: 26, size: TYPE.big }, accHit: { x: 296, y: 8, w: 232, h: 52 }, accWideW: 280,
       goalX: 534, billLeft: 584, billRight: 884, billBox: { y: 10, h: 48 }, hourglass: { x: 842, y: 22, s: 20 }, daysLeft: { x: 856, y: 22 },
       billY: 13, billNoteY: 37, goalIconY: 24, goalWordY: 46, goalBarY: 41, goalBarW: 110, houseY: 44, houseNoGoalY: 34, billTitleSize: TYPE.title,
       itemsX: 896, itemsY: 10, itemsW: 258, itemsWExt: 168, rowIconY: 18, rowChipY: 24, row2Y0: 12, row2H: 26, row2Icon: 24,

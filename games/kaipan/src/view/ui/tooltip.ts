@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { Rect } from '../rect.ts';
-import { COLOR } from '../theme.ts';
+import { COLOR, RADIUS } from '../theme.ts';
 import { addText } from './text.ts';
 import { viewOf } from '../viewport.ts';
 
@@ -46,7 +46,7 @@ class Tooltip {
     const title = addText(s, 12, 10, c.title, { size: 15, bold: true, color: COLOR.accentDark, wrap: W - 24 });
     const body = addText(s, 12, 14 + title.height, c.body, { size: 13, color: COLOR.ink, wrap: W - 24, lineSpacing: 4 });
     const h = 24 + title.height + body.height;
-    const bg = s.add.rectangle(0, 0, W, h, COLOR.paperHi, 0.98).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.ink, 1);
+    const bg = s.add.rectangle(0, 0, W, h, COLOR.paperHi, 0.98).setOrigin(0, 0).setRounded(RADIUS.md).setStrokeStyle(2, COLOR.ink, 1);
     // 优先放在目标下方，放不下放上方；左右夹在屏幕内
     let y = rect.y + rect.h + 8;
     if (y + h > V.h - 6) y = rect.y - h - 8;
@@ -137,19 +137,24 @@ export function bindTooltip(obj: Phaser.GameObjects.GameObject, rect: () => Rect
     timer?.remove();
     timer = null;
   };
+  // 触屏：手指按下开始计时，按满时长再显示，短按照常当点击。
+  // 0.9.0 按下（POINTER_DOWN）也开始计时：手指按下时 Phaser 不一定先发"移入"，只等移入的话长按不出说明、松手照样算点击
+  const arm = (p: Phaser.Input.Pointer): void => {
+    if (timer) return;
+    timer = scene.time.delayedCall(LONG_PRESS_MS, () => {
+      timer = null;
+      if (!obj.active || !p.isDown) return;
+      const c = content();
+      tooltipOf(scene).pin(obj, rect(), c);
+      if (c) globalThis.navigator?.vibrate?.(12);
+    });
+  };
+  obj.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer) => {
+    if (p.wasTouch) arm(p);
+  });
+  obj.on(Phaser.Input.Events.POINTER_UP, cancel);
   obj.on(Phaser.Input.Events.POINTER_OVER, (p: Phaser.Input.Pointer) => {
-    // 触屏的"移入"就是手指按下：等按满时长再显示，短按照常当点击
-    if (p.wasTouch) {
-      cancel();
-      timer = scene.time.delayedCall(LONG_PRESS_MS, () => {
-        timer = null;
-        if (!obj.active || !p.isDown) return;
-        const c = content();
-        tooltipOf(scene).pin(obj, rect(), c);
-        if (c) globalThis.navigator?.vibrate?.(12);
-      });
-      return;
-    }
+    if (p.wasTouch) return arm(p);
     const c = content();
     if (c) tooltipOf(scene).show(obj, rect(), c);
   });
