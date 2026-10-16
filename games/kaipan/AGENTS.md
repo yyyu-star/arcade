@@ -55,8 +55,8 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 ## 5. 数据管线（在开发机上跑，产物进仓库，原始数据不进）
 
 - 来源：WIKI Prices（Quandl 社区整理、Nasdaq Data Link 托管，公有领域）。
-- **外部依赖**：原始 CSV 默认在 `$HOME/data/wiki-prices/`（`tools/data/common.ts` 的 `DEFAULT_SRC`、`DEFAULT_CACHE`），
-  逐年年包缓存在 `$HOME/data/wiki-prices/packs`；都可以用命令行参数改。下载需要 Nasdaq Data Link 的 key，
+- **外部依赖**：原始 CSV 默认在模块里的 `.data/wiki-prices/`（被 .gitignore，`tools/data/common.ts` 的 `DATA_DIR`），
+  逐年年包缓存在 `.data/wiki-prices/packs`；环境变量 `KAIPAN_WIKI_PRICES` 或命令行参数都能改。数据有 4 GB 多，几份检出共用一份时把 `.data/wiki-prices` 做成软链。下载需要 Nasdaq Data Link 的 key，
   放在 `~/.config/nasdaq/nasdaq.env`（`NASDAQ_DATA_LINK_API_KEY`），不进仓库。
 - 流程：`tools/data/slice.ts` 切片 → `build.ts` 清洗、选池、合成大盘 → `segments.ts` 切行情段到 `public/data/segments/`。
   段文件名和 id 是加盐哈希，年份对照只在 `tools/data/segments-manifest.json`；`tests/segments-leak.test.ts` 保证线上文件不含年份日期。
@@ -77,7 +77,7 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 1. 本目录 `npm run typecheck`、`npm test`、`npm run build:cf` 全过；改了画面就跑 `npm run shot`（或对应模式）并逐张看截图。
 2. 更新 `package.json` 版本和 `CHANGELOG.md`（用户看得懂的大白话）。
 3. 提交信息以 `kaipan:` 开头，只暂存明确路径；推 `kaipan/<说明>` 分支开 PR（见仓库根 CONTRIBUTING.md），审阅通过、合并进 `main` 后由 `.github/workflows/game-kaipan.yml` 部署。
-   部署时路由由工作流注入（正式站主机名在 `production` 环境的 secret `SITE_HOST`），`wrangler.jsonc` 里不写路由和站点地址，代码里也不写（见 README 的「部署」一节）。
+   `wrangler.jsonc` 是能单独部署的独立配置（0.8.0）：不写平台绑定、`GATE`、路由和站点地址，代码里也不写站点地址；本站部署时由 `tools/deployer` 补上平台绑定、`GATE=login` 和路由（正式站主机名在 `production` 环境的 secret `SITE_HOST`，见 README 的「部署」一节）。
    Cloudflare 偶尔返回 504，但部署可能已经生效：先用 `npx wrangler deployments list` 核实再决定是否重跑。
 4. 发布后在线上 `/games/kaipan/` 实际打开：版本号、开局能加载行情段、玩一天、控制台零报错。
 

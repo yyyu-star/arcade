@@ -1,26 +1,23 @@
 {
-  // 开盘：静态资源 Worker，挂在平台同一个域名的 /games/kaipan 路径下（路径路由优先于平台的自定义域名，请求不经过平台的 Worker）。
-  // 路由不写在这里，由部署时注入：正式站在 CI 里用 `wrangler deploy --route <站点>/games/kaipan --route <站点>/games/kaipan/*`，
-  // 自己部署的看 README 的「部署」一节。自己不开 workers.dev 地址。
+  // 开盘的独立配置（0.8.0）：原样部署就是一个不要平台、谁打开都能玩的开盘（单机，没有登录、云存档、排行榜、钱包和实盘），
+  // 地址是 kaipan.<你的子域>.workers.dev，打开 / 会转到 /games/kaipan/。见 README 的「单独部署这个游戏」。
+  //
+  // 本站正式部署时，维护者的部署工具（tools/deployer）在这份配置上补平台的东西，这里不写：
+  // 服务绑定 ARCADE（认人）和 WALLET（钱包，props.game = kaipan）、GATE = "login"（测试期邀请制，必须登录）、
+  // 关掉 workers_dev，路由按站点注入。所以这里不写 services、GATE 和路由。
   "$schema": "node_modules/wrangler/config-schema.json",
-  // 0.5.6：测试期邀请制。首页（只有 run_worker_first 列的这三个路径）先进 Worker，GATE=login 时问平台登录了没有，
-  // 平台有问题一律不放行（见 src/worker/gate.ts）。其余静态资源不经过 Worker。
-  // 0.6.0：/games/kaipan/api/*（实盘钱包接口，src/worker/live.ts）也先进 Worker，不看 GATE，总要认人。GATE 开着（login）；临时放开改成 off。
   "name": "kaipan",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    "run_worker_first": ["/games/kaipan", "/games/kaipan/", "/games/kaipan/index.html", "/games/kaipan/api/*"]
-  },
-  "services": [
-    { "binding": "ARCADE", "service": "arcade" },
-    // 实盘钱包：props.game 必须是 kaipan，否则钱包所有调用都回 bad_game（docs/design-live.md 第 6 节）
-    { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "kaipan" } }
-  ],
-  "vars": { "GATE": "login" }
+    // 先进 Worker 的路径（其余静态资源直接回，不经过 Worker）：
+    // /（单独部署时转到 /games/kaipan/）、首页三种写法（GATE=login 时问平台登录了没有，见 src/worker/gate.ts）、
+    // /games/kaipan/api/*（实盘钱包接口，src/worker/live.ts，总要认人；单独部署时一律 501）
+    "run_worker_first": ["/", "/games/kaipan", "/games/kaipan/", "/games/kaipan/index.html", "/games/kaipan/api/*"]
+  }
 }

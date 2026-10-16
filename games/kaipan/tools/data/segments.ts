@@ -1,12 +1,12 @@
 /**
  * 行情段库（0.4 重做，里程碑 B）：从年度包切出"一局用的一段真实行情"。
  *
- *   node tools/data/segments.ts                       从 public/data/years 的现有年包切段（默认；现在仓库里的 135 段是用 --packs ~/data/wiki-prices/packs --step 1 切的）
+ *   node tools/data/segments.ts                       从 public/data/years 的现有年包切段（默认；现在仓库里的 135 段是用 --packs .data/wiki-prices/packs --step 1 切的）
  *   node tools/data/segments.ts --gap 39 --step 3     两段的开局日至少隔 gap 个交易日（一局 58 天，gap 39 = 重叠不超过三分之一）；候选开局日每 step 天一个
  *   node tools/data/segments.ts --packs <目录> --out <目录> [--manifest <文件>]   指定年包目录、输出目录、id 对照表
  *   node tools/data/segments.ts --retitle             只改现有段文件的标题和大事的行业（不重切行情、不读年包）
  *   node tools/data/segments.ts --full                全量数据到位后一条命令：检查前置条件 → 切片 → 建 1996–2018 年包
- *                                                     （到 ~/data/wiki-prices/packs，不进仓库）→ 切 150–300 段
+ *                                                     （到 .data/wiki-prices/packs，不进仓库）→ 切 150–300 段
  *
  * 一段 = 开局前 WARM 天历史（风口热度预热）+ 一局的交易日数（BALANCE.monthDays 之和）。
  * 每段只放这一局要用的东西：8 个风口各自对应的真实行业（等权合成）、按 0.3 的股票池绑定的真实股票（每个风口 3–7 只）、大盘（老三十）。
@@ -20,13 +20,14 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { BALANCE } from '../../src/core/balance.ts';
 import { STOCKS, THEME_IDS } from '../../src/core/content/stocks.ts';
 import { assignTitles, dayOfDate, sectorsOf } from '../../src/core/reveal.ts';
 import { REGIME_LABEL, THEME_REAL, type Regime, type Segment, type SegmentIndex, type SegmentStock, type SegmentTheme } from '../../src/core/segment.ts';
 import type { Role, ThemeId } from '../../src/core/types.ts';
-import { DEFAULT_CACHE, DEFAULT_SRC, arg, flag, pct } from './common.ts';
+import { DATA_DIR, DEFAULT_CACHE, DEFAULT_SRC, arg, flag, pct } from './common.ts';
 import { SEG_EVENTS } from './events.ts';
 import { SECTOR_OF } from './sectors.ts';
 import { dowMembers } from './dow.ts';
@@ -509,7 +510,7 @@ export function generate(packDir: string, outDir: string, gap: number, step: num
 
 /**
  * 全量数据（1996–2018）到位后的一条命令。现在还缺的东西会逐条列出，缺了就停在那一步：
- * 1. 原始 CSV：~/data/wiki-prices/WIKI_PRICES_*.csv（用户把 Nasdaq key 放进 ~/.config/nasdaq/nasdaq.env 后下载）；
+ * 1. 原始 CSV：.data/wiki-prices/WIKI_PRICES_*.csv（用户把 Nasdaq key 放进 ~/.config/nasdaq/nasdaq.env 后下载）；
  * 2. 行业标注：tools/data/sectors.ts 已按 candidates.ts --top 300 补到 1996–2018（2026-10-12）；换口径时再跑
  *    `node tools/data/candidates.ts --year <年> --missing` 列出缺行业的候选并补进 sectors.ts；
  * 3. 老三十成分：tools/data/dow.ts 只有 1998–2000、2007–2008 的道指成分和换股，1996–2018 其他年份要补成分名单和换股日；
@@ -521,7 +522,7 @@ function full(): void {
   const [a, b] = years.split('-').map(Number) as [number, number];
   const list: number[] = [];
   for (let y = a; y <= (b ?? a); y++) list.push(y);
-  const packs = arg('packs', `${process.env['HOME'] ?? ''}/data/wiki-prices/packs`);
+  const packs = arg('packs', join(DATA_DIR, 'packs'));
   const hard: string[] = [];
   if (!existsSync(arg('src', DEFAULT_SRC))) hard.push(`缺原始数据 ${arg('src', DEFAULT_SRC)}：等 ~/.config/nasdaq/nasdaq.env 就位后下载 WIKI Prices 全量`);
   const noDow = list.filter((y) => dowMembers(`${y}-03-01`).length !== 30);

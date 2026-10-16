@@ -175,18 +175,21 @@ describe('wrangler.jsonc 和代码一致', () => {
     expect(Object.keys(mod)).toEqual(['default']);
   });
 
-  it('run_worker_first 只列首页路径，绑定 ARCADE → arcade，GATE 开着（login）', () => {
+  it('独立配置：run_worker_first 是站点根、首页路径和钱包接口；不写平台绑定和 GATE（本站部署时由部署工具补）', () => {
     // jsonc：去掉整行注释再解析
     const text = readFileSync('wrangler.jsonc', 'utf8')
       .split('\n')
       .filter((l) => !l.trim().startsWith('//'))
       .join('\n');
-    const cfg = JSON.parse(text) as { main: string; assets: { binding: string; run_worker_first: string[] }; services: { binding: string; service: string }[]; vars: Record<string, string> };
+    const cfg = JSON.parse(text) as Record<string, unknown> & { main: string; assets: { binding: string; run_worker_first: string[] } };
     expect(cfg.main).toBe('src/worker/index.ts');
     expect(cfg.assets.binding).toBe('ASSETS');
-    // 首页闸门路径之外，只多一条钱包接口 /api/*
-    expect([...cfg.assets.run_worker_first].sort()).toEqual([...GATED_PATHS, '/games/kaipan/api/*'].sort());
-    expect(cfg.services).toContainEqual({ binding: 'ARCADE', service: 'arcade' });
-    expect(cfg.vars.GATE).toBe('login');
+    // 首页闸门路径之外，只多站点根 /（单独部署时转到游戏）和钱包接口 /api/*
+    expect([...cfg.assets.run_worker_first].sort()).toEqual(['/', ...GATED_PATHS, '/games/kaipan/api/*'].sort());
+    expect(cfg.workers_dev).toBe(true);
+    expect(cfg.preview_urls).toBe(false);
+    expect(cfg.services).toBeUndefined();
+    expect(cfg.vars).toBeUndefined();
+    expect(cfg.routes).toBeUndefined();
   });
 });

@@ -14,13 +14,16 @@ import { phoneLayout } from '../viewport.ts';
 
 const W = 640;
 
-/** 今天的每日挑战（按北京日期）：人设、市场环境、种子、今日最好成绩，「开始挑战」；「排行榜」看今天的排行（0.5.10）。 */
+/**
+ * 今天的每日挑战（按北京日期）：人设、市场环境、种子、今日最好成绩，「开始挑战」；「排行榜」看今天的排行（0.5.10）。
+ * onBoard 为 null（0.8.0 单独部署，没有平台）时不放「排行榜」。
+ */
 export class DailyPanel extends Dialog {
   constructor(
     scene: Phaser.Scene,
     profile: Profile,
     onStart: (seed: string, setup: ReturnType<typeof dailySetup>['setup']) => void,
-    onBoard: (date: string) => void,
+    onBoard: ((date: string) => void) | null,
     date = dailyDate(),
   ) {
     // 手机横屏（444 高）放不下 440：内容本来只到 316，面板收到 400，按钮跟着上移
@@ -63,15 +66,18 @@ export class DailyPanel extends Dialog {
     });
     const back = new Button(scene, 32, H - 62, { width: 110, height: 40, label: '返回', fontSize: 15, hotkey: 'Esc' });
     back.setHandler(() => this.close());
-    const board = new Button(scene, 32 + 110 + 16, H - 62, { width: 120, height: 40, label: '排行榜', icon: 'trophy', fontSize: 15 });
-    board.setHandler(() => {
-      this.close();
-      onBoard(date);
-    });
-    this.inner.add([go, back, board]);
+    this.inner.add([go, back]);
     this.named['daily:start'] = go;
     this.named['daily:back'] = back;
-    this.named['daily:board'] = board;
+    if (onBoard) {
+      const board = new Button(scene, 32 + 110 + 16, H - 62, { width: 120, height: 40, label: '排行榜', icon: 'trophy', fontSize: 15 });
+      board.setHandler(() => {
+        this.close();
+        onBoard(date);
+      });
+      this.inner.add(board);
+      this.named['daily:board'] = board;
+    }
     const onKey = (e: KeyboardEvent): void => {
       if (e.code === 'Enter' || e.code === 'NumpadEnter') go.press();
     };

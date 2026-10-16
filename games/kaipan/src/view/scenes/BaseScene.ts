@@ -11,6 +11,7 @@ import { SettingsPanel } from '../ui/settingsPanel.ts';
 import { HelpPanel } from '../meta/helpPanel.ts';
 import { ensureMetaArt, metaArtReady } from '../assets.ts';
 import { loadViewPrefs } from '../meta/prefs.ts';
+import { standalone } from '../../platform/mode.ts';
 import { loadProfile } from '../../platform/profile.ts';
 import { goLobby } from '../lobby.ts';
 import { lobbyConfirm, live, livePlaying } from '../live.ts';
@@ -159,7 +160,8 @@ export abstract class BaseScene extends Phaser.Scene implements Presenter {
       animLocked: this.session.animLocked,
       runs: loadProfile().profile.runs,
       onMenu: inGame ? () => this.session.toTitle() : undefined,
-      lobby: inGame,
+      // 单独部署没有大厅，回首页就是「回到主菜单」，不重复放一个
+      lobby: inGame && !standalone(),
       onQuitLive: inGame && this.session.liveOk && livePlaying(this.session.state) ? () => {
         quitting = true;
         // 设置框关掉后下一帧才放开对话框标记，确认框等它放开再开

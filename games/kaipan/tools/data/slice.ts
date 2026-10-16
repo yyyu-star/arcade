@@ -6,7 +6,7 @@
  *
  * 每个年份 Y 的切片包含 (Y-1)-08-01 到 Y-12-31 的行：前一年下半年的数据用作开局前的历史（β 估计、K 线回看）。
  * 同时写 tickers.json：全量数据里每个代码的首日、末日、行数（用于核对化名表和改写代码重名）。
- * 原始数据和切片都不进仓库（默认缓存在 ~/data/wiki-prices/slices/）。
+ * 原始数据和切片都不进仓库（默认缓存在 .data/wiki-prices/slices/）。
  */
 import { closeSync, createReadStream, existsSync, mkdirSync, openSync, writeFileSync, writeSync } from 'node:fs';
 import { createInterface } from 'node:readline';

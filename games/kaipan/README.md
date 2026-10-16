@@ -130,30 +130,41 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 
 ## 部署
 
+开盘是一个 Cloudflare Worker（名字 `kaipan`）：静态资源加一小段 Worker 代码。`wrangler.jsonc` 是能单独部署的独立配置，不依赖平台；
+挂到有平台的站点上时，平台的绑定由部署工具补上（见下面「和平台一起部署」）。
+
+### 单独部署这个游戏
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/kaipan)
 
-开盘是一个 Cloudflare Worker（名字 `kaipan`）：静态资源加一小段 Worker 代码，挂在平台同一个域名的 `/games/kaipan` 路径下，依赖平台：
+点上面的按钮，或在本目录 `npm ci && npm run deploy`（`build:cf` 加 `wrangler deploy`，需要环境变量 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`）。
+部署完用 `https://kaipan.<你的 workers.dev 子域>/` 打开，根路径会跳到 `/games/kaipan/`；想挂自己的域名，在 Cloudflare 后台给 `kaipan` 加路由或自定义域名。
 
-1. **先部署平台**（`platform/`，Worker 名 `arcade`，见仓库根 README 的部署一节）。开盘的两个服务绑定都指向它，平台不在时部署会失败。
-2. **再部署开盘**：点上面的按钮，或在本目录 `npm ci && npm run deploy`（`build:cf` 加 `wrangler deploy`，需要环境变量 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`）。
-3. **最后加路由**：在 Cloudflare 后台给 `kaipan` 加两条路由 `<你的域名>/games/kaipan` 和 `<你的域名>/games/kaipan/*`（和平台同一个域名），
-   或者部署时直接带上：`npx wrangler deploy --route "<你的域名>/games/kaipan" --route "<你的域名>/games/kaipan/*"`。
-   路由不写在 `wrangler.jsonc` 里；`workers_dev` 关着，没有路由时外面访问不到。
+单独部署时：
 
-本模块要的绑定和变量（都写在 `wrangler.jsonc` 里，没有 secret）：
+- **有**：完整的单机游戏，存档、档案、设置都在浏览器里；每日挑战照常能打（成绩只记在本机）。
+- **没有**：登录、云存档、每日排行榜、钱包和实盘。页面启动时问一次同域 `/api/me`，回 404 或不是 JSON 就当没有平台，把这些入口藏起来，
+  "大厅"按钮换成回游戏首页；实盘接口 `/games/kaipan/api/live/*` 直接回 `501 no_wallet`。
+- 开盘没有好友房，单独部署和本站一样，没有联机。
+
+### 和平台一起部署
+
+本站上开盘挂在平台同一个域名的 `/games/kaipan` 下，依赖平台（`platform/`，Worker 名 `arcade`）。部署时 `tools/deployer/deploy.mjs` 在独立配置上叠加：
 
 | 名字 | 类型 | 说明 |
 |---|---|---|
-| `ASSETS` | 静态资源 | `dist-cf/`，由 `npm run build:cf` 生成 |
 | `ARCADE` | 服务绑定 → `arcade` | 登录闸门问平台 `/api/me` |
 | `WALLET` | 服务绑定 → `arcade` 的 `WalletService`，`props.game = kaipan` | 实盘的带入、结回、放弃 |
-| `GATE` | 变量 | 登录闸门：`login`（没登录跳 `/login?from=kaipan`，平台有问题回 503 不放行）或 `off` |
+| `GATE` | 变量 `login` | 登录闸门：没登录跳 `/login?from=kaipan`，平台有问题回 503 不放行 |
 
-只有首页和实盘接口 `/games/kaipan/api/*` 进 Worker（`assets.run_worker_first`，分流在 `src/worker/route.ts`；接口不看 `GATE`，总要认人），其余静态资源不经过 Worker。
+另外关掉 `workers_dev`、`preview_urls`，注入两条路由 `<站点>/games/kaipan` 和 `<站点>/games/kaipan/*`。独立配置里只有 `ASSETS`（`dist-cf/`，由 `npm run build:cf` 生成），没有 secret。
+写了 `GATE=login` 却没有 `ARCADE` 时按出错处理：首页回 503，不当成单独部署放行。
+
+只有根路径、首页和实盘接口 `/games/kaipan/api/*` 进 Worker（`assets.run_worker_first`，分流在 `src/worker/route.ts`；接口不看 `GATE`，总要认人），其余静态资源不经过 Worker。
 平台续期下发的 Set-Cookie 由闸门原样带回浏览器。
 
-本仓库的正式站由 `.github/workflows/game-kaipan.yml` 部署：改动经 PR 合并进 `main` 且涉及 `games/kaipan/**` 时，先跑模块独立性检查，再 `npm ci`、`npm test`、`build:cf`，
-然后 `wrangler deploy` 并注入路由（正式站的主机名在 GitHub `production` 环境的 secret `SITE_HOST` 里，没设就失败）；PR 上只测试不部署。
+本仓库的正式站由 `.github/workflows/game-kaipan.yml` 部署：改动经 PR 合并进 `main` 且涉及 `games/kaipan/**` 时，先跑模块独立性检查，再 `npm ci`、`npm test`、`build:cf` 并打包，
+然后由 `tools/deployer/deploy.mjs` 补上平台绑定和路由后部署（正式站的主机名在 GitHub `production` 环境的 secret `SITE_HOST` 里，没设就失败）；PR 上只测试不部署。
 在本仓库里不对正式环境手动部署。需要拆成单独仓库时，在仓库根运行 `tools/split-module.sh games/kaipan`。
 
 ## 目录结构
@@ -178,7 +189,7 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 - 行情段（`public/data/segments/`）：文件名和 id 是不透明的短哈希，目录只有 id 和文件名，段文件里只有相对涨跌（基点）、
   市况、游戏化标题和大事的故事句，没有年份、日期、公司和代码（`tests/segments-leak.test.ts` 把关）。id 和真实年份的对照只在
   `tools/data/segments-manifest.json`，大事的故事版在 `tools/data/beats.ts`，都不进画面包。重新生成：
-  `node tools/data/segments.ts --packs ~/data/wiki-prices/packs --step 1`（同一份年包结果逐字节一致）。
+  `node tools/data/segments.ts --packs .data/wiki-prices/packs --step 1`（同一份年包结果逐字节一致）。
 - `docs/`：现行的是 `design-0.5.md`、`design-0.5-visual.md`、`core-api-0.5.md`、`design-live.md`（实盘），其余带版本号的是历史稿，
   索引见 `docs/README.md`。
 

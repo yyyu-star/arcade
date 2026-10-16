@@ -5,6 +5,7 @@
 import { dailyBoardId, dailyScore, dailySegmentId, isDailyRun, type GameState, type RunSummary } from '../core/index.ts';
 import { askUser, boardDateOpen, readBoard, submitScoreAs, type BoardDeps, type BoardResult, type Scope, type SubmitResult } from '../platform/board.ts';
 import type { RecordResult } from '../platform/profile.ts';
+import { standalone } from '../platform/mode.ts';
 import { cloudUserId } from './cloudSync.ts';
 
 /** 这一局在排行榜上的状态（结束页显示一行） */
@@ -77,7 +78,7 @@ function currentUser(): string | null {
  */
 export function warmBoardUser(delayMs = 3000): void {
   setTimeout(() => {
-    if (!currentUser()) void askOnce();
+    if (!currentUser() && !standalone()) void askOnce();
   }, delayMs);
 }
 
@@ -124,7 +125,8 @@ export function runBoard(runId: string): RunBoard {
 
 /** 一局记进档案后调用（Session.recordEnd，每局只调一次）：能上榜就交分。 */
 export function submitRun(runId: string, state: Readonly<GameState>, sum: Readonly<RunSummary>, result: Readonly<RecordResult> | null, today: string): void {
-  if (runs.has(runId)) return;
+  // 0.8.0 单独部署没有排行榜：不交分，结束页也就没有这一行
+  if (runs.has(runId) || standalone()) return;
   const b = boardCheck(state, sum, result, today);
   set(runId, b);
   if (b.state === 'sending') void send(runId, b.boardId, b.score);

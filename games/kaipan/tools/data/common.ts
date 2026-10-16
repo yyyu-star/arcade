@@ -1,6 +1,15 @@
 // 数据管线公用：默认路径、命令行参数、CSV 行解析。
-export const DEFAULT_SRC = `${process.env['HOME'] ?? ''}/data/wiki-prices/WIKI_PRICES_989367082a7cf822fd35dbe3c8f4969b.csv`;
-export const DEFAULT_CACHE = `${process.env['HOME'] ?? ''}/data/wiki-prices/slices`;
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * 原始数据（WIKI Prices 全量，4 GB 多）放哪儿：环境变量 KAIPAN_WIKI_PRICES 优先，没设就是模块里的 .data/wiki-prices（被 .gitignore，不进仓库）。
+ * 不往家目录或模块外面放东西；几个检出共用一份时，把 .data/wiki-prices 做成指过去的软链，或者设环境变量，不要每份检出复制一遍。
+ * 各工具的 --src、--cache、--packs 参数照样能改。
+ */
+export const DATA_DIR = process.env['KAIPAN_WIKI_PRICES'] || fileURLToPath(new URL('../../.data/wiki-prices', import.meta.url));
+export const DEFAULT_SRC = join(DATA_DIR, 'WIKI_PRICES_989367082a7cf822fd35dbe3c8f4969b.csv');
+export const DEFAULT_CACHE = join(DATA_DIR, 'slices');
 export const OUT_DIR = 'public/data/years';
 
 export function arg(name: string, def: string): string {

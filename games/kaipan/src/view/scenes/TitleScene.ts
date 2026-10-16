@@ -29,6 +29,7 @@ import { loadBoard } from '../dailyBoard.ts';
 import { live, livePlaying, onLiveChange } from '../live.ts';
 import { LIVE_GUARD, buyinFailText, chips, liveEndText, liveNoticeTitle } from '../liveText.ts';
 import { hasLoginHint } from '../../platform/cloud.ts';
+import { standalone } from '../../platform/mode.ts';
 import { showBanner } from '../segments.ts';
 import { ChoiceDialog } from '../ui/noticeDialog.ts';
 import { hideHomeTip, showHomeTip } from '../../platform/viewportFit.ts';
@@ -76,8 +77,8 @@ export class TitleScene extends BaseScene {
     if (can) main.push(['continue', `继续 · ${livePlaying(this.session.state) ? '实盘 ' : ''}${this.session.state.month}月`, () => this.session.enterGame(), 'primary']);
     main.push(['quick', '快速开始', () => this.guardNew(() => this.startSetup(quick.persona, quick.difficulty)), can ? 'default' : 'primary']);
     main.push(['new', '新游戏', () => this.openSetup(), 'default']);
-    // 0.6.0 实盘：带一份筹码进场打半年（设计稿第 4 节）
-    main.push(['live', '实盘', () => this.openLive(), 'default']);
+    // 0.6.0 实盘：带一份筹码进场打半年（设计稿第 4 节）。0.8.0 单独部署没有平台钱包，不放这个按钮
+    if (!standalone()) main.push(['live', '实盘', () => this.openLive(), 'default']);
     const more: Item[] = [
       ['help', '怎么玩', () => this.openHelp(), 'default'],
       ['daily', '每日挑战', () => this.openDaily(), 'default'],
@@ -96,15 +97,17 @@ export class TitleScene extends BaseScene {
     else this.buildRoom(main, more, line);
     // 云存档的云朵放在 Logo 右边（两边的群友气泡、四个角都占着）
     const at = phoneLayout(this) ? { x: 612, y: 46 } : keyart ? { x: 800, y: 84 } : { x: 790, y: 140 };
-    this.cloud = new CloudBadge(this, at.x, at.y, this.lively);
+    // 单独部署没有平台，也就没有云存档和登录，不放云朵
+    this.cloud = standalone() ? null : new CloudBadge(this, at.x, at.y, this.lively);
     // iOS Safari：开始菜单底下提示「添加到主屏幕玩更大」（可关），离开开始菜单就收起
     showHomeTip();
     this.events.off('shutdown', hideHomeTip);
     this.events.once('shutdown', hideHomeTip);
     // 回大厅（平台首页）：常驻左上角，开始菜单不在一局里，点了直接走。
     // 手机上主视觉缩小上移，最左上角是画里的第一条群友气泡（到 x≈205），挪到它和 Logo 之间的留白
+    // 单独部署没有大厅，开始菜单本身就是首页，不放
     const lobbyAt = phoneLayout(this) ? { x: 224, y: 12 } : { x: 14, y: 10 };
-    this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: 104, height: 42, label: '大厅', icon: 'house', fontSize: 16, onClick: () => goLobby() });
+    if (!standalone()) this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: 104, height: 42, label: '大厅', icon: 'house', fontSize: 16, onClick: () => goLobby() });
     this.liveButton();
     this.dailyBadge();
     // 实盘的结果在局外说一次（提前收手、离开结束页之后才结完、放太久作废）；之后结完了也说。
@@ -319,7 +322,7 @@ export class TitleScene extends BaseScene {
   private openSetup(mode: 'fun' | 'live' = 'fun', wallet?: { wallet: WalletView | null; blocked: string | null; aside?: LiveAside | null }, persona?: PersonaId): void {
     this.withMeta(() => {
       const initial = { ...this.quickSetup(), ...(persona ? { persona } : {}) };
-      const can = !this.session.debugSession && this.session.persist && hasLoginHint();
+      const can = !this.session.debugSession && this.session.persist && hasLoginHint() && !standalone();
       this.trackDialog(
         new SetupPanel(this, {
           profile: this.profile,
@@ -457,9 +460,9 @@ export class TitleScene extends BaseScene {
     draw();
     b.tooltip(() => ({
       title: '每日挑战',
-      body: `${dailyText(rec)}${rank ? `\n今天全站第 ${rank} 名` : ''}\n今天所有人玩的都是同一局，打完上排行榜。`,
+      body: `${dailyText(rec)}${rank ? `\n今天全站第 ${rank} 名` : ''}\n今天所有人玩的都是同一局${standalone() ? '。' : '，打完上排行榜。'}`,
     }));
-    if (!rec || rec.attempts === 0 || this.session.debugSession || !hasLoginHint()) return;
+    if (!rec || rec.attempts === 0 || this.session.debugSession || !hasLoginHint() || standalone()) return;
     void loadBoard(dailyBoardId(date), 'all').then((res) => {
       // 读回来时开始菜单可能已经重画（云同步）或离开了：按钮没了就不画
       if (res.kind !== 'ok' || !res.me?.rank || !b.active) return;
@@ -475,8 +478,8 @@ export class TitleScene extends BaseScene {
           this,
           this.profile,
           (seed, setup) => this.guardNew(() => this.session.newRun(seed, setup)),
-          // 排行榜关掉后回到每日挑战面板（两个弹窗不叠着开：关掉一个时会放开场景快捷键）
-          (date) => this.trackDialog(new BoardPanel(this, date, dailyBoardId(date), () => this.openDaily())),
+          // 排行榜关掉后回到每日挑战面板（两个弹窗不叠着开：关掉一个时会放开场景快捷键）；单独部署没有排行榜
+          standalone() ? null : (date) => this.trackDialog(new BoardPanel(this, date, dailyBoardId(date), () => this.openDaily())),
         ),
       );
     });

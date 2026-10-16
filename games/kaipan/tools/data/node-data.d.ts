@@ -19,3 +19,12 @@ declare module 'node:zlib' {
 declare module 'node:child_process' {
   export function spawnSync(cmd: string, args: string[], opts?: { stdio?: string }): { status: number | null };
 }
+
+// common.ts 算原始数据的默认目录（模块里的 .data/wiki-prices）用
+declare module 'node:path' {
+  export function join(...parts: string[]): string;
+}
+
+declare module 'node:url' {
+  export function fileURLToPath(url: string | URL): string;
+}

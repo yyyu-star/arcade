@@ -206,7 +206,7 @@ client 模式每天每个游戏的净赢有上限（钱包管，份数是平台�
 
 - **路径**：浏览器 → 开盘的 Worker（同域 `POST /games/kaipan/api/live/{buyin,settle,refund}`，带 `X-Arcade: 1`）→ 服务绑定 `WALLET` 的钱包 RPC。
   浏览器从来不直接碰带入、结回、放弃（平台的 `/api` 里也没有这几条路）。`wrangler.jsonc` 的 `run_worker_first` 加上 `/games/kaipan/api/*`。
-- **绑定**：在开盘的 `wrangler.jsonc` 里加一个，和登录闸门用的 `ARCADE`（fetch 绑定）分开：
+- **绑定**：和登录闸门用的 `ARCADE`（fetch 绑定）分开。0.8.0 起模块的 `wrangler.jsonc` 是不带平台的独立配置，这条绑定由部署工具（`tools/deployer`）在本站部署时补上；单独部署没有它，三条接口回 `501 no_wallet`：
   ```jsonc
   { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "kaipan" } }
   ```

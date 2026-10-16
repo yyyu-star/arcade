@@ -312,14 +312,13 @@ describe('路由与请求体', () => {
 });
 
 describe('wrangler.jsonc', () => {
-  it('WALLET 绑定带 props.game，run_worker_first 含钱包接口，ARCADE 保留', () => {
+  it('run_worker_first 含钱包接口；WALLET、ARCADE 不写在模块里（本站部署时由部署工具补，形式在仓库的 tools/deployer 里定）', () => {
     const text = readFileSync('wrangler.jsonc', 'utf8')
       .split('\n')
       .filter((l) => !l.trim().startsWith('//'))
       .join('\n');
-    const cfg = JSON.parse(text) as { assets: { run_worker_first: string[] }; services: Record<string, unknown>[] };
-    expect(cfg.services).toContainEqual({ binding: 'WALLET', service: 'arcade', entrypoint: 'WalletService', props: { game: 'kaipan' } });
-    expect(cfg.services).toContainEqual({ binding: 'ARCADE', service: 'arcade' });
+    const cfg = JSON.parse(text) as { assets: { run_worker_first: string[] }; services?: unknown };
+    expect(cfg.services).toBeUndefined();
     expect(cfg.assets.run_worker_first).toContain('/games/kaipan/api/*');
   });
 });

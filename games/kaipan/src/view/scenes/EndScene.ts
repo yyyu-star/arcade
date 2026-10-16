@@ -2,7 +2,7 @@ import { achievementHints, achievementView, dailyBoardId, difficultyView, format
 import { RevealPanel } from '../meta/revealPanel.ts';
 import { BoardPanel } from '../meta/boardPanel.ts';
 import { onBoardChange, retryRun, runBoard } from '../dailyBoard.ts';
-import { goLobby } from '../lobby.ts';
+import { goLobby, lobbyLabel } from '../lobby.ts';
 import { live, onLiveChange } from '../live.ts';
 import { chips, liveEndText } from '../liveText.ts';
 import { setColor } from '../ui/text.ts';
@@ -309,7 +309,7 @@ export class EndScene extends BaseScene {
     // 回大厅（0.5.8）：和开始菜单一样在左上角；这局已经结束、记进档案了，点了直接走。
     // 手机横屏纸卡几乎铺满，挪到左栏标题行的右端（每日挑战的标签到 x≈312）
     const lobbyAt = ph ? { x: L + G.leftW - 96, y: y + 8 } : { x: 14, y: 10 };
-    this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: ph ? 96 : 104, height: 42, label: '大厅', icon: 'house', fontSize: 16, onClick: () => goLobby() });
+    this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: ph ? 96 : 104, height: 42, label: lobbyLabel(), icon: 'house', fontSize: 16, onClick: () => goLobby() });
     // 0.6.5 结局海报：电脑上放在右上角（和「大厅」对称），手机上放在按钮那一排的最右边
     const posterAt = ph ? { x: mx + (lv0 ? 192 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: ph && lv0 ? 140 : 102, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };
     this.posterButton(posterAt, sum);
