@@ -106,7 +106,7 @@ npm run build               # 正式构建
 不要平台，也不要域名：游戏会得到一个 `https://<id>.<你的子域>.workers.dev` 地址。
 
 - **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
-  （`<id>` 换成 `kaipan`、`guandan`、`texas` 或 `mahjong`）。按钮只复制这个游戏的目录，所以要等游戏改成依赖 npm 上发布的 `arcade-kit`
+  （`<id>` 换成 `kaipan`、`guandan`、`texas` 或 `mahjong`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`）
   （而不是仓库里的那份）才能用；能不能用看各游戏的 README。
 - **fork 后自己部署**：`cd games/<id> && npm ci && npx wrangler login && npm run deploy`。
 

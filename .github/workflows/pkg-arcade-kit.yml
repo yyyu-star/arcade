@@ -60,7 +60,8 @@ jobs:
           npm ci --no-audit --no-fund
           tgz=$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -1)
           echo "tarball=$RUNNER_TEMP/$tgz" >> "$GITHUB_OUTPUT"
-      # 依赖了 arcade-kit 的游戏自动找出来，新游戏不用改这里。每个游戏先按自己的 lockfile 装，再用打出来的包覆盖 kit（--no-save，不改 lockfile）
+      # 依赖了 arcade-kit 的游戏自动找出来，新游戏不用改这里。每个游戏先按自己的 lockfile 装，再用打出来的包覆盖 kit（--no-save，不改 lockfile）。
+      # 包名是 @yyyu-star/arcade-kit，游戏按别名 arcade-kit 引用：必须装成 "arcade-kit@file:<包>"，直接装 tarball 会多出一个 @yyyu-star/arcade-kit，游戏用的还是原来那份
       - name: 每个用 kit 的游戏装上这个包，跑游戏自己的测试
         working-directory: .
         env:
@@ -71,7 +72,7 @@ jobs:
             dir=$(dirname "$pkg")
             node -e 'const p=require(process.argv[1]); process.exit({...p.dependencies,...p.devDependencies}["arcade-kit"]?0:1)' "./$pkg" || continue
             echo "::group::$dir"
-            if (cd "$dir" && npm ci --no-audit --no-fund && npm install "$TARBALL" --no-save --no-audit --no-fund && npm test && npm run test:room --if-present); then
+            if (cd "$dir" && npm ci --no-audit --no-fund && npm install "arcade-kit@file:$TARBALL" --no-save --no-audit --no-fund && test ! -L node_modules/arcade-kit && npm test && npm run test:room --if-present); then
               echo "::endgroup::"
             else
               echo "::endgroup::"; echo "::error::$dir 用这一版 kit 的测试没过"; failed="$failed $dir"

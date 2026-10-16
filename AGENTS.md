@@ -68,7 +68,7 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 - **只部署一个游戏（不要平台）**：游戏的 `wrangler.jsonc` 本身就能部署（Deploy to Cloudflare 按钮或 fork 后 `npm run deploy`），得到一个 `workers.dev` 地址，
   以游客身份玩、好友房照常；没有登录、云存档、排行榜、钱包实盘。步骤见 [docs/new-game.md](docs/new-game.md) 第 7 节。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
-  把 `file:` 共用包换成发布的版本。线上 Worker、路由、存储前缀都不用改。
+  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
 - **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
   2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker），

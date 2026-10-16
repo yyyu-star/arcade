@@ -112,7 +112,7 @@ No platform, no domain needed — the game gets a `https://<id>.<your-subdomain>
 
 - **Deploy to Cloudflare button**: `https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
   (replace `<id>` with `kaipan`, `guandan`, `texas` or `mahjong`). The button copies only that game's directory, so it works once
-  the game depends on the published `arcade-kit` from npm instead of the in-repo copy; each game's README says whether its button is ready.
+  the game depends on the published `@yyyu-star/arcade-kit` from npm (aliased: `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`) instead of the in-repo copy; each game's README says whether its button is ready.
 - **From a fork**: `cd games/<id> && npm ci && npx wrangler login && npm run deploy`.
 
 A standalone game has single-player against the computer, friend rooms (players are identified by a guest cookie and pick a
