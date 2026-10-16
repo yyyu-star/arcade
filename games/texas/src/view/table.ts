@@ -285,6 +285,16 @@ export class TableView {
    * 播完才 resolve：单机等动画播完，电脑才接着出手。
    */
   async play(prev: View, next: View, seat: number | null, action: Action | null): Promise<void> {
+    // 画面出错（0.10.0 线上：全下的音效抛错）只记一笔、直接摆成结果：牌局永远不因为画面停住
+    try {
+      await this.animate(prev, next, seat, action);
+    } catch (e) {
+      console.error('texas: 这一步的动画出错，直接摆成结果', e);
+    }
+    this.show(next);
+  }
+
+  private async animate(prev: View, next: View, seat: number | null, action: Action | null): Promise<void> {
     const ended = prev.phase !== 'idle' && next.lastHand !== null && next.lastHand.handNo === prev.handNo;
     const fresh = next.phase !== 'idle' && (ended || prev.phase === 'idle' || next.handNo !== prev.handNo);
     const f = frameOf(prev);
@@ -336,7 +346,6 @@ export class TableView {
       await this.clear(ended ? null : f);
       await this.newHand(next);
     }
-    this.show(next);
   }
 
   // ---------- 一手打完 ----------
@@ -680,7 +689,8 @@ export class TableView {
         ],
         { duration: d, easing: 'cubic-bezier(.25,.75,.35,1)', fill: 'forwards' },
       );
-      await anim.finished.catch(() => {});
+      // 兜底：动画没按时结束（被挂起、浏览器没推进时间线）也最多多等 500 ms，不让牌局等一个永远不来的 finished
+      await Promise.race([anim.finished.catch(() => {}), new Promise<void>((ok) => window.setTimeout(ok, d + 500))]);
     }
     node.remove();
   }

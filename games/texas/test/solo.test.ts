@@ -1,5 +1,5 @@
 /** 单机流程（src/solo.ts）：钱包先扣后上桌、离桌结回、断网重发同一个操作 id、刷新后接着打。钱包是内存里的假的，照平台钱包的规矩（5.9）。 */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { aiAction } from '../src/bot.ts';
 import { stakesOf, type StakesId } from '../src/core/stakes.ts';
 import { newTable } from '../src/core/table.ts';
@@ -380,6 +380,21 @@ describe('单机', () => {
     await again.next();
     expect(again.session.held).toBeUndefined();
     expect(again.table.seats[ME]!.stack + again.table.seats[ME]!.total).toBe(stack + 300);
+  });
+
+  it('画面播一步出错（0.10.0 线上：全下的音效抛错）：电脑照常接着出手，牌局不卡', async () => {
+    const w = new FakeWallet();
+    const d = deps(w);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    d.onStep = async () => {
+      d.steps++;
+      throw new RangeError('画面坏了');
+    };
+    const solo = await open(d);
+    await playHands(solo, 5);
+    expect(solo.table.handNo).toBeGreaterThanOrEqual(6);
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
   });
 
   it('练习桌不碰钱包', async () => {

@@ -68,8 +68,8 @@ export function unlockAudio(): void {
     comp.attack.value = 0.003;
     comp.release.value = 0.2;
     master.connect(comp).connect(c.destination);
-    // 一份噪声反复用：0.5 秒够所有"嚓"和"啪"取不同起点
-    noise = c.createBuffer(1, Math.floor(c.sampleRate / 2), c.sampleRate);
+    // 一份噪声反复用：1 秒，比最长的一段（全下的蓄力约 0.5 秒）长，每次取不同起点
+    noise = c.createBuffer(1, c.sampleRate, c.sampleRate);
     const d = noise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     // iOS 要在手势里真的出一声才算解锁：播一个静音的单样本
@@ -136,7 +136,8 @@ function burst(t: number, freq: number, q: number, peak: number, decay: number, 
   src.connect(f).connect(g).connect(master!);
   track(src, [f, g]);
   const dur = (o.attack ?? 0.002) + decay + 0.02;
-  src.start(t, Math.random() * (noise!.duration - dur - 0.01), dur);
+  // 偏移不能是负的（start 会抛 RangeError）：0.10.0 全下那段 0.5 秒正好等于噪声长度，偏移成了负数，抛错把牌局卡住
+  src.start(t, Math.random() * Math.max(0, noise!.duration - dur - 0.01), dur);
 }
 
 interface ToneOpt {
@@ -190,8 +191,17 @@ function sparkle(t: number, n: number, peak: number): void {
   }
 }
 
+/** 放一个音效；出了错只记一笔，声音永远不打断牌局 */
 export function play(s: Sfx): void {
   if (!ready()) return;
+  try {
+    sfx(s);
+  } catch (e) {
+    console.error(`texas: 音效 ${s} 出错`, e);
+  }
+}
+
+function sfx(s: Sfx): void {
   const t = ctx!.currentTime + 0.005;
   const j = 1 + (Math.random() - 0.5) * 0.12;
   switch (s) {
@@ -314,5 +324,9 @@ export function funSound(prop: PropId, phase: FunPhase): void {
     if (on && ctx && needsResume(ctx)) void ctx.resume().catch(() => undefined);
     return;
   }
-  playFunSound(ctx, master, prop, phase, 0.8);
+  try {
+    playFunSound(ctx, master, prop, phase, 0.8);
+  } catch (e) {
+    console.error(`texas: 道具声音 ${prop} 出错`, e);
+  }
 }

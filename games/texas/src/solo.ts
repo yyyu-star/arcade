@@ -134,7 +134,7 @@ export class Solo {
     }
     this.s.table = deal(this.s.table);
     this.save();
-    await this.d.onStep({ prev, next: this.s.table, seat: null, action: null });
+    await this.show({ prev, next: this.s.table, seat: null, action: null });
     await this.flush();
   }
 
@@ -229,7 +229,7 @@ export class Solo {
     }
     this.s.pending = null;
     this.save();
-    await this.d.onStep({ prev, next: this.s.table, seat: null, action: null });
+    await this.show({ prev, next: this.s.table, seat: null, action: null });
     return null;
   }
 
@@ -243,7 +243,7 @@ export class Solo {
     if (this.busy || this.closing) return 'busy';
     const st = this.step(ME, a);
     if (typeof st === 'string') return st;
-    await this.d.onStep(st);
+    await this.show(st);
     await this.flush();
     return null;
   }
@@ -259,7 +259,7 @@ export class Solo {
       if (this.s.table.seats[ME]!.away) this.s.table = must(apply(this.s.table, ME, { t: 'back' }));
       this.stats.buyin += amount;
       this.save();
-      await this.d.onStep({ prev, next: this.s.table, seat: null, action: null });
+      await this.show({ prev, next: this.s.table, seat: null, action: null });
       await this.flush();
       return null;
     }
@@ -273,7 +273,7 @@ export class Solo {
   /** 下一手起歇着（想补码时用：这一手打完就停下） */
   async sitOut(on: boolean): Promise<void> {
     const st = this.step(ME, { t: on ? 'away' : 'back' });
-    if (typeof st !== 'string') await this.d.onStep(st);
+    if (typeof st !== 'string') await this.show(st);
     await this.flush();
   }
 
@@ -307,7 +307,7 @@ export class Solo {
     const held = this.s.held ?? 0;
     delete this.s.held;
     this.left = (payout?.amount ?? 0) + held;
-    await this.d.onStep({ prev, next: this.s.table, seat: ME, action: { t: 'leave' } });
+    await this.show({ prev, next: this.s.table, seat: ME, action: { t: 'leave' } });
     if (this.s.practice) {
       this.d.store.removeItem(SESSION_KEY);
       return null;
@@ -336,7 +336,7 @@ export class Solo {
         if (this.stopped) return;
         const st = this.step(seat, aiAction(t, seat));
         if (typeof st === 'string') throw new Error(`computer made an illegal move: ${st}`);
-        await this.d.onStep(st);
+        await this.show(st);
       }
     } finally {
       this.busy = false;
@@ -345,6 +345,15 @@ export class Solo {
 
   stop(): void {
     this.stopped = true;
+  }
+
+  /** 播这一步。画面出了错只记一笔：状态已经走了、存了盘，电脑照常接着出手（0.10.0 线上全下的音效抛错，循环断了，牌局卡死） */
+  private async show(st: Step): Promise<void> {
+    try {
+      await this.d.onStep(st);
+    } catch (e) {
+      console.error('texas: 画面播这一步出错', e);
+    }
   }
 
   /** 做一步、存盘（每一步都存：刷新、关页面后从这一步接着打） */
