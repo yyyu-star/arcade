@@ -3,8 +3,26 @@
  * 底板全用 Graphics 画（矢量，相机 zoom 后依然锐利），尺寸随用随定，不需要预烘焙贴图。
  */
 import Phaser from 'phaser';
-import { COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, RENDER_SCALE, TYPE, css } from '../theme.ts';
+import { BUTTON, COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, RADIUS, RENDER_SCALE, SHADOW, TYPE, css, minHit } from '../theme.ts';
 import { audio } from '../audio.ts';
+import { focusable, pushLayer } from './focus.ts';
+
+/**
+ * 改点按区域（世界坐标，以对象中心为中心）：按钮、图标按钮、区域都能用。
+ * 区域（Zone）的原点不一定在中心，按它自己的原点算。
+ */
+export function setHit(obj: Phaser.GameObjects.Container | Phaser.GameObjects.Zone, w: number, h: number): void {
+  const cx = obj.x;
+  const cy = obj.y;
+  if (obj instanceof Phaser.GameObjects.Zone && (obj.originX !== 0.5 || obj.originY !== 0.5)) {
+    const left = cx + obj.width * (0.5 - obj.originX) - w / 2;
+    const top = cy + obj.height * (0.5 - obj.originY) - h / 2;
+    obj.setOrigin(0, 0).setPosition(left, top);
+  }
+  obj.setSize(w, h);
+  if (obj.input) obj.input.hitArea.setTo(0, 0, w, h);
+  else obj.setInteractive({ useHandCursor: true });
+}
 
 export function worldW(scene: Phaser.Scene): number {
   return Math.round(scene.scale.gameSize.width / RENDER_SCALE);
@@ -67,6 +85,23 @@ export function text(scene: Phaser.Scene, x: number, y: number, str: string, o: 
   return scene.add.text(x, y, str, style).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
 }
 
+/** 放不下就截短，末尾加"…"（长昵称）；返回同一个文字对象 */
+export function fitText(t: Phaser.GameObjects.Text, maxW: number): Phaser.GameObjects.Text {
+  const full = t.text;
+  if (t.width <= maxW) return t;
+  const chars = [...full];
+  let lo = 0;
+  let hi = chars.length;
+  // 二分找最长能放下的前缀：长名字逐字试要量几十次
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    t.setText(chars.slice(0, mid).join('') + '…');
+    if (t.width <= maxW) lo = mid;
+    else hi = mid - 1;
+  }
+  return t.setText(chars.slice(0, lo).join('') + '…');
+}
+
 function shade(c: number, f: number): number {
   const r = Math.min(255, Math.max(0, Math.round(((c >> 16) & 255) * f)));
   const g = Math.min(255, Math.max(0, Math.round(((c >> 8) & 255) * f)));
@@ -74,21 +109,14 @@ function shade(c: number, f: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-export type ButtonStyle = 'red' | 'gold' | 'green' | 'wood' | 'blue';
-const STYLE: Record<ButtonStyle, { fill: number; text: number; rim: number }> = {
-  red: { fill: 0xc0282f, text: 0xfff3d6, rim: 0xf0c66e },
-  gold: { fill: 0xe6b450, text: 0x4a2a0c, rim: 0xfff0c0 },
-  green: { fill: 0x2f8a55, text: 0xf2fff4, rim: 0xb8e6c4 },
-  wood: { fill: 0x7a4a26, text: 0xffeccb, rim: 0xd7a55b },
-  blue: { fill: 0x2f68b0, text: 0xeef6ff, rim: 0xa8cdf5 },
-};
+export type ButtonStyle = Exclude<keyof typeof BUTTON, 'off'>;
 
-/** 圆角按钮底板（带投影、上半高光、金边）。 */
-export function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r = 14, pressed = false): void {
+/** 圆角按钮底板（带投影、上半高光、金边）。按下时面板下沉 2、投影跟着收。 */
+export function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
   g.clear();
   const dy = pressed ? 2 : 0;
-  g.fillStyle(0x000000, 0.35);
-  g.fillRoundedRect(-w / 2, -h / 2 + 5, w, h, r);
+  g.fillStyle(0x000000, SHADOW.alpha);
+  g.fillRoundedRect(-w / 2, -h / 2 + SHADOW.dy + 1, w, h, r);
   g.fillStyle(shade(fill, 0.62), 1);
   g.fillRoundedRect(-w / 2, -h / 2 + 3 + dy, w, h - 3, r);
   g.fillStyle(fill, 1);
@@ -99,11 +127,19 @@ export function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, 
   g.strokeRoundedRect(-w / 2 + 1, -h / 2 + 1 + dy, w - 2, h - 6, r - 1);
 }
 
+/**
+ * 按钮：常态、悬停（亮一点、放大一点）、按下（下沉、缩一点）、禁用（灰）、键盘焦点（focus.ts 画框）、加载中（转圈，点了没反应）。
+ * 点按区域至少 minHit() 见方（画出来的可以小），挨得近的调用方用 setHit 收窄；按下和抬起都在它上面才算点了一下。
+ */
 export class Button extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
   private icon: Phaser.GameObjects.Image | null = null;
+  private spinner: Phaser.GameObjects.Graphics | null = null;
   private enabledFlag = true;
+  private loadingFlag = false;
+  private hover = false;
+  private down = false;
   private styleName: ButtonStyle;
   readonly bw: number;
   readonly bh: number;
@@ -117,7 +153,7 @@ export class Button extends Phaser.GameObjects.Container {
     this.onClick = onClick;
     this.bg = scene.add.graphics();
     this.add(this.bg);
-    const st = STYLE[style];
+    const st = BUTTON[style];
     const size = h >= 56 ? TYPE.title : TYPE.body;
     if (iconKey && scene.textures.exists(`icon:${iconKey}`)) {
       const isz = Math.round(h * 0.5);
@@ -127,25 +163,46 @@ export class Button extends Phaser.GameObjects.Container {
     this.label = text(scene, 0, -2, label, { size, color: st.text, bold: true, stroke: shade(st.fill, 0.5), strokeWidth: 3 });
     this.add(this.label);
     this.layoutContent();
-    drawPlate(this.bg, w, h, st.fill, st.rim);
-    this.setSize(w, h);
-    this.setInteractive({ useHandCursor: true });
-    this.on('pointerover', () => this.enabledFlag && this.setScale(1.04));
+    this.redraw();
+    this.setHit(Math.max(w, minHit()), Math.max(h, minHit()));
+    this.on('pointerover', () => {
+      this.hover = true;
+      this.redraw();
+    });
     this.on('pointerout', () => {
-      this.setScale(1);
-      this.redraw(false);
+      this.hover = false;
+      this.down = false;
+      this.redraw();
     });
     this.on('pointerdown', () => {
-      if (!this.enabledFlag) return;
-      this.redraw(true);
+      if (!this.usable) return;
+      this.down = true;
+      this.redraw();
     });
     this.on('pointerup', () => {
-      this.redraw(false);
-      if (!this.enabledFlag) return;
-      audio.sfx('click');
-      this.onClick();
+      const was = this.down;
+      this.down = false;
+      this.redraw();
+      if (was) this.press();
     });
+    focusable(this, w, h, () => this.press(), () => this.usable);
     scene.add.existing(this);
+  }
+
+  /** 点按区域（世界坐标，以按钮中心为中心）；默认至少 minHit() 见方，挨得近的调用方按间距收窄 */
+  setHit(w: number, h: number): this {
+    setHit(this, w, h);
+    return this;
+  }
+
+  private get usable(): boolean {
+    return this.enabledFlag && !this.loadingFlag;
+  }
+
+  private press(): void {
+    if (!this.usable) return;
+    audio.sfx('click');
+    this.onClick();
   }
 
   private layoutContent(): void {
@@ -159,13 +216,17 @@ export class Button extends Phaser.GameObjects.Container {
     }
   }
 
-  private redraw(pressed: boolean): void {
-    const st = STYLE[this.enabledFlag ? this.styleName : 'wood'];
-    const fill = this.enabledFlag ? st.fill : 0x5d5049;
-    drawPlate(this.bg, this.bw, this.bh, fill, this.enabledFlag ? st.rim : 0x8a7d70, 14, pressed);
+  private redraw(): void {
+    const on = this.enabledFlag;
+    const pressed = on && this.down;
+    const st = on ? BUTTON[this.styleName] : BUTTON.off;
+    const fill = on && this.hover && !pressed ? shade(st.fill, 1.1) : st.fill;
+    drawPlate(this.bg, this.bw, this.bh, fill, st.rim, RADIUS.lg, pressed);
     const dy = pressed ? 2 : 0;
     this.label.y = -2 + dy;
     if (this.icon) this.icon.y = -2 + dy;
+    if (this.spinner) this.spinner.y = -2 + dy;
+    this.setScale(!this.usable ? 1 : pressed ? 0.97 : this.hover ? 1.03 : 1);
   }
 
   setText(s: string): this {
@@ -177,40 +238,92 @@ export class Button extends Phaser.GameObjects.Container {
   setEnabled(on: boolean): this {
     if (on === this.enabledFlag) return this;
     this.enabledFlag = on;
-    const st = STYLE[this.styleName];
-    this.label.setColor(css(on ? st.text : 0xb5aaa0));
+    const st = on ? BUTTON[this.styleName] : BUTTON.off;
+    this.label.setColor(css(st.text));
     this.label.setStroke(css(on ? shade(st.fill, 0.5) : 0x3a302a), 3);
-    this.icon?.setTint(on ? st.text : 0xb5aaa0);
-    this.redraw(false);
-    if (!on) this.setScale(1);
+    this.icon?.setTint(st.text);
+    if (!on) this.down = false;
+    this.redraw();
+    return this;
+  }
+
+  /** 加载中：字和图标淡下去，中间转圈；这期间点了不算（等钱包、开房这类要等回话的） */
+  setLoading(on: boolean): this {
+    if (on === this.loadingFlag) return this;
+    this.loadingFlag = on;
+    this.label.setAlpha(on ? 0.25 : 1);
+    this.icon?.setAlpha(on ? 0.25 : 1);
+    if (on) {
+      const r = Math.min(14, this.bh * 0.24);
+      const g = this.scene.add.graphics();
+      g.lineStyle(4, BUTTON[this.styleName].text, 0.35).strokeCircle(0, 0, r);
+      g.lineStyle(4, BUTTON[this.styleName].text, 1).beginPath().arc(0, 0, r, -Math.PI / 2, 0).strokePath();
+      g.y = -2;
+      this.add(g);
+      this.spinner = g;
+      this.scene.tweens.add({ targets: g, angle: 360, duration: 800, repeat: -1 });
+    } else if (this.spinner) {
+      this.scene.tweens.killTweensOf(this.spinner);
+      this.spinner.destroy();
+      this.spinner = null;
+    }
+    this.down = false;
+    this.redraw();
     return this;
   }
 
   get enabled(): boolean {
     return this.enabledFlag;
   }
+
+  get loading(): boolean {
+    return this.loadingFlag;
+  }
 }
 
-/** 圆形木质图标按钮（顶栏用）。 */
+/** 圆形木质图标按钮（顶栏用）。点按区域默认至少 minHit() 见方，挨得近的调用方用 setHit 收窄到间距。 */
 export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: string, onClick: () => void, size = 48): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y);
   const g = scene.add.graphics();
   const r = size / 2;
-  g.fillStyle(0x000000, 0.3).fillCircle(0, 3, r);
-  g.fillStyle(0x4a2a14, 1).fillCircle(0, 0, r);
-  g.fillStyle(0x6b3f20, 1).fillCircle(0, -1, r - 3);
-  g.lineStyle(2, COLOR.gold, 0.85).strokeCircle(0, -1, r - 3);
+  const paint = (lit: boolean): void => {
+    g.clear();
+    g.fillStyle(0x000000, SHADOW.alpha * 0.85).fillCircle(0, 3, r);
+    g.fillStyle(0x4a2a14, 1).fillCircle(0, 0, r);
+    g.fillStyle(lit ? 0x82502a : 0x6b3f20, 1).fillCircle(0, -1, r - 3);
+    g.lineStyle(2, lit ? COLOR.goldLight : COLOR.gold, lit ? 1 : 0.85).strokeCircle(0, -1, r - 3);
+  };
+  paint(false);
   c.add(g);
   const img = scene.add.image(0, -1, `icon:${icon}`).setDisplaySize(size * 0.56, size * 0.56).setTint(0xffe9c2);
   c.add(img);
-  c.setSize(size + 8, size + 8);
-  c.setInteractive({ useHandCursor: true });
-  c.on('pointerover', () => c.setScale(1.08));
-  c.on('pointerout', () => c.setScale(1));
-  c.on('pointerup', () => {
+  const hit = Math.max(size + 8, minHit());
+  setHit(c, hit, hit);
+  let down = false;
+  const press = (): void => {
     audio.sfx('click');
     onClick();
+  };
+  c.on('pointerover', () => {
+    paint(true);
+    c.setScale(1.06);
   });
+  c.on('pointerout', () => {
+    down = false;
+    paint(false);
+    c.setScale(1);
+  });
+  c.on('pointerdown', () => {
+    down = true;
+    c.setScale(0.94);
+  });
+  c.on('pointerup', () => {
+    c.setScale(1);
+    if (!down) return;
+    down = false;
+    press();
+  });
+  focusable(c, size, size, press);
   c.setData('icon', img);
   return c;
 }
@@ -270,6 +383,8 @@ export function modal(scene: Phaser.Scene, w: number, h: number, title?: string,
     const cb = iconButton(scene, w / 2 - 6, -h / 2 + 6, 'close', close, 46);
     body.add(cb);
   }
+  // 键盘只在弹窗里走；能关的弹窗 Esc 关掉
+  pushLayer(root, opts.closeBtn !== false ? close : undefined);
   root.setAlpha(0);
   body.setScale(0.92);
   scene.tweens.add({ targets: root, alpha: 1, duration: 140 });
@@ -336,32 +451,51 @@ export function segmented(
   current: string,
   onPick: (v: string) => void,
   itemW = 104,
+  hitH = 60,
 ): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y);
-  const btns: { g: Phaser.GameObjects.Graphics; t: Phaser.GameObjects.Text; v: string }[] = [];
+  const btns: { g: Phaser.GameObjects.Graphics; t: Phaser.GameObjects.Text; v: string; hover: boolean; down: boolean }[] = [];
   const h = 44;
-  const paint = (cur: string): void => {
+  let cur = current;
+  const paint = (): void => {
     for (const b of btns) {
       const on = b.v === cur;
+      const base = on ? COLOR.red : 0xeadbc0;
+      const fill = b.down ? shade(base, 0.9) : b.hover && !on ? 0xf4e8d0 : base;
+      const dy = b.down ? 2 : 0;
       b.g.clear();
-      b.g.fillStyle(on ? COLOR.red : 0xeadbc0, 1).fillRoundedRect(-itemW / 2 + 3, -h / 2, itemW - 6, h, 12);
-      b.g.lineStyle(2, on ? COLOR.gold : 0xc9b48e, 1).strokeRoundedRect(-itemW / 2 + 3, -h / 2, itemW - 6, h, 12);
+      b.g.fillStyle(fill, 1).fillRoundedRect(-itemW / 2 + 3, -h / 2 + dy, itemW - 6, h, RADIUS.md);
+      b.g.lineStyle(2, on ? COLOR.gold : b.hover ? COLOR.goldDark : 0xc9b48e, 1).strokeRoundedRect(-itemW / 2 + 3, -h / 2 + dy, itemW - 6, h, RADIUS.md);
       b.t.setColor(css(on ? COLOR.goldLight : COLOR.ink));
+      b.t.y = dy;
     }
   };
   items.forEach((it, i) => {
     const bx = i * itemW;
     const g = scene.add.graphics().setPosition(bx, 0);
     const t = text(scene, bx, 0, it.label, { size: TYPE.label, bold: true });
-    const hit = scene.add.zone(bx, 0, itemW - 4, h).setInteractive({ useHandCursor: true });
-    hit.on('pointerup', () => {
+    // 点按区域：宽到和邻居相接，高到行距（设置面板一行 60），比画出来的 44 高
+    const hit = scene.add.zone(bx, 0, itemW, Math.max(h, hitH)).setInteractive({ useHandCursor: true });
+    const b = { g, t, v: it.value, hover: false, down: false };
+    const pick = (): void => {
       audio.sfx('click');
-      paint(it.value);
+      cur = it.value;
+      paint();
       onPick(it.value);
+    };
+    hit.on('pointerover', () => ((b.hover = true), paint()));
+    hit.on('pointerout', () => ((b.hover = false), (b.down = false), paint()));
+    hit.on('pointerdown', () => ((b.down = true), paint()));
+    hit.on('pointerup', () => {
+      const was = b.down;
+      b.down = false;
+      if (was) pick();
+      else paint();
     });
-    btns.push({ g, t, v: it.value });
+    focusable(hit, itemW - 6, h, pick);
+    btns.push(b);
     c.add([g, t, hit]);
   });
-  paint(current);
+  paint();
   return c;
 }

@@ -27,7 +27,7 @@ import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { dur, tweenP, wait } from '../anim.ts';
-import { PLACE_NAMES, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, fullSeatName, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
@@ -42,11 +42,11 @@ import { dealRecap } from '../recap.ts';
 import { suggestFor } from '../suggest.ts';
 import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type Title } from '../../stake/titles.ts';
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
-import { COLOR, TYPE, css } from '../theme.ts';
+import { COLOR, TYPE, css, minHit } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
 import { join, shareRoom } from '../online.ts';
 import { cloudButton } from '../ui/cloud.ts';
-import { Button, iconButton, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
+import { Button, iconButton, setHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { applyAudio, confirm, openRules, openSettings } from '../ui/panels.ts';
 import { runTutorial } from '../tutorial.ts';
 import { CardView } from '../table/card.ts';
@@ -250,7 +250,7 @@ export class TableScene extends Phaser.Scene {
             this.playBanter(banterOnEmote(this.banter, ME, id, to, this.banterBots(), Date.now(), Math.random));
           },
           scope: () => 'solo',
-          who: (v) => ({ seat: v, name: seatName(v) }),
+          who: (v) => ({ seat: v, name: fullSeatName(v) }),
         };
     const t = new Taunts({
       scene: this,
@@ -259,6 +259,7 @@ export class TableScene extends Phaser.Scene {
       avatarRect: (seat) => this.screenRect(this.seats[seat]!.a),
       busy: () => this.overlay !== null,
       log: (line) => this.fxLog.push(line),
+      chatRight: this.btnSort.x - this.btnSort.width / 2,
     });
     this.taunts = t;
     this.events.once('shutdown', () => stopFlash());
@@ -353,18 +354,30 @@ export class TableScene extends Phaser.Scene {
     };
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
     this.lobbyBtn = new Button(this, 70, 29, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
+    // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）：下面没有能点的就伸到底（deep），
+    // 搭档头像（顶 67、左右 W/2 - 250 ± 45）上面的只到 67（shallow），不压着头像
+    const deep = Math.max(54, 2 * (minHit() - 29));
+    const shallow = Math.min(deep, 2 * (67 - 29));
+    const barH = (x0: number, x1: number): number => (x1 <= W / 2 - 295 || x0 >= W / 2 - 205 ? deep : shallow);
+    this.lobbyBtn.setHit(112, deep);
     c.add(this.lobbyBtn);
     team(138, '我方', v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
     team(280, '对方', v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
     // 云存档：放左边（右边四个按钮已经挤满）
-    this.cloudBtn = cloudButton(this, 446, 29, 46);
+    // 和右边的图标一样：有地方就把间距拉到 44 CSS 像素，最少 56；不越过下面记牌器的左边（W/2 - 140，它的点按区域往上伸进顶栏）
+    const lp = Math.max(56, Math.min(minHit(), (W / 2 - 140 - 418) / (this.net ? 2 : 1)));
+    this.cloudBtn = cloudButton(this, 418 + lp / 2, 29, 46);
+    setHit(this.cloudBtn, lp, barH(418, 418 + lp));
     // 单独部署没有账号，不摆云存档
     if (standalone()) this.cloudBtn.setVisible(false);
     c.add(this.cloudBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：云朵右边，中途进来的人接管电脑的座位。右边的图标和名次条已经排满了
     const net = this.net;
-    this.inviteBtn = net ? iconButton(this, 502, 29, 'invite', () => void this.invite(net.code), 46) : null;
-    if (this.inviteBtn) c.add(this.inviteBtn);
+    this.inviteBtn = net ? iconButton(this, 418 + lp * 1.5, 29, 'invite', () => void this.invite(net.code), 46) : null;
+    if (this.inviteBtn) {
+      setHit(this.inviteBtn, lp, barH(418 + lp, 418 + lp * 2));
+      c.add(this.inviteBtn);
+    }
 
     // 中：本副打几（级牌放大成一张小牌）
     const mx = W / 2;
@@ -402,8 +415,12 @@ export class TableScene extends Phaser.Scene {
       ['settings', () => this.openOverlay('menu', openSettings(this, { onTutorial: () => this.startTutorial(), onClose: () => this.closeOverlay() }))],
       ['rules', () => this.openOverlay('menu', openRules(this, () => this.closeOverlay(), this.ses.view().level))],
     ];
+    // 间距：手机横屏世界更宽，有地方就拉到 44 CSS 像素（minHit），16:9 屏挤不下时最少 56；最左一个的点按区域不越过名次条
+    const room = (W - 34 - (px + 3 * 48 + 21)) / 3.5;
+    const pitch = Math.max(56, Math.min(minHit(), room));
     icons.forEach(([icon, fn], i) => {
-      const b = iconButton(this, W - 34 - i * 56, 29, icon, fn, 46);
+      const b = iconButton(this, W - 34 - i * pitch, 29, icon, fn, 46);
+      setHit(b, pitch, deep);
       c.add(b);
       this.topIcons[i] = b;
       if (icon === 'mute' || icon === 'sound') this.soundIcon = b;
@@ -458,6 +475,7 @@ export class TableScene extends Phaser.Scene {
       g.fillStyle(0x1a0e07, 0.6).fillRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
       g.lineStyle(1.5, COLOR.gold, 0.6).strokeRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
       const z = this.add.zone(x0, y0, t.width + 28, 34).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+      setHit(z, Math.max(t.width + 28, minHit()), minHit());
       z.on('pointerdown', toggle);
       c.add([g, t, z]);
       this.counterAt = { x: x0 + (t.width + 28) / 2, y: y0 + 17 };
@@ -481,6 +499,8 @@ export class TableScene extends Phaser.Scene {
       c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: 0xffffff }).setAlpha(a));
     });
     const z = this.add.zone(x0, y0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    // 记牌器只有 50 高：点按区域上下各扩一点，够 44 CSS 像素（左右没有别的能点的）
+    setHit(z, w, Math.max(h, minHit()));
     z.on('pointerdown', toggle);
     c.add(z);
     this.counterAt = { x: x0 + w / 2, y: y0 + h / 2 };

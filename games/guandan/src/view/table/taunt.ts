@@ -14,8 +14,8 @@ import { audio } from '../audio.ts';
 import { bakeFun } from '../textures.ts';
 import { seatName } from '../labels.ts';
 import { getBlocked, getSettings, setBlocked } from '../store.ts';
-import { COLOR, TYPE } from '../theme.ts';
-import { iconButton, text, worldH, worldW } from '../ui/kit.ts';
+import { COLOR, TYPE, minHit } from '../theme.ts';
+import { iconButton, setHit, text, worldH, worldW } from '../ui/kit.ts';
 import type { SeatView } from './seats.ts';
 
 /** 想了多久以后别人能对他扔"催促炸弹" */
@@ -44,6 +44,8 @@ export interface TauntHost {
   /** 现在有弹窗开着（面板、菜单不该再开） */
   busy(): boolean;
   log(line: string): void;
+  /** 聊天按钮的点按区域右边最多到哪（世界坐标）：再往右是"理牌"按钮 */
+  chatRight: number;
 }
 
 type Tab = 'taunt' | 'sticker' | 'prop';
@@ -74,8 +76,11 @@ export class Taunts {
     this.layer = createFunLayer();
     const s = h.scene;
     void bakeFun(s).then(() => (this.baked = true), () => (this.baked = true));
-    // 我的头像右边：聊天按钮（0.5.5 起的位置）
-    this.btn = iconButton(s, 128, 396, 'chat', () => (this.panel ? this.closePanel() : this.openPanel()), 46).setDepth(400);
+    // 我的头像右边：聊天按钮（0.5.5 起的位置）。点按区域夹在我的头像（layout.ts：中心 x 60，至少 minHit() 见方）和"理牌"之间，不重叠
+    const left = 60 + Math.max(72, minHit()) / 2;
+    const w = Math.max(48, Math.min(Math.max(56, minHit()), h.chatRight - left));
+    this.btn = iconButton(s, left + w / 2, 396, 'chat', () => (this.panel ? this.closePanel() : this.openPanel()), 46).setDepth(400);
+    setHit(this.btn, w, Math.max(56, minHit()));
     for (let v = 1; v < 4; v++) h.seats[v]!.onTap(() => this.openMenu(v));
     h.seats[0]!.onTap(() => (this.panel ? this.closePanel() : this.openPanel()));
     s.events.once('shutdown', () => this.destroy());

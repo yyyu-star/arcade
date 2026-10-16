@@ -13,6 +13,7 @@ import { fetchWallet } from './stake.ts';
 import { standalone } from './platform.ts';
 import { getNick, setNick } from './store.ts';
 import { loginUrl } from './ui/cloud.ts';
+import { mountThemeCss } from './theme.ts';
 
 const TEAM = ['#d9443a', '#3a78c8'];
 
@@ -22,36 +23,36 @@ let offSes: (() => void) | null = null;
 let note = '';
 
 function style(): void {
+  mountThemeCss();
   if (document.getElementById('online-style')) return;
   const st = document.createElement('style');
   st.id = 'online-style';
   st.textContent = `
 #online { position: fixed; inset: 0; z-index: 8500; display: flex; align-items: center; justify-content: center; background: rgba(10, 6, 4, 0.72);
-  font: 16px/1.5 "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; color: #2b1d14; }
-#online .ol-card { width: min(560px, calc(100vw - 24px)); max-height: calc(100% - 16px); overflow: auto; box-sizing: border-box; padding: 18px 20px; border-radius: 18px;
-  background: #fbf1dc; border: 5px solid #6b3b1f; box-shadow: 0 0 0 2px #e0b45a inset; display: flex; flex-direction: column; gap: 12px; }
-#online h2 { margin: 0; font-size: 22px; color: #b3202a; }
-#online .ol-code { font: bold 34px/1.1 "Arial Black", Arial, sans-serif; letter-spacing: 6px; color: #b3202a; }
-#online .ol-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-#online button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; font: inherit; font-weight: bold; background: #b3202a; color: #fff3d6; cursor: pointer; }
-#online button.ol-2 { background: #7a6555; }
-#online button.ol-big { min-height: 58px; font-size: 22px; background: #2f8a3a; }
-#online button:disabled { opacity: .45; cursor: default; }
-#online input { flex: 1; min-width: 120px; min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 2px solid #c8a878; border-radius: 12px;
-  font: bold 22px "Arial Black", Arial, sans-serif; letter-spacing: 4px; background: #fffaf0; color: #2b1d14; }
-#online .ol-seats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-#online .ol-seat { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 52px; padding: 4px 6px 4px 12px; border-radius: 12px;
-  background: #f1e4c6; border-left: 6px solid var(--team); }
-#online .ol-seat b { font-size: 16px; }
-#online .ol-seat small { color: #7a6555; }
-#online .ol-seat button { min-height: 40px; padding: 0 12px; font-size: 15px; }
-#online .ol-note { min-height: 1.5em; color: #7d121a; font-weight: bold; }
-#online .ol-tip { color: #7a6555; font-size: 14px; }
-#online .ol-stake { padding: 6px 10px; border-radius: 10px; background: #f6dcc8; color: #7d121a; font-weight: bold; }
-#online #ol-tiers button { min-height: 40px; padding: 0 12px; font-size: 15px; }
-#net-banner { position: fixed; z-index: 8400; left: 50%; top: max(8px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: none;
-  padding: 8px 16px; border-radius: 20px; background: rgba(43, 22, 10, 0.92); border: 2px solid #e0b45a; color: #ffe9c2;
-  font: bold 15px/1.3 "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; pointer-events: none; }
+  font: 16px/1.5 var(--gd-font); color: var(--gd-ink); font-variant-numeric: tabular-nums;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); box-sizing: border-box; }
+#online .ol-card { width: min(560px, calc(100vw - var(--gd-s6))); max-height: calc(100% - var(--gd-s4)); overflow: auto; box-sizing: border-box; padding: var(--gd-s4) var(--gd-s6);
+  border-radius: var(--gd-r-lg); background: var(--gd-paper); border: 5px solid var(--gd-wood); box-shadow: 0 0 0 2px var(--gd-gold) inset, 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: var(--gd-s3); }
+#online h2 { margin: 0; font-size: 22px; line-height: 1.3; color: var(--gd-red); }
+#online .ol-code { font: bold 34px/1.1 var(--gd-font-num); letter-spacing: 6px; color: var(--gd-red); }
+#online .ol-row { display: flex; gap: var(--gd-s2); flex-wrap: wrap; align-items: center; }
+#online input { flex: 1; min-width: 120px; min-height: var(--gd-hit); box-sizing: border-box; padding: 0 var(--gd-s3); border: 2px solid #c8a878; border-radius: var(--gd-r-md);
+  font: bold 22px var(--gd-font-num); letter-spacing: 4px; background: #fffaf0; color: var(--gd-ink); }
+#online input:focus-visible { outline: 3px solid var(--gd-focus); outline-offset: 1px; }
+#online .ol-seats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gd-s2); }
+#online .ol-seat { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-s2); min-height: 52px; min-width: 0; padding: var(--gd-s1) var(--gd-s2) var(--gd-s1) var(--gd-s3);
+  border-radius: var(--gd-r-md); background: #f1e4c6; border-left: 6px solid var(--team); }
+#online .ol-seat > div { min-width: 0; overflow: hidden; }
+#online .ol-seat b { display: block; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#online .ol-seat small { display: block; color: var(--gd-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#online .ol-seat .gd-btn, #online #ol-tiers .gd-btn { flex: none; padding: 0 var(--gd-s3); font-size: 15px; }
+#online .ol-note { min-height: 1.5em; color: var(--gd-red-dark); font-weight: bold; }
+#online .ol-tip { color: var(--gd-muted); font-size: 14px; }
+#online .ol-stake { padding: var(--gd-s1) var(--gd-s3); border-radius: var(--gd-r-sm); background: #f6dcc8; color: var(--gd-red-dark); font-weight: bold; }
+#net-banner { position: fixed; z-index: 8400; left: 50%; top: max(var(--gd-s2), env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: none;
+  padding: var(--gd-s2) var(--gd-s4); border-radius: var(--gd-r-pill); background: rgba(43, 22, 10, 0.92); border: 2px solid var(--gd-gold); color: #ffe9c2;
+  font: bold 15px/1.3 var(--gd-font); pointer-events: none; }
 #net-banner.on { display: block; }`;
   document.head.appendChild(st);
 }
@@ -63,8 +64,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   return e;
 }
 
+/** 面板里的按钮都用 THEME_CSS 的 .gd-btn；cls 是 gd-2（次要）、gd-big（大号确认） */
 function button(label: string, onClick: () => void, cls = '', id = ''): HTMLButtonElement {
-  const b = el('button', { type: 'button', ...(cls ? { class: cls } : {}), ...(id ? { id } : {}) }, label);
+  const b = el('button', { type: 'button', class: cls ? `gd-btn ${cls}` : 'gd-btn', ...(id ? { id } : {}) }, label);
   b.addEventListener('click', onClick);
   return b;
 }
@@ -114,7 +116,7 @@ export function openOnline(): void {
   const make = el('div', { class: 'ol-row' });
   make.appendChild(button('开个房间', () => void create(null), '', 'ol-create'));
   // 实盘房间（0.5.0，docs/stake.md 第 3 节）：开房时选档位，之后不能改。单独部署没有钱包，不摆
-  if (!standalone()) make.appendChild(button('开实盘房间', () => pickTier(tiers), 'ol-2', 'ol-create-stake'));
+  if (!standalone()) make.appendChild(button('开实盘房间', () => pickTier(tiers), 'gd-2', 'ol-create-stake'));
   c.appendChild(make);
   const tiers = el('div', { class: 'ol-row', id: 'ol-tiers' });
   c.appendChild(tiers);
@@ -133,7 +135,7 @@ export function openOnline(): void {
   c.appendChild(button('关掉', () => {
     note = '';
     close();
-  }, 'ol-2'));
+  }, 'gd-2'));
 }
 
 function setNote(t: string): void {
@@ -160,7 +162,10 @@ function pickTier(box: HTMLElement): void {
 /** "开个房间"永远开新的（0.6.0）：不再因为有一个开着的就把人送回旧房间 */
 async function create(stake: TierId | null): Promise<void> {
   setNote('正在开房…');
-  const r = await createRoom(fetch, stake);
+  // 等回话时按钮转圈、不能再点（连点会开出两个房间）
+  const btn = document.getElementById(stake === null ? 'ol-create' : 'ol-create-stake');
+  btn?.classList.add('is-loading');
+  const r = await createRoom(fetch, stake).finally(() => btn?.classList.remove('is-loading'));
   if ('code' in r) {
     note = '';
     join(r.code, true);
@@ -239,7 +244,7 @@ function renderRoom(): void {
       else row.appendChild(button('去登录', () => (window.location.href = loginUrl(`?room=${s.code}`))));
     }
     if (s.status === 'failed') row.appendChild(button('再试一次', () => s.retry()));
-    row.appendChild(button('好', () => openOnline(), 'ol-2', 'ol-ok'));
+    row.appendChild(button('好', () => openOnline(), 'gd-2', 'ol-ok'));
     c.appendChild(row);
     return;
   }
@@ -247,7 +252,7 @@ function renderRoom(): void {
   head.appendChild(el('span', {}, '房间码'));
   head.appendChild(el('span', { class: 'ol-code', id: 'ol-room-code' }, s.code));
   c.appendChild(head);
-  if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void share(s.code), 'ol-big', 'ol-share'));
+  if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void share(s.code), 'gd-big', 'ol-share'));
   // 实盘房间：开房时定的档位，进房的人都看得到
   const stake = parseRoomOpts(s.room?.opts)?.stake ?? null;
   if (stake) {
@@ -257,7 +262,7 @@ function renderRoom(): void {
   }
   if (s.status !== 'open' || !s.room) {
     c.appendChild(el('div', { class: 'ol-tip' }, s.status === 'reconnecting' ? s.linkText() : '正在进房…'));
-    c.appendChild(button('离开', () => leave(), 'ol-2'));
+    c.appendChild(button('离开', () => leave(), 'gd-2'));
     return;
   }
   const room = s.room;
@@ -269,8 +274,7 @@ function renderRoom(): void {
     // 电脑座位带 name 的是绑了人、主人离座了，电脑在替他打
     const name =
       st.kind === 'human' ? (i === s.mySeat ? `${st.name ?? ''}（你）` : (st.name ?? '玩家')) : st.kind === 'ai' ? (st.name !== null ? `电脑代 ${st.name} 打` : '电脑') : '空位';
-    who.appendChild(el('b', {}, name));
-    who.appendChild(el('br'));
+    who.appendChild(el('b', { title: name }, name));
     who.appendChild(el('small', {}, `${seatLabel(i, s.mySeat)}${st.kind === 'human' && st.away ? ' · 掉线了' : ''}`));
     box.appendChild(who);
     if (room.status === 'waiting' && st.kind === 'empty') box.appendChild(button(s.mySeat === null ? '坐这里' : '换到这', () => s.sit(i), '', `ol-sit-${i}`));
@@ -301,7 +305,7 @@ function renderRoom(): void {
     c.appendChild(el('div', { class: 'ol-tip' }, '这局已经打完了，开个新房间再来'));
   }
   c.appendChild(noteEl());
-  c.appendChild(button('离开房间', () => leave(), 'ol-2', 'ol-leave'));
+  c.appendChild(button('离开房间', () => leave(), 'gd-2', 'ol-leave'));
   const err = s.lastError;
   // 其余的（座位被占 not_your_seat / seat_reserved 等）用和牌桌上一样的大白话
   if (err) setNote(err === 'seat_taken' ? '这个座位刚被别人坐了' : errorText(err));

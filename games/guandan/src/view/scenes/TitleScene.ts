@@ -9,7 +9,7 @@ import { SOLO_DEALS } from '../../stake/index.ts';
 import { STAKE_ERROR, TIER_NAME, signed } from '../stake-text.ts';
 import { StakeSession, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
 import { loadSave } from '../store.ts';
-import { TYPE } from '../theme.ts';
+import { TYPE, minHit } from '../theme.ts';
 import { goLobby } from '../lobby.ts';
 import { join, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
@@ -65,19 +65,22 @@ export class TitleScene extends Phaser.Scene {
       stake = null;
       this.time.delayedCall(600, () => toast(this, STAKE_ERROR['expired']!, W / 2, worldH - 60));
     }
-    let y = 312;
+    // 竖排按钮的间隔：手机横屏拉开到小按钮 + 间隔够 44 CSS 像素（minHit），电脑上 14；最多的一种（实盘或存档 + 五个按钮）底边约 690
+    const gap = Math.max(14, Math.min(26, minHit() - 56));
+    let y = 300;
     const add = (key: string, label: string, style: 'red' | 'gold' | 'wood', icon: string, fn: () => void, h = 64): void => {
-      const b = new Button(this, rx, y, 300, h, label, style, fn, icon).setDepth(20);
+      // 点按区域到间隔的中线为止，不互相压着
+      const b = new Button(this, rx, y, 300, h, label, style, fn, icon).setDepth(20).setHit(300, h + gap);
       this.buttons[key] = b;
       b.setAlpha(0);
       b.x += 40;
       this.tweens.add({ targets: b, alpha: 1, x: rx, duration: 320, delay: 200 + Object.keys(this.buttons).length * 70, ease: 'Cubic.easeOut' });
-      y += h + 14;
+      y += h + gap;
     };
     const saved = save && save.state.phase !== 'gameOver' ? `第 ${save.state.dealNo} 副 · 我方 ${levelName(save.state.levels[0])} · 对方 ${levelName(save.state.levels[1])}` : null;
-    // 夹在上一个按钮的底边（y - 46）和下一个按钮的顶边（y + 18 - 32）之间
+    // 夹在上一个按钮的底边（y - gap - 32）和下一个按钮的顶边（y + 18 - 32）正中
     const subLine = (s: string): Phaser.GameObjects.Text => {
-      const t = text(this, rx, y - 26, s, { size: TYPE.small, color: 0xf6e4c0, stroke: 0x1a0e07, strokeWidth: 4 }).setDepth(20);
+      const t = text(this, rx, y - 23 - gap / 2, s, { size: TYPE.small, color: 0xf6e4c0, stroke: 0x1a0e07, strokeWidth: 4 }).setDepth(20);
       y += 18;
       return t;
     };

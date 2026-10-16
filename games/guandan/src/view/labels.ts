@@ -70,6 +70,17 @@ export function seatPerson(seat: number): SeatId {
 }
 
 export function seatName(seat: number): string {
+  const full = fullSeatName(seat);
+  // 平台昵称可能很长：画面上一律最多 NAME_MAX 个字，多了截短加"…"，名牌、结算表、句子里都排得下
+  const chars = [...full];
+  return chars.length > NAME_MAX ? `${chars.slice(0, NAME_MAX - 1).join('')}…` : full;
+}
+
+/** 画面上的名字最多几个字（seatName 截短用） */
+export const NAME_MAX = 7;
+
+/** 不截短的名字：只给认人用（屏蔽名单按名字核对是不是换了人），不往画面上放 */
+export function fullSeatName(seat: number): string {
   if (seat === 0) return '你';
   const who = seatIdentity[seat];
   if (who?.human) return who.name;

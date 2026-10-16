@@ -3,6 +3,7 @@
  * 最近 20 条错误记在 localStorage（guandan.errors），方便排查。
  */
 import { clearSave, rememberError } from './store.ts';
+import { mountThemeCss } from './theme.ts';
 
 let panel: HTMLElement | null = null;
 
@@ -24,9 +25,9 @@ export function showErrorPanel(err: unknown): void {
       <span>进度已经自动保存，一般点"继续"就好。</span>
       <code></code>
       <div class="ep-row">
-        <button data-act="go">继续</button>
-        <button data-act="reload">重新载入</button>
-        <button data-act="reset" class="ep-warn">放弃存档重开</button>
+        <button type="button" class="gd-btn" data-act="go">继续</button>
+        <button type="button" class="gd-btn" data-act="reload">重新载入</button>
+        <button type="button" class="gd-btn gd-2" data-act="reset">放弃存档重开</button>
       </div>
     </div>`;
   (el.querySelector('code') as HTMLElement).textContent = e.message.slice(0, 200);
@@ -52,18 +53,17 @@ export function hideErrorPanel(): void {
 }
 
 export function installErrorHandler(): void {
+  mountThemeCss();
   const style = document.createElement('style');
   style.textContent = `
 #error-panel { position: fixed; inset: 0; z-index: 9500; display: flex; align-items: center; justify-content: center;
-  background: rgba(10, 6, 4, 0.72); font: 16px/1.6 "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
-#error-panel .ep-card { max-width: 420px; margin: 16px; padding: 22px 24px; border-radius: 18px; background: #fbf1dc;
-  border: 5px solid #6b3b1f; box-shadow: 0 0 0 2px #e0b45a inset; color: #2b1d14; display: flex; flex-direction: column; gap: 10px; }
-#error-panel b { font-size: 22px; color: #b3202a; }
-#error-panel code { font-size: 12px; color: #7a6555; word-break: break-all; background: #f1e4c6; padding: 6px 8px; border-radius: 8px; }
-#error-panel .ep-row { display: flex; gap: 8px; flex-wrap: wrap; }
-#error-panel button { flex: 1; min-width: 96px; padding: 10px 8px; border: 0; border-radius: 12px; font: inherit; font-weight: bold;
-  background: #b3202a; color: #fff3d6; cursor: pointer; }
-#error-panel button.ep-warn { background: #7a6555; }`;
+  background: rgba(10, 6, 4, 0.72); font: 16px/1.6 var(--gd-font); }
+#error-panel .ep-card { max-width: 420px; margin: var(--gd-s4); padding: var(--gd-s6); border-radius: var(--gd-r-lg); background: var(--gd-paper);
+  border: 5px solid var(--gd-wood); box-shadow: 0 0 0 2px var(--gd-gold) inset; color: var(--gd-ink); display: flex; flex-direction: column; gap: var(--gd-s3); }
+#error-panel b { font-size: 22px; color: var(--gd-red); }
+#error-panel code { font-size: 12px; color: var(--gd-muted); word-break: break-all; background: #f1e4c6; padding: var(--gd-s2); border-radius: var(--gd-r-sm); }
+#error-panel .ep-row { display: flex; gap: var(--gd-s2); flex-wrap: wrap; }
+#error-panel .gd-btn { flex: 1; min-width: 96px; }`;
   document.head.appendChild(style);
   window.addEventListener('error', (ev) => {
     if (isNoise(ev.message ?? '', ev.filename)) return;

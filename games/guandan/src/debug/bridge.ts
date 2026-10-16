@@ -12,7 +12,8 @@ import { loadStake } from '../view/stake.ts';
 import type { StakeView } from '../net/stake.ts';
 import type { TableScene } from '../view/scenes/TableScene.ts';
 import type { TitleScene } from '../view/scenes/TitleScene.ts';
-import { RENDER_SCALE } from '../view/theme.ts';
+import { GAME_HEIGHT, RENDER_SCALE } from '../view/theme.ts';
+import { focusedAt } from '../view/ui/focus.ts';
 import { tutorialState } from '../view/tutorial.ts';
 
 type Pt = { x: number; y: number };
@@ -39,6 +40,13 @@ export interface GameBridge {
   toScreen(p: Pt): Pt;
   /** 主要控件（页面 CSS 坐标） */
   controls(): Record<string, Pt & { enabled?: boolean; visible?: boolean }>;
+  /**
+   * 现在点得到的东西的点按区域（页面 CSS 坐标的矩形，0.9.0）：冒烟查有没有小于 44 CSS 像素、有没有互相压着的。
+   * 只列看得见、开着输入的；整屏挡点击的遮罩（和画面一样大）不算。
+   */
+  hits(): { x: number; y: number; w: number; h: number; kind: string }[];
+  /** 键盘焦点停在哪（页面 CSS 坐标的中心），没在用键盘时是 null（0.9.0） */
+  focused(): Pt | null;
   /** 手牌某张牌露出部分的中心（页面 CSS 坐标） */
   cardPoint(c: Card): Pt | null;
   selected(): Card[];
@@ -126,6 +134,60 @@ export function mountBridge(game: Phaser.Game): void {
       }
       if (tutorialState.step >= 0) for (const [k, p] of Object.entries(tutorialState.buttons)) out[`tutorial:${k}`] = toScreen(p);
       return out;
+    },
+    hits: () => {
+      const s = active();
+      if (!s) return [];
+      const out: { x: number; y: number; w: number; h: number; kind: string }[] = [];
+      const W = s.scale.gameSize.width / RENDER_SCALE;
+      const shown = (o: Phaser.GameObjects.GameObject): boolean => {
+        for (let p: Phaser.GameObjects.GameObject | null = o; p; p = p.parentContainer) {
+          const v = p as unknown as { visible?: boolean; alpha?: number; active: boolean };
+          if (!v.active || v.visible === false || (v.alpha !== undefined && v.alpha < 0.05)) return false;
+        }
+        return true;
+      };
+      const list = (s.input as unknown as { _list: Phaser.GameObjects.GameObject[] })._list.filter((o) => o.input?.enabled && shown(o));
+      // 整屏挡点击的遮罩（弹窗、引导）下面的点不到：只看最上面那层遮罩所在的层和更上面的
+      const top = (o: Phaser.GameObjects.GameObject): Phaser.GameObjects.GameObject => {
+        let t = o;
+        while (t.parentContainer) t = t.parentContainer;
+        return t;
+      };
+      const depth = (o: Phaser.GameObjects.GameObject): number => {
+        const t = top(o);
+        return (t as unknown as { depth: number }).depth * 1e6 + s.children.getIndex(t);
+      };
+      const full = (o: Phaser.GameObjects.GameObject): boolean => {
+        const r = o.input!.hitArea as Phaser.Geom.Rectangle;
+        return r.width >= W - 1 && r.height >= GAME_HEIGHT - 1;
+      };
+      const floor = Math.max(-Infinity, ...list.filter(full).map(depth));
+      for (const o of list) {
+        const inp = o.input!;
+        if (depth(o) < floor) continue;
+        // 只认矩形的点按区域（按钮、区域、头像都是）；Phaser 的类型是运行时的，这里只按形状认
+        const r = inp.hitArea as Phaser.Geom.Rectangle;
+        if (typeof r?.width !== 'number' || typeof r.right !== 'number') continue;
+        const t = o as unknown as Phaser.GameObjects.Components.Transform & Phaser.GameObjects.Components.Origin;
+        const m = t.getWorldTransformMatrix();
+        const a = m.transformPoint(r.x - (t.displayOriginX ?? 0), r.y - (t.displayOriginY ?? 0));
+        const b = m.transformPoint(r.right - (t.displayOriginX ?? 0), r.bottom - (t.displayOriginY ?? 0));
+        const x0 = Math.min(a.x, b.x);
+        const y0 = Math.min(a.y, b.y);
+        const w = Math.abs(b.x - a.x);
+        const h = Math.abs(b.y - a.y);
+        if (w >= W - 1 && h >= GAME_HEIGHT - 1) continue;
+        const p0 = toScreen({ x: x0, y: y0 });
+        const p1 = toScreen({ x: x0 + w, y: y0 + h });
+        out.push({ x: p0.x, y: p0.y, w: p1.x - p0.x, h: p1.y - p0.y, kind: o.type });
+      }
+      return out;
+    },
+    focused: () => {
+      const s = active();
+      const p = s ? focusedAt(s) : null;
+      return p ? toScreen(p) : null;
     },
     cardPoint: (c) => {
       const p = table()?.cardPoint(c);

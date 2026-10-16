@@ -5,75 +5,90 @@ import { app } from '../app.ts';
 import { levelName } from '../labels.ts';
 import { audio } from '../audio.ts';
 import { getSettings, getStats, setTutorialDone, updateSettings, type Settings } from '../store.ts';
-import { COLOR, TYPE, css } from '../theme.ts';
-import { Button, modal, segmented, text, type Modal } from './kit.ts';
+import { COLOR, SPACE, TYPE, css, minHit } from '../theme.ts';
+import { Button, modal, segmented, text, worldW, type Modal } from './kit.ts';
 import { PATTERNS, miniCards, patternTile } from './patterns.ts';
 
 export function applyAudio(s: Settings = getSettings()): void {
   audio.apply({ volume: s.volume, music: s.music, muted: s.muted });
 }
 
+/**
+ * 设置：两栏（0.9.0）。手机横屏上每一行至少 44 CSS 像素高（minHit），一栏九行排不下，所以左边放声音、速度、难度、牌背，
+ * 右边放嘲讽、地方规则和"重看引导"。选项组的点按区域高到行距、宽到和邻居相接。
+ */
 export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => void; onClose?: () => void } = {}): Modal {
-  const m = modal(scene, 860, 660, '设置', { onClose: opts.onClose });
+  const P = Math.max(64, minHit());
+  // 高度跟着行距走：右栏最长（一行嘲讽 + 规则标题 + 三行规则 + 按钮，约 4.6 行），上面留标题飘带、下面留边
+  const PH = Math.round(4.6 * P + 200);
+  const PW = Math.min(worldW(scene) - SPACE.xxl * 2, 1200);
+  const m = modal(scene, PW, PH, '设置', { onClose: opts.onClose });
   const b = m.body;
   const s = getSettings();
-  const rowX = -360;
-  let y = -220;
-  const row = (label: string): void => {
-    b.add(text(scene, rowX, y, label, { size: TYPE.body, bold: true, ox: 0 }));
+  const colL = -PW / 2 + 56;
+  const colR = 56;
+  const top = -PH / 2 + 104;
+  const row = (x: number, y: number, label: string): void => {
+    b.add(text(scene, x, y, label, { size: TYPE.body, bold: true, ox: 0 }));
   };
-  const segX = -120;
+  // 选项组的第一项中心：标签 120 宽、第一项半宽 52
+  const seg = (x: number, y: number, items: { label: string; value: string }[], cur: string, pick: (v: string) => void, at = 172): void => {
+    b.add(segmented(scene, x + at, y, items, cur, pick, 104, P));
+  };
+
+  let y = top;
   const vol = s.muted ? '0' : s.volume <= 0.4 ? '0.35' : s.volume <= 0.7 ? '0.65' : '1';
-  row('音量');
-  b.add(segmented(scene, segX, y, [
+  row(colL, y, '音量');
+  seg(colL, y, [
     { label: '静音', value: '0' }, { label: '小', value: '0.35' }, { label: '中', value: '0.65' }, { label: '大', value: '1' },
   ], vol, (v) => {
     const n = Number(v);
     applyAudio(updateSettings(n === 0 ? { muted: true } : { muted: false, volume: n }));
     if (n > 0) audio.sfx('play');
-  }));
-  y += 60;
-  row('背景音');
-  b.add(segmented(scene, segX, y, [{ label: '开', value: '1' }, { label: '关', value: '0' }], s.music ? '1' : '0', (v) => applyAudio(updateSettings({ music: v === '1' }))));
-  y += 60;
-  row('动画速度');
-  b.add(segmented(scene, segX, y, [{ label: '慢', value: 'slow' }, { label: '中', value: 'normal' }, { label: '快', value: 'fast' }], s.speed, (v) => updateSettings({ speed: v as Settings['speed'] })));
-  y += 60;
-  row('电脑难度');
-  b.add(segmented(scene, segX, y, [{ label: '简单', value: 'easy' }, { label: '普通', value: 'normal' }, { label: '较强', value: 'good' }, { label: '困难', value: 'hard' }], s.difficulty, (v) => {
+  });
+  y += P;
+  row(colL, y, '背景音');
+  seg(colL, y, [{ label: '开', value: '1' }, { label: '关', value: '0' }], s.music ? '1' : '0', (v) => applyAudio(updateSettings({ music: v === '1' })));
+  y += P;
+  row(colL, y, '动画速度');
+  seg(colL, y, [{ label: '慢', value: 'slow' }, { label: '中', value: 'normal' }, { label: '快', value: 'fast' }], s.speed, (v) => updateSettings({ speed: v as Settings['speed'] }));
+  y += P;
+  row(colL, y, '电脑难度');
+  seg(colL, y, [{ label: '简单', value: 'easy' }, { label: '普通', value: 'normal' }, { label: '较强', value: 'good' }, { label: '困难', value: 'hard' }], s.difficulty, (v) => {
     updateSettings({ difficulty: v as Settings['difficulty'] });
     if (app.session) app.session.difficulty = v as Settings['difficulty'];
-  }));
-  y += 60;
-  row('牌背');
-  b.add(segmented(scene, segX, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 })));
-  y += 60;
-  // 别人（好友房的人、单机的电脑）的嘲讽、表情、道具：关掉就不看也不听，单机的电脑也不发（自己照样能发）
-  row('嘲讽和道具');
-  b.add(segmented(scene, segX, y, [{ label: '看', value: '1' }, { label: '不看', value: '0' }], s.taunts ? '1' : '0', (v) => updateSettings({ taunts: v === '1' })));
-  y += 66;
+  });
+  y += P;
+  row(colL, y, '牌背');
+  seg(colL, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 }));
+
+  // 右栏。别人（好友房的人、单机的电脑）的嘲讽、表情、道具：关掉就不看也不听，单机的电脑也不发（自己照样能发）
+  y = top;
+  row(colR, y, '嘲讽和道具');
+  seg(colR, y, [{ label: '看', value: '1' }, { label: '不看', value: '0' }], s.taunts ? '1' : '0', (v) => updateSettings({ taunts: v === '1' }), 196);
   // 地方规则：下一局生效
-  b.add(text(scene, rowX, y, '地方规则', { size: TYPE.body, bold: true, ox: 0, color: COLOR.red }));
-  b.add(text(scene, rowX + 110, y, '新开一局时生效', { size: TYPE.small, color: COLOR.muted, ox: 0 }));
-  y += 48;
+  y += P * 0.8;
+  b.add(text(scene, colR, y, '地方规则', { size: TYPE.body, bold: true, ox: 0, color: COLOR.red }));
+  b.add(text(scene, colR + 110, y, '新开一局时生效', { size: TYPE.small, color: COLOR.muted, ox: 0 }));
   const rules = { ...DEFAULT_OPTIONS, ...s.rules };
   const setRule = (patch: Partial<Settings['rules']>): void => {
     updateSettings({ rules: { ...getSettings().rules, ...patch } });
   };
-  b.add(text(scene, rowX, y, '三带二能带一对王', { size: TYPE.label, ox: 0 }));
-  b.add(segmented(scene, 130, y, [{ label: '能', value: '1' }, { label: '不能', value: '0' }], rules.fullHouseJokerPair ? '1' : '0', (v) => setRule({ fullHouseJokerPair: v === '1' }), 92));
-  y += 52;
-  b.add(text(scene, rowX, y, '打 A 没过几次退回打 2', { size: TYPE.label, ox: 0 }));
-  b.add(segmented(scene, 130, y, [{ label: '3 次', value: '3' }, { label: '不退', value: '0' }], String(rules.aFailLimit === 0 ? 0 : 3), (v) => setRule({ aFailLimit: Number(v) }), 92));
-  y += 52;
-  b.add(text(scene, rowX, y, '双下两人合计两张大王抗贡', { size: TYPE.label, ox: 0 }));
-  b.add(segmented(scene, 130, y, [{ label: '算', value: '1' }, { label: '不算', value: '0' }], rules.antiTributeCombined ? '1' : '0', (v) => setRule({ antiTributeCombined: v === '1' }), 92));
-  // 右下：重看引导
-  const tb = new Button(scene, 280, 20, 180, 50, '重看引导', 'wood', () => {
+  const rule = (label: string, items: { label: string; value: string }[], cur: string, pick: (v: string) => void): void => {
+    y += P;
+    b.add(text(scene, colR, y, label, { size: TYPE.label, ox: 0 }));
+    b.add(segmented(scene, colR + 300, y, items, cur, pick, 92, P));
+  };
+  y -= P * 0.2;
+  rule('三带二能带一对王', [{ label: '能', value: '1' }, { label: '不能', value: '0' }], rules.fullHouseJokerPair ? '1' : '0', (v) => setRule({ fullHouseJokerPair: v === '1' }));
+  rule('打 A 没过几次退回打 2', [{ label: '3 次', value: '3' }, { label: '不退', value: '0' }], String(rules.aFailLimit === 0 ? 0 : 3), (v) => setRule({ aFailLimit: Number(v) }));
+  rule('双下两人合计两张大王抗贡', [{ label: '算', value: '1' }, { label: '不算', value: '0' }], rules.antiTributeCombined ? '1' : '0', (v) => setRule({ antiTributeCombined: v === '1' }));
+  const tb = new Button(scene, colR + 90, y + P, 180, 50, '重看引导', 'wood', () => {
     setTutorialDone(false);
     m.close();
     opts.onTutorial?.();
   }, 'restart');
+  tb.setHit(180, Math.min(P, minHit()));
   b.add(tb);
   return m;
 }

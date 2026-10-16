@@ -4,7 +4,7 @@ import { PERSONAS, type Mood } from '../art/index.ts';
 import { dur, tweenP } from '../anim.ts';
 import { audio } from '../audio.ts';
 import { PLACE_NAMES, seatIdentity, seatName, seatPerson } from '../labels.ts';
-import { COLOR, TYPE } from '../theme.ts';
+import { COLOR, TYPE, minHit } from '../theme.ts';
 import { bubble, text, type BubbleTone } from '../ui/kit.ts';
 import type { SeatAnchor } from './layout.ts';
 
@@ -166,7 +166,12 @@ export class SeatView {
 
   /** 点这个人的头像（0.6.0：别人的对他扔道具、发嘲讽、屏蔽；自己的打开嘲讽面板，手机上比小按钮好点） */
   onTap(fn: () => void): void {
-    this.avatar.setInteractive({ useHandCursor: true });
+    // 点按区域至少 minHit() 见方（我自己的头像只有 72，手机上不到 44 CSS 像素）；按贴图像素算，贴图缩放过
+    const k = this.avatar.scaleX;
+    const side = Math.max(this.a.size, minHit()) / k;
+    const fw = this.avatar.frame.width;
+    const fh = this.avatar.frame.height;
+    this.avatar.setInteractive({ hitArea: new Phaser.Geom.Rectangle((fw - side) / 2, (fh - side) / 2, side, side), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
     this.avatar.on('pointerdown', fn);
   }
 

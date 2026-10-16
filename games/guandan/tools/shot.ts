@@ -145,8 +145,10 @@ async function until(ctx: Ctx, what: string, cond: string, timeout = WAIT_MS): P
   } catch {
     const info = await ctx.page.evaluate(() => {
       const g = window.__game;
-      return g ? { scene: g.scene, idle: g.idle, overlay: g.overlay, phase: g.state()?.phase, tut: g.tutorialStep, err: g.lastError } : null;
+      return g ? { scene: g.scene, idle: g.idle, overlay: g.overlay, phase: g.state()?.phase, tut: g.tutorialStep, err: g.lastError, fx: g.fxLog.slice(-3) } : null;
     });
+    // 超时时留一张当时的画面，查偶发的失败不用再复现
+    await ctx.page.screenshot({ path: `${OUT}/fail-${ctx.name}.png` }).catch(() => {});
     throw new Error(`[${ctx.name}] 等待超时：${what}（${JSON.stringify(info)}）`);
   }
 }
@@ -158,6 +160,25 @@ async function toLobby(ctx: Ctx, what: string): Promise<void> {
   } catch {
     throw new Error(`[${ctx.name}] ${what}：没有跳到大厅（现在是 ${ctx.page.url()}）`);
   }
+}
+
+/**
+ * 点按区域（0.9.0）：互相压着的一律算错；strict 时（电脑上）每个都要至少 44 CSS 像素见方。
+ * 手机横屏有几处排不开（顶栏贴着上沿、16:9 的窄屏），只记数不算错，PR 和 CHANGELOG 里写明是哪几个。
+ */
+async function checkHits(ctx: Ctx, where: string, strict: boolean): Promise<void> {
+  const hits = await ctx.page.evaluate(() => window.__game!.hits());
+  const small = hits.filter((h) => h.w < 43.5 || h.h < 43.5);
+  let over = 0;
+  for (let i = 0; i < hits.length; i++)
+    for (let j = i + 1; j < hits.length; j++) {
+      const a = hits[i]!;
+      const b = hits[j]!;
+      if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 1 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 1) over++;
+    }
+  assert(over === 0, `[${ctx.name}] ${where}：点按区域互相压着 ${over} 处`);
+  if (strict) assert(small.length === 0, `[${ctx.name}] ${where}：点按区域小于 44 CSS 像素 ${small.length} 个`);
+  else if (small.length) notes.push(`${ctx.name} ${where}：点按区域小于 44 CSS 像素 ${small.length} 个（${small.map((h) => `${Math.round(h.w)}×${Math.round(h.h)}`).join('、')}）`);
 }
 
 async function shot(ctx: Ctx, file: string): Promise<void> {
@@ -225,6 +246,7 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   assert(pull > 0 && api.log[pull - 1]!.path === '/api/me' && api.log.slice(0, pull).every((l) => l.path === '/api/me'), '先问 /api/me 再拉存档');
   await page.waitForTimeout(900);
   await shot(ctx, '01-title');
+  await checkHits(ctx, '标题页', true);
   // "开始"先选娱乐 / 实盘（0.4.0）
   await click(ctx, 'new');
   await until(ctx, '选模式', "'fun' in g.controls() && 'stake' in g.controls()");
@@ -334,9 +356,11 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await shot(ctx, '09-continued');
 
   // 设置、规则（三页）、战绩
+  await checkHits(ctx, '牌桌', true);
   await page.evaluate(() => window.__game!.open('settings'));
   await page.waitForTimeout(500);
   await shot(ctx, '10-settings');
+  await checkHits(ctx, '设置', true);
   await page.evaluate(() => window.__game!.closeOverlay());
   await page.evaluate(() => window.__game!.open('rules'));
   await page.waitForTimeout(500);
@@ -354,6 +378,26 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await click(ctx, 'stats');
   await page.waitForTimeout(500);
   await shot(ctx, '13-stats');
+  // 键盘（0.9.0）：Esc 关弹窗；Tab 走到"设置"、回车打开、Esc 再关上。弹窗开着时整屏遮罩在，hits() 只剩弹窗里的
+  const titleHits = (await page.evaluate(() => window.__game!.hits())).length;
+  await page.keyboard.press('Escape');
+  await until(ctx, 'Esc 关掉战绩', `g.hits().length > ${titleHits}`, 5000);
+  const target = (await controls(ctx))['settings']!;
+  let found = false;
+  for (let i = 0; i < 12 && !found; i++) {
+    await page.keyboard.press('Tab');
+    const f = await page.evaluate(() => window.__game!.focused());
+    found = !!f && Math.abs(f.x - target.x) < 8 && Math.abs(f.y - target.y) < 8;
+  }
+  assert(found, 'Tab 能走到"设置"');
+  await page.waitForTimeout(200);
+  await shot(ctx, '13b-keyboard-focus');
+  const onTitle = (await page.evaluate(() => window.__game!.hits())).length;
+  await page.keyboard.press('Enter');
+  await until(ctx, '回车打开设置', `g.hits().length > ${onTitle + 10}`, 5000);
+  await page.keyboard.press('Escape');
+  await until(ctx, 'Esc 关掉设置', `g.hits().length === ${onTitle}`, 5000);
+  notes.push('键盘：Tab 走到"设置"、回车打开、Esc 关上');
 
   // 云存档：教程标记和打完一副后的战绩都传上去了，写请求带 X-Arcade
   await until(ctx, '云存档传完', "g.cloud()?.status === 'synced'", 30_000);
@@ -429,6 +473,7 @@ async function smokeMobile(browser: Browser): Promise<void> {
   await until(ctx, '轮到我（手机）', "g.idle && g.view().toAct.includes(0) && g.overlay === null", 120_000);
   await page.waitForTimeout(300);
   await shot(ctx, '20-mobile-table');
+  await checkHits(ctx, '牌桌', false);
   // 逐张点手牌，确认每张都能点中（点中 = 选中集合里多了这张）
   const hand = await page.evaluate(() => window.__game!.view()!.hand);
   let hits = 0;

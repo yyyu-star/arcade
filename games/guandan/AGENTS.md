@@ -11,7 +11,7 @@ src/net/    联机（房间和页面共用，纯函数）：rules 把规则核�
             stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
-src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗、art 程序生成 SVG、audio 合成音效、store 存储、
+src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗（focus 画布里的键盘焦点）、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
@@ -149,6 +149,10 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 走开了（0.6.3）：`timeout()` 给的操作带 `idle: true`（`parse` 会去掉，浏览器伪造不了），`NetState.idle` 数每个座位连着几手被代出，
     到 `IDLE_AFTER`（2）后这一手只等 `IDLE_MS`（3 秒）；自己出一手或发 `back`（"我回来了"）清零。代出什么不变，规则核心看不到这个记号。
     浏览器每次连上（welcome：打开页面、断线重连）看到自己还 afk 就自动发一次 `back`（0.6.4）：连得上说明人回来了；一直连着只是走开的照旧要自己点。
+- 界面的刻度和按钮（0.9.0 界面改版①）：间距、圆角、投影、按钮配色只从 `theme.ts` 取（`SPACE`、`RADIUS`、`SHADOW`、`BUTTON`），DOM 用 `THEME_CSS` 的 `--gd-` 变量和 `.gd-btn`（`tests/ui-theme.test.ts` 查 DOM 按钮）。
+  画布里能点的一律用 `ui/kit.ts` 的 `Button`、`iconButton`、`segmented`（自带悬停、按下、禁用、加载中，登记进 `ui/focus.ts` 的键盘焦点；弹窗用 `modal()`，自带焦点层和 Esc）。
+  点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距，不许互相压着。
+  调试桥 `hits()` 列出现在点得到的矩形，冒烟的 `checkHits` 用它查；新加能点的东西后跑一遍 `npm run shot`。画面上的人名用 `seatName`（最多 `NAME_MAX` 个字），认人用 `fullSeatName`。
 - 改了画面后跑 `npm run shot`，并亲自看 `shots/` 里 1280×720、844×390、1920×1080 的截图。
 
 ## 4. 常用命令（在本目录运行）

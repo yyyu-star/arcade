@@ -2,6 +2,8 @@
  * 手机竖屏时盖一层"请横过来"的提示（纯 CSS 媒体查询控制显隐，转过来自动消失）。
  * 左上角留一个"大厅"按钮：竖屏时牌桌整个被盖住，不放这里就回不去平台首页。
  */
+import { mountThemeCss } from './theme.ts';
+
 const QUERY = '(orientation: portrait) and (max-width: 820px)';
 
 const ICON = `
@@ -21,21 +23,22 @@ const HOUSE = `<svg viewBox="0 0 64 64" width="22" height="22" aria-hidden="true
 
 export function mountRotateHint(onLobby: () => void): void {
   if (document.getElementById('rotate-hint')) return;
+  mountThemeCss();
   const style = document.createElement('style');
   style.textContent = `
 #rotate-hint { position: fixed; inset: 0; z-index: 9000; display: none; align-items: center; justify-content: center;
-  flex-direction: column; gap: 14px; background: radial-gradient(circle at 50% 40%, #2a6a50 0, #123a2b 75%); color: #ffe3a0;
-  font: bold 22px/1.5 "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; text-align: center; }
+  flex-direction: column; gap: var(--gd-s4); background: radial-gradient(circle at 50% 40%, #2a6a50 0, var(--gd-felt-dark) 75%); color: var(--gd-gold-light);
+  font: bold 22px/1.5 var(--gd-font); text-align: center; }
 #rotate-hint span { font-size: 15px; font-weight: normal; color: #d8e8dc; }
 #rotate-hint .rh-phone { transform-origin: 80px 64px; animation: rh-turn 2.4s ease-in-out infinite; }
 @keyframes rh-turn { 0%, 18% { transform: rotate(0deg); } 52%, 80% { transform: rotate(90deg); } 100% { transform: rotate(0deg); } }
-#rh-lobby { position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px;
-  border: 2px solid #e0b45a; border-radius: 22px; background: #6b3f20; color: #ffe9c2; font-family: inherit; font-size: 17px; font-weight: bold; line-height: 1; cursor: pointer; }
+#rh-lobby { position: absolute; top: max(var(--gd-s3), env(safe-area-inset-top, 0px)); left: max(var(--gd-s3), env(safe-area-inset-left, 0px));
+  border-radius: var(--gd-r-pill); border-color: var(--gd-gold); background: #6b3f20; color: #ffe9c2; font-size: 17px; }
 @media ${QUERY} { #rotate-hint { display: flex; } }`;
   document.head.appendChild(style);
   const el = document.createElement('div');
   el.id = 'rotate-hint';
-  el.innerHTML = `<button id="rh-lobby" type="button">${HOUSE}大厅</button>${ICON}<div>把手机横过来</div><span>牌桌是横的，横屏才排得下 27 张牌</span>`;
+  el.innerHTML = `<button id="rh-lobby" class="gd-btn" type="button">${HOUSE}大厅</button>${ICON}<div>把手机横过来</div><span>牌桌是横的，横屏才排得下 27 张牌</span>`;
   el.querySelector('#rh-lobby')!.addEventListener('click', onLobby);
   document.body.appendChild(el);
 }
