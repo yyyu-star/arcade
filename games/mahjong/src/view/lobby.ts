@@ -5,7 +5,7 @@
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { STAKES, type StakesId } from '../game/stakes.ts';
 import type { WalletView } from '../net/wallet.ts';
-import { button, el } from './dom.ts';
+import { busy, button, el } from './dom.ts';
 import { GAME_NAME, num, STAKES_NAME, VARIANT_NAME } from './text.ts';
 
 export interface LobbyProps {
@@ -15,11 +15,12 @@ export interface LobbyProps {
   stakes: StakesId;
   opts: XzOpts;
   canResume: boolean;
-  onSolo(stakes: StakesId, opts: XzOpts): void;
+  /** 开单机、开房间要先问钱包和服务器：按钮转圈直到回来 */
+  onSolo(stakes: StakesId, opts: XzOpts): Promise<void>;
   onResume(): void;
   onRules(): void;
   /** 好友房：没有时不显示 */
-  onRoom?(stakes: StakesId, opts: XzOpts): void;
+  onRoom?(stakes: StakesId, opts: XzOpts): Promise<void>;
   onJoin?(code: string): void;
   /** 从平台大厅的"好友房"按钮进来（?online=1，和德州、掼蛋同一个约定）：开房、进房那一块滚到看得见、亮一下 */
   friends?: boolean;
@@ -86,8 +87,8 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   ]);
 
   const go = el('div', 'go-row', box);
-  button('act go big', go, '单机开打', () => p.onSolo(stakes, opts));
-  const room = p.onRoom ? button('act big', go, '开房间叫朋友', () => p.onRoom!(stakes, opts)) : null;
+  const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, opts)));
+  const room = p.onRoom ? button('act big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, opts))) : null;
   if (p.standalone) {
     const row = el('label', 'nick', box);
     el('span', '', row, '好友房里的昵称');

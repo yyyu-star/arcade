@@ -38,6 +38,8 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onChange: (o
     stage.style.height = `${h}px`;
     stage.style.setProperty('--cut', `${st.h - h}px`);
     stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+    // 点按区域在屏幕上至少 44 像素：折成舞台里的设计像素（手机上约 63），按钮的隐形点按区按它撑开（style.css 的 --tap）
+    stage.style.setProperty('--tap', `${Math.ceil(44 / s)}px`);
     if (o !== orient) {
       orient = o;
       stage.dataset.orient = o;

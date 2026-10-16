@@ -13,7 +13,7 @@ import { PHRASE_COUNT } from './game/emotes.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
-import { button, el } from './view/dom.ts';
+import { busy, button, el } from './view/dom.ts';
 import { GUIDE_KEY, showGuide, showRules } from './view/guide.ts';
 import { Comms, type CommsEvent, type CommsHost } from './view/comms.ts';
 import { renderLobby } from './view/lobby.ts';
@@ -78,7 +78,7 @@ const soundBtn = button('icon', top, '', () => {
   paintTop();
 });
 button('icon', top, '规则', () => showRules(stage));
-const shareBtn = button('pill share', top, '叫朋友', () => void share());
+const shareBtn = button('pill share', top, '叫朋友', () => void busy(shareBtn, share));
 const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
 
@@ -204,10 +204,10 @@ function lobby(friends = false): void {
     stakes: prefs.stakes,
     opts: prefs.opts,
     canResume: loadSolo() !== null,
-    onSolo: (stakes, opts) => void startSolo(stakes, opts),
+    onSolo: startSolo,
     onResume: () => void resumeSolo(),
     onRules: () => showRules(stage),
-    onRoom: (stakes, opts) => void openRoom(stakes, opts),
+    onRoom: openRoom,
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
     friends,
     ...(standalone ? { standalone: { nick: nick(), onNick: setNick } } : {}),
