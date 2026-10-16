@@ -1,0 +1,204 @@
+/*
+ * 牌桌互动的样式（view/comms.ts）：头像旁菜单、首次提示、连击、回敬、护盾、冷却转圈、爱心星星。
+ * 面板、名场面横幅的底子在 style.css；这里只放新增的，和要覆盖的（用更具体的选择器，不去改 style.css）。
+ * 菜单和提示挂在 body 上、用屏幕坐标（舞台是缩放的），字号和点击区域不跟着缩；效果挂在 kit 的好玩图层里，点击穿透。
+ */
+
+/* 左下常驻的"互动"：笑脸 + 字，整个是一个 ≥44px 的按钮 */
+.comms .comms-btn {
+  width: auto;
+  min-width: 48px;
+  height: 48px;
+  padding: 0 14px 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* 面板别太高：留出手牌和操作条 */
+.comms .comms-panel {
+  width: 280px;
+  max-height: min(300px, 46vh);
+}
+/* 横屏：手牌那一行的左端在按钮正上方一点，面板整个抬高一截，不压到最左边的手牌 */
+[data-orient='land'] .comms .comms-panel {
+  margin-bottom: 22px;
+}
+.comms-body .to-row .chip {
+  min-height: 36px;
+}
+.comms-body .pic.prop,
+.comms-body .pic.talk {
+  position: relative;
+}
+
+/* 冷却：按钮上盖一块深色的扇形，随剩余时间转着缩小（--cool 是剩余毫秒，comms.ts 写） */
+@property --p {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+.cool {
+  position: relative;
+}
+.cool::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(#000000a8 calc(var(--p) * 1turn), transparent 0);
+  animation: mj-cool var(--cool, 1s) linear forwards;
+  pointer-events: none;
+}
+@keyframes mj-cool {
+  from {
+    --p: 1;
+  }
+  to {
+    --p: 0;
+  }
+}
+
+/* 头像旁的菜单 */
+.fun-menu,
+.fun-hint {
+  position: fixed;
+  z-index: 60;
+}
+.fun-menu {
+  width: min(396px, calc(100vw - 12px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--r-lg);
+  background: #102a20f2;
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-2);
+  animation: mj-in 0.14s ease-out;
+}
+.fun-menu.mine {
+  width: min(300px, calc(100vw - 12px));
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+}
+.fun-menu .fm-props {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.fun-menu .pic {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: #ffffff14;
+  cursor: pointer;
+}
+.fun-menu .pic svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.fun-menu .fm-say {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fun-menu .phrase {
+  position: relative;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  background: var(--surface-hi);
+  color: inherit;
+  cursor: pointer;
+}
+.fun-menu .fm-block {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-size: var(--fs-xs);
+  color: inherit;
+  opacity: 0.8;
+  cursor: pointer;
+}
+@keyframes mj-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+/* 第一次进牌桌的提示气泡：金边，小一点 */
+.fun-hint {
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: #7a2416f0;
+  border: 2px solid var(--gold);
+  color: #ffe9b0;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--sh-2);
+  animation: mj-in 0.2s ease-out;
+}
+
+/* 好玩图层里的小效果（图层本身点击穿透） */
+.arcade-fun .fx-pop {
+  position: absolute;
+  font-weight: 800;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px #000c;
+}
+.arcade-fun .fx-pop.combo {
+  font-size: 30px;
+  color: var(--gold);
+  -webkit-text-stroke: 1px #6b4a05;
+}
+.arcade-fun .fx-pop.back {
+  font-size: 22px;
+  color: #ffd2c4;
+  -webkit-text-stroke: 1px #7a2416;
+}
+.arcade-fun .fx-shield {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 3px solid #8fd3ff;
+  background: radial-gradient(circle, #8fd3ff22, #8fd3ff66);
+  box-shadow: 0 0 16px #8fd3ffaa;
+  color: #e6f6ff;
+  font-size: var(--fs-sm);
+  text-shadow: 0 1px 4px #000c;
+  transform: translate(-50%, -50%);
+}
+.arcade-fun .fx-spark {
+  position: absolute;
+  font-size: 20px;
+  line-height: 1;
+  text-shadow: 0 1px 4px #0008;
+}
+.arcade-fun .fx-spark.heart {
+  color: #ff6b8b;
+}
+.arcade-fun .fx-spark.star {
+  color: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fun-menu,
+  .fun-hint {
+    animation: none;
+  }
+}

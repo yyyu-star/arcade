@@ -60,17 +60,17 @@
     inset 0 8px 14px #0009,
     inset 0 -4px 10px #0006;
   background:
-    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 178px top -30px / 46px 94px no-repeat,
-    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 24px top 2px / 60px 56px no-repeat,
+    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 204px top -30px / 46px 94px no-repeat,
+    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 196px top 2px / 60px 56px no-repeat,
     /* 暗角：中间亮、四周暗，眼睛自然落到牌河和中控盘 */
     radial-gradient(ellipse 70% 75% at 50% 48%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
 }
-/* 横屏的两盏/一碗夹在左右两家头像（离顶 70）和对家头像、副露之间的空处 */
-/* 竖屏：上方两角（对家头像在正中，两角空着） */
+/* 横屏的灯笼、茶碗挂在两个上角的头像里侧（对家一排居中，碰杠多到第四副才够得着） */
+/* 竖屏：两个上角是头像，摆设往下挪到左右两家竖排上面的空处 */
 [data-orient='port'] .table::after {
   background:
-    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 14px top -24px / 54px 111px no-repeat,
-    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 12px top 6px / 66px 62px no-repeat,
+    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 14px top 110px / 54px 111px no-repeat,
+    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 12px top 150px / 66px 62px no-repeat,
     radial-gradient(ellipse 80% 60% at 50% 45%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
 }
 
@@ -207,4 +207,88 @@
 .table::before,
 .table::after {
   will-change: transform;
+}
+
+/* ---------- 牌桌角落的常驻小动画：灯笼轻摆、茶杯冒热气 ----------
+ * art.ts 的 watchTable() 往牌桌里加 .art-decor（省内存设备和减少动态效果时不加，那时仍是 ::after 里的静态背景）。
+ * 容器和 ::after 同样的位置与圆角、同样垫在牌下面（z-index -1），所以下面的坐标就是 ::after 里 background 的偏移。
+ * 只动 transform / opacity，各自一个合成层。 */
+.art-decor {
+  position: absolute;
+  inset: var(--art-rim);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+.art-decor i {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+.art-lantern {
+  left: 204px;
+  top: -30px;
+  width: 46px;
+  height: 94px;
+  background-image: var(--art-lantern-dim);
+  /* 绳子顶端是支点（图里绳子在正中、最上面） */
+  transform-origin: 50% 0;
+  will-change: transform;
+  animation: art-sway 6s ease-in-out infinite;
+}
+.art-cup {
+  right: 196px;
+  top: 2px;
+  width: 60px;
+  height: 56px;
+  background-image: var(--art-cup-dim);
+}
+.art-cup b {
+  position: absolute;
+  left: 26px;
+  top: 8px;
+  width: 4px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(#ffffff8c, #ffffff00);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: art-steam 5s ease-out infinite;
+}
+.art-cup b:nth-child(2) { left: 31px; animation-duration: 4.2s; animation-delay: -1.6s; }
+.art-cup b:nth-child(3) { left: 36px; animation-duration: 5.6s; animation-delay: -3.1s; }
+@keyframes art-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+@keyframes art-steam {
+  0% { transform: translateY(6px) scaleY(0.6); opacity: 0; }
+  30% { opacity: 0.8; }
+  100% { transform: translateY(-14px) translateX(2px) scaleY(1.2); opacity: 0; }
+}
+[data-orient='port'] .art-lantern { left: 14px; top: 110px; width: 54px; height: 111px; }
+[data-orient='port'] .art-cup { right: 12px; top: 150px; width: 66px; height: 62px; }
+[data-orient='port'] .art-cup b { left: 29px; top: 9px; }
+[data-orient='port'] .art-cup b:nth-child(2) { left: 34px; }
+[data-orient='port'] .art-cup b:nth-child(3) { left: 40px; }
+/* 摆设改由上面的元素画，::after 里只留暗角（带 data-decor 才换，没挂上时仍是原来的静态背景） */
+.table[data-decor]::after {
+  background: radial-gradient(ellipse 70% 75% at 50% 48%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+}
+[data-orient='port'] .table[data-decor]::after {
+  background: radial-gradient(ellipse 80% 60% at 50% 45%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+}
+/* 省内存设备、减少动态效果：不动（art.ts 判断后写 data-lite；这里再用媒体查询兜一层，用户中途改系统设置也生效） */
+[data-lite] .art-lantern,
+[data-lite] .art-cup b {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .art-lantern,
+  .art-cup b {
+    animation: none;
+  }
 }

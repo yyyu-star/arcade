@@ -182,6 +182,39 @@ export function installArt(root: HTMLElement = document.documentElement): void {
     '--art-lattice': url(lattice()),
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+  if (isLite()) root.dataset.lite = '1';
+  else watchTable();
+}
+
+/**
+ * 省内存设备（iOS、触屏、内存 ≤ 4GB）和"减少动态效果"：不跑常驻的小动画。
+ * 为什么不单看 CSS 媒体查询：iOS 和 deviceMemory 没有对应的媒体查询，要在这里判断后写个标记给 CSS 用。
+ */
+function isLite(): boolean {
+  const mq = (q: string): boolean => typeof matchMedia === 'function' && matchMedia(q).matches;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return ios || mq('(pointer: coarse)') || mq('(prefers-reduced-motion: reduce)') || (nav.deviceMemory !== undefined && nav.deviceMemory <= 4);
+}
+
+/**
+ * 牌桌是每局新建的，所以盯着页面，见到没挂摆设的 .table 就补两个小装饰：灯笼（轻摆）和茶杯（冒热气）。
+ * 它们和静态的角落摆设（art.css 里 .table::after 的背景）画在同一个位置；挂上后 CSS 把背景里那两样去掉，换成这两个能动的。
+ * 为什么用元素而不是伪元素：灯笼、茶杯在 ::after 里是同一张背景，没法单独动。
+ */
+function watchTable(): void {
+  const attach = (): void => {
+    document.querySelectorAll<HTMLElement>('.table:not([data-decor])').forEach((t) => {
+      t.dataset.decor = '1';
+      const box = document.createElement('div');
+      box.className = 'art-decor';
+      box.setAttribute('aria-hidden', 'true');
+      box.innerHTML = "<i class='art-lantern'></i><i class='art-cup'><b></b><b></b><b></b></i>";
+      t.appendChild(box);
+    });
+  };
+  attach();
+  new MutationObserver(attach).observe(document.body, { childList: true, subtree: true });
 }
 
 /** 档位卡片上的小图标（32×32）：娱乐一碗茶 → 小档一枚铜钱 → 中档一摞铜钱 → 大档银元宝 → 豪华档金元宝 */

@@ -9,6 +9,7 @@ import type { Tile } from '../core/tiles/index.ts';
 import { kindOf, tileOf } from '../core/tiles/index.ts';
 import type { Meld, RiverTile } from '../core/table/index.ts';
 import { avatarSvg } from './avatar.ts';
+import { celebrate, type CelebrateKind } from './fx.ts';
 import { button, clear, el } from './dom.ts';
 import { play } from './sound.ts';
 import { num } from './text.ts';
@@ -83,6 +84,8 @@ export interface Fx {
   weather(kind: 'wind' | 'rain'): void;
   /** 盖在牌桌中间的一块（川麻：胡牌亮牌）：不挡点击、不动计时，delay 毫秒后出来、ms 毫秒后自己收掉 */
   overlay(node: HTMLElement, ms: number, delay?: number): void;
+  /** 胡、自摸、杠的大字加粒子（view/fx.ts），在这个座位前面放 */
+  celebrate(seat: number, text: string, kind: CelebrateKind): void;
 }
 
 /** 通用的动作（胡、碰、杠、过、自摸、打牌）由牌桌直接发，交给控制器包成玩法的动作 */
@@ -119,6 +122,9 @@ export class TableUi<V extends TableView, A> {
   /** 选中一张牌、再点一次才打（手机上防误触）；电脑上双击直接打 */
   private readonly confirmTap = true;
 
+  /** 点了谁的头像（互动菜单，view/comms.ts 接） */
+  onAvatar: ((seat: number) => void) | null = null;
+
   private readonly ui: VariantUi<V, A>;
   private readonly send: (a: CommonAct | A) => void;
 
@@ -126,15 +132,16 @@ export class TableUi<V extends TableView, A> {
     this.ui = ui;
     this.send = send;
     this.root = el('div', 'table', parent);
+    // 每家的手牌和碰杠排成一排（自己的横着、左右两家竖着），整排沿桌边居中：碰杠多了少了，整排一起挪，不会一边空一边挤
     for (let r = 0; r < 4; r++) {
       this.rivers.push(el('div', `river r${r}`, this.root));
-      this.melds.push(el('div', `melds r${r}`, this.root));
-      if (r > 0) this.hands.push(el('div', `opp-hand r${r}`, this.root));
-      else this.hands.push(el('div', 'hidden-slot', this.root));
+      const side = el('div', `side r${r}`, this.root);
+      this.hands.push(el('div', r > 0 ? `opp-hand r${r}` : 'my-hand', side));
+      this.melds.push(el('div', `melds r${r}`, side));
       this.badges.push(el('div', `badge r${r}`, this.root));
     }
     this.center = el('div', 'center', this.root);
-    this.myHand = el('div', 'my-hand', this.root);
+    this.myHand = this.hands[0]!;
     this.bar = el('div', 'bar', this.root);
     this.fxLayer = el('div', 'fx', this.root);
   }
@@ -213,6 +220,12 @@ export class TableUi<V extends TableView, A> {
         window.setTimeout(() => node.remove(), ms);
       }, delay);
     },
+    celebrate: (seat, text, kind) => {
+      const r = this.rel(seat);
+      // 大字放在这个人的牌河那边（画面坐标，舞台没缩放前的像素）
+      const box = this.rivers[r]!;
+      celebrate(this.fxLayer, box.offsetLeft + box.offsetWidth / 2, box.offsetTop + box.offsetHeight / 2, text, kind);
+    },
   };
 
   // ---------- 各部分 ----------
@@ -227,7 +240,12 @@ export class TableUi<V extends TableView, A> {
     b.classList.toggle('turn', v.turn === seat && (v.phase === 'turn' || v.phase === 'claim'));
     b.classList.toggle('won', !!s.won);
     b.classList.toggle('empty', !!meta.empty);
-    const av = el('div', 'avatar', b);
+    // 头像是个按钮：点别人的扔道具、点自己的发表情（view/comms.ts）
+    const av = el('button', 'avatar', b);
+    av.type = 'button';
+    av.disabled = !!meta.empty;
+    av.setAttribute('aria-label', meta.empty ? '空位' : `${meta.name}：互动`);
+    av.addEventListener('click', () => this.onAvatar?.(seat));
     av.appendChild(this.avatarArt(seat, meta.name, meta.bot));
     if (v.dealer === seat) el('span', 'dealer', av, '庄');
     const info = el('div', 'info', b);
@@ -307,7 +325,16 @@ export class TableUi<V extends TableView, A> {
     const dx = from.left + from.width / 2 - (to.left + to.width / 2);
     const dy = from.top + from.height / 2 - (to.top + to.height / 2);
     const k = r === 0 ? from.width / to.width : 1.2;
-    e.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})` }, { transform: 'none' }], { duration: r === 0 ? 220 : 260, easing: 'cubic-bezier(.2,.75,.3,1)' });
+    // 落到桌上轻轻弹一下（落桌声由玩法在同一时刻放）
+    e.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(${k})`, easing: 'cubic-bezier(.2,.75,.3,1)' },
+        { transform: 'translateY(0) scale(1)', offset: 0.72, easing: 'ease-out' },
+        { transform: 'translateY(-3px) scale(1.04)', offset: 0.86, easing: 'ease-in' },
+        { transform: 'none' },
+      ],
+      { duration: r === 0 ? 300 : 340 },
+    );
     return true;
   }
 
@@ -329,12 +356,14 @@ export class TableUi<V extends TableView, A> {
     clear(c);
     for (let s = 0; s < 4; s++) {
       const d = el('div', `dir r${this.rel(s)}`, c);
-      d.classList.toggle('on', v.turn === s && v.phase === 'turn');
+      // 轮到谁、或者大家在等谁回碰杠胡：那一边的灯亮、箭头指过去
+      d.classList.toggle('on', v.turn === s && (v.phase === 'turn' || v.phase === 'claim'));
       d.classList.toggle('done', !!v.seats[s]!.won);
     }
-    el('div', 'wall', c, `${v.wall}`);
-    el('div', 'wall-label', c, '剩');
-    el('div', 'round', c, `第 ${Math.min(v.round + 1, v.opts.rounds)}/${v.opts.rounds} 局`);
+    const mid = el('div', 'mid', c);
+    el('div', 'wall', mid, `${v.wall}`);
+    el('div', 'wall-label', mid, '剩余');
+    el('div', 'round', mid, `第 ${Math.min(v.round + 1, v.opts.rounds)}/${v.opts.rounds} 局`);
   }
 
   private drawHand(): void {
@@ -382,6 +411,9 @@ export class TableUi<V extends TableView, A> {
     if (s.won) {
       const w = this.tile(s.won.tile, 'lg', box);
       w.classList.add('drawn', 'win-tile');
+    } else if (drawn === null && tiles.length % 3 === 1) {
+      // 没摸牌时摸牌的位置空着占住：整排居中，不然每摸一张、打一张整手牌左右晃半张
+      el('div', 'tile lg drawn ghost off', box);
     }
   }
 

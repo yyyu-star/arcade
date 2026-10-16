@@ -9,7 +9,7 @@ import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } 
 import { createError, Online, roomUrl, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { AI_URGE_MS, Banter, highlightsOf, momentsOf, type Act, type Cast, type Highlight } from './game/banter.ts';
-import { PHRASE_COUNT } from './game/emotes.ts';
+import { PHRASE_COUNT, PROP_BASE } from './game/emotes.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
@@ -473,6 +473,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
       () => online?.state.you?.seat ?? null,
       (seat) => (online?.state.room?.seats[seat]?.kind ?? 'empty') !== 'empty',
       (id, to) => online?.emote(id, to),
+      (seat) => online?.state.room?.seats[seat]?.kind === 'ai',
     );
   }
   // 同一步重画：事件已经放过了
@@ -666,8 +667,9 @@ function playSolo(s: Solo): void {
       // 单机没有房间：自己发的直接显示，被点名、被扔的电脑按性格回一下
       comms?.receive(0, id, to);
       const r = banter?.reply(soloCast, 0, id, to, Date.now());
-      if (r) soloAct(r, 900);
+      if (r) soloAct(r, r.after ?? 900);
     },
+    (seat) => soloCast[seat] !== null && soloCast[seat] !== undefined,
   );
   s.resume();
   if (!localStorage.getItem(GUIDE_KEY)) showGuide(stage);
@@ -713,15 +715,19 @@ let soloCast: Cast = [];
 let soloUrgeTimer = 0;
 const soloTimers = new Set<number>();
 
-function newComms(t: TableUi<XzView, XzAction>, me: () => number | null, occupied: (seat: number) => boolean, send: (id: number, to?: number) => void): Comms {
+function newComms(t: TableUi<XzView, XzAction>, me: () => number | null, occupied: (seat: number) => boolean, send: (id: number, to?: number) => void, isBot?: (seat: number) => boolean): Comms {
   const host: CommsHost = {
     me,
     avatarRect: (seat) => t.avatarRect(seat),
     avatarEl: (seat) => t.avatarEl(seat),
     bubble: (seat, text) => t.bubble(seat, text),
     occupied,
+    isBot,
   };
-  return new Comms(screen, host, send);
+  const c = new Comms(screen, host, send);
+  // 点头像：自己发表情，别人扔道具（菜单在 view/comms.ts）
+  t.onAvatar = (seat) => c.tapAvatar(seat);
+  return c;
 }
 
 function stopSoloTalk(): void {
@@ -772,7 +778,13 @@ function soloAct(a: Act, delay: number, v?: XzView): void {
     soloTimers.delete(t);
     const p = v ? PERSONAS[v.seats[a.seat]!.persona] : undefined;
     const lines = a.voice && a.id < PHRASE_COUNT && p ? VOICES[p.name]?.[a.voice] : undefined;
-    if (!lines?.length) return comms?.receive(a.seat, a.id, a.to);
+    if (!lines?.length) {
+      comms?.receive(a.seat, a.id, a.to);
+      // 电脑扔的道具，被扔的电脑也按性格回一下（回敬有 20 秒两次的限额，不会一直扔下去）
+      const r = a.id >= PROP_BASE ? banter?.reply(soloCast, a.seat, a.id, a.to, Date.now()) : null;
+      if (r) soloAct(r, r.after ?? 900);
+      return;
+    }
     const fresh = lines.filter((x) => x !== lastLine.get(a.seat));
     const say = (fresh.length ? fresh : lines)[Math.floor(Math.random() * (fresh.length || lines.length))]!;
     lastLine.set(a.seat, say);

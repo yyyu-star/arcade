@@ -7,7 +7,7 @@
 // 只有十来个大音效同一刻叠上（实测峰值 1.1）时才圆滑地压到 0.9 以内，不会削波出"咔"。
 
 export type Sfx =
-  | 'draw' | 'discard' | 'pon' | 'kan' | 'hu' | 'zimo' | 'wind' | 'rain'
+  | 'draw' | 'discard' | 'land' | 'pon' | 'kan' | 'hu' | 'zimo' | 'wind' | 'rain'
   | 'turn' | 'tick' | 'win' | 'lose' | 'click' | 'deal'
   | 'chips' | 'button' | 'swap' | 'que' | 'countdown' | 'emote' | 'big';
 
@@ -213,6 +213,11 @@ const PLAYERS: Record<Sfx, (e: Env, t: number) => void> = {
     clack(e, t, 1.2, 0.95);
     thump(e, t + 0.002, 1);
   },
+  // 牌飞进河里落到毡面：比 discard 更低更短的一声闷响，只有"嗒"的肉，没有脆的高频
+  land: (e, t) => {
+    tone(e, t, 0.05, 0.22, 'sine', 140, 70, 0.002);
+    burst(e, t, 0.03, 0.12, 'lowpass', 600, 0.7, 600, 0.001);
+  },
   // 理牌：一把牌哗啦一下碰在一起，间隔不匀才像手搓出来的
   deal: (e, t) => {
     let at = 0;
@@ -330,6 +335,7 @@ const PLAYERS: Record<Sfx, (e: Env, t: number) => void> = {
 const SPEC: Record<Sfx, { gap: number; dur: number; key?: boolean }> = {
   draw: { gap: 0.05, dur: 0.06 },
   discard: { gap: 0.05, dur: 0.1, key: true },
+  land: { gap: 0.05, dur: 0.07 },
   deal: { gap: 0.3, dur: 0.45 },
   pon: { gap: 0.15, dur: 0.3, key: true },
   kan: { gap: 0.2, dur: 0.55, key: true },

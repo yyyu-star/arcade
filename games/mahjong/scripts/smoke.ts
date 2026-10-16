@@ -69,8 +69,9 @@ async function play(page: Page, name: string): Promise<boolean> {
 }
 
 /**
- * 单机也有交流面板：点名一个电脑说一句、冲它扔个番茄（它按性格回不回都行），设置里屏蔽它、关掉再打开总开关。
- * 截一张图（shots/smoke-land-comms.png）
+ * 单机的互动：面板里点名一个电脑说一句、先选人再冲它扔个番茄（它按性格回不回都行）；
+ * 点一个电脑的头像扔一个道具（菜单收起）、点自己的头像发一个表情；设置里屏蔽它、关掉再打开总开关。
+ * 截两张图（shots/smoke-land-comms.png 面板后、smoke-land-menu.png 头像菜单开着）
  */
 async function soloComms(page: Page): Promise<void> {
   await page.click('.comms-btn');
@@ -79,11 +80,32 @@ async function soloComms(page: Page): Promise<void> {
   await page.waitForSelector('.bubble:has-text("@")');
   await page.click('.comms-btn');
   await page.click('.comms-tabs .chip:has-text("道具")');
-  await page.click('.comms-body .pic >> nth=0');
   await page.click('.comms-body .act >> nth=0');
-  // 等电脑回一下（性格定回不回）
-  await page.waitForTimeout(1_600);
+  await page.click('.comms-body .pic.prop >> nth=0');
+  // 冷却：刚扔完再点，按钮转圈、不再发
+  await page.click('.comms-btn');
+  await page.click('.comms-tabs .chip:has-text("道具")');
+  await page.click('.comms-body .act >> nth=0');
+  await page.waitForSelector('.comms-body .pic.prop.cool');
+  // 等电脑回一下（性格定回不回），冷却过去
+  await page.waitForTimeout(1_700);
   await page.screenshot({ path: `${root}shots/smoke-land-comms.png` });
+  await page.click('.comms-btn');
+  // 点别人的头像：菜单里 8 个道具、3 句短语、屏蔽他；点第二个道具（鸡蛋）扔出去，菜单收起
+  await page.click('.badge .avatar >> nth=1');
+  await page.waitForSelector('.fun-menu .fm-props .pic');
+  if ((await page.$$('.fun-menu .fm-props .pic')).length !== 8 || (await page.$$('.fun-menu .fm-say .phrase')).length !== 3) throw new Error('头像菜单不是 8 个道具 + 3 句短语');
+  await page.screenshot({ path: `${root}shots/smoke-land-menu.png` });
+  await page.click('.fun-menu .fm-props .pic >> nth=1');
+  await page.waitForSelector('.fun-menu', { state: 'detached' });
+  await page.waitForTimeout(1_700);
+  // 点自己的头像：12 个表情，点一个，菜单收起
+  await page.click('.badge .avatar >> nth=0');
+  await page.waitForSelector('.fun-menu.mine .pic');
+  if ((await page.$$('.fun-menu.mine .pic')).length !== 12) throw new Error('自己的头像菜单不是 12 个表情');
+  await page.click('.fun-menu.mine .pic >> nth=2');
+  await page.waitForSelector('.fun-menu', { state: 'detached' });
+  await page.waitForTimeout(1_200);
   await page.click('.comms-btn');
   await page.click('.comms-tabs .chip:has-text("设置")');
   await page.click('.comms-body .set-row:has-text("屏蔽 ") >> nth=1');

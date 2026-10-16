@@ -89,13 +89,15 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
           break;
         case 'discard':
           play('discard');
+          // 牌飞进河里约 200 毫秒，落到毡面那一刻再补一声闷响
+          window.setTimeout(() => play('land'), 200);
           break;
         case 'pon':
           fx.banner(e.seat, '碰！', 'pon');
           play('pon');
           break;
         case 'kan':
-          fx.banner(e.seat, '杠！', 'kan');
+          fx.celebrate(e.seat, '杠！', 'kan');
           // 暗杠下雨，直杠、补杠刮风
           fx.weather(e.kan === 'concealed' ? 'rain' : 'wind');
           play('kan');
@@ -104,7 +106,7 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
         case 'hu': {
           const multi = hus.length > 1 && e.from !== null;
           const text = e.from === null ? '自摸！' : e.rob ? '抢杠！' : multi ? (hus.length === 2 ? '一炮双响！' : '一炮三响！') : '胡！';
-          fx.banner(e.seat, text, 'hu');
+          fx.celebrate(e.seat, text, e.from === null ? 'zimo' : 'hu');
           play(e.from === null ? 'zimo' : 'hu');
           // 喊完"胡！"再亮牌；一炮多响一个接一个亮
           const ms = e.fan >= 2 ? HU_BIG_MS : HU_MS;

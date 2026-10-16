@@ -643,8 +643,8 @@ button {
   --sm-h: 38px;
 }
 .stage[data-orient='port'] {
-  --lg-w: 37px;
-  --lg-h: 52px;
+  --lg-w: 36px;
+  --lg-h: 50px;
   --md-w: 28px;
   --md-h: 39px;
   --sm-w: 26px;
@@ -682,6 +682,12 @@ button {
   width: 44px;
   height: 44px;
   flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   border-radius: 50%;
   /* 圆框：金边外再压一道深色，任何底色上都框得住 */
   box-shadow:
@@ -707,6 +713,20 @@ button {
 .badge .avatar svg {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
+}
+/* 点头像扔道具：屏幕上至少 44 像素可点 */
+.badge .avatar::after {
+  content: '';
+  position: absolute;
+  inset: min(0px, calc((44px - var(--tap, 44px)) / 2));
+}
+.badge .avatar:disabled {
+  cursor: default;
+}
+.badge .avatar:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 .badge .dealer {
   position: absolute;
@@ -816,8 +836,8 @@ button {
   background-image: var(--wall-v);
 }
 .opp-hand.r2 .back {
-  width: 16px;
-  height: 24px;
+  width: 18px;
+  height: 27px;
 }
 .opp-hand.r1,
 .opp-hand.r3 {
@@ -825,8 +845,8 @@ button {
 }
 .opp-hand.r1 .back,
 .opp-hand.r3 .back {
-  width: 24px;
-  height: 12px;
+  width: 27px;
+  height: 13px;
 }
 .opp-hand.r1 .tile.xs,
 .opp-hand.r3 .tile.xs {
@@ -845,12 +865,54 @@ button {
 .melds.r3 {
   flex-direction: column;
 }
+.melds:empty {
+  display: none;
+}
+/* 一家的手牌加碰杠：自己的横排在底边、对家的横排在顶边（碰杠在他右手边，从我这儿看是左边），左右两家竖排在两边，都沿桌边居中 */
+.side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.side.r0 {
+  align-items: flex-end;
+  gap: 16px;
+}
+.side.r2 {
+  flex-direction: row-reverse;
+}
+.side.r1 {
+  flex-direction: column-reverse;
+}
+.side.r3 {
+  flex-direction: column;
+}
+.side.r1,
+.side.r3 {
+  gap: 8px;
+}
+/* 亮出来的手牌（胡了、一局完了）：左右两家四张一行，不然一竖条比桌子还高 */
+.opp-hand.r1:has(.tile),
+.opp-hand.r3:has(.tile) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 88px;
+}
+.opp-hand.r2:has(.tile) {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 340px;
+}
 
 .river {
   display: flex;
   flex-wrap: wrap;
   gap: 1px;
   align-content: flex-start;
+}
+.river .tile {
+  position: relative;
 }
 .river .tile.taken {
   opacity: 0.35;
@@ -865,9 +927,27 @@ button {
     0 0 0 2px var(--gold),
     0 0 10px var(--gold);
 }
-/* 全桌最近打出的那张：金边慢慢呼吸两下再停住，一眼找得到 */
+/* 全桌最近打出的那张：金边慢慢呼吸两下再停住，头上一个往下点的小箭头，一眼找得到 */
 .river .tile.last {
+  z-index: 1;
   animation: last-in 0.9s ease-out 2;
+}
+.river .tile.last::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -13px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top: 9px solid var(--gold);
+  border-bottom-width: 0;
+  filter: drop-shadow(0 1px 1px #000a);
+  animation: last-arrow 0.8s ease-in-out infinite alternate;
+}
+@keyframes last-arrow {
+  to {
+    transform: translateY(-4px);
+  }
 }
 @keyframes last-in {
   50% {
@@ -884,73 +964,119 @@ button {
 }
 
 .center {
-  width: 140px;
-  height: 100px;
+  width: 156px;
+  height: 112px;
   border-radius: var(--r-lg);
   background: linear-gradient(#00000030, #00000058);
   border: 1px solid #ffffff1f;
   box-shadow: inset 0 1px 0 #ffffff14, var(--sh-1);
 }
-.center .wall {
+.center .mid {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 10px;
-  text-align: center;
-  font-size: 28px;
+  inset: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.center .wall {
+  font-size: 34px;
+  line-height: 1;
   font-weight: 700;
   color: var(--gold);
 }
 .center .wall-label {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 44px;
-  text-align: center;
+  margin-top: 2px;
   font-size: 11px;
-  opacity: 0.7;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  opacity: 0.75;
 }
 .center .round {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 4px;
-  text-align: center;
+  margin-top: 6px;
   font-size: 12px;
-  opacity: 0.85;
+  opacity: 0.9;
 }
+/* 四边的方向灯：轮到谁谁那边亮，外面再出一个箭头指着他 */
 .center .dir {
   position: absolute;
   background: #ffffff1a;
   border-radius: 3px;
 }
+.center .dir.r0,
+.center .dir.r2 {
+  left: 38px;
+  right: 38px;
+  height: 7px;
+}
 .center .dir.r0 {
-  left: 30px;
-  right: 30px;
-  bottom: -4px;
-  height: 6px;
+  bottom: 4px;
 }
 .center .dir.r2 {
-  left: 30px;
-  right: 30px;
-  top: -4px;
-  height: 6px;
+  top: 4px;
+}
+.center .dir.r1,
+.center .dir.r3 {
+  top: 30px;
+  bottom: 30px;
+  width: 7px;
 }
 .center .dir.r1 {
-  top: 24px;
-  bottom: 24px;
-  right: -4px;
-  width: 6px;
+  right: 4px;
 }
 .center .dir.r3 {
-  top: 24px;
-  bottom: 24px;
-  left: -4px;
-  width: 6px;
+  left: 4px;
 }
 .center .dir.on {
   background: var(--gold);
   box-shadow: 0 0 10px var(--gold);
+}
+.center .dir.on::after {
+  content: '';
+  position: absolute;
+  border: 8px solid transparent;
+  animation: dir-point 0.7s ease-in-out infinite alternate;
+}
+.center .dir.r0.on::after {
+  left: 50%;
+  top: 100%;
+  margin: 6px 0 0 -8px;
+  border-top: 10px solid var(--c, var(--gold));
+  border-bottom-width: 0;
+  --dx: 0;
+  --dy: 4px;
+}
+.center .dir.r2.on::after {
+  left: 50%;
+  bottom: 100%;
+  margin: 0 0 6px -8px;
+  border-bottom: 10px solid var(--c, var(--gold));
+  border-top-width: 0;
+  --dx: 0;
+  --dy: -4px;
+}
+.center .dir.r1.on::after {
+  top: 50%;
+  left: 100%;
+  margin: -8px 0 0 6px;
+  border-left: 10px solid var(--c, var(--gold));
+  border-right-width: 0;
+  --dx: 4px;
+  --dy: 0;
+}
+.center .dir.r3.on::after {
+  top: 50%;
+  right: 100%;
+  margin: -8px 6px 0 0;
+  border-right: 10px solid var(--c, var(--gold));
+  border-left-width: 0;
+  --dx: -4px;
+  --dy: 0;
+}
+@keyframes dir-point {
+  to {
+    transform: translate(var(--dx), var(--dy));
+  }
 }
 .center .dir.done {
   background: #e0484888;
@@ -969,7 +1095,10 @@ button {
   transform: translateY(-14px);
 }
 .my-hand .tile.drawn {
-  margin-left: 12px;
+  margin-left: calc(var(--lg-w) / 2);
+}
+.my-hand .tile.ghost {
+  visibility: hidden;
 }
 .my-hand .tile {
   position: relative;
@@ -1030,6 +1159,18 @@ button {
 }
 .bar .claim-tile {
   display: flex;
+}
+/* 碰杠胡过：大、醒目，浮在手牌右上方 */
+.bar .act {
+  min-width: 84px;
+  min-height: 60px;
+  font-size: var(--fs-2xl);
+  border-radius: var(--r-lg);
+  box-shadow: 0 4px 0 #0006, 0 8px 18px #000a;
+}
+.bar .act.ron {
+  min-width: 96px;
+  font-size: var(--fs-3xl);
 }
 /* 听牌提示：打了能听的牌头上一个小"听"，操作条上摆听哪些、各剩几张 */
 .my-hand .tile.ting::before {
@@ -1275,6 +1416,10 @@ button {
   .hu-card .total {
     animation-duration: 0.01s;
   }
+  .river .tile.last::after,
+  .center .dir.on::after {
+    animation: none;
+  }
   .hu-card {
     animation: none;
     transform: translate(-50%, -50%);
@@ -1362,87 +1507,80 @@ button {
   }
 }
 
-/* ---------- 横屏布局（牌桌 1000×520） ---------- */
-/* 四个弃牌河围着中间的小方框，各占一块不重叠：上 389–612 × 40–196，下 389–612 × 300–420，左 200–368，右 632–800 */
-[data-orient='land'] .badge.r0 { left: 12px; bottom: 92px; }
-[data-orient='land'] .badge.r1 { right: 12px; top: 70px; }
-[data-orient='land'] .badge.r2 { left: 230px; top: 4px; }
-[data-orient='land'] .badge.r3 { left: 12px; top: 70px; }
-[data-orient='land'] .opp-hand.r2 { left: 390px; top: 6px; max-width: 330px; flex-wrap: wrap; }
-[data-orient='land'] .opp-hand.r1 { right: 30px; top: 132px; }
-[data-orient='land'] .opp-hand.r3 { left: 30px; top: 132px; }
-[data-orient='land'] .opp-hand.r1:has(.tile),
-[data-orient='land'] .opp-hand.r3:has(.tile) { flex-direction: row; flex-wrap: wrap; width: 160px; }
-[data-orient='land'] .opp-hand.r1:has(.tile) { right: 12px; }
-[data-orient='land'] .opp-hand.r3:has(.tile) { left: 12px; }
-[data-orient='land'] .melds.r2 { right: 200px; top: 8px; }
-[data-orient='land'] .melds.r1 { right: 66px; top: 132px; }
-[data-orient='land'] .melds.r3 { left: 66px; top: 132px; }
-/* 手牌亮出来（胡了、一局完了）占了副露的地方，副露挪到手牌下面；副露排在手牌前面，只能从 .table 往下找 */
-[data-orient='land'] .table:has(.opp-hand.r1 .tile) .melds.r1 { right: 12px; top: 236px; }
-[data-orient='land'] .table:has(.opp-hand.r3 .tile) .melds.r3 { left: 12px; top: 236px; }
-[data-orient='land'] .melds.r0 { left: 16px; bottom: 8px; align-items: flex-end; }
-[data-orient='land'] .center { left: 440px; top: 202px; width: 120px; height: 90px; }
-/* 牌河每张 29×41（比副露的小牌大）：左右两家 6 张一行；对家、自己 7 张一行——上下只放得下 4 行和 3 行，6 张一行自己那块 18 张就压到手牌。
- * 对家的从下边往上长（贴着中控盘，4 行到顶），自己的从上往下 */
+/* ---------- 横屏布局（牌桌 1000×520） ----------
+ * 照主流四人麻将摆：四家的牌沿各自桌边居中（自己的手牌加碰杠一整排在底边正中），头像各在自己左手那个角（我左下、下家右下、
+ * 对家右上、上家左上），中控盘在正中，四个牌河围着它：上下两块 8 张一行、宽 240，左右两块 6 张一行、宽 180，
+ * 左右两块躲开上下两块的横向范围（牌河多到第 4 行也不压）。竖着从对家一排（到 52）到我抬起的牌（426）：上牌河 3 行、中控盘、下牌河 3 行
+ * 正好塞下。碰杠胡过浮在手牌右上方、下家头像左边。 */
+[data-orient='land'] .badge.r0 { left: 14px; bottom: 98px; }
+[data-orient='land'] .badge.r1 { right: 14px; bottom: 98px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
+[data-orient='land'] .badge.r2 { right: 14px; top: 14px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
+[data-orient='land'] .badge.r3 { left: 14px; top: 14px; }
+[data-orient='land'] .side.r0 { left: 50%; bottom: 10px; transform: translateX(-50%); }
+[data-orient='land'] .side.r2 { left: 50%; top: 14px; transform: translateX(-50%); }
+[data-orient='land'] .side.r1 { right: 22px; top: 237px; transform: translateY(-50%); }
+[data-orient='land'] .side.r3 { left: 22px; top: 237px; transform: translateY(-50%); }
+[data-orient='land'] .center { left: 422px; top: 185px; height: 104px; }
 [data-orient='land'] .river .tile { width: 29px; height: 41px; }
-[data-orient='land'] .river.r2 { left: 395px; bottom: 324px; width: 210px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
-[data-orient='land'] .river.r0 { left: 395px; top: 300px; width: 210px; }
-[data-orient='land'] .river.r3 { left: 200px; top: 150px; width: 180px; }
-[data-orient='land'] .river.r1 { left: 620px; top: 150px; width: 180px; }
-[data-orient='land'] .my-hand { right: 16px; bottom: 8px; }
-[data-orient='land'] .bar { right: 16px; bottom: 92px; height: 56px; }
+[data-orient='land'] .river.r2 { left: 380px; bottom: 341px; width: 240px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
+[data-orient='land'] .river.r0 { left: 380px; top: 295px; width: 240px; }
+[data-orient='land'] .river.r3 { left: 196px; top: 175px; width: 180px; flex-direction: row-reverse; }
+[data-orient='land'] .river.r1 { left: 624px; top: 175px; width: 180px; }
+[data-orient='land'] .bar { right: 176px; bottom: 96px; height: 64px; }
+[data-orient='land'] .comms { left: 16px; bottom: 14px; }
 [data-orient='land'] .banner.r0 { left: 50%; top: 66%; }
-[data-orient='land'] .banner.r1 { left: 82%; top: 38%; }
-[data-orient='land'] .banner.r2 { left: 50%; top: 18%; }
-[data-orient='land'] .banner.r3 { left: 18%; top: 38%; }
-[data-orient='land'] .banner.center { left: 50%; top: 45%; }
-[data-orient='land'] .bubble.r0 { left: 140px; bottom: 150px; }
-[data-orient='land'] .bubble.r1 { right: 150px; top: 70px; }
-[data-orient='land'] .bubble.r2 { left: 380px; top: 10px; }
-[data-orient='land'] .bubble.r3 { left: 150px; top: 70px; }
+[data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
+[data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
+[data-orient='land'] .banner.r3 { left: 20%; top: 46%; }
+[data-orient='land'] .banner.center { left: 50%; top: 46%; }
+[data-orient='land'] .bubble.r0 { left: 40px; bottom: 158px; }
+[data-orient='land'] .bubble.r1 { right: 40px; bottom: 158px; }
+[data-orient='land'] .bubble.r2 { right: 40px; top: 74px; }
+[data-orient='land'] .bubble.r3 { left: 40px; top: 74px; }
 
-/* ---------- 竖屏布局（舞台 560 × 920–1120） ---------- */
-[data-orient='port'] .badge.r0 { left: 8px; bottom: 214px; }
-/*
- * 竖屏分三截：上面对家贴顶，下面自己（头像、副露、手牌、操作条）贴底，中间（左右两家和四个牌河）随舞台变矮往上挪 --cut 的一半
- * （viewport.ts 按屏幕比例写，最多 200）。牌河：对家、自己的 5 张一行摆在正中一列，左右两家的 4 张一行摆在两边，四个互不压住。
- */
-[data-orient='port'] .badge.r1 { right: 6px; top: calc(110px - var(--cut, 0px) / 2); flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
-[data-orient='port'] .badge.r2 { left: 50%; top: 8px; transform: translateX(-50%); }
-[data-orient='port'] .badge.r3 { left: 6px; top: calc(110px - var(--cut, 0px) / 2); }
-[data-orient='port'] .opp-hand.r2 { left: 50%; top: 74px; transform: translateX(-50%); }
-[data-orient='port'] .opp-hand.r1 { right: 10px; top: calc(176px - var(--cut, 0px) / 2); }
-[data-orient='port'] .opp-hand.r3 { left: 10px; top: calc(176px - var(--cut, 0px) / 2); }
-[data-orient='port'] .opp-hand.r1:has(.tile),
-[data-orient='port'] .opp-hand.r3:has(.tile) { flex-direction: row; flex-wrap: wrap; width: 92px; }
-[data-orient='port'] .melds.r2 { left: 50%; top: 104px; transform: translateX(-50%); }
-[data-orient='port'] .melds.r1 { right: 42px; top: calc(176px - var(--cut, 0px) / 2); }
-[data-orient='port'] .melds.r3 { left: 42px; top: calc(176px - var(--cut, 0px) / 2); }
-/* 手牌亮出来（胡了、一局完了）占了副露的地方，副露挪到下面；副露排在手牌前面，只能从 .table 往下找 */
-[data-orient='port'] .table:has(.opp-hand.r1 .tile) .melds.r1 { right: 10px; top: calc(420px - var(--cut, 0px) / 2); }
-[data-orient='port'] .table:has(.opp-hand.r3 .tile) .melds.r3 { left: 10px; top: calc(420px - var(--cut, 0px) / 2); }
-[data-orient='port'] .melds.r0 { left: 8px; bottom: 76px; }
+/* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
+ * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
+ * 再往上是浮着的碰杠胡过。中间一截（左右两家竖排、四个牌河、中控盘）以 C = 537 − --cut/2 为中心（比正中偏下 40：底下常有浮着的按钮和听牌提示）（viewport.ts 按屏幕比例写 --cut，
+ * 最多 200）；屏幕越高，上下牌河离中控盘越远（--spread，0–50），留白匀开，不全挤在中间。 */
+.stage[data-orient='port'] {
+  --c: calc(537px - var(--cut, 0px) / 2);
+  --spread: calc((200px - var(--cut, 0px)) / 4);
+}
+[data-orient='port'] .badge.r0 { left: 8px; bottom: 74px; }
+[data-orient='port'] .badge.r1 { right: 8px; bottom: 74px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
+[data-orient='port'] .badge.r2 { right: 8px; top: 8px; flex-direction: row-reverse; padding: 4px 4px 4px 10px; }
+[data-orient='port'] .badge.r3 { left: 8px; top: 8px; }
+[data-orient='port'] .side.r0 { left: 50%; bottom: 12px; transform: translateX(-50%); gap: 8px; }
+[data-orient='port'] .side.r2 { left: 50%; top: 72px; transform: translateX(-50%); }
+[data-orient='port'] .side.r1 { right: 10px; top: var(--c); transform: translateY(-50%); }
+[data-orient='port'] .side.r3 { left: 10px; top: var(--c); transform: translateY(-50%); }
 /* 左右两家的副露用和亮出的手牌一样的小牌：杠了四张也伸不进牌河 */
 [data-orient='port'] .melds.r1 .tile,
 [data-orient='port'] .melds.r3 .tile { width: 20px; height: 28px; }
-[data-orient='port'] .center { left: 220px; top: calc(446px - var(--cut, 0px) / 2); width: 120px; height: 90px; }
-[data-orient='port'] .river.r2 { left: 214px; top: calc(255px - var(--cut, 0px) / 2); width: 134px; height: 185px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
-[data-orient='port'] .river.r0 { left: 214px; top: calc(542px - var(--cut, 0px) / 2); width: 134px; }
-[data-orient='port'] .river.r3 { left: 100px; top: calc(361px - var(--cut, 0px) / 2); width: 108px; }
-[data-orient='port'] .river.r1 { left: 354px; top: calc(361px - var(--cut, 0px) / 2); width: 108px; }
-[data-orient='port'] .my-hand { left: 50%; bottom: 14px; transform: translateX(-50%); }
-[data-orient='port'] .bar { right: 8px; bottom: 150px; height: 56px; }
+[data-orient='port'] .center { left: 220px; top: calc(var(--c) - 56px); width: 120px; height: 112px; }
+/* 竖屏中控盘离左右牌河只有 12：左右的箭头小一号、贴近一点 */
+[data-orient='port'] .center .dir.r1.on::after { margin-left: 2px; border-width: 6px 0 6px 8px; margin-top: -6px; }
+[data-orient='port'] .center .dir.r3.on::after { margin-right: 2px; border-width: 6px 8px 6px 0; margin-top: -6px; }
+[data-orient='port'] .center .dir.r0,
+[data-orient='port'] .center .dir.r2 { left: 26px; right: 26px; }
+[data-orient='port'] .river.r2 { left: 213px; bottom: calc(1080px - var(--cut, 0px) - var(--c) + 62px + var(--spread)); width: 134px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
+[data-orient='port'] .river.r0 { left: 213px; top: calc(var(--c) + 62px + var(--spread)); width: 134px; }
+[data-orient='port'] .river.r3 { left: 100px; top: calc(var(--c) - 74px); width: 108px; flex-direction: row-reverse; }
+[data-orient='port'] .river.r1 { left: 352px; top: calc(var(--c) - 74px); width: 108px; }
+[data-orient='port'] .bar { left: 50%; bottom: 136px; height: 64px; transform: translateX(-50%); justify-content: center; }
+[data-orient='port'] .comms { left: 186px; bottom: 74px; }
+/* 竖屏面板往上展开时整块抬到浮着的按钮（离底 136–200）上面，不盖按钮 */
+[data-orient='port'] .comms .comms-panel { margin-bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }
 [data-orient='port'] .banner.r0 { left: 50%; top: 72%; }
-[data-orient='port'] .banner.r1 { left: 78%; top: 30%; }
+[data-orient='port'] .banner.r1 { left: 78%; top: 40%; }
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
-[data-orient='port'] .banner.r3 { left: 22%; top: 30%; }
+[data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
 [data-orient='port'] .banner.center { left: 50%; top: 46%; }
-[data-orient='port'] .bubble.r0 { left: 140px; bottom: 270px; }
-[data-orient='port'] .bubble.r1 { right: 20px; top: 70px; }
-[data-orient='port'] .bubble.r2 { left: 50%; top: 120px; }
-[data-orient='port'] .bubble.r3 { left: 20px; top: 70px; }
+[data-orient='port'] .bubble.r0 { left: 30px; bottom: 134px; }
+[data-orient='port'] .bubble.r1 { right: 30px; bottom: 134px; }
+[data-orient='port'] .bubble.r2 { right: 30px; top: 68px; }
+[data-orient='port'] .bubble.r3 { left: 30px; top: 68px; }
 [data-orient='port'] .lobby-head h1 { font-size: 46px; }
 
 /* ---------- 弹窗 ---------- */
@@ -1610,17 +1748,9 @@ button {
   flex-direction: column-reverse;
   gap: var(--sp-2);
 }
-/* 横屏：贴在自己头像右边（离底 96–144），面板往右上展开；放右边会压住右家胡了亮出的手牌（血战里局中就会亮） */
-[data-orient='land'] .comms {
-  left: 176px;
-  bottom: 96px;
+/* 位置在上面的横屏、竖屏布局里：横屏在左下角（手牌一排的左边），竖屏在自己头像右边；面板往上展开 */
+.comms {
   align-items: flex-start;
-}
-/* 竖屏：右边、操作条（离底 150–206）上面，不压按钮 */
-[data-orient='port'] .comms {
-  right: 12px;
-  bottom: 214px;
-  align-items: flex-end;
 }
 .comms-btn {
   width: 48px;
