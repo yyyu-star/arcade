@@ -39,7 +39,7 @@ export function WalletStats() {
               <th>管理员调整</th>
               <th>庄家</th>
               <th>到顶没进</th>
-              <th>各游戏（带入 / 结回 / 退回）</th>
+              <th>各游戏</th>
             </tr>
           </thead>
           <tbody>
@@ -53,10 +53,18 @@ export function WalletStats() {
                 <td data-label="管理员调整">{num(d.admin ?? 0)}</td>
                 <td data-label="庄家">{num(sum(d, 'in') - sum(d, 'out') - sum(d, 'back'))}</td>
                 <td data-label="到顶没进">{num(sum(d, 'capped'))}</td>
-                <td data-label="各游戏">
-                  {Object.entries(d.games)
-                    .map(([g, x]) => `${gameName(g)} ${num(x.in)} / ${num(x.out)} / ${num(x.back)}`)
-                    .join('；') || '—'}
+                <td data-label="各游戏" className="cards-on-phone__wide">
+                  {Object.keys(d.games).length > 0 ? (
+                    <ul className="per-game">
+                      {Object.entries(d.games).map(([g, x]) => (
+                        <li key={g}>
+                          <b>{gameName(g)}</b> <span>带入 {num(x.in)}</span> · <span>结回 {num(x.out)}</span> · <span>退回 {num(x.back)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    '—'
+                  )}
                 </td>
               </tr>
             ))}

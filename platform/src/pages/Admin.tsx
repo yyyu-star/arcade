@@ -14,7 +14,7 @@ import { Panel } from '../ui.tsx';
 import type { Credentials } from './admin/common.ts';
 import { Overview } from './admin/Overview.tsx';
 import { NoticePanel, RegistrationSwitch, WalletRulesPanel } from './admin/Settings.tsx';
-import { CreateUser, UserList } from './admin/Users.tsx';
+import { UserList } from './admin/Users.tsx';
 import { WalletStats } from './admin/WalletStats.tsx';
 import './admin/admin.css';
 
@@ -67,15 +67,7 @@ export function AdminPage() {
         {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
         {section === 'overview' && <Overview />}
         {section === 'users' && (
-          <>
-            <UserList version={version} selfId={user!.id} onCard={setCard} onChanged={reload} />
-            <CreateUser
-              onDone={(c) => {
-                setCard(c);
-                reload();
-              }}
-            />
-          </>
+          <UserList version={version} selfId={user!.id} onCard={setCard} onChanged={reload} />
         )}
         {section === 'stats' && <WalletStats />}
         {section === 'settings' && (

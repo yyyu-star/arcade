@@ -371,7 +371,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   const stats = page.getByTestId('wallet-stats');
   await stats.getByText('10-14').waitFor();
   await stats.getByText('1,234,567').waitFor();
-  await stats.getByText('开盘 4,000 / 6,000 / 0').waitFor();
+  await stats.locator('.per-game li', { hasText: '开盘 带入 4,000 · 结回 6,000 · 退回 0' }).waitFor();
   expectHttp(409, '/api/wallet/relief');
   expectHttp(404, '/api/wallet/buyin');
   const wallet = await page.evaluate(async () => {
@@ -413,14 +413,15 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   check((await regOf()) === 'closed', '关闭注册后 /api/me 应该马上是 closed');
   await adminSection(page, '用户');
   await (await pickUser(page, ADMIN)).getByText('你自己的密码去"我的账号"改').waitFor();
+  await page.getByTestId('new-user').click();
   await page.getByLabel('用户名').fill(NAME);
   await page.getByLabel('昵称').fill('冒烟小王');
   await page.getByLabel('密码').fill('password1');
   expectHttp(422, '/api/admin/users');
-  await page.getByRole('button', { name: '建号' }).click();
+  await page.getByRole('button', { name: '建号', exact: true }).click();
   await page.getByText('密码太简单了').waitFor();
   await page.getByLabel('密码').fill('');
-  await page.getByRole('button', { name: '建号' }).click();
+  await page.getByRole('button', { name: '建号', exact: true }).click();
   await page.getByRole('heading', { name: '账号建好了' }).waitFor();
   const pw1 = (await page.getByTestId('cred-password').textContent())!.trim();
   const rc1 = (await page.getByTestId('cred-recovery').textContent())!.trim();
@@ -448,15 +449,16 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await page.getByTestId(`user-${NAME}`).waitFor();
 
   console.log('重名 409；给了密码时卡片上显示的就是那个密码');
+  await page.getByTestId('new-user').click();
   await page.getByLabel('用户名').fill(NAME);
   await page.getByLabel('昵称').fill('撞名的人');
   expectHttp(409, '/api/admin/users');
-  await page.getByRole('button', { name: '建号' }).click();
+  await page.getByRole('button', { name: '建号', exact: true }).click();
   await page.getByText('这个用户名已经有人用了').waitFor();
   await page.getByLabel('用户名').fill(NAME2);
   await page.getByLabel('昵称').fill('要删的号');
   await page.getByLabel('密码').fill(PW3);
-  await page.getByRole('button', { name: '建号' }).click();
+  await page.getByRole('button', { name: '建号', exact: true }).click();
   await page.getByRole('heading', { name: '账号建好了' }).waitFor();
   check((await page.getByTestId('cred-password').textContent()) === PW3, '给了密码时卡片上应该是那个密码');
   await page.getByLabel('已经发给对方了').check();
@@ -938,7 +940,7 @@ async function mockAdmin(page: Page, registration: object = { open: true, switch
 async function fakeAdmin(page: Page): Promise<void> {
   await mockAdmin(page);
   await page.goto(`${BASE}/admin?s=stats`);
-  await page.getByTestId('wallet-stats').getByText('德州扑克 50,000 / 38,000 / 2,000').waitFor();
+  await page.getByTestId('wallet-stats').locator('.per-game li', { hasText: '德州扑克 带入 50,000 · 结回 38,000 · 退回 2,000' }).waitFor();
   await adminSection(page, '用户');
   await page.getByTestId('user-xiaoming_2026').waitFor();
 }
@@ -1040,10 +1042,13 @@ async function mobile(browser: Browser): Promise<void> {
   await row.getByRole('button', { name: '删号' }).click();
   await row.getByLabel(/确定删掉/).waitFor();
   await shot(adm.page, 'mobile-admin-delete');
-  await adm.page.getByRole('button', { name: '建号' }).click(); // 必填项空着：浏览器自己拦下，不发请求
+  await row.getByRole('button', { name: '返回列表' }).click();
+  await adm.page.getByTestId('new-user').click();
+  check(await adm.page.getByTestId('user-xiaoming_2026').isHidden(), '手机上点"+ 建号"以后列表应该收起来');
+  await adm.page.getByRole('button', { name: '建号', exact: true }).click(); // 必填项空着：浏览器自己拦下，不发请求
   await adm.page.getByLabel('用户名').fill('xiaoming_2026');
   await adm.page.getByLabel('昵称').fill('小明');
-  await adm.page.getByRole('button', { name: '建号' }).click();
+  await adm.page.getByRole('button', { name: '建号', exact: true }).click();
   await adm.page.getByRole('heading', { name: '账号建好了' }).waitFor();
   await shot(adm.page, 'mobile-admin-card');
   await adm.ctx.close();

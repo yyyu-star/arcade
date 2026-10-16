@@ -6,7 +6,8 @@ import { Empty, Field, FormError, Panel, SubmitButton, useSubmit } from '../../u
 import { signed, tone } from '../../format.ts';
 import { num, type Credentials, dateText, gameName } from './common.ts';
 
-export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
+/** 建号表单：在详情的位置打开（手机上整页），顶上"返回列表" */
+function CreateUser({ onBack, onDone }: { onBack: () => void; onDone: (c: Credentials) => void }) {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +19,11 @@ export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
     onDone({ title: '账号建好了', username: r.user.username, password: r.password ?? password, recoveryCode: r.recoveryCode });
   });
   return (
-    <Panel icon="user" title="给朋友建个账号">
+    <section className="panel user-panel" data-testid="create-user">
+      <button className="linkish users-split__back" type="button" onClick={onBack}>
+        ← 返回列表
+      </button>
+      <h2 className="panel__title">给朋友建个账号</h2>
       <form className="form" onSubmit={onSubmit}>
         <Field label="用户名" hint="登录用，3–20 位小写字母、数字或下划线" name="username" autoComplete="off" autoCapitalize="none" spellCheck={false} required value={username} onChange={(e) => setUsername(e.target.value)} />
         <Field label="昵称" hint="别人看到的名字，2–12 个字，对方以后可以自己改" name="displayName" autoComplete="off" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -26,17 +31,18 @@ export function CreateUser({ onDone }: { onDone: (c: Credentials) => void }) {
         <FormError text={error} />
         <SubmitButton busy={busy}>建号</SubmitButton>
       </form>
-    </Panel>
+    </section>
   );
 }
 
 /**
- * 账号：左边列表、右边选中那个人的详情（钱包、战绩、流水、重设密码、删号）。
- * 手机上一次只看一边：点一个人进详情，详情顶上"返回列表"。
+ * 账号：左边列表、右边选中那个人的详情（钱包、战绩、流水、重设密码、删号），或者"+ 建号"打开的建号表单。
+ * 手机上一次只看一边：点一个人（或建号）进详情，详情顶上"返回列表"。
  */
 export function UserList({ version, selfId, onCard, onChanged }: { version: number; selfId: string; onCard: (c: Credentials) => void; onChanged: () => void }) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState('');
+  /** 选中的人的 id；'new' 是建号表单 */
   const [picked, setPicked] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
@@ -56,9 +62,22 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
   }, [version]);
 
   const current = users?.find((u) => u.id === picked) ?? null;
+  const creating = picked === 'new';
   return (
-    <div className={`users-split${current ? ' users-split--picked' : ''}`}>
+    <div className={`users-split${current || creating ? ' users-split--picked' : ''}`}>
       <Panel icon="user" title={users ? `账号（${users.length}）` : '账号'}>
+        <button
+          className="btn btn--primary btn--small users__new"
+          type="button"
+          data-testid="new-user"
+          aria-pressed={creating}
+          onClick={() => {
+            setNotice('');
+            setPicked('new');
+          }}
+        >
+          + 建号
+        </button>
         {error && <FormError text={error} />}
         {notice && <p className="ok" role="status">{notice}</p>}
         {!users && !error && <p className="note">正在读取…</p>}
@@ -95,7 +114,16 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
         </ul>
       </Panel>
       <div className="users-split__detail">
-        {current ? (
+        {creating ? (
+          <CreateUser
+            onBack={() => setPicked(null)}
+            onDone={(c) => {
+              setPicked(null);
+              onCard(c);
+              onChanged();
+            }}
+          />
+        ) : current ? (
           <UserPanel
             key={current.id}
             user={current}

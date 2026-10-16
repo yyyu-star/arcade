@@ -51,6 +51,7 @@
 .users__head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .users__name { font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .users__meta { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.users__new { width: 100%; margin-bottom: var(--s-3); }
 .users-split__hint { padding: var(--s-6); border: var(--bw-thin) dashed var(--dashed); border-radius: var(--r-lg); text-align: center; }
 .users-split__back { display: none; }
 .user-panel { position: sticky; top: var(--s-4); }
@@ -87,7 +88,13 @@
   .cards-on-phone td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-xs); }
   .cards-on-phone td:first-child { grid-column: 1 / -1; font-weight: 800; font-size: var(--fs-md); }
   .cards-on-phone td:first-child::before { content: none; }
+  /* 放不进半格的一项（各游戏）：独占一行，标签在上 */
+  .cards-on-phone td.cards-on-phone__wide { grid-column: 1 / -1; flex-direction: column; justify-content: flex-start; text-align: left; }
+  .cards-on-phone .per-game { white-space: normal; text-align: left; }
 }
+.per-game { margin: 0; padding: 0; list-style: none; white-space: nowrap; }
+.per-game b { margin-right: 4px; }
+.per-game span { white-space: nowrap; }
 /* 电脑上宽表格放得下：照常是表格、撑满面板（窄一点的屏幕上才横着滑，手机上是卡片） */
 @media (min-width: 1024px) {
   .stats-table { display: table; background: none; }
