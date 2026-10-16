@@ -242,7 +242,7 @@ client 模式每天每个游戏的净赢有上限（钱包管，份数是平台�
 | 动作 | 浏览器传 | Worker 做 | 钱包 |
 |---|---|---|---|
 | 带入 | `ref`、`tier` | `amount` = 这一档的一份（不能少带）；`until` = 现在 + 24 小时（按 Worker 的时钟）；`op` = `${ref}-in` | `buyin({ userId, game, ref, tier, amount, until, mode, op })` |
-| 结回 | `ref`、`tier`、`bp`、`stats`（可选） | 检查 `bp` 是 0..30000 的整数（倍数的万分之几）；`amount` = ⌊一份 × `bp` ÷ 10000⌋；`op` = `${ref}-out`；`stats` 原样转发（0.6.5） | `settle({ userId, game, ref, amount, mode, op, stats? })` |
+| 结回 | `ref`、`tier`、`bp`、`stats`（可选） | 检查 `bp` 是 0..`LIVE_MAX_BP`（0.11.0 起 70000）的整数（倍数的万分之几）；先 `view` 看钱包，`amount` = ⌊桌上这一份 × `bp` ÷ 10000⌋（0.11.2 起按带入时的金额，不信报的 `tier`；桌上没有这一份时按 `tier` 填，钱包只会回重发的原结果或 `no_stake`；看不了钱包回 503）；`op` = `${ref}-out`；`stats` 原样转发（0.6.5） | `settle({ userId, game, ref, amount, mode, op, stats? })` |
 | 放弃 | `ref` | `op` = `${ref}-refund` | `refund({ userId, game, ref, mode, op })` |
 
 - **ref 和 op 的格式**：钱包只收 8–64 位的 `[A-Za-z0-9_-]`。`ref` = `kaipan-` + `crypto.randomUUID()`（43 位），加上 `-in` / `-out` / `-refund` 最长 50 位。

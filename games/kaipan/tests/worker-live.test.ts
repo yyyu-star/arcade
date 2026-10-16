@@ -30,7 +30,9 @@ function wallet(...rest: [unknown?]): { calls: Call[]; rpc: Env['WALLET'] } {
     calls.push({ method, args });
     return result;
   };
-  return { calls, rpc: { buyin: mk('buyin'), settle: mk('settle'), refund: mk('refund') } as unknown as Env['WALLET'] };
+  // 0.11.2 结回前先看钱包：默认桌上没有这一份（按报的档位算）；view 不记进 calls，免得每个结回的测试都多一条
+  const view = async () => ({ ok: true, wallet: { balance: 100, stakes: [] } });
+  return { calls, rpc: { view, buyin: mk('buyin'), settle: mk('settle'), refund: mk('refund') } as unknown as Env['WALLET'] };
 }
 
 function env(over: Partial<Env> = {}): Env & { arcade: ReturnType<typeof arcade>; w: ReturnType<typeof wallet> } {
@@ -88,6 +90,41 @@ describe('三个动作的正常路径', () => {
     const res = await run(e, post('refund', { ref: REF }));
     expect(res.status).toBe(200);
     expect(e.w.calls[0]).toEqual({ method: 'refund', args: { userId: 'u1', game: 'kaipan', ref: REF, mode: 'client', op: `${REF}-refund` } });
+  });
+});
+
+describe('settle 按桌上那一份的金额算（0.11.2 审计）', () => {
+  const withStake = (view: unknown) => {
+    const e = env();
+    (e.WALLET as unknown as { view: () => Promise<unknown> }).view = async () => view;
+    return e;
+  };
+  const stakes = [
+    { game: 'texas', ref: REF, tier: 'lux', amount: 200_000, mode: 'client', at: 1, until: 2 },
+    { game: 'kaipan', ref: REF, tier: 'small', amount: 2_000, mode: 'client', at: 1, until: 2 },
+  ];
+
+  it('带小档、结回报豪华档：按带入的 2,000 算，最多 7 倍', async () => {
+    const e = withStake({ ok: true, wallet: { balance: 0, stakes } });
+    const res = await run(e, post('settle', { ref: REF, tier: 'lux', bp: LIVE_MAX_BP }));
+    expect(res.status).toBe(200);
+    expect(e.w.calls).toEqual([{ method: 'settle', args: { userId: 'u1', game: 'kaipan', ref: REF, amount: 14_000, mode: 'client', op: `${REF}-out` } }]);
+  });
+
+  it('别的游戏、别的 ref 的那一份不算；桌上没有这一份时按报的档位填（钱包只会回重发的原结果或 no_stake）', async () => {
+    const e = withStake({ ok: true, wallet: { balance: 0, stakes: [stakes[0], { ...stakes[1], ref: 'kaipan-other000' }] } });
+    await run(e, post('settle', { ref: REF, tier: 'mid', bp: 20_000 }));
+    expect(e.w.calls[0]?.args.amount).toBe(20_000);
+  });
+
+  it('看不了钱包（拒绝或抛错）回 503，不结', async () => {
+    for (const view of [{ ok: false, error: 'bad_game' }, Promise.reject(new Error('x'))]) {
+      const e = withStake(null);
+      (e.WALLET as unknown as { view: () => unknown }).view = () => view;
+      const res = await run(e, post('settle', { ref: REF, tier: 'small', bp: 10_000 }));
+      expect(res.status).toBe(503);
+      expect(e.w.calls).toHaveLength(0);
+    }
   });
 });
 

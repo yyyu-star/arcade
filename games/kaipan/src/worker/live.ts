@@ -2,7 +2,8 @@
  * 开盘 Worker 的实盘钱包接口（0.6.0）：POST /games/kaipan/api/live/{buyin,settle,refund}。
  *
  * 由 ./route.ts 按路径转进来。浏览器只给 ref / tier / bp（结回倍数，万分之几）；金额和到期时间都由 Worker 定：
- * 带入的 amount 固定是这一档的一份（不能少带），until 是 Worker 时钟的现在 + 24 小时，结回的 amount 由档位和 bp 算出。
+ * 带入的 amount 固定是这一档的一份（不能少带），until 是 Worker 时钟的现在 + 24 小时；结回的 amount 由桌上那一份的金额和 bp 算出：
+ * 结回前先看一眼钱包（view），按带入时记下的金额算，不信浏览器报的档位（带小档、报豪华档就能多拿，0.11.2 审计堵上）。
  * 浏览器从不直接碰钱包，平台的 /api 里也没有这几条路（设计稿第 6 节）。
  *
  * 认人沿用 gate.ts 的 checkLogin，而不用 arcade-kit 的 whoIs：whoIs 只在 fetch 上挂 AbortSignal.timeout，
@@ -20,6 +21,7 @@ import { ME_TIMEOUT_MS, checkLogin, isStandalone, type Env } from './gate.ts';
 type WalletReply = { ok: true; wallet: unknown; credited?: number; capped?: number; dup?: boolean } | { ok: false; error: string; wallet?: unknown };
 
 export interface WalletRpc {
+  view(userId: string): Promise<WalletReply>;
   buyin(req: { userId: string; game: 'kaipan'; ref: string; tier: LiveTier; amount: number; until: number; mode: 'client'; op: string }): Promise<WalletReply>;
   /** stats：0.6.5 战绩小结（平台 5.10），浏览器报什么原样转发，形状由平台校验（不合格整份忽略、钱照常结） */
   settle(req: { userId: string; game: 'kaipan'; ref: string; amount: number; mode: 'client'; op: string; stats?: unknown }): Promise<WalletReply>;
@@ -60,6 +62,14 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   }
 }
 
+/** 钱包里开盘桌上 ref 这一份带入了多少（平台 WalletView.stakes）；没有或形状不对为 null */
+function stakeAmount(wallet: unknown, ref: string): number | null {
+  const stakes = (wallet as { stakes?: unknown } | null)?.stakes;
+  if (!Array.isArray(stakes)) return null;
+  const st = stakes.find((x): x is { game: string; ref: string; amount: number } => !!x && typeof x === 'object' && x.game === 'kaipan' && x.ref === ref);
+  return st && Number.isSafeInteger(st.amount) && st.amount > 0 ? st.amount : null;
+}
+
 export async function handleLive(req: Request, env: Env, timeoutMs = WALLET_TIMEOUT_MS): Promise<Response> {
   const url = new URL(req.url);
   const action = url.pathname.startsWith(PREFIX) ? ACTIONS.find((a) => a === url.pathname.slice(PREFIX.length)) : undefined;
@@ -93,7 +103,14 @@ export async function handleLive(req: Request, env: Env, timeoutMs = WALLET_TIME
       if (typeof bp !== 'number' || !Number.isInteger(bp) || bp < 0 || bp > LIVE_MAX_BP) return fail(400, 'bad_bp');
       // 战绩小结只转发不改（平台 5.10：游戏 Worker 的路由不改、不补）；没带就不放这个字段
       const stats = body.stats;
-      call = (w, userId) => w.settle({ userId, game: 'kaipan', ref, amount: liveReturn(stake, bp), mode: 'client', op: `${ref}-out`, ...(stats === undefined ? {} : { stats }) });
+      call = async (w, userId) => {
+        const v = await w.view(userId);
+        // 看不了钱包就当连不上（503，浏览器过会儿重发），不退回去按浏览器报的档位算
+        if (!v.ok) throw new Error('view');
+        // 桌上没有这一份（已经结过、到期退回了）时钱包只会回重发的原结果或 no_stake，金额用不上，按报的档位填
+        const base = stakeAmount(v.wallet, ref) ?? stake;
+        return w.settle({ userId, game: 'kaipan', ref, amount: liveReturn(base, bp), mode: 'client', op: `${ref}-out`, ...(stats === undefined ? {} : { stats }) });
+      };
     }
   }
 
