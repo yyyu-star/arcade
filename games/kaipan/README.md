@@ -8,57 +8,11 @@
 当前版本见 `package.json`（0.6.x）。涨跌由真实历史行情驱动：每局从 135 段真实走势里随机抽一段，大环境、风口和股票小人跟着它走；
 画面不说是哪一年、哪家公司，局末用花名讲一篇"这段日子"小故事。玩法上有仓位、押跌、银行抵押借钱、小知识；
 局外有每日挑战和排行榜（0.5.10）、带平台筹码进场的实盘（0.6.0）、结局海报（0.6.5）。
-0.4.0-alpha.1 的美股交易原型已撤回，代码在 0.6.12 删掉了，旧私有仓库已删除，原型代码在所有者的离线备份里（tag `kaipan-us-prototype`）。
+0.4.0-alpha.1 的美股交易原型已撤回，代码在 0.6.12 删掉了（原型代码在维护者的离线备份里，tag `kaipan-us-prototype`）。
 
-## 命令
+![开盘的开始菜单](public/assets/art/v3/scene/title_keyart.svg)
 
-```bash
-npm run dev          # 开发服务器 0.0.0.0:5173（热更新）
-npm run build        # 类型检查 + 正式构建到 dist/（Phaser 单独成块；KP_SOURCEMAP=1 时带 sourcemap）
-npm run preview      # 用正式构建启动服务 0.0.0.0:4173
-npm test             # 单元测试：core 规则与回放、内容、机器人、平台层（设置/存档/纪录）、音频纯逻辑、架构约束
-npm run sim          # 数值模拟：--accept 跑设计稿第 11 节的验收（--part a|b 可并行），--value 测道具价值，--live 实盘各档的结回，--set 临时改数值（见 tools/sim.ts 顶部注释）
-npm run shot         # 无头 Chromium 冒烟 + 截图到 shots/（vite 起在系统挑的空闲端口，KP_SHOT_PORT 可指定）；加 -- --main 只跑主流程，-- --playtest 用真实鼠标键盘打一局并计时
-npm run audio-check  # 离线渲染所有音效与音乐，检查峰值/响度/时长/拖尾/节点泄漏
-node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估算显存（渲染倍数、纹理、文字画布、主画布）
-```
-
-## 部署
-
-线上地址：https://game.yyyu.org/games/kaipan/。开盘在平台的域名下用路径路由直接挂上，请求不经过平台的 Worker；
-自己不开 workers.dev 地址。0.5.6 起有一道登录闸门（`src/worker/gate.ts`，开关 `wrangler.jsonc` 的 `vars.GATE`，现在是 login，临时放开改 off）：首页先经服务绑定 `ARCADE` 问平台 `/api/me`，没登录跳 `/login?from=kaipan`，平台有问题一律回 503 不放行，平台续期下发的 Set-Cookie 原样带回浏览器；进 Worker 的只有首页和实盘接口 `/games/kaipan/api/*`（`wrangler.jsonc` 的 `run_worker_first`，分流在 `src/worker/route.ts`；接口不看 GATE，总要认人），其余静态资源不经过 Worker。开盘是总仓库 `yyyu-star/arcade` 里的 `games/kaipan/` 模块；改动经 PR 合并进总仓库的 `main` 且涉及 `games/kaipan/**` 时，总仓库的 `.github/workflows/game-kaipan.yml` 会先跑模块独立性检查，再 `npm ci`、`npm test`、`build:cf` 并部署（PR 上只测试不部署）。需要拆回单独仓库时，在总仓库根运行 `tools/split-module.sh games/kaipan`。
-`npm run deploy`（`build:cf` 加 `wrangler deploy`）是拆成独立仓库后用的，需要环境变量 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`；在总仓库里不对正式环境手动部署。
-`build:cf` 的产物放在 `dist-cf/games/kaipan/`，适配 `/games/kaipan/` 这个子路径；本机的 `build`、`preview` 仍按根路径。
-
-在 Paseo 守卫内启动的服务只绑定在隔离区网卡上，需要再执行 `paseo-svc publish <端口>`，
-内网才能用 `http://<本机 IP>:<端口>` 访问；守卫重启后服务与发布都会失效，需要重新启动。
-
-## 结构
-
-- `src/core/`：游戏规则，纯逻辑且完全确定（种子 + 操作序列可回放），不依赖浏览器和 Phaser。
-  数值集中在 `balance.ts`；题材生命周期、个股与连板在 `market.ts`；群聊与推荐在 `chat.ts`；
-  股票、群友、道具、A 股日历、事件、人设、难度、成就在 `content/`；每日挑战在 `daily.ts`；画面用的查询函数在 `queries.ts`。
-- `src/view/`：Phaser 画面。`session.ts` 持有状态并分发事件；`scenes/` 有启动加载、开始菜单、交易、结束界面；
-  `trade/` 是交易主场景的各部分（小屋、顶栏、题材看板、持仓、群聊、月底流程、教程气泡）；
-  `meta/` 是开局选择、每日挑战、图鉴与成就、解锁弹窗；`tutorial.ts` 是分步教程的触发逻辑；
-  `assets.ts` 是素材清单和图集加载；`sound.ts` 把音频接入画面。
-- `src/view/audio/`：程序化音频。合成音效、生成式背景音乐、试听面板；接口约定在 `types.ts`。
-- `src/platform/`：设置（`settings.ts`）、存档与纪录（`storage.ts`）、档案（`profile.ts`：图鉴、成就、解锁、最好成绩）、
-  全局错误兜底（`errors.ts`）、横屏提示、版本号。
-- `src/debug/`：URL 参数与 `window.__game` 调试接口。
-- `public/assets/art/`：SVG 素材与美术规范；0.3 的股票小人、小屋、群聊等在 `v3/`，由 `tools/art/` 的脚本生成
-  （`public/art-preview.html` 是美术预览页）。`v3/atlas/` 是烘焙好的 WebP 图集（`node tools/art/bake.ts`）：
-  `game` 首屏加载，`meta`（人设、难度、成就、图鉴）进对应界面再加载；图集缺失时自动回退到单张 SVG。
-- `tools/`：自动玩家与数值模拟（`bots.ts`、`sim.ts`）、截图冒烟（`shot.ts`）、音频检查、美术生成（`art/`）；
-  `tools/data/` 是真实行情数据管线（WIKI Prices）：`segments.ts` 从年包切出一局用的行情段到 `public/data/segments/`。
-- 行情段（`public/data/segments/`）：文件名和 id 是不透明的短哈希，目录只有 id 和文件名，段文件里只有相对涨跌（基点）、
-  市况、游戏化标题和大事的故事句，没有年份、日期、公司和代码（`tests/segments-leak.test.ts` 把关）。id 和真实年份的对照只在
-  `tools/data/segments-manifest.json`，大事的故事版在 `tools/data/beats.ts`，都不进画面包。重新生成：
-  `node tools/data/segments.ts --packs ~/data/wiki-prices/packs --step 1`（同一份年包结果逐字节一致）。
-- `docs/`：现行的是 `design-0.5.md`、`design-0.5-visual.md`、`core-api-0.5.md`、`design-live.md`（实盘），其余带版本号的是历史稿，
-  索引见 `docs/README.md`。
-
-## 玩法与设置
+## 功能
 
 开始菜单可以继续、快速开始（沿用上次的人设和难度，第一次是新手 + 第 1 级）、新游戏或实盘，另有每日挑战、图鉴、成就、
 设置和关于，左上角常驻「大厅」，下方显示通关、难度、图鉴和成就进度。
@@ -98,7 +52,7 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 设置项包括主音量、音效音量、音乐音量、静音、动画速度（关闭 / 1× / 2× / 4×）、涨跌配色（红涨绿跌 / 绿涨红跌）
 和减少动态效果（不震屏、不闪电、不放烟花，小人和小屋不再做待机动画），保存在浏览器本地。
 
-## 存档与稳定性
+### 存档、云同步和平台对接
 
 - 存档保存完整的局面快照和写入时的版本号（格式 5），读档直接使用快照：小版本调整数值后，旧存档仍按当时的局面继续。
 - 0.3 以前和撤回的 0.4.0-alpha.1 的存档（格式 ≤ 4、6）接不上：读到时清掉，开始菜单提示"版本大更新"后开新局。
@@ -106,15 +60,14 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
   测试锁住只清这些，当前的存档、档案、设置不碰）。
 - 档案（`kaipan.profile`）与单局存档分开保存，记录图鉴、成就、解锁和各人设、难度、每日挑战的最好成绩；
   损坏时备份到 `kaipan.profile.corrupt` 后重建，不影响单局存档。
-- 存档损坏时先备份到 `kaipan.save.corrupt` 再清除。本地纪录（最远月份、最高账户、通关与总局数）单独保存。
+- 存档损坏时先备份到 `kaipan.save.corrupt` 再清除。
 - 云存档（0.5.7，`src/platform/cloud.ts`，槽的定义在 `src/view/cloudSync.ts`）：登录后同步档案（槽 `profile`）和教程标记（槽 `tutorial`：
   `kaipan.tutorial.v3` + `kaipan.extTips.v1`），打到一半的局（`kaipan.save`）和设置不同步。元数据在 `kaipan.cloud`（`{userId, rev, dirty}`），
   合并前的本地备份在 `kaipan.<槽>.pre-sync`；换账号时上一个账号的本地进度存在 `kaipan.<槽>.pre-switch.<旧 userId>`，它回来时并回去
   （先把元数据记成新账号再并，中途失败下次打开接着并；全部并完才改名为 `.restored`，每个账号每个槽留一份）。
   教程重新开启时记一次 `reset`，合并时次数多的一边整个说了算，不会被别的设备上看过的步骤抹掉。
   切回前台（隔 1 分钟以上）、上传前、收到 409 时重新确认账号；多个标签页靠 storage 事件互通元数据。接口和规矩见总仓库
-  `docs/platform-backend.md` 5.5、15.3。本地开发：平台目录先 `npm run build` 再 `npm run dev:api`（5181），开盘 `npm run dev` 会把 `/api` 转过去；
-  先在 http://localhost:5181 登录，再用 http://localhost:5173 打开开盘（`__Host-` cookie 要求安全上下文，用 IP 打开时登录状态带不过来）。
+  `docs/platform-backend.md` 5.5、15.3。本地联调见下面「本地开发」。
 - 每日排行榜（0.5.10，交分和读榜在 `src/platform/board.ts`，一局的交分状态在 `src/view/dailyBoard.ts`，面板 `src/view/meta/boardPanel.ts`）：
   每日挑战结束时交一次分到 `daily-YYYY-MM-DD`（北京日期，规则版本 `DAILY_RULES` 大于 0 时加 `-v<n>`），分数是通关 1e11 + 账户元，没通关为还清月数。
   只有用当天冻结段池（`src/core/content/dailySegments.ts`）里那一段真实行情的局才交；段池顺序和数量不能改，要换就加版本。
@@ -126,20 +79,42 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
   档位表和结回算法单放在 `src/core/liveTiers.ts`（Worker 也用，不把规则引擎打进 Worker）。
   - 钱包（0.6.0）：浏览器 → 开盘 Worker（同域 `POST api/live/{buyin,settle,refund}`，`src/worker/live.ts`，入口分流在 `route.ts`）→ 服务绑定 `WALLET`（平台的 `WalletService`，`props.game = kaipan`）。
     浏览器只给 `ref`、`tier`、`bp`，金额和到期时间由 Worker 定；认人沿用闸门的 `checkLogin`（为什么不用 kit 的 `whoIs` 见设计稿第 6 节）。
-  - 本机的账在 `kaipan.live`（`src/platform/live.ts`）：带入前记 `buying`（回话丢了下次先 `refund` 收回），结回 / 放弃先记 `settling` 再发，
+  - 这台设备上的账在 `kaipan.live`（`src/platform/live.ts`）：带入前记 `buying`（回话丢了下次先 `refund` 收回），结回 / 放弃先记 `settling` 再发，
     连不上、`busy`、`internal`、没认出人都留着，打开、回到前台、联网时重发；`expired` / `no_stake` 改成不算筹码；`bad_*` 等是开盘自己的 bug，不重发。
   - 画面：开始菜单「实盘」、开局面板的「娱乐 | 实盘」和四张档位卡、顶栏的实盘小牌子、设置里「提前收手」（还没开盘原样退回，开盘以后按现在的资产结）、
     结束页的结回和第 5 节的文案（`src/view/liveText.ts`，测试按词表查）。接线在 `src/view/live.ts`。冒烟 `npm run shot -- --live`（假钱包）。
   - 战绩小结（0.6.5，平台 5.10）：结回时带 `stats`（`src/core/career.ts`，Worker 原样转发）；称号的中文名在 `public/titles.json`（平台称号墙读 `/games/kaipan/titles.json`），
     由 `titlesJson()` 生成、测试锁一致。钱包和平台的错误照平台 15.10 的对照表说（设计稿第 6 节的表）。
 - 每日榜的分数怎么显示（0.6.13）：`public/daily.json`（平台每日榜读 `/games/kaipan/daily.json`；通关分 = 1e11 + 账户元数，没通关 = 还上了几个月，`tests/daily-json.test.ts` 按平台的解析规则锁一致）。
-- 结局海报（0.6.5，`src/view/poster.ts`）：结束页「晒战绩」，进场就在浏览器里用 canvas 画好（1080×1350 PNG），点了用系统分享（带图片），不支持就下载；不走服务器。每日挑战的海报读到名次后重画一张带名次的，分享标题是一句邀请（0.6.10），分享文字带上游戏地址（0.6.11，`gameLink` 按当前页面推）。
+- 结局海报（0.6.5，`src/view/poster.ts`）：结束页「晒战绩」，进场就在浏览器里用 canvas 画好（1080×1350 PNG），点了用系统分享（带图片），不支持就下载；不走服务器。每日挑战的海报读到名次后重画一张带名次的，分享标题是一句邀请（0.6.10），分享文字带上游戏地址（0.6.11，`gameLink` 按当前页面推）；海报右下角写当前页面的站点（`location.host`），代码里不写站点地址。
 - 回大厅（0.5.8，`src/view/lobby.ts`）：跳平台首页 `/`。开始菜单左上角常驻「大厅」，点了直接走；一局里点齿轮 → 「回大厅」，先确认
-  （这局存在本机，不算放弃，回来点「继续」）；手机竖屏的"横过来"提示层左上角也有，一局里同样先问。点下后提示"正在离开……"；走之前先等还在确认账号的交分发出去（最多 1.5 秒），再把待上传的槽都补传一次（keepalive，连同在途的 keepalive 合起来不超 60 KB，
+  （这局存在这台设备上，不算放弃，回来点「继续」）；手机竖屏的"横过来"提示层左上角也有，一局里同样先问。点下后提示"正在离开……"；走之前先等还在确认账号的交分发出去（最多 1.5 秒），再把待上传的槽都补传一次（keepalive，连同在途的 keepalive 合起来不超 60 KB，
   记账在 `src/platform/keepalive.ts`；不受切后台 3 分钟间隔限制；普通请求在途的槽也补一个 keepalive，补过的不再补；额度不够没补成的，原来排好的普通上传照旧，没排的给排一个）。结束页左上角也有「大厅」，直接走。
 - 未捕获的错误会弹出独立面板，可以继续、重新载入、放弃存档开新局或复制错误信息；最近 20 条错误记在 `kaipan.errors`。
 
-## 调试用 URL 参数
+## 本地开发
+
+需要 Node 22（见 `.nvmrc`）。在本目录里：
+
+```bash
+npm ci
+npm run dev          # 开发服务器 0.0.0.0:5173（热更新）
+npm run build        # 类型检查 + 正式构建到 dist/（Phaser 单独成块；KP_SOURCEMAP=1 时带 sourcemap）
+npm run build:cf     # 部署用的构建：产物在 dist-cf/games/kaipan/，适配 /games/kaipan/ 子路径
+npm run preview      # 用正式构建启动服务 0.0.0.0:4173
+npm test             # 单元测试：core 规则与回放、内容、机器人、平台层（设置/存档/档案）、Worker、音频纯逻辑、架构约束
+npm run sim          # 数值模拟：--accept 跑设计稿第 11 节的验收（--part a|b 可并行），--value 测道具价值，--live 实盘各档的结回，--set 临时改数值（见 tools/sim.ts 顶部注释）
+npm run shot         # 无头 Chromium 冒烟 + 截图到 shots/（vite 起在系统挑的空闲端口，KP_SHOT_PORT 可指定）；加 -- --main 只跑主流程，-- --playtest 用真实鼠标键盘打一局并计时
+npm run audio-check  # 离线渲染所有音效与音乐，检查峰值/响度/时长/拖尾/节点泄漏
+node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估算显存（渲染倍数、纹理、文字画布、主画布）
+```
+
+开发和预览服务监听所有网卡，同一局域网里的手机、平板可以直接用 `http://<电脑的局域网 IP>:5173` 打开测试（不登录，云存档、排行榜、实盘不可用，其余照常）。
+
+和平台联调（登录、云存档、排行榜、实盘）：平台目录先 `npm run build` 再 `npm run dev:api`（5181），开盘 `npm run dev` 会把 `/api` 转过去；
+先在 http://localhost:5181 登录，再用 http://localhost:5173 打开开盘（`__Host-` cookie 要求安全上下文，用 IP 打开时登录状态带不过来）。
+
+### 调试用 URL 参数
 
 开局参数映射到 core 的开局设置（RunSetup）：`seed`、`account`（开局账户，元）、`items=a,b`（道具 id）、
 `friends=a,b`（额外群友）、`themes=a,b,…`（6 个登场题材）、`holdings=a,b`（开局持仓的股票 id，须属于登场题材）、
@@ -151,3 +126,61 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 带 seed 或开局设置时跳过开始菜单。开发版和 debug=1 时挂出 `window.__game` 调试接口（见 `src/debug/bridge.ts`，
 含 `controls()` 控件坐标、`loadState()`、`skip()` 等）。
 例：`http://localhost:5173/?seed=demo&themes=ai,newenergy,consumer,pharma,lowalt,pig&holdings=ai_leader,ai_follower&items=longtou,margin&debug=1`
+
+## 部署
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/kaipan)
+
+开盘是一个 Cloudflare Worker（名字 `kaipan`）：静态资源加一小段 Worker 代码，挂在平台同一个域名的 `/games/kaipan` 路径下，依赖平台：
+
+1. **先部署平台**（`platform/`，Worker 名 `arcade`，见仓库根 README 的部署一节）。开盘的两个服务绑定都指向它，平台不在时部署会失败。
+2. **再部署开盘**：点上面的按钮，或在本目录 `npm ci && npm run deploy`（`build:cf` 加 `wrangler deploy`，需要环境变量 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`）。
+3. **最后加路由**：在 Cloudflare 后台给 `kaipan` 加两条路由 `<你的域名>/games/kaipan` 和 `<你的域名>/games/kaipan/*`（和平台同一个域名），
+   或者部署时直接带上：`npx wrangler deploy --route "<你的域名>/games/kaipan" --route "<你的域名>/games/kaipan/*"`。
+   路由不写在 `wrangler.jsonc` 里；`workers_dev` 关着，没有路由时外面访问不到。
+
+本模块要的绑定和变量（都写在 `wrangler.jsonc` 里，没有 secret）：
+
+| 名字 | 类型 | 说明 |
+|---|---|---|
+| `ASSETS` | 静态资源 | `dist-cf/`，由 `npm run build:cf` 生成 |
+| `ARCADE` | 服务绑定 → `arcade` | 登录闸门问平台 `/api/me` |
+| `WALLET` | 服务绑定 → `arcade` 的 `WalletService`，`props.game = kaipan` | 实盘的带入、结回、放弃 |
+| `GATE` | 变量 | 登录闸门：`login`（没登录跳 `/login?from=kaipan`，平台有问题回 503 不放行）或 `off` |
+
+只有首页和实盘接口 `/games/kaipan/api/*` 进 Worker（`assets.run_worker_first`，分流在 `src/worker/route.ts`；接口不看 `GATE`，总要认人），其余静态资源不经过 Worker。
+平台续期下发的 Set-Cookie 由闸门原样带回浏览器。
+
+本仓库的正式站由 `.github/workflows/game-kaipan.yml` 部署：改动经 PR 合并进 `main` 且涉及 `games/kaipan/**` 时，先跑模块独立性检查，再 `npm ci`、`npm test`、`build:cf`，
+然后 `wrangler deploy` 并注入路由（正式站的主机名在 GitHub `production` 环境的 secret `SITE_HOST` 里，没设就失败）；PR 上只测试不部署。
+在本仓库里不对正式环境手动部署。需要拆成单独仓库时，在仓库根运行 `tools/split-module.sh games/kaipan`。
+
+## 目录结构
+
+- `src/core/`：游戏规则，纯逻辑且完全确定（种子 + 操作序列可回放），不依赖浏览器和 Phaser。
+  数值集中在 `balance.ts`；题材生命周期、个股与连板在 `market.ts`；群聊与推荐在 `chat.ts`；
+  股票、群友、道具、A 股日历、事件、人设、难度、成就在 `content/`；每日挑战在 `daily.ts`；画面用的查询函数在 `queries.ts`。
+- `src/view/`：Phaser 画面。`session.ts` 持有状态并分发事件；`scenes/` 有启动加载、开始菜单、交易、结束界面；
+  `trade/` 是交易主场景的各部分（小屋、顶栏、题材看板、持仓、群聊、月底流程、教程气泡）；
+  `meta/` 是开局选择、每日挑战、图鉴与成就、解锁弹窗；`tutorial.ts` 是分步教程的触发逻辑；
+  `assets.ts` 是素材清单和图集加载；`sound.ts` 把音频接入画面。
+- `src/view/audio/`：程序化音频。合成音效、生成式背景音乐、试听面板；接口约定在 `types.ts`。
+- `src/platform/`：设置（`settings.ts`）、存档（`storage.ts`）、档案（`profile.ts`：图鉴、成就、解锁、最好成绩）、
+  全局错误兜底（`errors.ts`）、云存档、排行榜、实盘的本地账、横屏提示、版本号。
+- `src/worker/`：开盘自己的 Worker：登录闸门（`gate.ts`）、实盘钱包接口（`live.ts`）、分流（`route.ts`）。
+- `src/debug/`：URL 参数与 `window.__game` 调试接口。
+- `public/assets/art/`：SVG 素材与美术规范；0.3 的股票小人、小屋、群聊等在 `v3/`，由 `tools/art/` 的脚本生成
+  （`public/art-preview.html` 是美术预览页）。`v3/atlas/` 是烘焙好的 WebP 图集（`node tools/art/bake.ts`）：
+  `game` 首屏加载，`meta`（人设、难度、成就、图鉴）进对应界面再加载；图集缺失时自动回退到单张 SVG。
+- `tools/`：自动玩家与数值模拟（`bots.ts`、`sim.ts`）、截图冒烟（`shot.ts`）、音频检查、美术生成（`art/`）；
+  `tools/data/` 是真实行情数据管线（WIKI Prices）：`segments.ts` 从年包切出一局用的行情段到 `public/data/segments/`。
+- 行情段（`public/data/segments/`）：文件名和 id 是不透明的短哈希，目录只有 id 和文件名，段文件里只有相对涨跌（基点）、
+  市况、游戏化标题和大事的故事句，没有年份、日期、公司和代码（`tests/segments-leak.test.ts` 把关）。id 和真实年份的对照只在
+  `tools/data/segments-manifest.json`，大事的故事版在 `tools/data/beats.ts`，都不进画面包。重新生成：
+  `node tools/data/segments.ts --packs ~/data/wiki-prices/packs --step 1`（同一份年包结果逐字节一致）。
+- `docs/`：现行的是 `design-0.5.md`、`design-0.5-visual.md`、`core-api-0.5.md`、`design-live.md`（实盘），其余带版本号的是历史稿，
+  索引见 `docs/README.md`。
+
+## 许可证
+
+MIT，见仓库根目录的 `LICENSE`。

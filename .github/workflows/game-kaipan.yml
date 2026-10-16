@@ -71,7 +71,12 @@ jobs:
           cache-dependency-path: games/kaipan/package-lock.json
       - run: npm ci
       - run: npm run build:cf
-      - run: npx wrangler deploy
+      # 路由在部署时注入：正式站的主机名只放在 production 环境的 secret SITE_HOST 里（公开仓库的日志会自动打码），没设就失败，不带着空路由部署
+      - name: 部署（注入 /games/kaipan 的路由）
+        run: |
+          : "${SITE_HOST:?SITE_HOST 未设置}"
+          npx wrangler deploy --route "$SITE_HOST/games/kaipan" --route "$SITE_HOST/games/kaipan/*"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SITE_HOST: ${{ secrets.SITE_HOST }}

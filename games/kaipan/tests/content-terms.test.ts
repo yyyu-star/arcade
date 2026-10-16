@@ -221,7 +221,7 @@ describe('文案只用新说法（第 2 节词表）', () => {
     for (const seed of ['terms-a', 'terms-b', 'terms-c']) {
       for (const t of playTexts(seed)) expect(offending(t), t).toEqual([]);
     }
-    // 要真玩三局：机器忙（几个代理同时跑）时会超过默认的 5 秒
+    // 要真玩三局：机器忙（几个任务同时跑）时会超过默认的 5 秒
   }, 30_000);
 
   it('0.4 C：押跌、借钱、仓位的文案（银行、持仓、买入选项、事件、结束页、故事、小知识）', () => {

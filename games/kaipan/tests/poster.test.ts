@@ -34,9 +34,9 @@ describe('结局海报', () => {
   });
 
   it('分享文字里的游戏地址：按当前页面推，去掉参数，归到游戏首页（0.6.11）', () => {
-    expect(gameLink('https://game.yyyu.org/games/kaipan/?debug=1#x')).toBe('https://game.yyyu.org/games/kaipan/');
-    expect(gameLink('https://game.yyyu.org/games/kaipan/index.html?seed=1')).toBe('https://game.yyyu.org/games/kaipan/');
-    expect(gameLink('https://game.yyyu.org/games/kaipan')).toBe('https://game.yyyu.org/games/kaipan/');
+    expect(gameLink('https://game.example.com/games/kaipan/?debug=1#x')).toBe('https://game.example.com/games/kaipan/');
+    expect(gameLink('https://game.example.com/games/kaipan/index.html?seed=1')).toBe('https://game.example.com/games/kaipan/');
+    expect(gameLink('https://game.example.com/games/kaipan')).toBe('https://game.example.com/games/kaipan/');
     expect(gameLink('http://127.0.0.1:5173/')).toBe('http://127.0.0.1:5173/');
   });
 

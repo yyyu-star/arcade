@@ -5,7 +5,7 @@ import worker from '../src/worker/index.ts';
 
 /** 0.5.6 登录闸门：平台的 /api/me 用假的服务绑定代替。 */
 
-const HOME = 'https://game.yyyu.org/games/kaipan/';
+const HOME = 'https://game.example.com/games/kaipan/';
 
 function assets(): Fetcher & { calls: Request[] } {
   const calls: Request[] = [];
@@ -34,7 +34,7 @@ const LOGGED_IN = { user: { id: 'u1', username: 'zy', displayName: 'zy' }, servi
 const LOGGED_OUT = { user: null, service: 'ok', saves: 'ok' };
 
 function req(path = '/games/kaipan/', headers: Record<string, string> = {}): Request {
-  return new Request(`https://game.yyyu.org${path}`, { headers });
+  return new Request(`https://game.example.com${path}`, { headers });
 }
 
 describe('登录闸门（GATE=login）', () => {
@@ -92,6 +92,8 @@ describe('登录闸门（GATE=login）', () => {
     const sent = ar.calls[0]!;
     expect(sent.method).toBe('GET');
     expect(new URL(sent.url).pathname).toBe('/api/me');
+    // 地址按请求自己的 origin 拼，代码里不写站点地址
+    expect(new URL(sent.url).origin).toBe('https://game.example.com');
     expect([...sent.headers.keys()].sort()).toEqual(['cf-connecting-ip', 'cookie']);
     expect(sent.headers.get('cookie')).toBe('sid=abc');
   });

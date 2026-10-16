@@ -1,14 +1,14 @@
 # 《开盘》模块约定
 
 > 总仓库规范见仓库根的 `AGENTS.md`，其中第 1、2 节的硬约束优先于本文件。本文件只写开盘特有的约定。
-> 2026-10-13 随开盘并入总仓库 `yyyu-star/arcade` 而建立（并入前是独立仓库 `yyyu-star/kaipan`，历史已用 subtree 完整保留）。
+> 2026-10-13 随开盘并入总仓库而建立（并入前开盘是一个独立仓库）。
 
 ## 1. 这是什么
 
 一款股市主题的肉鸽网页游戏：散户每天看群聊情报，挑股票小人进持仓，跟着风口轮动赚钱，每月还月供，闯过 12 个月。
 涨跌来自 1996–2018 年美股的真实历史行情段（公有领域数据），但游戏里不露年份、公司和代码，局末用花名讲一个"这段日子"小故事。
 
-产品取向（用户多次明确）：**游戏为主、娱乐为主，让人快乐**。真实性只为让涨跌像真的；不能把游戏做成炒股软件，不堆术语、不堆长句，
+产品取向：**游戏为主、娱乐为主，让人快乐**。真实性只为让涨跌像真的；不能把游戏做成炒股软件，不堆术语、不堆长句，
 信息用图标、数字、图表、动画来表达，但删掉的信息必须有替代，画面不能空。设计稿按版本放在 `docs/`，最新的是 `design-0.5.md` 和 `design-0.5-visual.md`；实盘模式（筹码）的设计在 `design-live.md`。
 
 ## 2. 目录
@@ -41,7 +41,7 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 | 命令 | 用途 |
 |---|---|
 | `npm ci` | 安装依赖（本模块自带 lockfile，不在仓库根装） |
-| `npm run dev` / `npm run preview` | 开发 0.0.0.0:5173 / 正式构建预览 0.0.0.0:4173；本机在 Paseo 守卫内，还要 `paseo-svc publish <端口>` |
+| `npm run dev` / `npm run preview` | 开发 0.0.0.0:5173 / 正式构建预览 0.0.0.0:4173 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | vitest 全量（规则、回放、内容、文案扫描、防泄漏、架构约束） |
 | `npm run build` / `npm run build:cf` | 根路径构建 / 线上子路径 `/games/kaipan/` 构建到 `dist-cf/` |
@@ -49,10 +49,10 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 | `npm run shot` | 无头 Chromium 冒烟 + 截图，默认输出到 `shots/`（已忽略）；`--out` 指定目录；`--real`、`--ext`、`--story`、`--vis`、`--v05` 等模式见脚本顶部 |
 | `node tools/realness.ts` | 实测游戏个股、大盘与真实走势的逐日相关度（0.5 验收：个股 ≥ 0.9） |
 
-截图脚本需要 `playwright-core` 和本机的 chromium-headless-shell；中文截图要装中文字体。浏览器启动参数用
-`--enable-unsafe-swiftshader --no-proxy-server --no-zygote --in-process-gpu`（守卫内无 GPU）。
+截图脚本需要 `playwright-core` 和一个 chromium-headless-shell；中文截图要装中文字体。浏览器启动参数用
+`--enable-unsafe-swiftshader --no-proxy-server --no-zygote --in-process-gpu`（没有 GPU 的环境也能跑）。
 
-## 5. 数据管线（只在本机跑，产物进仓库，原始数据不进）
+## 5. 数据管线（在开发机上跑，产物进仓库，原始数据不进）
 
 - 来源：WIKI Prices（Quandl 社区整理、Nasdaq Data Link 托管，公有领域）。
 - **外部依赖**：原始 CSV 默认在 `$HOME/data/wiki-prices/`（`tools/data/common.ts` 的 `DEFAULT_SRC`、`DEFAULT_CACHE`），
@@ -77,8 +77,9 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 1. 本目录 `npm run typecheck`、`npm test`、`npm run build:cf` 全过；改了画面就跑 `npm run shot`（或对应模式）并逐张看截图。
 2. 更新 `package.json` 版本和 `CHANGELOG.md`（用户看得懂的大白话）。
 3. 提交信息以 `kaipan:` 开头，只暂存明确路径；推 `kaipan/<说明>` 分支开 PR（见仓库根 CONTRIBUTING.md），审阅通过、合并进 `main` 后由 `.github/workflows/game-kaipan.yml` 部署。
+   部署时路由由工作流注入（正式站主机名在 `production` 环境的 secret `SITE_HOST`），`wrangler.jsonc` 里不写路由和站点地址，代码里也不写（见 README 的「部署」一节）。
    Cloudflare 偶尔返回 504，但部署可能已经生效：先用 `npx wrangler deployments list` 核实再决定是否重跑。
-4. 发布后在线上 https://game.yyyu.org/games/kaipan/ 实际打开：版本号、开局能加载行情段、玩一天、控制台零报错。
+4. 发布后在线上 `/games/kaipan/` 实际打开：版本号、开局能加载行情段、玩一天、控制台零报错。
 
 ## 8. 已知待办
 

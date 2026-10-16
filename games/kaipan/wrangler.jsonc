@@ -1,7 +1,7 @@
 {
-  // 开盘：纯静态资源 Worker，只经平台的域名访问：
-  // game.yyyu.org/games/kaipan* 用路径路由直接挂到这里（路由优先于平台的自定义域名，请求不经过平台的 Worker）；
-  // 平台的 workers.dev 测试地址上由平台 Worker 通过服务绑定转发。自己不开 workers.dev 地址。
+  // 开盘：静态资源 Worker，挂在平台同一个域名的 /games/kaipan 路径下（路径路由优先于平台的自定义域名，请求不经过平台的 Worker）。
+  // 路由不写在这里，由部署时注入：正式站在 CI 里用 `wrangler deploy --route <站点>/games/kaipan --route <站点>/games/kaipan/*`，
+  // 自己部署的看 README 的「部署」一节。自己不开 workers.dev 地址。
   "$schema": "node_modules/wrangler/config-schema.json",
   // 0.5.6：测试期邀请制。首页（只有 run_worker_first 列的这三个路径）先进 Worker，GATE=login 时问平台登录了没有，
   // 平台有问题一律不放行（见 src/worker/gate.ts）。其余静态资源不经过 Worker。
@@ -11,10 +11,6 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [
-    { "pattern": "game.yyyu.org/games/kaipan", "zone_name": "yyyu.org" },
-    { "pattern": "game.yyyu.org/games/kaipan/*", "zone_name": "yyyu.org" }
-  ],
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",

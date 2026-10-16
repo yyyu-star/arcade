@@ -6,7 +6,7 @@ import { EXT_TIPS_KEY, EXT_TIP_ORDER, loadSeenTips, reviveTips, type ExtTipId } 
 import { TUTORIAL_KEY, TUTORIAL_ORDER, freshTutorial, loadTutorial, reviveTutorial, saveTutorial, type TutorialProgress } from './tutorial.ts';
 
 /**
- * 开盘要同步的两个槽（所有者定：档案、战绩、教程标记；打到一半的局和设置不同步）：
+ * 开盘要同步的两个槽（档案、战绩、教程标记；打到一半的局和设置不同步）：
  * - profile：档案（图鉴、成就、人设和难度解锁、各组合最好成绩、每日挑战、行情段、小知识；战绩就在档案里）；
  * - tutorial：分步教程进度 + 新玩法的第一次提示。
  * 切到后台补传时 profile 排前面（丢了最心疼）。

@@ -6,7 +6,7 @@ import { LIVE_MAX_BP } from '../src/core/liveTiers.ts';
 
 /** 0.6.0 实盘钱包接口：平台 /api/me 和钱包 RPC 都用假的绑定代替，记录调用参数。 */
 
-const ORIGIN = 'https://game.yyyu.org';
+const ORIGIN = 'https://game.example.com';
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const LOGGED_IN = { user: { id: 'u1', username: 'zy', displayName: 'zy' }, service: 'ok', saves: 'ok' };
 const REF = 'kaipan-abcdef12';

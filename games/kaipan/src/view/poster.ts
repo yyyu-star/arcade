@@ -262,11 +262,15 @@ function drawPoster(g: CanvasRenderingContext2D, c: PosterContent, art: PosterAr
   g.fillStyle = css(COLOR.dim);
   g.font = font(26);
   g.fillText(c.footer, P, H - 56);
-  g.textAlign = 'right';
-  g.fillStyle = css(COLOR.accentDark);
-  g.font = font(28, true);
-  g.fillText('game.yyyu.org', W - P, H - 56);
-  g.textAlign = 'left';
+  // 去哪玩：写当前页面的站点（部署在哪就是哪，代码里不写站点地址）
+  const site = typeof location === 'undefined' ? '' : location.host;
+  if (site) {
+    g.textAlign = 'right';
+    g.fillStyle = css(COLOR.accentDark);
+    g.font = font(28, true);
+    g.fillText(site, W - P, H - 56);
+    g.textAlign = 'left';
+  }
 }
 
 /** 画好一张海报（PNG）。画不出来（没有 canvas、内存紧）返回 null，按钮就不出。 */
