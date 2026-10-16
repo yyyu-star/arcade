@@ -1,4 +1,4 @@
-# 掼蛋（games/guandan/）：只在掼蛋或共用包有改动时测试、构建并部署到 Cloudflare Workers（guandan，路径路由 <站点>/games/guandan/）。
+# 掼蛋（games/guandan/）：只在掼蛋有改动时测试、构建并部署到 Cloudflare Workers（guandan，路径路由 <站点>/games/guandan/）。
 # 两个作业（为什么这样分见 docs/review-policy.md 的「部署怎么防」一节）：
 #   test：测试、构建、打包。跑的是合并进来的模块代码，所以拿不到任何凭证（不进 production 环境）；打出的产物当不可信数据交给 deploy。
 #   deploy：只在 main 上、进 production 环境。不 checkout 模块代码（sparse-checkout 只取 tools/ 和本模块的 wrangler.jsonc）、不装模块依赖，
@@ -6,19 +6,15 @@
 #     重新检查产物和配置、注入路由和 SITE_ORIGIN 后部署（见 CONTRIBUTING.md）。
 # 拆成独立仓库时：去掉 paths 和 working-directory，把 games/guandan/ 前缀去掉，并把 tools/deployer、tools/verify-main.sh 一起带走。
 name: Deploy guandan
-# packages/arcade-kit/** 的触发：游戏现在经 file: 依赖仓库里的 kit 源码，kit 一改游戏的产物就变，要重新测试、部署。
-# 游戏换成 npm 上发布的 kit 版本以后，kit 改动不再影响游戏（兼容性由 pkg-arcade-kit.yml 的 games 作业测），删掉这两行。
 on:
   push:
     branches: [main]
     paths:
       - 'games/guandan/**'
-      - 'packages/arcade-kit/**'
       - '.github/workflows/game-guandan.yml'
   pull_request:
     paths:
       - 'games/guandan/**'
-      - 'packages/arcade-kit/**'
       - '.github/workflows/game-guandan.yml'
   workflow_dispatch:
 permissions:
