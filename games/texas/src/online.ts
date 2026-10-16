@@ -10,10 +10,8 @@ import type { LastAct, RoomAction, RoomOpts, RoomView } from './room/rules.ts';
 
 /** 页面的协议版本（房间的 minClientVersion 高于它就让刷新） */
 export const CLIENT_VERSION = 1;
-/** 现在在的好友房：刷新、关页面后标题页给"回到房间"（不自动进）；点"离开房间"、房间关了就清掉 */
-export const ROOM_KEY = 'texas.room';
-/** 上一次进的好友房：钱包里还有那一桌的一份时，标题页按它给"回到房间"；点"离开房间"、房间关了就清掉 */
-export const LAST_ROOM_KEY = 'texas.lastRoom';
+/** 房间码是 6 位数字 */
+export const isRoomCode = (code: string): boolean => /^\d{6}$/.test(code);
 /** 积压超过这么多帧就不播了，直接摆最新的 */
 const MAX_BACKLOG = 6;
 

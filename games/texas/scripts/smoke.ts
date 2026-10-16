@@ -19,12 +19,8 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
+import { opt } from './args.ts';
 
-const args = process.argv.slice(2);
-const opt = (name: string, def: string): string => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : def;
-};
 const HANDS = Number(opt('hands', '30'));
 const SHOTS = opt('shots', join(tmpdir(), 'texas-shots'));
 mkdirSync(SHOTS, { recursive: true });

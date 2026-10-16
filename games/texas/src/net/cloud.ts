@@ -5,6 +5,7 @@
  * 换号不合并、不问人：旧号的本地数据备份到 pre-switch.<旧号>，本地清空再拉新号；登录回旧号时把备份并回，上传成功后改名 .restored。
  * 存储写不进去时宁可暂停同步，也不清本地（第 5 条）。依赖都从 deps 进来，测试用假的 fetch、存储和定时器。
  */
+import { KEYS } from '../store.ts';
 
 export interface Stats {
   v: 1;
@@ -59,12 +60,7 @@ export interface Cloud {
   onStorage(e: { key: string | null; newValue: string | null }): void;
 }
 
-export const KEYS = {
-  stats: 'texas.stats',
-  meta: 'texas.cloud',
-  preSync: 'texas.stats.pre-sync',
-  preSwitch: (userId: string): string => `texas.stats.pre-switch.${userId}`,
-} as const;
+export { KEYS };
 
 const SAVES = '/api/saves/texas';
 const SLOT = 'stats';

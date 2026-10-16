@@ -16,9 +16,3 @@ export function toggle(e: Element, cls: string, on: boolean): void {
   if (e.classList.contains(cls) !== on) e.classList.toggle(cls, on);
 }
 
-/** 元素中心在舞台坐标里的位置（舞台按比例缩放过，要除回去） */
-export function centerIn(e: Element, stage: HTMLElement, scale: number): { x: number; y: number } {
-  const r = e.getBoundingClientRect();
-  const s = stage.getBoundingClientRect();
-  return { x: (r.left + r.width / 2 - s.left) / scale, y: (r.top + r.height / 2 - s.top) / scale };
-}

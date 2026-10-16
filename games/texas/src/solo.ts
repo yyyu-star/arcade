@@ -12,10 +12,11 @@ import { NO_FAME, noteHand, settleStats, type Fame } from './core/fame.ts';
 import { stakesOf, type StakesId } from './core/stakes.ts';
 import { addChips, apply, deal, isFail, newTable, paid, seatHouse, seatPlayer, type Action, type Table } from './core/table.ts';
 import type { WalletApi } from './net/wallet.ts';
+import { KEYS } from './store.ts';
 
 /** 我永远坐 0 号位（画面上转到正下方） */
 export const ME = 0;
-export const SESSION_KEY = 'texas.session';
+export const SESSION_KEY = KEYS.session;
 
 /** payout：桌上待结的那一笔的 id（输光了离桌没有，只是把钱包里"桌上那一份"清掉） */
 export type Pending = { t: 'buyin'; op: string; amount: number } | { t: 'cashout'; op: string; amount: number; payout: string | null };

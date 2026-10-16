@@ -2,7 +2,6 @@
 import type { Card } from '../core/cards.ts';
 import { CATEGORY_NAMES, categoryOf, evalCards, FLUSH, FULL_HOUSE, PAIR, QUADS, STRAIGHT, STRAIGHT_FLUSH, TRIPS, TWO_PAIR } from '../core/eval.ts';
 import { PERSONAS } from '../ai/personas.ts';
-import type { LogEntry } from '../core/table.ts';
 
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 export const rankText = (rank: number): string => RANKS[rank]!;
@@ -55,25 +54,3 @@ export function chips(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-/** 座位上冒出来的那句话 */
-export function actText(e: LogEntry): string {
-  if (e.allin && e.act !== 'sb' && e.act !== 'bb') return '全下';
-  switch (e.act) {
-    case 'fold':
-      return e.auto ? '超时弃牌' : '弃牌';
-    case 'check':
-      return e.auto ? '超时过牌' : '过牌';
-    case 'call':
-      return '跟注';
-    case 'bet':
-      return '下注';
-    case 'raise':
-      return '加注';
-    case 'sb':
-      return '小盲';
-    case 'bb':
-      return '大盲';
-    default:
-      return '';
-  }
-}

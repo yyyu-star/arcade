@@ -17,12 +17,8 @@ import { PERSONAS } from '../src/ai/personas.ts';
 import type { Card } from '../src/core/cards.ts';
 import { CATEGORY_NAMES, categoryOf } from '../src/core/eval.ts';
 import type { Table } from '../src/core/table.ts';
+import { args, opt } from './args.ts';
 
-const args = process.argv.slice(2);
-const opt = (name: string, def: string): string => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : def;
-};
 const OUT = opt('out', join(tmpdir(), 'texas-capture'));
 const EVERY = Number(opt('every', '300'));
 const SECS = Number(opt('secs', '40'));

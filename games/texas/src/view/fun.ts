@@ -5,6 +5,7 @@
  */
 import { categoryOf } from '../core/eval.ts';
 import type { HandResult, LogEntry } from '../core/table.ts';
+import { KEYS } from '../store.ts';
 import { bluffer } from './talk.ts';
 import { riverTurnaround } from './titles.ts';
 
@@ -48,7 +49,7 @@ export function suggest(r: HandResult, log: readonly LogEntry[], me: number): nu
   return riverTurnaround(r) !== null ? [T('运气而已，别骄傲'), T('再来！')] : [T('好牌，服了'), T('下一把轮到我了')];
 }
 
-const KEY = 'texas.fun';
+const KEY = KEYS.fun;
 
 export interface FunPrefs {
   /** 不看嘲讽和道具（总开关；电脑说话也一起收起） */

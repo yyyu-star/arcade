@@ -7,9 +7,10 @@ import { stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
-import { createError, createRoom, LAST_ROOM_KEY, Online, ROOM_KEY, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
+import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
 import { OPENING_MS, PROP_BASE, STICKER_BASE, TAUNT_COUNT, TURN_MS, type RoomView } from './room/rules.ts';
 import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, type WalletApi, type WalletReply, type WalletView } from './net/wallet.ts';
+import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from './store.ts';
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
 import { ActionBar } from './view/actions.ts';
 import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
@@ -28,7 +29,6 @@ import { handOver, showcase, showcaseText, Tally } from './view/titles.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
 
-const SETTINGS = 'texas.settings';
 interface Settings {
   sound: boolean;
   fast: boolean;
@@ -37,20 +37,11 @@ interface Settings {
 }
 
 function loadSettings(): Settings {
-  try {
-    const s = JSON.parse(localStorage.getItem(SETTINGS) ?? '{}') as Partial<Settings>;
-    return { sound: s.sound !== false, fast: s.fast === true, autoNext: s.autoNext === true };
-  } catch {
-    return { sound: true, fast: false, autoNext: false };
-  }
+  const s = readSettings() as Partial<Settings>;
+  return { sound: s.sound !== false, fast: s.fast === true, autoNext: s.autoNext === true };
 }
 function saveSettings(): void {
-  try {
-    const old = JSON.parse(localStorage.getItem(SETTINGS) ?? '{}') as Record<string, unknown>;
-    localStorage.setItem(SETTINGS, JSON.stringify({ ...old, ...settings }));
-  } catch {
-    // 存不上就这一次有效
-  }
+  patchSettings({ ...settings });
 }
 
 const settings = loadSettings();
@@ -283,7 +274,7 @@ async function boot(): Promise<void> {
     if (s.pending) await settlePending();
     if (solo && !s.practice && !s.pending && wallet && !texasStakes(wallet).some((x) => x.ref === s.id)) {
       // 钱包里已经没有这一桌了：单机只在本机结回，几乎都是放太久、平台原样退回了（15.10 的 expired）
-      localStorage.removeItem(SESSION_KEY);
+      remove(SESSION_KEY);
       solo = null;
       walletNote = walletError('expired');
     }
@@ -295,12 +286,8 @@ async function boot(): Promise<void> {
   const wantOnline = q.get('online') === '1';
   if (q.has('room') || q.has('online')) history.replaceState(null, '', location.pathname);
   // 0.2.2 及以前"我开的房间"的记录：现在开房一律去开新的，旧记录清掉
-  try {
-    localStorage.removeItem('texas.hosted');
-  } catch {
-    // 清不掉也不再读它
-  }
-  if (code && /^\d{6}$/.test(code)) joinRoom(code);
+  remove(KEYS.hosted);
+  if (code && isRoomCode(code)) joinRoom(code);
   else if (wantOnline) lobby.showFriends();
   drawLobby();
 }
@@ -316,7 +303,7 @@ async function settlePending(): Promise<void> {
   const err = await s.settle();
   if (!Solo.load(localStorage, cloud.userId())) solo = null;
   else if (!s.session.pending && !s.session.practice && s.table.seats[ME]!.owner === 'none') {
-    localStorage.removeItem(SESSION_KEY);
+    remove(SESSION_KEY);
     solo = null;
   }
   await refreshWallet();
@@ -1005,22 +992,18 @@ function otherTab(): void {
 /** 刷新页面后多久以内自动回到上次的房间（房间最长活 6 小时） */
 const ROOM_REMEMBER_MS = 6 * 3_600_000;
 
-function savedRoom(): SavedRoom | null {
-  try {
-    const r = JSON.parse(localStorage.getItem(ROOM_KEY) ?? 'null') as SavedRoom | null;
-    return r && /^\d{6}$/.test(r.code) && r.userId === cloud.userId() && Date.now() - r.at < ROOM_REMEMBER_MS ? r : null;
-  } catch {
-    return null;
-  }
+/** 读本机记着的房间：码不对、不是这个账号的、过了 6 小时的都当没有 */
+function readRoom(key: string): SavedRoom | null {
+  const r = readJson<SavedRoom>(key);
+  return r && isRoomCode(r.code) && r.userId === cloud.userId() && Date.now() - r.at < ROOM_REMEMBER_MS ? r : null;
 }
 
+const savedRoom = (): SavedRoom | null => readRoom(KEYS.room);
+
 function saveRoom(r: SavedRoom | null): void {
-  try {
-    if (r) localStorage.setItem(ROOM_KEY, JSON.stringify(r));
-    else localStorage.removeItem(ROOM_KEY);
-  } catch {
-    // 存不上：刷新后从大厅输码回来
-  }
+  // 存不上：刷新后从大厅输码回来
+  if (r) writeJson(KEYS.room, r);
+  else remove(KEYS.room);
 }
 
 async function openRoom(stakes: StakesId, size: number): Promise<void> {
@@ -1038,7 +1021,7 @@ async function openRoom(stakes: StakesId, size: number): Promise<void> {
 }
 
 function joinRoom(code: string): void {
-  if (!/^\d{6}$/.test(code)) return;
+  if (!isRoomCode(code)) return;
   const old = savedRoom();
   enterRoom(old?.code === code ? old : { code, userId: cloud.userId(), host: false, at: Date.now() });
 }
@@ -1049,23 +1032,12 @@ function backToRoom(): void {
 }
 
 /** 上一次进的好友房（离开后也留着，标题页说"那一桌还没结回"时给回去的按钮） */
-function lastRoom(): SavedRoom | null {
-  try {
-    const r = JSON.parse(localStorage.getItem(LAST_ROOM_KEY) ?? 'null') as SavedRoom | null;
-    return r && /^\d{6}$/.test(r.code) && r.userId === cloud.userId() && Date.now() - r.at < ROOM_REMEMBER_MS ? r : null;
-  } catch {
-    return null;
-  }
-}
+const lastRoom = (): SavedRoom | null => readRoom(KEYS.lastRoom);
 
 /** 点了"离开房间"、房间关了、房间没了：本机关于这个房间的记录全清掉 */
 function forgetRoom(): void {
   saveRoom(null);
-  try {
-    localStorage.removeItem(LAST_ROOM_KEY);
-  } catch {
-    // 清不掉：6 小时后自己过期
-  }
+  remove(KEYS.lastRoom); // 清不掉：6 小时后自己过期
 }
 
 function enterRoom(r: SavedRoom): void {
@@ -1073,11 +1045,8 @@ function enterRoom(r: SavedRoom): void {
   saveRoom({ ...r, at: Date.now() });
   reads.clear();
   tally.clear();
-  try {
-    localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ ...r, at: Date.now() }));
-  } catch {
-    // 存不上：标题页只是不给"回到房间"
-  }
+  // 存不上：标题页只是不给"回到房间"
+  writeJson(KEYS.lastRoom, { ...r, at: Date.now() });
   online?.close();
   lastRefused = null;
   wasBuying = false;

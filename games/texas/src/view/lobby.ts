@@ -5,6 +5,7 @@
 import { STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
 import { MAX_SEATS } from '../core/table.ts';
 import type { Stake, WalletView } from '../net/wallet.ts';
+import { patchSettings, readSettings } from '../store.ts';
 import { makeCard, setCard } from './art.ts';
 import { el, setText, toggle } from './dom.ts';
 import { chips } from './text.ts';
@@ -32,7 +33,6 @@ export interface LobbyHandlers {
   backToRoom(): void;
 }
 
-const SIZE_KEY = 'texas.settings';
 
 type Mode = 'fun' | 'real';
 
@@ -144,14 +144,11 @@ export class Lobby {
     });
     this.joinBtn = button(fr, 'pill', '进房间', () => h.joinRoom(this.codeIn.value));
 
-    try {
-      const saved = JSON.parse(localStorage.getItem(SIZE_KEY) ?? '{}') as { stakes?: StakesId; size?: number; mode?: Mode };
-      if (saved.stakes && STAKES.some((x) => x.id === saved.stakes)) this.stakes = saved.stakes;
-      if (saved.size && saved.size >= 2 && saved.size <= MAX_SEATS) this.size = saved.size;
-      if (saved.mode === 'fun' || saved.mode === 'real') this.mode = saved.mode;
-    } catch {
-      // 设置坏了就用默认的
-    }
+    // 设置坏了就用默认的（readSettings 坏了给空）
+    const saved = readSettings() as { stakes?: StakesId; size?: number; mode?: Mode };
+    if (saved.stakes && STAKES.some((x) => x.id === saved.stakes)) this.stakes = saved.stakes;
+    if (saved.size && saved.size >= 2 && saved.size <= MAX_SEATS) this.size = saved.size;
+    if (saved.mode === 'fun' || saved.mode === 'real') this.mode = saved.mode;
   }
 
   update(s: LobbyState): void {
@@ -193,12 +190,7 @@ export class Lobby {
   }
 
   private remember(): void {
-    try {
-      const old = JSON.parse(localStorage.getItem(SIZE_KEY) ?? '{}') as Record<string, unknown>;
-      localStorage.setItem(SIZE_KEY, JSON.stringify({ ...old, stakes: this.stakes, size: this.size, mode: this.mode }));
-    } catch {
-      // 存不上不要紧
-    }
+    patchSettings({ stakes: this.stakes, size: this.size, mode: this.mode });
   }
 
   private draw(): void {

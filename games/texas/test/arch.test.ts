@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { KEYS } from '../src/store.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const files = (dir: string): string[] =>
@@ -31,19 +32,20 @@ describe('架构约束', () => {
     for (const f of files('src/room')) expect(read(f), f).not.toMatch(/from '\.\.\/(view|net)\/|from '\.\.\/(main|solo)\.ts'/);
   });
 
-  it('浏览器存储的键都以 texas. 开头（和平台、别的游戏同域，前缀是唯一的隔离）', () => {
-    const page = files('src').filter((f) => !f.startsWith('src/core') && !f.startsWith('src/ai'));
-    const keys: string[] = [];
-    for (const f of page) {
+  it('浏览器存储的键都在 store.ts 里，且以 texas. 开头（和平台、别的游戏同域，前缀是唯一的隔离）', () => {
+    const keys = Object.values(KEYS).map((k) => (typeof k === 'function' ? k('u1') : k));
+    expect(keys.length).toBeGreaterThanOrEqual(9);
+    for (const k of keys) expect(k).toMatch(/^texas\./);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('只有 store.ts 直接碰 localStorage / sessionStorage；别处的键名都从 store.ts 拿，不再写 texas. 字面量', () => {
+    for (const f of files('src').filter((f) => f !== 'src/store.ts')) {
       const src = read(f);
-      // 直接写在 getItem / setItem / removeItem 里的字面量（拼出来的 `${key}.restored` 由下面的常量管）
-      for (const m of src.matchAll(/Item\(\s*(['"`])((?!\$\{)[^'"`]*)\1/g)) keys.push(`${f}: ${m[2]}`);
-      // 存成常量的键：SESSION_KEY、SETTINGS 这类，和 cloud.ts 的 KEYS
-      for (const m of src.matchAll(/const [A-Z_]*(?:KEY|SETTINGS)[A-Z_]* = (['"`])([^'"`]*)\1/g)) keys.push(`${f}: ${m[2]}`);
-      const block = /export const KEYS = \{([\s\S]*?)\} as const/.exec(src)?.[1];
-      if (block) for (const m of block.matchAll(/(['"`])([^'"`]*)\1/g)) keys.push(`${f}: ${m[2]}`);
+      // 注入点：main.ts 把 localStorage 整个交给 solo / cloud / fun（它们经注入读写，便于测试），只传不调
+      const bare = src.replace(/\blocalStorage(?=[,)])/g, '').replace(/\bsessionStorage(?=[,)])/g, '');
+      expect(bare.match(/\b(localStorage|sessionStorage)\b/)?.[0], f).toBeUndefined();
+      expect(src.match(/['"`]texas\.[^'"`]*['"`]/)?.[0], f).toBeUndefined();
     }
-    expect(keys.length).toBeGreaterThanOrEqual(6);
-    for (const k of keys) expect(k).toMatch(/: texas\./);
   });
 });
