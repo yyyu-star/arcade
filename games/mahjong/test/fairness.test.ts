@@ -270,7 +270,8 @@ beforeAll(() => {
     ['lux', 2],
   ] as const)
     for (let i = 0; i < 2; i++) runRoom(st, humans, n++);
-});
+  // 本机约 8 秒，CI 的机器慢一倍多，钩子默认 10 秒不够
+}, 120_000);
 afterAll(() => {
   vi.restoreAllMocks();
   // 跑完打一行数字，自己复现时对得上
