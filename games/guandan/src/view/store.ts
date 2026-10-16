@@ -2,7 +2,7 @@
  * 浏览器存储：全部 key 带 `guandan.` 前缀（所有游戏同域，前缀是唯一的隔离手段）。
  * 读坏了（JSON 损坏、版本不对）一律退回默认值，不让坏存档卡死游戏。
  */
-import type { Difficulty } from '../ai/index.ts';
+import type { SoloLevel } from '../ai/venue.ts';
 import type { GameState, Options } from '../core/index.ts';
 
 export const KEYS = {
@@ -90,7 +90,7 @@ export interface Settings {
   music: boolean;
   muted: boolean;
   speed: SpeedSetting;
-  difficulty: Difficulty;
+  difficulty: SoloLevel;
   /** 地方规则开关（新开一局时生效） */
   rules: Partial<Options>;
   back: 0 | 1;
@@ -135,7 +135,7 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 export interface SaveData {
   v: 1;
   state: GameState;
-  difficulty: Difficulty;
+  difficulty: SoloLevel;
   /** 这一局的胜负是否已记入战绩（防止刷新后重复计） */
   counted: boolean;
   /** 已记入战绩的副数（同上） */

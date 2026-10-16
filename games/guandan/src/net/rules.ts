@@ -13,10 +13,10 @@
  */
 import { EMOTE_COUNT } from './emotes.ts';
 import type { RoomGame } from 'arcade-kit/game';
-import { ROOM_BOT } from '../stake/index.ts';
 import { canRebuy, parseRoomOpts, stakeBegin, stakeDeal, stakeFinish, stakeRebuy, stakeSeated, stakeSettled, stakeView, type RoomOpts, type StakeEffect, type StakeTable, type StakeView } from './stake.ts';
 import { type Entropy, stream } from 'arcade-kit/rng';
-import { decide } from '../ai/index.ts';
+import { decide, type Difficulty, type PersonaId } from '../ai/index.ts';
+import { botFor } from '../ai/venue.ts';
 import {
   RULES_VERSION,
   createKeyedGame,
@@ -126,6 +126,20 @@ function aiSeed(g: GameState): number | string {
   return g.key ? stream(g.key, 'room-ai', g.step).u32() : `${g.seed}|room`;
 }
 
+/** 这一场电脑的状态按它抽（每场不同、整场不变）；和 aiSeed 一样从密钥另分一条 */
+function formSeed(g: GameState): number | string {
+  return g.key ? stream(g.key, 'room-form', 0).u32() : `${g.seed}|room-form`;
+}
+
+/**
+ * 房间里这个座位的电脑怎么打（docs/ai.md、docs/stake.md 3.1）：电脑座位按场地取强弱，按真实座位带性格。
+ * 掉线太久、房间替真人代打的座位不带性格（替人打牌不该带着老张的脾气），强弱照旧：实盘最强、娱乐普通
+ */
+function roomBot(s: NetState, seat: number): { difficulty: Difficulty; persona?: PersonaId } {
+  if (s.humans?.[seat]) return { difficulty: s.stake ? 'hard' : 'normal' };
+  return botFor(s.stake ? { kind: 'roomStake', tier: s.stake.tier } : { kind: 'room' }, seat);
+}
+
 /**
  * 只给测试、模拟器用：从一个种子算出一把固定的"密钥"，让联机规则的测试可以复现。它只有种子那么多种可能，不安全，
  * 房间里绝不用它（房间的熵来自 crypto.getRandomValues）
@@ -134,8 +148,6 @@ export function testKey(seed: string | number): number[] {
   return Array.from({ length: 8 }, (_, i) => hashSeed(seed, 'test-key', i));
 }
 
-/** 电脑在房间里的难度（第一版固定） */
-export const NET_DIFFICULTY = 'normal' as const;
 
 const PLAY_TYPES: readonly PlayType[] = ['single', 'pair', 'triple', 'fullHouse', 'straight', 'tube', 'plate', 'bomb', 'straightFlush', 'jokerBomb'];
 
@@ -381,8 +393,7 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
   },
   ai: (s, seat) => {
     if (s.g.phase === 'dealEnd') return { type: 'ready' };
-    // 实盘房间的电脑一律最强（3.1）：电脑座位是庄家的，好友房不是来赢电脑的
-    const a = decide(viewFor(s.g, seat), { seed: aiSeed(s.g), difficulty: s.stake ? ROOM_BOT : NET_DIFFICULTY });
+    const a = decide(viewFor(s.g, seat), { seed: aiSeed(s.g), match: formSeed(s.g), ...roomBot(s, seat) });
     if (a && a.type !== 'nextDeal') return withoutSeat(a);
     const t = timeoutAction(viewFor(s.g, seat));
     return t ? withoutSeat(t) : { type: 'pass' };

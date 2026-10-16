@@ -1,7 +1,7 @@
 {
   "name": "guandan",
   "private": true,
-  "version": "0.6.5",
+  "version": "0.7.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "typecheck:core": "tsc --noEmit -p tsconfig.core.json",
     "test": "vitest run",
     "sim": "node tools/sim.ts",
+    "ai-sim": "node tools/ai-sim.ts",
     "shot": "node tools/shot.ts",
     "art": "node tools/art-preview.ts",
     "cover": "node tools/cover.ts",

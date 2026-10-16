@@ -3,7 +3,8 @@
  * 按钮都用 body.setData('btn:<名字>', 按钮) 登记，标题页的 controls() 据此给冒烟坐标。
  */
 import type Phaser from 'phaser';
-import { SOLO_BOTS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
+import { SOLO_BOTS } from '../../ai/venue.ts';
+import { SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
 import { DIFF_NAME, STAKE_TEXT, TIER_NAME, fmtChips, stakeError } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
 import { COLOR, TYPE } from '../theme.ts';

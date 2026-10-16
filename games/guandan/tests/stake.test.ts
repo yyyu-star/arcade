@@ -4,7 +4,6 @@ import { createGame, dispatch, seatsToAct, viewFor, type DealResult, type GameSt
 import {
   POINTS_PER_SHARE,
   ROOM_DEALS,
-  SOLO_BOTS,
   SOLO_DEALS,
   TIERS,
   TIER_IDS,
@@ -22,7 +21,6 @@ import {
   seatOp,
   setPaid,
   soloAddDeal,
-  soloBot,
   soloOp,
   soloOver,
   soloPoints,
@@ -50,15 +48,6 @@ describe('档位和每分', () => {
     expect(isTier(1)).toBe(false);
   });
 
-  it('越往上越难（1.3 的表）：对手不变弱，豪华档换成简单搭档', () => {
-    expect(SOLO_BOTS).toEqual({
-      small: { mate: 'normal', opp: 'easy' },
-      mid: { mate: 'normal', opp: 'normal' },
-      big: { mate: 'normal', opp: 'hard' },
-      lux: { mate: 'easy', opp: 'hard' },
-    });
-    expect([1, 2, 3].map((s) => soloBot('small', s))).toEqual(['easy', 'normal', 'easy']);
-  });
 });
 
 describe('每副的分', () => {

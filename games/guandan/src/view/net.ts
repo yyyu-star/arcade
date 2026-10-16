@@ -9,15 +9,15 @@
  */
 import { RoomClient, type ClientStatus, type RoomClientOptions, type WebSocketLike } from 'arcade-kit/client';
 import { CLOSE, CLOSE_REASON, EMOTE_ERRORS, type CreateError, type DownMsg, type RoomInfo } from 'arcade-kit/protocol';
-import { decide } from '../ai/index.ts';
+import { PERSONAS, SEAT_PERSONA, decide, situationOf, tiltOf } from '../ai/index.ts';
 import type { Action, GameEvent, NextPreview, PlayerView } from '../core/index.ts';
 import { ERROR_TEXT, type NetAction, type NetView } from '../net/rules.ts';
 import { rotateNetView, rotation, toReal } from '../net/rotate.ts';
 import { CLIENT_VERSION, ROOM_PATH } from '../net/version.ts';
 import { parseRoomOpts } from '../net/stake.ts';
 import type { TierId } from '../stake/index.ts';
-import { setSeatIdentities, type SeatIdentity } from './labels.ts';
-import type { TableSession } from './session.ts';
+import { seatIdentity, setSeatIdentities, type SeatIdentity } from './labels.ts';
+import type { BotStyle, TableSession } from './session.ts';
 import { QUOTA_TEXT } from './quota-text.ts';
 import { KEYS, rawStore } from './store.ts';
 
@@ -426,7 +426,7 @@ export class NetSession implements TableSession {
       const s = room.seats[toReal(me, shown)];
       if (!s || s.kind === 'empty') list.push(null);
       // 绑了人、主人离座的座位：显示主人的名字和"电脑代打"（和掉线超过宽限一个样子）；没绑人的电脑座位 name 是 null
-      else if (s.kind === 'ai') list.push(s.name !== null ? { human: true, name: s.name, away: true, auto: true } : { human: false, name: '', away: false, auto: false });
+      else if (s.kind === 'ai') list.push(s.name !== null ? { human: true, name: s.name, away: true, auto: true } : { human: false, name: '', away: false, auto: false, persona: SEAT_PERSONA[toReal(me, shown)] });
       else list.push({ human: true, name: s.name ?? '玩家', away: s.away, auto: s.auto, ...(afk?.[shown] ? { afk: true } : {}) });
     }
     setSeatIdentities(list);
@@ -548,6 +548,14 @@ export class NetSession implements TableSession {
 
   isBot(seat: number): boolean {
     return seat === 0 && this.autoplay;
+  }
+
+  /** 房间里电脑的状态按密钥抽，页面不知道：只给性格和看得见的上头程度 */
+  botStyle(seat: number): BotStyle | null {
+    const persona = seatIdentity[seat]?.persona;
+    if (!persona || !this.shown) return null;
+    const v = this.shown.view;
+    return { persona, form: 0, tilt: tiltOf(PERSONAS[persona], situationOf(v, seat)) };
   }
 
   botAction(seat: number): Action | null {

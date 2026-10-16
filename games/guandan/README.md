@@ -7,7 +7,8 @@
 ## 功能
 
 - **完整规则**：牌型识别（含逢人配的所有解释）、比大小、进贡 / 抗贡 / 还贡、接风、名次升级、打 A，规则核心是纯函数、同一种子同一串操作结果完全相同（`src/core/`，取舍见 `docs/rules.md`）。
-- **电脑对手**：简单 / 普通 / 困难三档，只读自己能看到的信息（`src/ai/`）。
+- **电脑对手**：老张、小美、阿强各有性格（爱炸、捂炸弹、抢牌），每场状态有起伏，随级数差和输赢调整，说话和出手快慢跟着性格走；
+  强弱按场地定，新手场偏弱、档位越高越强。只读自己能看到的信息（`src/ai/`，设计和模拟见 `docs/ai.md`）。
 - **单机**：标题页、新手引导、规则说明、设置、战绩，每副结算有复盘和称号；云存档同步战绩（需要平台账号）。
 - **好友房**：开房后"叫朋友来"发链接，点开就进房、自动坐下，开打后接管电脑的座位；掉线重连、走开了自动托管、打完"再来一场"；
   嘲讽、表情包、扔道具（人人一样、免费，不影响牌局）。房间是 Cloudflare Durable Object，服务端说了算，底座是共用包 `packages/arcade-kit`。
@@ -44,6 +45,7 @@ npm ci
 npm test              # vitest：牌型、比大小、流程、进贡、打 A、回放、防泄漏、电脑、架构约束
 npm run typecheck     # 全量 tsc；npm run typecheck:core 只查规则核心和电脑（不带 DOM 库）
 npm run sim           # 机器人对打 5000 副：电脑 vs 随机；更多模式见 tools/sim.ts 顶部
+npm run ai-sim -- solo # 各场地电脑的强弱（还有 room / style / time，见 docs/ai.md）
 npm run dev           # 0.0.0.0:5174（局域网里的手机也能打开）
 npm run build         # 页面产物 dist/（预览 npm run preview → 4174）
 npm run shot          # 无头冒烟 + 截图到 shots/（--playtest 真实速度鼠标试玩一副，--only desktop,mobile,viewport,… 只跑部分）
@@ -121,7 +123,7 @@ pyftsubset NotoSerifSC-Bold.otf --text-file=src/view/fonts/svg-chars.txt --flavo
 
 ## 文档
 
-`docs/design.md` 设计、`docs/rules.md` 规则核实与取舍、`docs/core-api.md` 给画面层的接口说明、`docs/stake.md` 实盘设计（筹码体系第 3 步；0.4.0 单机实盘、0.5.0 好友房实盘；数字由 `node tools/stake-sim.ts` 量出）。
+`docs/design.md` 设计、`docs/rules.md` 规则核实与取舍、`docs/core-api.md` 给画面层的接口说明、`docs/stake.md` 实盘设计（筹码体系第 3 步；0.4.0 单机实盘、0.5.0 好友房实盘；数字由 `node tools/stake-sim.ts` 量出）、`docs/ai.md` 电脑的场地、性格和状态（0.7.0；数字由 `npm run ai-sim` 量出）。
 
 ## 许可证
 
