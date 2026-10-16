@@ -1,18 +1,12 @@
 /**
- * 好友房的乐子（0.3.0，DESIGN.md 13.4）：嘲讽短语、顺手提示、互动总开关（菜单、面板、屏蔽 0.13.0 起是 kit 的 TableFun）。
- * 房间只转发短语编号（kit 的 emote），文字在这里；只说牌局和打法，不说人（不涉及长相、家人、地域、性别，不带脏字）。
+ * 顺手提示和互动总开关（0.3.0，DESIGN.md 13.4、13.7）。短语的文字在 fun/taunts.ts；菜单、面板、屏蔽 0.13.0 起是 kit 的 TableFun。
  * 顺手提示只看公开事件（谁赢了、怎么赢的、亮出来的牌），不碰没亮的底牌。
  */
+import { bluffer, riverTurnaround } from '../core/fame.ts';
 import { categoryOf } from '../core/eval.ts';
 import type { HandResult, LogEntry } from '../core/table.ts';
+import { tauntId as T } from '../fun/taunts.ts';
 import { KEYS } from '../store.ts';
-import { bluffer } from './talk.ts';
-import { riverTurnaround } from './titles.ts';
-import { TAUNTS } from '../fun/taunts.ts';
-
-export { TAUNTS };
-
-const T = (s: (typeof TAUNTS)[number]): number => TAUNTS.indexOf(s);
 
 /**
  * 一手打完、我坐在桌上：按这一手公开发生的事，给 1–2 句合适的嘲讽（编号），一点就发。没什么好说的回空

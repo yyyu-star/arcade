@@ -161,4 +161,3 @@ export class Talk {
   }
 }
 
-export { bluffer, putIn } from '../core/fame.ts';

@@ -83,13 +83,13 @@ export function decide(v: View, r: RandomStream): Action {
   // 底池赔率：要跟的钱 ÷（池子 + 要跟的钱），千分数
   const odds = Math.floor((toCall * 1000) / (v.pot + toCall));
 
-  // 筹码很短（0.5.0）：翻牌前不再小加小跟，够好就推、不够就弃（会的才这样，新手照常打）
+  // 筹码很短（0.5.0）：翻牌前不再小加小跟，够好就推、不够就弃（会的才这样，低档照常打）
   if (pre && k.depth && eff <= SHORT_BB) {
     if (rel >= callAt - 120 + k.pre * raises - pos) return lg.raise ? { t: 'allin' } : lg.check ? { t: 'check' } : { t: 'call' };
     return lg.check ? { t: 'check' } : { t: 'fold' };
   }
 
-  // 新手不连开三枪（0.8.0）：翻牌、转牌都是我下的注，河牌没人下注时有牌也多半只过牌（只管价值注，诈唬照常）
+  // 低档不连开三枪（0.8.0；0.12.0 起第 0–3 档）：翻牌、转牌都是我下的注，河牌没人下注时有牌也多半只过牌（只管价值注，诈唬照常）
   const third = !pre && v.board.length === 5 && raises === 0 && k.third > 0 && lg.check && streak(v, me) >= 2 && r.below(1000) < k.third;
 
   // 大牌：加注（偶尔慢打）
@@ -137,7 +137,7 @@ export function decide(v: View, r: RandomStream): Action {
       }
       // 中等牌（比这一桌平均强）也常先下一注，不全靠过牌看牌：有来有回，弱牌被打走，不是每手都摊牌
       // 对手多时收着：每多一个对手少 80‰（不往 8 个人里薄打）
-      // 对跟注站（0.5.0）：有点牌就薄薄下一注（他会跟），门槛放低；新手偶尔手软，该下的只过牌
+      // 对跟注站（0.5.0）：有点牌就薄薄下一注（他会跟），门槛放低；低档偶尔手软，该下的只过牌
       let size = p.size;
       if (rel >= THIN + jit - pos - Math.floor((opp2.thin * k.adapt) / 1000)) {
         // 不连开第三枪只管有牌的价值注；诈唬照性格（拦掉诈唬反倒便宜了会弃牌的人）
@@ -162,7 +162,7 @@ export function decide(v: View, r: RandomStream): Action {
   // 爱跟的性格（slack 为正）和 loose 一样按档的 soft 打折：小桌全用，越往上越收（中桌的小白原来翻牌后照样跟到底，每百手 −150）
   const slack = p.slack > 0 ? Math.floor((p.slack * k.soft) / 1000) : p.slack;
   const ok = eq >= odds - slack - k.slack - (tilt ? TILT.slack : 0);
-  // 新手手软（0.5.0）：够跟、但只比赔率多一点的牌，偶尔就弃了
+  // 低档手软（0.5.0；0.12.0 起第 0–3 档）：够跟、但只比赔率多一点的牌，偶尔就弃了
   if (ok && k.slip && eq < odds + 150 && r.below(1000) < k.slip) return { t: 'fold' };
   return ok ? { t: 'call' } : { t: 'fold' };
 }
@@ -296,7 +296,7 @@ function lastPreflopRaiser(v: View): number {
 
 /**
  * 按翻牌前的动作猜每个对手的底牌范围（给蒙特卡洛的下限，见 equity.ts）：加过注的最紧，跟过加注的次之，平跟的再松一点。
- * 加注的人按这一档和性格里紧的那个猜（小桌只有老好、阿飙猜：他们翻牌前跟得松，翻牌后不看人会输穿）。
+ * 加注的人按这一档和性格里紧的那个猜（第 0–3 档本身不猜，只有性格里写了的阿飙、老好、叨叨、小白猜：他们翻牌前跟得松，翻牌后不看人会输穿）。
  * 都不猜时返回 undefined，蒙特卡洛按随机牌算
  */
 function ranges(v: View, others: readonly number[], k: Skill, p: Persona): number[] | undefined {
@@ -341,7 +341,7 @@ function raise(v: View, p: Persona, k: Skill, eq: number, raises: number, r: Ran
     // 翻牌后：性格的基本尺度乘 0.7–1.3（五档随机挑，不总是同一个数）；很大的牌再大一点
     // 河牌上的大牌，凶的人偶尔直接全下
     if (v.board.length === 5 && eq >= 900 && k.value >= 1000 && r.below(1000) < p.shove) return { t: 'allin' };
-    // 新手档（0.8.0，功力的 value）：尺度小一点，很大的牌也不再加码
+    // 低档（0.8.0，功力的 value 不到 1000；0.12.0 起第 0–4 档）：尺度小一点，很大的牌也不再加码
     const size = Math.floor((Math.floor((p.size * k.value) / 1000) * (700 + 150 * r.below(5))) / 1000) + (eq >= 850 && k.value >= 1000 ? 250 : 0);
     to = v.currentBet + Math.floor(((v.pot + lg.call) * size) / 1000);
   }

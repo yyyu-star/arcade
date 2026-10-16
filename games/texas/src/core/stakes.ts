@@ -26,7 +26,7 @@ export function stakesOf(id: StakesId): Stakes {
 
 /**
  * 电脑的强弱档（0.5.0，DESIGN.md 4.7；0.12.0 按配平重调，4.10）：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强（好友房）。
- * 功力（看人、诈唬、松紧、新手的"手软"）在 src/ai/personas.ts 的 SKILL；补位挑性格的权重在这里（顺序同 PERSONAS），5 按 STRONG 的顺序挑。
+ * 功力（看人、诈唬、松紧、低档的"手软"）在 src/ai/personas.ts 的 SKILL；补位挑性格的权重在这里（顺序同 PERSONAS），5 按 STRONG 的顺序挑。
  * 档位定的是"这一档该多强"，场地（单机、好友房）再按档位挑强弱档：SOLO_LEVEL、ROOM_LEVEL
  */
 export const LEVELS = 6;

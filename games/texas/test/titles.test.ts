@@ -6,8 +6,10 @@ import type { HandResult, LogEntry } from '../src/core/table.ts';
 import { invested, NO_FAME, noteHand, settleStats, TITLES } from '../src/core/fame.ts';
 import { funItem, PROPS, propId } from 'arcade-kit/fun-logic';
 import { EMOTE_COUNT, TAUNT_COUNT } from '../src/room/rules.ts';
-import { suggest, TAUNTS } from '../src/view/fun.ts';
-import { riverTurnaround, showcase, showcaseText, Tally } from '../src/view/titles.ts';
+import { riverTurnaround } from '../src/core/fame.ts';
+import { TAUNTS } from '../src/fun/taunts.ts';
+import { suggest } from '../src/view/fun.ts';
+import { showcase, showcaseText, Tally } from '../src/view/titles.ts';
 
 const board = parseCards('Ah 7d 2c 9s Kh');
 const sh = (seat: number, hole: string) => {

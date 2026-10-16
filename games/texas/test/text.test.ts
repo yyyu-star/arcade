@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseCards } from '../src/core/cards.ts';
 import { HIGH_CARD, PAIR } from '../src/core/eval.ts';
 import type { LogEntry } from '../src/core/table.ts';
-import { bluffer } from '../src/view/talk.ts';
+import { bluffer } from '../src/core/fame.ts';
 import { madeHand } from '../src/view/text.ts';
 
 describe('我现在凑成的牌', () => {

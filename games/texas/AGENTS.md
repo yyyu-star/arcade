@@ -7,7 +7,7 @@
 - 规则核心 `src/core/` 和电脑 `src/ai/` 是纯函数：不碰 DOM、网络；不用 `Math.random`、`Date.now`、`new Date`、结果依赖平台的数学函数；
   随机只用 `arcade-kit/rng`（ChaCha20）按"用途 + 序号"分流，不在本模块另写随机数；用途名放在 `table.ts` 的 `RNG`（DESIGN.md 1.5）。
   电脑只拿视图，不拿完整状态：`src/ai/` 只用 `import type` 引用规则，不出现 `Table`（4.1，`test/arch.test.ts` 检查）。
-- 改了电脑的参数或决定方式，跑 `npm run sim 24000` 看各性格每百手的输赢，结果写进 DESIGN.md 4.6（现行参数和改前改后）；改了随机数的用法要重新生成翻牌前胜率表（`npm run gen:preflop`）。
+- 改了电脑的参数或决定方式，跑 `npm run sim 24000` 看各性格每百手的输赢，结果写进 DESIGN.md（现行参数在 4.10，按档配平的用 `npm run sim -- --balance`；改前改后照 4.6 的写法）；改了随机数的用法要重新生成翻牌前胜率表（`npm run gen:preflop`）。
 - 规则的筹码只从 `seatPlayer`、`addChips`、`seatHouse` 进，从 `out`（离桌）和电脑换人出，每一步 Σ筹码 + Σ投入 = `bank`（测试核对）。
 - 隐藏信息：`view` 只放这个座位能看到的，别人没亮的牌、牌堆、种子一律不下发（第 2 节）。
 - 筹码：钱包是平台的（服务绑定 `WALLET`，`props.game = "texas"`），单机 client 模式经 `worker/main.ts` 转、好友房 server 模式由 `TexasRoom.perform` 调；

@@ -19,7 +19,8 @@ import { el, setText, toggle } from './dom.ts';
 import { betPos, boardPos, buttonPos, deckPos, felt, isTop, potPos, resultPos, seatPos, type Geo, type Pt } from './layout.ts';
 import { play } from './sound.ts';
 import type { StickerId } from 'arcade-kit/fun';
-import { bluffer, putIn, stickerFor, Talk, type Moment } from './talk.ts';
+import { bluffer, putIn } from '../core/fame.ts';
+import { stickerFor, Talk, type Moment } from './talk.ts';
 import { chips, handName, madeHand, personaName, personaStyle } from './text.ts';
 
 /** 画面上一个座位此刻的样子（和视图不完全一样：动画中途、一手的结尾要摆出规则已经翻过去的那一刻） */

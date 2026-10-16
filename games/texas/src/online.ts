@@ -112,7 +112,7 @@ export class Online {
 
   private onMessage(m: DownMsg<RoomView>): void {
     if (m.t === 'error') {
-      // 嘲讽被拒（发太快、没入座、房间打完了）：不弹提示，按钮那边自己按冷却画
+      // 嘲讽被拒（发太快、没入座、房间打完了）：不弹提示，kit 的互动菜单自己按冷却画
       if (!(EMOTE_ERRORS as readonly string[]).includes(m.code)) this.ui.toast(errorText(m.code));
       return;
     }

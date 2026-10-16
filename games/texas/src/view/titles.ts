@@ -7,8 +7,6 @@ import { bluffer, riverTurnaround } from '../core/fame.ts';
 import type { HandResult, LogEntry } from '../core/table.ts';
 import type { View } from '../core/view.ts';
 
-export { riverTurnaround };
-
 export type Moment = 'river' | 'quads' | 'allin';
 
 export interface Showcase {

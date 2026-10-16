@@ -1,3 +1,25 @@
+# Arcade · Texas Hold'em
+
+No-limit Texas Hold'em for 2–9 players, one of the games on the Arcade mini-game site, running on Cloudflare Workers.
+
+- **Solo play** against 1–5 computer players, entirely in the browser: ten personalities, three fun difficulties (beginner / normal / expert) and four real-chip tables tuned against simulated players.
+- **Friend rooms** with a six-digit code or an invite link (built on the shared `arcade-kit` room); empty seats are filled by the computer, and the server never sends anyone else's hole cards.
+- **Table fun** — props, stickers and taunts, with computer players that react — from the shared `arcade-kit/table-fun` component.
+- **Play chips only**: chips live in the platform wallet and have no cash value; they cannot be bought, exchanged or transferred.
+- **Standalone deploy**: `wrangler.jsonc` deploys as-is without the platform (guest identity, solo and friend rooms, no wallet).
+
+```bash
+cd games/texas && npm ci
+npm run dev        # page on :5175
+npm test           # type check + vitest + Worker and room tests in workerd
+npm run build:cf   # page bundle for the Worker
+npm run smoke      # headless Chromium smoke test against a local Worker (run build:cf first)
+```
+
+The rest of this README, the design document (`DESIGN.md`) and the code comments are in Simplified Chinese. MIT licensed, see [LICENSE](LICENSE).
+
+---
+
 # 德州扑克（texas）
 
 无限注德州扑克，一桌 2–9 人：单机对电脑（全在浏览器里跑）和好友房（基于 `arcade-kit`，空位电脑补）。
@@ -9,8 +31,8 @@
 
 ## 功能
 
-- **单机**：对 1–5 个电脑，10 种性格，每一场的状态不一样（松紧、凶不凶、诈唬多少、出手快慢在性格的范围里浮动），会看对手的打法、按筹码深浅打；小桌是新手场，电脑偏弱、偶尔手软，往上逐档变强（DESIGN.md 4.7）；娱乐桌不碰钱包，实盘从平台钱包带一份上桌、离桌结回（经德州 Worker 转平台钱包）。牌局存在浏览器里，刷新接着打。
-- **好友房**（都是实盘）：开房给六位房间码或邀请链接，2–9 人，空位电脑补；至少两个真人才发牌，电脑一律最强，一个人想玩实盘去单机（DESIGN.md 6.5）。服务端说了算，不下发别人的底牌。嘲讽、表情、道具单机和好友房都有（单机对电脑，电脑会回、会催），可以整体关掉、屏蔽某个人或一键屏蔽全桌（DESIGN.md 13.5）。
+- **单机**：对 1–5 个电脑，10 种性格，每一场的状态不一样（松紧、凶不凶、诈唬多少、出手快慢在性格的范围里浮动），会看对手的打法、按筹码深浅打；娱乐分新手、普通、高手三个难度，实盘四档，小桌电脑最弱、偶尔手软，往上逐档变强（DESIGN.md 4.10）；娱乐桌不碰钱包，实盘从平台钱包带一份上桌、离桌结回（经德州 Worker 转平台钱包）。牌局存在浏览器里，刷新接着打。
+- **好友房**（都是实盘）：开房给六位房间码或邀请链接，2–9 人，空位电脑补；至少两个真人才发牌，电脑一律最强，一个人想玩实盘去单机（DESIGN.md 6.5）。服务端说了算，不下发别人的底牌。短语、表情、道具单机和好友房都有（kit 的 table-fun，单机里电脑会回），顶栏的笑脸能整体关掉，也能屏蔽某个人或一键屏蔽全桌（DESIGN.md 13.7）。
 - **登录闸门**：首页要先在平台登录（`GATE=login`），平台有问题时回德州自己的 503 页，不放行。单独部署时没有闸门，认游客（DESIGN.md 10.1）。
 - **战绩**：存在本机，登录后同步到平台云存档。
 
@@ -116,6 +138,7 @@ PR 上只测试不部署。在本仓库里不对正式环境手动部署（`npm 
 | `src/main.ts` | 页面入口：大厅、等人页和牌桌，单机和好友房共用一套牌桌，接钱包、云存档、声音；`site.ts` 记着有没有平台（单独部署） |
 | `src/view/` | 画面（DOM + CSS，不用画布），主要的几个：`table.ts` 牌桌和动画、`actions.ts` 操作区、`lobby.ts` 标题页兼选桌、`room.ts` 好友房的等人页、`art.ts` 牌面头像筹码、`viewport.ts` 看得见的区域、`sound.ts` 合成音效；其余见目录 |
 | `src/net/` | `wallet.ts` 钱包（看钱包、领补给走平台的 `/api/wallet*`，单机带入结回走德州 Worker）、`cloud.ts` 云存档（战绩槽 `stats`，按平台的推荐做法） |
+| `src/fun/` | 互动里德州自己的那部分：`taunts.ts` 短语表、`moments.ts` 名场面怎么认和电脑的互动性格（菜单、面板、电脑怎么回是 kit 的 `arcade-kit/table-fun`） |
 | `src/room/` | 好友房的规则：把牌桌接到 kit 的 `RoomGame` 上（纯函数，房间和页面共用） |
 | `worker/` | texas Worker：`main.ts` 路由、登录闸门（`arcade-kit/auth` 经平台 `/api/me` 认人，单独部署认游客）和单机带入结回（转平台钱包，client 模式）、`platform.ts` 平台钱包 RPC 的类型、`room.ts` 好友房 DO（server 模式调平台钱包） |
 | `test/` | vitest；`bots.ts` 是机器人对打的驱动（测试和 `scripts/sim.ts` 共用）；`test/worker/` 跑在 workerd 里；`arcade.dev.ts` 假平台（钱包用 `arcade-kit/testing`）、`dev-entry.ts` 本地入口（测试、冒烟、本地试用，不部署） |
@@ -123,4 +146,4 @@ PR 上只测试不部署。在本仓库里不对正式环境手动部署（`npm 
 
 ## 许可证
 
-MIT，见仓库根的 [LICENSE](../../LICENSE)。
+MIT，见本目录的 [LICENSE](LICENSE)（和仓库根的一样，拆成单独仓库时直接带走）。
