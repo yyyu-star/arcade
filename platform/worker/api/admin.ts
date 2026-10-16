@@ -1,8 +1,8 @@
 /**
- * 管理接口 /api/admin/*：测试期是邀请制，账号由管理员建（所有者 2026-10-14 定）。
+ * 管理接口 /api/admin/*：测试期是邀请制，账号由管理员建（维护者 2026-10-14 定）。
  *
  * 两种调用方：
- * - 本机建号工具（tools/admin.ts）：请求头 Authorization: Bearer <ADMIN_TOKEN>，不要 X-Arcade 和 Origin；
+ * - 管理命令行工具（tools/admin.ts）：请求头 Authorization: Bearer <ADMIN_TOKEN>，不要 X-Arcade 和 Origin；
  *   令牌对不上按 IP 和全站每小时计数，超了 429（见 bearerAuth）。只有它能建管理员、能动管理员账号。
  * - 平台页 /admin：当前会话是管理员，写请求照常要 X-Arcade 和 Origin。只能动普通账号：
  *   偷到管理员 cookie 的人改不了管理员的密码，也删不掉管理员。
@@ -55,7 +55,7 @@ async function tokenMatches(env: Ctx['env'], given: string): Promise<boolean> {
  * 2. 先只读查全站和这个 IP 这小时的计数，任何一个满了就 429、不比对、写 0 行；
  * 3. 两个计数各 +1（带条件 UPSERT，满了 0 行写入、抛 429）：并发打进来的请求在这里排队，最多放过上限那么多次比对；
  * 4. 比对：对了把两个名额还回去（共写 4 行），错了名额留着就是失败记录（写 2 行），回 401。请求头格式不对也算错。
- * 全站满了以后，对的令牌也是 429：这时多半有人在猜，主线的工具等一小时或改用管理员会话。
+ * 全站满了以后，对的令牌也是 429：这时多半有人在猜，维护者的工具等一小时或改用管理员会话。
  */
 export async function bearerAuth(c: Ctx): Promise<void> {
   const { db, limits, now } = c;
@@ -219,7 +219,7 @@ export async function resetPassword(c: Ctx): Promise<Response> {
 /**
  * POST /api/admin/users/<id>/delete：和本人注销删得一样干净（7.3），再加每日计数 1 行。
  * 不能删自己（会话管理员本来就动不了管理员），不能删最后一个管理员。
- * "最后一个"是先查再删：只有本机工具能删管理员，一个人用，不考虑两个请求同时删最后两个的情况。
+ * "最后一个"是先查再删：只有命令行工具能删管理员，一个人用，不考虑两个请求同时删最后两个的情况。
  */
 export async function deleteUser(c: Ctx): Promise<Response> {
   const { db } = c;

@@ -23,7 +23,7 @@ export interface Ctx {
   sidCookie: string | null;
   /** 有效会话；没登录或会话无效为 null。 */
   session: Session | null;
-  /** 管理接口的调用方：本机工具的令牌，或者当前会话的管理员（docs/platform-backend.md 5.x 管理接口）。其他接口为 null。 */
+  /** 管理接口的调用方：命令行工具的令牌，或者当前会话的管理员（docs/platform-backend.md 5.x 管理接口）。其他接口为 null。 */
   admin: { by: 'token' } | { by: 'session'; userId: string } | null;
   /** IP 哈希，用到才算。 */
   ipHash(): Promise<string>;

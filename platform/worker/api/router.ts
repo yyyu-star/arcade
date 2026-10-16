@@ -60,7 +60,7 @@ interface Route {
   /** 请求体上限，默认 BODY_LIMIT。 */
   bodyLimit?: number;
   cat: Category;
-  /** user：必须登录；optional：有会话就带上；admin：本机工具的 Bearer 令牌，或者管理员的会话（admin.ts）。 */
+  /** user：必须登录；optional：有会话就带上；admin：命令行工具的 Bearer 令牌，或者管理员的会话（admin.ts）。 */
   auth: 'none' | 'optional' | 'user' | 'admin';
   /** 停增长档要停的接口（注册、新建存档槽）。 */
   growth?: boolean;
@@ -205,6 +205,11 @@ export async function handleApi(request: Request, env: Env, ctx: ExecutionContex
   }
 }
 
+/** 本站地址：SITE_ORIGIN 设了按它，没设按请求自己的 origin（跨站请求的 Origin 头照样对不上，写请求照样挡得住） */
+export function siteOrigin(env: Pick<Env, 'SITE_ORIGIN'>, url: URL): string {
+  return env.SITE_ORIGIN || url.origin;
+}
+
 async function dispatch(
   request: Request,
   env: Env,
@@ -213,8 +218,9 @@ async function dispatch(
   stats: RequestStats,
 ): Promise<Response> {
   const url = new URL(request.url);
-  // 只认正式域名：workers.dev 地址不经过网关限速（5.4）
-  if (url.host !== new URL(env.SITE_ORIGIN).host) throw new ApiError(404, 'not_found');
+  const site = siteOrigin(env, url);
+  // 设了 SITE_ORIGIN 就只认那个主机名：workers.dev 之类的别的地址不经过网关限速（5.4）
+  if (url.host !== new URL(site).host) throw new ApiError(404, 'not_found');
   const candidates = ROUTES.map((r) => ({ r, segments: matchPath(r, url.pathname) })).filter((x) => x.segments);
   if (!candidates.length) throw new ApiError(404, 'not_found');
   const hit = candidates.find((x) => x.r.method === request.method);
@@ -236,10 +242,10 @@ async function dispatch(
     }
   }
 
-  // 管理接口带了 Authorization 就按本机工具的令牌认证，不看 X-Arcade 和 Origin：浏览器跨站请求带不了这个头（要预检，我们不答应）
+  // 管理接口带了 Authorization 就按命令行工具的令牌认证，不看 X-Arcade 和 Origin：浏览器跨站请求带不了这个头（要预检，我们不答应）
   const bearer = route.auth === 'admin' && request.headers.has('authorization');
   // 写请求：X-Arcade 和 Origin（只挡浏览器里的跨站请求，脚本能伪造，5.2）
-  if (write && !bearer && (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== env.SITE_ORIGIN)) {
+  if (write && !bearer && (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== site)) {
     throw new ApiError(403, 'forbidden');
   }
   const params = route.params ? route.params(hit.segments!) : {};

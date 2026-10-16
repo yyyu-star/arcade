@@ -1,7 +1,7 @@
 /**
  * /privacy：存了什么、存多久、怎么删（docs/platform-backend.md 5.7）。
  * 只写代码里确实这样做的事：天数和 worker/api/config.ts（会话、一年清理、每日榜留几天）、worker/api/cron.ts（每天清理）对得上，改了那边要同步改这里。
- * "不放广告、不卖数据"是所有者 2026-10-14 定的。"积分和筹码"那段也是所有者 2026-10-14 定的（当时为德州扑克的筹码跨场保留，
+ * "不放广告、不卖数据"是维护者 2026-10-14 定的。"积分和筹码"那段也是维护者 2026-10-14 定的（当时为德州扑克的筹码跨场保留，
  * 先把"只是朋友娱乐、不涉及任何线下资产"说清楚），适用于所有游戏；和仓库根 AGENTS.md"不碰真钱"那条一致，那边改了这里跟着改。
  * 访问统计那段只写 Cloudflare 官方说过的（2026-10-14 查 cloudflare.com/web-analytics 和 developers.cloudflare.com/web-analytics 的
  * about、faq、data-metrics）：beacon 每次打开页面用 Performance API 上报；统计的是访问次数（visits）和页面浏览数，按 Path、Country、

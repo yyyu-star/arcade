@@ -1,5 +1,5 @@
 /**
- * 本机建号工具：测试期邀请制，主线替所有者给朋友建号、重设密码（所有者 2026-10-14 定）。
+ * 管理命令行工具：邀请制下由维护者给朋友建号、重设密码，开关注册。新部署的站点没有任何账号、注册默认关着，第一个管理员也用它建。
  *
  *   npm run admin -- list
  *   npm run admin -- create <用户名> <昵称> [--admin] [--password=<密码>]
@@ -8,7 +8,7 @@
  *
  * 不给 --password 时由服务器生成一个好记的密码（推荐：命令行里的密码会留在 shell 历史里）。
  * 令牌只从环境变量 ARCADE_ADMIN_TOKEN 读，不读文件、不打印。生成的密码和恢复码会打印在终端，要转给对方。
- * 默认调线上 https://game.yyyu.org；--base=<地址> 换成别的（比如本地 wrangler dev，冒烟脚本用）。
+ * 站点地址必须给：--base=<地址> 或环境变量 ARCADE_BASE_URL（比如 https://game.example.com；本地 wrangler dev 是 http://localhost:5181）。
  */
 
 interface AdminUser {
@@ -25,7 +25,7 @@ const USAGE = `用法：
   npm run admin -- create <用户名> <昵称> [--admin] [--password=<密码>]
   npm run admin -- reset <用户名> [--new-recovery-code] [--password=<密码>]
   npm run admin -- registration open|close|status
-令牌放在环境变量 ARCADE_ADMIN_TOKEN 里；--base=<地址> 换接口地址（默认 https://game.yyyu.org）。`;
+令牌放在环境变量 ARCADE_ADMIN_TOKEN 里；站点地址用 --base=<地址> 或环境变量 ARCADE_BASE_URL 给（必须给）。`;
 
 class Fail extends Error {}
 
@@ -45,9 +45,11 @@ function parse(argv: string[]) {
 /** 接口地址：只许 https，或者本机（冒烟、本地开发）的 http；令牌不能明文发到别处。 */
 function baseOf(flag: string | true | undefined): string {
   if (flag === true) throw new Fail('--base 后面要跟 =<地址>');
+  const raw = flag ?? process.env.ARCADE_BASE_URL?.trim();
+  if (!raw) throw new Fail(`不知道站点地址：用 --base=<地址> 或环境变量 ARCADE_BASE_URL 给，比如 https://game.example.com\n${USAGE}`);
   let url: URL;
   try {
-    url = new URL(flag ?? 'https://game.yyyu.org');
+    url = new URL(raw);
   } catch {
     throw new Fail('--base 不是一个网址');
   }

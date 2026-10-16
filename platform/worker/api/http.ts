@@ -25,7 +25,7 @@ const MESSAGES: Record<string, string> = {
   busy: '服务器今天有点忙，先只能看、不能改，明早恢复',
   registration_closed: '现在只对受邀的朋友开放，账号找邀请你的人要',
   not_admin: '只有管理员能用',
-  admin_protected: '管理员账号只能用本机建号工具来建、改密码和删除',
+  admin_protected: '管理员账号只能用管理命令行工具来建、改密码和删除',
   cannot_delete_self: '不能删自己的账号，要注销请去"我的账号"',
   last_admin: '这是最后一个管理员，不能删',
   invalid_target: '这是你自己',

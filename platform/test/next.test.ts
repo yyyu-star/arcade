@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { safeNext } from '../src/next';
 
-const O = 'https://game.yyyu.org';
+const O = 'https://game.example.com';
 
 describe('safeNext', () => {
   it('认：游戏目录带房间码、平台自己的页面', () => {

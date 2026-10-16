@@ -8,7 +8,7 @@
  *   npm run cover -- --shrink --id=kaipan --id=guandan  # 把别的游戏给的封面缩到同样的 800×450（只缩比它宽的，重复跑没事）；
  *     --id 可以写几次，不写就是开盘、掼蛋（最早给的两张）
  *   npm run cover -- --from=<SVG 路径> --id=<游戏 id>  # 把别的游戏给的 16:9 SVG 光栅化成 public/covers/<id>.webp（麻将，0.10.13）
- *     路径从命令行传进来，工具本身不引用模块外的文件；SVG 里的中文用本机装的字体（本机是 Noto Sans CJK SC）
+ *     路径从命令行传进来，工具本身不引用模块外的文件；SVG 里的中文用运行环境装的字体（比如 Noto Sans CJK SC），换了环境字形可能略有不同
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';

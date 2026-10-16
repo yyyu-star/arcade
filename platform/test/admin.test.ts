@@ -549,7 +549,7 @@ describe('注册开关（D1，0.8.0）', () => {
     expect((await register()).status).toBe(403);
   });
 
-  it('本机工具的令牌也能改；普通用户 403 not_admin；没登录 401；open 不是 true/false 400；都写 0 行', async () => {
+  it('命令行工具的令牌也能改；普通用户 403 not_admin；没登录 401；open 不是 true/false 400；都写 0 行', async () => {
     const u = await registerUser();
     const res = await call('/api/admin/settings/registration', { body: { open: false }, authorization: TOKEN, csrf: false });
     expect(await res.json()).toMatchObject({ open: false });

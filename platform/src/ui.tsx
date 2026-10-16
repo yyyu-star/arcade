@@ -111,7 +111,7 @@ export function RecoveryCodeCard({ code, username, onDone, doneText }: { code: s
     g.fillStyle = '#7a6a70';
     g.font = '20px system-ui, sans-serif';
     g.fillText('忘了密码时，凭用户名和这串码重设密码。别给别人看。', 48, 270);
-    g.fillText(`game.yyyu.org · ${new Date().toLocaleDateString('zh-CN')}`, 48, 310);
+    g.fillText(`${location.host} · ${new Date().toLocaleDateString('zh-CN')}`, 48, 310);
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
     a.download = `恢复码-${username}.png`;

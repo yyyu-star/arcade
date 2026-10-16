@@ -1,5 +1,5 @@
 {
-  // 平台：界面是静态资源；/api/* 先进 Worker（worker/index.ts）。正式环境只有这一个平台 Worker，没有测试 Worker（所有者 2026-10-14 定）。
+  // 平台：界面是静态资源；/api/* 先进 Worker（worker/index.ts）。正式环境只有这一个平台 Worker，不另建测试 Worker。
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "arcade",
   "main": "worker/index.ts",
@@ -15,13 +15,13 @@
     // /games/* 正常由游戏自己的路由接走；落到平台说明没有这个游戏，由 Worker 回 404，免得单页回退给出平台首页
     "run_worker_first": ["/api/*", "/games/*"]
   },
-  "routes": [{ "pattern": "game.yyyu.org", "custom_domain": true }],
-  // 账号、存档、好友等数据（库建在 apac）。database_id 不是凭证。
+  // 不写 routes：站点域名由部署时注入（正式站：工作流的 --domain；一键部署：部署后自己绑自定义域名），见 README 的部署一节。
+  // 账号、存档、好友等数据。不写 database_id：一键部署时 Cloudflare 自动建库；
+  // 正式部署由工作流用 tools/deploy-config.ts 生成一份带正式库 id 的部署配置（不进 Git），迁移和部署都指向它。
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "arcade",
-      "database_id": "2897c944-53e5-4da3-9797-dc0a10741136",
       "migrations_dir": "migrations"
     }
   ],
@@ -30,11 +30,11 @@
   // LIMITS：要调的熔断阈值、限流上限写在这里，覆盖 worker/api/config.ts 里的默认值（docs/platform-backend.md 6.6、15.6）。
   // 紧急开关 API_MODE 是 Secret，不放这里（6.6）。
   // Secret：PEPPER_PW、PEPPER_RC、PEPPER_SID、PEPPER_IP（值写成 "<kid>:<随机串>"），换 pepper 时另设对应的 *_PREV；
-  // ADMIN_TOKEN（同样格式）给主线本机的建号工具 tools/admin.ts 用。
+  // ADMIN_TOKEN（同样格式）给维护者的命令行工具 tools/admin.ts 用。列表和说明见 .dev.vars.example。
+  // SITE_ORIGIN（站点地址，可选）：设了 /api 只认这个主机名；正式部署由工作流 --var 注入，没设按请求自己的地址（worker/env.ts）。
   // REGISTRATION：注册的紧急总闸。"switch" = 听管理员在 /admin 或 npm run admin -- registration 里的开关（D1，没设过按关）；
   // 改成 "off"（或任何别的值）= 一定关，开关暂时不起作用。改这里要重新部署，平时开关注册用管理页就行（0.8.0）。
   "vars": {
-    "SITE_ORIGIN": "https://game.yyyu.org",
     "REGISTRATION": "switch",
     "LIMITS": {}
   },

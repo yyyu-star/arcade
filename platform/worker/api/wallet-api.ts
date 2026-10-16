@@ -61,7 +61,7 @@ export async function listWalletStats(c: Ctx): Promise<Response> {
   return json(200, { days: rows.map((r) => JSON.parse(r.data) as DayStats) });
 }
 
-// ---------- 管理员调整筹码（0.9.4，所有者给朋友加减；只认管理员会话，记在账号安全类） ----------
+// ---------- 管理员调整筹码（0.9.4，维护者给朋友加减；只认管理员会话，记在账号安全类） ----------
 
 async function adminTarget(c: Ctx, username: unknown): Promise<{ id: string; username: string; display_name: string }> {
   if (typeof username !== 'string' || !username) throw new ApiError(400, 'bad_request');
@@ -73,7 +73,7 @@ async function adminTarget(c: Ctx, username: unknown): Promise<{ id: string; use
 }
 
 function onlySession(c: Ctx): string {
-  // 令牌给本机建号工具用，调筹码只在管理页做，这样记录里总有一个管理员的名字
+  // 令牌给管理命令行工具用，调筹码只在管理页做，这样记录里总有一个管理员的名字
   if (c.admin?.by !== 'session') throw new ApiError(403, 'not_admin');
   return c.session!.user.username;
 }
