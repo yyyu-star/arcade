@@ -3,7 +3,7 @@
  * 娱乐不碰钱包、随便玩；实盘从钱包带一份上桌、离桌结回。钱包常驻一行"无任何现金价值"（DESIGN.md 5.3）；钱包连不上时实盘不可选，娱乐照常。
  * 单独部署（没有平台，10.1）：藏起钱包和"娱乐 / 实盘"，只有娱乐；好友房下面多一个昵称框。
  */
-import { STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
+import { DIFFICULTIES, DIFFICULTY_NAME, difficultyOf, FUN_LEVEL, FUN_STAKES, STAKES, stakesOf, type Difficulty, type StakesId } from '../core/stakes.ts';
 import { MAX_SEATS } from '../core/table.ts';
 import type { Stake, WalletView } from '../net/wallet.ts';
 import { patchSettings, readSettings } from '../store.ts';
@@ -16,7 +16,7 @@ export interface LobbyState {
   /** 钱包连不上、只读时的说明 */
   note: string | null;
   /** 本机有一桌没打完；waiting：那一笔钱包还没回话（买入在路上，或者离桌的结算还没结回去） */
-  resume: { stakes: StakesId; size: number; practice: boolean; waiting: boolean } | null;
+  resume: { stakes: StakesId; size: number; practice: boolean; level?: number | undefined; waiting: boolean } | null;
   /** 钱包里有一桌单机，但本机没有（另一台设备上的） */
   orphan: Stake | null;
   busy: boolean;
@@ -25,7 +25,8 @@ export interface LobbyState {
 }
 
 export interface LobbyHandlers {
-  start(stakes: StakesId, size: number, amount: number, practice: boolean): void;
+  /** level：娱乐按难度给电脑的强弱档；实盘不给 */
+  start(stakes: StakesId, size: number, amount: number, practice: boolean, level?: number): void;
   resume(): void;
   relief(): void;
   /** 好友房：用现在选的档位和人数开一个；输码进房；回到上次的房间 */
@@ -48,6 +49,8 @@ export class Lobby {
   private readonly modeBtns = new Map<Mode, HTMLButtonElement>();
   private readonly modeNote: HTMLDivElement;
   private readonly tiles = new Map<StakesId, HTMLButtonElement>();
+  private readonly diffTiles = new Map<Difficulty, HTMLButtonElement>();
+  private readonly grid: HTMLDivElement;
   private readonly sizes: HTMLButtonElement[] = [];
   private readonly slider: HTMLInputElement;
   private readonly buyAmt: HTMLSpanElement;
@@ -65,8 +68,10 @@ export class Lobby {
   /** 单独部署：没有钱包，只有娱乐 */
   private alone = false;
   private stakes: StakesId = 'small';
+  private diff: Difficulty = 'easy';
   private size = 6;
-  private mode: Mode = 'real';
+  /** 第一次来默认娱乐·新手（docs/balance.md 第 3 节）；记过的按记的 */
+  private mode: Mode = 'fun';
   private s: LobbyState = { wallet: null, note: null, resume: null, orphan: null, busy: true, room: null };
   private readonly h: LobbyHandlers;
   /** 最后点的那个要等回话的按钮：忙着的时候它转圈（0.9.0） */
@@ -115,11 +120,17 @@ export class Lobby {
     }
     this.modeNote = el('div', 'mode-note', modes);
 
-    const grid = el('div', 'stakes', panel);
+    // 每档一张卡（docs/balance.md 第 5 节）：电脑多强（★）、一场约多久、一场最多输赢；实盘四档、娱乐三个难度
+    const grid = (this.grid = el('div', 'stakes', panel));
     for (const st of STAKES) {
       const t = button(grid, 'tile', '', () => this.pick(st.id));
-      t.innerHTML = `<b>${st.name}</b><span>盲注 ${chips(st.sb)}/${chips(st.bb)}</span><small>买入 ${short(st.min)}–${short(st.max)}</small>`;
+      t.innerHTML = card(st.name, STARS[st.id], `盲注 ${chips(st.sb)}/${chips(st.bb)}`, [`最多输 ${short(st.max)}`, `赢很少过 ${short(3 * st.max)}`]);
       this.tiles.set(st.id, t);
+    }
+    for (const d of DIFFICULTIES) {
+      const t = button(grid, 'tile diff', '', () => this.pickDiff(d));
+      t.innerHTML = card(DIFFICULTY_NAME[d], FUN_STARS[d], FOR_WHOM[d], ['不碰钱包', '筹码不算数']);
+      this.diffTiles.set(d, t);
     }
     const sizeRow = el('div', 'sizes', panel);
     el('span', 'label', sizeRow, '人数');
@@ -134,7 +145,9 @@ export class Lobby {
     this.slider.addEventListener('input', () => this.draw());
     this.buyAmt = el('span', 'buy-amt', buy);
     const go = el('div', 'go-row', panel);
-    this.startBtn = button(go, 'start', '坐下开打', () => this.wait(this.startBtn, () => this.h.start(this.stakes, this.size, Number(this.slider.value), this.fun())));
+    this.startBtn = button(go, 'start', '坐下开打', () =>
+      this.wait(this.startBtn, () => (this.fun() ? this.h.start(FUN_STAKES, this.size, Number(this.slider.value), true, FUN_LEVEL[this.diff]) : this.h.start(this.stakes, this.size, Number(this.slider.value), false))),
+    );
 
     // 好友房：开房用上面选的档位和人数，买入固定是这一档的满买入
     const fr = (this.friends = el('div', 'friends', panel));
@@ -158,8 +171,9 @@ export class Lobby {
     this.nickIn.addEventListener('change', () => patchSettings({ nick: this.nickname() }));
 
     // 设置坏了就用默认的（readSettings 坏了给空）
-    const saved = readSettings() as { stakes?: StakesId; size?: number; mode?: Mode };
+    const saved = readSettings() as { stakes?: StakesId; size?: number; mode?: Mode; diff?: Difficulty };
     if (saved.stakes && STAKES.some((x) => x.id === saved.stakes)) this.stakes = saved.stakes;
+    if (saved.diff && DIFFICULTIES.includes(saved.diff)) this.diff = saved.diff;
     if (saved.size && saved.size >= 2 && saved.size <= MAX_SEATS) this.size = saved.size;
     if (saved.mode === 'fun' || saved.mode === 'real') this.mode = saved.mode;
     if (typeof (saved as { nick?: unknown }).nick === 'string') this.nickIn.value = (saved as { nick: string }).nick;
@@ -214,6 +228,12 @@ export class Lobby {
     this.draw();
   }
 
+  private pickDiff(d: Difficulty): void {
+    this.diff = d;
+    this.remember();
+    this.draw();
+  }
+
   private pickMode(m: Mode): void {
     this.mode = m;
     this.slider.dataset.init = '';
@@ -228,7 +248,7 @@ export class Lobby {
   }
 
   private remember(): void {
-    patchSettings({ stakes: this.stakes, size: this.size, mode: this.mode });
+    patchSettings({ stakes: this.stakes, size: this.size, mode: this.mode, diff: this.diff });
   }
 
   private draw(): void {
@@ -239,7 +259,8 @@ export class Lobby {
     setText(this.noteEl, note ?? '');
     toggle(this.noteEl, 'hidden', !note);
     toggle(this.resumeBox, 'hidden', !resume);
-    if (resume) setText(this.resumeText, `${resume.practice ? '娱乐' : '实盘'} · ${stakesOf(resume.stakes).name} · ${resume.size} 人，${resume.waiting ? '等钱包回话' : '上次没打完'}`);
+    const rd = resume?.practice ? difficultyOf(resume.level) : null;
+    if (resume) setText(this.resumeText, `${resume.practice ? '娱乐' : '实盘'} · ${rd ? DIFFICULTY_NAME[rd] : stakesOf(resume.stakes).name} · ${resume.size} 人，${resume.waiting ? '等钱包回话' : '上次没打完'}`);
     toggle(this.orphanBox, 'hidden', !orphan || !!resume);
     if (orphan) setText(this.orphanText, `另一台设备上还有一桌没打完（带上桌 ${chips(orphan.amount)}）：回那台设备离桌就能结回；放着不管，24 小时后原样退回钱包`);
 
@@ -255,9 +276,16 @@ export class Lobby {
       const t = this.tiles.get(st.id)!;
       toggle(t, 'sel', st.id === this.stakes);
       toggle(t, 'locked', !fun && bal !== null && bal < st.min);
+      toggle(t, 'hidden', fun);
+    }
+    toggle(this.grid, 'fun', fun);
+    for (const [d, t] of this.diffTiles) {
+      toggle(t, 'sel', d === this.diff);
+      toggle(t, 'hidden', !fun);
     }
     this.sizes.forEach((b, i) => toggle(b, 'sel', i + 2 === this.size));
-    const st = stakesOf(this.stakes);
+    // 娱乐按小桌的盲注和买入打（难度只管电脑）；好友房照旧用实盘选的档位
+    const st = stakesOf(fun ? FUN_STAKES : this.stakes);
     const ok = fun || (bal ?? 0) >= st.min;
     const top = fun ? st.max : Math.max(st.min, Math.min(st.max, Math.floor((bal ?? 0) / st.bb) * st.bb));
     this.slider.min = String(st.min);
@@ -296,3 +324,19 @@ function button(parent: HTMLElement, cls: string, text: string, onClick: () => v
 
 /** 格子窄，一万以上写成"4万" */
 const short = (n: number): string => (n >= 10_000 && n % 10_000 === 0 ? `${n / 10_000}万` : chips(n));
+
+/** 电脑多强（1–4 颗星，四个游戏一样的画法）：实盘按档位，娱乐按难度（高手和豪华桌是同一档电脑） */
+const STARS: Readonly<Record<StakesId, number>> = { small: 1, mid: 2, big: 3, lux: 4 };
+const FUN_STARS: Readonly<Record<Difficulty, number>> = { easy: 1, normal: 2, hard: 4 };
+const FOR_WHOM: Readonly<Record<Difficulty, string>> = { easy: '刚学会，先赢几把', normal: '会看牌、会弃牌', hard: '想和最强的电脑过招' };
+
+/**
+ * 选档卡：名字、星、一句（盲注或适合谁）、一场约多久、最多输赢（娱乐写不碰钱包）。
+ * "赢很少过 3 份"是配平模拟量的（DESIGN.md 4.10：一场赢超过 3 份的不到 1%），规则不封顶，所以不写"最多赢"
+ */
+function card(name: string, stars: number, line: string, stake: readonly string[]): string {
+  return (
+    `<b>${name}</b><span class="stars" aria-label="电脑强度 ${stars}/4">${'★'.repeat(stars)}${'☆'.repeat(4 - stars)}</span>` +
+    `<span>${line}</span><small>一场约 20 分钟</small>${stake.map((x) => `<small>${x}</small>`).join('')}`
+  );
+}

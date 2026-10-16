@@ -9,7 +9,7 @@ import { SKILL } from '../src/ai/personas.ts';
 import { parseCards } from '../src/core/cards.ts';
 import { categoryOf, evalCards, HIGH_CARD } from '../src/core/eval.ts';
 import { addChips, apply, deal, FORM_SWING, isFail, levelOf, newTable, seatHouse, seatPlayer, type Table } from '../src/core/table.ts';
-import { LEVELS, ROOM_LEVEL, SOLO_LEVEL, STAKES, STRONG } from '../src/core/stakes.ts';
+import { FUN_LEVEL, LEVELS, ROOM_LEVEL, SOLO_LEVEL, STAKES, STRONG } from '../src/core/stakes.ts';
 import { view, type View } from '../src/core/view.ts';
 import { runBots } from './bots.ts';
 import { must, rig, SEED, setup } from './helpers.ts';
@@ -20,19 +20,26 @@ const ok = (t: Table | { error: string }): Table => {
 };
 
 describe('场地 → 强弱档', () => {
-  it('单机小桌是新手档（会手软、不看人、不按筹码深浅打），往上逐档不弱；好友房各档不比单机同档弱，往上也不弱', () => {
-    expect(SOLO_LEVEL.small).toBe(0);
-    expect(SKILL[0]!.slip).toBeGreaterThan(0);
-    expect(SKILL[0]!.adapt).toBe(0);
-    expect(SKILL[0]!.depth).toBe(false);
+  it('娱乐新手是第 0 档、单机小桌第 1 档（会手软、不看人、不按筹码深浅打），往上逐档不弱；好友房各档不比单机同档弱，往上也不弱', () => {
+    expect(FUN_LEVEL.easy).toBe(0);
+    expect(SOLO_LEVEL.small).toBe(1);
+    for (const k of SKILL.slice(0, 4)) {
+      expect(k.slip).toBeGreaterThan(0);
+      expect(k.adapt).toBe(0);
+      expect(k.depth).toBe(false);
+    }
     for (let i = 1; i < STAKES.length; i++) {
       expect(SOLO_LEVEL[STAKES[i]!.id]).toBeGreaterThanOrEqual(SOLO_LEVEL[STAKES[i - 1]!.id]);
       expect(ROOM_LEVEL[STAKES[i]!.id]).toBeGreaterThanOrEqual(ROOM_LEVEL[STAKES[i - 1]!.id]);
     }
     for (const st of STAKES) expect(ROOM_LEVEL[st.id]).toBeGreaterThanOrEqual(SOLO_LEVEL[st.id]);
     expect(SKILL.length).toBe(LEVELS);
-    // 新手以外都不手软
-    for (const k of SKILL.slice(1)) expect(k.slip).toBe(0);
+    // 0.12.0 配平：豪华桌、最强档不手软；多跟少加、不敢先打逐档变少（docs/balance.md）
+    for (const k of SKILL.slice(4)) expect(k.slip).toBe(0);
+    for (let i = 1; i < LEVELS; i++) {
+      expect(SKILL[i]!.passive).toBeLessThanOrEqual(SKILL[i - 1]!.passive);
+      expect(SKILL[i]!.shy).toBeLessThanOrEqual(SKILL[i - 1]!.shy);
+    }
   });
 
   it('单机的牌桌不写 level，按档位取；写了就按写的；0.4.0 好友房的 strong 是最强档；视图带着它', () => {
@@ -161,17 +168,19 @@ describe('公开的打法统计（seen）', () => {
 });
 
 describe('0.8.0：新手不连开三枪、大桌以上记住上一手亮的牌（DESIGN.md 4.9）', () => {
-  it('新参数只在该有的档：新手档价值注小、会放过第三枪，记住上一手只在大桌以上', () => {
-    expect(SKILL[0]!.value).toBeLessThan(1000);
-    expect(SKILL[0]!.third).toBeGreaterThan(0);
-    for (const k of SKILL.slice(1)) {
-      expect(k.value).toBe(1000);
-      expect(k.third).toBe(0);
+  it('新参数只在该有的档：0–3 档价值注小、会放过第三枪；豪华桌价值注略小（0.12.0）；记住上一手只在豪华桌以上', () => {
+    for (const k of SKILL.slice(0, 4)) {
+      expect(k.value).toBeLessThan(1000);
+      expect(k.third).toBeGreaterThan(0);
     }
-    SKILL.forEach((k, i) => (i >= 3 ? expect(k.memory).toBeGreaterThan(0) : expect(k.memory).toBe(0)));
+    expect(SKILL[4]!.value).toBeLessThan(1000);
+    for (const k of SKILL.slice(4)) expect(k.third).toBe(0);
+    expect(SKILL[5]!.value).toBe(1000);
+    // 0.12.0 大桌（3）配平后不看人，也不记上一手
+    SKILL.forEach((k, i) => (i >= 4 ? expect(k.memory).toBeGreaterThan(0) : expect(k.memory).toBe(0)));
   });
 
-  it('翻牌、转牌都是我下的注，河牌拿着大牌：新手档多半只过牌，第 1 档照常下注', () => {
+  it('翻牌、转牌都是我下的注，河牌拿着大牌：新手档多半只过牌，豪华桌那一档照常下注', () => {
     // 两人桌：0 号是按钮（小盲），1 号先说话；1 号拿 AA，公共牌又来两张 A
     let t = rig(setup([2000, 2000], 1), { 0: '3c 4d', 1: 'As Ah' }, 'Ad Ac 7s 2h 9d');
     const go = (seat: number, a: Parameters<typeof apply>[2]) => (t = must(apply(t, seat, a)));
@@ -190,12 +199,12 @@ describe('0.8.0：新手不连开三枪、大桌以上记住上一手亮的牌�
       return n;
     };
     const novice = bets(0);
-    const level1 = bets(1);
-    expect(novice).toBeLessThan(level1 * 0.3);
-    expect(level1).toBeGreaterThan(200);
+    const lux = bets(4);
+    expect(novice).toBeLessThan(lux * 0.3);
+    expect(lux).toBeGreaterThan(200);
   });
 
-  it('下注的人上一手亮的是空气：大桌以上弃得不比原来多、整体少一些；中桌照旧（只用亮出来的牌）', () => {
+  it('下注的人上一手亮的是空气：豪华桌以上弃得不比原来多、整体少一些；中桌、大桌照旧（只用亮出来的牌）', () => {
     // 上一手亮出来的一手高牌（2 3 4 7 9 J K 不成顺、不成同花）
     const air = evalCards(parseCards('2c 3h 4d 7s 9c Jd Kh'));
     expect(categoryOf(air)).toBe(HIGH_CARD);
@@ -234,7 +243,7 @@ describe('0.8.0：新手不连开三枪、大桌以上记住上一手亮的牌�
       }
     }
     expect(spots).toBeGreaterThan(300);
-    expect(folds[2]![0]).toBe(folds[2]![1]);
-    for (const level of [3, 4]) expect(folds[level]![0]).toBeLessThan(folds[level]![1]);
+    for (const level of [2, 3]) expect(folds[level]![0]).toBe(folds[level]![1]);
+    expect(folds[4]![0]).toBeLessThan(folds[4]![1]);
   });
 });

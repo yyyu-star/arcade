@@ -3,7 +3,8 @@
  * - simple：简单合理的打法，相当于认真但不精的新手——起手牌挑一挑，翻牌后看自己用上底牌的成牌，好牌下注、差牌弃；
  * - station：跟注站，什么都跟，从不加注；
  * - jammer：乱全下，随手推光。
- * 电脑要做到：simple 在小桌常赢、越往上越难；station、jammer 每一档都明显输。
+ * - novice：小白（docs/balance.md 第 1 节，0.12.0）：见牌就跟、偶尔乱加，只在明显差的时候弃。
+ * 电脑要做到：simple 在小桌常赢、越往上越难；station、jammer 每一档都明显输。配平（DESIGN.md 4.10）用 novice 当"小白"、simple 当"普通"。
  */
 import type { RandomStream } from 'arcade-kit/rng';
 import { rankOf, suitOf, type Card } from '../src/core/cards.ts';
@@ -107,4 +108,37 @@ export const simple: Strategy = (v) => {
   return (tier === 2 && half && n <= 1) || (tier === 1 && half) ? { t: 'call' } : { t: 'fold' };
 };
 
-export const STRATEGIES: Record<string, Strategy> = { simple, station, jammer };
+/** 小白眼里"能玩"的起手牌：对子、带 A、两张都是 8 以上、同花、连张（6 人桌约六成的手） */
+function looksPlayable(a: Card, b: Card): boolean {
+  const hi = Math.max(rankOf(a), rankOf(b));
+  const lo = Math.min(rankOf(a), rankOf(b));
+  return hi === lo || hi === 12 || lo >= 6 || suitOf(a) === suitOf(b) || hi - lo === 1;
+}
+
+/**
+ * 小白：只会最直白的打法。翻牌前看着顺眼的牌（looksPlayable）都跟，明显的烂牌要花钱才弃；被加到 4 个大盲以上时烂牌（tier 1）一半弃、好牌三成加注；
+ * 翻牌后两对以上（用上了底牌）什么都跟、偶尔下注；一对跟到一个池子那么大，再大一半弃；听牌跟到大半池；什么都没有的跟到三分之一池。
+ * 能加注时 6% 乱加一次（最小加注）。随机只用传进来的流（带种子，可复现）
+ */
+export const novice: Strategy = (v, r) => {
+  const lg = v.legal!;
+  if (lg.raise && r.below(100) < 6) return lg.minTo >= lg.maxTo ? { t: 'allin' } : { t: 'raise', to: lg.minTo };
+  if (v.board.length === 0) {
+    const tier = preflopTier(v.hole[0]!, v.hole[1]!);
+    if (tier === 3 && lg.raise && raises(v) <= 1 && r.below(10) < 3) return betPot(v, 1000);
+    if (lg.check) return { t: 'check' };
+    if (!looksPlayable(v.hole[0]!, v.hole[1]!)) return { t: 'fold' };
+    if (tier === 1 && lg.call > 4 * v.bb && r.below(2) === 0) return { t: 'fold' };
+    return { t: 'call' };
+  }
+  const tier = madeTier(v.hole, v.board);
+  if (lg.check) return tier === 3 && lg.raise && r.below(10) < 4 ? betPot(v, 500) : { t: 'check' };
+  // 要跟的占（池子 + 要跟的）的千分比：半池注 250、满池注 333、两倍池 400
+  const share = Math.floor((lg.call * 1000) / (v.pot + lg.call));
+  if (tier === 3) return { t: 'call' };
+  if (tier === 2) return share <= 334 || r.below(2) === 0 ? { t: 'call' } : { t: 'fold' };
+  if (tier === 1) return share <= 290 ? { t: 'call' } : { t: 'fold' };
+  return share <= 200 ? { t: 'call' } : { t: 'fold' };
+};
+
+export const STRATEGIES: Record<string, Strategy> = { simple, station, jammer, novice };

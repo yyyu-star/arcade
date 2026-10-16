@@ -10,10 +10,10 @@ import { PERSONAS } from '../src/ai/personas.ts';
 import { strength, TOP } from '../src/ai/preflop.ts';
 import { parseCards } from '../src/core/cards.ts';
 import { categoryOf, evalCards, HIGH_CARD } from '../src/core/eval.ts';
-import { LEVEL_HOUSE, type StakesId } from '../src/core/stakes.ts';
+import { FUN_LEVEL, LEVEL_HOUSE, SESSION_HANDS, type StakesId } from '../src/core/stakes.ts';
 import { isFail, newTable, PERSONA_COUNT, seatHouse } from '../src/core/table.ts';
 import { view, type View } from '../src/core/view.ts';
-import { runBots, runVs } from './bots.ts';
+import { runBots, runSession, runVs } from './bots.ts';
 import { SEED } from './helpers.ts';
 import { STRATEGIES } from './strategies.ts';
 
@@ -93,14 +93,38 @@ const fmt = (xs: { vpip: number; pfr: number }[]): string =>
   xs.flatMap((x, i) => (Number.isNaN(x.vpip) ? [] : [`${PERSONAS[i]!.name} ${x.vpip}/${x.pfr}`])).join('、');
 
 describe('电脑的难度', () => {
-  it('跟注站、乱全下在小桌和豪华桌都输得很多；新手档对跟注站没那么狠', () => {
-    for (const st of ['small', 'lux'] as const) {
-      const station = bb100(st, 'station', 6);
-      expect(station, st).toBeLessThan(-300);
-      // 0.8.0：新手档价值注小、不连开三枪，跟注站长期约 −760（原来 −2,220），6 场的标准误约 ±130（DESIGN.md 4.9）
-      if (st === 'small') expect(station).toBeGreaterThan(-1_300);
-      expect(bb100(st, 'jammer', 6), st).toBeLessThan(-150);
-    }
+  it('配平（0.12.0）：娱乐新手档小白平均赢、过半场次赢；高手档小白平均输，同一批牌比新手档输得多', () => {
+    // 每格 80 场 × 40 手（一场约 0.2 秒），种子和 scripts/balance.ts 一样。长期的数字（每格 2,000 场）见 DESIGN.md 4.10；
+    // 新手档长期 +0.21 份、赢 68%，高手档 −0.33 份；80 场的 2 倍标准误约 ±0.1 份、±10%，这里只拦方向翻掉
+    const cell = (level: number): { mean: number; won: number } => {
+      let sum = 0;
+      let won = 0;
+      for (let k = 0; k < 80; k++) {
+        const r = runSession({ seed: [k, 0xba1a, 3, 4, 5, 6, 7, 8], stakes: 'small', size: 6, hands: SESSION_HANDS, strategy: STRATEGIES.novice!, level }).result;
+        sum += r;
+        if (r > 0) won++;
+      }
+      return { mean: sum / 80, won: won / 80 };
+    };
+    const easy = cell(FUN_LEVEL.easy);
+    const hard = cell(FUN_LEVEL.hard);
+    console.log(`小白 80 场：新手档 ${easy.mean.toFixed(3)} 份、赢 ${easy.won}；高手档 ${hard.mean.toFixed(3)} 份、赢 ${hard.won}`);
+    expect(easy.mean).toBeGreaterThan(0);
+    expect(easy.won).toBeGreaterThan(0.5);
+    expect(hard.mean).toBeLessThan(0);
+    expect(hard.mean).toBeLessThan(easy.mean - 0.2);
+  }, 60_000);
+
+  it('跟注站、乱全下在豪华桌输得很多；小桌对跟注站没那么狠', () => {
+    // 0.12.0 配平（DESIGN.md 4.10）：小桌的电脑多跟少加、价值注小，"什么都跟"的人在小桌差不多打平（6 场约 −60），这是配平要的
+    const station = { small: bb100('small', 'station', 6), lux: bb100('lux', 'station', 6) };
+    const jammer = { small: bb100('small', 'jammer', 6), lux: bb100('lux', 'jammer', 6) };
+    console.log(`每百手：跟注站 小桌 ${station.small.toFixed(0)}、豪华桌 ${station.lux.toFixed(0)}；乱全下 小桌 ${jammer.small.toFixed(0)}、豪华桌 ${jammer.lux.toFixed(0)}`);
+    expect(station.lux).toBeLessThan(-300);
+    expect(jammer.lux).toBeLessThan(-150);
+    expect(station.small).toBeGreaterThan(-1_300);
+    expect(station.small).toBeGreaterThan(station.lux);
+    expect(jammer.small).toBeLessThan(0);
   });
 
   it('简单打法在小桌不输太多', () => {
@@ -110,7 +134,7 @@ describe('电脑的难度', () => {
     expect(small).toBeGreaterThan(-25);
   });
 
-  it('同一批翻牌后被下注的局面，豪华桌那一档的电脑弃得比小桌那一档多（会看人；0.5.0 起按强弱档）', () => {
+  it('同一批翻牌后被下注的局面，小桌、豪华桌两档的电脑决定得不一样（强弱档管用；0.5.0 起按强弱档）', () => {
     // 从机器人对打里收集"翻牌后要跟注"的局面，换成各档的视图让电脑重新决定。整场输赢太吵，几十场比不出来，这里直接比决定
     const spots: View[] = [];
     runBots({
@@ -126,66 +150,67 @@ describe('电脑的难度', () => {
         }
       },
     });
-    const calls = (level: number): number =>
-      spots.filter((v, i) => decide({ ...v, level }, stream(SEED, 'spot', i)).t !== 'fold').length;
-    const small = calls(1);
-    const lux = calls(4);
-    console.log(`翻牌后被下注 ${spots.length} 个局面：小桌不弃 ${small} 次，豪华桌 ${lux} 次`);
+    // 0.12.0 以前是"豪华桌弃得多"；配平后小桌第 1 档跟注放得宽、被加注又只跟不加，弃牌数和豪华桌差不多，差别在怎么打（DESIGN.md 4.10）
+    const act = (level: number): string[] => spots.map((v, i) => decide({ ...v, level }, stream(SEED, 'spot', i)).t);
+    const small = act(1);
+    const lux = act(4);
+    const differ = small.filter((a, i) => a !== lux[i]).length;
+    const raised = (xs: string[]): number => xs.filter((a) => a === 'raise' || a === 'allin').length;
+    console.log(`翻牌后被下注 ${spots.length} 个局面：两档决定不一样 ${differ} 次；加注 小桌 ${raised(small)}、豪华桌 ${raised(lux)} 次`);
     expect(spots.length).toBe(800);
-    expect(lux).toBeLessThan(small * 0.9);
+    expect(differ).toBeGreaterThan(spots.length * 0.1);
+    expect(raised(small)).toBeLessThan(raised(lux));
   });
 
-  it('小桌的老好松（入池约 50–60%）、阿飙凶（约 35–40%，加注多），稳哥、慢慢紧（15–20%）；豪华桌的老好收回去', () => {
+  it('小桌整体松、很少加注（0.12.0），性格照样拉得开：老好最松，稳哥、慢慢最紧；豪华桌收回去', () => {
     // 原来的 6 种坐 6 人桌（每场轮换座位），6 场 × 500 手，每种性格约 3,000 手，入池比例的标准误约 ±1%。长期的数字见 DESIGN.md 4.3
     const six = (k: number): number[] => Array.from({ length: 6 }, (_, i) => (i + k) % 6);
     const small = style('small', 6, 6, 500, six);
     const lux = style('lux', 6, 6, 500, six);
     console.log(`6 人桌入池 / 翻牌前加注（%）小桌 ${fmt(small)}`);
     console.log(`                           豪华桌 ${fmt(lux)}`);
-    // 0.3.0 起的目标（DESIGN.md 4.6 定的区间）：原来老好 32–44、慢慢 ≤ 13；没人加注时不再卡底池赔率以后，各性格按新区间重新调
+    // 0.12.0 小桌改用第 1 档（松、不敢先打）：入池整体高、翻牌前加注少；0.11 及以前的区间见 DESIGN.md 4.6
     const [wen, abiao, laohao, manman] = small;
-    expect(laohao!.vpip).toBeGreaterThanOrEqual(45);
-    expect(laohao!.vpip).toBeLessThanOrEqual(65);
+    expect(laohao!.vpip).toBeGreaterThanOrEqual(55);
+    expect(laohao!.vpip).toBeLessThanOrEqual(75);
     expect(laohao!.pfr).toBeLessThanOrEqual(10);
-    expect(abiao!.vpip).toBeGreaterThanOrEqual(30);
-    expect(abiao!.vpip).toBeLessThanOrEqual(45);
-    expect(abiao!.pfr).toBeGreaterThanOrEqual(20);
-    expect(abiao!.pfr).toBeLessThanOrEqual(32);
-    // 0.5.0 小桌改成新手档（整体松一点、带这一场的状态）：紧的两个放宽到 ≤ 27
-    expect(wen!.vpip).toBeGreaterThanOrEqual(13);
-    expect(wen!.vpip).toBeLessThanOrEqual(27);
-    expect(manman!.vpip).toBeGreaterThanOrEqual(12);
-    expect(manman!.vpip).toBeLessThanOrEqual(27);
-    // 0.3.0 实打后：慢慢 59 手翻牌前一次没加过注（原来 2%）。拿 QQ+、AK 这类大牌开池要加，目标 4–6%
-    expect(manman!.pfr).toBeGreaterThanOrEqual(4);
+    expect(abiao!.vpip).toBeGreaterThanOrEqual(40);
+    expect(abiao!.vpip).toBeLessThanOrEqual(58);
+    expect(abiao!.pfr).toBeGreaterThan(laohao!.pfr + 4);
+    for (const x of [wen!, manman!]) {
+      expect(x.vpip).toBeGreaterThanOrEqual(22);
+      expect(x.vpip).toBeLessThanOrEqual(40);
+    }
+    expect(laohao!.vpip).toBeGreaterThan(wen!.vpip + 20);
+    expect(manman!.pfr).toBeGreaterThanOrEqual(2);
     expect(manman!.pfr).toBeLessThanOrEqual(7);
     // 松只在软桌：豪华桌的老好、阿飙明显收紧
     expect(lux[2]!.vpip).toBeLessThan(laohao!.vpip - 8);
     expect(lux[1]!.vpip).toBeLessThan(abiao!.vpip);
   });
 
-  it('9 人桌：新手、话多松而不加注，紧凶老手一进就加，爱诈唬加得多；豪华桌的新手收回去', () => {
+  it('9 人桌：新手、话多松而不加注；豪华桌紧凶老手一进就加，爱诈唬加得多，新手收回去', () => {
     // 10 种性格每场洗一遍取 9 个（和 scripts/vs.ts 的混桌一样），10 场 × 300 手，每种性格约 2,700 手。长期的数字见 DESIGN.md 4.3
     const nine = (k: number): number[] => shuffle(Array.from({ length: PERSONA_COUNT }, (_, i) => i), stream([k, 2, 3, 4, 5, 6, 7, 8], 'mix')).slice(0, 9);
     const small = style('small', 9, 10, 300, nine);
     const lux = style('lux', 9, 10, 300, nine);
     console.log(`9 人桌入池 / 翻牌前加注（%）小桌 ${fmt(small)}`);
     console.log(`                           豪华桌 ${fmt(lux)}`);
-    const [wen, , laohao, manman, suanpan, jianghu, huzi, laoying, daodao, xiaobai] = small;
+    const [wen, , laohao, manman, suanpan, jianghu, , laoying, daodao, xiaobai] = small;
     // 0.3.0：小白、叨叨原来 ≥ 17（实测 22），新的目标是松（9 人桌人多，比 6 人桌的 45–60% 低一点）
     expect(xiaobai!.vpip).toBeGreaterThanOrEqual(40);
     expect(xiaobai!.pfr).toBeLessThanOrEqual(9);
     expect(daodao!.vpip).toBeGreaterThanOrEqual(40);
     expect(daodao!.pfr).toBeLessThanOrEqual(12);
-    expect(laoying!.pfr).toBeGreaterThanOrEqual(laoying!.vpip * 0.75);
     expect(laoying!.pfr).toBeGreaterThan(wen!.pfr);
-    expect(huzi!.pfr).toBeGreaterThanOrEqual(15);
-    // 0.7.1 电脑的随机流序号改成 ×16（公平审计）：样本整体换了一批，慢慢 20 → 21（每场状态本身浮动几个百分点），放宽到 22
-    expect(manman!.vpip).toBeLessThanOrEqual(22);
+    // 0.12.0：小桌第 1 档不敢先打，"一进就加""加得多"只在豪华桌看（DESIGN.md 4.10）
+    expect(lux[7]!.pfr).toBeGreaterThanOrEqual(lux[7]!.vpip * 0.6);
+    expect(lux[6]!.pfr).toBeGreaterThanOrEqual(10);
+    expect(manman!.vpip).toBeLessThanOrEqual(35);
     expect(laohao!.vpip).toBeGreaterThan(wen!.vpip + 20);
     for (const x of [suanpan!, jianghu!]) {
-      expect(x.vpip).toBeGreaterThanOrEqual(18);
-      expect(x.vpip).toBeLessThanOrEqual(32);
+      expect(x.vpip).toBeGreaterThanOrEqual(25);
+      expect(x.vpip).toBeLessThanOrEqual(45);
     }
     expect(lux[9]!.vpip).toBeLessThan(xiaobai!.vpip - 6);
   });
@@ -228,7 +253,8 @@ describe('电脑的难度', () => {
     const bets = (persona: number): number =>
       spots.filter((v, i) => {
         const seats = v.seats.map((x, j) => (j === v.me ? { ...x, persona } : x));
-        return decide({ ...v, seats }, stream(SEED, 'river', i)).t !== 'check';
+        // 0.12.0：小桌第 1 档几乎不诈唬（配平），性格的差别放在豪华桌那一档比
+        return decide({ ...v, seats, level: 4 }, stream(SEED, 'river', i)).t !== 'check';
       }).length;
     const huzi = bets(6);
     const laohao = bets(2);

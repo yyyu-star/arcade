@@ -95,7 +95,11 @@ export function decide(v: View, r: RandomStream): Action {
   // 大牌：加注（偶尔慢打）
   if (lg.raise && !third && rel >= raiseAt + k.pre * raises - pos) {
     const slow = eq >= 800 && v.board.length < 5 && r.below(1000) < p.slow;
-    if (!slow) return raise(v, p, k, eq, raises, r);
+    // 多跟少加（0.12.0，低档）：有人下注、加注时只跟
+    // 不敢先打（0.12.0，低档）：没人下注时只过牌、翻牌前只平跟
+    const meek = k.passive > 0 && raises > 0 ? r.below(1000) < k.passive : k.shy > 0 && raises === 0 && r.below(1000) < k.shy;
+    if (!slow && !meek) return raise(v, p, k, eq, raises, r);
+    if (meek) return lg.check ? { t: 'check' } : { t: 'call' };
   }
 
   if (pre) {
@@ -139,6 +143,7 @@ export function decide(v: View, r: RandomStream): Action {
         // 不连开第三枪只管有牌的价值注；诈唬照性格（拦掉诈唬反倒便宜了会弃牌的人）
         if (third) return { t: 'check' };
         if (k.slip && r.below(1000) < k.slip) return { t: 'check' };
+        if (k.shy && r.below(1000) < k.shy) return { t: 'check' };
         chance = Math.max(chance, THIN_BET + p.bluff - 80 * (opp - 1));
         size = Math.floor((p.size * k.value) / 1000);
       }
@@ -148,7 +153,7 @@ export function decide(v: View, r: RandomStream): Action {
       if (tilt) chance *= TILT.bluff;
       if (r.below(1000) < chance) {
         // 河牌上连着打过来的，偶尔全下吓人（筹码不到池子 3 倍才推，不然下 1.25 池的重注）
-        if (river && mine && r.below(1000) < p.shove) return seat.stack <= 3 * v.pot ? { t: 'allin' } : betTo(v, Math.floor((v.pot * 1250) / 1000));
+        if (river && mine && k.value >= 1000 && r.below(1000) < p.shove) return seat.stack <= 3 * v.pot ? { t: 'allin' } : betTo(v, Math.floor((v.pot * 1250) / 1000));
         return betTo(v, Math.floor((v.pot * size * (600 + 100 * r.below(5))) / 1_000_000));
       }
     }
@@ -335,7 +340,7 @@ function raise(v: View, p: Persona, k: Skill, eq: number, raises: number, r: Ran
   } else {
     // 翻牌后：性格的基本尺度乘 0.7–1.3（五档随机挑，不总是同一个数）；很大的牌再大一点
     // 河牌上的大牌，凶的人偶尔直接全下
-    if (v.board.length === 5 && eq >= 900 && r.below(1000) < p.shove) return { t: 'allin' };
+    if (v.board.length === 5 && eq >= 900 && k.value >= 1000 && r.below(1000) < p.shove) return { t: 'allin' };
     // 新手档（0.8.0，功力的 value）：尺度小一点，很大的牌也不再加码
     const size = Math.floor((Math.floor((p.size * k.value) / 1000) * (700 + 150 * r.below(5))) / 1000) + (eq >= 850 && k.value >= 1000 ? 250 : 0);
     to = v.currentBet + Math.floor(((v.pot + lg.call) * size) / 1000);

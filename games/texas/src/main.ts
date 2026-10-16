@@ -5,7 +5,7 @@
  */
 import { detectPlatform } from 'arcade-kit/client';
 import { CLOSE } from 'arcade-kit/protocol';
-import { stakesOf, type StakesId } from './core/stakes.ts';
+import { DIFFICULTY_NAME, difficultyOf, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
@@ -402,7 +402,7 @@ function drawLobby(): void {
     wallet,
     // 本机不知道是哪个房间（别的设备进的）：没有按钮，只说一句
     note: walletNote ?? (inRoom && !back ? `好友房那一桌还没结回钱包（带上桌 ${chips(inRoom.amount)}）。${settle}` : null),
-    resume: s ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, waiting: s.pending !== null } : null,
+    resume: s ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, level: s.table.level, waiting: s.pending !== null } : null,
     orphan: texasStakes(wallet, 'client').find((x) => x.ref !== s?.id) ?? null,
     busy,
     room: back
@@ -412,11 +412,11 @@ function drawLobby(): void {
   drawTop();
 }
 
-async function start(stakes: StakesId, size: number, amount: number, practice: boolean): Promise<void> {
+async function start(stakes: StakesId, size: number, amount: number, practice: boolean, level?: number): Promise<void> {
   if (busy) return;
   busy = true;
   drawLobby();
-  const r = await Solo.open(deps, { userId: cloud.userId(), stakes, size, amount, practice });
+  const r = await Solo.open(deps, { userId: cloud.userId(), stakes, size, amount, practice, ...(level !== undefined ? { level } : {}) });
   busy = false;
   if ('error' in r) {
     await refreshWallet();
@@ -1115,7 +1115,8 @@ async function tips(): Promise<void> {
 function drawTop(): void {
   if (online) return drawRoomTop(online.state);
   const at = stage.classList.contains('at-table') && solo;
-  setText(where, at ? `${solo!.session.practice ? `娱乐 · ${stakesOf(solo!.table.stakes).name}` : stakesOf(solo!.table.stakes).name} · 盲注 ${chips(solo!.table.sb)}/${chips(solo!.table.bb)}` : '');
+  const diff = solo?.session.practice ? difficultyOf(solo.table.level) : null;
+  setText(where, at ? `${solo!.session.practice ? `娱乐 · ${diff ? DIFFICULTY_NAME[diff] : stakesOf(solo!.table.stakes).name}` : stakesOf(solo!.table.stakes).name} · 盲注 ${chips(solo!.table.sb)}/${chips(solo!.table.bb)}` : '');
   setText(walletChip, wallet && at && !solo!.session.practice ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', !at);
   const loud = settings.volume > 0.5;

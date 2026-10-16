@@ -886,6 +886,10 @@ body::before {
 .tile.sel span, .tile.sel small { color: #e8d6a8; }
 .tile.sel b { color: var(--gold); }
 .tile.locked { opacity: .4; }
+/* 选档卡（0.12.0）：电脑多强的星；娱乐只有三个难度，排三列 */
+.stakes.fun, .stage.tall .stakes.fun { grid-template-columns: repeat(3, 1fr); }
+.tile .stars { color: var(--gold); letter-spacing: 1px; font-size: var(--fs-2); }
+.tile.diff span:not(.stars) { white-space: normal; text-align: center; }
 .sizes, .buyin { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
 .label { font-size: var(--fs-3); color: var(--muted); width: 52px; flex: none; }
 .size {
