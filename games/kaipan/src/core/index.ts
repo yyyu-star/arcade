@@ -1,10 +1,10 @@
 /** core 层对外接口：view、debug、tools、tests 只从这里引用。接口说明见 docs/core-api-0.3.md。 */
 export { BALANCE, fx } from './balance.ts';
 export type { Balance, LiveParams, RoleParams, StageParams, ThemeParams } from './balance.ts';
-export { credibility, flipDir, hottestTheme, recCredibility, makeComments, makeMessages, makeRecs, messageCred, topicsOf, turnTalk } from './chat.ts';
+export { credibility, flipDir, friendForm, handOf, hottestTheme, recCredibility, makeComments, makeMessages, makeRecs, messageCred, topicsOf, turnTalk } from './chat.ts';
 export { dayQuips, makeNews, quipLines, stockQuip } from './story.ts';
 export { MARKET_NEWS, THEME_NEWS } from './content/news.ts';
-export { ROLE_QUIPS, STOCK_QUIPS } from './content/quips.ts';
+export { MOOD_QUIPS, ROLE_QUIPS, STOCK_QUIPS } from './content/quips.ts';
 export {
   ACHIEVEMENTS,
   BILL_NAMES,
@@ -24,6 +24,7 @@ export {
   knowledgeById,
   EVENTS,
   FRIENDS,
+  HAND_TAILS,
   ITEMS,
   MAX_DIFFICULTY,
   MESSAGE_LINES,
@@ -31,6 +32,7 @@ export {
   MOCK_LINES,
   PERSONAS,
   PERSONA_IDS,
+  REACT_LINES,
   REC_LINES,
   ROLES,
   STOCKS,

@@ -7,9 +7,9 @@ import { BALANCE } from './balance.ts';
 import { stockById, themeById } from './content/index.ts';
 import { AHEAD_NEWS, MARKET_NEWS, THEME_NEWS } from './content/news.ts';
 import { bandDir, forwardRet } from './real.ts';
-import { ROLE_QUIPS, STOCK_QUIPS } from './content/quips.ts';
+import { MOOD_QUIPS, ROLE_QUIPS, STOCK_QUIPS } from './content/quips.ts';
 import { rngFor, type Rng } from './rng.ts';
-import type { DayReport, GameState, NewsItem, QuipMoment, StockQuip } from './types.ts';
+import type { DayReport, GameState, Mood, NewsItem, QuipMoment, StockQuip } from './types.ts';
 
 function fill(text: string, vars: Record<string, string>): string {
   return text.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
@@ -53,22 +53,38 @@ export function makeNews(s: Readonly<GameState>, report: Readonly<DayReport>): N
   return out;
 }
 
-/** 某只股票在某个时机的台词池：它自己的台词 + 它角色的通用台词。 */
-export function quipLines(stockId: string, moment: QuipMoment): readonly string[] {
+/** 某只股票在某个时机的台词池：它自己的台词 + 它角色的通用台词 + 牛市、熊市时按大盘多几句。 */
+export function quipLines(stockId: string, moment: QuipMoment, mood: Mood = 'flat'): readonly string[] {
   const def = stockById(stockId);
-  return [...(STOCK_QUIPS[stockId]?.[moment] ?? []), ...ROLE_QUIPS[def.role][moment]];
+  const byMood = mood === 'flat' ? [] : (MOOD_QUIPS[mood][moment] ?? []);
+  return [...(STOCK_QUIPS[stockId]?.[moment] ?? []), ...ROLE_QUIPS[def.role][moment], ...byMood];
 }
 
 /**
- * 股票小人的一句台词。key 用来区分同一天同一只股票的多次（比如第几次买入），同样的输入总是同一句。
+ * 0.7.0 轮着说：台词池按种子打乱，按第几次（买入、卖出的序号，收盘时按交易日和格子）轮着用。
+ * 打乱按角色而不是按股票：同一个角色的通用台词几只股票共用，按股票各抽各的，几只大哥就会说同一句。
+ * 原来是每次随机抽，一局里同一句能冒七八次；台词只是事件，不影响局面。
+ */
+function cycleLine(seed: string, stockId: string, moment: QuipMoment, lines: readonly string[], k: number): string {
+  const rng = rngFor(seed, 'quip', stockById(stockId).role, moment, lines.length);
+  const order = lines.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1);
+    [order[i], order[j]] = [order[j] as number, order[i] as number];
+  }
+  return lines[order[Math.abs(k) % lines.length] as number] ?? '';
+}
+
+/**
+ * 股票小人的一句台词。key 用来区分同一天同一只股票的多次（买入、卖出时是第几次买卖），同样的输入总是同一句。
  * 没有合适的台词时返回 null。
  */
 export function stockQuip(s: Readonly<GameState>, stockId: string, moment: QuipMoment, key: number | string = 0): string | null {
-  const lines = quipLines(stockId, moment);
+  const lines = quipLines(stockId, moment, s.mood);
   if (lines.length === 0) return null;
-  const rng = rngFor(s.seed, 'quip', s.today.day, stockId, moment, key);
   const st = s.stocks[stockId];
-  return fill(pick(rng, lines), { stock: stockById(stockId).name, n: String(st?.boards ?? 0) });
+  const k = typeof key === 'number' ? key : s.today.day;
+  return fill(cycleLine(s.seed, stockId, moment, lines, k), { stock: stockById(stockId).name, n: String(st?.boards ?? 0) });
 }
 
 /** 收盘时持仓小人的台词：退市 > 连续涨停 > 涨停 > 跌停 > 被自动卖出（止损、止盈），每只最多一句。 */
@@ -84,10 +100,10 @@ export function dayQuips(s: Readonly<GameState>, report: Readonly<DayReport>): S
     else if (m.limitDown) moment = 'limitDown';
     else if (h.sold === 'stop' || h.sold === 'take') moment = 'sold';
     if (!moment) continue;
-    const lines = quipLines(h.stockId, moment);
+    const lines = quipLines(h.stockId, moment, s.mood);
     if (lines.length === 0) continue;
-    const rng = rngFor(s.seed, 'quip', report.day, h.stockId, moment, 'close');
-    out.push({ stockId: h.stockId, slot: h.slot, moment, text: fill(pick(rng, lines), { stock: stockById(h.stockId).name, n: String(m.boards) }) });
+    const text = fill(cycleLine(s.seed, h.stockId, moment, lines, report.day * 5 + h.slot), { stock: stockById(h.stockId).name, n: String(m.boards) });
+    out.push({ stockId: h.stockId, slot: h.slot, moment, text });
   }
   return out;
 }
