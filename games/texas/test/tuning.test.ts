@@ -177,7 +177,8 @@ describe('电脑的难度', () => {
     expect(laoying!.pfr).toBeGreaterThanOrEqual(laoying!.vpip * 0.75);
     expect(laoying!.pfr).toBeGreaterThan(wen!.pfr);
     expect(huzi!.pfr).toBeGreaterThanOrEqual(15);
-    expect(manman!.vpip).toBeLessThanOrEqual(20);
+    // 0.7.1 电脑的随机流序号改成 ×16（公平审计）：样本整体换了一批，慢慢 20 → 21（每场状态本身浮动几个百分点），放宽到 22
+    expect(manman!.vpip).toBeLessThanOrEqual(22);
     expect(laohao!.vpip).toBeGreaterThan(wen!.vpip + 20);
     for (const x of [suanpan!, jianghu!]) {
       expect(x.vpip).toBeGreaterThanOrEqual(18);

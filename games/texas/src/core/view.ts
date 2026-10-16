@@ -1,6 +1,7 @@
 /**
  * 某个座位能看到的牌桌（DESIGN.md 第 2 节）。房间只发它，电脑也只拿它做决定（src/ai）。
  * 不放：别人没亮的底牌、牌堆、种子；上一手里只有真的亮出来的牌（lastHand.shown）。
+ * 下注记录和上一手的结果按字段一个个抄（0.7.1，公平审计）：规则以后往里加了字段，不会顺手带出去（DESIGN.md 4.8）。
  */
 import type { Card } from './cards.ts';
 import { buildPots, legal, levelOf, type HandResult, type Legal, type LogEntry, type Owner, type Phase, type Status, type Table } from './table.ts';
@@ -92,11 +93,26 @@ export function view(t: Table, me: number | null): View {
     hold: t.hold === true,
     currentBet: t.currentBet,
     legal: me === null ? null : legal(t, me),
-    log: t.log.map((e) => ({ ...e })),
-    lastHand: t.lastHand && structuredClone(t.lastHand),
+    log: t.log.map(logEntry),
+    lastHand: t.lastHand && handResult(t.lastHand),
     tilt: me === null ? 0 : (t.seats[me]?.tilt ?? 0),
     level: levelOf(t),
     ...(me !== null && t.seats[me]?.form ? { form: [...t.seats[me]!.form!] } : {}),
     ...(me !== null && t.seats[me]?.start ? { start: t.seats[me]!.start! } : {}),
+  };
+}
+
+function logEntry(e: LogEntry): LogEntry {
+  return { seat: e.seat, act: e.act, amount: e.amount, ...(e.allin ? { allin: true } : {}), ...(e.auto ? { auto: true } : {}) };
+}
+
+function handResult(h: HandResult): HandResult {
+  return {
+    handNo: h.handNo,
+    board: [...h.board],
+    shown: h.shown.map((x) => ({ seat: x.seat, hole: [...x.hole], value: x.value })),
+    pots: h.pots.map((p) => ({ amount: p.amount, winners: p.winners.map((w) => ({ seat: w.seat, won: w.won })) })),
+    uncalled: h.uncalled && { seat: h.uncalled.seat, amount: h.uncalled.amount },
+    byFold: h.byFold,
   };
 }
