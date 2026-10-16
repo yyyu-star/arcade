@@ -195,8 +195,8 @@ describe('wrangler.jsonc', () => {
     services?: unknown;
     assets: { binding: string; run_worker_first: string[] };
   };
-  it('只有站点根（单独部署时转到游戏）、三个首页路径、房间接口和实盘接口先进 Worker，js、图片等直接走静态资源', () => {
-    expect(cfg.assets.run_worker_first).toEqual(['/', ...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*']);
+  it('只有站点根和 /api/me（单独部署时由 kit 接）、三个首页路径、房间接口和实盘接口先进 Worker，js、图片等直接走静态资源', () => {
+    expect(cfg.assets.run_worker_first).toEqual(['/', '/api/me', ...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*']);
     expect(cfg.assets.binding).toBe('ASSETS');
     // 部署入口是 main.ts（默认导出 + 房间类 Room）；index.ts 只有默认导出，上面的"入口模块"测试查的是它
     expect(cfg.main).toBe('worker/main.ts');

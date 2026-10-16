@@ -61,6 +61,9 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
   try {
     // ① Worker：站点根、实盘接口
+    // /api/me 由 kit 接住（0.10.2）：页面问有没有平台时不再落到静态资源的 404
+    const me = await fetch(`${origin}/api/me`);
+    assert(me.status === 200 && ((await me.json()) as { standalone?: boolean }).standalone === true, `/api/me 应当 200 { standalone: true }（${me.status}）`);
     const root = await fetch(`${origin}/`, { redirect: 'manual' });
     assert(root.status === 302 && new URL(root.headers.get('location')!, origin).pathname === '/games/guandan/', `站点根应当 302 到 /games/guandan/（${root.status}）`);
     const body = JSON.stringify({ tier: 'small' });
@@ -68,7 +71,7 @@ async function main(): Promise<void> {
     assert(stake.status === 409 && ((await stake.json()) as { error?: string }).error === 'no_wallet', `单机实盘应当 409 no_wallet（${stake.status}）`);
     const room = await fetch(`${origin}/games/guandan/room/rooms`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ stake: 'small' }) });
     assert(room.status === 409, `实盘房间应当 409（${room.status}）`);
-    notes.push('站点根转到 /games/guandan/；单机实盘、实盘房间都回 409 no_wallet');
+    notes.push('/api/me 回 { standalone: true }；站点根转到 /games/guandan/；单机实盘、实盘房间都回 409 no_wallet');
 
     // ② 单机：标题页、开局、"首页"
     const solo = await open(browser, '单机', `${origin}/games/guandan/?debug=1&anim=0&autoplay=1`);

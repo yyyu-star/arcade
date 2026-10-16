@@ -70,6 +70,6 @@ describe('wrangler.jsonc', () => {
     expect(conf.vars.GATE).toBeUndefined();
     expect(conf.workers_dev).toBe(true);
     expect(conf.preview_urls).toBe(false);
-    expect(conf.assets.run_worker_first).toEqual(expect.arrayContaining(['/', '/games/guandan/api/stake/*']));
+    expect(conf.assets.run_worker_first).toEqual(expect.arrayContaining(['/', '/api/me', '/games/guandan/api/stake/*']));
   });
 });
