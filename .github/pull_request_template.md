@@ -1,19 +1,21 @@
-<!-- 标题以模块名开头，例如「kaipan: 修复月账单空行」「repo: …」。一个 PR 只改一个模块；跨模块的改动拆开，并写明合并顺序。 -->
+<!--
+Title starts with the module, e.g. "kaipan: fix empty row in the monthly bill" or "repo: …".
+One PR changes one module; split cross-module work and state the merge order.
+标题以模块名开头，例如「kaipan: 修复月账单空行」「repo: …」。一个 PR 只改一个模块；跨模块的改动拆开，并写明合并顺序。
+-->
 
-## 改了什么、为什么
+## What and why / 改了什么、为什么
 
-## 模块与版本
+## Module and version / 模块与版本
 
-- 模块：platform / games/<id> / packages/<name> / 仓库根
-- 版本号与 CHANGELOG：已更新到 x.y.z / 不涉及（只改文档、测试或工具）
+- Module: platform / games/<id> / packages/<name> / repository
+- Version and CHANGELOG: bumped to x.y.z / not needed (docs, tests or tooling only)
 
-## 验证
+## Verification / 验证
 
-- [ ] 仓库根 `node tools/check-isolation.mjs` 通过
-- [ ] 模块里 `npm test`、构建通过（写明命令和结果）
-- [ ] 改了画面：附截图（电脑 1280×720 和手机横屏），控制台零报错
-- [ ] 改了数值或电脑策略：附模拟器 / 机器人对打结果
+- [ ] `node tools/check-isolation.mjs` passes at the repository root
+- [ ] `npm test` and the build pass in the module (commands and results below)
+- [ ] UI changes: screenshots (desktop 1280×720 and phone landscape), zero console errors
+- [ ] Balance or AI changes: simulator / bot results attached
 
-## 审阅备注
-
-<!-- 需要审阅人特别看的地方、已知限制、合并后要做的线上验证。 -->
+## Notes for reviewers / 审阅备注

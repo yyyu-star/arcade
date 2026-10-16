@@ -1,0 +1,35 @@
+name: Bug report / 问题反馈
+description: Something does not work as expected. 有东西不对劲。
+labels: [bug]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module / 模块
+      options:
+        - platform
+        - games/kaipan
+        - games/guandan
+        - games/texas
+        - games/mahjong
+        - packages/arcade-kit
+        - repository / docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / 版本
+      description: Shown in the game's corner, or the module's package.json. 游戏角落或模块 package.json 里的版本号。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / 发生了什么
+      description: Steps to reproduce, what you expected and what you saw. Screenshots and console errors help. 复现步骤、期望和实际，附截图或控制台报错更好。
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Device and browser / 设备和浏览器
+      placeholder: iPhone 13, Safari 18 / Windows, Chrome 141

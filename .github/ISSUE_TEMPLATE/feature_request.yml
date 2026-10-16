@@ -1,0 +1,26 @@
+name: Feature request / 建议
+description: An idea for a new game, feature or improvement. 新游戏、新功能或改进的想法。
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module / 模块
+      options:
+        - platform
+        - games/kaipan
+        - games/guandan
+        - games/texas
+        - games/mahjong
+        - packages/arcade-kit
+        - new game / 新游戏
+        - repository / docs
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea / 想法
+      description: What should change and why it would be more fun or more useful. 想改什么、为什么更好玩或更好用。
+    validations:
+      required: true

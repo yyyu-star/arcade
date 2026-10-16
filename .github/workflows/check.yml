@@ -1,14 +1,23 @@
-# 每次推送和 PR 都跑模块独立性检查：任何模块都不能引用自己目录以外的文件（packages/ 下的共用包除外）。
+# 模块独立性检查：任何模块都不能引用自己目录以外的文件（packages/ 下的共用包除外）。
+# PR 上跑一次（分支保护要求它通过），合并进 main 后再跑一次；功能分支的 push 不重复跑。
 name: Check isolation
 on:
   push:
+    branches: [main]
   pull_request:
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
 jobs:
   isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

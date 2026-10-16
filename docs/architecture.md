@@ -2,7 +2,7 @@
 
 > 2026-10-11 初稿；2026-10-13 改为单一总仓库：平台和各个小游戏都在 `yyyu-star/arcade` 里，每个是可以单独部署、随时拆分的独立模块（规范见仓库根 `AGENTS.md`）。
 
-## 1. 选型原则（用户定）
+## 1. 选型原则
 
 技术栈统一，全部可以部署到 Cloudflare Workers，资源轻量，打包方便。
 
@@ -15,7 +15,7 @@
 
 ## 2. 仓库与目录
 
-只有一个仓库 `yyyu-star/arcade`（2026-10-13 起；原 `yyyu-star/kaipan` 已并入，历史完整保留）。
+只有一个仓库 `yyyu-star/arcade`（2026-10-13 起；在这之前是每个游戏一个仓库）。
 
 | 目录 | 内容 | Worker | 线上路径 |
 |---|---|---|---|
@@ -32,20 +32,23 @@
 - 拆成独立仓库用 `tools/split-module.sh`（基于 `git subtree split`，保留历史）。
 - 游戏目录写在 `platform/src/games.ts`：名字、介绍、封面、线上路径、本地开发地址、状态。
 
-## 3. 部署形态：同一个域名，按路径分给不同的 Worker
+## 3. 部署形态：同一个站点主机名，按路径分给不同的 Worker
+
+站点主机名不写在仓库里：部署时由 GitHub `production` 环境的 secret `SITE_HOST` 注入（各 Worker 的路由和 `SITE_ORIGIN`），
+下文写作 `<站点>`，例如 `games.example.com`。
 
 ```
-https://game.yyyu.org/                 → arcade Worker（自定义域名；平台界面，静态资源）
-https://game.yyyu.org/api/*            → arcade Worker（账号、好友、云存档、排行榜；数据在 D1）
-https://game.yyyu.org/games/<id>/*     → 各游戏的 Worker（路径路由，优先于自定义域名；静态资源直接返回，首页有登录闸门，
-                                          联机房间和实盘接口经服务绑定 ARCADE / WALLET 调平台）
+https://<站点>/                 → arcade Worker（自定义域名；平台界面，静态资源）
+https://<站点>/api/*            → arcade Worker（账号、好友、云存档、排行榜；数据在 D1）
+https://<站点>/games/<id>/*     → 各游戏的 Worker（路径路由，优先于自定义域名；静态资源直接返回，首页有登录闸门，
+                                   联机房间和实盘接口经服务绑定 ARCADE / WALLET 调平台）
 ```
 
-2026-10-11 上线。游戏的 Worker 关闭了自己的 workers.dev 地址，只能通过平台的域名访问。
+2026-10-11 上线。游戏的 Worker 关闭了自己的 workers.dev 地址，只能通过站点主机名访问。
 原先平台的 Worker 还通过服务绑定在 workers.dev 测试地址上兜底转发 `/games/*`；2026-10-14 决定取消：平台也关闭 workers.dev，
 只留自定义域名这一个入口，不再有测试地址，也就不需要兜底转发。线上 Worker 只有平台 1 个加每个游戏 1 个，不另建测试环境（platform-backend.md 第 8 节）。
 
-- 为什么放在同一个域名下：登录状态（cookie）和接口（`/api/*`）可以被所有游戏直接共用，没有跨域问题。以后接入账号时，游戏不需要各自做登录。
+- 为什么放在同一个主机名下：登录状态（cookie）和接口（`/api/*`）可以被所有游戏直接共用，没有跨域问题。以后接入账号时，游戏不需要各自做登录。
 - 为什么每个游戏单独一个 Worker：游戏可以单独更新，不用连带重新发布平台；一个游戏出问题也不影响其他游戏。
 - 游戏要能在子路径下运行：
   - 素材一律用相对路径加载，开盘已经满足；
@@ -58,10 +61,10 @@ https://game.yyyu.org/games/<id>/*     → 各游戏的 Worker（路径路由，
 完整方案见 [platform-backend.md](platform-backend.md)（2026-10-13，含实测与审阅）。要点：
 
 - 账号、好友、排行榜、房间登记归平台的 `/api/*`，数据在平台独占的 D1；账号用用户名 + 密码 + 恢复码；测试期是邀请制，账号主要由管理员建，注册默认关着、管理员可以随时开关（0.8.0），不登录不能玩游戏（游戏 Worker 在首页上做登录闸门，见 platform-backend.md 5.8、15.8；接口约定见第 15 节）。
-- 排行榜是简单版、不防作弊（所有者 2026-10-14 定）：游戏页直接调 `/api/scores` 交分，平台只防刷额度、查数据格式，不重放验分，所以不需要付费版（platform-backend.md 9.2）。
-- 平台页和游戏同域，Cloudflare Web Analytics 由 `yyyu.org` 自动注入统计脚本；平台的 CSP 只为它多放了一个脚本来源，上报走同源（platform-backend.md 5.2）。
+- 排行榜是简单版、不防作弊（2026-10-14 定，能作弊算玩家自己的本事）：游戏页直接调 `/api/scores` 交分，平台只防刷额度、查数据格式，不重放验分，所以不需要付费版（platform-backend.md 9.2）。
+- 平台页和游戏同域，Cloudflare Web Analytics 由站点所在的 zone 自动注入统计脚本；平台的 CSP 只为它多放了一个脚本来源，上报走同源（platform-backend.md 5.2）。
 - 每个游戏的联机房间放在它自己的 Worker 里（Durable Objects，休眠写法，免费版只能用 SQLite 后端），开房 `…/rooms`、进房 `…/rooms/<码>/ws`（德州、麻将挂在 `/games/<id>/` 下，掼蛋挂在 `/games/guandan/room/` 下）。
-- 共用代码放进私有包 `packages/arcade-kit`，所有游戏必须遵守其中的房间规范。现有房间基类、开房进房入口（经平台 `/api/me` 认人）、浏览器连接器、协议、计量、表情道具（`arcade-kit/fun`）；
+- 共用代码放进共用包 `packages/arcade-kit`，所有游戏必须遵守其中的房间规范。现有房间基类、开房进房入口（经平台 `/api/me` 认人）、浏览器连接器、协议、计量、表情道具（`arcade-kit/fun`）；
   入场票、房间登记以后再加，第一版的取舍见 platform-backend.md 4.6、5.3。
 - 费用：自计量熔断 + GraphQL 对账 + 墓碑版本兜底，默认 8 美元停服。联机之前，平台接口先按免费版的日额度自计量，到线就只读或停服（platform-backend.md 6.6）。
 
