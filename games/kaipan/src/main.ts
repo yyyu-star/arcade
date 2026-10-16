@@ -3,12 +3,13 @@ import { createRun, type GameEvent, type GameState } from './core/index.ts';
 import { mountBridge } from './debug/bridge.ts';
 import { mountOverlay } from './debug/overlay.ts';
 import { parseParams } from './debug/params.ts';
-import { mountRotateHint } from './platform/orientation.ts';
+import { detectPlatform, onPlatformMode } from './platform/mode.ts';
+import { mountRotateHint, setRotateLobbyLabel } from './platform/orientation.ts';
 import { fitViewport } from './platform/viewportFit.ts';
 import { getSettings, onSettingsChange } from './platform/settings.ts';
 import { loadProfile } from './platform/profile.ts';
 import { startCloudSync } from './view/cloudSync.ts';
-import { goLobby } from './view/lobby.ts';
+import { goLobby, lobbyLabel } from './view/lobby.ts';
 import { live, lobbyConfirm, startLive } from './view/live.ts';
 import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
 import { startGame } from './view/game.ts';
@@ -92,8 +93,18 @@ if (LOW_MEMORY) {
 }
 // 首次触摸后才确认是触屏：重建当前场景，去掉快捷键提示
 onInputModeChange(() => session.redraw());
-// 云存档：调试会话（?debug=1，看得到隐藏信息、不计档案）不同步。云端的进度写进本地后，开始菜单按新档案重画；
-// 别的画面不打断，下次回到开始菜单自然读到新档案
-if (!params.debug) startCloudSync(() => session.sceneKey === 'title' && session.redraw());
+// 0.8.0 有没有平台（单独部署时没有，见 platform/mode.ts）：问出来"没有"时开始菜单重画（藏起实盘、云朵、大厅），
+// 竖屏提示的按钮改叫「首页」。开发构建不问：vite 的开发服务器对任何路径都回 index.html，问了总是"没有"；
+// 冒烟要平台时自己假一个 /api/me，要看单独部署的样子用 wrangler dev 跑构建产物
+onPlatformMode(() => {
+  setRotateLobbyLabel(lobbyLabel());
+  if (session.sceneKey === 'title') session.redraw();
+});
+const platformKnown = import.meta.env.DEV ? Promise.resolve('unknown' as const) : detectPlatform();
+// 云存档：调试会话（?debug=1，看得到隐藏信息、不计档案）不同步；单独部署没有平台，也不同步。
+// 云端的进度写进本地后，开始菜单按新档案重画；别的画面不打断，下次回到开始菜单自然读到新档案
+void platformKnown.then((m) => {
+  if (!params.debug && m !== 'standalone') startCloudSync(() => session.sceneKey === 'title' && session.redraw());
+});
 if (import.meta.env.DEV || params.debug) mountBridge(session);
 if (params.debug) mountOverlay(session);

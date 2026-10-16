@@ -9,13 +9,13 @@
  * 平台不理会中止信号、或响应头回来了响应体迟迟不来时会一直挂住；checkLogin 对"等响应"和"读响应体"两段都用 Promise.race 限时，
  * 有测试锁住（tests/worker-gate.test.ts）。这样模块也不必为此依赖共用包。
  *
- * 不管 GATE 开关都认人：钱包动的是真账户。校验顺序是 方法/路径 → CSRF → 请求体 → 认人 → 钱包，前面不过就不去问平台和钱包。
+ * 不管 GATE 开关都认人：钱包动的是真账户。校验顺序是 方法/路径 → 单独部署 → CSRF → 请求体 → 认人 → 钱包，前面不过就不去问平台和钱包。
  * 钱包的业务拒绝（no_funds、at_table……）是正常回话，原样 200 交给浏览器按 error 处理；钱包连不上才回 503。
  *
  * 只从 core/liveTiers.ts 取档位表：整个 core/index.ts 会把规则引擎打进 Worker。
  */
 import { LIVE_MAX_BP, isLiveTier, liveReturn, liveTierById, type LiveTier } from '../core/liveTiers.ts';
-import { ME_TIMEOUT_MS, checkLogin, type Env } from './gate.ts';
+import { ME_TIMEOUT_MS, checkLogin, isStandalone, type Env } from './gate.ts';
 
 type WalletReply = { ok: true; wallet: unknown; credited?: number; capped?: number; dup?: boolean } | { ok: false; error: string; wallet?: unknown };
 
@@ -65,6 +65,8 @@ export async function handleLive(req: Request, env: Env, timeoutMs = WALLET_TIME
   const action = url.pathname.startsWith(PREFIX) ? ACTIONS.find((a) => a === url.pathname.slice(PREFIX.length)) : undefined;
   if (!action) return fail(404, 'not_found');
   if (req.method !== 'POST') return fail(405, 'method');
+  // 0.8.0 单独部署没有平台钱包，实盘根本开不了：说清楚是"这里没有"（501），不是"暂时连不上"（503），页面不会去重试
+  if (isStandalone(env)) return fail(501, 'no_wallet');
   // CSRF：自定义头让跨站表单发不出来，Origin 对得上才认
   if (req.headers.get('X-Arcade') !== '1' || req.headers.get('Origin') !== url.origin) return fail(403, 'csrf');
 

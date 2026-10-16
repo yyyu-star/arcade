@@ -54,7 +54,9 @@ import { banner, bigWord, burst, flash, rain, rays, shake } from '../table/fx.ts
 import { HandView } from '../table/hand.ts';
 import { BUTTON_Y, TOPBAR_H, seatAnchors } from '../table/layout.ts';
 import { SeatView } from '../table/seats.ts';
-import { Taunts } from '../table/taunt.ts';
+import { Taunts, type FunChannel } from '../table/taunt.ts';
+import { banterOnDeal, banterOnEmote, banterOnEvent, banterOnSlow, newBanter, type BanterBot, type BanterOut } from '../../net/banter.ts';
+import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { TrickView } from '../table/trick.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
@@ -81,6 +83,12 @@ export class TableScene extends Phaser.Scene {
   private tickSlot = -1;
   /** 好友房轮到我（标题闪、振动只在刚轮到时来一次） */
   private myNetTurn = false;
+  /** 单机：电脑互动的冷却记录（net/banter.ts）；我这一手从什么时候开始想（电脑催人用） */
+  private banter = newBanter();
+  private myTurnKey = '';
+  private myTurnSince = 0;
+  /** 好友房：电脑发的、等出牌画面播完再放的（画面座位） */
+  private botEmotes: { from: number; id: number; to: number | undefined }[] = [];
   /** 整局称号用：攒到第几副了（场景重开不清，新的一局从第 1 副重新攒） */
   private matchLog = emptyMatchLog();
   /** 这一副播过几次接风（结算页的复盘用；重连后只算之后看到的） */
@@ -136,6 +144,7 @@ export class TableScene extends Phaser.Scene {
     this.overlayModal = null;
     // 场景重开（重连的全量快照）时旧的按钮、面板已经随场景销毁
     this.taunts = null;
+    this.botEmotes = [];
     this.following = false;
     this.botTimer = null;
     this.seats = [];
@@ -155,6 +164,18 @@ export class TableScene extends Phaser.Scene {
       this.events.once('shutdown', off);
       // 这一手的倒计时（房间给的截止时间）
       this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateClocks() });
+    } else {
+      // 单机：我想太久时电脑催一下；标签页切到后台时正轮到我，标题闪
+      this.banter = newBanter();
+      this.time.addEvent({ delay: 500, loop: true, callback: () => this.tickSolo() });
+      const onHide = (): void => {
+        if (document.hidden && this.mySoloTurn()) flashTitle();
+      };
+      document.addEventListener('visibilitychange', onHide);
+      this.events.once('shutdown', () => {
+        document.removeEventListener('visibilitychange', onHide);
+        stopFlash();
+      });
     }
     const W = worldW(this);
     this.add.image(0, 0, `table:${W}`).setOrigin(0, 0).setDisplaySize(W, worldH);
@@ -166,7 +187,7 @@ export class TableScene extends Phaser.Scene {
     this.hand.onChange = () => this.refreshButtons();
     this.buildButtons(W);
     this.buildTopBar(W);
-    if (net) this.buildTaunts();
+    this.buildTaunts();
     audio.music('table');
 
     const evs = this.ses.lastEvents;
@@ -205,11 +226,34 @@ export class TableScene extends Phaser.Scene {
     this.status = text(this, cx, BUTTON_Y - 50, '', { size: TYPE.label, color: 0xfff3d6, bold: true }).setDepth(400);
   }
 
-  /** 好友房的嘲讽系统（table/taunt.ts）：聊天按钮、点头像、催促炸弹；动画在 kit 的 DOM 图层上，弹窗开着时藏起来 */
+  /**
+   * 嘲讽系统（table/taunt.ts）：聊天按钮、点头像、催促炸弹；动画在 kit 的 DOM 图层上，弹窗开着时藏起来。
+   * 好友房经房间转发；单机（0.7.1）在本地直接播，再交给电脑去回（net/banter.ts）
+   */
   private buildTaunts(): void {
+    const net = this.net;
+    const chan: FunChannel = net
+      ? {
+          seated: () => net.mySeat !== null,
+          send: (id, to) => net.emote(id, to),
+          scope: () => net.code,
+          who: (v) => {
+            const seat = (v + (net.mySeat ?? 0)) % 4;
+            return { seat, name: net.room?.seats[seat]?.name ?? null };
+          },
+        }
+      : {
+          seated: () => true,
+          send: (id, to) => {
+            this.taunts?.receive(ME, id, to);
+            this.playBanter(banterOnEmote(this.banter, ME, id, to, this.banterBots(), Date.now(), Math.random));
+          },
+          scope: () => 'solo',
+          who: (v) => ({ seat: v, name: seatName(v) }),
+        };
     const t = new Taunts({
       scene: this,
-      net: this.net!,
+      chan,
       seats: this.seats,
       avatarRect: (seat) => this.screenRect(this.seats[seat]!.a),
       busy: () => this.overlay !== null,
@@ -217,6 +261,49 @@ export class TableScene extends Phaser.Scene {
     });
     this.taunts = t;
     this.events.once('shutdown', () => stopFlash());
+  }
+
+  // ───────────── 单机里电脑的互动（net/banter.ts） ─────────────
+
+  /** 电脑座位此刻的性格和状态（好友房的电脑在房间里，这里不管） */
+  private banterBots(): BanterBot[] {
+    if (this.net) return [];
+    const out: BanterBot[] = [];
+    for (let s = 1; s < 4; s++) {
+      const st = this.ses.botStyle(s);
+      if (st) out.push({ seat: s, ...st });
+    }
+    return out;
+  }
+
+  /** 电脑要发的按它的反应时间播出来；设置里"嘲讽和道具：不看"时电脑一句也不发 */
+  private playBanter(outs: BanterOut[]): void {
+    if (this.net || !getSettings().taunts) return;
+    for (const o of outs) {
+      this.time.delayedCall(o.delay, () => {
+        if (this.alive && this.overlay === null) this.taunts?.receive(o.from, o.id, o.to);
+      });
+    }
+  }
+
+  private mySoloTurn(): boolean {
+    if (this.net || this.ses.autoplay) return false;
+    const v = this.ses.view();
+    return v.phase === 'play' && v.turn === ME;
+  }
+
+  /** 单机每半秒：我想太久，最没耐心的电脑催一下（每一手最多一次） */
+  private tickSolo(): void {
+    if (!this.mySoloTurn() || this.overlay !== null || !getSettings().taunts) return;
+    const v = this.ses.view();
+    const key = `${v.dealNo}:${v.step}`;
+    const now = Date.now();
+    if (key !== this.myTurnKey) {
+      this.myTurnKey = key;
+      this.myTurnSince = now;
+      return;
+    }
+    this.playBanter(banterOnSlow(this.banter, ME, now - this.myTurnSince, key, this.banterBots(), now, Math.random));
   }
 
   /** 头像（世界坐标）在屏幕上的矩形：画布的 CSS 矩形 × 世界到 CSS 的比例（相机 zoom 后画布高 = worldH） */
@@ -581,9 +668,13 @@ export class TableScene extends Phaser.Scene {
       return;
     }
     if (kind === 'emote') {
-      // 房间转发的（含我自己发的）："说话人:编号[:对象]"，画面座位
-      const [vs, id, to] = (detail ?? '').split(':').map(Number);
-      if (vs !== undefined && id !== undefined) this.taunts?.receive(vs, id, to === undefined || Number.isNaN(to) ? undefined : to);
+      // 房间转发的（含我自己发的）："说话人:编号:对象:电脑"，画面座位
+      const [vs, id, to, bot] = (detail ?? '').split(':');
+      const e = { from: Number(vs), id: Number(id), to: to ? Number(to) : undefined };
+      if (!Number.isInteger(e.from) || !Number.isInteger(e.id)) return;
+      // 电脑的是房间看了这一步当场发的，比出牌的画面早到：排到手头这几帧播完再放，免得炸弹还没出来电脑就先显摆
+      if (bot === '1' && (this.busy || (this.net?.queue.length ?? 0) > 0)) this.botEmotes.push(e);
+      else this.taunts?.receive(e.from, e.id, e.to);
       return;
     }
     this.noticeNetTurn();
@@ -633,6 +724,11 @@ export class TableScene extends Phaser.Scene {
     // 弹窗关掉的路子很多（有的直接把 overlay 置空），图层的显隐在这里跟上；打开时 openOverlay 立刻藏
     if (this.overlay === null) this.taunts?.layer.show();
     else this.taunts?.layer.hide();
+    // 电脑的互动：画面追上了再放（每 250 毫秒看一次，一次放一条）
+    if (this.botEmotes.length && !this.busy && (this.net?.queue.length ?? 0) === 0) {
+      const e = this.botEmotes.shift()!;
+      this.taunts?.receive(e.from, e.id, e.to);
+    }
     this.taunts?.tickTurn(this.overlay === null && t ? t.seat : null, t ? `${t.seat}:${t.deadline}` : '');
     // 我的最后 5 秒：每秒"嗒"一声，最后 2 秒每半秒一声、升调
     const left = t && t.seat === ME && t.deadline !== null ? t.deadline - now : -1;
@@ -1105,12 +1201,25 @@ export class TableScene extends Phaser.Scene {
         break;
       case 'turn':
         for (let s = 0; s < 4; s++) this.seats[s]!.setTurn(s === e.seat);
-        if (e.seat === ME && !this.ses.autoplay) audio.sfx('turn');
+        if (e.seat === ME && !this.ses.autoplay) {
+          audio.sfx('turn');
+          // 单机也振一下（好友房在收到房间消息时就振了，见 noticeNetTurn）
+          if (!this.net) vibrate();
+        }
+        if (e.seat !== ME && !this.net) stopFlash();
         break;
       case 'play': {
         const victim = this.trick.topSeat();
+        // 名场面：炸上炸（出牌记录里这一手已经在最后了）
+        const hist = this.ses.view().history;
+        const bob = bombOnBomb(hist.slice(0, -1), e.seat, e.play);
         await this.animatePlay(e.seat, e.play, e.left);
+        if (bob) {
+          this.fxLog.push('名场面 炸上炸');
+          toast(this, `名场面！${seatName(e.seat)} 炸上炸`, worldW(this) / 2, 300, COLOR.goldLight);
+        }
         this.taunts?.suggest(suggestFor(e, victim));
+        this.playBanter(banterOnEvent(this.banter, e, victim, this.banterBots(), [ME], Date.now(), Math.random));
         break;
       }
       case 'pass':
@@ -1153,9 +1262,11 @@ export class TableScene extends Phaser.Scene {
         if (e.place === 4) this.talk(e.seat, 'last');
         await this.seats[e.seat]!.setPlace(e.place, true);
         this.taunts?.suggest(suggestFor(e, -1));
+        this.playBanter(banterOnEvent(this.banter, e, -1, this.banterBots(), [ME], Date.now(), Math.random));
         break;
       }
       case 'dealEnd':
+        this.playBanter(banterOnDeal(this.banter, e.result, this.banterBots(), Date.now(), Math.random));
         // 最后一手和名次章留在桌上看清楚，再弹结算
         await wait(this, 1500);
         break;
@@ -1380,9 +1491,13 @@ export class TableScene extends Phaser.Scene {
       `炸弹 我方 ${rc.bombs[0]} · 对方 ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
       rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
     ];
-    recap.forEach((line, i) => b.add(text(this, -370, 116 + i * 30, line, { size: TYPE.small, color: COLOR.ink, ox: 0 })));
+    // 名场面（0.7.1）：最精彩的两条
+    const hl = dealHighlights(r, history).slice(0, 2);
+    if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
+    recap.forEach((line, i) => b.add(text(this, -370, 116 + i * 30, line, { size: TYPE.small, color: i === 2 ? COLOR.redDark : COLOR.ink, bold: i === 2, ox: 0 })));
+    const titleY = 116 + recap.length * 30 + 6;
     dealTitles(r, history).forEach((t, i) => {
-      b.add(text(this, -370, 182 + i * 30, this.titleLine(t, true), { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 }));
+      b.add(text(this, -370, titleY + i * 30, this.titleLine(t, true), { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 }));
     });
     const btn = new Button(this, rx, stakeLine ? 200 : 190, 240, 64, matchOver ? '结算' : net ? '继续' : '下一副', 'red', () => {
       if (matchOver) {

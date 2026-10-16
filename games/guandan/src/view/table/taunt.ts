@@ -1,10 +1,11 @@
 /**
- * 好友房的嘲讽系统（0.6.0）：快捷按钮的面板（嘲讽 / 表情 / 道具三个页签）、点别人头像的小菜单（扔道具、点名嘲讽、屏蔽他）、
+ * 嘲讽系统（好友房 0.6.0，单机 0.7.1 起同一套）：快捷按钮的面板（嘲讽 / 表情 / 道具三个页签）、点别人头像的小菜单（扔道具、点名嘲讽、屏蔽他）、
  * 有人想太久时的"催促炸弹"、公开事件后的顺手提示，以及收到别人发的东西时怎么播（arcade-kit/fun 的图层）。
+ * 发出去走 FunChannel：好友房经房间转发（房间只转发编号），单机在本地直接播、再交给电脑去回（net/banter.ts）。
  *
  * 公平：所有表情、道具、短语人人一样、免费，不能买、不和筹码挂钩；只是画面和声音，不停任何计时、不改规则；
- * 房间只转发编号，不转发任何隐藏信息；动画在 DOM 图层里、点击穿透，落在被扔的人头像上，不盖自己的手牌和操作按钮。
- * 屏蔽：设置里"嘲讽和道具：不看"一刀切；点头像"屏蔽他"只对这个房间这一局（sessionStorage，key 带 guandan. 前缀）。
+ * 不转发任何隐藏信息，电脑出牌也不读这些；动画在 DOM 图层里、点击穿透，落在被扔的人头像上，不盖自己的手牌和操作按钮。
+ * 屏蔽：设置里"嘲讽和道具：不看"一刀切；点头像"屏蔽他"、面板里"全部屏蔽"只对这个房间（单机：这一局）有效（sessionStorage，key 带 guandan. 前缀）。
  */
 import Phaser from 'phaser';
 import { PROPS, STICKERS, createFunLayer, showSticker, throwAt, type FunLayer, type RectLike } from 'arcade-kit/fun';
@@ -12,7 +13,6 @@ import { EMOTES, PROP_BASE, STICKER_BASE, TAUNTS, TAUNT_BASE, emoteOf } from '..
 import { audio } from '../audio.ts';
 import { bakeFun } from '../textures.ts';
 import { seatName } from '../labels.ts';
-import type { NetSession } from '../net.ts';
 import { getBlocked, getSettings, setBlocked } from '../store.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { iconButton, text, worldH, worldW } from '../ui/kit.ts';
@@ -23,9 +23,21 @@ export const URGE_AFTER_MS = 8000;
 /** 顺手提示留多久 */
 const SUGGEST_MS = 6000;
 
+/** 发出去的路子和屏蔽认人的办法：好友房、单机各给一份（TableScene 里） */
+export interface FunChannel {
+  /** 能不能发（好友房：坐下了才能发；单机总能） */
+  seated(): boolean;
+  /** 发：画面座位的对象 */
+  send(id: number, toView?: number): void;
+  /** 屏蔽名单按这个分开（房间码；单机固定一个） */
+  scope(): string;
+  /** 画面座位 → 屏蔽时记的身份（真实座位 + 当时坐在那儿的名字）：人走了、换了人就不算 */
+  who(v: number): { seat: number; name: string | null };
+}
+
 export interface TauntHost {
   scene: Phaser.Scene;
-  net: NetSession;
+  chan: FunChannel;
   seats: SeatView[];
   /** 画面座位（我 = 0）的头像在屏幕上的矩形 */
   avatarRect(seat: number): RectLike;
@@ -87,12 +99,12 @@ export class Taunts {
   // ───────────── 发 ─────────────
 
   private send(id: number, toView?: number): void {
-    if (this.h.net.mySeat === null) return;
-    this.h.net.emote(id, toView);
+    if (!this.h.chan.seated()) return;
+    this.h.chan.send(id, toView);
   }
 
   private canSend(): boolean {
-    if (this.h.net.mySeat !== null) return true;
+    if (this.h.chan.seated()) return true;
     this.toast('坐下以后才能互动');
     return false;
   }
@@ -112,7 +124,7 @@ export class Taunts {
     this.closeAll();
     this.tab = tab;
     const s = this.h.scene;
-    const [x0, y0, w, h] = [16, 62, 488, 318];
+    const [x0, y0, w, h] = [16, 62, 488, tab === 'taunt' ? 352 : 318];
     const root = s.add.container(0, 0).setDepth(4000);
     root.add(this.away(() => this.closePanel()));
     const g = s.add.graphics();
@@ -130,6 +142,13 @@ export class Taunts {
       all.forEach(({ t, id }, i) => {
         root.add(this.chip(x0 + 84 + (i % 3) * 160, top + 14 + Math.floor(i / 3) * 34, 152, 30, t, id >= TAUNT_BASE ? 0x7a2a1e : 0x4a3220, () => this.pick(id), `emote${id}`, TYPE.small - 1));
       });
+      // 一键全部屏蔽 / 全部恢复（另外三个人的嘲讽、表情、道具；客气话照常）
+      const all3 = [1, 2, 3].every((v) => this.isBlocked(v));
+      root.add(this.chip(x0 + w / 2, y0 + h - 22, 220, 28, all3 ? '全部恢复' : '全部屏蔽', 0x3a3a3a, () => {
+        for (const v of [1, 2, 3]) this.setBlocked(v, !all3);
+        this.closeAll();
+        this.toast(all3 ? '看得到大家的嘲讽和道具了' : '这一局不看任何人的嘲讽和道具');
+      }, 'blockAll', TYPE.small - 1));
     } else if (tab === 'sticker') {
       STICKERS.forEach((name, i) => {
         root.add(this.pic(x0 + 50 + (i % 6) * 78, top + 50 + Math.floor(i / 6) * 96, 68, `fun:sticker:${name}`, () => this.pick(STICKER_BASE + i), `emote${STICKER_BASE + i}`));
@@ -207,7 +226,7 @@ export class Taunts {
 
   /** 公开事件后在聊天按钮上冒 1–2 句（suggest.ts 算），一点就发；6 秒后自己收起 */
   suggest(ids: number[]): void {
-    if (ids.length === 0 || !getSettings().taunts || this.h.net.mySeat === null || this.panel || this.menu || this.h.busy()) return;
+    if (ids.length === 0 || !getSettings().taunts || !this.h.chan.seated() || this.panel || this.menu || this.h.busy()) return;
     this.clearTip();
     const s = this.h.scene;
     const root = s.add.container(0, 0).setDepth(3900);
@@ -241,7 +260,7 @@ export class Taunts {
       this.turnKey = key;
       this.turnSince = now;
     }
-    const want = turn !== null && turn !== 0 && this.h.net.mySeat !== null && getSettings().taunts && now - this.turnSince >= URGE_AFTER_MS && this.urged !== key ? turn : -1;
+    const want = turn !== null && turn !== 0 && this.h.chan.seated() && getSettings().taunts && now - this.turnSince >= URGE_AFTER_MS && this.urged !== key ? turn : -1;
     if (want === this.urgeSeat) return;
     this.urge?.destroy();
     this.urge = null;
@@ -301,25 +320,16 @@ export class Taunts {
   // ───────────── 屏蔽（本局） ─────────────
   // 按"真实座位 + 当时坐在那儿的名字"记：被屏蔽的人走了、别人接管这个座位，新来的人不跟着被屏蔽
 
-  private realOf(v: number): number {
-    return (v + (this.h.net.mySeat ?? 0)) % 4;
-  }
-
-  private nameAt(real: number): string | null {
-    return this.h.net.room?.seats[real]?.name ?? null;
-  }
-
   isBlocked(v: number): boolean {
-    const r = this.realOf(v);
-    const name = this.nameAt(r);
-    return getBlocked(this.h.net.code).some((b) => b.seat === r && b.name === name);
+    const w = this.h.chan.who(v);
+    return getBlocked(this.h.chan.scope()).some((b) => b.seat === w.seat && b.name === w.name);
   }
 
   private setBlocked(v: number, on: boolean): void {
-    const r = this.realOf(v);
-    const list = getBlocked(this.h.net.code).filter((b) => b.seat !== r);
-    if (on) list.push({ seat: r, name: this.nameAt(r) });
-    setBlocked(this.h.net.code, list);
+    const w = this.h.chan.who(v);
+    const list = getBlocked(this.h.chan.scope()).filter((b) => b.seat !== w.seat);
+    if (on) list.push(w);
+    setBlocked(this.h.chan.scope(), list);
   }
 
   // ───────────── 小部件 ─────────────

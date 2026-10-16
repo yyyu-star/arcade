@@ -5,7 +5,8 @@
 import { isLive, liveMultipleBp, liveSettleStats, runSummary, type GameState, type SettleStats } from '../core/index.ts';
 import { LiveClient } from '../platform/live.ts';
 import { defaultStore } from '../platform/settings.ts';
-import { LOBBY_CONFIRM } from './lobby.ts';
+import { standalone } from '../platform/mode.ts';
+import { HOME_CONFIRM, LOBBY_CONFIRM } from './lobby.ts';
 import { LIVE_LOBBY_CONFIRM } from './liveText.ts';
 
 const listeners = new Set<() => void>();
@@ -65,7 +66,8 @@ export function startLive(s: Readonly<GameState>): void {
   window.addEventListener('online', () => void live.retry());
 }
 
-/** 回大厅的确认：实盘局说"回来接着打完再结算" */
+/** 回大厅的确认：实盘局说"回来接着打完再结算"；单独部署（没有实盘）说"回首页" */
 export function lobbyConfirm(s: Readonly<GameState>): { title: string; body: string; ok: string } {
+  if (standalone()) return HOME_CONFIRM;
   return livePlaying(s) ? LIVE_LOBBY_CONFIRM : LOBBY_CONFIRM;
 }

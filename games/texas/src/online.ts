@@ -43,8 +43,11 @@ export interface OnlineUi {
   play(prev: RoomView | null, next: RoomView, last: LastAct | null): Promise<void>;
   /** 一句提示（被拒的操作、买入被拒……） */
   toast(text: string): void;
-  /** 有人发了嘲讽、表情、道具（0.3.0，kit 的 emote）：seat 是谁发的，id 见 room/rules.ts 的编号表，to 是对谁；我自己发的也会回来 */
-  emote(seat: number, id: number, to?: number): void;
+  /**
+   * 有人发了嘲讽、表情、道具（0.3.0，kit 的 emote）：seat 是谁发的，id 见 room/rules.ts 的编号表，to 是对谁；我自己发的也会回来。
+   * bot：房间替电脑座位发的（0.6.1，kit 0.10 的 botEmote），即时到，不跟着帧的播放延迟走
+   */
+  emote(seat: number, id: number, to?: number, bot?: boolean): void;
   /** 房间停了（关了、被顶掉、连不上）：text 给人看，final 为 true 时不会再连 */
   ended(text: string, code: number): void;
   wait(ms: number): Promise<void>;
@@ -67,7 +70,7 @@ export class Online {
       clientVersion: CLIENT_VERSION,
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, code, reason) => this.onStatus(st, code, reason),
-      onEmote: (seat, id, to) => this.ui.emote(seat, id, to),
+      onEmote: (seat, id, to, bot) => this.ui.emote(seat, id, to, bot),
     });
   }
 

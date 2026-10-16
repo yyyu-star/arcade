@@ -11,7 +11,7 @@ const files = (dir: string): string[] =>
 const read = (f: string): string => readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 describe('架构约束', () => {
-  const pure = [...files('src/core'), ...files('src/ai'), ...files('src/room'), 'src/bot.ts'];
+  const pure = [...files('src/core'), ...files('src/ai'), ...files('src/room'), ...files('src/fun'), 'src/bot.ts'];
 
   it('规则核心和电脑里没有 Math.random、时间、平台相关的数学函数、DOM 和网络', () => {
     const banned = /Math\.(random|exp|log|log2|log10|pow|sqrt|sin|cos|tan|atan2|hypot|cbrt)\b|\bDate\b|performance\.|crypto\.|\bwindow\b|\bdocument\b|\bfetch\(|localStorage|setTimeout|setInterval|\*\*|from 'node:/;
@@ -32,8 +32,8 @@ describe('架构约束', () => {
     for (const f of files('src/room')) expect(read(f), f).not.toMatch(/from '\.\.\/(view|net)\/|from '\.\.\/(main|solo)\.ts'/);
   });
 
-  it('电脑的出牌决定拿不到嘲讽、表情、道具（0.6.0）：src/ai 和 bot.ts 不引用页面、网络和房间，只吃规则给的视图', () => {
-    for (const f of [...files('src/ai'), 'src/bot.ts']) expect(read(f), f).not.toMatch(/from '\.\.?\/(view|net|room)\/|from '\.\.?\/(main|solo|online)\.ts'|banter|emote/);
+  it('电脑的出牌决定拿不到嘲讽、表情、道具（0.6.0）：src/ai 和 bot.ts 不引用页面、网络、房间和电脑的互动（src/fun），只吃规则给的视图', () => {
+    for (const f of [...files('src/ai'), 'src/bot.ts']) expect(read(f), f).not.toMatch(/from '\.\.?\/(view|net|room|fun)\/|from '\.\.?\/(main|solo|online)\.ts'|banter|emote/);
   });
 
   it('页面启动先建云存档再画大厅（0.3.7）：画大厅要按 cloud.userId() 读记着的房间，反过来在好友房里刷新一打开就报错', () => {

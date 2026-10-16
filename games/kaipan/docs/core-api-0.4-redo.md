@@ -25,7 +25,7 @@
 ### 2.1 生成
 
 ```
-node tools/data/segments.ts --packs ~/data/wiki-prices/packs --gap 39 --step 1   # 现在的 135 段就是这样切的（年包在仓库外）
+node tools/data/segments.ts --packs .data/wiki-prices/packs --gap 39 --step 1   # 现在的 135 段就是这样切的（年包不进仓库）
 node tools/data/segments.ts --gap 39 --step 3   # 两段开局日至少隔 gap 个交易日；候选开局日每 step 天一个
 node tools/data/segments.ts --full [--force]    # 全量数据到位后（见第 6 节）
 ```
@@ -152,11 +152,11 @@ key 是内部的 `<开局年月>-<市况>`（例如 `2000-03-crash`），`from` 
 
 ## 6. 全量数据到位后
 
-1. 把 Nasdaq key 放进 `~/.config/nasdaq/nasdaq.env`，下载 WIKI Prices 全量到 `~/data/wiki-prices/`；
+1. 把 Nasdaq key 放进 `~/.config/nasdaq/nasdaq.env`，下载 WIKI Prices 全量到 `.data/wiki-prices/`；
 2. 补 `tools/data/dow.ts`：1996–1997、2001–2006、2009–2018 的老三十成分与换股日（现在只有 1998–2000、2007–2008）；
 3. 补 `tools/data/sectors.ts`：逐年跑 `node tools/data/candidates.ts --year <年> --missing` 给候选股标行业；
 4. 可选：`tools/data/events.ts` 补其他年份的大事（新增的大事要在 `src/core/content/tales.ts` 的 `BEATS` 里写故事版，没写的按大环境方向用通用句），`aliases.ts` / story 补化名；
-5. `node tools/data/segments.ts --full --force`：切片 → 建年包到 `~/data/wiki-prices/packs`（不进仓库）→ 切段（gap 39，约 135 段）。build.ts 一次建 23 年会爆内存，要逐年跑（`--years <年>`，每次合并 index.json）；
+5. `node tools/data/segments.ts --full --force`：切片 → 建年包到 `.data/wiki-prices/packs`（不进仓库）→ 切段（gap 39，约 135 段）。build.ts 一次建 23 年会爆内存，要逐年跑（`--years <年>`，每次合并 index.json）；
    2026-10-12 已跑通：sectors.ts 补到 1,298 个代码（新年份候选 738 个里标了 713 个，25 个归不了的不进池），events.ts 的大事都有故事版；
 6. 重跑 `node tools/sim.ts --real-table --runs 2000` 复核平衡。
 

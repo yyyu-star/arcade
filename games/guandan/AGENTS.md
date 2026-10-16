@@ -12,7 +12,7 @@ src/net/    联机（房间和页面共用，纯函数）：rules 把规则核�
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（taunt 嘲讽面板和点头像菜单）、ui 组件与弹窗、art 程序生成 SVG、audio 合成音效、store 存储、
-            recap 每副复盘、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅
+            recap 每副复盘、highlights 名场面、suggest 公开事件后的嘲讽建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（默认导出 + Durable Object 类 Room）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
@@ -128,7 +128,11 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     `busy` / `internal` / 异常抛出去让 kit 退避重试，业务拒绝回 `{ ok: false, error }` 交给 `settled`。视图 `NetView.stake` 公开每个座位的分和到账，被拒原因只给自己。
     房间测试 `tests/room/stake.spec.ts` 用 `tests/room/wallet.ts` 的假钱包（测试入口 `tests/room/main.ts` 多导出 `FakeWallet` / `WalletBank`，WALLET 绑到自己）。
 - 好友房的乐子（0.6.0 起，底座是 kit 的 `emote` 和 `arcade-kit/fun`；公平底线：人人一样、免费、不挂筹码，不停计时、不挡牌和按钮）：
-  - 嘲讽、表情包、扔道具都是 kit 转发的编号（文字在 `src/net/emotes.ts`），面板和点头像菜单在 `src/view/table/taunt.ts`；设置里能整个关掉，点头像"屏蔽他"只管这个房间（sessionStorage `guandan.blocked`）。
+  - 嘲讽、表情包、扔道具都是 kit 转发的编号（文字在 `src/net/emotes.ts`），面板和点头像菜单在 `src/view/table/taunt.ts`；设置里能整个关掉，点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（sessionStorage `guandan.blocked`）。
+  - 单机（0.7.1 起）挂同一套面板：`taunt.ts` 只认 `FunChannel`，好友房经房间转发，单机在本地播。电脑什么时候发、被扔了怎么回、真人想太久怎么催在 `src/net/banter.ts`（纯函数，
+    随机数和时间由调用方给，只看公开事件；按性格和状态，有冷却）。电脑出牌（`src/ai`）绝不读这些（测试查 `src/ai` 不引 banter/emotes）。名场面在 `src/view/highlights.ts`。
+  - 好友房的电脑也用 banter（kit 0.10.1 的钩子）：`worker/room.ts` 的 `onStep` 每步广播完看公开事件、`onEmote` 回真人冲电脑扔的东西，经 `botEmote` 发（消息带 `bot: true`，
+    页面排到手头的帧播完再放）。冷却、电脑性格只在内存里，不写存储、不记真人短语；好友房电脑不催人（房间只有一个闹钟）。`npm run test:room` 断言电脑房有电脑互动、4 真人房没有。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
   - 称号和每副复盘只用公开信息（出牌记录、名次），电脑决策不读表情。
   - 再来一场（0.6.2）：娱乐房间打到 gameOver 先不 `over`，用 kit 的 `pause`/`resume` 停 `AGAIN_MS`（3 分钟）；有人发不轮流的 `again { code }`（他先开好新房间），

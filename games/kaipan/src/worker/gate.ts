@@ -11,6 +11,11 @@
  *   测试期的目标是"没受邀的人玩不到"，所以宁可暂时谁都进不去，也不放进来（fail-closed）。
  * GATE 写成 off / login 以外的值也按 login 处理：开关写错时往"关门"那边偏。
  *
+ * 0.8.0 两种部署（和共用包 arcade-kit 的语义一样，开盘不依赖它，自己按同样的规则写）：
+ * - 本站：部署工具（tools/deployer）补上 ARCADE、WALLET 绑定和 GATE=login，行为和以前一样；
+ * - 单独部署（模块里的 wrangler.jsonc 原样部署）：没有 ARCADE、GATE 不是 login，谁打开都能玩，实盘接口一律拒绝（见 isStandalone）。
+ *   GATE=login 却没有 ARCADE（漏了绑定）不算单独部署，照旧按平台不可用拦下（fail-closed）。
+ *
  * 不依赖 @cloudflare/workers-types：下面只声明用到的那一点接口。
  */
 
@@ -25,10 +30,15 @@ export interface Env {
   ASSETS: Fetcher;
   /** 平台 Worker（arcade）的服务绑定；没配时按平台不可用处理 */
   ARCADE?: Fetcher;
-  /** 登录闸门：'off' 或 'login'（wrangler.jsonc 里是 login；没配按 off） */
+  /** 登录闸门：'off' 或 'login'（本站部署时由部署工具设成 login；模块里的独立配置不写，按 off） */
   GATE?: string;
-  /** 平台钱包 RPC（服务绑定 arcade 的 WalletService，props.game=kaipan）；没配时钱包接口回 503 */
+  /** 平台钱包 RPC（服务绑定 arcade 的 WalletService，props.game=kaipan）；单独部署没有，实盘接口回 501 no_wallet */
   WALLET?: WalletRpc;
+}
+
+/** 单独部署（没有平台）：没有 ARCADE 绑定，GATE 也不是 login。 */
+export function isStandalone(env: Pick<Env, 'ARCADE' | 'GATE'>): boolean {
+  return !env.ARCADE && env.GATE !== 'login';
 }
 
 /** 要过闸门的路径，和 wrangler.jsonc 的 run_worker_first 保持一致（别的路径即使进来也直接放行给静态资源）。 */

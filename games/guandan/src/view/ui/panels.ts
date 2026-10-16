@@ -48,7 +48,7 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   row('牌背');
   b.add(segmented(scene, segX, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 })));
   y += 60;
-  // 好友房里别人的嘲讽、表情、道具：关掉就不看也不听（自己照样能发）
+  // 别人（好友房的人、单机的电脑）的嘲讽、表情、道具：关掉就不看也不听，单机的电脑也不发（自己照样能发）
   row('嘲讽和道具');
   b.add(segmented(scene, segX, y, [{ label: '看', value: '1' }, { label: '不看', value: '0' }], s.taunts ? '1' : '0', (v) => updateSettings({ taunts: v === '1' })));
   y += 66;

@@ -263,6 +263,16 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await page.waitForTimeout(500);
   await shot(ctx, '06-table-played');
 
+  // 单机互动（0.7.1）：点阿强的头像扔个番茄，看到播出来；电脑回不回、怎么回按性格（随机），只记下来
+  await click(ctx, 'avatar3');
+  await until(ctx, '头像菜单', "'menu:prop0' in g.controls()");
+  await click(ctx, 'menu:prop0');
+  await until(ctx, '番茄扔出去', "g.fxLog.includes('道具 0>3:tomato')");
+  await page.waitForTimeout(1800);
+  await shot(ctx, '06b-solo-fun');
+  const reply = (await page.evaluate(() => window.__game!.fxLog)).filter((x) => /^(道具 3>|嘲讽 3:|表情 3:|短语 3:)/.test(x));
+  notes.push(`单机互动：对阿强扔番茄，他${reply.length ? `回了 ${reply.join('、')}` : '装没看见'}`);
+
   // 点一张牌再点一次：选中又取消
   await until(ctx, '再次轮到我', "g.idle && g.view().toAct.includes(0) && g.overlay === null");
   const card = await page.evaluate(() => window.__game!.view()!.hand[3]!);

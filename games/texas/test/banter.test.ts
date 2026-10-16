@@ -1,8 +1,10 @@
 /** 电脑的互动（0.6.0，DESIGN.md 13.5）：被招惹时按性格回、冷却、催人、一手打完主动来一下；嘲讽只用短语表里的（只说牌局） */
 import { PROPS, STICKERS } from 'arcade-kit/fun';
 import { describe, expect, it } from 'vitest';
-import { Banter, SEAT_GAP_MS, TABLE_GAP_MS, type Out } from '../src/view/banter.ts';
-import { TAUNTS } from '../src/view/fun.ts';
+import { Banter, emoteOf, pokeOf, PROP_ORDER, SEAT_GAP_MS, STICKER_ORDER, TABLE_GAP_MS, type Out } from '../src/fun/banter.ts';
+import { TAUNTS } from '../src/fun/taunts.ts';
+import type { HandResult, LogEntry } from '../src/core/table.ts';
+import { EMOTE_COUNT, PROP_BASE, STICKER_BASE } from '../src/room/rules.ts';
 
 /** 带种子的伪随机（测试里换掉 Math.random，可复现） */
 function lcg(seed: number): () => number {
@@ -52,6 +54,64 @@ function temper(persona: number, n = 3000): { back: number; meek: number; quiet:
 }
 
 describe('电脑的互动', () => {
+  it('表情、道具的顺序和 kit 的一样（房间的代码不能引 kit/fun，抄了一份）；换成的编号都在房间的表里', () => {
+    expect(STICKER_ORDER).toEqual(STICKERS);
+    expect(PROP_ORDER).toEqual(PROPS);
+    expect(emoteOf({ sticker: 'cool' })).toEqual({ id: STICKER_BASE + STICKERS.indexOf('cool') });
+    expect(emoteOf({ prop: 'cheers', to: 2 })).toEqual({ id: PROP_BASE + PROPS.indexOf('cheers'), to: 2 });
+    expect(emoteOf({ taunt: 3 })).toEqual({ id: 3 });
+    expect(PROP_BASE + PROPS.length).toBe(EMOTE_COUNT);
+  });
+
+  it('房间转发的编号换回真人做了什么（和 emoteOf 对得上）；房间里的电脑不说自己的话，回的都能发成编号', () => {
+    for (let id = 0; id < EMOTE_COUNT; id++) {
+      const p = pokeOf(id)!;
+      expect(p).not.toBeNull();
+      expect(emoteOf('prop' in p ? { prop: p.prop, to: 0 } : p).id).toBe(id);
+    }
+    expect(pokeOf(EMOTE_COUNT)).toBeNull();
+    expect(pokeOf(-1)).toBeNull();
+    for (const persona of [0, 2, 3, 7, 9]) {
+      const b = new Banter(lcg(persona), clock(SEAT_GAP_MS), false);
+      for (let i = 0; i < 400; i++) {
+        const o = b.react({ seat: 1, persona }, 0, i % 3 ? { prop: 'egg' } : { prop: 'rose' });
+        if (o) expect('say' in o).toBe(false);
+      }
+    }
+  });
+
+  it('一手打完（只看公开的操作记录和结果）：电脑赢了真人 ≥ 20 个大盲，偶尔点名这个真人；小池子不来', () => {
+    // 0 号真人、1 号电脑：0 号加到 600、1 号跟，翻牌后 1 号下 1,000、0 号跟，1 号赢 3,200（盲注 10/20）
+    const seats = [
+      { owner: 'player', persona: 0 },
+      { owner: 'house', persona: 8 },
+    ];
+    const log: LogEntry[] = [
+      { seat: 0, act: 'sb', amount: 10 },
+      { seat: 1, act: 'bb', amount: 20 },
+      { seat: 0, act: 'raise', amount: 600 },
+      { seat: 1, act: 'call', amount: 580 },
+      { seat: -1, act: 'flop', amount: 0 },
+      { seat: 1, act: 'bet', amount: 1000 },
+      { seat: 0, act: 'call', amount: 1000 },
+    ];
+    const r = { handNo: 1, board: [], shown: [], pots: [{ amount: 3200, winners: [{ seat: 1, won: 3200 }] }], uncalled: null, byFold: false } as unknown as HandResult;
+    let n = 0;
+    for (let k = 0; k < 200; k++) {
+      const b = new Banter(lcg(k), clock(SEAT_GAP_MS));
+      const a = b.afterHand(seats, 20, r, log);
+      if (!a) continue;
+      n++;
+      expect(a.seat).toBe(1);
+      valid(a.out);
+      if ('to' in a.out && a.out.to !== undefined) expect(a.out.to).toBe(0);
+    }
+    expect(n).toBeGreaterThan(40);
+    // 只输了盲注：不来
+    const small = { ...r, pots: [{ amount: 30, winners: [{ seat: 1, won: 30 }] }] } as unknown as HandResult;
+    for (let k = 0; k < 50; k++) expect(new Banter(lcg(k), clock(SEAT_GAP_MS)).afterHand(seats, 20, small, log.slice(0, 2))).toBeNull();
+  });
+
   it('被扔东西按性格回：虎子、阿飙爱扔回来，慢慢多认怂，老鹰多不理；回的都在表情、短语、道具表里', () => {
     const huzi = temper(HUZI);
     const abiao = temper(ABIAO);

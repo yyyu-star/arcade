@@ -305,7 +305,7 @@ p();
 p('## 1. 管线与年度包格式');
 p();
 p('```');
-p('node tools/data/slice.ts --years 1999,2000,2008   # 流式切片，约 15 秒；切片放 ~/data/wiki-prices/slices/（不进仓库）');
+p('node tools/data/slice.ts --years 1999,2000,2008   # 流式切片，约 15 秒；切片放 .data/wiki-prices/slices/（不进仓库）');
 p('node tools/data/build.ts --years 1999,2000,2008   # 清洗、选池、合成大盘、写 public/data/years/（--index A|B|auto）');
 p('node tools/data/check.ts                          # 生成本报告');
 p('node tools/data/candidates.ts --year 2003 --missing  # 扩年份时列出缺行业标注的候选');

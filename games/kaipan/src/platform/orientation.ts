@@ -81,6 +81,13 @@ interface RotateLobby {
   go: () => void;
 }
 
+/** 改左上角按钮的字（0.8.0 单独部署时叫「首页」）。还没挂载时什么都不做。 */
+export function setRotateLobbyLabel(text: string): void {
+  if (typeof document === 'undefined') return;
+  const span = document.querySelector(`#${ID} .rh-lobby span`);
+  if (span) span.textContent = text;
+}
+
 /** 挂载竖屏提示（重复调用无副作用）。 */
 export function mountRotateHint(lobby?: RotateLobby): void {
   if (typeof document === 'undefined' || document.getElementById(ID)) return;
