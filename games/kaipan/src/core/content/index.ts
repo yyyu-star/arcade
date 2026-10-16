@@ -22,11 +22,15 @@ export {
   CHEER_LINES,
   EXT_REACT_LINES,
   FRIENDS,
+  HAND_TAILS,
   MESSAGE_LINES,
   MISS_LINES,
   MOCK_LINES,
+  REACT_LINES,
+  REACT_MOOD,
   REC_LINES,
   TURN_LINES,
+  type ReactMoment,
 } from './friends.ts';
 export { ITEMS, ITEM_BRIEF } from './items.ts';
 export {

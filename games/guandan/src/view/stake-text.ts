@@ -6,7 +6,7 @@
 /** 档位的名字 */
 export const TIER_NAME = { small: '小档', mid: '中档', big: '大档', lux: '豪华档' } as const;
 
-export const DIFF_NAME = { easy: '简单', normal: '普通', hard: '困难' } as const;
+export const DIFF_NAME = { novice: '新手', easy: '简单', normal: '普通', good: '较强', hard: '困难' } as const;
 
 /**
  * 钱包被拒、没连上时页面说的话（按 error）：照平台的错误码对照表（docs/platform-backend.md 15.10，0.10.2），

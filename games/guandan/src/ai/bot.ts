@@ -9,7 +9,8 @@
  * - 跟牌：对手出的，用"最小、拆牌最少"的压，不随手用逢人配、不拆炸弹；对手快走完时出大牌顶住、该炸就炸。
  * - 队友出的一般不压：除非能借此一把出完，或者队友明显出不完而对手快走了。
  * - 进贡交最不影响牌型的那张最大牌；还贡还最没用的 ≤ 10 的牌。
- * 难度只调"记性、配合、失误"：简单不记牌、不配合、偶尔犯新手错；普通只记大牌；困难全记。
+ * 难度只调"记性、配合、失误"：新手、简单不记牌、不配合、偶尔犯新手错（新手还会手软）；普通只记大牌；较强、困难全记。
+ * 性格、每场的状态、随局面的调整在 persona.ts：给了性格才有，没给就是难度预设本身。
  * 随机性来自种子 + 步数，同样的局面同样的种子做同样的决定。
  */
 import {
@@ -28,44 +29,22 @@ import {
   type PlayerView,
   type Rng,
 } from '../core/index.ts';
-import { buildMemory, bombPossible, isTop, type Memory, type Recall } from './memory.ts';
+import { buildMemory, bombPossible, isTop, type Memory } from './memory.ts';
 import { groupToPlay, isBombType, planHand, type Group, type HandPlan } from './plan.ts';
+import { TUNING, tuningFor, type Difficulty, type PersonaId, type Tuning } from './persona.ts';
 
-export type Difficulty = 'easy' | 'normal' | 'hard';
+export type { Difficulty, PersonaId, Tuning };
 
 export interface BotConfig {
   seed: string | number;
   difficulty?: Difficulty;
-  /** 只给模拟调参用：在难度预设上覆盖部分参数 */
+  /** 性格（persona.ts）：不给就是难度预设本身 */
+  persona?: PersonaId;
+  /** 这一场的种子：每场的状态按它抽（不给就用 seed）。seed 每步都变的地方（联机房间）要另给 */
+  match?: string | number;
+  /** 只给模拟调参用：在算好的参数上覆盖部分 */
   tuning?: Partial<Tuning>;
 }
-
-export interface Tuning {
-  /** 记牌程度 */
-  recall: Recall;
-  /** 是否和队友配合（不压队友、送牌、帮队友顶） */
-  teamwork: boolean;
-  /** 对手剩几张以内算"快出完"，开始拼命压 */
-  threat: number;
-  /** 不紧急时，愿意为压牌多付出的拆牌代价 */
-  breakTolerance: number;
-  /** 犯"新手错"的概率：跟牌时只看能不能压、领出时随手出最小的 */
-  slip: number;
-  /** 队友剩几张以内开始送牌 */
-  feedAt: number;
-  /** 跟对手的单张、对子时额外愿意付的拆牌代价（其他牌型按 6 成算）：越大越爱抢出牌权 */
-  chase: number;
-  /** 队友已经不要、我是这一轮最后能顶的人时，再多愿意付的代价 */
-  lastChance: number;
-}
-
-const TUNING: Record<Difficulty, Tuning> = {
-  // 失误率按 npm run sim 校准（2026-10-14，0.1.3）：简单对普通整局胜率约 2 成多，困难对普通约 7 成。
-  // 2026-10-15 失误不再拆炸弹/同花顺、不压队友，一次失误亏得少了，按同样目标重调：简单 0.13 → 0.25，普通 0.05 → 0.1
-  easy: { recall: 'none', teamwork: false, threat: 2, breakTolerance: 1.2, slip: 0.25, feedAt: 0, chase: 0.6, lastChance: 0.2 },
-  normal: { recall: 'high', teamwork: true, threat: 6, breakTolerance: 0.6, slip: 0.1, feedAt: 6, chase: 1.6, lastChance: 0.5 },
-  hard: { recall: 'full', teamwork: true, threat: 8, breakTolerance: 0.6, slip: 0, feedAt: 6, chase: 1.6, lastChance: 0.5 },
-};
 
 const toAction = (seat: number, p: Play): Action => ({
   type: 'play',
@@ -122,10 +101,10 @@ function makeCtx(view: PlayerView, tune: Tuning, rng: Rng): Ctx {
 
 /** 电脑的决定；不该它行动时返回 null。 */
 export function decide(view: PlayerView, cfg: BotConfig): Action | null {
-  const diff = cfg.difficulty ?? 'normal';
-  const tune = cfg.tuning ? { ...TUNING[diff], ...cfg.tuning } : TUNING[diff];
   if (view.myTribute) return tributeAction(view);
   if (view.phase !== 'play' || view.turn !== view.seat) return null;
+  const tuned = tuningFor(view, cfg.difficulty ?? 'normal', cfg.persona, cfg.match ?? cfg.seed);
+  const tune = cfg.tuning ? { ...tuned, ...cfg.tuning } : tuned;
   const p = choosePlay(view, tune, rngFor(cfg.seed, 'bot', view.seat, view.step));
   return p ? toAction(view.seat, p) : { type: 'pass', seat: view.seat };
 }
@@ -339,8 +318,8 @@ function chooseLead(ctx: Ctx): Play {
   }
 
   let pool = normal;
-  // 对手快走完：避开他一把能走的张数（单张、对子……），出他接不住的大牌型
-  if (ctx.oppMin <= tune.threat) {
+  // 对手快走完：避开他一把能走的张数（单张、对子……），出他接不住的大牌型。新手场的电脑有时手软，照常出
+  if (ctx.oppMin <= tune.threat && !(tune.soft > 0 && ctx.rng.next() < tune.soft)) {
     const danger = new Set(ctx.opps.map((s) => view.counts[s]!).filter((n) => n <= tune.threat));
     const safe = normal.filter((g) => !danger.has(g.cards.length));
     if (safe.length) {
@@ -353,12 +332,16 @@ function chooseLead(ctx: Ctx): Play {
       return groupToPlay([...normal].sort((a, b) => Number(isTop(mem, b)) - Number(isTop(mem, a)) || b.value - a.value)[0]!);
     }
   }
-  // 控制牌（王、级牌、记牌后最大的牌）留到后面
+  // 控制牌（王、级牌、记牌后最大的牌）留到后面；急性子有时等不及，先亮出来
+  const rush = tune.rush > 0 && ctx.rng.next() < tune.rush;
   const cheap = pool.filter((g) => !isControl(ctx, g));
-  if (cheap.length) pool = cheap;
+  if (cheap.length && !rush) pool = cheap;
+  else if (rush && pool.length > cheap.length) return groupToPlay(pool.filter((g) => isControl(ctx, g)).sort((a, b) => b.cards.length - a.cards.length || a.value - b.value)[0]!);
   // 先出最难处理的小牌型：最低张小的先走；多张的牌型（顺子、三带二等）别人难接，同样小时先走
   const score = (g: Group) => lowCard(g) - (g.cards.length >= 5 ? 1.5 : g.cards.length >= 3 ? 0.5 : 0);
   pool = [...pool].sort((a, b) => score(a) - score(b) || b.cards.length - a.cards.length);
+  // 差不多的两手换着先出，同样的牌型不总是一个出法
+  if (tune.jitter > 0 && pool.length > 1 && score(pool[1]!) - score(pool[0]!) <= 2 && ctx.rng.next() < tune.jitter) return groupToPlay(pool[1]!);
   return groupToPlay(pool[0]!);
 }
 
@@ -444,6 +427,8 @@ function followOpponent(ctx: Ctx, plays: Play[]): Play | null {
   const critical = ctx.oppMin <= 2 || (lastLeft > 0 && lastLeft <= 4) || (lastLeft === 0 && ctx.oppMin <= 8);
   // 开局（双方牌都还多）：出牌权没那么值钱，炸弹留着
   const early = view.hand.length >= 18 && ctx.oppMin >= 12;
+  // 新手场的电脑手软：对手快走完、本该拼命顶的时候，有时就放过去了（让人有赢的机会）
+  if (critical && tune.soft > 0 && canPass(view) && ctx.rng.next() < tune.soft) return null;
   const normal = plays.filter((p) => !isBomb(p)).sort((a, b) => a.value - b.value || a.extra - b.extra);
   const bombs = plays.filter((p) => isBomb(p)).sort((a, b) => bombRank(a) - bombRank(b));
   const base = planOf(ctx, view.hand);
@@ -470,9 +455,14 @@ function followOpponent(ctx: Ctx, plays: Play[]): Play | null {
       const pool = cands.filter((c) => !c.breaks);
       let best: Cand | null = null;
       for (const c of pool) if (!best || c.delta < best.delta - 0.2) best = c;
+      // 换着出：代价差不多的另一手（比如压对 5 还是对 7）
+      if (best && tune.jitter > 0 && ctx.rng.next() < tune.jitter) {
+        const alt = pool.find((c) => c !== best && c.delta <= best!.delta + 0.4 && !wastesControl(ctx, c, last.play));
+        if (alt) best = alt;
+      }
       if (best) {
         if (urgent && best.delta <= tune.breakTolerance + 1) return best.p;
-        if (best.delta <= followTolerance(ctx, last.play) && !wastesControl(ctx, best, last.play)) return best.p;
+        if (best.delta <= followTolerance(ctx, last.play) && (!wastesControl(ctx, best, last.play) || (tune.rush > 0 && ctx.rng.next() < tune.rush))) return best.p;
         // 只剩两手了，压上去拿回出牌权
         if (baseShape.normal <= 2 && best.top) return best.p;
       }
@@ -486,9 +476,11 @@ function followOpponent(ctx: Ctx, plays: Play[]): Play | null {
   // 手里能炸几次：理牌里的炸弹，加上这次用的不是其中之一（比如拆顺子凑出的同花顺）
   const protect = protectedCards(base, view.level);
   const held = baseShape.bombs + (bomb.p.cards.every((c) => protect.has(c)) ? 0 : 1);
+  // 爱炸（bombLove ≥ 1）不急也肯炸、炸得早；捂炸弹（≤ -1）留到最后；中间是原来的做法
+  const love = tune.bombLove >= 1 ? 1 : tune.bombLove <= -1 ? -1 : 0;
   if (urgent) {
-    // 对手快走完但还不至于下一手就走，而且手里炸弹只有一个：最后关头再用
-    if (!critical && held <= 1 && after.normal > 3) return null;
+    // 对手快走完但还不至于下一手就走，而且手里炸弹只有一个（捂炸弹的人两个也留着）：最后关头再用
+    if (!critical && love <= 0 && held <= (love < 0 ? 2 : 1) && after.normal > 3) return null;
     return bomb.p;
   }
   // 记牌：别人已经不可能有更大的炸弹，这一炸稳拿出牌权
@@ -496,7 +488,9 @@ function followOpponent(ctx: Ctx, plays: Play[]): Play | null {
   // 炸完只剩两手，抢出牌权就能走（只剩一手，或者炸了不会被反炸）
   if (after.normal <= 1 || (after.normal <= 2 && safe)) return bomb.p;
   // 对方出的是大牌型（顺子类、三带二或 A 以上的牌）且我炸弹多：炸。开局不这么干，除非炸完就快走完了
-  const big = ['straight', 'tube', 'plate', 'fullHouse'].includes(last.play.type) || last.play.value >= 14;
-  if (!isBomb(last.play) && big && baseShape.bombs >= 2 && after.normal <= (early ? 3 : 6)) return bomb.p;
+  const big = ['straight', 'tube', 'plate', 'fullHouse'].includes(last.play.type) || last.play.value >= (love > 0 ? 13 : 14);
+  const need = love > 0 ? 1 : love < 0 ? 3 : 2;
+  const room = (early ? 3 : 6) + (love > 0 ? 1 : love < 0 ? -2 : 0);
+  if (!isBomb(last.play) && big && baseShape.bombs >= need && after.normal <= room) return bomb.p;
   return null;
 }

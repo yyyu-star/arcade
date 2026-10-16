@@ -27,9 +27,9 @@ import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { dur, tweenP, wait } from '../anim.ts';
-import { PLACE_NAMES, SEAT_PERSON, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
-import { TALKATIVE, lineFor, type Situation } from '../personas.ts';
+import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
 import { ROOM_DEALS, SOLO_DEALS, dealPoints, pointValue } from '../../stake/index.ts';
 import type { StakeView } from '../../net/stake.ts';
@@ -59,14 +59,6 @@ import { TrickView } from '../table/trick.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
 
-/**
- * 电脑的思考时间（毫秒，再经 dur 换算）：不要最快，跟牌稍慢，领出要想想，出炸弹前犹豫一下。
- * 太快了看不清谁出了什么，也没有"在博弈"的感觉（德州试玩时的反馈，掼蛋按同一标准自查）。
- */
-function botThink(kind: 'pass' | 'play' | 'bomb', lead: boolean): number {
-  const base = kind === 'pass' ? 550 : kind === 'bomb' ? 1500 : lead ? 1100 : 850;
-  return base + Math.random() * (kind === 'pass' ? 350 : 600);
-}
 
 export class TableScene extends Phaser.Scene {
   private ses!: TableSession;
@@ -681,7 +673,7 @@ export class TableScene extends Phaser.Scene {
     // 电脑连着出：和单机一样按出法给思考时间（房间给的间隔只说明这一帧是电脑出的；播得比房间慢一点，到我出牌时队列总会播完）
     if (f.delay > 0) {
       const e = f.nv.events.find((x) => x.type === 'play' || x.type === 'pass');
-      const think = !e ? f.delay : botThink(e.type === 'pass' ? 'pass' : isBomb(e.play) ? 'bomb' : 'play', lead);
+      const think = !e ? f.delay : this.botThink(e.seat, e.type === 'pass' ? 'pass' : isBomb(e.play) ? 'bomb' : 'play', lead);
       this.botTimer = this.time.delayedCall(dur(think), () => {
         this.botTimer = null;
         play();
@@ -973,7 +965,7 @@ export class TableScene extends Phaser.Scene {
     if (seat !== ME) this.seats[seat]!.setThinking(true);
     this.botSeat = seat;
     const kind = planned?.type !== 'play' ? 'pass' : isBomb(planned.as ?? interpret(planned.cards, v.level, v.options)[0] ?? { type: 'single' }) ? 'bomb' : 'play';
-    this.botTimer = this.time.delayedCall(dur(v.phase === 'play' ? botThink(kind, !v.trick.last) : 900), () => {
+    this.botTimer = this.time.delayedCall(dur(v.phase === 'play' ? this.botThink(seat, kind, !v.trick.last) : 900), () => {
       this.botTimer = null;
       this.botSeat = -1;
       this.seats[seat]!.setThinking(false);
@@ -1012,13 +1004,46 @@ export class TableScene extends Phaser.Scene {
     this.pump();
   }
 
+  /**
+   * 电脑的思考时间（毫秒，再经 dur 换算）：按性格、状态和上头程度（personas.ts 的 thinkTime）；对手快走完时多想一会儿。
+   * 太快了看不清谁出了什么，也没有"在博弈"的感觉（德州试玩时的反馈，掼蛋按同一标准自查）。
+   */
+  private botThink(seat: number, kind: 'pass' | 'play' | 'bomb', lead: boolean): number {
+    const style = this.ses.botStyle(seat);
+    const v = this.ses.view();
+    const tense = [1, 3].some((d) => {
+      const opp = (seat + d) % 4;
+      return !v.finished.includes(opp) && v.counts[opp]! <= 4;
+    });
+    return thinkTime({ kind, lead, tense, ...(style ?? {}) });
+  }
+
   private talk(seat: number, sit: Situation, force = false): void {
     // 联机的真人自己说话，不替他编台词
     if (seat === ME || seatIdentity[seat]?.human) return;
-    const id = SEAT_PERSON[seat]!;
-    if (!force && Math.random() > TALKATIVE[id]) return;
+    const id = seatPerson(seat);
+    const style = this.ses.botStyle(seat);
+    if (!force && Math.random() > talkChance(id, style?.form ?? 0, style?.tilt ?? 0)) return;
     const line = lineFor(id, sit);
     if (line) this.seats[seat]!.say(line);
+  }
+
+  /** 一副开始时电脑说的话：第一副看状态（手热、手冷），之后看局面（上一副输了上头、级数差得多） */
+  private dealTalk(dealNo: number): void {
+    for (let s = 1; s < 4; s++) {
+      const style = this.ses.botStyle(s);
+      if (dealNo === 1) {
+        this.talk(s, style && style.form > 0.25 ? 'hot' : style && style.form < -0.25 ? 'cold' : 'start');
+        continue;
+      }
+      if (!style) continue;
+      const v = this.ses.view();
+      const mine = teamOf(s);
+      const lead = v.levels[mine]! - v.levels[1 - mine]!;
+      if (style.tilt >= 0.5) this.talk(s, 'tilt');
+      else if (lead <= -3) this.talk(s, 'behind');
+      else if (lead >= 3) this.talk(s, 'ahead');
+    }
   }
 
   private mood(seat: number, m: Mood, ms = 2200): void {
@@ -1048,7 +1073,7 @@ export class TableScene extends Phaser.Scene {
         const v = this.ses.view();
         this.hand.setHand(v.hand, v.level, { animate: false });
         await this.hand.dealIn(W / 2, 250);
-        if (e.dealNo === 1) for (let s = 1; s < 4; s++) this.talk(s, 'start');
+        this.dealTalk(e.dealNo);
         if (!tutorialDone() && !this.ses.autoplay && !this.ses.online && app.params?.seed === null) {
           // 第一次玩：发完牌后出新手引导（URL 调试开局不弹）
           await this.startTutorialAsync();
@@ -1124,6 +1149,8 @@ export class TableScene extends Phaser.Scene {
             await banner(this, `${seatName(e.seat)} 头游`);
           }
         }
+        // 末游的电脑嘟囔一句（双下时两个人都说也不奇怪）
+        if (e.place === 4) this.talk(e.seat, 'last');
         await this.seats[e.seat]!.setPlace(e.place, true);
         this.taunts?.suggest(suggestFor(e, -1));
         break;
@@ -1174,7 +1201,8 @@ export class TableScene extends Phaser.Scene {
     const king = play.type === 'jokerBomb';
     const label = playLabel(play);
     this.fxLog.push(label);
-    this.mood(seat, seat === 1 ? 'happy' : 'smug', 2600);
+    // 老张炸得开心，别人炸得得意
+    this.mood(seat, seatPerson(seat) === 'laozhang' ? 'happy' : 'smug', 2600);
     // 被炸的人（上一手的主人）郁闷一下
     const hist = this.ses.view().history;
     for (let i = hist.length - 2; i >= 0; i--) {
@@ -1187,7 +1215,7 @@ export class TableScene extends Phaser.Scene {
         break;
       }
     }
-    this.talk(seat, king ? 'jokerBomb' : 'bomb', seat === 1 || king);
+    this.talk(seat, king ? 'jokerBomb' : 'bomb', seatPerson(seat) === 'laozhang' || king);
     if (king) {
       flash(this, 0xffe7a0, 0.75);
       rays(this, W / 2, 330);

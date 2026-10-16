@@ -10,7 +10,7 @@
  * - 被扔的头像抖一下由游戏做（头像在游戏的画布或 DOM 里，kit 碰不到）：命中时调 opts.onHit(prop)。
  * 这个文件引用 DOM，但只在调用时才碰：在 workerd、Node 里 import 不会出错（测试只测纯函数和素材）。
  */
-import { BURST, DRIP, PETAL, PROPS, SHELL, SMOKE, SOOT, SPARK, SPLAT_TOMATO, STAR, STICKERS, STINK, dot, propSvg, splatEgg, stickerSvg, type PropId, type StickerId } from './fun-art';
+import { BURST, DRIP, PETAL, PROPS, SHELL, SMOKE, SOOT, SPARK, SPLAT_TOMATO, STAR, STICKERS, STINK, dot, propSvg, splatEgg, stickerSvg, type PropId, type StickerId } from './fun-art.js';
 
 export { PROPS, STICKERS, propSvg, stickerSvg, type PropId, type StickerId };
 

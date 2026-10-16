@@ -2,26 +2,55 @@
 
 小游戏共用的联机底座：Cloudflare Durable Object 房间、开房进房、浏览器连接、消息协议和每天的额度，各联机游戏（德州、掼蛋、麻将等）的好友房都用它。房间规范见仓库根 `docs/platform-backend.md` 第 4 节。
 
+## Install
+
+```bash
+npm i arcade-kit
+```
+
+Multiplayer toolkit for small turn-based games on Cloudflare Workers: a Durable Object room base class (`arcade-kit/room`),
+create/join entry points for your game Worker (`arcade-kit/worker`), a reconnecting browser client (`arcade-kit/client`),
+a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-kit/rng`) and the wire protocol (`arcade-kit/protocol`).
+
+- **Two modes.** With a service binding `ARCADE` to the Arcade platform, players are identified through the platform's `/api/me` (login required).
+  Without it (and `GATE` not set to `"login"`), the game runs **standalone**: the Worker issues a long-lived guest cookie and anyone can play — no platform needed.
+  See "两种部署方式" below.
+- **Package format.** ESM only. Each subpath ships compiled JavaScript plus `.d.ts` (`dist/`, with source maps back to `src/`).
+  Worker-side entries (`room`, `meter`, `testing`) import `cloudflare:workers` and need a Workers bundler (wrangler / esbuild,
+  `@cloudflare/vitest-plugin`); browser-safe entries (`client`, `protocol`, `rng`, `game`, `guest`, `fun`) also load in plain Node.
+  Types reference `@cloudflare/workers-types` (optional peer dependency). Node ≥ 22, TypeScript strict mode is fine.
+- **Versioning.** Semver; before 1.0 a minor bump (0.x → 0.(x+1)) may change behaviour, see `CHANGELOG.md`.
+  The room wire protocol only adds fields; incompatible changes bump `PROTOCOL_VERSION` (old pages are asked to reload).
+- **Source / issues:** <https://github.com/yyyu-star/arcade/tree/main/packages/arcade-kit>. License: MIT.
+
+下面的中文是细节。
+
 ## 功能
 
 | 入口 | 用在哪 | 做什么 |
 |---|---|---|
 | `arcade-kit/room` | 游戏 Worker（Durable Object） | 房间基类 `GameRoom`：入座离座（开打后座位绑人）、房主开局、轮流出手或一组人同时出手、按座位过滤下发、断线保留座位、超时代出、掉线托管和交还、电脑批量出手、空房和超时清理、硬限制 |
-| `arcade-kit/worker` | 游戏 Worker | `acceptCreate`（开房）、`acceptJoin`（进房）：查 Origin、认人、找房间打包在一起，游戏不用碰浏览器的原始请求；`loginGate`（0.8.0）：首页的登录闸门；`json`、`readJson`、`withCookies`：游戏自己的接口用的小工具 |
-| `arcade-kit/auth` | 游戏 Worker | `whoIs`（0.3.1）：经平台 `/api/me` 认人，和开房进房同一个做法（只转发 Cookie 和 IP、3 秒超时、"没登录"和"平台不可用"分开、fail-closed），带回平台的 `Set-Cookie`；游戏自己的接口用它，不再各写一份（登录闸门直接用 `loginGate`） |
+| `arcade-kit/worker` | 游戏 Worker | `acceptCreate`（开房）、`acceptJoin`（进房）：查 Origin、认人、找房间打包在一起，游戏不用碰浏览器的原始请求；`loginGate`（0.8.0）：首页的登录闸门（独立模式下放行并发游客 cookie）；`standaloneRoot`、`isStandalone`（0.10.0）；`json`、`readJson`、`withCookies`：游戏自己的接口用的小工具 |
+| `arcade-kit/auth` | 游戏 Worker | `whoIs`（0.3.1）：经平台 `/api/me` 认人，和开房进房同一个做法（只转发 Cookie 和 IP、3 秒超时、"没登录"和"平台不可用"分开、fail-closed），带回平台的 `Set-Cookie`；游戏自己的接口用它，不再各写一份（登录闸门直接用 `loginGate`）；`identify`（0.10.0）：按部署方式认人，有平台走 `whoIs`，独立模式认游客 |
+| `arcade-kit/guest` | 游戏 Worker、浏览器 | 独立模式（0.10.0）：`isStandalone`、游客 cookie（`mintGuestCookie`、`readGuestCookie`）、`guestIdentity`、昵称清洗 `cleanNickname` |
 | `arcade-kit/rng` | 两边、规则核心 | ChaCha20（RFC 8439，0.2.0）：256 位密钥按"用途 + 序号"分流、拒绝采样的均匀整数、Fisher–Yates 洗牌；纯函数 |
 | `arcade-kit/meter` | 游戏 Worker（Durable Object） | 计量 `RoomMeter`（0.2.0）：每天的写入额度、按人和全站的开房名额，游戏原样导出、绑成 `METER` 就行；`meterReport` / `meterLevel`（0.3.0）给房间以外的 DO 记写入、问门槛 |
 | `arcade-kit/game` | 两边、规则测试 | 规则接口 `RoomGame`；`snapshotBytes`：算进房快照最大有多大，游戏在自己的测试里断言上限 |
-| `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台马上连、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案 |
+| `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台马上连、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
 | `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 
-包里直接发 TypeScript 源码（不另外构建），游戏用 vite / wrangler 打包时一起编译。
+**发布和仓库内引用是两种形态**（0.10.0）：
+- npm 上的包是编译好的 `dist/`（JS + `.d.ts`），`exports` 每个入口给 `types` 和 `default`；
+- 仓库里 `package.json` 的 `exports` 指向 `src/*.ts`：仓库内的游戏用 `file:` 引用时 npm 只建一个软链、不会替 kit 构建，
+  指向源码才能 `npm ci` 后直接用（和 0.9 一样，游戏用 vite / wrangler / tsc 一起编译）。打包时 `prepack` 构建 dist 并把 `exports` 换成 dist 版，
+  `postpack` 换回来（`scripts/manifest.mjs`）。所以**不要手改 package.json 里的 exports 成 dist**，新加入口照 `"./x": "./src/x.ts"` 写；
+- `src/` 里相互引用写 `.js` 扩展名（`./auth.js`）：编出来的 JS 原样就能被 Node 原生 ESM 解析，vite、esbuild、tsc（bundler 解析）对源码会把它映射回 `.ts`。
 游戏只用上面这几个入口；内部地址和身份头（`src/internal.ts`）不在 `exports` 里，游戏引用不到，免得自己拼内部请求。
 
 ## 游戏怎么接
 
-1. `package.json` 加依赖 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用）。
+1. `package.json` 加依赖：仓库外 `npm i arcade-kit`；仓库内现在仍是 `"arcade-kit": "file:../../packages/arcade-kit"`（总仓库 AGENTS.md 第 1 节唯一允许的模块外引用），以后各游戏改用 npm 上的版本。
 2. 写规则：实现 `RoomGame<S, A, V>`（`begin`、`parse`、`apply`、`turn`、`view`、`ai`、`timeout`、`over`，可选 `actors`、`turnMs`、`breakPoint`），都是纯函数，浏览器和房间共用。
    - **开局用 `begin(entropy, rulesVersion)`**（0.2.0）：`entropy` 是房间现生成的 256 位熵（8 个 u32），当 `arcade-kit/rng` 的密钥发牌，
      后面每一副从同一把密钥分出的流里取：`shuffle(deck, stream(key, 'deal', 第几副))`。密钥放在自己的状态里（只在服务端），`view` 绝不能带上它。
@@ -189,6 +218,22 @@
     `RoomGame.emotes` 是总数；房间不区分种类，只校验 id 范围和 `to`。表情、道具按"游戏的起始编号 + 下标"映射到 `arcade-kit/fun` 的 `STICKERS`、`PROPS`（顺序固定、只往后加）；
   - 被拒回 `error`（不带 moveId，页面可以不提示）：`no_emotes` 游戏没写 `emotes`；`bad_emote` 编号不是 0 到 `emotes - 1` 的整数；
     `not_seated` 没入座（来看的人不能发，免得旁观的刷屏）；`room_over` 房间打完了；`emote_too_fast` 这个座位没令牌了；`bad_target` 对象不对。
+  - **电脑也会互动**（0.10.0）：房间子类覆盖 `protected onStep(state)`（每一步广播完调一次，同步、不能 await、不写存储，抛错只记日志），
+    在里面看这一步的公开事件，需要时调 `protected botEmote(seat, id, to?): boolean` 让电脑座位发一句：
+    ```ts
+    class Room extends GameRoom<S, A, V, Env> {
+      protected readonly game = rules;
+      protected override onStep(state: S): void {
+        const e = lastPublicEvent(state);          // 游戏自己的：谁出了什么、谁赢了一把（只取公开的）
+        if (e?.bigWin) this.botEmote(e.seat, CHEER, e.loser);
+      }
+    }
+    ```
+    只有电脑在出手的座位能发（`kind` 是 `ai`，或真人掉线后电脑托管 `auto`）；真人座位、空位、编号或 `to` 不对、房间打完了、这个座位没令牌了都回 `false`、不广播。
+    广播的消息和真人的一样（`{ t: 'emote', seat, id, to? }`），多带 `bot: true`（`onEmote` 的第 4 个参数），页面一般不用区分。
+    和真人共用同一个座位的令牌桶（`emoteMs` / `emoteBurst`），不写存储、不改 seq。电脑短语即时到达，不跟着 `frames` 的播放延迟走：想让它落在某一帧之后，游戏在页面上自己按帧排队。
+    **公平约束（游戏侧守，kit 只管广播）**：电脑发不发、发什么只看公开信息（出过的牌、结算结果），不读隐藏的牌，也不读任何真人的短语——
+    kit 本来就不把真人短语交给规则和 `onStep`，游戏也不要自己记下来喂给电脑。电脑出牌的决策（`ai`）照旧不受短语影响。
 - **好玩素材** `arcade-kit/fun`（0.7.0，浏览器用，纯 DOM + SVG + Web Animations，不依赖渲染库）：
   - **图层**：`createFunLayer({ zIndex?, parent? })` 往 `document.body` 挂一个 `position: fixed; inset: 0; pointer-events: none` 的层（class `arcade-fun`，默认 z-index 50），
     点击全部穿透。要比牌桌高、比游戏的弹窗低：**游戏的弹窗、确认框的 z-index 要高于它**。界面在自己的层叠上下文里的（`position: fixed` 的容器、带 transform 缩放的舞台），
@@ -280,6 +325,51 @@
 
 各游戏的额度在自己的 `wrangler.jsonc` 的 `KIT_QUOTA` 里，总账见仓库根 `docs/platform-backend.md` 4.7。
 
+## 两种部署方式：平台模式和独立模式（0.10.0）
+
+同一份游戏代码两种部署，**由 env 决定，不由代码决定**（`guest.ts` 的 `isStandalone(env)`）：
+
+| | 平台模式（本站正式环境） | 独立模式（任何人单独部署一个游戏） |
+|---|---|---|
+| 条件 | 有服务绑定 `ARCADE`；或者写了 `GATE: "login"` | 没有 `ARCADE`，`GATE` 也不是 `"login"` |
+| 认人 | 经 `ARCADE` 问平台 `/api/me`（`whoIs`），和 0.9 完全一样 | 游客 cookie：游戏 Worker 自己发，`userId` 是 `g:` 加 cookie 值的 SHA-256 前 128 位 |
+| 首页 `loginGate` | 没登录 302 到 `/login`，平台不可用 503 | 放行，没有游客 cookie 就补发一个 |
+| 开房 `acceptCreate` | 没登录 401 | 没有游客 cookie 就现发（回话带 Set-Cookie） |
+| 进房 `acceptJoin` | 没登录 4401 | 没有游客 cookie 4401（进房不发 cookie，页面刷新首页即可） |
+| 昵称 | 平台的 displayName | 地址上的 `?name=`，`cleanNickname` 清洗；不合格或没带是"游客"加 4 位数字 |
+| 计量 `METER`、房间、协议 | 照常 | 照常（`KIT_QUOTA` 一样管额度） |
+
+- **安全**：有 `ARCADE` 绑定时游客 cookie 一律不看（测试覆盖：本站带游客 cookie 开房 401、进房 4401、首页 302）。
+  `GATE: "login"` 却没绑 `ARCADE`（部署工具漏了绑定）时**不退成游客模式**，按平台不可用拒绝（fail-closed）。同源检查两种模式都照旧。
+- **游客 cookie**：https 下名字是 `__Host-kit-guest`（`HttpOnly; Secure; SameSite=Lax; Path=/`，约 400 天），值是 32 字节 `crypto.getRandomValues`。
+  同一个站点下的几个游戏默认共用一个游客身份（和平台的一个账号一样），想分开就传 `guest: { cookie: '<游戏 id>-guest' }`，
+  `loginGate`、`acceptCreate`、`acceptJoin` 三处要传同一个。http（`wrangler dev` 用局域网 IP 打开）下浏览器不收 Secure cookie，名字不带 `__Host-`、不带 Secure。
+- **昵称**：NFKC 归一后只许字母（含汉字）、数字和空格 `_ - . ·`，1 到 12 个字；不能含保留词：kit 自带"电脑、机器人、游客、AI、bot……"（`RESERVED_NICKNAMES`），
+  游戏把自己电脑人物的名字传进 `guest: { reserved: [...] }`。浏览器用 `withNickname(url, name)` 给开房、进房地址带上。
+- **站点根路径**：独立部署到 `workers.dev` 时游戏仍挂在 `/games/<id>/`。Worker 入口最前面加
+  `const root = standaloneRoot(request, env, '<id>'); if (root) return root;`，独立模式下 `/` 302 到 `/games/<id>/`（平台模式回 null，不管）。
+  `/` 要先到 Worker：静态资源根上不能有 `index.html`，或者把 `"/"` 加进 `assets.run_worker_first`。
+
+**独立配置的 wrangler.jsonc**（游戏仓库里放这一份；本站正式部署时由维护者的部署工具补上 `ARCADE`、`WALLET` 和 `GATE: "login"`、路由）：
+
+```jsonc
+{
+  "name": "<游戏 id>",
+  "main": "worker/main.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,                    // 独立部署用 <name>.<子域>.workers.dev
+  "assets": { "directory": "./dist-cf", "binding": "ASSETS", "run_worker_first": ["/", "/games/<id>/", "/games/<id>/rooms", "/games/<id>/rooms/*"] },
+  "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "Room" }, { "name": "METER", "class_name": "RoomMeter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "RoomMeter"] }]
+  // 不写 services（没有 ARCADE、WALLET），不写 GATE
+}
+```
+
+**页面怎么降级**：开局时 `const p = await detectPlatform()`（问同域 `/api/me`，默认 2.5 秒超时）：
+- `{ platform: true, user }`：有平台，照常（`user` 为 null 是没登录）；
+- `{ platform: false }`：404 或不是平台的 JSON，独立部署。藏起登录、云存档、排行榜、钱包（实盘），"回大厅"改成回游戏首页（`./`）；
+- `{ platform: 'unknown' }`：5xx、429、断网、超时。平台可能只是抖了一下，按游戏自己的取舍（比如先按有平台、稍后再问一次）。
+
 ## 还没做的（以后按需加）
 
 - 人机验证；跨游戏的统一房间登记（5.3）。开房名额现在由每个游戏的计量各管各的（上面"每天的额度"），开放注册前看一眼门槛够不够紧；
@@ -292,7 +382,9 @@
 ```bash
 cd packages/arcade-kit
 npm ci
-npm test        # 类型检查 + vitest（本地 workerd 里跑真的 Durable Object、WebSocket 休眠接口和闹钟）
+npm test        # 类型检查 + vitest（本地 workerd 里跑真的 Durable Object、WebSocket 休眠接口和闹钟）+ 构建 dist 并检查每个入口都在、浏览器入口 Node 能直接 import
+npm run build   # 只构建 dist/（tsconfig.build.json）
+npm pack        # prepack 构建并把 exports 换成 dist 版，打出 arcade-kit-<版本>.tgz，postpack 换回来
 ```
 
 测试用的游戏 Worker 在 `test/worker.ts`（一个最小的"比大小"规则；0.3.0 的可选接口用 `test/ledger.ts` 的"记账桌"和假银行测），平台的 `/api/me` 用假的服务绑定代替（`vitest.config.ts`），假钱包 `WALLET` 绑回测试 Worker 自己导出的 `WalletService`（`test/wrangler.jsonc`）。
@@ -300,10 +392,11 @@ npm test        # 类型检查 + vitest（本地 workerd 里跑真的 Durable Ob
 
 ## 部署
 
-kit 自己不部署，也没有 Worker：发的是 TypeScript 源码，游戏经 `package.json` 的 `"arcade-kit": "file:../../packages/arcade-kit"` 依赖它，打包进游戏自己的 Worker 和页面。
+kit 自己不部署，也没有 Worker：发到 npm（`npm publish`，由维护者做；`publishConfig.access` 是 public），仓库内的游戏现在仍经 `"arcade-kit": "file:../../packages/arcade-kit"` 依赖源码，打包进游戏自己的 Worker 和页面。
 CI 的 `pkg-arcade-kit.yml` 只跑测试；kit 改动时依赖它的游戏的流程也会跑一遍测试。用 kit 的游戏要准备这些（写在游戏自己的 `wrangler.jsonc` 里，整体部署见仓库根 README 的部署一节）：
 
-- 绑定：`ROOM`（游戏的房间 DO）、`METER`（`RoomMeter`）、`ARCADE`（到平台 Worker 的服务绑定，`/api/me` 认人走它）；
+- 绑定：`ROOM`（游戏的房间 DO）、`METER`（`RoomMeter`）、`ARCADE`（到平台 Worker 的服务绑定，`/api/me` 认人走它；独立部署不绑，见上面"两种部署方式"）；
+- 变量：`GATE`（0.10.0 起有三种意思）：`"login"` 必须接平台（没绑 `ARCADE` 时 fail-closed）；`"off"` 本地开发不拦首页；不写时看有没有 `ARCADE`；
 - 变量：`KIT_QUOTA`（可选，改每天的额度门槛，见上面"每天的额度"）；`SITE_ORIGIN`（可选，0.9.0）：Origin 只认这个站点。
   不设就认请求自己的 origin（游戏和平台挂在同一个站点下，浏览器从哪个站点打开、连的就是哪个），想更严的在部署时注入，再由游戏传给 `acceptCreate` / `acceptJoin` 的 `siteOrigin`；
 - kit 里不写死站点地址：同站校验默认用请求的 origin，`/api/me` 按请求的 origin 拼地址、经 `ARCADE` 绑定去问。
@@ -315,7 +408,8 @@ packages/arcade-kit/
 ├─ src/
 │  ├─ room.ts        房间基类 GameRoom（Durable Object）
 │  ├─ worker.ts      开房 acceptCreate、进房 acceptJoin、登录闸门 loginGate、json / readJson
-│  ├─ auth.ts        经平台 /api/me 认人 whoIs、同站校验 sameOrigin
+│  ├─ auth.ts        经平台 /api/me 认人 whoIs、按部署方式认人 identify、同站校验 sameOrigin
+│  ├─ guest.ts       独立模式：游客 cookie、游客身份、昵称清洗
 │  ├─ meter.ts       每天的额度计量 RoomMeter
 │  ├─ game.ts        规则接口 RoomGame、snapshotBytes
 │  ├─ client.ts      浏览器连接器 RoomClient、createRoom、默认文案
@@ -324,10 +418,12 @@ packages/arcade-kit/
 │  ├─ fun.ts、fun-art.ts  快捷短语、表情、道具的画面层
 │  ├─ testing.ts     假平台钱包（只给测试和本地开发）
 │  └─ internal.ts    内部地址、身份头（不在 exports 里）
+├─ scripts/manifest.mjs  打包时把 exports 换成 dist 版、换回来、检查 dist
+├─ tsconfig.build.json   构建 dist 用
 ├─ test/             vitest（workerd），测试用的游戏 Worker 和 wrangler 配置
 └─ demo/             浏览器里的小例子
 ```
 
 ## 许可证
 
-MIT，见仓库根的 `LICENSE`。
+MIT，见 `LICENSE`（和仓库根的同一份）。

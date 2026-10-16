@@ -1,0 +1,12 @@
+{
+  "name": "arcade-deployer",
+  "private": true,
+  "description": "部署工具：维护者管的、钉死版本的 wrangler，部署作业只用它（不用模块自己的 node_modules）。见 README.md",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "wrangler": "4.151.0"
+  }
+}

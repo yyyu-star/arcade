@@ -6,7 +6,7 @@
 
 ```
 src/core/   规则核心（纯函数、确定性）：cards 牌与牌序、patterns 牌型/比大小/枚举、game 状态机与玩家视角、options 规则开关、rng
-src/ai/     电脑对手：plan 理牌、bot 决策（三档难度）、random 随机机器人（模拟基准）
+src/ai/     电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、random 随机机器人（模拟基准）
 src/net/    联机（房间和页面共用，纯函数）：rules 把规则核心接成 arcade-kit 的 RoomGame、rotate 视角旋转（我总在下）、version 页面版本与房间、实盘路径、
             stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
@@ -21,7 +21,7 @@ tests/      vitest；architecture.test.ts 检查 core/ai 的纯度；tests/room/
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai-<版本>/ 上一版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC）；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
-            quota-smoke.ts 额度提示冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
+            quota-smoke.ts 额度提示冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
 docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计（0.4.0 单机、0.5.0 好友房）
 ```
 
@@ -35,6 +35,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   改了会影响牌局结果的规则要加 `RULES_VERSION`，并让旧版本的牌局能按旧规则打完。
 - 规则有出入的点先查 `docs/rules.md`；改规则要同步改该文档、`docs/core-api.md` 和测试，地方差异做成 `options.ts` 开关。
 - 改电脑策略后跑 `npm run sim`（`--mode random|greedy|ai|easy-vs-hard|normal-vs-prev`），确认无非法动作、无死锁、难度梯度还在。
+  改强弱、性格、场地表后跑 `npm run ai-sim -- solo|room|style`，把新数字写进 `docs/ai.md` 和 `docs/stake.md` 1.3、3.1（好友房实盘每档要"两个普通真人搭档期望加两倍标准误 ≤ 0"）。
+  没给性格时 `decide` 就是难度预设本身（聪明提示、代打、`sim` 都靠这个），新加的打法参数默认 0、不改原来的行为。
   发版时把这一版的 `src/ai` 复制成 `tools/baseline-ai-<版本>/`（改 import 路径），下一版用 `normal-vs-prev` 对比。
 
 ## 3. 画面层约定
@@ -151,6 +153,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
 | `npm run stake-smoke` / `node tools/stake-sim.ts` | 单机实盘冒烟（本地栈 + 假钱包）/ 实盘计分模拟 |
+| `npm run ai-sim -- solo\|room\|style\|time` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时（docs/ai.md） |
 | `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174 |
 
 ## 5. 浏览器存储 key（全部 `guandan.` 前缀）

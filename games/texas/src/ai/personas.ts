@@ -3,7 +3,6 @@
  * 个数要等于规则里的 PERSONA_COUNT（test/ai.test.ts 核对）。
  * 门槛都用"相对强度"：胜率 ×（对手数 + 1），千分数，1000 = 这一桌的平均水平。参数由 scripts/sim.ts 的机器人对打调。
  */
-import type { StakesId } from '../core/stakes.ts';
 
 export interface Persona {
   name: string;
@@ -59,8 +58,8 @@ export const PERSONAS: readonly Persona[] = [
 ];
 
 /**
- * 每档桌子的"功力"（DESIGN.md 4.3）：同一种性格，小桌松、软、不太会看人，豪华桌紧、凶、会按对手的动作猜他的牌。
- * 电脑从 View.stakes 知道是哪一档。补位时各档挑哪些性格多一些见 stakes.ts 的 house。
+ * 电脑的"功力"，按强弱档（0.5.0 起按档，原来按档位，DESIGN.md 4.3、4.7）：同一种性格，新手档松、软、不太会看人，越往上越紧、越凶、越会按对手的动作猜他的牌。
+ * 电脑从 View.level 知道是哪一档；场地按档位挑档（stakes.ts 的 SOLO_LEVEL、ROOM_LEVEL），补位时各档挑哪些性格多一些见 stakes.ts 的 LEVEL_HOUSE。
  */
 export interface Skill {
   /**
@@ -80,13 +79,24 @@ export interface Skill {
   bluff: number;
   /** 翻牌前跟注、加注门槛整体抬高多少（相对强度）：负数是松 */
   tight: number;
-  /** 性格的 loose / wild 和正的 slack 在这一档用几成（‰）：小桌全用，越往上越少 */
+  /** 性格的 loose / wild 和正的 slack 在这一档用几成（‰）：新手、小桌全用，越往上越少 */
   soft: number;
+  /** "手软"（0.5.0，只有新手档）：翻牌后拿着中等牌被人下注时偶尔就弃了、该薄薄下一注时偶尔只过牌（‰）。给新手场的人留点赢的感觉 */
+  slip: number;
+  /** 看对手的打法用几成（0.5.0，‰）：对紧的人多偷、对跟注站少诈唬多薄打、对爱加注的人放宽跟注。新手不看 */
+  adapt: number;
+  /** 按筹码深浅打（0.5.0）：剩的不到 SHORT_BB 个大盲翻牌前只推或弃，很深时多看便宜的翻牌。新手不会 */
+  depth: boolean;
 }
 
-export const SKILL: Readonly<Record<StakesId, Skill>> = {
-  small: { read: 300, pre: 150, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 700, tight: 0, soft: 1000 },
-  mid: { read: 240, pre: 200, raiser: 40, caller: 70, limper: 100, slack: 0, bluff: 800, tight: 0, soft: 600 },
-  big: { read: 220, pre: 205, raiser: 30, caller: 55, limper: 90, slack: 0, bluff: 750, tight: 20, soft: 200 },
-  lux: { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0 },
-};
+const LUX: Skill = { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0, slip: 0, adapt: 1000, depth: true };
+
+/** 下标是强弱档：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强（功力同豪华桌，性格按 STRONG 挑最强的） */
+export const SKILL: readonly Skill[] = [
+  { read: 200, pre: 120, raiser: 100, caller: 100, limper: 100, slack: 20, bluff: 550, tight: -20, soft: 1000, slip: 150, adapt: 0, depth: false },
+  { read: 300, pre: 150, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 700, tight: 0, soft: 1000, slip: 0, adapt: 300, depth: true },
+  { read: 240, pre: 200, raiser: 40, caller: 70, limper: 100, slack: 0, bluff: 800, tight: 0, soft: 600, slip: 0, adapt: 600, depth: true },
+  { read: 220, pre: 205, raiser: 30, caller: 55, limper: 90, slack: 0, bluff: 750, tight: 20, soft: 200, slip: 0, adapt: 800, depth: true },
+  LUX,
+  LUX,
+];

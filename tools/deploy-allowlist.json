@@ -1,0 +1,20 @@
+{
+  "$comment": "部署配置里放行的 vars 名和 compatibility_flags（tools/deployer/lib.mjs 按它检查，PR 检查和部署前都查）。只由维护者改：新增 vars 名、兼容开关属于放宽白名单，维护者确认它不是 Secret、不会改变安全相关的行为后再加。forbiddenVars 是任何模块都不许出现在 vars 里的名字：平台的 Secret（platform/worker/env.ts 里标了 Secret 的，按 2026-10-15 的版本抄过来；平台新增 Secret 时同步加）和由部署流程注入的 SITE_ORIGIN。",
+  "vars": {
+    "arcade": ["REGISTRATION", "LIMITS"],
+    "kaipan": ["GATE"],
+    "guandan": ["GATE", "ONLINE", "KIT_QUOTA"],
+    "texas": ["GATE", "KIT_QUOTA"],
+    "mahjong": ["GATE", "KIT_QUOTA"]
+  },
+  "forbiddenVars": [
+    "SITE_ORIGIN",
+    "ADMIN_TOKEN",
+    "API_MODE",
+    "PEPPER_PW", "PEPPER_PW_PREV",
+    "PEPPER_RC", "PEPPER_RC_PREV",
+    "PEPPER_SID", "PEPPER_SID_PREV",
+    "PEPPER_IP"
+  ],
+  "compatibility_flags": []
+}

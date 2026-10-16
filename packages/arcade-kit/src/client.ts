@@ -12,7 +12,7 @@
  *
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
-import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type UpMsg } from './protocol';
+import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type UpMsg } from './protocol.js';
 
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
 
@@ -30,9 +30,9 @@ export interface RoomClientOptions<V> {
   onStatus?(status: ClientStatus, closeCode?: number, reason?: string): void;
   /**
    * 有人发了快捷短语（0.6.0，见 RoomGame.emotes）：seat 是房间的座位号，id 是短语编号。不传就丢掉。
-   * to（0.7.0）：冲着哪个座位发的，没指定时是 undefined
+   * to（0.7.0）：冲着哪个座位发的，没指定时是 undefined；bot（0.10.0）：电脑座位发的（GameRoom.botEmote）是 true，一般不用区分
    */
-  onEmote?(seat: number, id: number, to?: number): void;
+  onEmote?(seat: number, id: number, to?: number, bot?: boolean): void;
   /** 下面这些是给测试注入的；浏览器里不用传 */
   WebSocketImpl?: { new (url: string): WebSocketLike };
   random?: () => number;
@@ -207,7 +207,7 @@ export class RoomClient<A = unknown, V = unknown> {
         return;
       }
       if (msg.t === 'emote') {
-        if (Number.isInteger(msg.seat) && Number.isInteger(msg.id)) this.opts.onEmote?.(msg.seat, msg.id, Number.isInteger(msg.to) ? msg.to : undefined);
+        if (Number.isInteger(msg.seat) && Number.isInteger(msg.id)) this.opts.onEmote?.(msg.seat, msg.id, Number.isInteger(msg.to) ? msg.to : undefined, msg.bot === true);
         return;
       }
       // 本地已经按节奏排队了，房间偶尔还嫌快（比如刚重连、节奏刚调过）：静默丢掉，不打扰页面
@@ -382,4 +382,57 @@ export function closeText(code: number, reason?: string, overrides: RoomTexts = 
     if (name && name in ROOM_TEXT) key = name as RoomTextKey;
   }
   return overrides[key] ?? ROOM_TEXT[key];
+}
+
+// ---------- 有没有平台（0.10.0，独立部署时页面降级用） ----------
+
+/**
+ * 页面所在站点有没有平台：
+ * - `platform: true`：同域 `/api/me` 回 200 且是 `{ user }` 的 JSON。user 是平台的 `/api/me` 原样（没登录为 null）；
+ * - `platform: false`：404、405、410，或者 2xx 却不是那个 JSON（独立部署时这个地址落到游戏自己的 Worker 或静态资源上）。
+ *   游戏应当藏起登录、云存档、排行榜、钱包，"回大厅"改成回游戏首页；
+ * - `platform: 'unknown'`：5xx、429、断网、超时（默认 2.5 秒）。平台可能只是抖了一下：先按有平台处理但别报错，过一会儿再试，
+ *   或者干脆当成没有——游戏自己定。
+ */
+export type PlatformInfo = { platform: true; user: unknown } | { platform: false } | { platform: 'unknown' };
+
+export interface DetectPlatformOptions {
+  /** 默认 `/api/me`（站点根下，和游戏挂在哪无关） */
+  url?: string | URL;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+export async function detectPlatform(opts: DetectPlatformOptions = {}): Promise<PlatformInfo> {
+  const f = opts.fetchImpl ?? fetch;
+  let res: Response;
+  try {
+    res = await f(opts.url ?? '/api/me', { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(opts.timeoutMs ?? 2_500) });
+  } catch {
+    return { platform: 'unknown' };
+  }
+  if (res.status === 404 || res.status === 405 || res.status === 410) return { platform: false };
+  if (res.status < 200 || res.status >= 300) return { platform: 'unknown' };
+  const type = res.headers.get('content-type') ?? '';
+  if (!/^application\/(?:[\w.+-]+\+)?json\b/i.test(type)) return { platform: false };
+  try {
+    const body = (await res.json()) as unknown;
+    if (body && typeof body === 'object' && !Array.isArray(body) && 'user' in body) return { platform: true, user: (body as { user: unknown }).user };
+  } catch {
+    // 读到一半断了算不知道；读完了却不是 JSON 在上面已经按 content-type 挡掉
+    return { platform: 'unknown' };
+  }
+  return { platform: false };
+}
+
+/**
+ * 独立模式下给开房、进房的地址带上昵称（`?name=`，0.10.0）：`createRoom(withNickname('rooms', name), opts)`、
+ * `new RoomClient({ url: withNickname(wsUrl, name), … })`。服务端会严格清洗（guest.ts 的 cleanNickname），不合格就用默认的"游客1234"；
+ * 有平台时服务端不看它，昵称以平台为准。name 空的原样返回
+ */
+export function withNickname(url: string, name?: string | null): string {
+  if (!name) return url;
+  const i = url.indexOf('#');
+  const [head, hash] = i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i)];
+  return `${head}${head.includes('?') ? '&' : '?'}name=${encodeURIComponent(name)}${hash}`;
 }

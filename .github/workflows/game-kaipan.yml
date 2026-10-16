@@ -1,7 +1,10 @@
-# 开盘（games/kaipan/）：只在开盘或共用包有改动时测试、构建并部署到 Cloudflare Workers（kaipan，路径路由 /games/kaipan/）。
-# PR 上只跑 test（不碰凭证）；deploy 只在 main 上跑，用 production 环境里的凭证（该环境只允许 main 部署），
-# 并先用 tools/verify-main.sh 核对 main 的历史都是经 PR、由所有者合并的——直接推送的提交不部署（见仓库根 CONTRIBUTING.md）。
-# 拆成独立仓库时：去掉 paths 和 working-directory，把 games/kaipan/ 前缀去掉即可。
+# 开盘（games/kaipan/）：只在开盘有改动时测试、构建并部署到 Cloudflare Workers（kaipan，路径路由 <站点>/games/kaipan/）。
+# 两个作业（为什么这样分见 docs/review-policy.md 的「部署怎么防」一节）：
+#   test：测试、构建、打包。跑的是合并进来的模块代码，所以拿不到任何凭证（不进 production 环境）；打出的产物当不可信数据交给 deploy。
+#   deploy：只在 main 上、进 production 环境。不 checkout 模块代码（sparse-checkout 只取 tools/ 和本模块的 wrangler.jsonc）、不装模块依赖，
+#     先用 tools/verify-main.sh 核对 main 的历史都是经 PR、由仓库所有者合并的，再由 tools/deployer/deploy.mjs 用钉死版本的 wrangler
+#     重新检查产物和配置、注入路由和 SITE_ORIGIN 后部署（见 CONTRIBUTING.md）。
+# 拆成独立仓库时：去掉 paths 和 working-directory，把 games/kaipan/ 前缀去掉，并把 tools/deployer、tools/verify-main.sh 一起带走。
 name: Deploy kaipan
 on:
   push:
@@ -27,9 +30,13 @@ jobs:
       group: game-kaipan-test-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     timeout-minutes: 30
+    outputs:
+      deployable: ${{ steps.pack.outputs.deployable }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: games/kaipan/.nvmrc
           cache: npm
@@ -38,11 +45,29 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build:cf
+      # PR 上也打一次包（几秒钟），合并前就能发现打包的问题；只有 main 上才上传给 deploy。
+      # 还没有 wrangler.jsonc（设计、规则核心阶段）时不打包、不部署
+      - name: 打包（wrangler --dry-run，产物交给 deploy 重新检查）
+        id: pack
+        run: |
+          if [ ! -f wrangler.jsonc ]; then echo "还没有 wrangler.jsonc，不部署"; echo deployable=false >> "$GITHUB_OUTPUT"; exit 0; fi
+          npx wrangler deploy --dry-run -c wrangler.jsonc --outdir "$RUNNER_TEMP/artifact/worker"
+          node ../../tools/deployer/pack.mjs "$RUNNER_TEMP/artifact"
+          echo deployable=true >> "$GITHUB_OUTPUT"
+      - name: 上传产物
+        if: github.event_name != 'pull_request' && steps.pack.outputs.deployable == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kaipan-bundle
+          path: ${{ runner.temp }}/artifact
+          retention-days: 3
+          if-no-files-found: error
+          include-hidden-files: false
   deploy:
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test.outputs.deployable == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     environment: production
     concurrency:
       # 部署排队，不互相打断
@@ -52,31 +77,55 @@ jobs:
       contents: read
       pull-requests: read
       actions: read
+    defaults:
+      run:
+        working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      # 只取维护者管的 tools/ 和本模块审过的 wrangler.jsonc（只当数据读）；模块的代码、package.json、node_modules 一概不进这个作业
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: 只部署经 PR 合并、由所有者合并进 main 的历史
-        working-directory: .
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tools/
+            /games/kaipan/wrangler.jsonc
+      - name: 只部署经 PR 合并、由仓库所有者合并进 main 的历史
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
         run: bash tools/verify-main.sh "${{ github.sha }}"
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: games/kaipan/.nvmrc
-          cache: npm
-          cache-dependency-path: games/kaipan/package-lock.json
-      - run: npm ci
-      - run: npm run build:cf
-      # 路由在部署时注入：正式站的主机名只放在 production 环境的 secret SITE_HOST 里（公开仓库的日志会自动打码），没设就失败，不带着空路由部署
-      - name: 部署（注入 /games/kaipan 的路由）
+      # 只部署 main 的最新提交：排队或等批准期间又合并了新的 PR，这次运行的提交就旧了，部署它会把线上退回旧版本。
+      # 失败时不重跑这次运行：对 main 手动运行本流程（workflow_dispatch），部署的就是最新提交（见 CONTRIBUTING.md）
+      - name: 只部署 main 的最新提交
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
-          : "${SITE_HOST:?SITE_HOST 未设置}"
-          npx wrangler deploy --route "$SITE_HOST/games/kaipan" --route "$SITE_HOST/games/kaipan/*"
+          head=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          if [ "$head" != "$SHA" ]; then
+            echo "::error::有更新的合并（main 现在是 $head，这次运行是 $SHA），旧运行不部署；要部署就对 main 手动运行本流程"
+            exit 1
+          fi
+      # 不用缓存：缓存能被跑模块代码的作业写
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: 装钉死版本的 wrangler（tools/deployer，不跑安装脚本）
+        working-directory: tools/deployer
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: kaipan-bundle
+          path: ${{ runner.temp }}/artifact
+      # 正式站的主机名只在 production 环境的 secret SITE_HOST 里（公开仓库的日志会自动打码），没设就失败，不带着空路由部署。
+      # deploy.mjs 给 wrangler 的环境只有这几个变量，工作目录是新建的空目录，--env-file 指向 /dev/null（不读任何 .env）
+      - name: 检查产物和配置，部署（注入 /games/kaipan 的路由和 SITE_ORIGIN）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_BASE_URL: https://api.cloudflare.com/client/v4
           SITE_HOST: ${{ secrets.SITE_HOST }}
+        run: node tools/deployer/deploy.mjs --module games/kaipan --artifact "$RUNNER_TEMP/artifact" --work "$RUNNER_TEMP/deploy"

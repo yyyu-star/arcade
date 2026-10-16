@@ -374,11 +374,29 @@ export class TableView {
     const b = bluffs.find(house);
     if (b !== undefined) return void this.speak(b, f.seats[b]!.persona, r.handNo, winners.has(b) ? 'bluffWon' : 'caught', true);
     const w = [...winners].find(house);
-    if (w === undefined) return;
-    const pot = r.pots.reduce((a, p) => a + p.amount, 0);
-    const lastBet = log.findLast((e) => e.act === 'bet' || e.act === 'raise');
-    if (r.byFold && lastBet?.seat === w && pot >= 10 * f.bb) this.speak(w, f.seats[w]!.persona, r.handNo, 'bluffWon');
-    else if (pot >= 40 * f.bb) this.speak(w, f.seats[w]!.persona, r.handNo, 'bigWin', true);
+    if (w !== undefined) {
+      const pot = r.pots.reduce((a, p) => a + p.amount, 0);
+      const lastBet = log.findLast((e) => e.act === 'bet' || e.act === 'raise');
+      if (r.byFold && lastBet?.seat === w && pot >= 10 * f.bb) return void this.speak(w, f.seats[w]!.persona, r.handNo, 'bluffWon');
+      if (pot >= 40 * f.bb) return void this.speak(w, f.seats[w]!.persona, r.handNo, 'bigWin', true);
+    }
+    // 输了大池子：这一手投进去 ≥ 40 个大盲、又没赢的电脑，偶尔嘟囔一句。
+    // 这时 f.seats[i].total 不一定还是本手的投入（筹码已分完），所以从 log 累加：
+    // 盲注、bet/raise 都是"这条街加到多少"（取代本街原值），call 是"本次跟了多少"（累加），公共牌（seat < 0）分街，每街结算一次
+    const put = new Map<number, number>();
+    let street = new Map<number, number>();
+    const settle = (): void => {
+      for (const [s, v] of street) put.set(s, (put.get(s) ?? 0) + v);
+      street = new Map();
+    };
+    for (const e of log) {
+      if (e.seat < 0) settle();
+      else if (e.act === 'sb' || e.act === 'bb' || e.act === 'bet' || e.act === 'raise') street.set(e.seat, e.amount);
+      else if (e.act === 'call') street.set(e.seat, (street.get(e.seat) ?? 0) + e.amount);
+    }
+    settle();
+    const loser = [...put].find(([s, v]) => v >= 40 * f.bb && !winners.has(s) && house(s));
+    if (loser) this.speak(loser[0], f.seats[loser[0]]!.persona, r.handNo, 'bigLoss');
   }
 
   /** 头像旁边冒一句话，过一会儿自己消失 */

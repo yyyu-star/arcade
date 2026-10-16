@@ -3,7 +3,6 @@
  * 和 src/core 一样是纯函数：不碰 DOM、网络、时间、随机数（ref 里的随机数由调用方给）。Worker、页面、房间都从这里取数，
  * 不各算一份。
  */
-import type { Difficulty } from '../ai/index.ts';
 import { teamOf, type DealResult, type Phase, type Seat, type Team } from '../core/index.ts';
 
 /** 档位表（docs/economy.md 第 2 节，三个游戏共用）：一份多少 */
@@ -24,20 +23,6 @@ export const ROOM_DEALS = 5;
 export const SOLO_HOURS = 24;
 /** 好友房：房间寿命 8 小时 + 关房收尾 1 小时 + 余量 */
 export const ROOM_HOURS = 10;
-
-/** 单机每档的电脑（1.3）：越往上越难。我是 0 号，搭档 2 号，对手 1、3 号 */
-export const SOLO_BOTS: Readonly<Record<TierId, { mate: Difficulty; opp: Difficulty }>> = {
-  small: { mate: 'normal', opp: 'easy' },
-  mid: { mate: 'normal', opp: 'normal' },
-  big: { mate: 'normal', opp: 'hard' },
-  lux: { mate: 'easy', opp: 'hard' },
-};
-/** 好友房的电脑座位一律最强（3.1）：电脑是庄家的，好友房不是来赢电脑的 */
-export const ROOM_BOT: Difficulty = 'hard';
-
-export function soloBot(tier: TierId, seat: Seat): Difficulty {
-  return seat === 2 ? SOLO_BOTS[tier].mate : SOLO_BOTS[tier].opp;
-}
 
 /** 每分多少筹码（各档都整除） */
 export function pointValue(tier: TierId): number {

@@ -19,6 +19,7 @@ declare module 'node:fs' {
 }
 declare module 'node:os' {
   export function tmpdir(): string;
+  export function cpus(): unknown[];
 }
 declare module 'node:fs' {
   export function mkdirSync(path: string, opts?: { recursive?: boolean }): void;

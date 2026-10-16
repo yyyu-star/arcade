@@ -232,21 +232,23 @@ function tracked(api: WalletApi): WalletApi {
  * - 翻牌前没人加注（只补一个大盲、过牌，或者弃）：顺手的事，0.25–0.5 秒（0.3.0 实打：原来弃牌也想 1.5–2.3 秒，
  *   大家都弃的一手也要 18–27 秒，6 人桌平均每手 41 秒、9 人桌 48 秒；目标 30 秒以内）；
  * - 其他：按性格 0.45–0.9 秒起，面对下注、翻牌以后多想一会儿；
- * - 难的决定（要跟的比池子大，或者占了手里三分之一以上）再想一会儿，最多 3.8 秒——久想本身就是个信号（0.2.3）
+ * - 难的决定（要跟的比池子大，或者占了手里三分之一以上）再想一会儿，最多 3.8 秒——久想本身就是个信号（0.2.3）；
+ * - 这一场的状态（0.5.0，SeatState.form 的第 4 个数）：同一个性格这一场整体快一点或慢一点（×0.8–1.25），和它的打法一起浮动
  */
 function think(t: Table, seat: number): number {
   const s = t.seats[seat]!;
+  const mood = (s.form?.[3] ?? 1000) / 1000;
   const owe = Math.min(s.stack, t.currentBet - s.bet);
   // 7–9 人桌一圈要等七八个电脑：整体再快一档（0.3.0 连拍、实打量的）
   const crowd = t.seats.filter((x) => x.owner !== 'none').length >= 7 ? 0.7 : 1;
-  if (t.board.length === 0 && owe <= t.bb) return (250 + Math.random() * 250) * crowd * pace();
+  if (t.board.length === 0 && owe <= t.bb) return (250 + Math.random() * 250) * crowd * mood * pace();
   // 顺序同 PERSONAS：稳哥、阿飙、老好、慢慢、算盘、江湖、虎子、老鹰、叨叨、小白
   const base = [650, 450, 700, 900, 750, 600, 450, 600, 550, 800][s.persona] ?? 650;
   const facing = owe > 0 ? 300 : 0;
   const later = t.board.length ? 100 : 0;
   const pot = t.seats.reduce((a, x) => a + x.total, 0);
   const hard = owe > 0 && (owe >= pot || owe * 3 >= s.stack) ? 800 + Math.random() * 600 : 0;
-  return Math.min(hard ? 3_800 : 2_200, (base + facing + later + Math.random() * 400) * crowd + hard) * pace();
+  return Math.min(hard ? 3_800 : 2_200, ((base + facing + later + Math.random() * 400) * crowd + hard) * mood) * pace();
 }
 
 // ---------- 大厅 ----------

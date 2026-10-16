@@ -1,5 +1,27 @@
 # 更新日志
 
+## 0.10.0
+
+- **能发到 npm**：去掉 `private`，补 `repository`、`homepage`、`bugs`、`keywords`、`files`、`engines`（Node ≥ 22）、`sideEffects: false`、`publishConfig.access: public`、`LICENSE`；
+  `@cloudflare/workers-types` 是可选的 peer 依赖（只用到类型）。
+  - 发布内容是 `dist/`（tsc 按 `tsconfig.build.json` 编的 JS + `.d.ts` + map）和对照用的 `src/`；`build` 脚本，`prepack` 先构建。
+  - 仓库里的 `exports` 仍指向 `src/*.ts`，仓库内游戏的 `file:` 引用 `npm ci` 后照旧能用（npm 不会替软链的依赖构建）；
+    `prepack` 把 `exports` 换成 `{ types, default }` 指向 dist，`postpack` 换回来（`scripts/manifest.mjs`）。
+  - `src/` 里相互引用改写 `.js` 扩展名，编出来的 JS Node 原生 ESM 也能解析（vite、esbuild、tsc 对源码照旧映射回 `.ts`）。行为不变。
+  - `npm test` 末尾加 `check:dist`：构建 dist，检查每个入口的 JS 和 `.d.ts` 都在，浏览器能用的入口 Node 能直接 import。
+- **独立模式**（游戏不带平台单独部署）：新入口 `arcade-kit/guest`。没有 `ARCADE` 绑定、`GATE` 也不是 `"login"` 时：
+  - `loginGate` 不跳登录，回页面，补发游客 cookie（https 下 `__Host-kit-guest`，HttpOnly、Secure、SameSite=Lax、Path=/，值 32 字节随机）；
+  - `acceptCreate` 认游客 cookie，没有就现发；`acceptJoin` 认游客 cookie，没有 4401；
+  - 游客 `userId` 是 `g:` 加 cookie 值 SHA-256 的前 128 位，默认昵称"游客"加 4 位数字；开房、进房地址可带 `?name=`，`cleanNickname` 严格清洗（保留词由游戏传 `guest.reserved`）；
+  - 新增 `identify`（auth）：按部署方式认人；`standaloneRoot(request, env, gameId)`：独立模式下 `/` 302 到 `/games/<id>/`；
+    浏览器 `detectPlatform()`（同域 `/api/me`：有平台 / 没有 / 不知道）、`withNickname(url, name)`。
+  - **有 `ARCADE` 绑定时行为完全不变**，游客 cookie 一律不认；`GATE: "login"` 却没绑 `ARCADE` 时 fail-closed（以前 GATE 不写也是这样，现在不写 GATE 又没绑 ARCADE 算独立模式）。
+  - 测试 `test/guest.test.ts`：发 cookie、认人、重连还是同一个人、换 cookie 是另一个人、昵称清洗、本站带游客 cookie 不认、GATE=login 不退成游客、同源检查照旧；
+    反证：让 `isStandalone` 忽略 `ARCADE`，平台模式那几条全部失败。
+- **电脑也会互动**：`GameRoom` 加 `protected onStep(state)`（每步广播完调一次）和 `protected botEmote(seat, id, to?): boolean`：只有电脑座位（`ai`、托管 `auto`）能发，
+  校验和限速同真人（同一个座位令牌桶），不写存储；广播的 `EmotedMsg` 多带 `bot: true`（协议只加字段），`onEmote` 多一个参数 `bot`。
+  测试（`test/emote.test.ts` 的 `ChattyRoom`）：所有连接收到、真人座位发不出、限速生效、不写库；反证：去掉"必须是电脑座位"的判断，两条都失败。
+
 ## 0.9.1
 
 - 只改测试：修 `quota.test.ts`"计量连不上"那条偶发的失败（CI 上 expected 201 to be 409）。房间代码不改。

@@ -19,7 +19,7 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { stream } from 'arcade-kit/rng';
 import { aiAction } from '../bot.ts';
 import { NO_FAME, noteHand, settleStats, type Fame, type SettleStats } from '../core/fame.ts';
-import { STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
+import { ROOM_LEVEL, STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
 import {
   MAX_SEATS,
   addChips,
@@ -161,10 +161,11 @@ const SIMPLE = new Set<string>(['fold', 'check', 'call', 'allin', 'away', 'back'
 
 /**
  * 好友房的牌桌（0.4.0，和掼蛋、麻将统一）：好友房都是实盘，不能一个人带电脑赢钱包——
- * 能打的真人至少两个才发牌（规则的 minHumans，一手打着时人走了照样打完，下一手不发），电脑一律最强（strong，不按档位挑软的）。
- * 一个人开打（旧页面、脚本绕过按钮）也一样：买入照常扣、牌不发，离桌原样结回，不计输赢。期望见 DESIGN.md 6.5
+ * 能打的真人至少两个才发牌（规则的 minHumans，一手打着时人走了照样打完，下一手不发）。
+ * 一个人开打（旧页面、脚本绕过按钮）也一样：买入照常扣、牌不发，离桌原样结回，不计输赢。
+ * 电脑用好友房的强弱档（0.5.0，stakes.ts 的 ROOM_LEVEL：四档都是最强，和 0.4.0 的 strong 一样）。期望见 DESIGN.md 6.5
  */
-const FRIENDS = { holdHands: true, minHumans: 2, strong: true } as const;
+const FRIENDS = { holdHands: true, minHumans: 2 } as const;
 
 /** 真人不到两个时页面上的那句（等人页和牌桌共用） */
 export const TWO_NOTE = '实盘好友房至少要两个人；一个人想玩实盘，去单机';
@@ -188,7 +189,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     const r = stream(entropy, RNG.room);
     const kinds = Array.from({ length: SEATS }, (_, i) => setup?.seats[i] ?? 'empty');
     let s: RoomState = {
-      t: newTable(opts.stakes, opts.size, entropy, FRIENDS),
+      t: newTable(opts.stakes, opts.size, entropy, { ...FRIENDS, level: ROOM_LEVEL[opts.stakes] }),
       ref: `r${hex(r.u32())}${hex(r.u32())}`,
       kinds,
       fx: [],
@@ -472,8 +473,8 @@ const humansReady = (s: RoomState): number =>
   s.t.seats.filter((c, i) => s.kinds[i] === 'human' && ((c.owner === 'player' && c.stack > 0 && !c.away && !c.leaving) || buying(s, i))).length;
 
 function seatPass(s: RoomState): RoomState {
-  // 0.4.0 以前开的房间：牌桌上没有这两样，补上（发下一手起按新规矩）
-  let t = s.t.minHumans ? s.t : { ...s.t, ...FRIENDS };
+  // 0.4.0 以前开的房间：牌桌上没有这两样，补上（发下一手起按新规矩）；0.4.0 开的（strong）照旧按最强，到房间关掉为止
+  let t = s.t.minHumans ? s.t : { ...s.t, ...FRIENDS, level: ROOM_LEVEL[s.t.stakes] };
   const held = [...s.held];
   const owed = [...s.owed];
   const max = stakesOf(t.stakes).max;

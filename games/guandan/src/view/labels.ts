@@ -41,7 +41,8 @@ export type SeatId = 'me' | 'laozhang' | 'xiaomei' | 'aqiang';
 export const SEAT_PERSON: SeatId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
 
 /**
- * 联机时座位上坐的是谁（画面座位号，我 = 0）：真人用昵称、头像统一用"你"那张；电脑沿用老张、小美、阿强（按画面位置）。
+ * 联机时座位上坐的是谁（画面座位号，我 = 0）：真人用昵称、头像统一用"你"那张；电脑是老张、小美、阿强，
+ * 按真实座位定（0.7.0 起，和房间里电脑的打法同一份 SEAT_PERSONA），每个人屏幕上同一个电脑叫同一个名字。
  * 单机时全是 null，照旧按固定人物。由联机会话（net.ts）在每次收到房间信息时更新。
  */
 export interface SeatIdentity {
@@ -53,6 +54,8 @@ export interface SeatIdentity {
   auto: boolean;
   /** 人还连着但走开了，房间每手几秒就替他出（0.6.3） */
   afk?: boolean;
+  /** 电脑座位：是哪个人物 */
+  persona?: Exclude<SeatId, 'me'>;
 }
 export const seatIdentity: (SeatIdentity | null)[] = [null, null, null, null];
 
@@ -62,12 +65,13 @@ export function setSeatIdentities(list: (SeatIdentity | null)[]): void {
 
 /** 头像用哪个人物：联机的真人一律用"你"那张，名字区分 */
 export function seatPerson(seat: number): SeatId {
-  return seatIdentity[seat]?.human ? 'me' : SEAT_PERSON[seat]!;
+  const who = seatIdentity[seat];
+  return who?.human ? 'me' : (who?.persona ?? SEAT_PERSON[seat]!);
 }
 
 export function seatName(seat: number): string {
   if (seat === 0) return '你';
   const who = seatIdentity[seat];
   if (who?.human) return who.name;
-  return PERSONAS[SEAT_PERSON[seat] as Exclude<SeatId, 'me'>].name;
+  return PERSONAS[seatPerson(seat) as Exclude<SeatId, 'me'>].name;
 }

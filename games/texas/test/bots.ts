@@ -5,7 +5,7 @@
 import { stream, type Entropy } from 'arcade-kit/rng';
 import { aiAction } from '../src/bot.ts';
 import { stakesOf, type StakesId } from '../src/core/stakes.ts';
-import { addChips, apply, deal, isFail, newTable, paid, PERSONA_COUNT, seatHouse, seatPlayer, type Action, type Table } from '../src/core/table.ts';
+import { addChips, apply, deal, drawForm, isFail, newTable, paid, PERSONA_COUNT, seatHouse, seatPlayer, type Action, type Table } from '../src/core/table.ts';
 import { view } from '../src/core/view.ts';
 import type { Strategy } from './strategies.ts';
 
@@ -33,6 +33,10 @@ export interface BotOptions {
   onStep?: (t: Table) => void;
   /** 穿插超时、暂离、离桌（默认开） */
   chaos?: boolean;
+  /** 电脑的强弱档（0.5.0，不给按单机的） */
+  level?: number;
+  /** 每个座位抽这一场的状态（0.5.0，默认抽；量"没有状态时"的对照用 false） */
+  form?: boolean;
   /**
    * 赢多了下桌（sim 的混桌用，0.3.0）：每手开始时筹码超过 cashOut × 买入上限的，多出来的当作带走（从买入里扣），
    * 不然 2,000 手里赢家的筹码越滚越深，底池平均上百个大盲，每百手的误差大到比不出性格
@@ -46,7 +50,7 @@ export function runBots(o: BotOptions): BotStats {
   const personas = o.personas ?? Array.from({ length: o.size }, (_, i) => i % PERSONA_COUNT);
   const chaos = o.chaos ?? true;
   const r = stream(o.seed, 'bots');
-  let t = newTable(st.id, o.size, o.seed);
+  let t = newTable(st.id, o.size, o.seed, o.level !== undefined ? { level: o.level } : {});
   const bought = new Array<number>(o.size).fill(0);
   const handsBy = new Array<number>(o.size).fill(0);
   const sit = (seat: number): void => {
@@ -57,6 +61,9 @@ export function runBots(o: BotOptions): BotStats {
   for (let i = 0; i < o.size; i++) {
     t.seats[i]!.owner = 'player';
     t.seats[i]!.persona = personas[i]!;
+    // 和电脑坐下时一样抽这一场的状态（0.5.0）：混桌量出来的打法才带着场与场之间的浮动
+    if (o.form ?? true) t.seats[i]!.form = drawForm(stream(o.seed, 'form', i));
+    t.seats[i]!.start = st.max;
     t.seats[i]!.stack = st.max;
     t.bank += st.max;
     bought[i] = st.max;
@@ -159,7 +166,7 @@ function ok(x: Table | { error: string }): Table {
 /**
  * 一个"玩家"对一桌电脑（和单机一样：电脑先按 putHouse 坐满，玩家坐 0 号、买满 100 个大盲，输光了补满）。
  * 打 hands 手，返回玩家净赢多少大盲（千分之一个大盲为单位取整，免得小数）和电脑的性格出场次数。
- * humans（0.4.0，好友房）：前几个座位都是玩家、用同一种打法，返回他们合起来的净赢；strong：电脑一律最强（规则的 strong）
+ * humans（0.4.0，好友房）：前几个座位都是玩家、用同一种打法，返回他们合起来的净赢；level：电脑的强弱档（0.5.0，不给按单机的）
  */
 export function runVs(o: {
   seed: Entropy;
@@ -172,11 +179,11 @@ export function runVs(o: {
   /** 每一步之后调用（sim 用来数整桌的热闹程度） */
   onStep?: (t: Table) => void;
   humans?: number;
-  strong?: boolean;
+  level?: number;
 }): { mbb: number; personas: number[] } {
   const st = stakesOf(o.stakes);
   const humans = o.humans ?? 1;
-  let t = newTable(st.id, o.size, o.seed, o.strong ? { strong: true } : {});
+  let t = newTable(st.id, o.size, o.seed, o.level !== undefined ? { level: o.level } : {});
   for (let i = humans; i < o.size; i++) t = ok(seatHouse(t, i));
   for (let i = 0; i < humans; i++) t = ok(seatPlayer(t, i, st.max, i === humans - 1));
   let bought = st.max * humans;

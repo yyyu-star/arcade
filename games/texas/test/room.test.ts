@@ -4,7 +4,7 @@
 import { snapshotBytes } from 'arcade-kit/game';
 import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, it } from 'vitest';
-import { STRONG, stakesOf } from '../src/core/stakes.ts';
+import { ROOM_LEVEL, STAKES, stakesOf } from '../src/core/stakes.ts';
 import { isFail } from '../src/core/table.ts';
 import { HAND_PAUSE_MS, OPENING_MS, SEATS, TURN_MS, texasRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { conserve, SEED } from './helpers.ts';
@@ -610,7 +610,7 @@ describe('一手打完停一会儿（0.1.1，kit 0.5.0 的 pause）', () => {
   });
 });
 
-describe('实盘至少两个真人、电脑最强（0.4.0）', () => {
+describe('实盘至少两个真人（0.4.0）、电脑按好友房的强弱档（0.5.0）', () => {
   /** 轮到的真人能过就过、不然跟（不弃，这一手打到摊牌），电脑按性格；直到这一手打完、停着的也 resume 过 */
   const finishHand = (s0: RoomState): RoomState => {
     let s = s0;
@@ -698,25 +698,24 @@ describe('实盘至少两个真人、电脑最强（0.4.0）', () => {
     expect(G.view(s, seat).needTwo).toBe(false);
   });
 
-  it('电脑一律最强：补位的性格按 STRONG 的顺序、一桌不重复，功力按豪华桌；0.4.0 以前开的房间下一步补上', () => {
-    let s = settleAll(begin(['human', 'human', 'ai', 'ai', 'ai'], 5, 'small'));
-    expect(s.t).toMatchObject({ minHumans: 2, strong: true });
-    expect(s.t.seats.slice(2).map((c) => c.persona)).toEqual(STRONG.slice(0, 3));
-    expect(G.view(s, 0).strong).toBe(true);
-    // 一个电脑被接管、打完这一手离桌，空出来再补电脑时还是挑桌上没有的里排最前的
-    let t = G.seated!(s, 2, 'human');
-    t = G.seated!(t, 2, 'ai');
-    t = settleAll(t);
-    while (t.t.seats[2]!.owner !== 'house' || t.t.seats[2]!.leaving) t = drive(act(t, G.turn(t)!, { t: 'fold' }));
-    const used = new Set(t.t.seats.filter((c, i) => i !== 2 && c.owner === 'house').map((c) => c.persona));
-    expect(t.t.seats[2]!.persona).toBe(STRONG.find((p) => !used.has(p)));
+  it('电脑按档位用好友房的强弱档（0.5.0，ROOM_LEVEL）；0.4.0 开的房间（strong）照旧最强；更早开的下一步补上', () => {
+    for (const st of STAKES) {
+      const s = settleAll(begin(['human', 'human', 'ai', 'ai'], 4, st.id));
+      expect(s.t, st.id).toMatchObject({ minHumans: 2, level: ROOM_LEVEL[st.id] });
+      expect(G.view(s, 0).level, st.id).toBe(ROOM_LEVEL[st.id]);
+    }
+    // 0.4.0 开的房间：没有 level、有 strong，按最强档（5）
+    const v040 = begin(['human', 'human', 'ai']);
+    delete v040.t.level;
+    v040.t.strong = true;
+    expect(G.view(settleAll(v040), 0).level).toBe(5);
 
-    // 老房间：牌桌上没有 minHumans、strong（0.4.0 以前开的），一个人带电脑；下一步按新规矩，不发牌
+    // 老房间：牌桌上没有 minHumans、level（0.4.0 以前开的），一个人带电脑；下一步按新规矩，不发牌
     const old = begin(['human', 'ai', 'ai']);
     delete old.t.minHumans;
-    delete old.t.strong;
-    s = settleAll(old);
-    expect(s.t).toMatchObject({ minHumans: 2, strong: true, phase: 'idle', handNo: 0 });
+    delete old.t.level;
+    const s = settleAll(old);
+    expect(s.t).toMatchObject({ minHumans: 2, level: ROOM_LEVEL.small, phase: 'idle', handNo: 0 });
     expect(G.view(s, 0).needTwo).toBe(true);
   });
 });

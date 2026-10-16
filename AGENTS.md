@@ -14,8 +14,8 @@ arcade/
 ├─ README.md               总览：有哪些模块、怎么开发、怎么部署
 ├─ CONTRIBUTING.md         合作指南：分支、PR、审阅、合并、部署、回滚
 ├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）
-├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh（部署前核对）
-├─ .github/workflows/      每个模块一个流程（PR 上测试、main 上部署，按路径触发）+ check.yml（独立性检查）+ main-guard.yml（直接推 main 报警）
+├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh（部署前核对）
+├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
 ├─ games/
 │  ├─ kaipan/              模块：《开盘》（Worker 名 kaipan，路径 /games/kaipan/）
@@ -51,21 +51,27 @@ arcade/
    `working-directory` 指向模块目录。
 8. **版本号、更新日志各自独立**：模块自己的 `package.json` version 和 `CHANGELOG.md`；提交信息以模块名开头，例如 `kaipan: ...`、`platform: ...`。
 
-`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条，CI 每次推送都跑，失败就不能部署。新增约束时，同步加进这个脚本。
+`tools/check-isolation.mjs` 会自动检查第 1、2、3（依赖部分）、6 条；`tools/check-deploy-config.mjs` 检查第 5 条里部署相关的部分（Worker 名、不写路由域名、只用逐键白名单里的绑定，
+模块里不许有 `.env*`、`.npmrc`、`wrangler.json`/`wrangler.toml`、`.wrangler/`、名单外的隐藏文件和符号链接；白名单在 `tools/deployer/lib.mjs`，要先 `npm ci --ignore-scripts --prefix tools/deployer`）。
+CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍，失败就不能部署。新增约束时，同步加进这些脚本。
 
 ## 2. 拆分与单独部署
 
 - **单独部署**：每个模块的流程只部署自己的 Worker，一个模块的部署不会动到其他模块。正式环境只由 main 上经 PR 合并的提交触发部署
-  （或在 GitHub Actions 里对 main 手动重跑该模块的流程）；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
+  （或在 GitHub Actions 里对 main 手动运行该模块的流程；只部署 main 的最新提交，旧提交的运行重跑也会在核对这一步失败），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
+- **部署流程的结构**（为什么这样见 [docs/review-policy.md](docs/review-policy.md) 第 7 节）：test 作业跑模块代码（不拿凭证），用 `wrangler deploy --dry-run --outdir` 打包后上传 artifact；
+  deploy 作业不 checkout 模块代码，只取 `tools/` 和模块的 `wrangler.jsonc`，用 `tools/deployer/` 里钉死的 wrangler 由 `deploy.mjs` 检查后 `--no-bundle` 部署。
+  所以部署用的配置就是模块根目录那份 `wrangler.jsonc`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
   把 `file:` 共用包换成发布的版本。线上 Worker、路由、存储前缀都不用改。
-- **新增一个游戏**：
+- **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
-  2. 加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、`environment: production` 和"只部署经 PR 合并的提交"那一步）；
+  2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker）；
+     加 `.github/workflows/game-<id>.yml`，从 `game-kaipan.yml` 复制后改名字和路径（保留 test/deploy 两段、打包和上传产物、`environment: production`、sparse-checkout、"只部署经 PR 合并的提交"那一步和 `deploy.mjs`）；
   3. 在平台的 `platform/src/games.ts` 里登记，并放一张封面（钱包、云存档、分数榜、保留用户名都从这份登记派生；想先接钱包再上大厅就先登记成 `status: 'coming'`）；
      游戏里电脑人物的名字同时登记进平台 `worker/api/validate.ts` 的 `RESERVED_PERSONAS`（真人昵称不许冒充电脑）。以后加、改电脑人物，
      在游戏自己的 PR 说明里写上名字，再开一个平台的 PR 补上；有每日挑战榜的，登记 `daily: true` 并在游戏的 `public/daily.json` 里写分数怎么显示（平台 0.10.18）；
-  4. 游戏的 `wrangler.jsonc` 关掉 `workers_dev`、不写 routes；部署流程用 `--route "$SITE_HOST/games/<id>" --route "$SITE_HOST/games/<id>/*"` 注入路由（`SITE_HOST` 是 `production` 环境的 secret，没设就失败）；
+  4. 游戏的 `wrangler.jsonc` 关掉 `workers_dev` 和 `preview_urls`、不写 routes；部署时 `deploy.mjs` 注入 `--route "$SITE_HOST/games/<id>" --route "$SITE_HOST/games/<id>/*"` 和 `SITE_ORIGIN`（`SITE_HOST` 是 `production` 环境的 secret，没设就失败）；
   5. 在下面的端口表里登记开发端口；
   6. 做一个常驻的"回大厅"入口（左上角，小房子加"大厅"，指向 `/`）：任何界面两步内能回到大厅，对局中离开先确认一次并补传云存档，冒烟里点一次。
 
@@ -133,11 +139,13 @@ dev 和 preview 监听 0.0.0.0，方便同一局域网里的手机、平板直�
 - 每个克隆先执行 `git config core.hooksPath tools/git-hooks`：本地拦住直接推 main 和 force push。被拦了就改走 PR，不用 `--no-verify` 绕过。
 - 分支名 `<模块>/<简短说明>`；一个 PR 只改一个模块，标题以模块名开头（合并用 Squash，标题就是 main 上的提交信息）。
 - 提交：只暂存明确的路径，禁止 `git add -A` 或 `git add .`；提交信息以模块名开头；不 force push，不改写已推送的历史。
-- 合并前：模块里 `npm test` 和构建通过、PR 上 CI 全绿、审阅意见全部处理完。合并后由 CI 部署，再到线上实际打开验证（版本号、主流程、控制台零报错）。
-- 审阅：作者按 CONTRIBUTING.md 的审阅清单（完整、正确、独立、不耦合、高效、简洁）自查，审阅人读完整个 diff；AI 代理开的 PR 同样要人或另一个审阅者完整审过，由维护者在 CI 全绿后合并。
-  改 `.github/`、`tools/`、`CONTRIBUTING.md`、`AGENTS.md` 的 PR 由维护者本人审阅。
+- 合并前：模块里 `npm test` 和构建通过、PR 上 CI 全绿、审阅意见全部处理完。合并后 CI 构建打包，维护者在 production 环境上批准后才部署，再到线上实际打开验证（版本号、主流程、控制台零报错）。
+- 审阅：作者按 CONTRIBUTING.md 的审阅清单（完整、正确、独立、不耦合、高效、简洁）自查，审阅人读完整个 diff；守门代理审过的 PR 由维护者（主线）复核后在 CI 全绿时合并。没有自动合并。
+  改 `.github/`、`tools/`、`CONTRIBUTING.md`、`AGENTS.md`，以及模块的 `package.json`、lockfile、构建测试配置、脚本、隐藏文件、wrangler 配置的 PR 由维护者本人审阅（[docs/review-policy.md](docs/review-policy.md) 第 6 节）。
+- 游戏代码按安全敏感代码审：它和平台同一个站点，浏览器里能以登录玩家的身份调平台 `/api`。
+- **Cloudflare 的发布只由维护者（主线）做**：守门代理永远不合并 PR、不批准部署，它的令牌不含 Deployments、Environments、Secrets、Administration 权限。
 - 带 D1 迁移的改动，发布顺序是：迁移 → 平台 → 游戏（分成几个 PR 依次合并）。
-- 线上出问题时，对出问题的 PR 开 revert PR，快速审阅后合并，CI 会重新部署上一版。不直接推 main 修线上。
+- 线上出问题时，对出问题的 PR 开 revert PR，快速审阅后由维护者合并并批准部署，重新部署上一版。不直接推 main 修线上。
 
 ## 6. 多人、多代理协作
 

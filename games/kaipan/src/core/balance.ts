@@ -154,6 +154,11 @@ export interface Balance {
     expertMsg: number;
     /** 可信度上限（所有加成之后）：只有道具指定的可信度（credOverride，老王的小本本）能到 1，也就是"必中" */
     credMax: number;
+    /**
+     * 0.7.0 每局状态：每个群友这一局的可信度在 ±cred 里浮动、说话权重乘 1 ± talk（按种子均匀抽，均值不变）。
+     * 同一个人这局可能比平时准、也可能更不靠谱，玩家得看本局战绩，不能背表
+     */
+    form: { cred: number; talk: number };
   };
   reward: {
     cards: number;
@@ -474,6 +479,7 @@ export const BALANCE: Balance = {
     reliable: 0.75,
     expertMsg: 0.15,
     credMax: 0.95,
+    form: { cred: 0.05, talk: 0.25 },
   },
   reward: {
     cards: 3,

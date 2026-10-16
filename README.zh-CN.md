@@ -139,6 +139,8 @@ flowchart LR
 - [docs/architecture.md](docs/architecture.md)：整体架构
 - [docs/platform-backend.md](docs/platform-backend.md)：账号、联机房间、额度和熔断
 - [docs/economy.md](docs/economy.md)：筹码体系
+- [docs/new-game.md](docs/new-game.md)：新游戏开发指南
+- [docs/review-policy.md](docs/review-policy.md)：PR 怎么审、怎么合（自动预审，只由维护者合并和批准部署）
 - 各模块 README：[平台](platform/README.md) · [开盘](games/kaipan/README.md) · [掼蛋](games/guandan/README.md) · [德州](games/texas/README.md) · [麻将](games/mahjong/README.md) · [arcade-kit](packages/arcade-kit/README.md)
 
 ## 参与贡献

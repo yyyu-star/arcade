@@ -7,8 +7,8 @@
  */
 import type { Card } from './cards.ts';
 import { evalCards } from './eval.ts';
-import { shuffle, stream, type Entropy } from 'arcade-kit/rng';
-import { HOUSE_MAX_BB, HOUSE_MIN_BB, STRONG, stakesOf, type StakesId } from './stakes.ts';
+import { shuffle, stream, type Entropy, type RandomStream } from 'arcade-kit/rng';
+import { HOUSE_MAX_BB, HOUSE_MIN_BB, LEVEL_HOUSE, SOLO_LEVEL, stakesOf, STRONG, type StakesId } from './stakes.ts';
 
 export const RULES_VERSION = 1;
 /** 电脑性格的个数（名字和参数在 src/ai/personas.ts）。9 人桌最多 8 个电脑、一桌不重复，所以至少 8 种（0.2.0 起 10 种） */
@@ -21,6 +21,8 @@ export const MAX_SEATS = 9;
  */
 export const RNG = { deal: 'deal', button: 'button', house: 'house', ai: 'ai', room: 'room' } as const;
 const DECK: readonly Card[] = Array.from({ length: 52 }, (_, i) => i);
+/** 电脑每一场的状态里，松紧、激进最多偏多少（相对强度，0.5.0）：和每次决定的随机浮动（JITTER 80）同一个量级，叠起来一场里看得出来 */
+export const FORM_SWING = 90;
 /** 连着这么多手超时就暂离 */
 const AWAY_AFTER_TIMEOUTS = 2;
 /**
@@ -60,6 +62,19 @@ export interface SeatState {
   leaving: boolean;
   /** "上头"还剩几手（0.3.0）。0 时不存这个字段：旧存档、旧房间状态没有它，一律按 0 算 */
   tilt?: number;
+  /**
+   * 电脑这一场的状态（0.5.0，DESIGN.md 4.7）：坐下时按种子抽，在性格的范围里浮动，同一个性格每一场打法不一样。
+   * [松紧, 激进, 诈唬 ‰, 想得快慢 ‰]：松紧、激进加在门槛上（正数更紧、更凶），诈唬 700–1300 乘在诈唬的概率上，快慢给页面的思考时间。
+   * 只有电脑有；旧存档没有，按不浮动算。只在自己的视图里
+   */
+  form?: number[];
+  /** 电脑坐下时带的筹码（0.5.0）：领先、落后按它比 */
+  start?: number;
+  /**
+   * 这个座位这一场公开的打法统计（0.5.0，人人看得到的出手推出来的，不碰底牌）：
+   * [发到牌的手数, 翻牌前主动入池, 翻牌前加注, 翻牌后下注加注, 翻牌后跟注]。换人清零；电脑按它看对手松紧、凶不凶
+   */
+  seen?: number[];
 }
 
 export interface LogEntry {
@@ -137,9 +152,14 @@ export interface Table {
   hold?: boolean;
   /** 至少几个真人能打才发牌（0.4.0，好友房是 2：不能一个人带电脑赢实盘）；没填是 1（单机、模拟器、老存档） */
   minHumans?: number;
-  /** 电脑一律最强（0.4.0，好友房）：功力按豪华桌、性格从 STRONG 里按顺序挑（personas.ts）；没填按档位（单机） */
+  /** 电脑的强弱档（0.5.0，stakes.ts 的 LEVELS）：场地按档位定（SOLO_LEVEL、ROOM_LEVEL）；没填的看 strong，再没有按单机的 */
+  level?: number;
+  /** 0.4.0 的好友房：电脑一律最强，等于 level 5。只为读 0.4.0 开的房间留着 */
   strong?: boolean;
 }
+
+/** 这一桌电脑的强弱档 */
+export const levelOf = (t: Pick<Table, 'level' | 'strong' | 'stakes'>): number => t.level ?? (t.strong ? 5 : SOLO_LEVEL[t.stakes]);
 
 export type Action =
   | { t: 'fold' }
@@ -188,7 +208,7 @@ const emptySeat = (): SeatState => ({
   leaving: false,
 });
 
-export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { holdHands?: boolean; minHumans?: number; strong?: boolean } = {}): Table {
+export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { holdHands?: boolean; minHumans?: number; level?: number } = {}): Table {
   if (!Number.isInteger(size) || size < 2 || size > MAX_SEATS) throw new Error(`bad table size ${size}`);
   if (seed.length !== 8) throw new Error('seed must be 8 words');
   const s = stakesOf(stakes);
@@ -219,7 +239,7 @@ export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { 
     uncalled: null,
     ...(opts.holdHands ? { holdHands: true, hold: false } : {}),
     ...(opts.minHumans ? { minHumans: opts.minHumans } : {}),
-    ...(opts.strong ? { strong: true } : {}),
+    ...(opts.level !== undefined ? { level: opts.level } : {}),
   };
 }
 
@@ -439,10 +459,26 @@ function raiseTo(t: Table, seat: number, to: number): void {
 
 function act(t: Table, seat: number, kind: 'check' | 'call' | 'bet' | 'raise', amount: number, auto: boolean): void {
   const s = t.seats[seat]!;
+  if (kind !== 'check') note(t, seat, kind);
   s.acted = true;
   s.actedAt = t.currentBet;
   t.log.push({ seat, act: kind, amount, ...(s.status === 'allin' ? { allin: true as const } : {}), ...(auto ? { auto: true as const } : {}) });
   advance(t, seat);
+}
+
+/**
+ * 记公开的打法统计（0.5.0，SeatState.seen）：翻牌前这一手第一次跟或加算入池、第一次加算加注；翻牌后的下注加注、跟注各记一次。
+ * 只用出手本身（人人看得到），在写进操作记录之前看这一手前面他做过什么
+ */
+function note(t: Table, seat: number, kind: 'call' | 'bet' | 'raise'): void {
+  const s = t.seats[seat]!;
+  const seen = s.seen ?? [0, 0, 0, 0, 0];
+  if (t.board.length === 0) {
+    const before = t.log.filter((e) => e.seat === seat && (e.act === 'call' || e.act === 'raise' || e.act === 'bet'));
+    if (before.length === 0) seen[1]!++;
+    if (kind !== 'call' && !before.some((e) => e.act !== 'call')) seen[2]!++;
+  } else seen[kind === 'call' ? 4 : 3]!++;
+  s.seen = seen;
 }
 
 function fold(t: Table, seat: number, auto: boolean): void {
@@ -660,14 +696,20 @@ function putHouse(t: Table, seat: number): void {
   const r = stream(t.seed, RNG.house, t.opSeq++);
   const used = new Set(t.seats.filter((s) => s.owner === 'house').map((s) => s.persona));
   const free = Array.from({ length: PERSONA_COUNT }, (_, i) => i).filter((i) => !used.has(i));
-  // 好友房按 STRONG 的顺序挑桌上还没有的最强的；单机按这一档的权重挑（stakes.ts 的 house）。随机数照样取，两种桌子后面的筹码一样分流
-  const w = stakesOf(t.stakes).house;
+  // 按这一桌电脑的强弱档的权重挑（stakes.ts 的 LEVEL_HOUSE）；最强档按 STRONG 的顺序挑桌上还没有的最强的。随机数照样取，后面的筹码、状态一样分流
+  const lv = levelOf(t);
+  const w = LEVEL_HOUSE[lv] ?? LEVEL_HOUSE[0]!;
   let x = r.below(free.reduce((a, i) => a + w[i]!, 0));
-  const persona = t.strong ? STRONG.find((i) => !used.has(i))! : free.find((i) => (x -= w[i]!) < 0)!;
+  const persona = lv >= 5 ? STRONG.find((i) => !used.has(i))! : free.find((i) => (x -= w[i]!) < 0)!;
   const stack = t.bb * (HOUSE_MIN_BB + r.below(HOUSE_MAX_BB - HOUSE_MIN_BB + 1));
-  t.seats[seat] = { ...emptySeat(), owner: 'house', persona, stack };
+  t.seats[seat] = { ...emptySeat(), owner: 'house', persona, stack, form: drawForm(r), start: stack };
   t.bank += stack;
   t.house = (t.house ?? 0) + stack;
+}
+
+/** 抽电脑这一场的状态（0.5.0，SeatState.form）：松紧、激进各 ±FORM_SWING，诈唬 ×0.7–1.3，想得快慢 ×0.8–1.25 */
+export function drawForm(r: RandomStream): number[] {
+  return [r.below(2 * FORM_SWING + 1) - FORM_SWING, r.below(2 * FORM_SWING + 1) - FORM_SWING, 700 + r.below(601), 800 + r.below(451)];
 }
 
 /** 坐下、补码、回来时顺手开一手：空闲、而且不是"一手刚打完、停着等发"的时候 */
@@ -700,6 +742,8 @@ function startHand(t: Table): void {
     const s = t.seats[i]!;
     s.status = 'active';
     s.hole = [t.deck[t.deckPos++]!, t.deck[t.deckPos++]!];
+    s.seen = s.seen ?? [0, 0, 0, 0, 0];
+    s.seen[0]!++;
   }
   // 两人桌：按钮位交小盲、翻牌前先说话
   const sb = players.length === 2 ? t.button : nextSeat(t, t.button, (s) => s.status === 'active')!;

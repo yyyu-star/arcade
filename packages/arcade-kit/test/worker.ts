@@ -5,7 +5,7 @@
 import type { RoomGame } from '../src/game.ts';
 import { shuffle, stream } from '../src/rng.ts';
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from '../src/room.ts';
-import { acceptCreate, acceptJoin, type GateOptions } from '../src/worker.ts';
+import { acceptCreate, acceptJoin, type GateOptions, type KitEnv } from '../src/worker.ts';
 
 // 计量照游戏的写法从 kit 原样导出（wrangler.jsonc 的 class_name 是 RoomMeter）
 export { RoomMeter } from '../src/meter.ts';
@@ -30,6 +30,7 @@ export interface Env {
   PAUSE_ROOM: DurableObjectNamespace;
   NORESUME_ROOM: DurableObjectNamespace;
   FAKE_BANK: DurableObjectNamespace<FakeBank>;
+  CHATTY_ROOM: DurableObjectNamespace;
   /** props.game = "toy" */
   WALLET: Service<WalletService>;
   /** 没写 props.game */
@@ -153,6 +154,22 @@ export const toyRoundsGame: RoomGame<ToyState, ToyAction, ToyView> = {
   breakPoint: (s) => s.played.length % 4 === 2,
 };
 
+/**
+ * 0.10.0 "电脑也会互动"：每一步之后看最后出牌的座位，让它（如果是电脑）发 0 号短语。结果记在 botTries 里（真人座位应当是 false）。
+ * 只看公开的出牌记录，不看手牌，也不看真人的短语
+ */
+export class ChattyRoom extends ToyRoom {
+  botTries: { seat: number; ok: boolean }[] = [];
+  protected override onStep(state: ToyState): void {
+    const last = state.played.at(-1);
+    if (last) this.botTries.push({ seat: last.seat, ok: this.botEmote(last.seat, 0) });
+  }
+  /** 测试直接调（runInDurableObject） */
+  tryBotEmote(seat: number, id: number, to?: number): boolean {
+    return this.botEmote(seat, id, to);
+  }
+}
+
 /** 用 FlakyMeter、每 5 行报一次的房间：测分批报数、计量断线、在收场点关房。 */
 export class FlakyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
   protected readonly game = toyRoundsGame;
@@ -171,14 +188,22 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     // /flaky/… 用 FlakyRoom（ROOM 换成 FLAKY_ROOM），/ledger/… 用 LedgerRoom，/pause/…、/noresume/… 用 PauseRoom、NoResumeRoom，其余照常
-    const prefixes = { flaky: env.FLAKY_ROOM, ledger: env.LEDGER_ROOM, pause: env.PAUSE_ROOM, noresume: env.NORESUME_ROOM };
+    const prefixes = { flaky: env.FLAKY_ROOM, ledger: env.LEDGER_ROOM, pause: env.PAUSE_ROOM, noresume: env.NORESUME_ROOM, chatty: env.CHATTY_ROOM };
     const hit = (Object.keys(prefixes) as (keyof typeof prefixes)[]).find((k) => url.pathname.startsWith(`/${k}/`));
     const path = hit ? url.pathname.slice(hit.length + 1) : url.pathname;
-    const e = hit ? { ...env, ROOM: prefixes[hit] } : env;
+    let e: KitEnv = hit ? { ...env, ROOM: prefixes[hit] } : env;
+    let p = path;
+    // 0.10.0 独立模式：/guest/… 是没绑 ARCADE 的部署（游客），/guest-login/… 是没绑 ARCADE 却写了 GATE=login（应当 fail-closed）
+    const solo = /^\/(guest|guest-login)(\/.*)$/.exec(path);
+    if (solo) {
+      e = { ROOM: env.ROOM, METER: env.METER, ...(solo[1] === 'guest-login' ? { GATE: 'login' } : {}) };
+      p = solo[2]!;
+    }
+    const gate: GateOptions = solo ? { ...GATE, guest: { reserved: ['老王'] } } : GATE;
     // 开房请求体 { opts } 是这个测试 Worker 自己的约定（游戏 Worker 各自决定怎么带），原样交给 kit（0.4.0）
-    if (path === '/rooms') return acceptCreate(request, e, { ...GATE, options: await bodyOpts(request) });
-    const m = /^\/rooms\/([^/]+)\/ws$/.exec(path);
-    if (m) return acceptJoin(request, e, m[1]!, GATE);
+    if (p === '/rooms') return acceptCreate(request, e, { ...gate, options: await bodyOpts(request) });
+    const m = /^\/rooms\/([^/]+)\/ws$/.exec(p);
+    if (m) return acceptJoin(request, e, m[1]!, gate);
     return new Response('not found', { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

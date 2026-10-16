@@ -3,10 +3,14 @@
 > 总规范见仓库根的 `AGENTS.md`（拆成独立仓库后，以本文件和随附的 docs 为准）。房间规范是 `docs/platform-backend.md` 第 4 节。
 
 - 内容：联机底座，给各游戏的 Worker 和页面用：`src/room.ts`（Durable Object 房间基类）、`src/worker.ts`（游戏 Worker 的开房、进房入口）、
-  `src/meter.ts`（每天的额度计量，0.2.0）、`src/rng.ts`（ChaCha20 随机数，纯函数，0.2.0）、`src/auth.ts`（经平台 `/api/me` 认人）、`src/internal.ts`（内部地址、身份头）、`src/game.ts`（规则接口、快照体积）、`src/client.ts`（浏览器连接器）、`src/protocol.ts`（消息和关闭码）。
+  `src/meter.ts`（每天的额度计量，0.2.0）、`src/rng.ts`（ChaCha20 随机数，纯函数，0.2.0）、`src/auth.ts`（经平台 `/api/me` 认人；`identify` 按部署方式认人）、`src/guest.ts`（独立模式的游客身份，0.10.0）、`src/internal.ts`（内部地址、身份头）、`src/game.ts`（规则接口、快照体积）、`src/client.ts`（浏览器连接器）、`src/protocol.ts`（消息和关闭码）。
   不部署，没有自己的 Worker。
-- 发 TypeScript 源码，不构建。`src/` 里的相互引用不写扩展名，游戏的 tsconfig 不用特别配置。
-- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`fun.ts`、`fun-art.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
+- 两种形态（0.10.0）：npm 上发 `dist/`（JS + `.d.ts`，`npm run build`）；仓库里 `package.json` 的 `exports` 一律写 `"./x": "./src/x.ts"`，
+  仓库内游戏的 `file:` 引用直接用源码。`prepack` / `postpack`（`scripts/manifest.mjs`）在打包时换成 dist 版再换回来，不要手改 exports 指 dist，也不提交 `dist/`。
+  `src/` 里相互引用写 `.js` 扩展名（`./auth.js`），游戏的 tsconfig 不用特别配置。发布（`npm publish`）由维护者做。
+- 两种部署方式（0.10.0，`src/guest.ts`）：有 `ARCADE` 绑定是平台模式，行为和以前一样、游客 cookie 一律不认；没有 `ARCADE`、`GATE` 也不是 `"login"` 是独立模式（游客）。
+  `GATE: "login"` 没绑 `ARCADE` 必须 fail-closed。改认人的代码时 `test/guest.test.ts` 的"平台模式不认游客"几条必须守住。
+- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
   `fun.ts`（0.7.0）只在调用时碰 DOM，import 时不碰；只动 transform、opacity，不读布局；素材只用 `fun-art.ts` 里手写的 SVG，不用 emoji 字体、不引外部资源，新素材也照这个来。`auth.ts`、`internal.ts` 不依赖运行时以外的东西。
 - 游戏只经 `acceptCreate` / `acceptJoin` 开房进房，不自己把浏览器的请求转给房间；房间的 `fetch` 只认 `KIT_HOST` 内部地址，开房走 RPC。
   `internal.ts` 不进 `package.json` 的 `exports`，游戏引用不到；新加的内部工具也放 `internal.ts`。`auth.ts` 从 0.3.1 起导出（游戏的登录闸门用），只认人，不碰内部地址和身份头。
@@ -23,3 +27,5 @@
 - 协议只加字段、不改含义（部署后正在打的房间还跑旧代码，4.5）。不兼容的改动要加 `PROTOCOL_VERSION`，并让房间用 `minClientVersion` 让旧页面刷新。
 - 测试：`npm test`。改了房间行为就加测试并做反证（把代码改坏，确认测试会失败）。测试的假时间放在将来，闹钟只在测试调用时才跑（`test/helpers.ts`）。
 - 版本号和 `CHANGELOG.md` 各自独立；提交信息以 `arcade-kit:` 开头，分支名 `pkg/<说明>`。
+- 电脑短语（0.10.0）：`onStep` 是同步钩子（广播之后、不 await、不写存储、抛错只记日志），`botEmote` 只给电脑座位（`ai`、托管 `auto`），和真人共用座位令牌桶。
+  真人的短语不交给规则、`onStep`，也不要加这样的入口（公平：电脑不读真人互动）。

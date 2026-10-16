@@ -18,7 +18,7 @@
  * `{ "binding": "WALLET", "service": "<测试 Worker 名>", "entrypoint": "WalletService", "props": { "game": "<游戏 id>" } }`。
  */
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
-import { SESSION_COOKIE } from './internal';
+import { SESSION_COOKIE } from './internal.js';
 
 /** 新号送多少、补给补到多少、client 模式每天净赢最多几份：平台的默认值（5.9，管理员可调的那几个数按默认算） */
 export const NEW_BALANCE = 10_000;

@@ -103,7 +103,7 @@ export interface ActMsg<A = unknown> {
 }
 /**
  * 快捷短语（0.6.0）：只发游戏短语表里的编号（0 到 RoomGame.emotes - 1），不收自由文本，不用审内容。
- * 只有入座的人能发，每个座位 RoomLimits.emoteMs 一句；房间只转发、不存，被拒回 error（见 EMOTE_ERRORS），页面可以不提示。
+ * 只有入座的人能发（电脑座位由房间子类经 GameRoom.botEmote 发，0.10.0），每个座位一个令牌桶；房间只转发、不存，被拒回 error（见 EMOTE_ERRORS），页面可以不提示。
  */
 export interface EmoteMsg {
   t: 'emote';
@@ -229,6 +229,8 @@ export interface EmotedMsg {
   id: number;
   /** 发的时候指定了对象才有（0.7.0），房间的座位号 */
   to?: number;
+  /** 电脑座位发的（0.10.0，GameRoom.botEmote）才有；页面可以不区分 */
+  bot?: true;
 }
 
 /**

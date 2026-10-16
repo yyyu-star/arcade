@@ -2,10 +2,10 @@
  * 游戏要提供的规则接口，和给游戏自己测"快照多大"的小工具。
  * 这个文件不依赖 Workers 运行时，游戏的规则测试（普通 Node 里的 vitest）也能直接引用。
  */
-import { PROTOCOL_VERSION, type RoomInfo, type SeatKind, type WelcomeMsg } from './protocol';
-import type { Entropy } from './rng';
+import { PROTOCOL_VERSION, type RoomInfo, type SeatKind, type WelcomeMsg } from './protocol.js';
+import type { Entropy } from './rng.js';
 
-export type { Entropy } from './rng';
+export type { Entropy } from './rng.js';
 
 /** 开局时房间告诉游戏的（0.3.0）：房主选的选项、每个座位坐的是谁（电脑补满以后；seatCount 以外的座位是 empty）。 */
 export interface RoomSetup<O> {

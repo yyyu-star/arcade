@@ -3,6 +3,7 @@ import {
   BALANCE,
   DIRS,
   FRIENDS,
+  HAND_TAILS,
   MESSAGE_LINES,
   TURN_LINES,
   chatView,
@@ -131,7 +132,10 @@ describe('群聊消息', () => {
       expect(m.turn ?? null).toBe(want);
       const pool = want ? TURN_LINES[m.friendId]?.[want] : MESSAGE_LINES[m.friendId]?.[m.claim];
       const name = themeById(m.theme).name;
-      expect(pool?.map((line) => line.replaceAll('{theme}', name))).toContain(m.text);
+      // 0.7.0：手气好坏时句尾可能多一句口气（HAND_TAILS），前面还是按方向挑的台词
+      const tails = Object.values(HAND_TAILS[m.friendId] ?? {}).flat();
+      const body = tails.reduce((t, o) => (t.endsWith(o) ? t.slice(0, -o.length) : t), m.text);
+      expect(pool?.map((line) => line.replaceAll('{theme}', name))).toContain(body);
       if (want) turns += 1;
     });
     expect(turns).toBeGreaterThan(50);

@@ -148,6 +148,8 @@ Detailed documentation is written in Chinese.
 - [docs/architecture.md](docs/architecture.md) — overall architecture
 - [docs/platform-backend.md](docs/platform-backend.md) — accounts, online rooms, quotas and circuit breakers
 - [docs/economy.md](docs/economy.md) — the chip economy
+- [docs/new-game.md](docs/new-game.md) — how to add a new game
+- [docs/review-policy.md](docs/review-policy.md) — how pull requests are reviewed and merged (automated pre-review; only maintainers merge and approve deploys)
 - Module READMEs: [platform](platform/README.md) · [kaipan](games/kaipan/README.md) · [guandan](games/guandan/README.md) · [texas](games/texas/README.md) · [mahjong](games/mahjong/README.md) · [arcade-kit](packages/arcade-kit/README.md)
 
 ## Contributing

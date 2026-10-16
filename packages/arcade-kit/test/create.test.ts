@@ -1,6 +1,6 @@
 /** 开房和默认文案（0.8.0，client.ts）：createRoom 把各种回话收成 { code } 或 { error }；文案按 key 可以覆盖 */
 import { describe, expect, it } from 'vitest';
-import { closeText, createRoom, createText, ROOM_TEXT } from '../src/client.ts';
+import { closeText, createRoom, createText, detectPlatform, ROOM_TEXT, withNickname } from '../src/client.ts';
 import { CLOSE, CLOSE_REASON } from '../src/protocol.ts';
 
 /** 假的 fetch：记下请求，回指定的响应 */
@@ -48,5 +48,37 @@ describe('默认文案', () => {
     expect(closeText(CLOSE.policy)).toBe(ROOM_TEXT.other);
     expect(closeText(1006)).toBe(ROOM_TEXT.other);
     expect(closeText(CLOSE.roomClosed, undefined, { roomClosed: '房间关了，桌上的结回去了' })).toBe('房间关了，桌上的结回去了');
+  });
+});
+
+describe('detectPlatform、withNickname（0.10.0）', () => {
+  const html = () => new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } });
+  it('200 且是 { user } 的 JSON：有平台（user 原样，没登录是 null）；默认问同域 /api/me', async () => {
+    const { f, got } = fakeFetch(() => Response.json({ user: { id: 'u1', displayName: '小王' } }));
+    expect(await detectPlatform({ fetchImpl: f })).toEqual({ platform: true, user: { id: 'u1', displayName: '小王' } });
+    expect(new URL(got[0]!.url).pathname).toBe('/api/me');
+    expect(await detectPlatform({ fetchImpl: fakeFetch(() => Response.json({ user: null })).f })).toEqual({ platform: true, user: null });
+  });
+
+  it('404、405、410、200 却是网页或别的 JSON：没有平台（独立部署）', async () => {
+    for (const r of [() => new Response('nope', { status: 404 }), () => new Response('', { status: 405 }), () => new Response('', { status: 410 }), html, () => Response.json({ ok: true }), () => Response.json([1])])
+      expect(await detectPlatform({ fetchImpl: fakeFetch(r).f })).toEqual({ platform: false });
+  });
+
+  it('5xx、429、断网、超时：不知道', async () => {
+    for (const r of [() => new Response('down', { status: 503 }), () => Response.json({ user: null }, { status: 500 }), () => new Response('slow', { status: 429 })])
+      expect(await detectPlatform({ fetchImpl: fakeFetch(r).f })).toEqual({ platform: 'unknown' });
+    expect(await detectPlatform({ fetchImpl: (() => Promise.reject(new TypeError('offline'))) as typeof fetch })).toEqual({ platform: 'unknown' });
+    const hang = ((_: unknown, init?: RequestInit) => new Promise<Response>((_ok, fail) => init?.signal?.addEventListener('abort', () => fail(init.signal!.reason)))) as typeof fetch;
+    const t = performance.now();
+    expect(await detectPlatform({ fetchImpl: hang, timeoutMs: 50 })).toEqual({ platform: 'unknown' });
+    expect(performance.now() - t).toBeLessThan(1_000);
+  });
+
+  it('withNickname：加 ?name= 或 &name=（编码），# 之前；没名字原样', () => {
+    expect(withNickname('rooms', '小明')).toBe(`rooms?name=${encodeURIComponent('小明')}`);
+    expect(withNickname('wss://a.example/games/x/rooms/123456/ws?cv=3#x', 'a b')).toBe('wss://a.example/games/x/rooms/123456/ws?cv=3&name=a%20b#x');
+    expect(withNickname('rooms', '')).toBe('rooms');
+    expect(withNickname('rooms', null)).toBe('rooms');
   });
 });

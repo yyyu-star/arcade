@@ -17,10 +17,10 @@
  *   计量说今天快满了（busy）就不进新人；说满了（stop）就在这一段打完（RoomGame.breakPoint）时收场。
  */
 import { DurableObject } from 'cloudflare:workers';
-import type { RoomEffect, RoomGame, RoomSetup } from './game';
-import { type Identity, KIT_HOST, meterStub, parseIdentity } from './internal';
-import type { MeterEnv, MeterLevel, RoomMeter } from './meter';
-import { ENTROPY_WORDS } from './rng';
+import type { RoomEffect, RoomGame, RoomSetup } from './game.js';
+import { type Identity, KIT_HOST, meterStub, parseIdentity } from './internal.js';
+import type { MeterEnv, MeterLevel, RoomMeter } from './meter.js';
+import { ENTROPY_WORDS } from './rng.js';
 import {
   CLOSE,
   CLOSE_REASON,
@@ -34,10 +34,10 @@ import {
   type RoomInfo,
   type RoomStatus,
   type SeatInfo,
-} from './protocol';
+} from './protocol.js';
 
-export type { RoomEffect, RoomGame, RoomSetup } from './game';
-export type { Identity } from './internal';
+export type { RoomEffect, RoomGame, RoomSetup } from './game.js';
+export type { Identity } from './internal.js';
 
 export interface RoomLimits {
   /** 单条入站消息字节数，超了 1009 断开 */
@@ -234,6 +234,32 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
    */
   protected perform(_effect: E, _userId: string | null): Promise<unknown> {
     return Promise.reject(new Error('GameRoom.perform is not implemented'));
+  }
+
+  /**
+   * 每一步广播完之后调一次（0.10.0，可选覆盖）：state 是这一步结束时的牌局状态（服务端全量，含隐藏信息）。
+   * 给"电脑也会互动"用：房间子类看这一步的**公开**事件（谁出了什么、谁赢了一把），需要时调 botEmote 让电脑座位发一句短语。
+   * 同步执行、不能 await、不能写存储；抛错只记日志，不影响这一步。公平约束（游戏侧守）：电脑发不发、发什么只看公开信息，
+   * 不读任何真人的短语、不读隐藏的牌。房间要收场（closing）时不调
+   */
+  protected onStep(_state: S): void {}
+
+  /**
+   * 让电脑座位发一句快捷短语（0.10.0）：广播的消息和真人发的一样（{ t: 'emote', seat, id, to? }），多带 bot: true，客户端可以不管它。
+   * 只有电脑在出手的座位能发：kind 是 ai，或者真人掉线后由电脑托管（auto）。id、to 的校验和真人一样，走同一个座位的令牌桶
+   * （emoteMs / emoteBurst），不写存储、不改 seq。发出去了回 true；座位是真人在打、空位、编号不对、目标不对、房间打完了、太快了，回 false 不广播
+   */
+  protected botEmote(seat: number, id: number, to?: number): boolean {
+    const st = this.st;
+    const n = this.game.emotes;
+    if (!st || st.status === 'over' || !hasEmotes(n)) return false;
+    if (!Number.isInteger(seat) || seat < 0 || seat >= this.game.seats || !this.isAuto(seat)) return false;
+    if (!Number.isInteger(id) || id < 0 || id >= n) return false;
+    if (to !== undefined && (!Number.isInteger(to) || to < 0 || to >= this.game.seats || to === seat || st.seats[to]!.kind === 'empty')) return false;
+    if (!this.takeEmote(seat)) return false;
+    const msg: EmotedMsg = { t: 'emote', seat, id, ...(to !== undefined ? { to } : {}), bot: true };
+    for (const o of this.sockets()) if (attachmentOf(o)) this.send(o, msg);
+    return true;
   }
 
   /** 内存缓存，被驱逐后从存储重建 */
@@ -1302,6 +1328,14 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (this.closing) {
       console.error('daily writes reached stop, room closed at a break point', st.code);
       this.closeRoom(CLOSE_REASON.quota);
+      return;
+    }
+    if (st.game != null) {
+      try {
+        this.onStep(st.game);
+      } catch (e) {
+        console.error('onStep threw', st.code, e instanceof Error ? e.message : e);
+      }
     }
   }
 

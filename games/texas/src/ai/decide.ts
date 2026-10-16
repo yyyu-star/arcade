@@ -27,6 +27,14 @@ const THIN_BET = 200;
 const INVESTED = 200;
 /** "上头"时（View.tilt > 0）：跟进门槛再放低、加注门槛再放低、诈唬翻倍、翻牌后多跟一点（0.3.0，DESIGN.md 4.6） */
 const TILT = { loose: 150, wild: 100, bluff: 2, slack: 30 } as const;
+/** 没有状态的（旧存档、托管的真人座位）：不浮动 */
+const NO_FORM: readonly number[] = [0, 0, 1000, 1000];
+/** 有效筹码不到这么多个大盲：翻牌前只推或弃（0.5.0，功力的 depth） */
+export const SHORT_BB = 12;
+/** 有效筹码这么多个大盲以上：没人加注时多看便宜的翻牌（深筹码，投机牌值钱） */
+const DEEP_BB = 150;
+/** 对手发到牌这么多手以后才看他的打法（样本太少不准） */
+export const READ_HANDS = 15;
 
 export function decide(v: View, r: RandomStream): Action {
   const me = v.me;
@@ -34,7 +42,9 @@ export function decide(v: View, r: RandomStream): Action {
   if (me === null || !lg) throw new Error('decide: not my turn');
   const seat = v.seats[me]!;
   const p: Persona = PERSONAS[seat.persona] ?? PERSONAS[DEFAULT_PERSONA]!;
-  const k = SKILL[v.strong ? 'lux' : v.stakes];
+  const k = SKILL[v.level] ?? SKILL[0]!;
+  // 这一场的状态（0.5.0）：松紧、激进、诈唬、快慢在性格的范围里浮动（坐下时抽好的，规则的 SeatState.form）
+  const form = v.form ?? NO_FORM;
   const others = v.seats.flatMap((s, i) => (i !== me && (s.status === 'active' || s.status === 'allin') ? [i] : []));
   const opp = others.length;
   const raises = raisesThisStreet(v);
@@ -53,12 +63,29 @@ export function decide(v: View, r: RandomStream): Action {
   const jit = r.below(2 * JITTER + 1) - JITTER;
   // 这一档的翻牌前门槛：功力的 tight 加上性格在软桌上放松的部分（老好更爱跟、阿飙更爱加，见 personas.ts 的 loose / wild）；
   // loose 同时把面对加注时的底池赔率放宽 ¼，否则赔率这一关挡住，松不起来
-  const loose = Math.floor((p.loose * k.soft) / 1000) + (tilt ? TILT.loose : 0);
-  const callAt = p.call + k.tight - loose + jit;
-  const raiseAt = (pre && raises === 0 ? (p.open ?? p.raise) : p.raise) + k.tight - Math.floor((p.wild * k.soft) / 1000) - (tilt ? TILT.wild : 0) + jit;
+  // 局面（0.5.0）：领先放开、落后看性格；对手的打法；筹码深浅
+  const lead = standing(v, seat, p);
+  const opp2 = k.adapt ? readOpponents(v, others) : NO_READ;
+  const eff = effectiveBb(v, me, others);
+  const deep = k.depth && pre && raises === 0 && eff >= DEEP_BB ? 50 : 0;
+  // 对爱加注的人（翻牌前加注率高）：他加注的牌更杂，跟得宽一点
+  const loosePre = pre && raises > 0 ? Math.floor((opp2.raiserLoose * k.adapt) / 1000) : 0;
+  const loose = Math.floor((p.loose * k.soft) / 1000) + (tilt ? TILT.loose : 0) + lead.loose + deep + loosePre;
+  const callAt = p.call + k.tight - loose + form[0]! + jit;
+  const raiseAt =
+    (pre && raises === 0 ? (p.open ?? p.raise) : p.raise) + k.tight - Math.floor((p.wild * k.soft) / 1000) - (tilt ? TILT.wild : 0) + Math.floor(form[0]! / 2) - form[1]! + jit;
+  // 诈唬的倍数（‰）：这一场的状态 × 领先落后 × 对手（对紧的人多偷、对跟注站少诈唬）
+  const readX = 1000 + Math.floor(((opp2.bluff - 1000) * k.adapt) / 1000);
+  const bluffX = Math.floor((form[2]! * lead.bluff * readX) / 1_000_000);
   const toCall = lg.call;
   // 底池赔率：要跟的钱 ÷（池子 + 要跟的钱），千分数
   const odds = Math.floor((toCall * 1000) / (v.pot + toCall));
+
+  // 筹码很短（0.5.0）：翻牌前不再小加小跟，够好就推、不够就弃（会的才这样，新手照常打）
+  if (pre && k.depth && eff <= SHORT_BB) {
+    if (rel >= callAt - 120 + k.pre * raises - pos) return lg.raise ? { t: 'allin' } : lg.check ? { t: 'check' } : { t: 'call' };
+    return lg.check ? { t: 'check' } : { t: 'fold' };
+  }
 
   // 大牌：加注（偶尔慢打）
   if (lg.raise && rel >= raiseAt + k.pre * raises - pos) {
@@ -68,7 +95,7 @@ export function decide(v: View, r: RandomStream): Action {
 
   if (pre) {
     // 再加注：凶的人（阿飙、虎子）面对一次加注，能跟的牌偶尔再加一手，不只拿大牌再加
-    if (lg.raise && raises === 1 && rel >= callAt - pos && r.below(1000) < p.threebet) return raise(v, p, eq, raises, r);
+    if (lg.raise && raises === 1 && rel >= callAt - pos && r.below(1000) < Math.floor((p.threebet * (1000 + 3 * form[1]!)) / 1000)) return raise(v, p, eq, raises, r);
     if (lg.check) return { t: 'check' };
     let ok: boolean;
     if (raises === 0) {
@@ -93,17 +120,22 @@ export function decide(v: View, r: RandomStream): Action {
       let chance: number;
       if (mine && v.board.length > 3) {
         // 上一轮是我下的注：接着打第二枪、第三枪（虎子、阿飙爱这样连着诈唬），对手越多越收着
-        chance = Math.floor((p.barrel * k.bluff) / 1000) - 60 * Math.max(0, opp - 1);
+        chance = Math.floor((p.barrel * k.bluff * bluffX) / 1_000_000) - 60 * Math.max(0, opp - 1);
       } else {
         // 没人下注：偶尔诈唬，对手越少越敢；翻牌前自己加过注的，翻牌上常"接着打"（持续下注）
         const cbet = v.board.length === 3 && lastPreflopRaiser(v) === me ? 3 : 1;
-        chance = Math.floor((p.bluff * k.bluff * 2 * cbet) / 1000 / (opp + 1)) + pos / 2;
+        chance = Math.floor((p.bluff * k.bluff * 2 * cbet * bluffX) / 1_000_000 / (opp + 1)) + pos / 2;
       }
       // 中等牌（比这一桌平均强）也常先下一注，不全靠过牌看牌：有来有回，弱牌被打走，不是每手都摊牌
       // 对手多时收着：每多一个对手少 80‰（不往 8 个人里薄打）
-      if (rel >= THIN + jit - pos) chance = Math.max(chance, THIN_BET + p.bluff - 80 * (opp - 1));
+      // 对跟注站（0.5.0）：有点牌就薄薄下一注（他会跟），门槛放低；新手偶尔手软，该下的只过牌
+      if (rel >= THIN + jit - pos - Math.floor((opp2.thin * k.adapt) / 1000)) {
+        if (k.slip && r.below(1000) < k.slip) return { t: 'check' };
+        chance = Math.max(chance, THIN_BET + p.bluff - 80 * (opp - 1));
+      }
       // 河牌没牌、没人下注：爱诈唬的人常在这儿偷一把（被跟到就亮出"诈唬"）
-      else if (river && categoryOf(evalCards([...v.hole, ...v.board])) === HIGH_CARD) chance = Math.max(chance, Math.floor((p.river * k.bluff) / 1000) - 80 * (opp - 1));
+      else if (river && categoryOf(evalCards([...v.hole, ...v.board])) === HIGH_CARD)
+        chance = Math.max(chance, Math.floor((p.river * k.bluff * bluffX) / 1_000_000) - 80 * (opp - 1));
       if (tilt) chance *= TILT.bluff;
       if (r.below(1000) < chance) {
         // 河牌上连着打过来的，偶尔全下吓人（筹码不到池子 3 倍才推，不然下 1.25 池的重注）
@@ -116,7 +148,62 @@ export function decide(v: View, r: RandomStream): Action {
   // 爱跟的性格（slack 为正）和 loose 一样按档的 soft 打折：小桌全用，越往上越收（中桌的小白原来翻牌后照样跟到底，每百手 −150）
   const slack = p.slack > 0 ? Math.floor((p.slack * k.soft) / 1000) : p.slack;
   const ok = eq >= odds - slack - k.slack - (tilt ? TILT.slack : 0);
+  // 新手手软（0.5.0）：够跟、但只比赔率多一点的牌，偶尔就弃了
+  if (ok && k.slip && eq < odds + 150 && r.below(1000) < k.slip) return { t: 'fold' };
   return ok ? { t: 'call' } : { t: 'fold' };
+}
+
+/**
+ * 领先、落后（0.5.0）：比坐下时多一半以上的，放开一点、多诈唬一点；少了一半以上的，爱赌的（阿飙、虎子这类）更松更凶，
+ * 稳的收紧、少诈唬。连同这一手已经投进去的一起算，一手打到一半不会变来变去
+ */
+function standing(v: View, seat: View['seats'][number], p: Persona): { loose: number; bluff: number } {
+  if (!v.start) return { loose: 0, bluff: 1000 };
+  const now = Math.floor(((seat.stack + seat.total) * 1000) / v.start);
+  if (now >= 1500) return { loose: 40, bluff: 1200 };
+  if (now <= 500) return p.wild > 0 || p.bluff >= 200 ? { loose: 60, bluff: 1250 } : { loose: -50, bluff: 750 };
+  return { loose: 0, bluff: 1000 };
+}
+
+interface Read {
+  /** 诈唬的倍数（‰）：这一手还在的对手都很紧就多偷，有跟注站就少诈唬 */
+  bluff: number;
+  /** 有跟注站时薄下注的门槛放低多少（相对强度，按功力的 adapt 打折） */
+  thin: number;
+  /** 翻牌前最后加注的人加注很勤：跟注门槛放低多少（按 adapt 打折） */
+  raiserLoose: number;
+}
+const NO_READ: Read = { bluff: 1000, thin: 0, raiserLoose: 0 };
+
+/**
+ * 看对手的打法（0.5.0）：只用公开的统计（SeatView.seen，出手推出来的），手数够了才算。
+ * 入池 ≤ 22% 算紧；入池 ≥ 45%、翻牌后下注加注不到跟注的六成算跟注站；翻牌前加注 ≥ 20% 算爱加注
+ */
+function readOpponents(v: View, others: readonly number[]): Read {
+  let tight = others.length > 0;
+  let station = false;
+  for (const s of others) {
+    const seen = v.seats[s]!.seen;
+    if (!seen || seen[0]! < READ_HANDS) {
+      tight = false;
+      continue;
+    }
+    const vpip = Math.floor((seen[1]! * 1000) / seen[0]!);
+    if (vpip > 220) tight = false;
+    if (vpip >= 450 && seen[3]! * 10 < seen[4]! * 6) station = true;
+  }
+  const raiser = lastPreflopRaiser(v);
+  const rs = raiser >= 0 ? v.seats[raiser]!.seen : undefined;
+  const loud = !!rs && rs[0]! >= READ_HANDS && rs[2]! * 1000 >= 200 * rs[0]!;
+  return { bluff: station ? 500 : tight ? 1300 : 1000, thin: station ? 100 : 0, raiserLoose: loud ? 60 : 0 };
+}
+
+/** 有效筹码（大盲数）：我和这一手里还在的对手里最深的那个，取小的 */
+function effectiveBb(v: View, me: number, others: readonly number[]): number {
+  const mine = v.seats[me]!.stack + v.seats[me]!.bet;
+  let deepest = 0;
+  for (const s of others) deepest = Math.max(deepest, v.seats[s]!.stack + v.seats[s]!.bet);
+  return Math.floor(Math.min(mine, deepest) / v.bb);
 }
 
 /** 翻牌前这一手里真的掏了钱的对手（跟、加过，还没弃），至少 1 个 */

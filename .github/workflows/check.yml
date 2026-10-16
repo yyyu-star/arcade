@@ -1,4 +1,9 @@
-# 模块独立性检查：任何模块都不能引用自己目录以外的文件（packages/ 下的共用包除外）。
+# 模块独立性检查：任何模块都不能引用自己目录以外的文件（packages/ 下的共用包除外）；
+# 部署配置检查：模块里不许有 .env、.npmrc、wrangler.json/.toml、.wrangler/ 等会改变 wrangler 行为的文件，各模块的 wrangler.jsonc
+# 用钉死版本的 wrangler 解析后按白名单查（tools/check-deploy-config.mjs，白名单在 tools/deployer/lib.mjs 和 tools/deploy-allowlist.json；
+# 部署前 deploy.mjs 再严格查一遍）。
+# 部署程序预跑（deployer 作业）：PR 改了 tools/ 或 .github/workflows/ 时，拿开盘走一遍构建作业和部署作业的全部步骤
+# （deploy.mjs --dry-run，不连 Cloudflare、没有凭证），合并前就发现部署程序被改坏；PR 没改这两处时整个作业秒过。
 # PR 上跑一次（分支保护要求它通过），合并进 main 后再跑一次；功能分支的 push 不重复跑。
 name: Check isolation
 on:
@@ -15,10 +20,52 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
       - run: node tools/check-isolation.mjs
+      # 钉死版本的 wrangler（只用它的配置解析器）；不跑安装脚本
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: tools/deployer
+      - run: node tools/check-deploy-config.mjs
+  deployer:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # 拿到 PR 的合并提交和它的第一个父提交（目标分支），用 git diff 判断改了哪些文件，不引入第三方 action
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: 这个 PR 改了 tools/ 或 .github/workflows/ 吗
+        id: changed
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '^(tools|\.github/workflows)/'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          else
+            echo "没改 tools/、.github/workflows/，不预跑"; echo run=false >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.run == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: games/kaipan/.nvmrc
+      # 下面照搬 game-kaipan.yml：test 作业的构建和打包，deploy 作业的检查和 wrangler deploy --dry-run
+      - name: 构建开盘并打包（和部署流程的构建作业一样）
+        if: steps.changed.outputs.run == 'true'
+        working-directory: games/kaipan
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:cf
+          npx wrangler deploy --dry-run -c wrangler.jsonc --outdir "$RUNNER_TEMP/artifact/worker"
+          node ../../tools/deployer/pack.mjs "$RUNNER_TEMP/artifact"
+      - name: 装钉死版本的 wrangler，deploy.mjs --dry-run
+        if: steps.changed.outputs.run == 'true'
+        env:
+          SITE_HOST: games.example.com
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deployer
+          node tools/deployer/deploy.mjs --module games/kaipan --artifact "$RUNNER_TEMP/artifact" --work "$RUNNER_TEMP/deploy" --dry-run

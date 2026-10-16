@@ -10,8 +10,31 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 1. **`main` only accepts pull requests.** No direct pushes, no force pushes, no rewriting published history.
 2. **Only commits merged into `main` through a pull request are deployed.** Deployment is done by GitHub Actions;
-   credentials live only in the `production` environment, which only `main` can use. Never deploy production from your machine.
-3. **Every pull request is fully reviewed** and needs green CI before it is merged (squash merge only).
+   credentials live only in the `production` environment, which only `main` can use and which runs only after a maintainer approves it.
+   Never deploy production from your machine.
+3. **Every pull request is fully reviewed** and needs green CI before a maintainer merges it (squash merge only). Nothing is merged automatically.
+
+## How the project works
+
+```
+you (fork) ──PR──▶ automated reviewer ──▶ CI ──▶ maintainer review ──▶ squash merge ──▶ build ──▶ maintainer approves ──▶ deploy ──▶ live site
+                        │                                                                         (production environment)
+                        └─▶ needs-maintainer: platform, shared kit, tooling, build config, new games
+```
+
+- **Anyone can contribute** through a fork and a pull request. You never need Cloudflare credentials:
+  develop locally (`npm run dev`, the fake wallet in `arcade-kit/testing`), and the deploy workflow publishes after merge.
+- **An automated reviewer** (an AI agent) patrols open pull requests on a schedule. It pre-checks the red lines, approves CI runs for forks,
+  reviews the whole diff against [docs/review-policy.md](docs/review-policy.md), comments with concrete change requests, labels the pull request
+  and notifies the maintainer. It **never merges and never approves a deployment**; its token has no Deployments, Environments, Secrets or
+  Administration permission. It never touches credentials or repository settings, and it never edits your code.
+- **Maintainers** re-check every reviewed pull request and merge it, approve every production deployment, and personally review what the reviewer
+  escalates (`needs-maintainer`): changes to `platform/`, `packages/`, `.github/`, `tools/`, root documents, a module's `package.json`, lockfile,
+  build/test configuration, scripts, hidden files or wrangler configuration, wallet/stake rules, migrations, and every **new game**
+  (registering its Worker name, deploy workflow and lobby entry). Publishing to Cloudflare is done only by maintainers.
+- **Game code is security-sensitive.** Games share the site with the platform, so a game's browser code can call the platform's `/api` as the
+  signed-in player. Reviewers treat it as code that can reach player accounts.
+- **Want to add a game?** Read [docs/new-game.md](docs/new-game.md) first (in Chinese) and open an issue with the game id you want.
 
 ## Workflow
 
@@ -25,9 +48,11 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
    - for UI changes, run the module's smoke test and look at the screenshots yourself;
    - for game releases, bump `package.json` `version` and add a `CHANGELOG.md` entry.
 4. **Open the pull request** with a title that starts with the module (`kaipan: …`, `platform: …`, `repo: …`) and fill in the template.
-5. **CI must be green**: `Check isolation` plus the `test` job of the changed module's workflow (pull requests only test and build — they never deploy or see credentials).
+5. **CI must be green**: `Check isolation` (module isolation + deploy configuration check) plus the `test` job of the changed module's workflow (pull requests only test, build and package — they never deploy or see credentials).
 6. **Review**: reviewers read the whole diff. Every comment is either addressed with a new commit on the same branch (no force pushes) or answered with a reason.
-7. **After merge** the module's workflow deploys it. Open the live game and check the version number, the main flow and that the console has no errors.
+   A maintainer re-checks the diff and the review, then merges.
+7. **After merge** the module's workflow builds the bundle; its deploy job waits until a maintainer approves the `production` environment.
+   After the deploy, open the live game and check the version number, the main flow and that the console has no errors.
 
 ### Commit identity
 
@@ -46,7 +71,7 @@ Authors self-check and reviewers verify:
 
 ## Rolling back
 
-If a deployment breaks something, open a **Revert** pull request for the offending change and merge it after a quick review; CI redeploys the previous version.
+If a deployment breaks something, open a **Revert** pull request for the offending change; a maintainer merges it after a quick review and approves the deploy, which redeploys the previous version.
 Do not push fixes straight to `main`.
 
 ## For maintainers
@@ -55,10 +80,34 @@ Repository settings, kept in sync with this section:
 
 - **Branch protection on `main`**: pull request required, `Check isolation` must pass, no force pushes or deletion.
 - **Merging**: squash merge only (the pull request title becomes the commit message); branches are deleted after merge.
-- **`production` environment**: restricted to `main`. It holds `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `SITE_HOST` and `D1_DATABASE_ID`.
+- **`production` environment**: restricted to `main`, with **required reviewers = the repository owner** (administrators cannot bypass it).
+  Every deploy job stops in *waiting* until a maintainer reviews the run and approves it in Actions — check that the run belongs to the merge
+  you expect (commit, workflow, module) before approving. Only the latest commit on `main` is deployed: if another pull request was merged while a run
+  was queued or waiting, that run fails its "latest commit" step; do not re-run old runs — start the module's workflow on `main` manually
+  (*Run workflow*), which deploys the current head. It holds `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `SITE_HOST` and `D1_DATABASE_ID`.
   The hostname and database ID are secrets so they are masked in the public Actions logs; the repository itself names no domain.
+- **Merging and publishing are maintainer-only.** The automated reviewer never merges and never approves deployments; its token has no
+  Deployments, Environments, Secrets or Administration permission.
 - **Actions**: the default workflow token is read-only; workflows from first-time and external contributors need approval, and fork pull requests never receive secrets.
 - **Secret scanning and push protection** are on.
+- **Build and deploy are separate jobs.** The `test` job runs the module's code (install, tests, build, `wrangler deploy --dry-run --outdir`)
+  without any secret and uploads the bundle and static assets as an artifact. The `deploy` job (production environment) never checks out or runs
+  module code: it sparse-checks-out `tools/` plus the module's `wrangler.jsonc` (and the platform's `migrations/`), installs the pinned wrangler from
+  `tools/deployer/` with `npm ci --ignore-scripts`, and runs `tools/deployer/deploy.mjs`. That script treats the artifact as data, parses the reviewed
+  `wrangler.jsonc` with the pinned wrangler's own parser, checks it against the allowlist in `tools/deployer/lib.mjs`, generates the final config,
+  re-checks it and deploys with `--no-bundle` from an empty directory, `--env-file /dev/null`, a minimal environment and a fixed
+  `CLOUDFLARE_API_BASE_URL`. Do not add caches, `npm ci` of module code or extra `wrangler` commands to deploy jobs.
+- **Deploy configuration check** (`tools/check-deploy-config.mjs`, on every pull request; `deploy.mjs` checks again before every deploy): modules may not
+  contain `.env*`, `.npmrc`, `wrangler.json`, `wrangler.toml`, `.wrangler/`, unlisted hidden files or symlinks; each module's `wrangler.jsonc` may only
+  deploy to its own Worker — named after the module and listed in `tools/workers.json` — with no routes, domains, account ids, limits, log
+  destinations or resources beyond the per-key allowlisted bindings, and Durable Object migrations may only create classes.
+  `vars` names and `compatibility_flags` must be listed per module in `tools/deploy-allowlist.json`; the platform's secret names and `SITE_ORIGIN` are never allowed as `vars`.
+  Only maintainers add names to `tools/workers.json` (after checking that no Worker with that name already exists in the account) and to `tools/deploy-allowlist.json`.
+- **Pinned tooling**: third-party actions are pinned to full commit SHAs, and the deployer's wrangler version is fixed in `tools/deployer/` (upgrade steps in
+  [tools/deployer/README.md](tools/deployer/README.md)). Pull requests that touch `tools/` or `.github/workflows/` also run the whole deploy path for one game
+  with `deploy.mjs --dry-run` (no credentials) in `Check isolation`.
+- **Residual risk**: the deploy token is account-wide. The safest setup is a separate Cloudflare account (with its own domain) for this project;
+  that is the repository owner's call. See [docs/review-policy.md](docs/review-policy.md) section 7.
 - **Deploy guard**: before deploying, `tools/verify-main.sh` checks that every commit on `main` since `TRUSTED_BASE` is a GitHub-generated squash merge of a pull request, merged by the repository owner.
   If someone pushes to `main` directly, the `Main guard` workflow opens an issue and deploys stop. To recover: review the push (revert it if needed),
   then open a pull request that moves `TRUSTED_BASE` to the full SHA of the last direct push. If credentials may have been exposed, rotate the Cloudflare token first.
