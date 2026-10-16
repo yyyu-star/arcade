@@ -99,7 +99,7 @@ async function soloFun(page: Page, name: string): Promise<void> {
   await tap('fun:sticker2');
   await page.waitForTimeout(1_200);
   await tap('fun:button');
-  // 面板整个在屏幕里（kit 的面板固定 440 宽，竖屏靠 style.css 收窄）
+  // 面板整个在屏幕里（kit 0.11.2 起窄屏自己收窄，这里守着别回退）
   const out = await page.evaluate(() => [...document.querySelectorAll('.atf-box')].some((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight; }));
   if (out) throw new Error('互动面板伸出屏幕');
   await page.screenshot({ path: `${root}shots/smoke-${name}-panel.png` });

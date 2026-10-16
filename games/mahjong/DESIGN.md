@@ -603,3 +603,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.10.0 | 配平（`docs/balance.md`）：小白和普通两个代理玩家，娱乐分新手/普通/高手，实盘四档按区间重调，选档卡片写星、多久、最多赢输 |
 | 0.10.1 | 互动换成 kit 的 table-fun（互动第二版），kit 0.11.1 |
 | 0.10.2 | 清理：删没用到的代码和过时的注释、冒烟跟上现状，README 加英文简介，模块里放 LICENSE，本文对齐现状（行为不变） |
+| 0.10.3 | kit 0.11.2（窄屏面板和菜单由 kit 收进屏幕），去掉本游戏收窄面板的样式 |

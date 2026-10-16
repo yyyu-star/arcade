@@ -341,7 +341,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
   其中四分之一同类回扔（鸡蛋回拖鞋；同一个电脑 20 秒最多回扔 2 次）；名场面输的一方 40% 冲赢家、赢的一方 30% 得意；每手最多主动 2 次；两次反应至少隔 1 秒。
   数字都在 `BOT_REACT`，第六个参数能整个换掉。
 - 电脑的反应只是画面，**出牌决策绝不读它**；真人的短语、道具不记进牌局状态（见上面 `onEmote` 的规矩）。
-- 其他纯函数：`stickerMood`（表情对应的情绪）、`FunCooldown`（冷却）、`FunTally`（护盾、连击、回敬）、`placeMenu`（菜单放哪，避开禁区）、`funItem`/`stickerId`/`propId`（编号换算），测试在 `test/fun-logic.test.ts`。
+- 其他纯函数：`stickerMood`（表情对应的情绪）、`FunCooldown`（冷却）、`FunTally`（护盾、连击、回敬）、`placeMenu`（菜单放哪，避开禁区；窄屏按 `fitMenuWidth` 收窄到屏幕宽减 16px，0.11.2）、`funItem`/`stickerId`/`propId`（编号换算），测试在 `test/fun-logic.test.ts`。
 
 ## 房间怎么守规矩
 

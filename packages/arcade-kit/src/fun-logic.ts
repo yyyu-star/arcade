@@ -278,7 +278,14 @@ const overlap = (a: Box, b: Box): number =>
  * 菜单（w×h）贴着头像（anchor）放：先试朝屏幕中心那一侧，再试另外三侧；夹在可见区里（留 margin），
  * 和"禁区"（手牌、操作按钮）以及头像本身压得最少的那个位置胜出，一样少时按试的顺序。
  */
-export function placeMenu(anchor: Box, w: number, h: number, view: { width: number; height: number }, avoid: readonly Box[] = [], margin = 8, gap = 10): { left: number; top: number } {
+/** 菜单、面板在这么宽的屏幕上实际多宽：最多 w，两边各留 margin（0.11.2；390 竖屏上 440 宽的面板会伸出屏幕） */
+export function fitMenuWidth(w: number, viewWidth: number, margin = 8): number {
+  return Math.max(0, Math.min(w, viewWidth - 2 * margin));
+}
+
+/** w 是想要的宽度，窄屏上按 fitMenuWidth 收窄后再摆（页面上的盒子也要按同样的宽度画，table-fun 用 CSS 的 min()） */
+export function placeMenu(anchor: Box, want: number, h: number, view: { width: number; height: number }, avoid: readonly Box[] = [], margin = 8, gap = 10): { left: number; top: number } {
+  const w = fitMenuWidth(want, view.width, margin);
   const cx = anchor.left + anchor.width / 2;
   const cy = anchor.top + anchor.height / 2;
   const right = { left: anchor.left + anchor.width + gap, top: cy - h / 2 };
