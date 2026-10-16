@@ -164,6 +164,38 @@ function ok(x: Table | { error: string }): Table {
 }
 
 /**
+ * 配平的一场（docs/balance.md，DESIGN.md 4.10，0.12.0）：玩家坐 0 号、带一份（这一档的买入上限）上桌，对 size − 1 个电脑（强弱档 level），
+ * 打 hands 手或输光为止，不补码。result 是这一场的输赢（份）；mine、theirs 是玩家、电脑各说了几次话（估一场多久）
+ */
+export function runSession(o: { seed: Entropy; stakes: StakesId; size: number; hands: number; strategy: Strategy; level: number }): {
+  result: number;
+  hands: number;
+  mine: number;
+  theirs: number;
+} {
+  const st = stakesOf(o.stakes);
+  let t = newTable(st.id, o.size, o.seed, { level: o.level });
+  for (let i = 1; i < o.size; i++) t = ok(seatHouse(t, i));
+  t = ok(seatPlayer(t, 0, st.max));
+  let mine = 0;
+  let theirs = 0;
+  let guard = 0;
+  while (t.handNo <= o.hands) {
+    if (++guard > o.hands * 400) throw new Error(`stuck at hand ${t.handNo}`);
+    const me = t.seats[0]!;
+    if (me.stack === 0 && me.status === 'out') break;
+    const s = t.toAct;
+    if (s === null) throw new Error(`no one to act at hand ${t.handNo}`);
+    const a = s === 0 ? o.strategy(view(t, 0), stream(o.seed, 'player', t.handNo * 0x20000 + t.log.length)) : aiAction(t, s);
+    if (s === 0) mine++;
+    else theirs++;
+    t = ok(apply(t, s, a));
+  }
+  const me = t.seats[0]!;
+  return { result: (me.stack + me.total - st.max) / st.max, hands: Math.min(t.handNo, o.hands), mine, theirs };
+}
+
+/**
  * 一个"玩家"对一桌电脑（和单机一样：电脑先按 putHouse 坐满，玩家坐 0 号、买满 100 个大盲，输光了补满）。
  * 打 hands 手，返回玩家净赢多少大盲（千分之一个大盲为单位取整，免得小数）和电脑的性格出场次数。
  * humans（0.4.0，好友房）：前几个座位都是玩家、用同一种打法，返回他们合起来的净赢；level：电脑的强弱档（0.5.0，不给按单机的）

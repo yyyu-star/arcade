@@ -278,7 +278,7 @@ export interface DifficultyDef {
   rules?(r: Rules): void;
   market?(r: MarketRules, month: number): void;
   /** 0.5：真实行情（个股照搬真实走势）下这一级改成的规则（market 那些改走势的参数在真实行情下不生效） */
-  realRules?(r: Rules): void;
+  realRules?(r: Rules, short: boolean): void;
   /** 0.5：真实行情下的 detail（缺省用 detail） */
   realDetail?: string;
   realDesc?: string;
@@ -286,6 +286,8 @@ export interface DifficultyDef {
   short?: string;
   /** 0.5：真实行情下的短话（缺省用 short） */
   realShort?: string;
+  /** 0.10.0 适合谁（选难度时那一行；高手之后的几级没有） */
+  who?: string;
 }
 
 /** 人设（0.3.0）。数值在 BALANCE.fx[id]。 */

@@ -618,6 +618,8 @@ export interface RunSummary {
   daily: string | null;
   /** 正常开局（不是调试设置）：只有这样的局计入档案 */
   ranked: boolean;
+  /** 0.10.0 娱乐短局（打几个月、最后交首付）；完整一年、实盘、每日挑战为 false */
+  short: boolean;
   /**
    * 0.6.0 实盘：打几个月、开局资产、当前资产（账户 − 借款）、结回倍数（万分之几）、档位和一份、按倍数结回多少；
    * clean 是正常从界面开的实盘局（图鉴照记）。娱乐局为 null
@@ -757,6 +759,7 @@ export function runSummary(s: Readonly<GameState>): RunSummary {
     difficultyName: difficultyDef(s.difficulty).name,
     daily: s.setup?.daily ?? null,
     ranked: isRankedSetup(s.setup),
+    short: !!s.setup?.short,
     live: s.setup?.live
       ? {
           months: s.setup.live.months,

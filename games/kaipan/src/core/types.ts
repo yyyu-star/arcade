@@ -9,6 +9,7 @@
  * 标了「隐藏」的字段是画面不能显示的信息（题材真实阶段、今天预先掷好的行情等），
  * 详见 docs/core-api-0.3.md。
  */
+import type { LiveTier } from './liveTiers.ts';
 import type { RealMarket } from './segment.ts';
 
 export type ThemeId = 'ai' | 'newenergy' | 'consumer' | 'pharma' | 'finance' | 'lowalt' | 'gaming' | 'pig';
@@ -701,12 +702,26 @@ export interface RunSetup {
   noChat?: boolean;
   /** 0.6.0 实盘模式：打几个月、账单倍数（开局时从 BALANCE.live 抄进来，存档自带）；娱乐局没有 */
   live?: LiveRules;
+  /** 0.10.0 娱乐短局：打几个月、账单倍数（开局时从 BALANCE.short 抄进来，存档自带）；完整一年的局、实盘、每日挑战没有 */
+  short?: ShortRules;
+}
+
+/** 0.10.0 娱乐短局这一局的规则。 */
+export interface ShortRules {
+  months: number;
+  billMult: number;
+  /** 最后一个月月底多交一笔"首付"：开局资产的几成（短局的最终目标，按难度定） */
+  goal: number;
 }
 
 /** 0.6.0 实盘这一局的规则。 */
 export interface LiveRules {
   months: number;
   billMult: number;
+  /** 0.10.0：资产涨跌算进筹码的倍数；更早开的局没有，按 1 算 */
+  lev?: number;
+  /** 0.10.0：档位；更早开的局没有，按难度认（那时一档一个难度） */
+  tier?: LiveTier;
 }
 
 export interface GameState {

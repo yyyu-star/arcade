@@ -128,7 +128,7 @@
 | 日历 | 元旦、五穷六绝、七翻身、年报、中报、国庆、年底改大盘 / β / 噪声 | 不生效，`CalendarDef.realDesc` 改说"老话说……涨跌照真的走"；春季躁动、政策窗口、金九、双十一只改热度（信息） |
 | 事件 大V直播间 | 热度加成带动涨幅 | 热度加成 + 手里这个风口每份马上多赚 6% |
 | 稀有股票卡 | 风口必火 | 内部消息：下个月走势偏强（85% 是真的） |
-| 月供 | — | 真实行情下 × `track.billMult` 0.8 × `track.regimeBill`（牛 1.1、泡沫 1.25、横盘 0.95、熊 0.9、崩盘 0.95；市况不公开） |
+| 月供 | — | 真实行情下 × `track.billMult` 0.5（0.10.0 配平前是 0.8，见 `design-balance.md`）× `track.regimeBill`（牛 1.1、泡沫 1.25、横盘 0.95、熊 0.9、崩盘 0.95；市况不公开） |
 
 `DifficultyDef.realRules / realDesc / realDetail`：难度选择页在真实行情下应显示 realDesc / realDetail。
 

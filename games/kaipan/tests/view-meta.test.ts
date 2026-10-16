@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ACHIEVEMENTS, MAX_DIFFICULTY, PERSONAS } from '../src/core/index.ts';
+import { ACHIEVEMENTS, BALANCE, MAX_DIFFICULTY, PERSONAS } from '../src/core/index.ts';
 import { parseParams } from '../src/debug/params.ts';
 import { presetProfile } from '../src/debug/profiles.ts';
 import { reviveProfile } from '../src/platform/profile.ts';
 import type { KeyValueStore } from '../src/platform/settings.ts';
 import { bestText, dailyBadgeView, dailyTag, dailyText, dailyDate, levelLabel, personaLockText, profileLine } from '../src/view/labels.ts';
-import { isUnscored, loadLastSetup, loadViewed, markUnscored, saveLastSetup, saveViewed, unscoredResult } from '../src/view/meta/prefs.ts';
+import { funSetup, isUnscored, loadLastSetup, loadViewed, markUnscored, saveLastSetup, saveViewed, unscoredResult } from '../src/view/meta/prefs.ts';
 import { emptyProfile } from '../src/platform/profile.ts';
 import { GRID_MAX, achievementUnlocks, unlocksOf } from '../src/view/meta/unlocks.ts';
 
@@ -20,8 +20,8 @@ describe('长线界面的文字', () => {
     expect(dailyDate(new Date(Date.UTC(2026, 0, 5, 15, 59)))).toBe('2026-01-05');
     expect(dailyDate(new Date(Date.UTC(2026, 0, 5, 16, 0)))).toBe('2026-01-06');
     expect(dailyDate(new Date(Date.UTC(2026, 11, 31, 16, 30)))).toBe('2027-01-01');
-    expect(levelLabel(1, '慢牛')).toBe('第 1 级·慢牛（最简单）');
-    expect(levelLabel(3, '熊出没')).toBe('第 3 级·熊出没（难度 3/8）');
+    expect(levelLabel(1, '新手')).toBe('第 1 级·新手（最简单）');
+    expect(levelLabel(3, '高手')).toBe('第 3 级·高手（难度 3/8）');
     expect(levelLabel(8, '末日')).toBe('第 8 级·末日（最难）');
     expect(dailyTag('2026-10-10')).toBe('每日挑战 10/10');
     expect(bestText(undefined)).toBe('还没玩过');
@@ -43,14 +43,25 @@ describe('长线界面的文字', () => {
 });
 
 describe('画面自己的小记录', () => {
-  it('上次开局：读坏了或不认识的回到新手 + 第 1 级', () => {
-    expect(loadLastSetup(memStore())).toEqual({ persona: 'newbie', difficulty: 1 });
-    expect(loadLastSetup(memStore({ 'kaipan.setup.last': '{bad' }))).toEqual({ persona: 'newbie', difficulty: 1 });
-    expect(loadLastSetup(memStore({ 'kaipan.setup.last': JSON.stringify({ persona: 'nobody', difficulty: 99 }) }))).toEqual({ persona: 'newbie', difficulty: 1 });
+  it('上次开局：读坏了或不认识的回到新手 + 第 1 级 + 短局；0.10.0 以前存的没有短局这一项，也按短局', () => {
+    expect(loadLastSetup(memStore())).toEqual({ persona: 'newbie', difficulty: 1, short: true });
+    expect(loadLastSetup(memStore({ 'kaipan.setup.last': '{bad' }))).toEqual({ persona: 'newbie', difficulty: 1, short: true });
+    expect(loadLastSetup(memStore({ 'kaipan.setup.last': JSON.stringify({ persona: 'nobody', difficulty: 99 }) }))).toEqual({ persona: 'newbie', difficulty: 1, short: true });
     const st = memStore();
     const id = PERSONAS[2]!.id;
-    saveLastSetup({ persona: id, difficulty: 4 }, st);
-    expect(loadLastSetup(st)).toEqual({ persona: id, difficulty: 4 });
+    saveLastSetup({ persona: id, difficulty: 4, short: false }, st);
+    expect(loadLastSetup(st)).toEqual({ persona: id, difficulty: 4, short: false });
+  });
+
+  it('娱乐开局设置：短局带上 BALANCE.short 的规则和这一级的首付比例，完整一年只有人设和难度', () => {
+    expect(funSetup({ persona: 'newbie', difficulty: 2, short: false })).toEqual({ persona: 'newbie', difficulty: 2 });
+    expect(funSetup({ persona: 'newbie', difficulty: 2, short: true })).toEqual({
+      persona: 'newbie',
+      difficulty: 2,
+      short: { months: BALANCE.short.months, billMult: BALANCE.short.billMult, goal: BALANCE.short.goal[1] },
+    });
+    // 高手之后的几级沿用最后一个比例
+    expect(funSetup({ persona: 'newbie', difficulty: 8, short: true }).short?.goal).toBe(BALANCE.short.goal.at(-1));
   });
   it('图鉴看过的：只留字符串', () => {
     const st = memStore({ 'kaipan.codex.viewed.v1': JSON.stringify({ stocks: ['a', 3], items: 'x' }) });

@@ -288,7 +288,13 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
   const before = await balance(page);
   if (before !== 10_000) throw new Error(`new wallet should have 10,000, got ${before}`);
+  // 0.12.0：第一次来默认娱乐·新手，三张难度卡、不显示档位卡；切到实盘才是四张档位卡
+  if ((await page.locator('.tile.diff:visible').count()) !== 3 || (await page.locator('.tile.diff.sel', { hasText: '新手' }).count()) !== 1)
+    throw new Error('first visit should default to 娱乐 · 新手 with three difficulty cards');
   await shot(page, 'lobby');
+  await page.locator('.lobby .mode', { hasText: '实盘' }).click();
+  if ((await page.locator('.tile:not(.diff):visible').count()) !== 4) throw new Error('real mode should show four stakes cards');
+  await shot(page, 'lobby-real');
   await page.locator('.lobby .start').click();
   await page.locator('.dialog').waitFor({ timeout: 10_000 }).catch(async (e: unknown) => {
     await shot(page, 'debug-start');
@@ -712,7 +718,7 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await shot(page, 'alone-lobby');
 
   // 单机：只有娱乐
-  await page.locator('.tile', { hasText: '小桌' }).click();
+  await page.locator('.tile', { hasText: '新手' }).click();
   await page.locator('.size', { hasText: /^4$/ }).click();
   await page.locator('.lobby .start').click();
   await skipTips(page);

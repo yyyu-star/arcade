@@ -257,7 +257,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   {
     id: 'naked',
     name: '裸考',
-    desc: '一个道具都不拿（人设自带的不算），在第 3 级"熊出没"或更高难度通关',
+    desc: '一个道具都不拿（人设自带的不算），在第 3 级"高手"或更高难度通关',
     tier: 'gold',
     icon: 'star',
     check: (c) => c.won && c.state.difficulty >= 3 && c.state.stats.itemsTaken.length === 0,

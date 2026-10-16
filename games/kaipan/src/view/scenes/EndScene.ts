@@ -11,7 +11,7 @@ import { ensureMetaArt, hasArt, stockKey, type Glyph } from '../assets.ts';
 import { addBackdrop } from '../fx/effects.ts';
 import { confetti } from '../fx/particles.ts';
 import { bestText, boardLine, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
-import { loadLastSetup, saveLastSetup } from '../meta/prefs.ts';
+import { funSetup, loadLastSetup, saveLastSetup } from '../meta/prefs.ts';
 import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
 import { randomSeed, type Session } from '../session.ts';
@@ -260,8 +260,8 @@ export class EndScene extends BaseScene {
       this.events.once('shutdown', off);
     } else {
       // 最好成绩 / 今日挑战一句（0.5 只在悬停，0.5.1 放回来）
-      const best = profile.best[bestKey(sum.persona, sum.difficulty)];
-      const line = sum.daily ? `今日挑战：${dailyText(profile.daily[sum.daily])}` : `${sum.personaName}·${sum.difficulty}级最好：${bestText(best)}`;
+      const best = profile.best[bestKey(sum.persona, sum.difficulty, sum.short)];
+      const line = sum.daily ? `今日挑战：${dailyText(profile.daily[sum.daily])}` : `${sum.personaName}·${sum.difficulty}级${sum.short ? '短局' : ''}最好：${bestText(best)}`;
       addGlyph(this, mx + 12, ky + 52, 'trophy', 22);
       const lw = ph ? G.rightW - 100 : 380;
       const lt = addText(this, mx + 30, ky + 44, line, { size: TYPE.label, color: COLOR.ink, wrap: lw, lineSpacing: 2 });
@@ -434,13 +434,14 @@ export class EndScene extends BaseScene {
 
   /** 新局：沿用这局的人设和难度（每日挑战、调试局之后用上次自己选的）；都要按档案校验解锁，没解锁的退回新手 + 第 1 级。 */
   private newRun(sum: RunSummary, profile: Profile): void {
-    const want = sum.daily || !sum.ranked || this.result?.ignored ? loadLastSetup() : { persona: sum.persona, difficulty: sum.difficulty };
+    const want = sum.daily || !sum.ranked || this.result?.ignored ? loadLastSetup() : { persona: sum.persona, difficulty: sum.difficulty, short: sum.short };
     const setup = {
       persona: isPersonaUnlocked(profile, want.persona) ? want.persona : 'newbie',
       difficulty: isDifficultyUnlocked(profile, want.difficulty) ? want.difficulty : 1,
+      short: want.short,
     } as const;
     saveLastSetup(setup);
-    this.session.newRun(randomSeed(), setup);
+    this.session.newRun(randomSeed(), funSetup(setup));
   }
 
   /** 本局新达成的成就、新解锁的人设和难度、点亮的图鉴：一排图标 + 数字，名字在悬停；没计入档案时一行短话（原因在悬停）。 */

@@ -95,20 +95,27 @@ export interface Skill {
    * 这一手对他下注的折扣（read）少打这么多。只看 lastHand.shown，是大家都看到的牌（DESIGN.md 4.9）
    */
   memory: number;
+  /**
+   * 多跟少加（0.12.0，‰，低档）：翻牌后拿着够加注的牌、有人下注时，这么多的时候只跟不加；翻牌前面对加注也只跟不再加。
+   * 新手像人一样弱：有牌也不敢打大，不靠乱弃乱推（docs/balance.md 第 3 节）
+   */
+  passive: number;
+  /** 不敢先打（0.12.0，‰，低档）：没人下注时拿着够加注、够薄打的牌，这么多的时候只过牌（翻牌前是平跟不开池加注） */
+  shy: number;
   /** 看对手的打法用几成（0.5.0，‰）：对紧的人多偷、对跟注站少诈唬多薄打、对爱加注的人放宽跟注。新手不看 */
   adapt: number;
   /** 按筹码深浅打（0.5.0）：剩的不到 SHORT_BB 个大盲翻牌前只推或弃，很深时多看便宜的翻牌。新手不会 */
   depth: boolean;
 }
 
-const LUX: Skill = { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0, slip: 0, value: 1000, third: 0, memory: 250, adapt: 1000, depth: true };
+const LUX: Skill = { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0, slip: 0, value: 1000, third: 0, passive: 0, shy: 0, memory: 250, adapt: 1000, depth: true };
 
 /** 下标是强弱档：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强（功力同豪华桌，性格按 STRONG 挑最强的） */
 export const SKILL: readonly Skill[] = [
-  { read: 300, pre: 120, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 550, tight: -20, soft: 1000, slip: 150, value: 450, third: 900, memory: 0, adapt: 0, depth: false },
-  { read: 300, pre: 150, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 700, tight: 0, soft: 1000, slip: 0, value: 1000, third: 0, memory: 0, adapt: 300, depth: true },
-  { read: 240, pre: 200, raiser: 40, caller: 70, limper: 100, slack: 0, bluff: 800, tight: 0, soft: 600, slip: 0, value: 1000, third: 0, memory: 0, adapt: 600, depth: true },
-  { read: 220, pre: 205, raiser: 30, caller: 55, limper: 90, slack: 0, bluff: 750, tight: 20, soft: 200, slip: 0, value: 1000, third: 0, memory: 250, adapt: 800, depth: true },
-  LUX,
+  { read: 600, pre: 600, raiser: 100, caller: 100, limper: 100, slack: 150, bluff: 100, tight: -250, soft: 1000, slip: 400, value: 300, third: 1000, passive: 950, shy: 800, memory: 0, adapt: 0, depth: false },
+  { read: 550, pre: 500, raiser: 100, caller: 100, limper: 100, slack: 120, bluff: 120, tight: -220, soft: 1000, slip: 350, value: 330, third: 1000, passive: 930, shy: 750, memory: 0, adapt: 0, depth: false },
+  { read: 460, pre: 400, raiser: 100, caller: 100, limper: 100, slack: 40, bluff: 250, tight: -200, soft: 1000, slip: 300, value: 400, third: 1000, passive: 900, shy: 700, memory: 0, adapt: 0, depth: false },
+  { read: 420, pre: 300, raiser: 100, caller: 100, limper: 100, slack: 30, bluff: 500, tight: -150, soft: 800, slip: 250, value: 500, third: 800, passive: 700, shy: 450, memory: 0, adapt: 0, depth: false },
+  { ...LUX, value: 900, passive: 150, shy: 150 },
   LUX,
 ];

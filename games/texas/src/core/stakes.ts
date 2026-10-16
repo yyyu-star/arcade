@@ -25,7 +25,7 @@ export function stakesOf(id: StakesId): Stakes {
 }
 
 /**
- * 电脑的强弱档（0.5.0，DESIGN.md 4.7）：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强。
+ * 电脑的强弱档（0.5.0，DESIGN.md 4.7；0.12.0 按配平重调，4.10）：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强（好友房）。
  * 功力（看人、诈唬、松紧、新手的"手软"）在 src/ai/personas.ts 的 SKILL；补位挑性格的权重在这里（顺序同 PERSONAS），5 按 STRONG 的顺序挑。
  * 档位定的是"这一档该多强"，场地（单机、好友房）再按档位挑强弱档：SOLO_LEVEL、ROOM_LEVEL
  */
@@ -47,14 +47,31 @@ export const LEVEL_HOUSE: readonly (readonly number[])[] = [
  */
 export const STRONG: readonly number[] = [1, 0, 7, 4, 6, 5, 8, 3, 2, 9];
 
-/** 单机（娱乐、实盘一样）按档位用哪一档电脑（0.5.0）：小桌是新手场，电脑偏弱、偶尔手软；豪华桌接近最强 */
-export const SOLO_LEVEL: Readonly<Record<StakesId, number>> = { small: 0, mid: 2, big: 3, lux: 4 };
+/**
+ * 单机实盘按档位用哪一档电脑（0.12.0 配平，DESIGN.md 4.10；0.5.0–0.11 是 0、2、3、4，娱乐也按它）：小桌 1、中桌 2、大桌 3、豪华桌 4。
+ * 0 档只给娱乐的新手（FUN_LEVEL）。0.12.0 以前开的娱乐桌没记 level，也按这张表
+ */
+export const SOLO_LEVEL: Readonly<Record<StakesId, number>> = { small: 1, mid: 2, big: 3, lux: 4 };
 
 /**
  * 好友房（都是实盘）按档位用哪一档电脑（0.5.0）：四档都是最强（5），和 0.4.0 一样，是维护者定的：
  * 真人之间能互通、配合，最强档最稳。模拟里第 4 档已经让两个普通玩家期望 ≤ 0（3 在 9 人桌还能小赢），只作对照，见 DESIGN.md 6.5
  */
 export const ROOM_LEVEL: Readonly<Record<StakesId, number>> = { small: 5, mid: 5, big: 5, lux: 5 };
+
+/**
+ * 娱乐的难度（0.12.0，docs/balance.md 第 3 节）：新手、普通、高手。娱乐不碰钱包，盲注按小桌的数；难度只管用哪一档电脑
+ */
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+export const FUN_STAKES: StakesId = 'small';
+export const FUN_LEVEL: Readonly<Record<Difficulty, number>> = { easy: 0, normal: 2, hard: 4 };
+export const DIFFICULTY_NAME: Readonly<Record<Difficulty, string>> = { easy: '新手', normal: '普通', hard: '高手' };
+/** 牌桌记着的强弱档是哪个娱乐难度（0.12.0 以前开的娱乐桌没记，回 null） */
+export const difficultyOf = (level: number | undefined): Difficulty | null => DIFFICULTIES.find((d) => FUN_LEVEL[d] === level) ?? null;
+
+/** 配平和选档页按"一场"算（docs/balance.md 第 2、3 节）：打这么多手，真人速度约 15–25 分钟（DESIGN.md 4.10） */
+export const SESSION_HANDS = 40;
 
 /** 电脑带上桌的筹码：60–100 个大盲 */
 export const HOUSE_MIN_BB = 60;

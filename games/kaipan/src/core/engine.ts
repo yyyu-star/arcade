@@ -14,6 +14,7 @@ import {
   collateralById,
   collateralTerms,
   EVENTS,
+  SHORT_GOAL_BILL,
   SURPRISE_BILLS,
   FRIENDS,
   ITEMS,
@@ -35,6 +36,7 @@ import {
   stocksOf,
 } from './content/index.ts';
 import type { EventCtx, HoldingCtx, MarketRules, Rules } from './hooks.ts';
+import { isLiveTier } from './liveTiers.ts';
 import {
   MOODS,
   advanceStage,
@@ -49,6 +51,7 @@ import {
   rollDH,
   round2,
   rulesFor,
+  runBillMult,
   rulesOf,
   settleTheme,
   stageDays,
@@ -126,9 +129,26 @@ export function daysInMonth(month: number): number {
   return BALANCE.monthDays[month - 1] ?? 0;
 }
 
-/** 这一局打几个月：实盘按开局设置（0.6.0），娱乐局 12 个月。 */
+/** 0.10.0 娱乐短局的开局设置：规则从 BALANCE.short 抄进这局，首付比例按难度 */
+export function shortSetup(persona: PersonaId, difficulty: number): RunSetup {
+  const { months, billMult, goal } = BALANCE.short;
+  const lv = clampDifficulty(difficulty);
+  return { persona, difficulty: lv, short: { months, billMult, goal: goal[Math.min(lv, goal.length) - 1] as number } };
+}
+
+/** 短局最后要交的首付（元，取整到百元）：开局资产 × 这局的首付比例；不是短局为 0。开局面板用开局设置算，局里用 shortGoal */
+export function shortGoalFor(setup: Readonly<RunSetup> | null): number {
+  const g = setup?.short?.goal ?? 0;
+  return g > 0 ? Math.round((g * (setup?.account ?? personaAccount(setup?.persona ?? 'newbie'))) / 100) * 100 : 0;
+}
+
+export function shortGoal(s: Readonly<GameState>): number {
+  return shortGoalFor(s.setup);
+}
+
+/** 这一局打几个月：实盘（0.6.0）、娱乐短局（0.10.0）按开局设置，完整一年 12 个月。 */
 export function runMonths(s: Readonly<GameState>): number {
-  return s.setup?.live?.months ?? MONTHS;
+  return s.setup?.live?.months ?? s.setup?.short?.months ?? MONTHS;
 }
 
 /** 一局的总交易日数。 */
@@ -634,7 +654,7 @@ function startMonth(s: GameState, month: number, em: Emitter): void {
   const rules = rulesOf(s);
   const base = billFor(month, rules, s.nextBillMult);
   s.nextBillMult = 1;
-  const extras = surprisePlan(s.seed, s.difficulty, s.persona, s.setup?.live?.billMult ?? 1)
+  const extras = surprisePlan(s.seed, s.difficulty, s.persona, runBillMult(s.setup))
     .filter((x) => x.month === month)
     .map((x) => ({ ...x.extra }));
   // 第 6 级股灾那个月：爆仓的亲戚找你借钱救急（按常规月供的比例，和传闻一起在月初公布）
@@ -643,6 +663,9 @@ function startMonth(s: GameState, month: number, em: Emitter): void {
     const def = SURPRISE_BILLS.find((d) => d.id === CRASH_BILL_ID);
     extras.push({ id: CRASH_BILL_ID, name: def?.name ?? '借钱救急', amount: Math.round((base * BALANCE.crash.bill) / 100) * 100 });
   }
+  // 0.10.0 娱乐短局：最后一个月月底多交一笔首付（这局的最终目标，开局时就说了）
+  const goal = shortGoal(s);
+  if (goal > 0 && month === runMonths(s)) extras.push({ id: SHORT_GOAL_BILL.id, name: SHORT_GOAL_BILL.name, amount: goal });
   let amount = base;
   for (const x of extras) amount += x.amount;
   s.bill = { month, name: BILL_NAMES[month - 1] ?? '账单', amount, extras };
@@ -1673,10 +1696,10 @@ export function emptyStats(account: number): GameState['stats'] {
   };
 }
 
-/** 正常开局（只用了 persona / difficulty / daily）：计入档案、成就。带调试字段的开局不计。 */
+/** 正常开局（只用了 persona / difficulty / daily / short）：计入档案、成就。带调试字段的开局不计。 */
 export function isRankedSetup(setup: RunSetup | null): boolean {
   if (!setup) return true;
-  return Object.keys(setup).every((k) => k === 'persona' || k === 'difficulty' || k === 'daily');
+  return Object.keys(setup).every((k) => k === 'persona' || k === 'difficulty' || k === 'daily' || k === 'short');
 }
 
 function checkSetup(setup: RunSetup | null): void {
@@ -1697,10 +1720,19 @@ function checkSetup(setup: RunSetup | null): void {
   }
   if (setup.account !== undefined && !(setup.account > 0)) throw new Error('开局账户要大于 0');
   if (setup.live !== undefined) {
-    const { months, billMult } = setup.live;
+    const { months, billMult, lev, tier } = setup.live;
     if (!Number.isInteger(months) || months < 1 || months > MONTHS) throw new Error(`实盘的月数要在 1..${MONTHS}`);
     if (!(billMult > 0 && billMult <= 1)) throw new Error('实盘的账单倍数要在 (0, 1]');
+    if (lev !== undefined && !(lev >= 1 && lev <= 10)) throw new Error('实盘的涨跌倍数要在 1..10');
+    if (tier !== undefined && !isLiveTier(tier)) throw new Error(`未知档位：${String(tier)}`);
     if (setup.daily !== undefined) throw new Error('每日挑战不能是实盘');
+  }
+  if (setup.short !== undefined) {
+    const { months, billMult, goal } = setup.short;
+    if (!Number.isInteger(months) || months < 1 || months > MONTHS) throw new Error(`短局的月数要在 1..${MONTHS}`);
+    if (!(billMult > 0 && billMult <= 2)) throw new Error('短局的账单倍数要在 (0, 2]');
+    if (!(goal >= 0 && goal <= 3)) throw new Error('短局的首付比例要在 0..3');
+    if (setup.daily !== undefined || setup.live !== undefined) throw new Error('每日挑战、实盘不能是短局');
   }
 }
 

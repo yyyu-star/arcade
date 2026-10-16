@@ -145,10 +145,11 @@ export class Solo {
    */
   static async open(
     d: SoloDeps,
-    o: { userId: string | null; stakes: StakesId; size: number; amount: number; practice: boolean },
+    o: { userId: string | null; stakes: StakesId; size: number; amount: number; practice: boolean; level?: number },
   ): Promise<Solo | { error: string; pending?: Solo }> {
     const id = d.newId();
-    let t = newTable(o.stakes, o.size, d.entropy(), { holdHands: true });
+    // level：娱乐按难度定电脑的强弱档（0.12.0，stakes.ts 的 FUN_LEVEL）；实盘不写，按档位（SOLO_LEVEL）
+    let t = newTable(o.stakes, o.size, d.entropy(), { holdHands: true, ...(o.level !== undefined ? { level: o.level } : {}) });
     // 都坐好了也先不发：第一手等新手提示关了、调用方 next 再发（不然提示框后面电脑已经开打）
     for (let i = 1; i < o.size; i++) t = must(seatHouse(t, i, false));
     const s: Session = { v: 1, id, userId: o.userId, practice: o.practice, table: t, pending: null, stats: { ...NO_STATS } };

@@ -195,7 +195,6 @@ export function dailyDate(d: Date = new Date()): string {
   return `${b.getUTCFullYear()}-${p(b.getUTCMonth() + 1)}-${p(b.getUTCDate())}`;
 }
 
-/** 难度：「第 3 级 · 熊出没」。 */
 /** 难度在几级里的位置：「最简单」「最难」「难度 3/8」。 */
 export function levelHint(level: number): string {
   if (level <= MIN_DIFFICULTY) return '最简单';
@@ -203,7 +202,7 @@ export function levelHint(level: number): string {
   return `难度 ${level}/${MAX_DIFFICULTY}`;
 }
 
-/** 「第 1 级·慢牛（最简单）」 */
+/** 「第 1 级·新手（最简单）」 */
 export function levelLabel(level: number, name: string): string {
   return `第 ${level} 级·${name}（${levelHint(level)}）`;
 }

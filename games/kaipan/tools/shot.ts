@@ -1231,7 +1231,7 @@ function fakeWallet(balance = 12_340) {
 }
 
 /**
- * 实盘（设计稿第 8 节第 5 步）：假钱包跑一遍"带入 → 打完半年 → 结回"、"还没开盘就收手 → 原样退回"、"打到一半刷新 → 接着打 → 结回"、
+ * 实盘（设计稿第 8 节第 5 步）：假钱包跑一遍"带入 → 打完 → 结回"、"还没开盘就收手 → 原样退回"、"打到一半刷新 → 接着打 → 结回"、
  * "结回连不上 / 钱包忙 / 平台内部出错 → 重试"、"放太久 → 改成不算筹码"、"带入没等到回话 → 下次先收回"、"另一台设备上有一局"。
  */
 async function liveShots(browser: Browser): Promise<void> {
@@ -1257,7 +1257,7 @@ async function liveShots(browser: Browser): Promise<void> {
   };
   const opts = (w: ReturnType<typeof fakeWallet>, net = false): OpenOpts => ({ storage: profileStorage('partial'), api: (r) => w.route(r), loginHint: true, touch: PHONE, netErrors: net });
 
-  // A. 带入 → 打完半年 → 结回
+  // A. 带入 → 打完 → 结回
   {
     const w = fakeWallet();
     const ctx = await openPage(browser, 'live-full', '', opts(w));
@@ -1276,7 +1276,7 @@ async function liveShots(browser: Browser): Promise<void> {
     expect(!!r && r.step === 'playing' && r.tier === 'mid' && r.stake === 10_000, `带入后记录应是 playing（${JSON.stringify(r)}）`);
     expect(!!buy && buy.body.ref === r?.ref && buy.body.tier === 'mid' && buy.xArcade === '1' && Object.keys(buy.body).sort().join() === 'ref,tier', `带入只传 ref 和 tier、带 X-Arcade（${JSON.stringify(buy)}）`);
     const st = await state<GameState>(ctx, 'window.__game.state()');
-    expect(st.seed === r?.seed && st.setup?.live?.months === 6 && st.difficulty === 2, `中档是半年、难度 2（${JSON.stringify(st.setup)}）`);
+    expect(st.seed === r?.seed && st.setup?.live?.months === BALANCE.live.months && st.setup.live.tier === 'mid' && st.difficulty === 2, `中档打 ${BALANCE.live.months} 个月、难度 2（${JSON.stringify(st.setup)}）`);
     await waitFor(ctx, '顶栏的实盘小牌子', `g.displayList().some((t) => t === 'text:${PHONE ? '实盘中档 → 约 10,000' : '实盘 · 中档 10,000 → 约 10,000'}')`);
     await shot(ctx, 'l2-trade-badge');
     const end = finished(st);

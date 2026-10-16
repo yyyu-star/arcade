@@ -118,8 +118,9 @@ export interface RecordResult {
 
 const STARTERS: readonly PersonaId[] = PERSONAS.filter((d) => d.unlock === 'start').map((d) => d.id);
 
-export function bestKey(persona: PersonaId, difficulty: number): string {
-  return `${persona}:${difficulty}`;
+/** 0.10.0 短局和完整一年分开记（一局几个月不一样，账户和还清几个月没法比）；老的键就是完整一年 */
+export function bestKey(persona: PersonaId, difficulty: number, short = false): string {
+  return `${persona}:${difficulty}${short ? ':short' : ''}`;
 }
 
 export function emptyProfile(): Profile {
@@ -415,7 +416,7 @@ function recordLive(profile: Readonly<Profile>, summary: Readonly<RunSummary>, b
  * - 每日挑战的日期晚于 today：ignored 'future'。
  * - 成就：本局达成的里面档案还没有的就是新成就；成就带来的人设随之解锁。
  * - 难度：非每日挑战的局通关第 N 级，解锁第 N+1 级（最高 8）。
- * - 纪录：非每日挑战记在 best[persona:difficulty]；每日挑战记在 daily[date]。
+ * - 纪录：非每日挑战记在 best[persona:difficulty]（短局另记 best[persona:difficulty:short]）；每日挑战记在 daily[date]。
  *   每日挑战要校验种子、人设、难度和 dailySetup(日期) 完全一致，不一致的按普通局记（"每日打卡"成就同样校验）。
  */
 export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSummary>, today: string): RecordResult {
@@ -501,7 +502,7 @@ export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSumma
     if (summary.won) rec.won = true;
     p.daily[daily] = rec;
   } else {
-    const key = bestKey(summary.persona, summary.difficulty);
+    const key = bestKey(summary.persona, summary.difficulty, summary.short);
     const rec: BestRecord = p.best[key] ? { ...p.best[key] } : { runs: 0, wins: 0, bestAccount: 0, bestMonths: 0 };
     rec.runs += 1;
     if (summary.won) rec.wins += 1;

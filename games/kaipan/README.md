@@ -74,8 +74,9 @@
   交分带确认过的 userId、用 keepalive，429 / busy / wrong_user 不重试，连不上给「重试」；200 但回话看不懂算"交了"，不给重试。
   云同步还没确认账号时，每日挑战开局（或恢复）后几秒先问一次 `/api/me`（0.5.11），免得结束页马上回大厅时这个普通请求被取消。
   读榜按榜和范围缓存 45 秒，交分后那次读也进缓存；交上分（含 odd）时作废这个榜，缓存带版本号，作废前发出的读晚回来不写进缓存（0.5.12）。接口见总仓库 `docs/platform-backend.md` 9.2、15.5。
-- 实盘模式（设计 `docs/design-live.md`）：规则在开局设置 `RunSetup.live`（打几个月、账单倍数，开局时从 `BALANCE.live` 抄进这局）和 `src/core/live.ts`
-  （四档对应难度 1–4、当前资产 = 账户 − 借款、结回倍数用万分之几的整数、破产为 0）。`npm run sim -- --live` 出各档的结回分布，`tests/live-sim.test.ts` 锁住梯度。
+- 实盘模式（设计 `docs/design-live.md`）：规则在开局设置 `RunSetup.live`（打几个月、账单倍数、涨跌倍数、档位，开局时从 `BALANCE.live` 抄进这局）和 `src/core/live.ts`
+  （四档对应难度 1/2/3/3、当前资产 = 账户 − 借款、结回倍数用万分之几的整数、破产为 0）。`npm run sim -- --live` 出各档的结回分布，`tests/live-sim.test.ts` 锁住梯度。
+- 配平（0.10.0，`docs/design-balance.md`）：模拟器里的小白 `xiaobai`、普通 `putong` 两个玩家模型，`npm run sim -- --balance --runs 2000` 出实盘四档、娱乐三档（短局和完整一年）的对照表和一局约几分钟。娱乐短局的规则在开局设置 `RunSetup.short`（`shortSetup`）。
   档位表和结回算法单放在 `src/core/liveTiers.ts`（Worker 也用，不把规则引擎打进 Worker）。
   - 钱包（0.6.0）：浏览器 → 开盘 Worker（同域 `POST api/live/{buyin,settle,refund}`，`src/worker/live.ts`，入口分流在 `route.ts`）→ 服务绑定 `WALLET`（平台的 `WalletService`，`props.game = kaipan`）。
     浏览器只给 `ref`、`tier`、`bp`，金额和到期时间由 Worker 定；认人沿用闸门的 `checkLogin`（为什么不用 kit 的 `whoIs` 见设计稿第 6 节）。

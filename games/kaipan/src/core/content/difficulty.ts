@@ -12,7 +12,7 @@ function more(id: string, key: string): string {
 }
 
 /**
- * 难度（"市场环境"，0.3.0：1..8 级，id 固定）。高等级包含低等级的全部约束，引擎按 1..level 依次叠加：
+ * 难度（"市场环境"，0.3.0：1..8 级，id 固定）。0.10.0 前三级改叫新手 / 普通 / 高手（仓库根 docs/balance.md 第 3 节），后面五级是高手之后的挑战。高等级包含低等级的全部约束，引擎按 1..level 依次叠加：
  * rules 改玩家规则表（月供倍数、可信度、奖励张数……），market 改每天的市场规则（偏熊、炸板率……）。
  * 第 6 级"股灾"的月份由种子决定（crashPlan），引擎在那个月月初公布传闻、在某个交易日让所有题材提前退潮。
  * 数值在 BALANCE.fx[id]。通关一级解锁下一级（档案层，见 src/platform/profile.ts）。
@@ -21,20 +21,33 @@ function more(id: string, key: string): string {
 export const DIFFICULTIES: readonly DifficultyDef[] = [
   {
     id: 'slow_bull',
-    name: '慢牛',
+    name: '新手',
     short: '大环境慢慢涨',
+    realShort: '要还的钱最少',
     level: 1,
-    desc: '标准难度：大环境慢慢往上走',
+    who: '第一次玩',
+    desc: '最友好的一档：大环境慢慢往上走',
+    realDesc: '大环境慢慢往上走，每月要还的钱最少',
   },
   {
     id: 'choppy',
-    name: '震荡',
+    name: '普通',
     short: '风口忽冷忽热',
+    realShort: '群里消息乱一些',
     level: 2,
+    who: '玩过几局',
     desc: '风口忽冷忽热，每月要还的钱也多一点',
+    realDesc: '每月要还的钱多一点，群里的消息也乱一些：谁的话都得掂量',
+    realDetail: `每月要还的钱多 ${more('choppy', 'realBill')}；群里 ${Math.round(fx('choppy', 'realNoise') * 100)}% 的消息是瞎传的，推荐的股票不受影响`,
     detail: `每月要还的钱多 ${more('choppy', 'billMult')}；每个风口每天的热度额外乱晃，最多差 ${n('choppy', 'dHNoise')} 点${fx('choppy', 'failMult') > 1 ? `；"刚开始火就熄火"的情况多 ${more('choppy', 'failMult')}` : ''}`,
     rules(r) {
       r.billMult *= fx('choppy', 'billMult');
+    },
+    // 0.10.0 配平：真实行情下这一级就是"普通"，群里的消息也跟着乱一些，小白和会看战绩的人差得没那么远（docs/balance.md 第 3 节）。
+    // 短局只有 5 个月，会看战绩的人本来就攒不出多大优势，不再加乱（docs/design-balance.md 第 3 节）
+    realRules(r, short) {
+      r.billMult *= fx('choppy', 'realBill');
+      if (!short) r.msgNoise = 1 - (1 - r.msgNoise) * (1 - fx('choppy', 'realNoise'));
     },
     market(r) {
       r.failMult *= fx('choppy', 'failMult');
@@ -43,18 +56,20 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
   },
   {
     id: 'bear_market',
-    name: '熊出没',
+    name: '高手',
     short: '大环境容易变差',
     realShort: '买入要交手续费',
     level: 3,
+    who: '想要挑战',
     desc: '大环境更容易变差，而且一差就是好几天',
-    realDesc: '券商涨价了：每次买入都要交手续费',
-    realDetail: `每次买入按这一笔的金额收 ${n('bear_market', 'fee')}% 手续费（真实行情的涨跌照真的走，不再人为变差）`,
+    realDesc: '券商涨价了：每次买入都要交手续费，要还的钱也再多一点',
+    realDetail: `每次买入按这一笔的金额收 ${n('bear_market', 'fee')}% 手续费；每月要还的钱再多 ${more('bear_market', 'realBill')}（真实行情的涨跌照真的走，不再人为变差）`,
     market(r) {
       r.bearBias += fx('bear_market', 'bearBias');
     },
     realRules(r) {
       r.buyFee += fx('bear_market', 'fee');
+      r.billMult *= fx('bear_market', 'realBill');
     },
   },
   {

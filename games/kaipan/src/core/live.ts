@@ -13,17 +13,24 @@ export { LIVE_MAX_BP, LIVE_TIERS, isLiveTier, liveReturn, liveTierById, type Liv
 
 /** 实盘开局设置：难度由档位定，规则从 BALANCE.live 抄进这局（以后改默认值不影响已经开了的局）。 */
 export function liveSetup(tier: LiveTier, persona: PersonaId = 'newbie'): RunSetup {
-  return { persona, difficulty: liveTierById(tier).difficulty, live: { months: BALANCE.live.months, billMult: BALANCE.live.billMult } };
+  const { billMult, lev } = BALANCE.live.tiers[tier];
+  return { persona, difficulty: liveTierById(tier).difficulty, live: { months: BALANCE.live.months, billMult, lev, tier } };
 }
+
+/** 0.10.0 以前一档一个难度，那时开的局没记档位，按难度认 */
+const LEGACY_TIER: Record<number, LiveTier> = { 1: 'small', 2: 'mid', 3: 'big', 4: 'lux' };
 
 /** 这局是不是实盘 */
 export function isLive(s: Readonly<GameState>): boolean {
   return !!s.setup?.live;
 }
 
-/** 这局的档位：难度由档位定（liveSetup），反过来按难度认；不是实盘或难度对不上为 null */
+/** 这局的档位（开局设置里记着；更早的局按难度认）；不是实盘或认不出为 null */
 export function liveTierOf(s: Readonly<GameState>): LiveTierDef | null {
-  return s.setup?.live ? (LIVE_TIERS.find((t) => t.difficulty === s.difficulty) ?? null) : null;
+  const live = s.setup?.live;
+  if (!live) return null;
+  const id = live.tier ?? LEGACY_TIER[s.difficulty];
+  return id ? liveTierById(id) : null;
 }
 
 /**
@@ -45,14 +52,17 @@ export function liveAssets(s: Readonly<GameState>): number {
 }
 
 /**
- * 结回倍数（万分之几的整数，0..cap × 10000）：当前资产 ÷ 开局资产，向下取整到万分之一；破产为 0。
+ * 结回倍数（万分之几的整数，0..cap × 10000）：1 + 涨跌倍数 ×（当前资产 ÷ 开局资产 − 1），向下取整到万分之一；破产为 0。
+ * 涨跌倍数是 1 的老局照原来的算式算，免得浮点多绕一步差出 1。
  * 用整数传给 Worker，结回 = ⌊一份 × 倍数 ÷ 10000⌋ 全是整数运算，不会因为小数误差少给 1 筹码。
  */
 export function liveMultipleBp(s: Readonly<GameState>): number {
   if (s.phase === 'lost') return 0;
   const start = liveStart(s);
   if (!(start > 0)) return 0;
-  const bp = Math.floor((liveAssets(s) / start) * 10_000);
+  const lev = s.setup?.live?.lev ?? 1;
+  const r = liveAssets(s) / start;
+  const bp = Math.floor((lev === 1 ? r : 1 + lev * (r - 1)) * 10_000);
   return Math.max(0, Math.min(LIVE_MAX_BP, bp));
 }
 
