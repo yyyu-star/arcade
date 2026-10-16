@@ -187,6 +187,13 @@ export abstract class BaseScene extends Phaser.Scene implements Presenter {
     });
   }
 
+  /** 0.9.2 对局里左上角的「大厅」：先确认一次（和设置里「回大厅」同一个确认框），确认了才走 */
+  protected askLobby(): void {
+    if (this.dialogOpen) return;
+    const c = lobbyConfirm(this.session.state);
+    this.openConfirm(c.title, c.body, c.ok, () => goLobby());
+  }
+
   /** 等前一个对话框的标记放开（关掉后下一帧才放）再做，最多等 20 次（约 0.3 秒） */
   protected whenFree(fn: () => void, tries = 20): void {
     this.time.delayedCall(16, () => {

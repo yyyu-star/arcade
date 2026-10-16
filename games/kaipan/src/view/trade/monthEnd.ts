@@ -123,6 +123,12 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
 /** 稀有度：几颗星（常见 1、少见 2、稀有 3）。 */
 const RARITY_STARS: Record<string, number> = { common: 1, uncommon: 2, rare: 3 };
 
+/** 奖励卡卡面上各行的纵坐标（相对卡顶）：手机上卡矮 42，图标小一号、各行往上收 */
+const CARD_LAYOUT = {
+  desktop: { icon: 98, iconS: 96, name: 160, big: 208 },
+  phone: { icon: 84, iconS: 80, name: 136, big: 180 },
+} as const;
+
 /** 三选一奖励卡（phase = reward 时常驻，直到选择）：稀有度色框 + 大图标 + 名字 + 大数字 + 一行；详情悬停。 */
 export class RewardPanel {
   readonly root: Phaser.GameObjects.Container;
@@ -135,14 +141,14 @@ export class RewardPanel {
     const cards = rewardView(s);
     const V = viewOf(scene);
     const ph = phoneLayout(scene);
-    // 手机上标题贴顶、「都不要」挪到右上角，卡片才放得下
+    // 手机上标题贴顶、卡片矮一截（卡面排布见 CARD_LAYOUT），「都不要」和电脑一样放在卡片下方居中（0.9.2：以前在右上角，盖住顶栏的道具栏、贴着 ? 和设置）
     const ty = ph ? 30 : 104;
     const title = addText(scene, V.w / 2 + 22, ty, '挑一样', { size: TYPE.big + 6, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 7 });
     this.root.add([addGlyph(scene, V.w / 2 - title.width / 2 - 14, ty, 'gift', ph ? 44 : 52), title]);
     const gap = ph ? 20 : 30;
     const CW = Math.min(236, Math.floor((V.w - 24 - gap * (cards.length - 1)) / cards.length));
-    const CH = 350;
-    const top = ph ? 70 : 146;
+    const CH = ph ? 308 : 350;
+    const top = ph ? 58 : 146;
     const x0 = V.w / 2 - (CW * cards.length + gap * (cards.length - 1)) / 2;
     cards.forEach((r, i) => {
       const x = x0 + i * (CW + gap);
@@ -157,11 +163,9 @@ export class RewardPanel {
         anim.fx({ targets: node, alpha: 1, duration: 240, delay: i * 90, ease: 'Quad.easeOut' }, () => node.setAlpha(1));
       }
     });
-    const skipY = ph ? 9 : top + CH + 18;
-    const skipX = ph ? x0 + CW * cards.length + gap * (cards.length - 1) - 120 : V.w / 2 - 60;
-    this.box = ph
-      ? { x: x0 - 6, y: skipY - 6, w: CW * cards.length + gap * (cards.length - 1) + 12, h: top + CH - skipY + 12 }
-      : { x: x0 - 6, y: top - 6, w: CW * cards.length + gap * (cards.length - 1) + 12, h: skipY + 42 - top + 12 };
+    const skipY = top + CH + (ph ? 10 : 18);
+    const skipX = V.w / 2 - 60;
+    this.box = { x: x0 - 6, y: top - 6, w: CW * cards.length + gap * (cards.length - 1) + 12, h: skipY + 42 - top + 12 };
     this.skip = new Button(scene, skipX, skipY, { width: 120, height: 42, label: '都不要', variant: 'default', fontSize: TYPE.title - 2, hotkey: '0', sound: null, onClick: onSkip });
     this.root.add(this.skip);
     sound.cue({ type: 'rewardShow' });
@@ -177,36 +181,37 @@ export class RewardPanel {
     const stars = RARITY_STARS[r.rarity] ?? 1;
     for (let k = 0; k < stars; k++) c.add(addGlyph(scene, x + w / 2 + (k - (stars - 1) / 2) * 26, y + 22, 'star', 24));
     const ax = x + w / 2;
-    const iy = y + 98;
+    const L = phoneLayout(scene) ? CARD_LAYOUT.phone : CARD_LAYOUT.desktop;
+    const iy = y + L.icon;
     if (r.item) {
       const color = ITEM_KIND_COLOR[r.item.kind] ?? COLOR.accent;
       if (hasArt(scene.textures, itemKey(r.id))) {
         // 彩色道具图标；美术还没交时退回两字徽章
-        c.add(addImage(scene, ax, iy, itemKey(r.id), 96));
+        c.add(addImage(scene, ax, iy, itemKey(r.id), L.iconS));
       } else {
         c.add(scene.add.circle(ax, iy, 42, color).setStrokeStyle(3, COLOR.ink, 1));
         c.add(addText(scene, ax, iy, shortItemName(r.item.name), { size: 22, bold: true, color: textOn(color), originX: 0.5, originY: 0.5 }));
       }
     } else if (r.friend) {
-      c.add(addImage(scene, ax, iy, avatarKey(r.id, 'smug'), 92));
+      c.add(addImage(scene, ax, iy, avatarKey(r.id, 'smug'), L.iconS - 4));
     } else if (r.stock) {
-      c.add(new StockGuy(scene, ax, iy + 44, r.stock.id, 'happy', 92, { idle }));
+      c.add(new StockGuy(scene, ax, iy + L.iconS / 2 - 4, r.stock.id, 'happy', L.iconS - 4, { idle }));
       // 风口小图标（右上角）
       c.add(addImage(scene, ax + 50, iy - 30, `theme:${r.stock.theme}`, 34));
     }
-    c.add(addText(scene, ax, y + 160, r.name, { size: TYPE.title + 2, bold: true, originX: 0.5 }));
+    c.add(addText(scene, ax, y + L.name, r.name, { size: TYPE.title + 2, bold: true, originX: 0.5 }));
     const big = r.brief.big;
     if (r.stock) {
       // 股票卡：风口 · 角色的色签放在大数字的位置
       const tc = THEME_COLOR[r.stock.theme];
-      const t = addText(scene, ax, y + 208, `${r.stock.themeName} · ${ROLE_WORD[r.stock.role]}`, { size: TYPE.label + 1, bold: true, color: textOn(tc), originX: 0.5, originY: 0.5 });
-      c.add(addPill(scene, ax - t.width / 2 - 12, y + 194, t.width + 24, 28, tc));
+      const t = addText(scene, ax, y + L.big, `${r.stock.themeName} · ${ROLE_WORD[r.stock.role]}`, { size: TYPE.label + 1, bold: true, color: textOn(tc), originX: 0.5, originY: 0.5 });
+      c.add(addPill(scene, ax - t.width / 2 - 12, y + L.big - 14, t.width + 24, 28, tc));
       c.add(t);
     }
-    if (big) c.add(addText(scene, ax, y + 208, big, { size: TYPE.big, bold: true, num: true, color: COLOR.accentDark, originX: 0.5, originY: 0.5 }));
+    if (big) c.add(addText(scene, ax, y + L.big, big, { size: TYPE.big, bold: true, num: true, color: COLOR.accentDark, originX: 0.5, originY: 0.5 }));
     // 0.5.1：说明短（≤34 字）就整句写出来，长的用短句；分类标签放在顶部色带左边
     const descShort = r.desc && [...r.desc].length <= 34 ? r.desc : r.brief.line;
-    const desc = addText(scene, ax, big || r.stock ? y + 234 : y + 212, descShort, { size: TYPE.label, color: COLOR.muted, originX: 0.5, align: 'center', wrap: w - 28, lineSpacing: 2 });
+    const desc = addText(scene, ax, big || r.stock ? y + L.big + 26 : y + L.big + 4, descShort, { size: TYPE.label, color: COLOR.muted, originX: 0.5, align: 'center', wrap: w - 28, lineSpacing: 2 });
     c.add(desc);
     if (r.tag) {
       const tg = addText(scene, x + 16, y + 22, r.tag, { size: 11, bold: true, color: textOn(rc), originY: 0.5 });

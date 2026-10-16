@@ -3,13 +3,14 @@ import type { GameState } from '../../core/index.ts';
 import { getSettings } from '../../platform/settings.ts';
 import type { Rect } from '../rect.ts';
 import { sound } from '../sound.ts';
-import { COLOR } from '../theme.ts';
+import { COLOR, PHONE } from '../theme.ts';
 import { TUTORIAL_ORDER, eligibleSteps, loadTutorial, markStep, setTutorialOn, tutorialCard, type StepHit, type TutorialStep } from '../tutorial.ts';
 import { addImage, addPill } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { addText } from '../ui/text.ts';
 import { GUIDE_BOX_KEY } from '../ui/tooltip.ts';
 import { viewOf } from '../viewport.ts';
+import { TOP } from './layout.ts';
 
 const W = 280;
 const DEPTH = 250;
@@ -187,13 +188,18 @@ export class Guide {
   private place(step: TutorialStep, target: Rect, h: number): { x: number; y: number; side: Side; inside?: boolean } {
     const avoid = this.host.avoid().map((r) => grow(r, 4));
     const tgt = grow(target, 8);
+    // 0.9.2 手机横屏：屏幕矮，气泡放到目标左右会压住顶栏（目标、日期、账户）和要点的卡片。
+    // 手机上放在目标的反方向（目标在上半屏就放下面，在下半屏就放上面），并把顶栏当成不能压的
+    if (PHONE) avoid.push(grow(TOP, 2));
     const minY = 8;
     const V = viewOf(this.scene);
     const clampX = (x: number): number => Math.max(8, Math.min(V.w - W - 8, x));
     const clampY = (y: number): number => Math.max(minY, Math.min(V.h - h - 8, y));
     const slides = [0, -40, 40, -80, 80, -130, 130, -190, 190];
     let best: { x: number; y: number; side: Side; cost: number } | null = null;
-    const sides = [...SIDES[step], ...(['left', 'right', 'below', 'above'] as Side[]).filter((x) => !SIDES[step].includes(x))];
+    const away: Side[] = target.y + target.h / 2 < V.h / 2 ? ['below', 'above'] : ['above', 'below'];
+    // 手机上只放上下：放左右再沿边滑开，气泡会和指向目标的箭头脱开
+    const sides = PHONE ? away : [...SIDES[step], ...(['left', 'right', 'below', 'above'] as Side[]).filter((x) => !SIDES[step].includes(x))];
     for (const [rank, side] of sides.entries()) {
       for (const d of slides) {
         let x: number;

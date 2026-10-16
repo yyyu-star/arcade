@@ -221,7 +221,7 @@ export class TradeScene extends BaseScene {
     this.stopHere = true;
     // 自动快进倒计时里，点画面任意处就停下
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => this.cancelAuto());
-    this.top = new TopBarView(this, s, () => this.openSettings(true), () => this.openHelp(), () => this.openBank());
+    this.top = new TopBarView(this, s, () => this.openSettings(true), () => this.openHelp(), () => this.openBank(), () => this.askLobby());
     // 手机横屏：右边一块用标签页在群聊 / 推荐 / 风口之间切换（重建画面时停在原来那一页）
     this.tabs = TABS ? new PanelTabs(this, TABS, this.tab, (t) => this.applyTab(t)) : null;
     this.applyTab(this.tab);
@@ -1525,7 +1525,7 @@ export class TradeScene extends BaseScene {
   }
 
   override controls(): Record<string, { x: number; y: number }> {
-    const out: Record<string, { x: number; y: number }> = { settings: this.top.settings.center(), help: this.top.help.center() };
+    const out: Record<string, { x: number; y: number }> = { settings: this.top.settings.center(), help: this.top.help.center(), lobby: this.top.lobby.center() };
     const ex = this.recapCard?.expandCenter();
     if (ex) out['recap:expand'] = ex;
     const cat = this.recapCard?.catCenter();

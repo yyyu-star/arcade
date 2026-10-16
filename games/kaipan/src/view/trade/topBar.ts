@@ -11,7 +11,7 @@ import { COLOR, ITEM_KIND_COLOR, PHONE, TYPE, signColor, textOn } from '../theme
 import { hasArt, itemKey } from '../assets.ts';
 import { addGlyph, addImage, addPaper, addPill } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
-import { addText, setColor } from '../ui/text.ts';
+import { addText, fitWidth, setColor } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { MOOD_WORD, term } from '../glossary.ts';
 
@@ -20,16 +20,19 @@ const MOOD_SIGN: Record<Mood, number> = { bull: 1, flat: 0, bear: -1 };
 import { TOP } from './layout.ts';
 import { isLiveRun } from '../live.ts';
 import { chips } from '../liveText.ts';
+import { lobbyLabel } from '../lobby.ts';
 
 /**
  * 顶栏各块的位置。电脑是 1264×56 的一条；手机横屏（0.5.5）是 952×46，各块收窄、两行字往上提，字号不低于 13。
  * 0.9.0 账户上面那行小字离顶边留出 4 以上（以前贴着边）。
+ * 0.9.2 最左边是常驻的「大厅」（小房子在上、字在下，和银行按钮一个样子），日期那一块整体右移让出位置。
  * goalX：有月度目标时「目标 + 要还的钱」那一块的左边（账户那一列收窄到 accW）；billLeft：没有目标时那一块的左边。
  */
 const TB = PHONE
   ? {
-      calIcon: { x: 22, y: 18, s: 22 }, day: { x: 38, y: 5, size: 16 }, calPill: { x: 10, y: 29, h: 18 }, calTextX: 18, row2Y: 38,
-      calHit: { x: 6, y: 4, w: 180, h: 44 }, flagsRight: 182, flagY: 29,
+      lobby: { x: 4, y: 6, w: 40, h: 40, iconDy: 13, iconS: 18 },
+      calIcon: { x: 66, y: 18, s: 22 }, day: { x: 82, y: 5, size: 16 }, calPill: { x: 54, y: 29, h: 18 }, calTextX: 62, row2Y: 38,
+      calHit: { x: 50, y: 4, w: 136, h: 44 }, flagsRight: 182, flagY: 29,
       accLabel: { x: 216, y: 8 }, wallet: { x: 200, y: 32, s: 24 }, account: { x: 216, y: 22, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
       goalX: 392, billLeft: 416, billRight: 640, billBox: { y: 6, h: 40 }, hourglass: { x: 604, y: 16, s: 18 }, daysLeft: { x: 616, y: 16 },
       billY: 5, billNoteY: 27, goalIconY: 17, goalWordY: 38, goalBarY: 35, goalBarW: 90, houseY: 38, houseNoGoalY: 28, billTitleSize: 17,
@@ -38,8 +41,9 @@ const TB = PHONE
       help: { x: 864, y: 7, w: 42, h: 38 }, settings: { x: 912, y: 7, w: 40, h: 38 }, gear: { x: 932, y: 26, r: 10 }, rollY: 48,
     }
   : {
-      calIcon: { x: 36, y: 24, s: 26 }, day: { x: 54, y: 12, size: TYPE.title }, calPill: { x: 26, y: 37, h: 20 }, calTextX: 34, row2Y: 47,
-      calHit: { x: 20, y: 8, w: 250, h: 52 }, flagsRight: 290, flagY: 37,
+      lobby: { x: 16, y: 10, w: 52, h: 46, iconDy: 15, iconS: 22 },
+      calIcon: { x: 94, y: 24, s: 26 }, day: { x: 112, y: 12, size: TYPE.title }, calPill: { x: 84, y: 37, h: 20 }, calTextX: 92, row2Y: 47,
+      calHit: { x: 78, y: 8, w: 212, h: 52 }, flagsRight: 290, flagY: 37,
       accLabel: { x: 330, y: 13 }, wallet: { x: 312, y: 35, s: 28 }, account: { x: 330, y: 26, size: TYPE.big }, accHit: { x: 296, y: 8, w: 232, h: 52 }, accWideW: 280,
       goalX: 534, billLeft: 584, billRight: 884, billBox: { y: 10, h: 48 }, hourglass: { x: 842, y: 22, s: 20 }, daysLeft: { x: 856, y: 22 },
       billY: 13, billNoteY: 37, goalIconY: 24, goalWordY: 46, goalBarY: 41, goalBarW: 110, houseY: 44, houseNoGoalY: 34, billTitleSize: TYPE.title,
@@ -143,11 +147,18 @@ export class TopBarView {
   private bankRing: Phaser.GameObjects.Rectangle | null = null;
   private bankPulse: Phaser.Tweens.Tween | null = null;
 
-  constructor(scene: Phaser.Scene, s: GameState, onSettings: () => void, onHelp?: () => void, onBank?: () => void) {
+  /** 0.9.2 左上角常驻的「大厅」（单独部署时是「首页」），点了由场景先确认再走 */
+  readonly lobby: Button;
+
+  constructor(scene: Phaser.Scene, s: GameState, onSettings: () => void, onHelp?: () => void, onBank?: () => void, onLobby?: () => void) {
     this.scene = scene;
     this.state = s;
     addPaper(scene, TOP.x, TOP.y, TOP.w, TOP.h, false).setDepth(20);
     const d = 21;
+    const L = TB.lobby;
+    this.lobby = new Button(scene, L.x, L.y, { width: L.w, height: L.h, label: '', subLabel: lobbyLabel(), fontSize: 15, onClick: onLobby });
+    this.lobby.setDepth(d + 1);
+    addGlyph(scene, L.x + L.w / 2, L.y + L.iconDy, 'house', L.iconS).setDepth(d + 2);
     // 0.5：日历图标 + 「1月 1/5」，下面是日历事件小签和大环境箭头（说明都在悬停提示里）
     addGlyph(scene, TB.calIcon.x, TB.calIcon.y, 'calendar', TB.calIcon.s).setDepth(d);
     this.day = addText(scene, TB.day.x, TB.day.y, '', { size: TB.day.size, bold: true }).setDepth(d);
@@ -246,11 +257,13 @@ export class TopBarView {
     this.state = s;
     const t = topBar(s);
     this.day.setText(dayLabel(t));
-    this.calText.setText(t.calendar.name);
-    this.calPill.setSize(this.calText.width + 16, TB.calPill.h);
     // 大环境：箭头 + 颜色（「大环境：一般」这类说明在日历的悬停提示里）
     const moodSign = MOOD_SIGN[t.mood];
-    this.weather.setX(TB.calPill.x + this.calPill.width + 8).setText(`大环境${moodSign > 0 ? '↑' : moodSign < 0 ? '↓' : '–'}`);
+    this.weather.setText(`大环境${moodSign > 0 ? '↑' : moodSign < 0 ? '↓' : '–'}`);
+    // 日历小签放不下（手机上让出「大厅」以后，「开春政策窗口」会顶到账户那一列）就截短，全名在悬停里
+    fitWidth(this.calText.setText(t.calendar.name), FLAGS_RIGHT - TB.calTextX - 16 - this.weather.width);
+    this.calPill.setSize(this.calText.width + 16, TB.calPill.h);
+    this.weather.setX(TB.calPill.x + this.calPill.width + 8);
     setColor(this.weather, moodSign > 0 ? COLOR.up : moodSign < 0 ? COLOR.down : COLOR.muted);
     // 「账户 · Lv1」：人设、难度全称在悬停提示里
     // 0.5.1：人设名找回来（难度全称仍在悬停里）

@@ -1623,6 +1623,14 @@ async function lobbyShots(browser: Browser): Promise<void> {
   {
     // 对局里：齿轮 → 回大厅 → 确认框；取消留在这局，确认才走
     const ctx = await openPage(browser, 'lobby-run', `seed=pre-1&anim=0&${setupQuery(BASIC_SETUP)}`, { touch: PHONE });
+    // 0.9.2 左上角常驻的「大厅」：同一个确认框，取消留在这局
+    expect('lobby' in (await controls(ctx)), '交易界面左上角应有「大厅」');
+    await shot(ctx, 'l1b-trade-lobby', { x: 0, y: 0, width: PHONE ? 422 : 640, height: PHONE ? 195 : 200 });
+    await press(ctx, 'lobby');
+    await dialogOpen(ctx, 'confirm:ok');
+    await press(ctx, 'confirm:cancel');
+    await ctx.page.waitForTimeout(300);
+    expect((await ctx.page.evaluate(() => window.__game?.scene)) === 'trade', '左上角「大厅」取消后应留在这局');
     await press(ctx, 'settings');
     await dialogOpen(ctx, 'settings:lobby');
     await shot(ctx, 'l2-settings-lobby');
