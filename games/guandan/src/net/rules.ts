@@ -15,7 +15,8 @@ import { EMOTE_COUNT } from './emotes.ts';
 import type { RoomGame } from 'arcade-kit/game';
 import { canRebuy, parseRoomOpts, stakeBegin, stakeDeal, stakeFinish, stakeRebuy, stakeSeated, stakeSettled, stakeView, type RoomOpts, type StakeEffect, type StakeTable, type StakeView } from './stake.ts';
 import { type Entropy, stream } from 'arcade-kit/rng';
-import { decide, type Difficulty, type PersonaId } from '../ai/index.ts';
+import { decide, styleOf, type Difficulty, type PersonaId } from '../ai/index.ts';
+import type { BanterBot } from './banter.ts';
 import { botFor } from '../ai/venue.ts';
 import {
   RULES_VERSION,
@@ -138,6 +139,23 @@ function formSeed(g: GameState): number | string {
 function roomBot(s: NetState, seat: number): { difficulty: Difficulty; persona?: PersonaId } {
   if (s.humans?.[seat]) return { difficulty: s.stake ? 'hard' : 'normal' };
   return botFor(s.stake ? { kind: 'roomStake', tier: s.stake.tier } : { kind: 'room' }, seat);
+}
+
+/**
+ * 房间里的电脑此刻的性格和状态（0.7.1，电脑互动 net/banter.ts 用）：只算真电脑的座位（替掉线真人代打的不算，不替人说话），
+ * 状态和出牌用的同一份（styleOf）。只读公开信息；0.6.0 以前开的局没有 humans，不互动
+ */
+export function banterBots(s: NetState): BanterBot[] {
+  if (!s.humans) return [];
+  const out: BanterBot[] = [];
+  for (let seat = 0; seat < 4; seat++) {
+    if (s.humans[seat]) continue;
+    const bot = roomBot(s, seat);
+    if (!bot.persona) continue;
+    const { form, tilt } = styleOf(viewFor(s.g, seat), bot.difficulty, bot.persona, formSeed(s.g));
+    out.push({ seat, persona: bot.persona, form, tilt });
+  }
+  return out;
 }
 
 /**

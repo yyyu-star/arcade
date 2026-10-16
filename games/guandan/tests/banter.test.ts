@@ -1,7 +1,8 @@
 import { PROPS, STICKERS } from 'arcade-kit/fun';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type GameEvent, type PlayRecord } from '../src/core/index.ts';
-import { COOLDOWN_MS, GAP_MS, banterOnDeal, banterOnEmote, banterOnEvent, banterOnSlow, newBanter, type BanterBot, type BanterOut } from '../src/net/banter.ts';
+import { COOLDOWN_MS, GAP_MS, banterOnDeal, banterOnEmote, banterOnEvent, banterOnSlow, newBanter, victimOf, type BanterBot, type BanterOut } from '../src/net/banter.ts';
+import { banterBots, guandanRoom, testKey } from '../src/net/rules.ts';
 import { EMOTE_COUNT, PROP_BASE, STICKER_BASE, TAUNT_BASE, emoteOf, taunt } from '../src/net/emotes.ts';
 import { QUICK_PLAYS, bombOnBomb, dealHighlights, highlightText } from '../src/view/highlights.ts';
 
@@ -109,6 +110,24 @@ describe('电脑的互动（net/banter.ts）', () => {
     const files = import.meta.glob('../src/ai/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
     expect(Object.keys(files).length).toBeGreaterThan(3);
     for (const [f, src] of Object.entries(files)) expect(src, f).not.toMatch(/banter|emotes|taunt/);
+  });
+});
+
+describe('好友房里的电脑互动（worker/room.ts 的 onStep / onEmote 用）', () => {
+  it('只算真电脑的座位（真人和替掉线真人代打的不算），性格按真实座位；0.6.0 以前的局没有 humans，不互动', () => {
+    const s = guandanRoom.begin(testKey(7), guandanRoom.rulesVersion, { opts: undefined, seats: ['human', 'ai', 'human', 'ai'] });
+    expect(banterBots(s).map((b) => [b.seat, b.persona])).toEqual([
+      [1, 'laozhang'],
+      [3, 'aqiang'],
+    ]);
+    for (const b of banterBots(s)) expect(Math.abs(b.form)).toBeLessThanOrEqual(1);
+    expect(banterBots({ ...s, humans: undefined })).toEqual([]);
+  });
+
+  it('victimOf：这一手之前最近一手有牌的是谁（"不要"跳过）', () => {
+    const h = (seat: number, p: boolean) => ({ seat, play: p ? {} : null });
+    expect(victimOf([h(1, true), h(2, false), h(3, false), h(0, true)])).toBe(1);
+    expect(victimOf([h(0, true)])).toBe(-1);
   });
 });
 

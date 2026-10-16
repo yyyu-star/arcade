@@ -394,6 +394,32 @@ async function main(): Promise<void> {
     notes.push(`隐藏信息：按步拼出真相比对 ${compared} 份视图（带贡牌的 ${withTribute} 份），没有看到别人手里的牌，贡牌、还贡牌按规则给；下行里没有 seed、hands、key`);
     const msgs = clients.map((c) => `${c.spec.name} ${c.raw.length} 条`).join('，');
     notes.push(`下行消息数：${msgs}`);
+
+    // ⑨ 电脑的互动（0.7.1）：另一个号开房、一个人开局（空位电脑补），冲三个电脑各扔一个番茄；
+    // 电脑按性格回怼、装没看见或认怂，三个都不理的概率约 4%，加上打牌时炸弹、头游的显摆，等 90 秒总该有一条
+    const solo = await openClient(browser, stack, { ...SPECS[0]!, name: '电脑房', user: 'u-bots' }, '');
+    await until(solo, '标题页', "g.ready && g.scene === 'title'");
+    const op = (await solo.page.evaluate(() => window.__game!.controls()))['online']!;
+    await solo.page.mouse.click(op.x, op.y);
+    await solo.page.click('#ol-create');
+    await until(solo, '房主坐下', 'g.net()?.seat === 0');
+    await solo.page.click('#ol-start');
+    await until(solo, '进牌桌', "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
+    for (const v of [3, 1, 2]) {
+      const a = (await solo.page.evaluate((k) => window.__game!.controls()[`avatar${k}`], v))!;
+      await solo.page.mouse.click(a.x, a.y);
+      await until(solo, '头像菜单', "!!g.controls()['menu:prop0']");
+      const t = (await solo.page.evaluate(() => window.__game!.controls()))['menu:prop0']!;
+      await solo.page.mouse.click(t.x, t.y);
+      await until(solo, `扔给 ${v} 号`, `g.fxLog.includes('道具 0>${v}:tomato')`, 10_000);
+      await solo.page.waitForTimeout(1500);
+    }
+    await until(solo, '电脑说了一句', "g.fxLog.some((l) => /^(短语|嘲讽|表情) [123]:|^道具 [123]>/.test(l))", 90_000);
+    await solo.page.waitForTimeout(600);
+    await shot(solo, '59-online-bot-banter');
+    const banter = await solo.page.evaluate(() => window.__game!.fxLog.filter((l) => /^(短语|嘲讽|表情) [123]:|^道具 [123]>/.test(l)));
+    notes.push(`好友房电脑互动：冲三个电脑扔番茄，电脑这边 ${banter.length} 条（${banter.slice(0, 4).join('、')}）`);
+    await solo.context.close();
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
     // 失败现场：每个客户端截一张图、记下联机状态和大厅里的提示

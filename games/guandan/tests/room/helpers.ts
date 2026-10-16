@@ -323,7 +323,8 @@ export function checkDown(raw: string, m: Msg, truth: HandTruth | null, game: Ne
   if (/"seed"|"hands"|"key"/.test(raw)) return `下行消息里有 seed / hands / key 字段：${raw.slice(0, 120)}`;
   // 太小的数会和牌号、步数撞上（随机的 u32 小于一百万的概率约万分之二），只查大的
   for (const w of game?.g.key ?? []) if (w >= 1_000_000 && raw.includes(String(w))) return `下行消息里出现了发牌密钥的数 ${w}`;
-  if (m.t === 'error') return null;
+  // 报错、快捷短语（0.7.1 起电脑也会发，只带座位和编号）没有视图，上面的原文检查就够了
+  if (m.t === 'error' || (m as { t: string }).t === 'emote') return null;
   const seat = m.you.seat;
   const views = m.t === 'welcome' ? [m.view] : m.frames.map((f) => f.view);
   for (const v of views) {

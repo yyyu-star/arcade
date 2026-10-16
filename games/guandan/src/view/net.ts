@@ -275,9 +275,10 @@ export class NetSession implements TableSession {
         onStatus: (s, c, r) => this.onStatus(s, c ?? null, r ?? null),
         // 快捷短语：房间给的是真实座位，换成画面上的（我 = 0），detail 是"座位:编号"
         // detail："画面座位:编号" 或 "画面座位:编号:画面对象座位"
-        onEmote: (seat, id, to) => {
+        // "说话人:编号:对象:电脑"（画面座位；没对象是空串，电脑发的末尾是 1）
+        onEmote: (seat, id, to, bot) => {
           const r = rotation(this.mySeat ?? 0);
-          this.emit('emote', `${r.seat(seat)}:${id}${to === undefined ? '' : `:${r.seat(to)}`}`);
+          this.emit('emote', `${r.seat(seat)}:${id}:${to === undefined ? '' : r.seat(to)}:${bot ? 1 : 0}`);
         },
         ...(deps.WebSocketImpl ? { WebSocketImpl: deps.WebSocketImpl } : {}),
         ...(deps.setTimer ? { setTimer: deps.setTimer } : {}),

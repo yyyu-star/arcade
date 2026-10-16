@@ -87,6 +87,8 @@ export class TableScene extends Phaser.Scene {
   private banter = newBanter();
   private myTurnKey = '';
   private myTurnSince = 0;
+  /** 好友房：电脑发的、等出牌画面播完再放的（画面座位） */
+  private botEmotes: { from: number; id: number; to: number | undefined }[] = [];
   /** 整局称号用：攒到第几副了（场景重开不清，新的一局从第 1 副重新攒） */
   private matchLog = emptyMatchLog();
   /** 这一副播过几次接风（结算页的复盘用；重连后只算之后看到的） */
@@ -142,6 +144,7 @@ export class TableScene extends Phaser.Scene {
     this.overlayModal = null;
     // 场景重开（重连的全量快照）时旧的按钮、面板已经随场景销毁
     this.taunts = null;
+    this.botEmotes = [];
     this.following = false;
     this.botTimer = null;
     this.seats = [];
@@ -665,9 +668,13 @@ export class TableScene extends Phaser.Scene {
       return;
     }
     if (kind === 'emote') {
-      // 房间转发的（含我自己发的）："说话人:编号[:对象]"，画面座位
-      const [vs, id, to] = (detail ?? '').split(':').map(Number);
-      if (vs !== undefined && id !== undefined) this.taunts?.receive(vs, id, to === undefined || Number.isNaN(to) ? undefined : to);
+      // 房间转发的（含我自己发的）："说话人:编号:对象:电脑"，画面座位
+      const [vs, id, to, bot] = (detail ?? '').split(':');
+      const e = { from: Number(vs), id: Number(id), to: to ? Number(to) : undefined };
+      if (!Number.isInteger(e.from) || !Number.isInteger(e.id)) return;
+      // 电脑的是房间看了这一步当场发的，比出牌的画面早到：排到手头这几帧播完再放，免得炸弹还没出来电脑就先显摆
+      if (bot === '1' && (this.busy || (this.net?.queue.length ?? 0) > 0)) this.botEmotes.push(e);
+      else this.taunts?.receive(e.from, e.id, e.to);
       return;
     }
     this.noticeNetTurn();
@@ -717,6 +724,11 @@ export class TableScene extends Phaser.Scene {
     // 弹窗关掉的路子很多（有的直接把 overlay 置空），图层的显隐在这里跟上；打开时 openOverlay 立刻藏
     if (this.overlay === null) this.taunts?.layer.show();
     else this.taunts?.layer.hide();
+    // 电脑的互动：画面追上了再放（每 250 毫秒看一次，一次放一条）
+    if (this.botEmotes.length && !this.busy && (this.net?.queue.length ?? 0) === 0) {
+      const e = this.botEmotes.shift()!;
+      this.taunts?.receive(e.from, e.id, e.to);
+    }
     this.taunts?.tickTurn(this.overlay === null && t ? t.seat : null, t ? `${t.seat}:${t.deadline}` : '');
     // 我的最后 5 秒：每秒"嗒"一声，最后 2 秒每半秒一声、升调
     const left = t && t.seat === ME && t.deadline !== null ? t.deadline - now : -1;

@@ -5,7 +5,8 @@
  * 实盘房间去钱包办事（perform，docs/stake.md 第 3 节）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
-import { guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
+import { banterOnDeal, banterOnEmote, banterOnEvent, newBanter, victimOf, type BanterBot, type BanterOut } from '../src/net/banter.ts';
+import { banterBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
 import type { RoomOpts, StakeEffect } from '../src/net/stake.ts';
 import { CLIENT_VERSION } from '../src/net/version.ts';
 import { ROOM_HOURS } from '../src/stake/index.ts';
@@ -16,6 +17,35 @@ const TRANSIENT = new Set(['busy', 'internal']);
 
 export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, StakeEffect> {
   protected readonly game = guandanRoom;
+  /**
+   * 电脑的互动（0.7.1，src/net/banter.ts）：冷却记录、电脑此刻的性格和状态都只放在内存里，不写存储（房间重启了从头记，无所谓）。
+   * bots 每一步按公开的牌局刷新一次，onEmote 拿它回嘴（kit 故意不给 onEmote 牌局状态）；这里绝不记任何真人短语。
+   * 随机用 Math.random：只决定说什么、不碰牌局，不需要复现。好友房里电脑不催人（房间只有一个闹钟），真人之间照旧有催促炸弹
+   */
+  private readonly banter = newBanter();
+  private bots: BanterBot[] = [];
+
+  private botSay(outs: BanterOut[]): void {
+    for (const o of outs) this.botEmote(o.from, o.id, o.to);
+  }
+
+  /** 每一步广播完：看这一步的公开事件（谁炸了谁、谁头游、双下），电脑按性格说一句 */
+  protected override onStep(s: NetState): void {
+    this.bots = banterBots(s);
+    if (this.bots.length === 0) return;
+    const humans = (s.humans ?? []).flatMap((h, i) => (h ? [i] : []));
+    const now = Date.now();
+    for (const e of s.ev) {
+      if (e.type === 'play') this.botSay(banterOnEvent(this.banter, e, victimOf(s.g.history), this.bots, humans, now, Math.random));
+      else if (e.type === 'finish') this.botSay(banterOnEvent(this.banter, e, -1, this.bots, humans, now, Math.random));
+      else if (e.type === 'dealEnd') this.botSay(banterOnDeal(this.banter, e.result, this.bots, now, Math.random));
+    }
+  }
+
+  /** 真人冲电脑扔东西、点名：被冲的电脑按性格回怼、装没看见或认怂 */
+  protected override onEmote(from: number, id: number, to?: number): void {
+    this.botSay(banterOnEmote(this.banter, from, id, to, this.bots, Date.now(), Math.random));
+  }
   /**
    * 掼蛋一整局很长（打 A 不过会退回打 2）：tools/room-sim.ts 3000 局里 4 真人桌入站中位约 950 条，两次实测最多 3493、6052 条，
    * 步数最多 6655（按每手 3 秒约 5.5 小时）。底座默认的 3000 条、3 小时会把千分之几的长局中途关掉，这里放到 8000 条、8 小时；

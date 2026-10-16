@@ -52,6 +52,8 @@ export interface TableStats {
   /** 跑了几次闹钟、其中故意不出导致的超时代出几次 */
   alarms: number;
   idleTimeouts: number;
+  /** 第一条连接收到的电脑互动（bot: true 的表情、短语、道具，0.7.1）条数 */
+  botEmotes: number;
   /** 房间被硬限制（入站总数、寿命）关掉了：没打完 */
   closedEarly: { inbound: number; steps: number } | null;
   /** 假时钟上这一局用了多久（毫秒） */
@@ -125,6 +127,9 @@ export class Table {
         const exact = m.t !== 'error' && m.seq === t.row.seq ? game : null;
         const bad = checkDown(c.raw[i]!, m, hands, exact);
         if (bad) this.problems.push(bad);
+        // 电脑互动只能从真电脑的座位发（真人座位托管代打时也不替真人说话）
+        const e = m as unknown as { t: string; seat: number; bot?: boolean };
+        if (e.t === 'emote' && e.bot && game?.humans?.[e.seat] !== false) this.problems.push(`座位 ${e.seat} 不是电脑，却发了电脑互动`);
       }
       this.checked.set(c, c.msgs.length);
     }
@@ -302,6 +307,7 @@ export class Table {
       maxStepWrites: t.max,
       alarms: this.alarms,
       idleTimeouts: this.idleTimeouts,
+      botEmotes: (conns[0]?.msgs ?? []).filter((m) => (m as unknown as { t: string; bot?: boolean }).t === 'emote' && (m as unknown as { bot?: boolean }).bot).length,
       closedEarly,
       fakeMs,
       problems: this.problems,

@@ -131,6 +131,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 嘲讽、表情包、扔道具都是 kit 转发的编号（文字在 `src/net/emotes.ts`），面板和点头像菜单在 `src/view/table/taunt.ts`；设置里能整个关掉，点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（sessionStorage `guandan.blocked`）。
   - 单机（0.7.1 起）挂同一套面板：`taunt.ts` 只认 `FunChannel`，好友房经房间转发，单机在本地播。电脑什么时候发、被扔了怎么回、真人想太久怎么催在 `src/net/banter.ts`（纯函数，
     随机数和时间由调用方给，只看公开事件；按性格和状态，有冷却）。电脑出牌（`src/ai`）绝不读这些（测试查 `src/ai` 不引 banter/emotes）。名场面在 `src/view/highlights.ts`。
+  - 好友房的电脑也用 banter（kit 0.10.1 的钩子）：`worker/room.ts` 的 `onStep` 每步广播完看公开事件、`onEmote` 回真人冲电脑扔的东西，经 `botEmote` 发（消息带 `bot: true`，
+    页面排到手头的帧播完再放）。冷却、电脑性格只在内存里，不写存储、不记真人短语；好友房电脑不催人（房间只有一个闹钟）。`npm run test:room` 断言电脑房有电脑互动、4 真人房没有。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
   - 称号和每副复盘只用公开信息（出牌记录、名次），电脑决策不读表情。
   - 再来一场（0.6.2）：娱乐房间打到 gameOver 先不 `over`，用 kit 的 `pause`/`resume` 停 `AGAIN_MS`（3 分钟）；有人发不轮流的 `again { code }`（他先开好新房间），

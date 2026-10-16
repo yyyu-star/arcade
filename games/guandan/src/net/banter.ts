@@ -44,6 +44,15 @@ export interface BanterOut {
   delay: number;
 }
 
+/**
+ * 这一手压下去的是谁的牌：出牌记录里这一手之前最近一手有牌的（领出时是上一墩的，算不上"压"，
+ * 但那手一定是自己人或自己出的，炸弹显摆只看对方，所以不会误认）。history 里最后一条是这一手本身
+ */
+export function victimOf(history: readonly { seat: number; play: unknown }[]): number {
+  for (let i = history.length - 2; i >= 0; i--) if (history[i]!.play) return history[i]!.seat;
+  return -1;
+}
+
 /** 冷却的记录：调用方保存（单机在页面里，房间里可以放进状态） */
 export interface BanterState {
   /** 每个座位上一次发的时间 */

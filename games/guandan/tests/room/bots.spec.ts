@@ -46,6 +46,7 @@ function report(label: string, s: TableStats[], sec: number): void {
       `每局写入行数（含开房 4 行）：${dist(s.map((x) => x.writes))}；开房那步：${[...new Set(s.map((x) => x.createWrites))].join('/')} 行；其余每步最多：${Math.max(...s.map((x) => x.maxStepWrites))} 行`,
       `每局入站消息（入座+开局+出手）：${dist(s.map((x) => x.inbound))}；其中出手：${dist(s.map((x) => x.acts))}`,
       `每条入座连接的下行条数：${dist(flat((x) => x.down))}；下行字节：${dist(flat((x) => x.downBytes))}`,
+      `第一条连接收到的电脑互动条数：${dist(s.map((x) => x.botEmotes))}`,
       `每局闹钟次数：${dist(s.map((x) => x.alarms))}；其中故意不出等超时代出：${dist(s.map((x) => x.idleTimeouts))}`,
       `假时钟上每局时长（分钟）：${dist(s.map((x) => Math.round(x.fakeMs / 60_000)))}`,
       ...early.map((x) => `  被关掉：房间 ${x.code}，已发入站 ${x.closedEarly!.inbound} 条`),
@@ -65,10 +66,15 @@ function check(s: TableStats[]): void {
 
 describe('机器人对打（真的 Durable Object）', () => {
   it(`4 真人：每人一条 WebSocket，本地算一手按 act 发出`, { timeout: 8 * HOUR }, async () => {
-    check(await series('4真人', inject('roomGames'), 4));
+    const s = await series('4真人', inject('roomGames'), 4);
+    check(s);
+    expect(s.every((x) => x.botEmotes === 0)).toBe(true);
   });
 
   it(`1 真人 + 3 电脑：电脑在房间里批量出`, { timeout: 8 * HOUR }, async () => {
-    check(await series('1真人3电脑', inject('roomGamesSolo'), 1));
+    const s = await series('1真人3电脑', inject('roomGamesSolo'), 1);
+    check(s);
+    // 电脑按公开事件（炸弹、头游、双下）说话（0.7.1）：几局下来一条都没有，就是 onStep 没接上
+    expect(s.reduce((n, x) => n + x.botEmotes, 0)).toBeGreaterThan(0);
   });
 });
