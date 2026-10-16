@@ -19,6 +19,7 @@ import {
   botReact,
   funItem,
   newBotState,
+  fitMenuWidth,
   placeMenu,
   propId,
   stickerId,
@@ -329,7 +330,8 @@ export class TableFun {
     b.className = 'atf-box';
     b.dataset['kind'] = kind;
     if (seat !== undefined) b.dataset['seat'] = String(seat);
-    b.style.width = `${w}px`;
+    // 窄屏两边各留 8px（0.11.2，和 placeMenu 的 fitMenuWidth 一致）；收窄了的内容会折行，由 fit() 按真实高度重摆
+    b.style.width = `min(${w}px, calc(100vw - 16px))`;
     b.style.height = `${h}px`;
     const view = { width: window.innerWidth, height: window.innerHeight };
     const at = placeMenu(anchor, w, h, view, this.o.avoid?.() ?? []);
@@ -385,7 +387,8 @@ export class TableFun {
   private openMenu(v: number): void {
     const s = this.seat(v);
     if (!s) return;
-    const b = this.box('menu', 8 * 52 + 16, 196, s.rect, v);
+    const W = 8 * 52 + 16;
+    const b = this.box('menu', W, 196, s.rect, v);
     add(b, this.el('div', 'atf-title', `对 ${s.name}`));
     const row = this.el('div', 'atf-row');
     const order = [this.lastProp, ...PROPS.filter((p) => p !== this.lastProp)];
@@ -408,6 +411,15 @@ export class TableFun {
     blk.style.marginTop = '6px';
     blk.style.width = '100%';
     add(b, blk);
+    // 窄屏上一排 8 个道具放不下、折成两排：高度跟着内容
+    if (fitMenuWidth(W, window.innerWidth) < W) this.fit(b, s.rect, W);
+  }
+
+  /** 高度跟着内容，量完按真实高度重新摆、避开禁区 */
+  private fit(b: HTMLDivElement, anchor: Rect, w: number): void {
+    b.style.height = 'auto';
+    const at = placeMenu(anchor, w, b.offsetHeight, { width: window.innerWidth, height: window.innerHeight }, this.o.avoid?.() ?? []);
+    b.style.transform = `translate(${at.left}px,${at.top}px)`;
   }
 
   /** 点自己头像：12 个表情 */
@@ -474,10 +486,7 @@ export class TableFun {
     }
     add(b, body);
     // 高度跟着内容（短语少时不留一大块空），量完按真实高度重新避开禁区
-    b.style.height = 'auto';
-    const h = b.offsetHeight;
-    const at = placeMenu(r, 440, h, { width: window.innerWidth, height: window.innerHeight }, this.o.avoid?.() ?? []);
-    b.style.transform = `translate(${at.left}px,${at.top}px)`;
+    this.fit(b, r, 440);
   }
 
   closeAll(): void {

@@ -19,6 +19,7 @@ import {
   STICKERS,
   funItem,
   newBotState,
+  fitMenuWidth,
   placeMenu,
   propId,
   stickerId,
@@ -409,6 +410,26 @@ describe('placeMenu', () => {
     const everywhere: Box = { left: 0, top: 0, width: 800, height: 600 };
     const p = placeMenu({ left: 370, top: 270, width: 60, height: 60 }, W, H, view, [everywhere]);
     expect(Number.isFinite(p.left) && Number.isFinite(p.top)).toBe(true);
+  });
+
+  it('窄屏（390 竖屏，0.11.2）：440 宽的面板、432 宽的菜单收窄到 100vw − 16px，左右都不伸出屏幕；宽屏照旧', () => {
+    expect(fitMenuWidth(440, 390)).toBe(374);
+    expect(fitMenuWidth(432, 390)).toBe(374);
+    expect(fitMenuWidth(328, 390)).toBe(328);
+    expect(fitMenuWidth(440, 1280)).toBe(440);
+    const phone = { width: 390, height: 844 };
+    // 头像在左边、右边、正中，面板都夹在 [8, 382] 里
+    for (const left of [0, 160, 330]) {
+      for (const top of [20, 400, 780]) {
+        const a: Box = { left, top, width: 60, height: 60 };
+        for (const want of [440, 432, 328]) {
+          const p = placeMenu(a, want, 300, phone);
+          const w = fitMenuWidth(want, phone.width);
+          expect(p.left).toBeGreaterThanOrEqual(8);
+          expect(p.left + w).toBeLessThanOrEqual(382);
+        }
+      }
+    }
   });
 });
 
