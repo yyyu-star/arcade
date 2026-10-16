@@ -10,7 +10,7 @@ import { loadProfile } from './platform/profile.ts';
 import { startCloudSync } from './view/cloudSync.ts';
 import { goLobby } from './view/lobby.ts';
 import { live, lobbyConfirm, startLive } from './view/live.ts';
-import { hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
+import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
 import { startGame } from './view/game.ts';
 import { initInputMode, onInputModeChange } from './view/input.ts';
 import { applySettingsToOptions, type ViewOptions } from './view/options.ts';
@@ -24,14 +24,15 @@ installErrorHandler();
 mountRotateHint({ inRun: () => session.sceneKey === 'trade', confirm: () => lobbyConfirm(session.state), go: () => goLobby() });
 initInputMode();
 
+// 旧版本留在本机的备份 key 一次性清掉（只清 LEGACY_KEYS，当前的存档、档案、设置不碰）
+clearLegacyKeys();
+
 const params = parseParams(window.location.search);
 /** URL 指定了开局（调试/自动化）时跳过开始菜单，直接进入对应局面 */
 const fromUrl = params.seed !== null || params.setup !== null;
 
 /** 启动读档的提示（旧版本存档 / 存档损坏），交给开始菜单显示 */
 let notice: SaveNotice = null;
-let legacyFrom: string | null = null;
-let restored = false;
 
 /** 决定开局状态：URL 指定种子/设置 > 存档 > 随机新局（未存档，等玩家在菜单里选择）。 */
 function initialRun(): { state: GameState; events: GameEvent[] } {
@@ -46,8 +47,6 @@ function initialRun(): { state: GameState; events: GameEvent[] } {
   }
   const saved = loadSave();
   notice = saved.notice;
-  legacyFrom = saved.legacyFrom ?? null;
-  restored = saved.restored === '0.3';
   if (saved.state) return { state: saved.state, events: [] };
   return createRun(randomSeed(), null, { ext: true });
 }
@@ -69,8 +68,6 @@ session.animLocked = params.anim.anim !== null || params.anim.speed !== null;
 // 行情来源（调试）：?market=synthetic 用 0.3 的合成行情；?market=<段 id> 指定一段真实行情
 session.market = new URLSearchParams(window.location.search).get('market') ?? 'real';
 session.notice = notice;
-session.legacyFrom = legacyFrom;
-session.restored = restored;
 // 调试与计分：?debug=1 的浮层会显示隐藏信息，这个会话里的局都不计入档案；URL 开局参数开的局也不计
 session.debugSession = params.debug;
 if (fromUrl) {

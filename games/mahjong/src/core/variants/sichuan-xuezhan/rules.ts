@@ -167,6 +167,11 @@ export interface XzState {
   /** 这一局第一个胡的人；第一个胡是一炮多响时记点炮的人（下一局的庄） */
   nextDealer: number | null;
   ledger: Payment[];
+  /**
+   * 每个座位这一局从 ledger 第几笔起算是"现在坐着的人"的（好友房中途换人、带入到账时记；没有这个字段按 0）。
+   * 退税只追到两头都还是同一个人的那几笔杠钱：换人前收的不让新人退，换人前付的也不退给新人（自审 C5）
+   */
+  since?: number[];
   events: XzEvent[];
   history: RoundSummary[];
   stats: SeatStats[];
@@ -197,10 +202,13 @@ function canWin(p: XzPlayer, hand: Tile[]): boolean {
   return isComplete(countsOf(hand), p.melds.length, SHAPE);
 }
 
-/** 听哪些牌（手里有缺门就是没听） */
+/**
+ * 听哪些牌（手里有缺门就是没听）。四张都在自己手里和自己碰杠里的那种不算：摸不到、也没人打得出来，胡不了的叫不算叫（主线 2026-10-15 定，自审 C7）
+ */
 export function tenpaiKinds(p: XzPlayer): number[] {
   if (hasQue(p)) return [];
-  const allowed = SUITED_KINDS.filter((k) => suitOf(k) !== p.que);
+  const own = countsOf([...p.hand, ...p.melds.flatMap((m) => m.tiles)]);
+  const allowed = SUITED_KINDS.filter((k) => suitOf(k) !== p.que && own[k]! < 4);
   return waits(countsOf(p.hand), p.melds.length, SHAPE, allowed);
 }
 
@@ -283,6 +291,7 @@ function startRound(s: XzState): void {
   s.winners = 0;
   s.nextDealer = null;
   s.ledger = [];
+  delete s.since;
   s.phase = s.opts.swap ? 'swap' : 'que';
   for (const st of s.stats) st.rounds++;
   s.events.push({ e: 'deal', round: s.round, dealer: s.dealer });
@@ -330,7 +339,8 @@ function advance(s: XzState, from: number): void {
 }
 
 /** 有人胡了：记下来、收钱。ron 时 from 是点炮的人；自摸时 from 是 null，每个还没胡的别家付 */
-function recordWin(s: XzState, seat: number, tile: Tile, from: number | null, ctx: WinContext): void {
+/** 点炮的胡：先记下要收多少（一炮多响时几家一起按比例付，见下面），自摸当场付 */
+function recordWin(s: XzState, seat: number, tile: Tile, from: number | null, ctx: WinContext, dues?: { to: number; amount: number }[]): void {
   const p = s.players[seat]!;
   const hand = from === null ? p.hand.slice() : [...p.hand, tile].sort(byTile);
   const r = scoreHand(countsOf(hand), p.melds, ctx, s.opts.cap);
@@ -344,7 +354,8 @@ function recordWin(s: XzState, seat: number, tile: Tile, from: number | null, ct
     for (const i of unfinished(s)) if (i !== seat) pays.push(...payOne(s.chips, i, seat, unit + extra, 'zimo'));
     pay(s, pays);
   } else {
-    pay(s, payOne(s.chips, from, seat, unit, 'hu'));
+    if (dues) dues.push({ to: seat, amount: unit });
+    else pay(s, payOne(s.chips, from, seat, unit, 'hu'));
     s.stats[from]!.pao++;
   }
   const st = s.stats[seat]!;
@@ -430,9 +441,12 @@ function resolve(s: XzState): void {
     else if (s.winners === 0) s.nextDealer = r.ron[0]!;
     if (c.rob) thrower.hand.splice(thrower.hand.indexOf(c.tile), 1);
     else thrower.river[thrower.river.length - 1]!.taken = true;
+    // 一炮多响：几家的胡一起付，点炮的付不起时按应收的比例分（2.8，自审 C6；原来先胡的先拿）
+    const dues: { to: number; amount: number }[] = [];
     for (const seat of r.ron) {
-      recordWin(s, seat, c.tile, c.from, { ...NO_CONTEXT, gangPao: c.kanRef !== null, rob: c.rob, haidi: c.haidi });
+      recordWin(s, seat, c.tile, c.from, { ...NO_CONTEXT, gangPao: c.kanRef !== null, rob: c.rob, haidi: c.haidi }, dues);
     }
+    pay(s, payMany(s.chips, c.from, dues, 'hu'));
     // 呼叫转移：那一杠收到的钱转给胡的人（平分，零头给离点炮者最近的）
     if (c.kanRef !== null && s.opts.transfer) {
       const got = s.ledger.filter((x) => x.kind === 'kan' && x.ref === c.kanRef && x.to === c.from).reduce((a, x) => a + x.amount, 0);
@@ -518,7 +532,9 @@ function endRound(s: XzState, end: 'wall' | 'three'): void {
       if (ting.has(i)) continue;
       const moved = new Map<number, number>();
       for (const x of s.ledger) if (x.kind === 'move' && x.from === i && x.ref !== undefined) moved.set(x.ref, (moved.get(x.ref) ?? 0) + x.amount);
-      for (const x of s.ledger.filter((y) => y.kind === 'kan' && y.to === i)) {
+      const since = s.since ?? [0, 0, 0, 0];
+      const mine = (y: Payment, n: number): boolean => n >= since[y.to]! && n >= since[y.from]!;
+      for (const x of s.ledger.filter((y, n) => y.kind === 'kan' && y.to === i && mine(y, n))) {
         const gone = Math.min(x.amount, moved.get(x.ref!) ?? 0);
         if (gone) moved.set(x.ref!, moved.get(x.ref!)! - gone);
         if (x.amount > gone) pay(s, payOne(s.chips, i, x.from, x.amount - gone, 'tax', x.ref));
@@ -728,6 +744,8 @@ export function actorsOf(s: XzState): { seats: number[]; group: string } | null 
 
 /** 好友房有人接管座位、带入到账：这个座位的筹码和"带进来的"重新记 */
 export function restakeMut(s: XzState, seat: number, chips: number): void {
+  // 从这一笔起这个座位的杠钱才算新人的（退税不追到他头上，见 since）
+  s.since = (s.since ?? [0, 0, 0, 0]).map((x, i) => (i === seat ? s.ledger.length : x));
   s.chips[seat] = chips;
   s.stake[seat] = chips;
   s.start[seat] = chips;

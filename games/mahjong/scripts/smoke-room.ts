@@ -200,6 +200,15 @@ try {
   let t = Date.now();
   let code = await openRoom(pa, base, '娱乐');
   log('A 开娱乐房', code);
+  // 等人页"离开房间"先离座（自审 C4）：B 坐下再离开，A 这边那个座位要空出来（只断开的话 kit 只记掉线、座位还占着）
+  await pb.goto(`${base}/games/mahjong/?room=${code}`);
+  await pb.waitForSelector('.room-code');
+  await pb.click('.room-seat.empty .act');
+  await pa.waitForFunction(() => document.querySelectorAll('.room-seat:not(.empty)').length >= 2);
+  await pb.click('button:text-is("离开房间")');
+  await pb.waitForSelector('.lobby-head');
+  const freed = await pa.waitForFunction(() => document.querySelectorAll('.room-seat:not(.empty)').length === 1, null, { timeout: 5_000 }).then(() => true, () => false);
+  check(freed, 'B 在等人页点"离开房间"，A 这边他的座位空出来');
   await joinAndStart(pa, pb, base, code);
   check(true, `娱乐房开打，两边进牌桌（${Math.round((Date.now() - t) / 1000)} 秒）`);
   // 开局换三张时操作条最宽：截一张看"聊"按钮、自己的头像牌有没有压住它

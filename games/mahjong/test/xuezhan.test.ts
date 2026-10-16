@@ -15,6 +15,7 @@ import {
 } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import type { Meld } from '../src/core/table/index.ts';
 import { xuezhanAi } from '../src/ai/xuezhan.ts';
+import { tenpaiKinds } from '../src/core/variants/sichuan-xuezhan/rules.ts';
 import { counts, kinds } from './helpers.ts';
 import { act, RON, table, tileIn } from './xz-table.ts';
 
@@ -464,5 +465,52 @@ describe('校验', () => {
     expect(view(r, 0).seats[1]!.que).toBe(-1);
     expect(view(r, 0).seats[1]!.ready).toBe(true);
     expect(view(r, 1).seats[1]!.que).toBe(2);
+  });
+});
+
+describe('自审 C5–C7', () => {
+  // 流局的局面（和上面"退税"那个一样）：3 号没听，收过 0 号 20 的杠钱
+  const wallEnd = () => {
+    const s = table(['123m456m789m11p23p9p', '123p456p789p11m5s9s', '1m2s', '5p8s'], [2, 2, 0, 0], 0, '');
+    s.ledger = [{ kind: 'kan', from: 0, to: 3, amount: 20, ref: 1 }];
+    s.chips = [1_980, 2_000, 2_000, 2_020];
+    return s;
+  };
+  const taxOf = (s: XzState) => act(s, 0, { t: 'discard', tile: tileIn(s, 0, '9p') }).ledger.filter((x) => x.kind === 'tax');
+
+  test('C5 换人以后：换人前收的杠钱不让新人退，换人前付的也不退给新人；换人后的照退', () => {
+    expect(taxOf(wallEnd())).toHaveLength(1);
+    // 3 号（收钱的）中途换了人：那 20 是前一个人收的，新人不退
+    expect(taxOf(XZ.restake(wallEnd(), 3, 2_000) as XzState)).toEqual([]);
+    // 0 号（付钱的）中途换了人：不退给新人
+    expect(taxOf(XZ.restake(wallEnd(), 0, 2_000) as XzState)).toEqual([]);
+    // 换人以后才收的杠钱照退
+    const s = XZ.restake(wallEnd(), 3, 2_000) as XzState;
+    s.ledger.push({ kind: 'kan', from: 1, to: 3, amount: 20, ref: 2 });
+    expect(taxOf(s)).toEqual([{ kind: 'tax', from: 3, to: 1, amount: 20, ref: 2 }]);
+  });
+
+  test('C6 一炮多响点炮的人付不起：按应收的比例分，不是先胡的先拿', () => {
+    const s = RON();
+    s.chips[0] = 5;
+    const r = act(s, 0, { t: 'discard', tile: tileIn(s, 0, '5p') });
+    const r1 = act(r, 1, { t: 'claim', w: r.claim!.id, c: 'ron' });
+    const r2 = act(r1, 2, { t: 'claim', w: r.claim!.id, c: 'ron' });
+    // 两家各应收 10（平胡 0 番、底分 10），只有 5：3 / 2（零头按座位顺序给）
+    expect(r2.ledger.filter((x) => x.kind === 'hu')).toEqual([
+      { kind: 'hu', from: 0, to: 1, amount: 3 },
+      { kind: 'hu', from: 0, to: 2, amount: 2 },
+    ]);
+  });
+
+  test('C7 四张都在自己手里和碰杠里的那种不算听：查大叫按没听算', () => {
+    const t = (k: string, copy: number): Tile => tileOf(kinds(k)[0]!, copy);
+    const pon = (k: string): Meld => ({ kind: 'pon', tiles: [t(k, 0), t(k, 1), t(k, 2)], from: 1 });
+    const hand = [...['1p', '2p', '3p', '4p', '5p', '6p', '7p', '8p', '9p'].map((k) => t(k, 0)), t('5m', 3)];
+    const base = { river: [], que: 2 as const, swapOut: null, swapIn: null, won: null, draws: 1 };
+    // 碰了 5 万、手里单钓第 4 张 5 万：不算听
+    expect(tenpaiKinds({ ...base, hand, melds: [pon('5m')] })).toEqual([]);
+    // 碰的是别的：单钓 5 万照算听
+    expect(tenpaiKinds({ ...base, hand, melds: [pon('6m')] })).toEqual(kinds('5m'));
   });
 });

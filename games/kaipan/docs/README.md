@@ -14,6 +14,6 @@
 
 - 0.2：`design-0.2.md`、`core-api-0.2.md`。
 - 0.3：`plan-0.3.md`、`design-0.3.md`、`design-0.3-release.md`、`design-0.3.1-friendly.md`、`core-api-0.3.md`。
-- 0.4：`design-0.4.md`（撤回的美股原型的设计，代码已删，见 tag `kaipan-us-prototype`）、`design-0.4-redo.md`（改成真实行情驱动）、
+- 0.4：`design-0.4.md`（撤回的美股原型的设计，代码已删，找回看私有存档仓库 `yyyu-star/arcade-archive` 的 tag `kaipan-us-prototype`）、`design-0.4-redo.md`（改成真实行情驱动）、
   `design-0.4-c.md`（仓位、押跌、抵押）、`core-api-0.4-redo.md`。
 - `history/`：数据核对和几个年份的事件时间线（研究稿）；`research/`：0.4 的依据核对。

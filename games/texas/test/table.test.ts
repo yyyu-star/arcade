@@ -293,6 +293,19 @@ describe('超时、暂离、离桌、补码', () => {
     expect(t.out).toEqual([]);
   });
 
+  it('下了注又离桌（不轮到他也算弃牌），别人都弃了：那一注不退给他，是死钱，归赢家（0.3.3）', () => {
+    let t = setup([1000, 1000, 1000], 2);
+    t = play(t, [[0, raise(60)]]);
+    t = must(apply(t, 0, { t: 'leave' }));
+    expect(t.seats[0]!.status).toBe('folded');
+    t = play(t, [[1, FOLD]]);
+    // 原来退回 40 给已经离桌的 0：好友房里他那一份离座时已经结回钱包，这 40 只能搁在房间里丢掉
+    expect(t.lastHand).toMatchObject({ byFold: true, uncalled: null });
+    expect(t.lastHand!.pots).toEqual([{ amount: 90, winners: [{ seat: 2, won: 90 }] }]);
+    expect(t.out).toEqual([{ id: expect.any(String), seat: 0, amount: 940 }]);
+    conserve(t);
+  });
+
   it('不在这一手里时离桌：马上结算', () => {
     let t = setup([1000, 1000, null], 0);
     t = must(seatPlayer(t, 2, 1000));

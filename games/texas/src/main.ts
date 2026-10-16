@@ -209,6 +209,7 @@ let stakeTimer = 0;
 /** 钱包那一笔连不上（请求可能已经到了、只是回话丢了）：这一桌留在本机，隔这么久用同一个操作 id 再办 */
 const RETRY_MS = 15_000;
 const PENDING_NOTE = '钱包暂时连不上，稍后会自动重试';
+const LOGIN_NOTE = '登录过期了：这一桌的筹码先记在本机，刷新页面登录后自动结回钱包';
 
 const deps: SoloDeps = {
   wallet: tracked(walletApi),
@@ -281,10 +282,10 @@ async function boot(): Promise<void> {
     // 上次有一笔没办完：用同一个操作 id 再办一次
     if (s.pending) await settlePending();
     if (solo && !s.practice && !s.pending && wallet && !texasStakes(wallet).some((x) => x.ref === s.id)) {
-      // 钱包里已经没有这一桌了（放太久，平台原样退回了）
+      // 钱包里已经没有这一桌了：单机只在本机结回，几乎都是放太久、平台原样退回了（15.10 的 expired）
       localStorage.removeItem(SESSION_KEY);
       solo = null;
-      walletNote = '上次那一桌已经在别处结过了';
+      walletNote = walletError('expired');
     }
   }
   // 邀请链接 ?room=123456 直接进；平台大厅的"好友房"按钮 ?online=1（和掼蛋同一个约定）。
@@ -319,7 +320,10 @@ async function settlePending(): Promise<void> {
     solo = null;
   }
   await refreshWallet();
-  if (s.session.pending) {
+  if (s.session.pending && err === 'login') {
+    // 登录过期：重试也是 401，等刷新登录后打开页面再结
+    walletNote = LOGIN_NOTE;
+  } else if (s.session.pending) {
     walletNote = PENDING_NOTE;
     retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
   } else if (err) walletNote = walletError(err);
@@ -786,8 +790,11 @@ async function leave(): Promise<boolean> {
   await soloSummary(stage, {
     practice: s.session.practice,
     buyin: st.buyin,
-    out: s.closing ? null : s.left - s.capped,
+    out: s.closing || err ? null : s.left - s.capped,
     left: s.left,
+    // 结回没办成：登录过期的等登录后再结；钱包明确拒了的（放太久已经退回、别处结过）照实说（0.3.3：原来照样显示结回了多少）
+    ...(s.closing && err === 'login' ? { pending: '登录后自动结回' } : {}),
+    ...(err && !s.closing ? { refused: walletError(err) } : {}),
     hands: st.hands,
     won: st.won,
     best: st.best,
@@ -797,8 +804,8 @@ async function leave(): Promise<boolean> {
     titles: tally.titles(s.left > st.buyin ? [{ name: myName, net: s.left - st.buyin }] : []),
   });
   if (err && s.closing) {
-    walletNote = '钱包暂时连不上：这一桌的筹码先记在本机，稍后会自动结回钱包';
-    retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
+    walletNote = err === 'login' ? LOGIN_NOTE : '钱包暂时连不上：这一桌的筹码先记在本机，稍后会自动结回钱包';
+    if (err !== 'login') retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
   } else {
     solo = null;
   }
@@ -1175,8 +1182,10 @@ function drawRoom(s: OnlineState): void {
   setText(handNo, v.handNo ? `第 ${v.handNo} 手` : '');
   stage.dataset.phase = v.phase;
   const mine = me === null ? null : v.seats[me]!;
-  // 被拒了、还没上桌的用座位上面那个大按钮；输光了补码还是左下角的小按钮
-  const refusedOut = v.canRebuy && v.refused !== null;
+  // 被拒了、还没上桌的用座位上面那个大按钮；坐着的人补码（被拒了也一样）还是左下角的小按钮，被拒时冒一句（0.3.3：
+  // 原来坐着补码被拒也挂出"没带上桌"的大框，按满额写、还把小按钮藏了）
+  const seated = mine?.owner === 'player';
+  const refusedOut = v.canRebuy && v.refused !== null && !seated;
   toggle(topUpBtn, 'hidden', !v.canRebuy || refusedOut);
   drawRebuy(refusedOut ? v : null);
   toggle(sitBtn, 'hidden', !mine || mine.owner !== 'player');
@@ -1195,7 +1204,10 @@ function drawRoom(s: OnlineState): void {
   wasBuying = buyingNow;
 
   // 买入被钱包拒了：钱包的数可能变了（比如别处已经结回），刷新一下，座位上面那块按新的数说
-  if (v.refused && v.refused !== lastRefused) void refreshWallet().then(() => online && drawRoom(online.state));
+  if (v.refused && v.refused !== lastRefused) {
+    void refreshWallet().then(() => online && drawRoom(online.state));
+    if (seated) toast(`没补上：${walletError(v.refused)}`);
+  }
   lastRefused = v.refused;
 
   const auto = bar.update(v, !s.busy && animating === 0 && s.status === 'open' && me !== null);
