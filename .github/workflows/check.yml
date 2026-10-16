@@ -1,5 +1,6 @@
 # 模块独立性检查：任何模块都不能引用自己目录以外的文件（packages/ 下的共用包除外）；
-# 部署配置检查：各模块的 wrangler.jsonc 只能部署到本仓库自己的 Worker、只用自己的资源（tools/check-deploy-config.mjs）。
+# 部署配置检查：模块里不许有 .env、.npmrc、wrangler.json/.toml、.wrangler/ 等会改变 wrangler 行为的文件，各模块的 wrangler.jsonc
+# 用钉死版本的 wrangler 解析后按白名单查（tools/check-deploy-config.mjs，白名单在 tools/deployer/lib.mjs；部署前 deploy.mjs 再严格查一遍）。
 # PR 上跑一次（分支保护要求它通过），合并进 main 后再跑一次；功能分支的 push 不重复跑。
 name: Check isolation
 on:
@@ -23,4 +24,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: node tools/check-isolation.mjs
+      # 钉死版本的 wrangler（只用它的配置解析器）；不跑安装脚本
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: tools/deployer
       - run: node tools/check-deploy-config.mjs
