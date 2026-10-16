@@ -22,7 +22,7 @@ const MIX_HANDS = 2_000;
 const CASH_OUT = 3;
 
 type Job =
-  | { kind: 'vs'; stakes: StakesId; strategy: string; size: number; from: number; to: number; persona?: number }
+  | { kind: 'vs'; stakes: StakesId; strategy: string; size: number; from: number; to: number; persona?: number; humans: number; strong: boolean }
   | { kind: 'mix'; stakes: StakesId; size: number; from: number; to: number };
 /** vs：每场的毫大盲；mix：每场每种性格的 [手数, 净赢筹码] */
 type Result = { mbb: number[]; personas: number[]; table: number[]; bluff: number[][] } | { rounds: [number, number][][]; style: number[][]; table: number[]; bluff: number[][] };
@@ -104,6 +104,8 @@ function work(j: Job): Result {
       hands: SESSION_HANDS,
       strategy: STRATEGIES[j.strategy]!,
       persona: j.persona,
+      humans: j.humans,
+      strong: j.strong,
       onStep: tableTracker(table, bluff),
     });
     mbb.push(r.mbb);
@@ -234,7 +236,10 @@ const meanSe = (xs: number[]): [number, number, number] => {
   return [m, sd / Math.sqrt(xs.length), sd];
 };
 
-/** npm run sim -- --vs [每格场数] [档位,...] [策略,...] [--persona=编号] [--size=人数] */
+/**
+ * npm run sim -- --vs [每格场数] [档位,...] [策略,...] [--persona=编号] [--size=人数] [--humans=玩家数] [--strong]
+ * --humans、--strong（0.4.0，好友房）：前几个座位都是玩家、打印他们合起来的输赢；电脑一律最强（DESIGN.md 6.5）
+ */
 export async function vsMain(args: string[]): Promise<void> {
   const sessions = Number(args[0] ?? 600);
   const stakes = (args[1]?.split(',') ?? STAKES.map((s) => s.id)) as StakesId[];
@@ -243,13 +248,17 @@ export async function vsMain(args: string[]): Promise<void> {
   const pin = process.argv.find((a) => a.startsWith('--persona='));
   const persona = pin ? Number(pin.slice(10)) : undefined;
   const size = sizeArg();
+  const h = process.argv.find((a) => a.startsWith('--humans='));
+  const humans = h ? Number(h.slice(9)) : 1;
+  if (!Number.isInteger(humans) || humans < 1 || humans >= size) throw new Error(`bad --humans ${h}`);
+  const strong = process.argv.includes('--strong');
   const t0 = performance.now();
-  console.log(`\n玩家对 ${size - 1} 个电脑：每格 ${sessions} 场 × ${SESSION_HANDS} 手，${THREADS} 线程`);
+  console.log(`\n${humans} 个玩家（合起来算）对 ${size - humans} 个${strong ? '最强的' : ''}电脑：每格 ${sessions} 场 × ${SESSION_HANDS} 手，${THREADS} 线程`);
   console.log('档位    策略      每百手大盲（±1 标准误）  赢的场次   手数');
   for (const st of stakes) {
     const mix = new Array<number>(PERSONA_COUNT).fill(0);
     for (const sg of strategies) {
-      const parts = await fanout<{ mbb: number[]; personas: number[]; table: number[]; bluff: number[][] }>(sessions, (from, to) => ({ kind: 'vs', stakes: st, strategy: sg, size, from, to, persona }));
+      const parts = await fanout<{ mbb: number[]; personas: number[]; table: number[]; bluff: number[][] }>(sessions, (from, to) => ({ kind: 'vs', stakes: st, strategy: sg, size, from, to, persona, humans, strong }));
       const xs = parts.flatMap((p) => p.mbb).map((x) => x / 1000);
       parts.forEach((p) => p.personas.forEach((n, i) => (mix[i]! += n)));
       const [mean, se, sd] = meanSe(xs);

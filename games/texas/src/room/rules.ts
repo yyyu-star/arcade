@@ -153,9 +153,21 @@ export interface RoomView extends View {
   canRebuy: boolean;
   closed: boolean;
   last: LastAct | null;
+  /** 能打的真人不到两个、牌桌停着（0.4.0）：页面写"实盘好友房至少要两个人" */
+  needTwo: boolean;
 }
 
 const SIMPLE = new Set<string>(['fold', 'check', 'call', 'allin', 'away', 'back', 'rebuy']);
+
+/**
+ * 好友房的牌桌（0.4.0，和掼蛋、麻将统一）：好友房都是实盘，不能一个人带电脑赢钱包——
+ * 能打的真人至少两个才发牌（规则的 minHumans，一手打着时人走了照样打完，下一手不发），电脑一律最强（strong，不按档位挑软的）。
+ * 一个人开打（旧页面、脚本绕过按钮）也一样：买入照常扣、牌不发，离桌原样结回，不计输赢。期望见 DESIGN.md 6.5
+ */
+const FRIENDS = { holdHands: true, minHumans: 2, strong: true } as const;
+
+/** 真人不到两个时页面上的那句（等人页和牌桌共用） */
+export const TWO_NOTE = '实盘好友房至少要两个人；一个人想玩实盘，去单机';
 
 export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, WalletEffect> = {
   seats: SEATS,
@@ -176,7 +188,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     const r = stream(entropy, RNG.room);
     const kinds = Array.from({ length: SEATS }, (_, i) => setup?.seats[i] ?? 'empty');
     let s: RoomState = {
-      t: newTable(opts.stakes, opts.size, entropy, { holdHands: true }),
+      t: newTable(opts.stakes, opts.size, entropy, FRIENDS),
       ref: `r${hex(r.u32())}${hex(r.u32())}`,
       kinds,
       fx: [],
@@ -273,6 +285,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
       canRebuy: seat !== null && canRebuy(s, seat),
       closed: s.closed,
       last: s.last ?? null,
+      needTwo: !s.closed && !s.opening && s.t.phase === 'idle' && !s.t.hold && humansReady(s) < 2,
       net: s.t.seats.map((c, i) => {
         const inn = s.inn?.[i] ?? 0;
         if (!inn) return null;
@@ -454,8 +467,13 @@ function noteFame(s: RoomState): RoomState {
   return dealt === fm.dealt && noted === fm.noted && per === fm.per ? (s.fame ? s : { ...s, fame: fm }) : { ...s, fame: { ...fm, dealt, noted, players, per } };
 }
 
+/** 下一手能发到牌的真人，加上买入在路上、到账就坐上的 */
+const humansReady = (s: RoomState): number =>
+  s.t.seats.filter((c, i) => s.kinds[i] === 'human' && ((c.owner === 'player' && c.stack > 0 && !c.away && !c.leaving) || buying(s, i))).length;
+
 function seatPass(s: RoomState): RoomState {
-  let t = s.t;
+  // 0.4.0 以前开的房间：牌桌上没有这两样，补上（发下一手起按新规矩）
+  let t = s.t.minHumans ? s.t : { ...s.t, ...FRIENDS };
   const held = [...s.held];
   const owed = [...s.owed];
   const max = stakesOf(t.stakes).max;

@@ -34,7 +34,7 @@ export function decide(v: View, r: RandomStream): Action {
   if (me === null || !lg) throw new Error('decide: not my turn');
   const seat = v.seats[me]!;
   const p: Persona = PERSONAS[seat.persona] ?? PERSONAS[DEFAULT_PERSONA]!;
-  const k = SKILL[v.stakes];
+  const k = SKILL[v.strong ? 'lux' : v.stakes];
   const others = v.seats.flatMap((s, i) => (i !== me && (s.status === 'active' || s.status === 'allin') ? [i] : []));
   const opp = others.length;
   const raises = raisesThisStreet(v);

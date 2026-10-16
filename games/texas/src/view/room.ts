@@ -3,7 +3,7 @@
  */
 import { stakesOf } from '../core/stakes.ts';
 import type { OnlineState } from '../online.ts';
-import { SEATS } from '../room/rules.ts';
+import { SEATS, TWO_NOTE } from '../room/rules.ts';
 import { el, setText, toggle } from './dom.ts';
 import { chips } from './text.ts';
 
@@ -22,6 +22,8 @@ export class RoomPanel {
   private readonly seats: { box: HTMLDivElement; name: HTMLSpanElement; sit: HTMLButtonElement }[] = [];
   private readonly startBtn: HTMLButtonElement;
   private readonly waitNote: HTMLDivElement;
+  /** 坐下的真人不到两个（0.4.0）：开打灰掉，说一句为什么 */
+  private readonly twoNote: HTMLDivElement;
   private readonly banner: HTMLDivElement;
   private readonly bannerText: HTMLSpanElement;
   private readonly retryBtn: HTMLButtonElement;
@@ -42,6 +44,7 @@ export class RoomPanel {
       const sit = button(box, 'pill rw-sit', '坐这里', () => h.sit(i));
       this.seats.push({ box, name, sit });
     }
+    this.twoNote = el('div', 'rw-two hidden', this.root, TWO_NOTE);
     const go = el('div', 'rw-go', this.root);
     button(go, 'pill', '离开房间', () => h.leave());
     this.startBtn = button(go, 'start', '开打', () => h.start());
@@ -84,8 +87,11 @@ export class RoomPanel {
     // 坐着的人都给"开打"（0.3.5）：房间不下发谁是房主，房主换了设备、页面被顶掉后本机不知道自己是房主，按钮一藏房间就只能干等；
     // 不是房主的点了由 kit 回 not_host，提示一句。没坐下的看"等房主开打"
     const canStart = s.host || mine !== null;
+    // 实盘好友房至少两个真人（0.4.0）：房间那边一个人开打也不发牌，按钮先灰掉，免得点了干坐着
+    const humans = s.room!.seats.filter((x, i) => i < size && x.kind === 'human').length;
+    toggle(this.twoNote, 'hidden', humans >= 2);
     toggle(this.startBtn, 'hidden', !canStart);
-    this.startBtn.disabled = mine === null || s.status !== 'open';
+    this.startBtn.disabled = mine === null || s.status !== 'open' || humans < 2;
     toggle(this.waitNote, 'hidden', canStart);
   }
 }

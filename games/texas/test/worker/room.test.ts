@@ -415,8 +415,12 @@ describe('停着等人（kit 0.3.2 的 waiting）', () => {
 
 describe('离开马上结（0.2.4）', () => {
   it('最后一个真人点离开：桌上的马上结回钱包，房间算打完、开房名额还了，马上能再开一个', async () => {
-    const { code, ids, conns } = await table(1, { stakes: 'small', size: 3 });
+    // 两个真人才发牌（0.4.0）：1 号先走（这一手照常打完，之后不发），0 号就是最后一个真人
+    const { code, ids, conns } = await table(2, { stakes: 'small', size: 4 });
     await conns[0]!.see((x) => x.handNo >= 1);
+    conns[1]!.send({ t: 'leave' });
+    await waitFor(async () => (await walletOf(ids[1]!)).stakes.length === 0);
+    expect((await inspect(code)).persist?.status).toBe('playing');
     conns[0]!.send({ t: 'leave' });
     await waitFor(async () => (await walletOf(ids[0]!)).stakes.length === 0);
     expect((await walletOf(ids[0]!)).balance).toBeGreaterThan(0);
@@ -434,26 +438,27 @@ describe('离开马上结（0.2.4）', () => {
 
 describe('换人、托管', () => {
   it('开打后有人接管电脑的座位：扣他的买入，下一手坐上；离线超过宽限由电脑托管，只过牌或弃牌', async () => {
-    const { code, conns } = await table(1, { stakes: 'small', size: 3 });
+    // 两个真人在打（0.4.0 至少两个才发牌），第三个人接管 3 号电脑
+    const { code, conns } = await table(2, { stakes: 'small', size: 4 });
     await conns[0]!.see((x) => x.handNo >= 1);
     const late = user();
     const c = await join(code, late);
-    c.send({ t: 'sit', seat: 2 });
-    await c.until((m) => m.t === 'state' && m.you.seat === 2);
+    c.send({ t: 'sit', seat: 3 });
+    await c.until((m) => m.t === 'state' && m.you.seat === 3);
     await waitFor(async () => (await walletOf(late)).stakes.length > 0);
     expect((await walletOf(late)).stakes).toMatchObject([{ mode: 'server', amount: MAX }]);
-    await playUntil([conns[0]!, c], (v) => v.seats[2]!.owner === 'player');
+    await playUntil([...conns, c], (v) => v.seats[3]!.owner === 'player');
 
-    // 2 号掉线：宽限过后托管，轮到他时只过牌或弃牌（记进日志的是 auto）
+    // 3 号掉线：宽限过后托管，轮到他时只过牌或弃牌（记进日志的是 auto）；另外两个真人接着打
     c.ws.close(1000, 'bye');
     await sleep(50);
     advance(ROOM_LIMITS.graceMs);
     await runDurableObjectAlarm(stub(code));
-    await conns[0]!.see((_v, m) => m.room.seats[2]!.auto === true);
+    await conns[0]!.see((_v, m) => m.room.seats[3]!.auto === true);
     const h = conns[0]!.view!.handNo;
-    await playUntil([conns[0]!], (v) => v.handNo >= h + 3);
+    await playUntil(conns, (v) => v.handNo >= h + 3);
     const s = (await inspect(code)).persist!.game;
-    expect(s.t.seats[2]!.owner).toBe('player');
+    expect(s.t.seats[3]!.owner).toBe('player');
     await writesOk(code);
   }, 20_000); // 0.1.1 起每手之后多一次停顿（拨时钟、跑闹钟），要多打好几手，5 秒的默认上限和别的测试一起跑时不够
 });

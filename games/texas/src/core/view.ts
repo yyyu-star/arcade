@@ -51,6 +51,8 @@ export interface View {
    * 只下发自己的，别人的不给；电脑据此松一点、凶一点，画面可以拿来配表情
    */
   tilt: number;
+  /** 电脑一律最强（0.4.0，好友房，规则的 strong）：电脑的功力按豪华桌算，不按这一桌的档位 */
+  strong?: boolean;
 }
 
 export function view(t: Table, me: number | null): View {
@@ -87,5 +89,6 @@ export function view(t: Table, me: number | null): View {
     log: t.log.map((e) => ({ ...e })),
     lastHand: t.lastHand && structuredClone(t.lastHand),
     tilt: me === null ? 0 : (t.seats[me]?.tilt ?? 0),
+    ...(t.strong ? { strong: true } : {}),
   };
 }

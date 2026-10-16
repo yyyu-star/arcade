@@ -30,6 +30,13 @@ export function stakesOf(id: StakesId): Stakes {
   return s;
 }
 
+/**
+ * 好友房（0.4.0）补位的性格顺序，最强的在前：桌上还没有的里挑排最前的（一桌不重复，9 人桌最多 8 个电脑，所以列全 10 种）。
+ * 顺序按实测（scripts/sim.ts --vs --humans=2 --strong --persona=<编号>：两个简单打法对一整桌同一种性格，每百手输得最多的排前面）：
+ * 阿飙、稳哥、老鹰、算盘、虎子、江湖、叨叨、慢慢、老好、小白；功力按豪华桌时排最后的小白也让他们输，见 DESIGN.md 6.5
+ */
+export const STRONG: readonly number[] = [1, 0, 7, 4, 6, 5, 8, 3, 2, 9];
+
 /** 电脑带上桌的筹码：60–100 个大盲 */
 export const HOUSE_MIN_BB = 60;
 export const HOUSE_MAX_BB = 100;

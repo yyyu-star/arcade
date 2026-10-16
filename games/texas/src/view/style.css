@@ -881,6 +881,7 @@ body::before {
 .rw-go .pill { height: 44px; }
 .rw-go .start { flex: 1; }
 .rw-wait { flex: 1; text-align: center; font-size: 15px; color: var(--muted); }
+.rw-two { text-align: center; font-size: 14px; color: var(--gold); }
 .room-banner {
   position: absolute;
   left: 50%; top: 56px;
@@ -1041,6 +1042,8 @@ body::before {
 .auto-next { height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(0, 0, 0, .35); font-size: 14px; color: var(--muted); }
 .auto-next.sel { border-color: var(--gold); color: var(--gold); background: rgba(243, 200, 107, .12); }
 .room-pause { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 8px; border-radius: 22px; background: rgba(0, 0, 0, .5); font-size: 15px; font-weight: 700; color: #f1e9d2; }
+/* 好友房能打的真人不到两个（0.4.0）：和倒计时同一个样子，只有字 */
+.two-note { display: flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 22px; background: rgba(0, 0, 0, .5); font-size: 15px; font-weight: 700; color: #f1e9d2; }
 
 /* ---------- 看对手的小卡（0.2.2） ---------- */
 .read-card {

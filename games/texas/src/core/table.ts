@@ -8,7 +8,7 @@
 import type { Card } from './cards.ts';
 import { evalCards } from './eval.ts';
 import { shuffle, stream, type Entropy } from 'arcade-kit/rng';
-import { HOUSE_MAX_BB, HOUSE_MIN_BB, stakesOf, type StakesId } from './stakes.ts';
+import { HOUSE_MAX_BB, HOUSE_MIN_BB, STRONG, stakesOf, type StakesId } from './stakes.ts';
 
 export const RULES_VERSION = 1;
 /** 电脑性格的个数（名字和参数在 src/ai/personas.ts）。9 人桌最多 8 个电脑、一桌不重复，所以至少 8 种（0.2.0 起 10 种） */
@@ -135,6 +135,10 @@ export interface Table {
    */
   holdHands?: boolean;
   hold?: boolean;
+  /** 至少几个真人能打才发牌（0.4.0，好友房是 2：不能一个人带电脑赢实盘）；没填是 1（单机、模拟器、老存档） */
+  minHumans?: number;
+  /** 电脑一律最强（0.4.0，好友房）：功力按豪华桌、性格从 STRONG 里按顺序挑（personas.ts）；没填按档位（单机） */
+  strong?: boolean;
 }
 
 export type Action =
@@ -184,7 +188,7 @@ const emptySeat = (): SeatState => ({
   leaving: false,
 });
 
-export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { holdHands?: boolean } = {}): Table {
+export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { holdHands?: boolean; minHumans?: number; strong?: boolean } = {}): Table {
   if (!Number.isInteger(size) || size < 2 || size > MAX_SEATS) throw new Error(`bad table size ${size}`);
   if (seed.length !== 8) throw new Error('seed must be 8 words');
   const s = stakesOf(stakes);
@@ -214,6 +218,8 @@ export function newTable(stakes: StakesId, size: number, seed: Entropy, opts: { 
     runout: false,
     uncalled: null,
     ...(opts.holdHands ? { holdHands: true, hold: false } : {}),
+    ...(opts.minHumans ? { minHumans: opts.minHumans } : {}),
+    ...(opts.strong ? { strong: true } : {}),
   };
 }
 
@@ -654,10 +660,10 @@ function putHouse(t: Table, seat: number): void {
   const r = stream(t.seed, RNG.house, t.opSeq++);
   const used = new Set(t.seats.filter((s) => s.owner === 'house').map((s) => s.persona));
   const free = Array.from({ length: PERSONA_COUNT }, (_, i) => i).filter((i) => !used.has(i));
-  // 按这一档的权重挑（stakes.ts 的 house）
+  // 好友房按 STRONG 的顺序挑桌上还没有的最强的；单机按这一档的权重挑（stakes.ts 的 house）。随机数照样取，两种桌子后面的筹码一样分流
   const w = stakesOf(t.stakes).house;
   let x = r.below(free.reduce((a, i) => a + w[i]!, 0));
-  const persona = free.find((i) => (x -= w[i]!) < 0)!;
+  const persona = t.strong ? STRONG.find((i) => !used.has(i))! : free.find((i) => (x -= w[i]!) < 0)!;
   const stack = t.bb * (HOUSE_MIN_BB + r.below(HOUSE_MAX_BB - HOUSE_MIN_BB + 1));
   t.seats[seat] = { ...emptySeat(), owner: 'house', persona, stack };
   t.bank += stack;
@@ -671,10 +677,13 @@ function autoStart(t: Table): void {
 
 const canPlay = (s: SeatState): boolean => s.owner !== 'none' && s.stack > 0 && !s.away && !s.leaving;
 
-/** 够人就开下一手：至少两个能打的，其中至少一个真人（全是电脑或真人都暂离时停着等人，不白打） */
+/**
+ * 够人就开下一手：至少两个能打的，其中真人至少 minHumans 个（默认 1；全是电脑或真人都暂离时停着等人，不白打）。
+ * 好友房是 2（0.4.0）：真人走得只剩一个、或者另一个暂离了，这一手照常打完，下一手不发，停着等人
+ */
 function startHand(t: Table): void {
   const players = t.seats.flatMap((s, i) => (canPlay(s) ? [i] : []));
-  if (players.length < 2 || !players.some((i) => t.seats[i]!.owner === 'player')) {
+  if (players.length < 2 || players.filter((i) => t.seats[i]!.owner === 'player').length < (t.minHumans ?? 1)) {
     t.phase = 'idle';
     return;
   }

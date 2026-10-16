@@ -159,6 +159,7 @@ function ok(x: Table | { error: string }): Table {
 /**
  * 一个"玩家"对一桌电脑（和单机一样：电脑先按 putHouse 坐满，玩家坐 0 号、买满 100 个大盲，输光了补满）。
  * 打 hands 手，返回玩家净赢多少大盲（千分之一个大盲为单位取整，免得小数）和电脑的性格出场次数。
+ * humans（0.4.0，好友房）：前几个座位都是玩家、用同一种打法，返回他们合起来的净赢；strong：电脑一律最强（规则的 strong）
  */
 export function runVs(o: {
   seed: Entropy;
@@ -170,12 +171,15 @@ export function runVs(o: {
   persona?: number;
   /** 每一步之后调用（sim 用来数整桌的热闹程度） */
   onStep?: (t: Table) => void;
+  humans?: number;
+  strong?: boolean;
 }): { mbb: number; personas: number[] } {
   const st = stakesOf(o.stakes);
-  let t = newTable(st.id, o.size, o.seed);
-  for (let i = 1; i < o.size; i++) t = ok(seatHouse(t, i));
-  t = ok(seatPlayer(t, 0, st.max));
-  let bought = st.max;
+  const humans = o.humans ?? 1;
+  let t = newTable(st.id, o.size, o.seed, o.strong ? { strong: true } : {});
+  for (let i = humans; i < o.size; i++) t = ok(seatHouse(t, i));
+  for (let i = 0; i < humans; i++) t = ok(seatPlayer(t, i, st.max, i === humans - 1));
+  let bought = st.max * humans;
   const personas = new Array<number>(PERSONA_COUNT).fill(0);
   let lastHand = -1;
   let guard = 0;
@@ -189,17 +193,20 @@ export function runVs(o: {
         }
       lastHand = t.handNo;
     }
-    const s = t.toAct;
-    if (s === null) {
-      // 只有玩家输光时才会停：补满
-      t = ok(addChips(t, 0, st.max));
+    // 输光的玩家补满（一个人桌上只剩他时，补完马上开下一手；不然等下一手发牌）
+    const broke = t.seats.findIndex((x, i) => i < humans && x.stack === 0 && x.status === 'out');
+    if (broke >= 0) {
+      t = ok(addChips(t, broke, st.max, t.toAct === null));
       bought += st.max;
       continue;
     }
-    const a = s === 0 ? o.strategy(view(t, 0), stream(o.seed, 'player', t.handNo * 0x20000 + t.log.length)) : aiAction(t, s);
+    const s = t.toAct;
+    if (s === null) throw new Error(`no one to act at hand ${t.handNo}`);
+    // 第一个玩家的随机流沿用原来的名字，原来的数字不变
+    const a = s < humans ? o.strategy(view(t, s), stream(o.seed, s === 0 ? 'player' : `player${s}`, t.handNo * 0x20000 + t.log.length)) : aiAction(t, s);
     t = ok(apply(t, s, a));
     o.onStep?.(t);
   }
-  const me = t.seats[0]!;
-  return { mbb: Math.round(((me.stack + me.total - bought) * 1000) / st.bb), personas };
+  const mine = t.seats.slice(0, humans).reduce((a, x) => a + x.stack + x.total, 0);
+  return { mbb: Math.round(((mine - bought) * 1000) / st.bb), personas };
 }

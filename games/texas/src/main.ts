@@ -8,7 +8,7 @@ import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
 import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
-import { OPENING_MS, PROP_BASE, STICKER_BASE, TAUNT_COUNT, TURN_MS, type RoomView } from './room/rules.ts';
+import { OPENING_MS, PROP_BASE, STICKER_BASE, TAUNT_COUNT, TURN_MS, TWO_NOTE, type RoomView } from './room/rules.ts';
 import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, type WalletApi, type WalletReply, type WalletView } from './net/wallet.ts';
 import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from './store.ts';
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
@@ -145,6 +145,8 @@ const RING = '<svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18
 const betweenBar = el('div', 'between hidden', screen);
 const roomPause = el('div', 'room-pause hidden', betweenBar);
 roomPause.innerHTML = `${RING}<span>下一手马上开始</span>`;
+// 好友房能打的真人不到两个（0.4.0）：牌桌停着不发牌，这里说为什么
+const twoNote = el('div', 'two-note hidden', betweenBar, TWO_NOTE);
 const autoBtn = el('button', 'auto-next', betweenBar, '自动下一手');
 autoBtn.type = 'button';
 const nextBtn = el('button', 'next-hand', betweenBar);
@@ -1145,6 +1147,7 @@ function exitRoom(note: string | null, keep = false): void {
   tableView.setClock(null, null, 1);
   drawRoomPause(null);
   toggle(betweenBar, 'hidden', true);
+  toggle(twoNote, 'hidden', true);
   drawRebuy(null);
   for (const e of [funBtn, funPanel, funHints, inviteBtn]) toggle(e, 'hidden', true);
   drawUrge(null, null);
@@ -1244,6 +1247,8 @@ function drawRoom(s: OnlineState): void {
   // 一手和一手之间也在计时的，是开打时在等这个人的买入（OPENING_MS）
   tableView.setClock(s.busy ? null : (turn?.seat ?? null), turn?.deadline ?? null, v.phase === 'idle' ? OPENING_MS : TURN_MS);
   drawRoomPause(s.busy || animating > 0 ? null : (s.room.pause?.until ?? null));
+  toggle(twoNote, 'hidden', !v.needTwo);
+  if (v.needTwo) toggle(betweenBar, 'hidden', false);
   if (!s.busy && animating === 0) tableView.show(v);
 
   setText(handNo, v.handNo ? `第 ${v.handNo} 手` : '');
