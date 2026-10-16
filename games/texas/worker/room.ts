@@ -4,10 +4,12 @@
  * 每个座位同一时间只有一笔（规则保证），一份只结回一次（平台的规矩，见 rules.ts 文件头）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
-import { stream, type Entropy, type RandomStream } from 'arcade-kit/rng';
+import { stream, type Entropy } from 'arcade-kit/rng';
 import { isStandalone } from 'arcade-kit/worker';
 import { RNG } from '../src/core/table.ts';
-import { Banter, emoteOf, pokeOf, type Emote, type SeatLike } from '../src/fun/banter.ts';
+import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunEvent } from 'arcade-kit/fun-logic';
+import { momentOf, temperOf } from '../src/fun/moments.ts';
+import { TAUNTS } from '../src/fun/taunts.ts';
 import { AI_DELAY_MS, texasRoom, TURN_MS, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import type { Env } from './main.ts';
 import { GAME } from './platform.ts';
@@ -27,54 +29,45 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
   protected override readonly limits = ROOM_LIMITS;
 
   /**
-   * 电脑的互动（0.6.1，DESIGN.md 13.5）：房间替电脑座位发（kit 0.10 的 botEmote），所有人看到的一样；不写存储。
-   * - 一手打完（onStep）：只看公开的结果（这一手的操作记录、谁分到多少），不碰底牌；随机按这一手的种子分流；
-   * - 真人对电脑扔东西、点名（onEmote，kit 0.10.1）：按性格回。真人发的短语只在这一刻用来决定回不回、回什么，不记下来，
+   * 电脑的互动（0.6.1 起房间替电脑座位发，kit 的 botEmote，所有人看到的一样；0.13.0 起怎么反应交给 kit 的 botReact，docs/table-fun.md 第 4 节）。不写存储。
+   * - 一手打完（onStep）：只看公开的结果（操作记录、摊牌亮出来的牌）认名场面，每个电脑问一次；
+   * - 真人对电脑扔道具、点名（onEmote）：被点的电脑问一次。真人发的东西只在这一刻用来决定回不回，不记下来，
    *   电脑的出牌决定（规则、src/ai）拿不到。
-   * 情绪、冷却、座位上是谁只在这个房间实例的内存里（座位是上一步公开的），被驱逐后从头记
+   * 随机按种子分流（名场面按手数、回应按序号）；反应的账、座位上是谁只在这个房间实例的内存里（座位是上一步公开的），被驱逐后从头记
    */
-  private banterRng: RandomStream | null = null;
-  private banterHand = -1;
+  private readonly bots = newBotState();
+  private hand = -1;
   private seed: Entropy | null = null;
-  private seats: SeatLike[] = [];
+  private seats: { owner: string; persona: number }[] = [];
   private replies = 0;
-  private readonly banter = new Banter(() => this.banterRng!.u32() / 4_294_967_296, () => Date.now(), false);
 
   protected override onStep(s: RoomState): void {
     this.seed = s.t.seed;
     this.seats = s.t.seats.map((x) => ({ owner: x.owner, persona: x.persona }));
     const r = s.t.lastHand;
     // 刚建、刚从存储里醒来：记下现在打到第几手，不补发以前的
-    if (this.banterHand < 0) return void (this.banterHand = r?.handNo ?? 0);
-    if (!r || r.handNo <= this.banterHand) return;
-    this.banterHand = r.handNo;
-    this.banterRng = stream(s.t.seed, RNG.banter, r.handNo);
+    if (this.hand < 0) return void (this.hand = r?.handNo ?? 0);
+    if (!r || r.handNo <= this.hand) return;
+    this.hand = r.handNo;
     // 一手打完牌桌停着（holdHands），操作记录还是这一手的
-    for (const a of this.banter.afterHand(s.t.seats, s.t.bb, r, s.t.log)) this.botSay(a.seat, a.out);
+    const m = momentOf(r, s.t.log);
+    if (!m) return;
+    const rng = stream(s.t.seed, RNG.banter, r.handNo);
+    const ev: FunEvent = { kind: 'moment', moment: m.moment, winners: [m.winner], losers: m.losers, hand: r.handNo };
+    for (const [seat, x] of this.seats.entries()) if (x.owner === 'house') this.botDo(botReact(ev, { seat, temper: temperOf(x.persona) }, this.bots, Date.now(), () => rng.u32() / 4_294_967_296));
   }
 
   protected override onEmote(from: number, id: number, to?: number): void {
-    const poke = pokeOf(id);
-    if (!this.seed || !poke) return;
-    this.banterRng = stream(this.seed, RNG.reply, this.replies++);
-    let target = to;
-    // 没点名的嘲讽：桌上随便一个电脑可能接话
-    if (target === undefined) {
-      if (!('taunt' in poke)) return;
-      const house = this.seats.flatMap((x, i) => (x.owner === 'house' && i !== from ? [i] : []));
-      if (!house.length) return;
-      target = house[Math.floor(this.banterRng.u32() / 4_294_967_296 * house.length)]!;
-    }
-    const who = this.seats[target];
-    if (who?.owner !== 'house') return;
-    const out = this.banter.react({ seat: target, persona: who.persona }, from, poke);
-    // 房间里的 Banter 不说自己的话（talk 为 false），回的都是能发的编号
-    if (out && !('say' in out)) this.botSay(target, out);
+    const ev = hitEvent(id, TAUNTS.length, from, to);
+    const who = ev ? this.seats[ev.to] : undefined;
+    if (!ev || !this.seed || who?.owner !== 'house') return;
+    const rng = stream(this.seed, RNG.reply, this.replies++);
+    this.botDo(botReact(ev, { seat: ev.to, temper: temperOf(who.persona) }, this.bots, Date.now(), () => rng.u32() / 4_294_967_296));
   }
 
-  private botSay(seat: number, out: Emote): void {
-    const e = emoteOf(out);
-    this.botEmote(seat, e.id, e.to);
+  /** 房间只有一个闹钟：反应的 delay 不等，立刻发；页面收到电脑座位发来的会晚一点再播（kit 的 TableFun） */
+  private botDo(a: BotAction | null): void {
+    if (a) for (const e of botEmoteIds(a, TAUNTS.length)) this.botEmote(a.from, e.id, e.to);
   }
 
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {

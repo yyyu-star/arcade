@@ -14,12 +14,14 @@
  * 牌桌结出来的筹码、没上桌的买入都先攒在 owed，等他完全离桌、没有在路上的买入了，合成一笔结回，这一份就封上（sealed）；
  * 之后再坐下开新的一份（ref 里的第几份加一），结回还在路上时新的买入排在它后面。
  */
+import { funIdCount } from 'arcade-kit/fun-logic';
 import type { RoomEffect, RoomGame } from 'arcade-kit/game';
 import type { SeatKind } from 'arcade-kit/protocol';
 import { stream } from 'arcade-kit/rng';
 import { aiAction } from '../bot.ts';
 import { NO_FAME, noteHand, settleStats, type Fame, type SettleStats } from '../core/fame.ts';
 import { ROOM_LEVEL, STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
+import { TAUNTS } from '../fun/taunts.ts';
 import {
   MAX_SEATS,
   addChips,
@@ -50,16 +52,12 @@ export const AI_DELAY_MS = 1_600;
 /** 开打时最多等这么久的买入回话：钱包一直连不上的人先当没坐上，到账了下一手再上 */
 export const OPENING_MS = 30_000;
 /**
- * 好友房的 emote 编号表（0.3.0，kit 0.7.0：短语、表情、道具共用一个编号，房间只转发编号、校验范围和 to）：
- * 0–14 嘲讽短语（view/fun.ts 的 TAUNTS）、15–26 表情包（kit/fun 的 STICKERS）、27–34 道具（kit/fun 的 PROPS，催促炸弹就是对人扔 bomb）。
- * 只往后加，不改顺序；测试核对和页面、kit 的表一样长
+ * 好友房的 emote 编号表（0.3.0；0.13.0 起照 kit 的 funItem：短语、表情、道具共用一个编号，房间只转发编号、校验范围和 to）：
+ * 0–14 短语（fun/taunts.ts 的 TAUNTS）、15–26 表情包、27–34 道具（kit 的 STICKERS、PROPS 原顺序，催促炸弹就是对人扔 bomb）。
+ * 只往后加，不改顺序
  */
-export const TAUNT_COUNT = 15;
-export const STICKER_BASE = TAUNT_COUNT;
-export const STICKER_COUNT = 12;
-export const PROP_BASE = STICKER_BASE + STICKER_COUNT;
-export const PROP_COUNT = 8;
-export const EMOTE_COUNT = PROP_BASE + PROP_COUNT;
+export const TAUNT_COUNT = TAUNTS.length;
+export const EMOTE_COUNT = funIdCount(TAUNT_COUNT);
 /**
  * 一手打完停多久再发下一手（0.1.1，kit 0.5.0 的 pause）：所有人看同一个结果条和倒计时圈，不等谁点（有人走开就卡住）。
  * 从这一手最后一帧播完算起；页面摊牌、分池的动画要占掉三秒左右，剩下的时间结果静静摆着

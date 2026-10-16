@@ -193,7 +193,7 @@ body::before {
 .cloud[data-state='anon'] svg { fill: #6f7b74; }
 .cloud[data-state='syncing'] svg { animation: pulse 1s ease-in-out infinite; }
 /* 选中：金边金字（档位、人数、预选、自动下一手……都是这一个样子） */
-.sel:is(.icon, .pill, .preset, .mode, .size, .tile, .pre-btn, .auto-next, .fp-tab) { border-color: var(--gold); color: var(--gold); background: var(--sel-bg); }
+.sel:is(.icon, .pill, .preset, .mode, .size, .tile, .pre-btn, .auto-next) { border-color: var(--gold); color: var(--gold); background: var(--sel-bg); }
 /* 主按钮（金）：开打、下一手、弹窗里的确定、横幅上的按钮 */
 .pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go { border: 0; background: var(--btn-gold); color: var(--gold-ink); font-weight: 800; --spin: var(--gold-ink); }
 /* 立体的大按钮：底下一条边，按下去往下沉 */
@@ -704,6 +704,8 @@ body::before {
 }
 .hand-no { font-size: var(--fs-2); color: var(--muted); margin-right: var(--s-1); }
 /* 好友房嘲讽（0.3.0）：按钮、顺手提示在左下，面板从左下弹出；都不压我的底牌（正下方）和操作区（右下） */
+/* kit 画的"互动"按钮的位置（0.13.0）：hud 里占一个和原来按钮一样大的空位，矩形交给 TableFun */
+.fun-slot { width: calc(88px * var(--ui)); height: var(--hit); flex: none; }
 /* 一手打完的顺手短语：在"歇一手、互动"那一行上面，不挨着我的头像和名牌 */
 .fun-hints { position: absolute; left: 0; bottom: calc(100% + var(--s-2)); display: flex; gap: var(--s-2); }
 /* 竖屏 hud 在顶上，下面是顶上的座位；放到我的名牌和赔率那一行之间的空地（舞台做了缩放，fixed 按舞台算） */
@@ -720,44 +722,7 @@ body::before {
   /* 原来用 pop（带 translateX(-50%)，是给居中摆的牌型签用的），冒出来的那一下往左跳半个身位 */
   animation: say .3s ease-out;
 }
-.fun-panel {
-  position: absolute;
-  left: var(--s-3); bottom: 60px;
-  z-index: 27;
-  width: 330px;
-  /* 限高：顶栏下面到"互动"按钮上面，放不下就在里面滚；底部留出安全区，最后一行不被截 */
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100% - 180px);
-  padding: var(--s-3) var(--s-3) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
-  border-radius: var(--r-4);
-  background: rgba(10, 20, 15, .97);
-  border: 1px solid rgba(243, 200, 107, .4);
-  box-shadow: var(--sh-2);
-}
-.fp-head { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-2); }
-.fp-tab { height: 34px; padding: 0 var(--s-3); border: 1px solid transparent; border-radius: var(--r-3); background: transparent; color: var(--muted); font-size: var(--fs-3); cursor: pointer; }
-.fp-tab.sel { font-weight: 800; }
-.fp-to { margin-left: auto; min-width: 0; font-size: var(--fs-2); color: #ffd9a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); flex: 1 1 auto; min-height: 0; max-height: 260px; overflow-y: auto; padding-bottom: var(--s-1); }
-.fp-grid.sticker, .fp-grid.prop { grid-template-columns: repeat(6, 1fr); }
-.fp-icon { aspect-ratio: 1; padding: var(--s-1); border: 1px solid rgba(255, 255, 255, .1); border-radius: var(--r-3); background: rgba(255, 255, 255, .05); cursor: pointer; }
-.fp-hint { grid-column: 1 / -1; padding: var(--s-4) var(--s-2); text-align: center; font-size: var(--fs-3); color: var(--muted); }
-.fp-say {
-  padding: var(--s-2) var(--s-2);
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: var(--r-3);
-  background: rgba(255, 255, 255, .05);
-  color: #f2ead8;
-  font-size: var(--fs-3);
-  text-align: left;
-  cursor: pointer;
-}
-.fp-off { display: flex; align-items: center; gap: var(--s-2); min-height: 34px; margin-top: var(--s-2); font-size: var(--fs-2); color: var(--muted); cursor: pointer; }
-.fp-off input { width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
-/* 一键屏蔽全桌（0.6.0）：总开关下面一行小字按钮 */
-.fun-panel > :not(.fp-grid) { flex: none; }
-.fp-mute-all { align-self: flex-start; height: 34px; margin-top: var(--s-1); padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-3); background: transparent; color: var(--muted); font-size: var(--fs-2); cursor: pointer; }
+
 /* 好友房带入被拒（0.2.5）：挂在我的座位上面，醒目，点了重新带入 */
 .rebuy-cta {
   position: absolute;
@@ -1059,7 +1024,7 @@ body::before {
 /* 顶栏下面第二行：第几手、歇一手、嘲讽；桌子从 150 往下 */
 .stage.tall .hud { top: 60px; bottom: auto; left: var(--s-3); right: var(--s-3); flex-wrap: wrap; }
 .stage.tall .hud .hand-no { margin-right: auto; }
-.stage.tall .fun-panel { top: 108px; bottom: auto; left: var(--s-3); right: var(--s-3); width: auto; max-height: calc(100% - 420px); }
+
 /* 竖屏我的动作气泡（"小盲 10"）：放在头像左边，不压右边的底牌 */
 .stage.tall .seat.me .bubble { left: -150px; top: 22px; transform: translateX(-100%); }
 .stage.tall .where { display: none; }
@@ -1178,13 +1143,6 @@ body::before {
   animation: fade .18s ease-out;
   pointer-events: none;
 }
-/* 好友房真人的卡（0.3.0）带按钮：接收点击 */
-.read-card.acts { pointer-events: auto; }
-.rc-acts { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
-.rc-icons { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); }
-.rc-icons:empty { display: none; }
-.rc-icon { width: 34px; height: 34px; padding: var(--s-0); border: 1px solid rgba(255, 255, 255, .12); border-radius: var(--r-2); background: rgba(255, 255, 255, .06); cursor: pointer; }
-.rc-icon svg, .fp-icon svg { width: 100%; height: 100%; display: block; }
 /* 催促炸弹（0.3.0）：轮到的真人想了 8 秒以上，头像旁边一个小炸弹一晃一晃 */
 .urge {
   position: absolute;
@@ -1200,101 +1158,17 @@ body::before {
 }
 .urge svg { width: 100%; height: 100%; display: block; }
 @keyframes urge { 0%, 100% { transform: translate(-50%, -50%) rotate(-10deg); } 50% { transform: translate(-50%, -50%) rotate(10deg) scale(1.08); } }
-/* kit 的道具、表情层挂在 body 上，压在整个牌桌上面：德州弹窗开着时收起（层叠上下文夹不到中间，0.3.0） */
-body.texas-dialog .arcade-fun { visibility: hidden !important; }
-.rc-act {
-  padding: var(--s-1) var(--s-3);
-  border: 1px solid rgba(243, 200, 107, .5);
-  border-radius: var(--r-3);
-  background: rgba(243, 200, 107, .12);
-  color: var(--gold);
-  font-size: var(--fs-2);
-  cursor: pointer;
-}
-/* 名场面（0.3.0）：公共牌和结果条之间那一条（一手打完池子已经分走，这里是空的），不压公共牌、不挡点击。
-   原来在 top 200，实打时正好压在公共牌上（0.3.0 实打截图 04、06） */
-.showcase {
-  position: absolute;
-  left: 50%; top: 280px;
-  transform: translateX(-50%);
-  z-index: 35;
-  padding: var(--s-1) var(--s-4);
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, rgba(120, 30, 20, .92), rgba(170, 60, 30, .95), rgba(120, 30, 20, .92));
-  border: 1px solid rgba(255, 210, 120, .7);
-  color: #ffe9b0;
-  font-size: var(--fs-5);
-  font-weight: 900;
-  white-space: nowrap;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, .6);
-  box-shadow: var(--sh-2);
-  pointer-events: none;
-  animation: showcase 3.2s ease-out;
-}
-@keyframes showcase {
-  0% { opacity: 0; transform: translateX(-50%) scale(.6); }
-  12% { opacity: 1; transform: translateX(-50%) scale(1.08); }
-  20% { transform: translateX(-50%) scale(1); }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
-}
+/* kit 的道具、表情层和互动菜单（TableFun，0.13.0）挂在 body 上，压在整个牌桌上面：德州弹窗开着时收起（层叠上下文夹不到中间，0.3.0） */
+body.texas-dialog :is(.arcade-fun, .atf-ui) { visibility: hidden !important; }
+/* 旁观、关了互动时 kit 的头像热区不接点按，点头像穿过去给牌桌：看对手、接管电脑座位（DESIGN.md 13.7） */
+body.texas-fun-idle .atf-hot { pointer-events: none; }
+
 .read-card.left {
   transform: translate(-100%, -50%);
 }
 .read-card.below {
   transform: translate(-50%, 0);
 }
-/* 我自己的头像弹的表情包（docs/table-fun.md 第 1 节）：在头像和底牌上方，6 个一行 */
-.read-card.above { transform: translate(-50%, -100%); }
-.read-card.mine { min-width: 0; padding: var(--s-2); }
-.read-card.mine .rc-icons { display: grid; grid-template-columns: repeat(6, 40px); margin-top: 0; }
-.read-card.mine .rc-icon { width: 40px; height: 40px; }
-.rc-says { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); }
-.rc-says:empty { display: none; }
-.rc-say {
-  padding: var(--s-1) var(--s-2);
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, .06);
-  color: #f1ede0;
-  font-size: var(--fs-2);
-  cursor: pointer;
-}
-/* 扔道具的冷却（1.5 秒）：一层暗色从满到空，转完能再扔 */
-.rc-icon, .fp-icon { position: relative; }
-.cooling { pointer-events: none; }
-.cooling::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: conic-gradient(rgba(0, 0, 0, .62) var(--left, 100%), transparent 0);
-  animation: cool var(--cd, 1.5s) linear forwards;
-}
-@property --left { syntax: '<percentage>'; inherits: false; initial-value: 100%; }
-@keyframes cool { from { --left: 100%; } to { --left: 0%; } }
-/* 连击"×3"、"回敬！"、"护盾"：头像上方弹一下就收 */
-.fun-flash {
-  position: absolute;
-  z-index: 52;
-  transform: translate(-50%, -50%);
-  font-weight: 900;
-  white-space: nowrap;
-  pointer-events: none;
-  text-shadow: 0 2px 3px rgba(0, 0, 0, .7);
-  animation: fun-flash .9s ease-out forwards;
-}
-.fun-flash.combo { color: var(--gold); font-size: 26px; }
-.fun-flash.revenge { color: #ff9a6a; font-size: var(--fs-4); }
-.fun-flash.shield { padding: 2px var(--s-2); border: 1px solid rgba(140, 200, 255, .8); border-radius: var(--r-pill); background: rgba(20, 50, 80, .85); color: #cfe8ff; font-size: var(--fs-2); }
-@keyframes fun-flash {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
-  25% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
-  45% { transform: translate(-50%, -50%) scale(1); }
-  80% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -80%); }
-}
-.fun-btn svg { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .rc-name { font-size: var(--fs-4); font-weight: 800; }
 .rc-style { margin-top: var(--s-0); font-size: var(--fs-2); color: var(--muted); }
 .rc-tag { display: inline-block; margin: 6px 0 4px; padding: var(--s-0) var(--s-2); border-radius: var(--r-2); background: rgba(243, 200, 107, .15); color: var(--gold); font-size: var(--fs-2); font-weight: 800; }
@@ -1304,5 +1178,5 @@ body.texas-dialog .arcade-fun { visibility: hidden !important; }
 @media (pointer: coarse) {
   .slider { height: max(44px, var(--hit)); }
   .code-in, .friends .pill { height: max(40px, var(--hit)); }
-  .fp-off { min-height: var(--hit); }
+
 }

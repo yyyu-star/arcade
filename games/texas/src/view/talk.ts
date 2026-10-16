@@ -5,7 +5,7 @@
  */
 
 import type { StickerId } from 'arcade-kit/fun';
-import { CHATTY } from '../fun/banter.ts';
+import { CHATTY } from '../fun/moments.ts';
 
 /**
  * 自己推全下、跟别人的全下（跟到全下）、赢了大池子、诈唬成了（亮出来的，或者下了注别人都弃了）、诈唬被抓、输了大池子（投进去 40 个大盲以上没赢）。

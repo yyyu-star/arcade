@@ -1,5 +1,5 @@
 /**
- * 好友房的乐子（0.3.0，DESIGN.md 13.4）：嘲讽短语、顺手提示、屏蔽。
+ * 好友房的乐子（0.3.0，DESIGN.md 13.4）：嘲讽短语、顺手提示、互动总开关（菜单、面板、屏蔽 0.13.0 起是 kit 的 TableFun）。
  * 房间只转发短语编号（kit 的 emote），文字在这里；只说牌局和打法，不说人（不涉及长相、家人、地域、性别，不带脏字）。
  * 顺手提示只看公开事件（谁赢了、怎么赢的、亮出来的牌），不碰没亮的底牌。
  */
@@ -33,31 +33,22 @@ export function suggest(r: HandResult, log: readonly LogEntry[], me: number): nu
   return riverTurnaround(r) !== null ? [T('运气而已，别骄傲'), T('再来！')] : [T('好牌，服了'), T('下一把轮到我了')];
 }
 
-export interface FunPrefs {
-  /** 互动"不看"（总开关，记在本机；电脑说话也一起收起） */
-  off: boolean;
-  /** 屏蔽了谁（真人按昵称、电脑按性格名）：只记在这个标签页（sessionStorage），关了就没了 */
-  muted: string[];
-}
-
-/** 总开关在 local（texas.fun），屏蔽名单在 session（texas.fun.muted）；0.10.1 以前存在 local 里的名单不再读 */
-export function loadFun(local: Storage, session: Storage): FunPrefs {
-  const read = (store: Storage, key: string): unknown => {
-    try {
-      return JSON.parse(store.getItem(key) ?? 'null');
-    } catch {
-      return null;
-    }
-  };
-  const p = read(local, KEYS.fun) as { off?: unknown } | null;
-  const m = read(session, KEYS.funMuted);
-  return { off: p?.off === true, muted: Array.isArray(m) ? m.filter((x): x is string => typeof x === 'string').slice(0, 50) : [] };
-}
-
-export function saveFun(local: Storage, session: Storage, p: FunPrefs): void {
+/**
+ * 互动"不看"（总开关，记在本机 texas.fun；电脑说话也一起收起）。按人屏蔽 0.13.0 起是 kit 的（texas.fun.blocked，这个标签页），
+ * 0.12.0 及以前记在 texas.fun.muted 的旧名单读的时候顺手清掉
+ */
+export function loadFunOff(local: Storage, session: Storage): boolean {
   try {
-    local.setItem(KEYS.fun, JSON.stringify({ off: p.off }));
-    session.setItem(KEYS.funMuted, JSON.stringify(p.muted));
+    session.removeItem(KEYS.funMuted);
+    return (JSON.parse(local.getItem(KEYS.fun) ?? 'null') as { off?: unknown } | null)?.off === true;
+  } catch {
+    return false;
+  }
+}
+
+export function saveFunOff(local: Storage, off: boolean): void {
+  try {
+    local.setItem(KEYS.fun, JSON.stringify({ off }));
   } catch {
     // 存不上：这一次还按改过的算，刷新后回到原样
   }

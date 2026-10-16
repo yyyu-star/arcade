@@ -11,11 +11,10 @@ export const KEYS = {
   /** 上一次进的好友房：钱包里还有那一桌的一份时，标题页按它给"回到房间"；点"离开房间"、房间关了就清掉 */
   lastRoom: 'texas.lastRoom',
   session: 'texas.session',
+  /** 互动的总开关（"互动：不看"）。按人屏蔽、首次提示是 kit 的 TableFun 按 storageKey 存的：texas.fun.blocked（sessionStorage）、texas.hint.fun */
   fun: 'texas.fun',
-  /** 按人屏蔽（sessionStorage：只对这一局、这个房间有效，docs/table-fun.md 第 5 节） */
+  /** 0.12.0 及以前自己记的按人屏蔽（sessionStorage），0.13.0 起换成 kit 的 texas.fun.blocked，只用来清掉 */
   funMuted: 'texas.fun.muted',
-  /** "点头像扔道具"的提示出过了（只出一次） */
-  hintFun: 'texas.hint.fun',
   stats: 'texas.stats',
   meta: 'texas.cloud',
   preSync: 'texas.stats.pre-sync',

@@ -4,8 +4,8 @@ import { parseCards } from '../src/core/cards.ts';
 import { evalCards } from '../src/core/eval.ts';
 import type { HandResult, LogEntry } from '../src/core/table.ts';
 import { invested, NO_FAME, noteHand, settleStats, TITLES } from '../src/core/fame.ts';
-import { PROPS, STICKERS } from 'arcade-kit/fun';
-import { EMOTE_COUNT, PROP_BASE, PROP_COUNT, STICKER_BASE, STICKER_COUNT, TAUNT_COUNT } from '../src/room/rules.ts';
+import { funItem, PROPS, propId } from 'arcade-kit/fun-logic';
+import { EMOTE_COUNT, TAUNT_COUNT } from '../src/room/rules.ts';
 import { suggest, TAUNTS } from '../src/view/fun.ts';
 import { riverTurnaround, showcase, showcaseText, Tally } from '../src/view/titles.ts';
 
@@ -91,11 +91,9 @@ describe('称号', () => {
 describe('嘲讽（0.3.0）', () => {
   it('短语表和房间允许的编号一样多；只能往后加', () => {
     expect(TAUNTS.length).toBe(TAUNT_COUNT);
-    // 编号表：0–14 短语、15–26 表情、27–34 道具，和 kit/fun 的表一样长（kit 只往后加）
-    expect([STICKER_BASE, PROP_BASE, EMOTE_COUNT]).toEqual([15, 27, 35]);
-    expect(STICKERS.length).toBe(STICKER_COUNT);
-    expect(PROPS.length).toBe(PROP_COUNT);
-    expect(PROPS[PROP_BASE + 4 - PROP_BASE]).toBe('bomb');
+    // 编号表：0–14 短语、15–26 表情、27–34 道具（kit 的 funItem，0.13.0）；催促炸弹是第 5 个道具
+    expect(EMOTE_COUNT).toBe(35);
+    expect(funItem(propId(TAUNT_COUNT, PROPS.indexOf('bomb')), TAUNT_COUNT)).toMatchObject({ kind: 'prop', index: 4 });
     expect(TAUNTS[0]).toBe('就这？');
     expect(TAUNTS[3]).toBe('谢谢老板');
   });

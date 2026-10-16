@@ -120,14 +120,8 @@ const MS = {
   clear: 420,
 };
 
-/** 头像菜单里的一项：icon 是道具、表情（一行图标），say 是点名短语，都没有是文字按钮；cool 是还要冷却多少毫秒 */
-export interface CardAct {
-  label: string;
-  run: () => void;
-  icon?: string;
-  say?: true;
-  cool?: number;
-}
+/** 不许盖的操作区：按钮、加注那一行、快捷下注、胜率、预选（看对手的卡、kit 的互动菜单都避开） */
+const KEEP_OUT = '.actions .buttons, .actions .raise-panel, .actions .quick, .actions .odds, .pre';
 
 export class TableView {
   readonly root: HTMLDivElement;
@@ -506,14 +500,6 @@ export class TableView {
     window.setTimeout(() => e.remove(), ms * this.opts.pace());
   }
 
-  /** 头像上冒一个小字：连击"×3"、回敬"回敬！"、被扔太多的"护盾"（docs/table-fun.md 第 2、3 节），一下就收 */
-  flash(seat: number, text: string, kind: 'combo' | 'revenge' | 'shield'): void {
-    const p = this.seatPt(seat);
-    const e = el('div', `fun-flash ${kind}`, this.fx, text);
-    place(e, { x: p.x, y: p.y - (kind === 'revenge' ? 64 : 30) });
-    window.setTimeout(() => e.remove(), 900);
-  }
-
   /** 这个座位头像在屏幕上的位置（道具往这儿扔，0.3.0）；按实际画出来的算，横竖屏、9 人桌都对。空座位、没摆出来回 null */
   avatarRect(seat: number): DOMRect | null {
     const n = this.seats[seat];
@@ -522,12 +508,14 @@ export class TableView {
     return r.width > 0 ? r : null;
   }
 
-  /** 名场面（0.3.0）：公共牌下面一条横幅，几秒就收；不挡点击、不压公共牌、底牌和操作区 */
-  banner(text: string): void {
-    this.root.querySelector('.showcase')?.remove();
-    const e = el('div', 'showcase', this.root, text);
-    play('banner');
-    window.setTimeout(() => e.remove(), 3_200 * this.opts.pace());
+  /**
+   * 互动菜单、面板不许盖的地方（kit 的 TableFun 的 avoid，docs/table-fun.md 第 1 节）：我的底牌和操作区，屏幕矩形。
+   * 0.13.0 起头像菜单是 kit 画的，这里只报位置
+   */
+  keepOut(): DOMRect[] {
+    const mine = this.seats[this.me]?.cards.filter((c) => !c.classList.contains('hidden')) ?? [];
+    const parts = [...mine, ...(this.root.parentElement?.querySelectorAll<HTMLElement>(KEEP_OUT) ?? [])];
+    return parts.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
   }
 
   /** 收掉桌上上一手的牌和结果（下一手发牌前）。f 为 null 时按现在摆着的收 */
@@ -742,61 +730,26 @@ export class TableView {
   }
 
   /**
-   * 看对手（0.2.2）：点头像弹一张小卡，名字、风格、这一场的数；放在座位往桌心那一侧，点别处或 5 秒后收起。
-   * tag 是按这一场的数给的标签，电脑再加上它的性格那一句
+   * 看对手（0.2.2）：点名牌弹一张小卡，名字、风格、这一场的数；放在座位往桌心那一侧，点别处或 5 秒后收起。
+   * tag 是按这一场的数给的标签，电脑再加上它的性格那一句。0.13.0 起点头像是 kit 的互动菜单，这张卡只放数（DESIGN.md 13.7）
    */
-  showCard(seat: number, tag: string, rows: string[], actions: CardAct[] = [], menu = false): void {
+  showCard(seat: number, tag: string, rows: string[]): void {
     this.hideCard();
     const s = this.frame?.seats[seat];
-    const mine = seat === this.me;
-    // 我自己的头像（docs/table-fun.md 第 1 节）：只弹表情包，没有"看对手"的数
-    if (!s || s.owner === 'none' || (mine && !actions.length)) return;
-    const card = el('div', `read-card${mine ? ' mine' : ''}`, this.root);
-    // menu：点头像先弹的小菜单（docs/table-fun.md 第 1 节），只写名字，"看对手"的数在菜单里点开
-    if (!mine) el('div', 'rc-name', card, this.nameOf(seat, s));
-    if (!mine && !menu) {
-      if (s.owner === 'house') el('div', 'rc-style', card, personaStyle(s.persona));
-      el('div', 'rc-tag', card, tag);
-      for (const r of rows) el('div', 'rc-row', card, r);
-    }
-    // 好友房里真人的卡（0.3.0）：能点的按钮（屏蔽他）；有按钮的卡接收点击，点卡里不收起
-    if (actions.length) {
-      card.classList.add('acts');
-      // 顺序照规范：道具（或表情）一行图标、点名短语一行、最后"屏蔽他"
-      const icons = el('div', 'rc-icons', card);
-      const says = el('div', 'rc-says', card);
-      const row = el('div', 'rc-acts', card);
-      for (const a of actions) {
-        const b = el('button', a.icon ? 'rc-icon' : a.say ? 'rc-say' : 'rc-act', a.icon ? icons : a.say ? says : row, a.icon ? '' : a.label);
-        if (a.icon) {
-          b.innerHTML = a.icon;
-          b.title = a.label;
-          b.setAttribute('aria-label', a.label);
-        }
-        // 冷却中（规范 2 节）：盖一层转圈，转完就能再扔
-        if (a.cool && a.cool > 0) {
-          b.classList.add('cooling');
-          b.style.setProperty('--cd', `${a.cool}ms`);
-          window.setTimeout(() => b.classList.remove('cooling'), a.cool);
-        }
-        b.type = 'button';
-        // 先收再做：做的事可能是再弹一张卡（"看对手"）
-        b.addEventListener('click', () => {
-          this.hideCard();
-          a.run();
-        });
-      }
-      card.addEventListener('pointerdown', (e) => e.stopPropagation());
-    }
+    if (!s || s.owner === 'none' || seat === this.me) return;
+    const card = el('div', 'read-card', this.root);
+    el('div', 'rc-name', card, this.nameOf(seat, s));
+    if (s.owner === 'house') el('div', 'rc-style', card, personaStyle(s.persona));
+    el('div', 'rc-tag', card, tag);
+    for (const r of rows) el('div', 'rc-row', card, r);
     // 贴着座位朝桌心那一边摆，不盖住这个人自己的头像和名字：顶上的往下，两边的往里
     const p = this.seatPt(seat);
-    // 我的在头像上方、底牌再往上（不盖底牌和右下的操作区）
-    const side = mine ? 'above' : isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
+    const side = isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
     card.classList.add(side);
-    place(card, side === 'above' ? { x: p.x, y: p.y - 100 } : side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
+    place(card, side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
     this.clearOf(card);
     this.card = card;
-    this.cardTimer = window.setTimeout(() => this.hideCard(), menu ? 8_000 : 5_000);
+    this.cardTimer = window.setTimeout(() => this.hideCard(), 5_000);
     // 下一次点哪里都收起（这一次的点击已经冒泡完了）
     window.setTimeout(() => window.addEventListener('pointerdown', () => this.hideCard(), { once: true }), 0);
   }
@@ -807,7 +760,7 @@ export class TableView {
     if (!r.height) return;
     const k = r.height / card.offsetHeight || 1;
     let lift = 0;
-    for (const e of this.root.parentElement?.querySelectorAll<HTMLElement>('.actions .buttons, .actions .raise-panel, .actions .quick, .actions .odds, .pre') ?? []) {
+    for (const e of this.root.parentElement?.querySelectorAll<HTMLElement>(KEEP_OUT) ?? []) {
       const o = e.getBoundingClientRect();
       if (!o.height || o.right < r.left || o.left > r.right || o.bottom < r.top || o.top > r.bottom) continue;
       lift = Math.max(lift, r.bottom - o.top + 8 * k);

@@ -204,27 +204,26 @@ html, body, body::before { background: var(--night); }
 @keyframes skin-spin { to { transform: rotate(360deg); } }
 
 /* ---------- 按钮：一套"上亮下暗 + 底边 + 顶沿高光"，按下沉 2px ---------- */
-.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next, .fp-tab, .fp-icon, .rc-act {
+.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next {
   background: var(--btn-glass);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 0 #070d0a, 0 4px 6px rgba(0, 0, 0, .42);
   text-shadow: 0 1px 0 #000;
 }
 .home, .icon, .pill { border-color: rgba(255, 255, 255, .2); }
 .tile, .size, .mode, .preset { border-color: rgba(255, 255, 255, .16); background: linear-gradient(#2c3d34, #1b2a23 55%, #121c17); }
-.fp-tab { background: transparent; box-shadow: none; text-shadow: none; }
-.fp-icon, .rc-icon { background: linear-gradient(#27382f, #17231d); }
+
 .qbet {
   background: linear-gradient(rgba(243, 200, 107, .26), rgba(243, 200, 107, .07)), #1a2a22;
   border-color: rgba(243, 200, 107, .55);
   box-shadow: inset 0 1px 0 rgba(255, 240, 190, .28), 0 2px 0 #3d2c0a, 0 4px 6px rgba(0, 0, 0, .42);
 }
-.sel:is(.icon, .pill, .preset, .mode, .size, .tile, .pre-btn, .auto-next, .fp-tab) {
+.sel:is(.icon, .pill, .preset, .mode, .size, .tile, .pre-btn, .auto-next) {
   background: linear-gradient(rgba(243, 200, 107, .26), rgba(243, 200, 107, .08)), #1b2a23;
   box-shadow: inset 0 1px 0 rgba(255, 240, 190, .3), 0 0 0 1px rgba(243, 200, 107, .35), 0 2px 0 #3d2c0a, 0 4px 6px rgba(0, 0, 0, .42);
 }
-.fp-tab.sel { box-shadow: inset 0 0 0 1px rgba(243, 200, 107, .5); }
+
 .tile.locked { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
-:is(.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next, .rc-act):not(:disabled):active {
+:is(.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next):not(:disabled):active {
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, .5), 0 1px 0 #070d0a;
   translate: 0 1px;
 }
@@ -271,7 +270,7 @@ html, body, body::before { background: var(--night); }
   border-color: rgba(243, 200, 107, .3);
   box-shadow: var(--hi), 0 0 0 1px rgba(0, 0, 0, .6), var(--sh-3);
 }
-.fun-panel, .read-card, .toast {
+.read-card, .toast {
   background: linear-gradient(#162319, #0a130e);
   border-color: rgba(243, 200, 107, .4);
   box-shadow: var(--hi), var(--sh-2);
@@ -294,13 +293,6 @@ html, body, body::before { background: var(--night); }
   border-color: var(--gold-hi);
   background: linear-gradient(rgba(255, 230, 150, .16), transparent 50%), linear-gradient(#4a380e, #1c1405);
   box-shadow: inset 0 1px 0 rgba(255, 240, 190, .35), var(--sh-2), 0 0 26px rgba(255, 214, 110, .25);
-}
-.showcase {
-  background: linear-gradient(#fff1b8, #f3c86b 45%, #c9973a);
-  border-color: #7c5513;
-  color: #2a1a04;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, .4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 0 0 2px rgba(0, 0, 0, .35), var(--sh-2), 0 0 28px rgba(255, 214, 110, .4);
 }
 
 /* ---------- 大厅标题：烫金字 ---------- */

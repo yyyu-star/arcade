@@ -306,26 +306,29 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   if ((await handText(page)) !== 0 || (await page.locator('.seat.me .card.up').count())) throw new Error('dealt before the tips were closed');
   await skipTips(page);
   await page.locator('.seat.me .card.up').first().waitFor();
-  // 互动（docs/table-fun.md）：点 1 号电脑的头像扔一个番茄，点自己的头像发一个表情；面板里点名发一句；全部屏蔽、再全放开
-  await page.locator('.seat[data-seat="1"] .avatar').click();
-  await page.locator('.read-card .rc-icon').first().click();
+  // 互动（docs/table-fun.md，0.13.0 起是 kit 的 TableFun）：点 1 号电脑的头像扔一个道具，点自己的头像发一个表情；
+  // "互动"面板里发一句；全部屏蔽、再全部恢复；点名牌看对手
+  await page.locator('.atf-hot[data-seat="1"]').click();
+  await page.locator('.atf-box [data-key="fun:prop0"]').click();
   await page.locator('.arcade-fun > *').first().waitFor({ timeout: 5_000 });
-  await page.locator('.seat.me .avatar').click();
-  await page.locator('.read-card.mine .rc-icon').first().click();
-  await page.locator('.read-card').waitFor({ state: 'detached' });
+  const meSeat = await page.locator('.seat.me').getAttribute('data-seat');
+  await page.locator(`.atf-hot[data-seat="${meSeat}"]`).click();
+  await page.locator('.atf-box [data-key="fun:sticker0"]').click();
+  await page.locator('.atf-box').waitFor({ state: 'detached' });
   await shot(page, 'solo-fun-sticker');
   // 表情和短语共用 1 秒冷却
   await page.waitForTimeout(1_100);
-  await page.locator('.fun-btn').click();
-  await page.locator('.fp-say').first().click();
-  await page.locator('.speech', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
+  await page.locator('.atf-btn').click();
+  await page.locator('.atf-box [data-key="fun:phrase0"]').click();
+  await page.locator('.atf-bubble', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
   await shot(page, 'solo-fun');
-  await page.locator('.fun-btn').click();
-  await page.locator('.fp-mute-all', { hasText: /^全部屏蔽$/ }).click();
-  await page.locator('.fp-mute-all', { hasText: '全部取消屏蔽' }).click();
-  await page.locator('.fp-mute-all', { hasText: /^全部屏蔽$/ }).waitFor();
-  await page.locator('.fun-btn').click();
-  log('solo fun: prop, own sticker, taunt, mute all');
+  await page.locator('.atf-btn').click();
+  await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部屏蔽' }).click();
+  await page.locator('.atf-btn').click();
+  await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部恢复' }).click();
+  await page.locator('.seat[data-seat="1"] .plate').click();
+  await page.locator('.read-card .rc-tag').waitFor({ timeout: 5_000 });
+  log('solo fun: prop, own sticker, phrase, block all, read card');
   await playUntil(page, HANDS, new Set([1, 5, -1]), true);
   await shot(page, 'after-hands');
   // 补码：先歇一手，这一手打完牌桌停下，再补码、回来
@@ -571,7 +574,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await hp.goto(`${base}/games/texas/?online=1`);
   await hp.locator('.friends.spot').waitFor();
   if (new URL(hp.url()).search !== '') throw new Error(`?online=1 not stripped: ${hp.url()}`);
-  if (!(await hp.locator('.code-in').evaluate((e) => e === document.activeElement))) throw new Error('?online=1 should focus the room code');
+  if (!(await hp.locator('.code-in:not(.nick-in)').evaluate((e) => e === document.activeElement))) throw new Error('?online=1 should focus the room code');
   await shot(hp, 'online-entry');
   for (const p of [hp, ap, bp, dp]) {
     if (p !== hp) await p.goto(`${base}/games/texas/`);
@@ -591,7 +594,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await ap.goto(`${base}/games/texas/?room=${code}`);
   await ap.locator('.room-wait').waitFor();
   if (new URL(ap.url()).search) throw new Error('invite link query not stripped');
-  await bp.locator('.code-in').fill(code);
+  await bp.locator('.code-in:not(.nick-in)').fill(code);
   await bp.locator('.friends .pill', { hasText: '进房间' }).tap();
   await bp.locator('.room-wait').waitFor();
   await ap.locator('.rw-seat').nth(1).locator('.rw-sit').click();
@@ -614,14 +617,14 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   log('room started');
 
   // 好友房的乐子（0.3.0）：房主点手机的头像扔一个番茄，1 号从面板发一句嘲讽；手机上看得到道具飞过来、嘲讽的气泡，两边截图
-  await hp.locator('.seat[data-seat="2"] .avatar').click();
-  await hp.locator('.read-card .rc-icon').first().click();
+  await hp.locator('.atf-hot[data-seat="2"]').click();
+  await hp.locator('.atf-box [data-key="fun:prop0"]').click();
   await bp.locator('.arcade-fun > *').first().waitFor({ timeout: 5_000 });
   await shot(bp, 'fun-prop-phone');
-  await ap.locator('.fun-btn').click();
-  await ap.locator('.fp-say').first().click();
-  await bp.locator('.speech', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
-  await hp.locator('.speech', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
+  await ap.locator('.atf-btn').click();
+  await ap.locator('.atf-box [data-key="fun:phrase0"]').click();
+  await bp.locator('.atf-bubble', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
+  await hp.locator('.atf-bubble', { hasText: '就这？' }).waitFor({ timeout: 5_000 });
   await shot(bp, 'fun-taunt-phone');
   await shot(hp, 'fun-taunt-host');
   log('fun: prop and taunt seen on the other screens');
