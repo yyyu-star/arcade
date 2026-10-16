@@ -115,6 +115,8 @@ export class TableScene extends Phaser.Scene {
   /** 再来一场：正在去新房间（只去一次）。我开的新房间的码记在会话上（NetSession.againCode），场景重开（重连）也不丢 */
   private following = false;
   private lobbyBtn: Button | undefined;
+  /** 结算弹窗上叠着的"回大厅"确认框（冒烟要找它的按钮） */
+  private settleConfirm: Modal | null = null;
   /** 好友房实盘：带入被拒以后的"重新带入"（冒烟点它） */
   private rebuyBtn: Button | undefined;
   /** 画面建了几次（冒烟核对地址栏收放时没有重建） */
@@ -542,6 +544,13 @@ export class TableScene extends Phaser.Scene {
     }
     if (!inGame()) return goLobby();
     this.openOverlay('menu', confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
+  }
+
+  /** 结算弹窗里的"回大厅"：和顶栏的一样先确认一次（确认框叠在结算上，点"算了"回到结算） */
+  private lobbyFromSettle(): void {
+    if (this.net ? !inOnlineGame() : !inGame()) return goLobby();
+    const m = confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => (this.settleConfirm = null));
+    this.settleConfirm = m;
   }
 
   private onHome(): void {
@@ -1450,7 +1459,20 @@ export class TableScene extends Phaser.Scene {
     const W = worldW(this);
     void W;
     audio.music('table');
-    const m = modal(this, 820, 560, `第 ${r.dealNo} 副 结束`, { closeBtn: false });
+    // 左下的复盘和称号行数不定：弹窗按最后一行往下留出边距，免得最后一行贴着下边被截（试玩评测 0.11.1）
+    const history = this.ses.view().history;
+    const rc = dealRecap(r, history);
+    const recap = [
+      `炸弹 我方 ${rc.bombs[0]} · 对方 ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
+      rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
+    ];
+    // 名场面（0.7.1）：最精彩的两条
+    const hl = dealHighlights(r, history).slice(0, 2);
+    if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
+    const titles = dealTitles(r, history);
+    const titleY = 116 + recap.length * 30 + 6;
+    const lastY = titles.length ? titleY + (titles.length - 1) * 30 : 116 + (recap.length - 1) * 30;
+    const m = modal(this, 820, Math.max(560, 2 * (lastY + 16 + 30)), `第 ${r.dealNo} 副 结束`, { closeBtn: false });
     this.openOverlay('settle', m);
     const b = m.body;
     const mine = r.winnerTeam === 0;
@@ -1529,21 +1551,16 @@ export class TableScene extends Phaser.Scene {
     const net = this.net;
     // 左下：这一副的复盘和称号（0.6.1，只看公开的出牌、名次和播过的接风）
     this.logMatch();
-    const history = this.ses.view().history;
-    const rc = dealRecap(r, history);
-    const recap = [
-      `炸弹 我方 ${rc.bombs[0]} · 对方 ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
-      rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
-    ];
-    // 名场面（0.7.1）：最精彩的两条
-    const hl = dealHighlights(r, history).slice(0, 2);
-    if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
     recap.forEach((line, i) => b.add(text(this, -370, 116 + i * 30, line, { size: TYPE.small, color: i === 2 ? COLOR.redDark : COLOR.ink, bold: i === 2, ox: 0 })));
-    const titleY = 116 + recap.length * 30 + 6;
-    dealTitles(r, history).forEach((t, i) => {
+    titles.forEach((t, i) => {
       b.add(text(this, -370, titleY + i * 30, this.titleLine(t, true), { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 }));
     });
-    const btn = new Button(this, rx, stakeLine ? 200 : 190, 240, 64, matchOver ? '结算' : net ? '继续' : '下一副', 'red', () => {
+    // 主按钮右挪，左边放"回大厅"：结算弹窗盖着顶栏的大厅按钮，任何界面两步内要能回大厅（仓库 AGENTS 第 2 节）
+    const by = stakeLine ? 200 : 190;
+    const lobby = new Button(this, rx - 126, by, 132, 56, lobbyName(), 'wood', () => this.lobbyFromSettle(), 'home');
+    b.add(lobby);
+    b.setData('lobby', lobby);
+    const btn = new Button(this, rx + 70, by, 210, 64, matchOver ? '结算' : net ? '继续' : '下一副', 'red', () => {
       if (matchOver) {
         m.close();
         this.overlay = null;
@@ -1828,9 +1845,10 @@ export class TableScene extends Phaser.Scene {
     put('lobby', this.lobbyBtn);
     put('rebuy', this.rebuyBtn);
     this.topIcons.forEach((b, i) => (out[`top${i}`] = { x: b.x, y: b.y, enabled: true, visible: b.visible }));
+    const top = this.settleConfirm ?? this.overlayModal;
     for (const k of ['ok', 'cancel']) {
-      const b = this.overlayModal?.body.getData(k) as Button | undefined;
-      if (b) out[k] = { x: b.x + this.overlayModal!.body.x, y: b.y + this.overlayModal!.body.y, enabled: true, visible: true };
+      const b = top?.body.getData(k) as Button | undefined;
+      if (b) out[k] = { x: b.x + top!.body.x, y: b.y + top!.body.y, enabled: true, visible: true };
     }
     for (const k of ['again', 'home', 'settleNow']) {
       const b = this.overlayModal?.body.getData(k) as Button | undefined;
@@ -1838,6 +1856,8 @@ export class TableScene extends Phaser.Scene {
     }
     const next = this.overlayModal?.body.getData('next') as Button | undefined;
     if (next && this.overlay === 'settle') out['next'] = { x: next.x + this.overlayModal!.body.x, y: next.y + this.overlayModal!.body.y, enabled: true, visible: true };
+    const lb = this.overlayModal?.body.getData('lobby') as Button | undefined;
+    if (lb && this.overlay === 'settle') out['settleLobby'] = { x: lb.x + this.overlayModal!.body.x, y: lb.y + this.overlayModal!.body.y, enabled: true, visible: true };
     return out;
   }
 

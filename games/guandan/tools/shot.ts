@@ -300,8 +300,8 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   notes.push(`单机互动：对阿强扔番茄，他${reply.length ? `回了 ${reply.join('、')}` : '装没看见'}`);
   // 点自己的头像发表情（0.11.0，docs/table-fun.md 第 1 节）
   await click(ctx, 'avatar0');
-  await until(ctx, '表情面板', "'me:sticker0' in g.controls()");
-  await click(ctx, 'me:sticker0');
+  await until(ctx, '表情面板', "'menu:sticker0' in g.controls()");
+  await click(ctx, 'menu:sticker0');
   await until(ctx, '表情发出去', "g.fxLog.includes('表情 0:smug')");
 
   // 点一张牌再点一次：选中又取消
@@ -340,6 +340,13 @@ async function smokeDesktop(browser: Browser): Promise<void> {
     await shot(ctx, '07-settle');
     const fx = await page.evaluate(() => window.__game!.fxLog);
     assert(fx.includes('头游'), '一副里要有头游印章');
+    // 结算框盖着顶栏的"大厅"：框里的"回大厅"先确认，点"算了"回到结算（0.11.1）
+    await click(ctx, 'settleLobby');
+    await until(ctx, '结算上的回大厅确认框', "'cancel' in g.controls()", 5000);
+    await page.waitForTimeout(300);
+    await click(ctx, 'cancel');
+    await until(ctx, '点算了回到结算', "!('cancel' in g.controls()) && g.overlay === 'settle'", 5000);
+    assert(new URL(page.url()).search !== '', '点算了不离开');
     await click(ctx, 'next');
     await until(ctx, '第二副开始', 'g.state().dealNo === 2');
     await page.waitForTimeout(1600);

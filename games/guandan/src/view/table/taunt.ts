@@ -35,6 +35,8 @@ const HINT_MS = 3000;
 const MENU_TAUNTS = ['就这？', '等着瞧', '等得花都谢了'] as const;
 /** 操作按钮（出牌、提示……）的顶边：菜单、表情面板的底边不能盖过它 */
 const BUTTON_TOP = BUTTON_Y - 36;
+/** 互动面板的顶边：搭档（上面那家）的名牌下沿再往下一点 */
+const PANEL_TOP = 192;
 
 /** 发出去的路子和屏蔽认人的办法：好友房、单机各给一份（TableScene 里） */
 export interface FunChannel {
@@ -152,45 +154,57 @@ export class Taunts {
     this.closeAll();
     this.tab = tab;
     const s = this.h.scene;
-    const [x0, y0, w, h] = [16, 62, 488, tab === 'taunt' ? 352 : 318];
+    // 贴左下：阿强（上家）头像和张数右边、搭档名牌下面、操作按钮上面，不盖任何人的头像（试玩评测 0.11.1）。
+    // 高度只有这一条缝，所以页签竖着放在左边，内容横着排
+    const left = this.h.seats[3]!.a;
+    const right = this.h.seats[1]!.a;
+    const x0 = left.ax + left.size / 2 + 66;
+    const y0 = PANEL_TOP;
+    const h = BUTTON_TOP - 8 - y0;
+    const w = Math.min(780, right.ax - right.size / 2 - 84 - x0);
     const root = s.add.container(0, 0).setDepth(4000);
     root.add(this.away(() => this.closePanel()));
     const g = s.add.graphics();
     g.fillStyle(0x2b1d14, 0.94).fillRoundedRect(x0, y0, w, h, 16);
     g.lineStyle(2, COLOR.gold, 0.9).strokeRoundedRect(x0, y0, w, h, 16);
     root.add(g);
+    const tx = x0 + 58;
     (['taunt', 'sticker', 'prop'] as Tab[]).forEach((t, i) => {
       const on = t === tab;
-      root.add(this.chip(x0 + 92 + i * 152, y0 + 26, 140, 36, ['短语', '表情', '道具'][i]!, on ? COLOR.red : 0x5a3a22, () => this.openPanel(t), `tab:${t}`));
+      root.add(this.chip(tx, y0 + 28 + i * 38, 96, 32, ['短语', '表情', '道具'][i]!, on ? COLOR.red : 0x5a3a22, () => this.openPanel(t), `tab:${t}`, TYPE.small));
     });
-    const top = y0 + 60;
+    const cx0 = x0 + 118;
+    const cw = w - 130;
     if (tab === 'taunt') {
-      // 客气话在前，嘲讽在后；3 列
+      // 客气话在前，嘲讽在后；4 列 5 行
       const all = [...EMOTES.map((t, i) => ({ t, id: i })), ...TAUNTS.map((t, i) => ({ t, id: TAUNT_BASE + i }))];
+      const col = cw / 4;
       all.forEach(({ t, id }, i) => {
-        root.add(this.chip(x0 + 84 + (i % 3) * 160, top + 14 + Math.floor(i / 3) * 34, 152, 30, t, id >= TAUNT_BASE ? 0x7a2a1e : 0x4a3220, () => this.pick(id), `emote${id}`, TYPE.small - 1));
+        root.add(this.chip(cx0 + col * ((i % 4) + 0.5), y0 + 26 + Math.floor(i / 4) * 30, col - 8, 26, t, id >= TAUNT_BASE ? 0x7a2a1e : 0x4a3220, () => this.pick(id), `emote${id}`, TYPE.small - 2));
       });
-      // 一键全部屏蔽 / 全部恢复（另外三个人的嘲讽、表情、道具；客气话照常）
+      // 一键全部屏蔽 / 全部恢复（另外三个人的嘲讽、表情、道具；客气话照常）：放在页签下面
       const all3 = [1, 2, 3].every((v) => this.isBlocked(v));
-      root.add(this.chip(x0 + w / 2, y0 + h - 22, 220, 28, all3 ? '全部恢复' : '全部屏蔽', 0x3a3a3a, () => {
+      root.add(this.chip(tx, y0 + 28 + 3 * 38, 96, 32, all3 ? '全部恢复' : '全部屏蔽', 0x3a3a3a, () => {
         for (const v of [1, 2, 3]) this.setBlocked(v, !all3);
         this.closeAll();
         this.toast(all3 ? '看得到大家的互动了' : '这一局不看任何人的互动');
-      }, 'blockAll', TYPE.small - 1));
+      }, 'blockAll', TYPE.small - 2));
     } else if (tab === 'sticker') {
+      const col = cw / 6;
       STICKERS.forEach((name, i) => {
-        root.add(this.pic(x0 + 50 + (i % 6) * 78, top + 50 + Math.floor(i / 6) * 96, 68, `fun:sticker:${name}`, () => this.pick(STICKER_BASE + i), `emote${STICKER_BASE + i}`));
+        root.add(this.pic(cx0 + col * ((i % 6) + 0.5), y0 + 46 + Math.floor(i / 6) * 76, 56, `fun:sticker:${name}`, () => this.pick(STICKER_BASE + i), `emote${STICKER_BASE + i}`));
       });
     } else {
-      // 扔给谁：三个人的名字，默认下家
+      // 先选人（默认下家），再选道具：一排 8 个
       [1, 2, 3].forEach((v, i) => {
-        root.add(this.chip(x0 + 92 + i * 152, top + 16, 140, 32, `扔给 ${seatName(v)}`, v === this.target ? 0x3a6a2a : 0x4a3220, () => {
+        root.add(this.chip(cx0 + 80 + i * 164, y0 + 28, 152, 30, `扔给 ${seatName(v)}`, v === this.target ? 0x3a6a2a : 0x4a3220, () => {
           this.target = v;
           this.openPanel('prop');
         }, `target${v}`, TYPE.small));
       });
+      const col = cw / 8;
       PROPS.forEach((name, i) => {
-        root.add(this.pic(x0 + 66 + (i % 4) * 118, top + 92 + Math.floor(i / 4) * 92, 70, `fun:prop:${name}`, () => this.pick(PROP_BASE + i, this.target), `emote${PROP_BASE + i}`, true));
+        root.add(this.pic(cx0 + col * (i + 0.5), y0 + 106, 56, `fun:prop:${name}`, () => this.pick(PROP_BASE + i, this.target), `emote${PROP_BASE + i}`, true));
       });
     }
     this.panel = root;
@@ -276,7 +290,7 @@ export class Taunts {
     g.lineStyle(2, COLOR.gold, 0.9).strokeRoundedRect(x, y, w, h, 14);
     root.add(g);
     STICKERS.forEach((name, i) => {
-      root.add(this.pic(x + 12 + cell * ((i % 6) + 0.5), y + 12 + cell * (Math.floor(i / 6) + 0.5), Math.min(60, cell - 16), `fun:sticker:${name}`, () => this.pick(STICKER_BASE + i), `me:sticker${i}`));
+      root.add(this.pic(x + 12 + cell * ((i % 6) + 0.5), y + 12 + cell * (Math.floor(i / 6) + 0.5), Math.min(60, cell - 16), `fun:sticker:${name}`, () => this.pick(STICKER_BASE + i), `menu:sticker${i}`));
     });
     this.stickers = root;
   }
