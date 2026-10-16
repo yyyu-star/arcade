@@ -24,14 +24,14 @@
 
 ### 手机和平板
 按仓库 AGENTS.md 第 4 节：高度按 `visualViewport` 算（`--app-h`，CSS 先 `100vh` 再 `100dvh`），转屏后补算一次；双指放大时不重排；
-四边用 `env(safe-area-inset-*, 0px)` 让出刘海；竖屏盖一层"横过来"。牌桌是 DOM + CSS，没有画布和 WebGL，
+四边用 `env(safe-area-inset-*, 0px)` 让出刘海；竖着拿是竖屏牌桌（DESIGN.md 8.2）。牌桌是 DOM + CSS，没有画布和 WebGL，
 "画布倍数封顶 2""整屏背景 1 倍""WebGL 上下文丢失"这三条不适用（DESIGN.md 8.1）。冒烟里模拟了省内存设备（CPU 降速 4 倍）和双指放大。
 
 ### 素材
 全部由本模块的代码生成，没有图片、音频、字体文件，没有第三方素材：
-- 四种花色是自己画的 SVG 路径（`src/view/art.ts`），牌面、牌背、筹码是 SVG 和 CSS 渐变；
-- 6 个电脑和"我"的头像按性格用 SVG 拼出来（脸、发型、眼镜、帽子）；
-- 绒布的细纹理是 SVG 的 `feTurbulence` 噪声；
+- 四种花色是自己画的 SVG 路径（`src/view/art.ts`）；人头牌的半身像（`art.ts`）、数字牌的中心花色（`src/view/pips.ts`）都是自己画的 SVG；
+- 10 个电脑和"我"的头像按性格用 SVG 拼出来（脸、发型、眼镜、帽子，加渐变光影）；
+- 毡面、桌边、牌背、筹码、按钮、背景是 CSS 渐变和内联 SVG（`src/view/skin.css`），没有图片文件；
 - 音效用 WebAudio 现合成（`src/view/sound.ts`）；文字用系统字体。
 
 ## 本地开发

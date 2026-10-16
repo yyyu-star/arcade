@@ -26,15 +26,19 @@ import { createFunLayer, PROPS, propSvg, showSticker, STICKERS, stickerSvg, thro
 import { loadFun, saveFun, suggest, TAUNTS } from './view/fun.ts';
 import { readLines, Reads, styleTag } from './view/reads.ts';
 import { RoomPanel } from './view/room.ts';
-import { funSound, play, setSound, unlockAudio } from './view/sound.ts';
+import { funSound, play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableView } from './view/table.ts';
 import { chips, personaName } from './view/text.ts';
 import { handOver, showcase, showcaseText, Tally } from './view/titles.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
+// 夜场牌桌的皮（0.10.0）：材质、光影、颜色都在这里，压在 style.css 的布局上
+import './view/skin.css';
 
 interface Settings {
   sound: boolean;
+  /** 总音量（0.10.0）：点喇叭在 大声 → 小声 → 静音 之间轮换，静音就是 sound 关掉 */
+  volume: number;
   fast: boolean;
   /** 单机一手打完，结果摆几秒后自己发下一手（默认关：试玩时大家要"点了才发"） */
   autoNext: boolean;
@@ -42,7 +46,7 @@ interface Settings {
 
 function loadSettings(): Settings {
   const s = readSettings() as Partial<Settings>;
-  return { sound: s.sound !== false, fast: s.fast === true, autoNext: s.autoNext === true };
+  return { sound: s.sound !== false, volume: s.volume === 0.35 ? 0.35 : 0.8, fast: s.fast === true, autoNext: s.autoNext === true };
 }
 function saveSettings(): void {
   patchSettings({ ...settings });
@@ -50,6 +54,7 @@ function saveSettings(): void {
 
 const settings = loadSettings();
 setSound(settings.sound);
+setVolume(settings.volume);
 const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const pace = (): number => (reduced ? 0.3 : settings.fast ? 0.55 : 1);
 /** 自动下一手：结果摆这么久再发（按动画快慢缩放） */
@@ -100,7 +105,10 @@ const tableView = new TableView(screen, {
   // 电脑说话配的表情包，和真人发的同一套（kit 的 STICKERS）
   sticker: (seat, id) => {
     const r = tableView.avatarRect(seat);
-    if (r && !fun.off && !mutedSeat(seat)) void showSticker(funLayer, onFace(r), id);
+    if (r && !fun.off && !mutedSeat(seat)) {
+      play('emote');
+      void showSticker(funLayer, onFace(r), id);
+    }
   },
   bombIcon: () => propSvg('bomb'),
 });
@@ -183,10 +191,9 @@ const roomPanel = new RoomPanel(stage, {
   leave: () => void leaveRoom(false),
   retry: () => online?.retry(),
 });
-el('div', 'rotate', app).innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="14" y="6" width="20" height="36" rx="3"/><path d="M38 30a14 14 0 0 1-10 10m10-10-4 1m4-1 1 4"/></svg><span>把手机横过来玩</span>';
 
-const getFit = watchViewport(app, stage, (f) => tableView.layout(f.w));
-tableView.layout(getFit().w);
+const getFit = watchViewport(app, stage, (f) => tableView.layout(f));
+tableView.layout(getFit());
 
 // ---------- 状态 ----------
 
@@ -268,6 +275,11 @@ function think(t: Table, seat: number): number {
 
 async function boot(): Promise<void> {
   window.addEventListener('pointerdown', unlockAudio, { once: true });
+  // 点按声（0.10.0）：界面上的按钮轻轻"嗒"一下；出牌按钮、喇叭自己有声音，不叠
+  document.addEventListener('click', (e) => {
+    const b = e.target instanceof Element ? e.target.closest('button') : null;
+    if (b && !b.disabled && !b.matches('.act, .qbet, .icon.sound')) play('tap');
+  });
   window.addEventListener('keydown', unlockAudio, { once: true });
   // 云存档先建好再画大厅（0.3.7）：画大厅要读本机记着的房间，按 cloud.userId() 认是不是这个账号的。
   // 原来先画大厅、后建 cloud，刷新前在好友房里的（记着房间）一打开页面就报错、大厅画不出来
@@ -820,7 +832,10 @@ function showFun(seat: number, id: number, to?: number): void {
   const from = tableView.avatarRect(seat);
   if (id < PROP_BASE) {
     const k = STICKERS[id - STICKER_BASE];
-    if (k && from) void showSticker(funLayer, onFace(from), k);
+    if (k && from) {
+      play('emote');
+      void showSticker(funLayer, onFace(from), k);
+    }
     return;
   }
   const prop = PROPS[id - PROP_BASE];
@@ -1033,10 +1048,12 @@ function drawTop(): void {
   setText(where, at ? `${solo!.session.practice ? `娱乐 · ${stakesOf(solo!.table.stakes).name}` : stakesOf(solo!.table.stakes).name} · 盲注 ${chips(solo!.table.sb)}/${chips(solo!.table.bb)}` : '');
   setText(walletChip, wallet && at && !solo!.session.practice ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', !at);
+  const loud = settings.volume > 0.5;
   soundBtn.innerHTML = settings.sound
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>'
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7${loud ? 'M18.5 6a8.5 8.5 0 0 1 0 12' : ''}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6m0-6-5 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
-  soundBtn.setAttribute('aria-label', settings.sound ? '关声音' : '开声音');
+  soundBtn.setAttribute('aria-label', !settings.sound ? '静音（点一下开大声）' : loud ? '大声（点一下调小）' : '小声（点一下静音）');
+  soundBtn.title = soundBtn.getAttribute('aria-label')!;
   speedBtn.textContent = settings.fast ? '快' : '慢';
   speedBtn.setAttribute('aria-label', settings.fast ? '动画：快' : '动画：正常');
   toggle(speedBtn, 'sel', settings.fast);
@@ -1054,8 +1071,13 @@ function drawCloud(): void {
 }
 
 soundBtn.addEventListener('click', () => {
-  settings.sound = !settings.sound;
+  // 大声 → 小声 → 静音 → 大声
+  if (!settings.sound) Object.assign(settings, { sound: true, volume: 0.8 });
+  else if (settings.volume > 0.5) settings.volume = 0.35;
+  else settings.sound = false;
   setSound(settings.sound);
+  setVolume(settings.volume);
+  if (settings.sound) play('tap');
   saveSettings();
   drawTop();
 });

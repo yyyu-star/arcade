@@ -6,15 +6,14 @@
  * - 舞台按 layout.fit 缩放，safe-area 由 CSS 的 env(safe-area-inset-*, 0px) 让出来。
  * 牌桌是 DOM + CSS，没有画布和 WebGL，"画布倍数封顶 2""WebGL 上下文丢失"那两条不适用（DESIGN.md 8.1）。
  */
-import { fit } from './layout.ts';
+import { fit, type Geo } from './layout.ts';
 
-export interface Fit {
-  w: number;
+export interface Fit extends Geo {
   scale: number;
 }
 
 export function watchViewport(app: HTMLElement, stage: HTMLElement, onFit: (f: Fit) => void): () => Fit {
-  let last: Fit = { w: 960, scale: 1 };
+  let last: Fit = { w: 960, h: 540, tall: false, scale: 1 };
   let timer = 0;
 
   const measure = (): void => {
@@ -26,9 +25,12 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onFit: (f: F
     const r = app.getBoundingClientRect();
     if (r.width < 10 || r.height < 10) return;
     const f = fit(r.width, r.height);
-    if (Math.abs(f.w - last.w) < 0.5 && Math.abs(f.scale - last.scale) < 0.001) return;
+    if (Math.abs(f.w - last.w) < 0.5 && Math.abs(f.h - last.h) < 0.5 && f.tall === last.tall && Math.abs(f.scale - last.scale) < 0.001) return;
     last = f;
     stage.style.width = `${f.w}px`;
+    stage.style.height = `${f.h}px`;
+    // 竖屏（0.10.0）：手机竖着拿，换竖的牌桌（style.css 的 .stage.tall、layout.ts 的竖屏位置）
+    stage.classList.toggle('tall', f.tall);
     stage.style.transform = `translate(-50%, -50%) scale(${f.scale})`;
     // 一个屏幕像素合几个设计单位（大屏是 1）：小字的下限、触屏按钮能点的范围按它放大（style.css 的 --fs-1..3、--hit）。
     // 写在根上，根上那几个变量才算得到

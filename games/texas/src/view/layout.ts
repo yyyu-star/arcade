@@ -11,9 +11,34 @@ export interface Pt {
   y: number;
 }
 
-/** 桌子：椭圆的中心和半轴（设计单位，宽按舞台宽算） */
-export function felt(w: number): { cx: number; cy: number; rx: number; ry: number } {
-  return { cx: w / 2, cy: 250, rx: w / 2 - 120, ry: 168 };
+/**
+ * 竖屏（0.10.0）：手机竖着拿时舞台宽 540、高随屏幕在 810–1170 之间变。桌子是竖的椭圆，别人沿桌边一圈，
+ * 我和操作区在下半屏（拇指够得着）；顶上两行是顶栏和"第几手、歇一手、嘲讽"。
+ */
+export const TALL_W = 540;
+export const TALL_MIN_H = 810;
+export const TALL_MAX_H = 1170;
+/** 竖屏顶上留给顶栏和第二行按钮的高度，桌子从这里往下 */
+const TALL_TOP = 150;
+/** 竖屏底下留给操作区（加注面板展开时最高）的高度：我的名牌下沿要在它上面 */
+const TALL_BOTTOM = 310;
+
+/** 舞台的样子：宽、高、是不是竖屏 */
+export interface Geo {
+  w: number;
+  h: number;
+  tall: boolean;
+}
+
+/** 我的座位的点（名牌上沿往上一点，各部件按它摆，style.css 的 .seat.me） */
+const meY = (g: Geo): number => (g.tall ? g.h - TALL_BOTTOM - 62 : ME_Y);
+
+/** 桌子：椭圆的中心和半轴（设计单位） */
+export function felt(g: Geo): { cx: number; cy: number; rx: number; ry: number } {
+  if (!g.tall) return { cx: g.w / 2, cy: 250, rx: g.w / 2 - 120, ry: 168 };
+  // 竖屏：下沿在我的底牌上面（底牌顶到点上方约 91）
+  const bottom = meY(g) - 100;
+  return { cx: g.w / 2, cy: (TALL_TOP + bottom) / 2, rx: 200, ry: (bottom - TALL_TOP) / 2 };
 }
 
 /**
@@ -22,7 +47,7 @@ export function felt(w: number): { cx: number; cy: number; rx: number; ry: numbe
  */
 const ME_Y = 470;
 
-/** 每种人数的座位位置：[x 占舞台宽的比例, y]，第 0 个是我 */
+/** 横屏每种人数的座位位置：[x 占舞台宽的比例, y]，第 0 个是我 */
 const SLOTS: Record<number, [number, number][]> = {
   2: [[0.5, ME_Y], [0.5, 66]],
   3: [[0.5, ME_Y], [0.24, 92], [0.76, 92]],
@@ -35,44 +60,74 @@ const SLOTS: Record<number, [number, number][]> = {
   9: [[0.5, ME_Y], [0.07, 335], [0.07, 190], [0.2, 78], [0.39, 60], [0.61, 60], [0.8, 78], [0.93, 190], [0.93, 335]],
 };
 
-/** 第 seat 号座位在舞台上的位置（me 是我坐的座位，画在正下方） */
-export function seatPos(seat: number, me: number, size: number, w: number): Pt {
-  const [fx, y] = SLOTS[size]![(seat - me + size) % size]!;
-  return { x: fx * w, y };
+/**
+ * 竖屏别人的座位：沿桌边一圈，从我左下方开始顺时针（和横屏同一个方向），到我右下方为止。
+ * 角度 90° 是正下方（我）；别人最多从 145° 排到 395°，人少时往上收（2 人桌对面就在正上方）
+ */
+function ringPos(k: number, n: number, g: Geo): Pt {
+  const f = felt(g);
+  const span = Math.min(250, 60 * (n - 1));
+  const from = 270 - span / 2;
+  const deg = n === 1 ? 270 : from + (k * span) / (n - 1);
+  const a = (deg * Math.PI) / 180;
+  // 座位的点在桌边稍往里：头像压着桌边，名牌在桌外那一侧
+  return { x: Math.round(f.cx + (f.rx + 8) * Math.cos(a)), y: Math.round(f.cy + (f.ry + 6) * Math.sin(a)) };
 }
 
+/** 第 seat 号座位在舞台上的位置（me 是我坐的座位，画在正下方） */
+export function seatPos(seat: number, me: number, size: number, g: Geo): Pt {
+  const k = (seat - me + size) % size;
+  if (g.tall) return k === 0 ? { x: g.w / 2, y: meY(g) } : ringPos(k - 1, size - 1, g);
+  const [fx, y] = SLOTS[size]![k]!;
+  return { x: fx * g.w, y };
+}
+
+/** 顶上一排的座位：动作签、看对手的卡放在下面 */
+export const isTop = (p: Pt, g: Geo): boolean => (g.tall ? p.y < felt(g).cy - felt(g).ry * 0.75 : p.y < 150);
+
 /** 下注的筹码放在座位和桌子中心之间（我的在底牌正上方） */
-export function betPos(p: Pt, w: number, mine: boolean): Pt {
-  const f = felt(w);
+export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
+  const f = felt(g);
   // 我的：底边在底牌上面一点（.bet.mine 按底边摆），往上长不碰底池
   if (mine) return { x: f.cx, y: p.y - 100 };
-  const k = 0.42;
+  const k = g.tall ? 0.5 : 0.42;
   return { x: p.x + (f.cx - p.x) * k, y: p.y + (f.cy - p.y) * k + 6 };
 }
 
 /** 庄家按钮：在下注的位置旁边偏一点 */
-export function buttonPos(p: Pt, w: number, mine: boolean): Pt {
-  const b = betPos(p, w, mine);
+export function buttonPos(p: Pt, g: Geo, mine: boolean): Pt {
+  const b = betPos(p, g, mine);
   // 别人的放在下注那摞筹码的左边（数字在右边），不压数字
   return mine ? { x: b.x - 96, y: b.y - 12 } : { x: b.x - 64, y: b.y };
 }
 
-/** 公共牌：5 张的中心 */
-export const boardPos = (w: number, i: number): Pt => ({ x: w / 2 + (i - 2) * 66, y: 232 });
+/** 公共牌：5 张的中心（竖屏桌子窄，挨得近一点） */
+export const boardPos = (g: Geo, i: number): Pt => ({ x: g.w / 2 + (i - 2) * (g.tall ? 62 : 66), y: felt(g).cy - 18 });
 /** 池子在公共牌下面（0.1.1：原来在上面，和顶上座位的下注、庄家按钮挤在一起） */
-export const potPos = (w: number): Pt => ({ x: w / 2, y: 304 });
+export const potPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 54 });
 /** 一手的结果条：公共牌和池子下面（0.1.1：放在上面会盖住顶上座位的庄家按钮），按上边摆 */
-export const resultPos = (w: number): Pt => ({ x: w / 2, y: 326 });
-/** 牌堆：发牌从这里出，弃的牌、收的牌飞回这里。在桌子正中（公共牌的位置）；放在偏上会压住顶上座位的名牌 */
-export const deckPos = (w: number): Pt => ({ x: w / 2, y: 232 });
+export const resultPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 76 });
+/** 牌堆：发牌从这里出，弃的牌、收的牌飞回这里。在桌子正中（公共牌的位置） */
+export const deckPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy - 18 });
 
-/** 按看得见的区域算舞台的宽和缩放 */
-export function fit(availW: number, availH: number): { w: number; scale: number } {
+/**
+ * 按看得见的区域算舞台：高比宽大 1.5 倍以上（手机竖着拿）用竖屏舞台，否则横屏（平板竖着也用横屏，上下留边）
+ */
+export function fit(availW: number, availH: number): Geo & { scale: number } {
+  if (availH / availW >= 1.5) {
+    let scale = availW / TALL_W;
+    let h = availH / scale;
+    if (h < TALL_MIN_H) {
+      scale = availH / TALL_MIN_H;
+      h = TALL_MIN_H;
+    }
+    return { w: TALL_W, h: Math.min(TALL_MAX_H, h), tall: true, scale };
+  }
   let scale = availH / STAGE_H;
   let w = availW / scale;
   if (w < STAGE_MIN_W) {
     scale = availW / STAGE_MIN_W;
     w = STAGE_MIN_W;
   }
-  return { w: Math.min(STAGE_MAX_W, w), scale };
+  return { w: Math.min(STAGE_MAX_W, w), h: STAGE_H, tall: false, scale };
 }

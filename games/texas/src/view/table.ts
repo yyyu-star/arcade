@@ -16,7 +16,7 @@ import type { Action, HandResult, LogEntry, Owner, Status } from '../core/table.
 import type { View } from '../core/view.ts';
 import { avatarSvg, chipPile, HUMAN_BG, makeCard, ME_LOOK, setCard } from './art.ts';
 import { el, setText, toggle } from './dom.ts';
-import { betPos, boardPos, buttonPos, deckPos, felt, potPos, resultPos, seatPos, type Pt } from './layout.ts';
+import { betPos, boardPos, buttonPos, deckPos, felt, isTop, potPos, resultPos, seatPos, type Geo, type Pt } from './layout.ts';
 import { play } from './sound.ts';
 import type { StickerId } from 'arcade-kit/fun';
 import { bluffer, putIn, stickerFor, Talk, type Moment } from './talk.ts';
@@ -134,7 +134,7 @@ export class TableView {
   /** 顶上一排刚赢的：名字那一行先写赢数（0.3.1） */
   private readonly won = new Map<number, string>();
   private me = 0;
-  private w = 960;
+  private g: Geo = { w: 960, h: 540, tall: false };
   private frame: Frame | null = null;
   /** 看对手的小卡（0.2.2）：同一时间一张 */
   private card: HTMLDivElement | null = null;
@@ -245,30 +245,32 @@ export class TableView {
     this.frame = null;
     this.won.clear();
     this.seats = Array.from({ length: size }, (_, i) => this.makeSeat(i));
-    this.layout(this.w);
+    this.layout(this.g);
   }
 
-  layout(w: number): void {
-    this.w = w;
-    const f = felt(w);
+  layout(g: Geo): void {
+    this.g = g;
+    const w = g.w;
+    const f = felt(g);
     Object.assign(this.feltEl.style, { left: `${f.cx - f.rx}px`, top: `${f.cy - f.ry}px`, width: `${f.rx * 2}px`, height: `${f.ry * 2}px` });
-    place(this.potEl, potPos(w));
-    place(this.resultEl, resultPos(w));
-    this.boardCards.forEach((c, i) => place(c, boardPos(w, i)));
+    place(this.potEl, potPos(g));
+    place(this.resultEl, resultPos(g));
+    this.boardCards.forEach((c, i) => place(c, boardPos(g, i)));
     const size = this.seats.length;
     this.seats.forEach((s, i) => {
-      const p = seatPos(i, this.me, size, w);
+      const p = seatPos(i, this.me, size, g);
       place(s.root, p);
-      place(s.bet, betPos(p, w, i === this.me));
+      place(s.bet, betPos(p, g, i === this.me));
       // 我的下注按底边摆、往上长：筹码多了也不压到自己的底牌
       s.bet.classList.toggle('mine', i === this.me);
       // 别人的底牌放在头像朝桌子中间的那一侧，不压名牌
       const side = p.x > w / 2 + 1 ? 'right' : p.x < w / 2 - 1 ? 'left' : 'mid';
       s.root.classList.toggle('left', side === 'left');
       s.root.classList.toggle('right', side === 'right');
-      s.root.classList.toggle('top', p.y < 150);
+      const top = isTop(p, g);
+      s.root.classList.toggle('top', top);
       // 顶上一排贴着左边的（6、7 人桌左上角）：动作标签放头像左边会出屏（0.3.1，线上 1280×800 实测），改放头像正上方
-      s.root.classList.toggle('edge', p.y < 150 && p.x < 150);
+      s.root.classList.toggle('edge', top && p.x < 150);
     });
     if (this.frame) this.draw(this.frame);
   }
@@ -304,7 +306,7 @@ export class TableView {
         play('fold');
         await this.muck(seat, f);
       } else if (put > 0) {
-        play('chip');
+        play(log?.allin ? 'allin' : 'chip');
         await this.fly(chipNode(put), this.seatPt(seat), this.betPt(seat), MS.chip);
         s.stack -= put;
         s.bet += put;
@@ -350,7 +352,7 @@ export class TableView {
       const u = r.uncalled;
       f.pots = shave(f.pots, u.amount);
       this.draw(f);
-      await this.fly(chipNode(u.amount), potPos(this.w), this.seatPt(u.seat), MS.chip);
+      await this.fly(chipNode(u.amount), potPos(this.g), this.seatPt(u.seat), MS.chip);
       f.seats[u.seat]!.stack += u.amount;
       this.draw(f);
     }
@@ -363,7 +365,7 @@ export class TableView {
         s.hand = showName(log, sh);
         if (s.hand.endsWith('诈唬')) bluffs.push(sh.seat);
         this.draw(f);
-        play('flip');
+        play('reveal');
         await this.pause(MS.reveal);
       }
     }
@@ -375,7 +377,7 @@ export class TableView {
     for (const [k, pot] of r.pots.entries()) {
       await Promise.all(
         pot.winners.map(async (w) => {
-          await this.fly(chipNode(w.won, 'big'), potPos(this.w), this.seatPt(w.seat), MS.potFly, 1, r.pots.length > 1 ? potName(k, r.pots.length) : '');
+          await this.fly(chipNode(w.won, 'big'), potPos(this.g), this.seatPt(w.seat), MS.potFly, 1, r.pots.length > 1 ? potName(k, r.pots.length) : '');
           f.seats[w.seat]!.stack += w.won;
           f.seats[w.seat]!.win = true;
         }),
@@ -388,6 +390,8 @@ export class TableView {
     this.draw(f);
     const mine = r.pots.reduce((a, p) => a + (p.winners.find((x) => x.seat === this.me)?.won ?? 0), 0);
     if (mine > 0) play('win');
+    // 摊牌我亮了牌却没赢到：轻轻两个往下的音（弃牌认输不响）
+    else if (!r.byFold && r.shown.some((x) => x.seat === this.me)) play('lose');
     const winners = new Set(r.pots.flatMap((p) => p.winners.map((x) => x.seat)));
     for (const seat of winners) {
       this.float(seat, `+${chips(r.pots.reduce((a, p) => a + (p.winners.find((x) => x.seat === seat)?.won ?? 0), 0))}`);
@@ -439,7 +443,7 @@ export class TableView {
     b.setAttribute('aria-label', '催他一下');
     b.innerHTML = this.opts.bombIcon?.() ?? '';
     // 头像右上角（顶上的座位放右下，免得出画面）
-    place(b, { x: p.x + 34, y: p.y + (p.y < 150 ? 30 : -34) });
+    place(b, { x: p.x + 34, y: p.y + (isTop(p, this.g) ? 30 : -34) });
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       onClick();
@@ -464,7 +468,7 @@ export class TableView {
     const p = this.seatPt(seat);
     // 同一个人上一句还没收：换成新的，不叠
     this.fx.querySelector(`.speech[data-seat="${seat}"]`)?.remove();
-    const side = seat === this.me ? 'left' : p.y < 150 ? 'below' : p.x < felt(this.w).cx ? 'right' : 'left';
+    const side = seat === this.me ? 'left' : isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
     const e = el('div', `speech ${side}`, this.fx, text);
     e.dataset.seat = String(seat);
     play('taunt');
@@ -504,7 +508,7 @@ export class TableView {
       s.win = false;
       s.tag = '';
     });
-    f.board.forEach((_, i) => out.push(this.flyFrom(this.boardCards[i]!, boardPos(this.w, i), deckPos(this.w), MS.clear)));
+    f.board.forEach((_, i) => out.push(this.flyFrom(this.boardCards[i]!, boardPos(this.g, i), deckPos(this.g), MS.clear)));
     f.board = [];
     f.result = null;
     f.pots = [];
@@ -537,6 +541,7 @@ export class TableView {
         f.seats[i]!.tag = i === sb?.seat ? `小盲 ${chips(b)}` : i === bb?.seat ? `大盲 ${chips(b)}` : '';
       }),
     );
+    play('shuffle');
     if (blinds.some((b) => b > 0)) play('chip');
     this.draw(f);
     // 从按钮下家开始顺时针，一人一张发两圈；牌从庄家那里发出
@@ -546,7 +551,7 @@ export class TableView {
       const i = (v.button + k) % size;
       if (dealt[i]) order.push(i);
     }
-    const from = buttonPos(this.seatPt(v.button), this.w, v.button === this.me);
+    const from = buttonPos(this.seatPt(v.button), this.g, v.button === this.me);
     const target = frameOf(v);
     const flights: Promise<void>[] = [];
     let n = 0;
@@ -588,8 +593,8 @@ export class TableView {
     }
     for (const [i] of bets) f.seats[i]!.bet = 0;
     this.draw(f);
-    play('chip');
-    await Promise.all(bets.map(([i, b]) => this.fly(chipNode(b), this.betPt(i), potPos(this.w), MS.collect)));
+    play('collect');
+    await Promise.all(bets.map(([i, b]) => this.fly(chipNode(b), this.betPt(i), potPos(this.g), MS.collect)));
     f.pots = pots.length ? [...pots] : [f.pots.reduce((a, x) => a + x, 0) + bets.reduce((a, [, b]) => a + b, 0)];
     this.draw(f);
     bump(this.potEl);
@@ -600,7 +605,7 @@ export class TableView {
     for (let i = from; i < board.length; i++) {
       await this.pause((i < 3 ? (i === from ? MS.street * 0.5 : MS.flopGap) : MS.street) * slow);
       play('card');
-      await this.fly(backNode('board'), deckPos(this.w), boardPos(this.w, i), MS.boardFly);
+      await this.fly(backNode('board'), deckPos(this.g), boardPos(this.g, i), MS.boardFly);
       f.board = board.slice(0, i + 1);
       this.draw(f);
       play('flip');
@@ -618,7 +623,7 @@ export class TableView {
     if (!quiet) s.status = 'folded';
     this.draw(f);
     const flights = [];
-    for (let k = 0; k < n; k++) flights.push(this.fly(backNode(seat === this.me ? 'mine' : 'small'), this.holePt(seat, k), deckPos(this.w), MS.muck, 0.4));
+    for (let k = 0; k < n; k++) flights.push(this.fly(backNode(seat === this.me ? 'mine' : 'small'), this.holePt(seat, k), deckPos(this.g), MS.muck, 0.4));
     await Promise.all(flights);
   }
 
@@ -689,16 +694,16 @@ export class TableView {
   // ---------- 位置 ----------
 
   private seatPt(i: number): Pt {
-    return seatPos(i, this.me, this.seats.length, this.w);
+    return seatPos(i, this.me, this.seats.length, this.g);
   }
   private betPt(i: number): Pt {
-    return betPos(this.seatPt(i), this.w, i === this.me);
+    return betPos(this.seatPt(i), this.g, i === this.me);
   }
   /** 底牌第 k 张的中心（和 style.css 里 .hole 的摆法对上） */
   private holePt(i: number, k: number): Pt {
     const p = this.seatPt(i);
     if (i === this.me) return { x: p.x + (k ? 36 : -36), y: p.y - 46 };
-    const side = p.x > this.w / 2 + 1 ? -1 : 1;
+    const side = p.x > this.g.w / 2 + 1 ? -1 : 1;
     return { x: p.x + side * 54 + (k ? 8 : -8), y: p.y - 6 };
   }
 
@@ -738,7 +743,7 @@ export class TableView {
     }
     // 贴着座位朝桌心那一边摆，不盖住这个人自己的头像和名字：顶上的往下，两边的往里
     const p = this.seatPt(seat);
-    const side = p.y < 150 ? 'below' : p.x < felt(this.w).cx ? 'right' : 'left';
+    const side = isTop(p, this.g) ? 'below' : p.x < felt(this.g).cx ? 'right' : 'left';
     card.classList.add(side);
     place(card, side === 'below' ? { x: p.x, y: p.y + 100 } : { x: p.x + (side === 'right' ? 80 : -80), y: p.y });
     this.card = card;
@@ -797,7 +802,7 @@ export class TableView {
     });
     const b = f.button >= 0 && f.button < this.seats.length ? f.button : -1;
     toggle(this.dealer, 'hidden', b < 0);
-    if (b >= 0) place(this.dealer, buttonPos(this.seatPt(b), this.w, b === this.me));
+    if (b >= 0) place(this.dealer, buttonPos(this.seatPt(b), this.g, b === this.me));
     f.seats.forEach((s, i) => this.drawSeat(this.seats[i]!, s, i, f));
     this.drawResult(f);
   }
@@ -827,7 +832,9 @@ export class TableView {
     if (this.resultEl.dataset.k !== key) {
       this.resultEl.dataset.k = key;
       const lines = resultLines(r, (i) => this.nameOf(i, f.seats[i]!), this.me);
-      this.resultEl.innerHTML = lines.map((l) => `<div class="r-line${l.mine ? ' mine' : ''}">${l.html}</div>`).join('');
+      // 赢家横幅（0.10.0）：左边圆框里是赢家的头像（分池、平分时放第一个池子的第一个赢家）
+      const face = this.seats[r.pots[0]?.winners[0]?.seat ?? -1]?.avatar.innerHTML ?? '';
+      this.resultEl.innerHTML = (face ? `<span class="r-face">${face}</span>` : '') + `<div class="r-lines">${lines.map((l) => `<div class="r-line${l.mine ? ' mine' : ''}">${l.html}</div>`).join('')}</div>`;
       toggle(this.resultEl, 'mine', lines.some((l) => l.mine));
       this.resultEl.classList.remove('on');
       void this.resultEl.offsetWidth;
