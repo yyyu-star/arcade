@@ -93,9 +93,12 @@ const fmt = (xs: { vpip: number; pfr: number }[]): string =>
   xs.flatMap((x, i) => (Number.isNaN(x.vpip) ? [] : [`${PERSONAS[i]!.name} ${x.vpip}/${x.pfr}`])).join('、');
 
 describe('电脑的难度', () => {
-  it('跟注站、乱全下在小桌和豪华桌都输得很多', () => {
+  it('跟注站、乱全下在小桌和豪华桌都输得很多；新手档对跟注站没那么狠', () => {
     for (const st of ['small', 'lux'] as const) {
-      expect(bb100(st, 'station', 6), st).toBeLessThan(-300);
+      const station = bb100(st, 'station', 6);
+      expect(station, st).toBeLessThan(-300);
+      // 0.8.0：新手档价值注小、不连开三枪，跟注站长期约 −760（原来 −2,220），6 场的标准误约 ±130（DESIGN.md 4.9）
+      if (st === 'small') expect(station).toBeGreaterThan(-1_300);
       expect(bb100(st, 'jammer', 6), st).toBeLessThan(-150);
     }
   });

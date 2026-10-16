@@ -54,7 +54,9 @@ export function decide(v: View, r: RandomStream): Action {
   // 0.3.0 起按次数连乘（原来是线性的 read × 次数）：read 调大以后，对随机牌还有四五成的高牌、空气碰到下注就该弃，不再每手跟到摊牌
   let eq = raw;
   // 越往后的下注越说明有牌：转牌的折扣 ×1.15、河牌 ×1.3（河牌对随机牌的胜率最虚，空气也常有四五成）
-  const read = Math.floor((k.read * (1000 + 150 * (v.board.length - 3))) / 1000);
+  let read = Math.floor((k.read * (1000 + 150 * (v.board.length - 3))) / 1000);
+  // 记住上一手（0.8.0，大桌以上）：下注的人上一手亮出来的是空气，不那么信他
+  if (!pre && raises > 0 && k.memory && showedAir(v, lastAggressor(v, [streetStart(v), v.log.length]))) read = Math.floor((read * (1000 - k.memory)) / 1000);
   if (!pre) for (let i = 0; i < Math.min(raises, 3); i++) eq = Math.floor((eq * (1000 - read)) / 1000);
   const rel = eq * (opp + 1);
   const pos = positionBonus(v, me);
@@ -87,15 +89,18 @@ export function decide(v: View, r: RandomStream): Action {
     return lg.check ? { t: 'check' } : { t: 'fold' };
   }
 
+  // 新手不连开三枪（0.8.0）：翻牌、转牌都是我下的注，河牌没人下注时有牌也多半只过牌（只管价值注，诈唬照常）
+  const third = !pre && v.board.length === 5 && raises === 0 && k.third > 0 && lg.check && streak(v, me) >= 2 && r.below(1000) < k.third;
+
   // 大牌：加注（偶尔慢打）
-  if (lg.raise && rel >= raiseAt + k.pre * raises - pos) {
+  if (lg.raise && !third && rel >= raiseAt + k.pre * raises - pos) {
     const slow = eq >= 800 && v.board.length < 5 && r.below(1000) < p.slow;
-    if (!slow) return raise(v, p, eq, raises, r);
+    if (!slow) return raise(v, p, k, eq, raises, r);
   }
 
   if (pre) {
     // 再加注：凶的人（阿飙、虎子）面对一次加注，能跟的牌偶尔再加一手，不只拿大牌再加
-    if (lg.raise && raises === 1 && rel >= callAt - pos && r.below(1000) < Math.floor((p.threebet * (1000 + 3 * form[1]!)) / 1000)) return raise(v, p, eq, raises, r);
+    if (lg.raise && raises === 1 && rel >= callAt - pos && r.below(1000) < Math.floor((p.threebet * (1000 + 3 * form[1]!)) / 1000)) return raise(v, p, k, eq, raises, r);
     if (lg.check) return { t: 'check' };
     let ok: boolean;
     if (raises === 0) {
@@ -129,9 +134,13 @@ export function decide(v: View, r: RandomStream): Action {
       // 中等牌（比这一桌平均强）也常先下一注，不全靠过牌看牌：有来有回，弱牌被打走，不是每手都摊牌
       // 对手多时收着：每多一个对手少 80‰（不往 8 个人里薄打）
       // 对跟注站（0.5.0）：有点牌就薄薄下一注（他会跟），门槛放低；新手偶尔手软，该下的只过牌
+      let size = p.size;
       if (rel >= THIN + jit - pos - Math.floor((opp2.thin * k.adapt) / 1000)) {
+        // 不连开第三枪只管有牌的价值注；诈唬照性格（拦掉诈唬反倒便宜了会弃牌的人）
+        if (third) return { t: 'check' };
         if (k.slip && r.below(1000) < k.slip) return { t: 'check' };
         chance = Math.max(chance, THIN_BET + p.bluff - 80 * (opp - 1));
+        size = Math.floor((p.size * k.value) / 1000);
       }
       // 河牌没牌、没人下注：爱诈唬的人常在这儿偷一把（被跟到就亮出"诈唬"）
       else if (river && categoryOf(evalCards([...v.hole, ...v.board])) === HIGH_CARD)
@@ -140,7 +149,7 @@ export function decide(v: View, r: RandomStream): Action {
       if (r.below(1000) < chance) {
         // 河牌上连着打过来的，偶尔全下吓人（筹码不到池子 3 倍才推，不然下 1.25 池的重注）
         if (river && mine && r.below(1000) < p.shove) return seat.stack <= 3 * v.pot ? { t: 'allin' } : betTo(v, Math.floor((v.pot * 1250) / 1000));
-        return betTo(v, Math.floor((v.pot * p.size * (600 + 100 * r.below(5))) / 1_000_000));
+        return betTo(v, Math.floor((v.pot * size * (600 + 100 * r.below(5))) / 1_000_000));
       }
     }
     return { t: 'check' };
@@ -234,6 +243,31 @@ function lastAggressor(v: View, [from, to]: [number, number]): number {
   return who;
 }
 
+/** 这个人上一手摊牌时亮出来的是高牌（什么都没成）。只看 lastHand.shown（亮出来的牌，大家都看到） */
+function showedAir(v: View, seat: number): boolean {
+  if (seat < 0 || !v.lastHand) return false;
+  const x = v.lastHand.shown.find((s) => s.seat === seat);
+  return !!x && categoryOf(x.value) === HIGH_CARD;
+}
+
+/** 这一轮在操作记录里从哪儿开始（最后一次发公共牌之后；翻牌前从头） */
+function streetStart(v: View): number {
+  for (let i = v.log.length - 1; i >= 0; i--) if (v.log[i]!.seat < 0) return i + 1;
+  return 0;
+}
+
+/** 翻牌以后连着几轮最后下注、加注的是我（到上一轮为止，往前数，断了就停） */
+function streak(v: View, me: number): number {
+  const marks = v.log.flatMap((e, i) => (e.seat < 0 ? [i] : []));
+  let n = 0;
+  // 第 j 轮（j ≥ 1 是翻牌以后）在 marks[j - 1] + 1 到 marks[j] 之间；最后一个 mark 之后是这一轮
+  for (let j = marks.length - 1; j >= 1; j--) {
+    if (lastAggressor(v, [marks[j - 1]! + 1, marks[j]!]) !== me) break;
+    n++;
+  }
+  return n;
+}
+
 /** 这一轮有过几次下注或加注（盲注不算） */
 function raisesThisStreet(v: View): number {
   let n = 0;
@@ -290,7 +324,7 @@ function positionBonus(v: View, me: number): number {
 }
 
 /** 加注的尺度带一点随机，像人：不总是同一个数 */
-function raise(v: View, p: Persona, eq: number, raises: number, r: RandomStream): Action {
+function raise(v: View, p: Persona, k: Skill, eq: number, raises: number, r: RandomStream): Action {
   const lg = v.legal!;
   let to: number;
   if (v.board.length === 0) {
@@ -302,7 +336,8 @@ function raise(v: View, p: Persona, eq: number, raises: number, r: RandomStream)
     // 翻牌后：性格的基本尺度乘 0.7–1.3（五档随机挑，不总是同一个数）；很大的牌再大一点
     // 河牌上的大牌，凶的人偶尔直接全下
     if (v.board.length === 5 && eq >= 900 && r.below(1000) < p.shove) return { t: 'allin' };
-    const size = Math.floor((p.size * (700 + 150 * r.below(5))) / 1000) + (eq >= 850 ? 250 : 0);
+    // 新手档（0.8.0，功力的 value）：尺度小一点，很大的牌也不再加码
+    const size = Math.floor((Math.floor((p.size * k.value) / 1000) * (700 + 150 * r.below(5))) / 1000) + (eq >= 850 && k.value >= 1000 ? 250 : 0);
     to = v.currentBet + Math.floor(((v.pot + lg.call) * size) / 1000);
   }
   return betTo(v, to);

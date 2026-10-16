@@ -83,20 +83,32 @@ export interface Skill {
   soft: number;
   /** "手软"（0.5.0，只有新手档）：翻牌后拿着中等牌被人下注时偶尔就弃了、该薄薄下一注时偶尔只过牌（‰）。给新手场的人留点赢的感觉 */
   slip: number;
+  /**
+   * 翻牌后价值下注、加注的尺度（0.8.0，‰，1000 = 照性格）：新手档小一点，面对一路跟到底的人少输一些（DESIGN.md 4.9）。
+   * 只管有牌时的下注，诈唬照性格
+   */
+  value: number;
+  /** 翻牌、转牌都是我下的注，河牌有牌也只过牌的概率（0.8.0，‰）：新手不会连开三枪。0 = 照常 */
+  third: number;
+  /**
+   * 记住上一手亮出来的牌（0.8.0，‰，大桌以上）：这一轮下注的人上一手摊牌亮的是高牌（空气也跟到底，或者诈唬被抓），
+   * 这一手对他下注的折扣（read）少打这么多。只看 lastHand.shown，是大家都看到的牌（DESIGN.md 4.9）
+   */
+  memory: number;
   /** 看对手的打法用几成（0.5.0，‰）：对紧的人多偷、对跟注站少诈唬多薄打、对爱加注的人放宽跟注。新手不看 */
   adapt: number;
   /** 按筹码深浅打（0.5.0）：剩的不到 SHORT_BB 个大盲翻牌前只推或弃，很深时多看便宜的翻牌。新手不会 */
   depth: boolean;
 }
 
-const LUX: Skill = { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0, slip: 0, adapt: 1000, depth: true };
+const LUX: Skill = { read: 240, pre: 215, raiser: 30, caller: 55, limper: 80, slack: -5, bluff: 800, tight: 40, soft: 0, slip: 0, value: 1000, third: 0, memory: 250, adapt: 1000, depth: true };
 
 /** 下标是强弱档：0 新手、1 小桌、2 中桌、3 大桌、4 豪华桌、5 最强（功力同豪华桌，性格按 STRONG 挑最强的） */
 export const SKILL: readonly Skill[] = [
-  { read: 200, pre: 120, raiser: 100, caller: 100, limper: 100, slack: 20, bluff: 550, tight: -20, soft: 1000, slip: 150, adapt: 0, depth: false },
-  { read: 300, pre: 150, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 700, tight: 0, soft: 1000, slip: 0, adapt: 300, depth: true },
-  { read: 240, pre: 200, raiser: 40, caller: 70, limper: 100, slack: 0, bluff: 800, tight: 0, soft: 600, slip: 0, adapt: 600, depth: true },
-  { read: 220, pre: 205, raiser: 30, caller: 55, limper: 90, slack: 0, bluff: 750, tight: 20, soft: 200, slip: 0, adapt: 800, depth: true },
+  { read: 300, pre: 120, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 550, tight: -20, soft: 1000, slip: 150, value: 450, third: 900, memory: 0, adapt: 0, depth: false },
+  { read: 300, pre: 150, raiser: 100, caller: 100, limper: 100, slack: 0, bluff: 700, tight: 0, soft: 1000, slip: 0, value: 1000, third: 0, memory: 0, adapt: 300, depth: true },
+  { read: 240, pre: 200, raiser: 40, caller: 70, limper: 100, slack: 0, bluff: 800, tight: 0, soft: 600, slip: 0, value: 1000, third: 0, memory: 0, adapt: 600, depth: true },
+  { read: 220, pre: 205, raiser: 30, caller: 55, limper: 90, slack: 0, bluff: 750, tight: 20, soft: 200, slip: 0, value: 1000, third: 0, memory: 250, adapt: 800, depth: true },
   LUX,
   LUX,
 ];
