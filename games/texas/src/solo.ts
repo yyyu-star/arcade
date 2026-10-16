@@ -31,6 +31,11 @@ export interface Session {
   table: Table;
   /** 还没得到钱包回话的那一笔 */
   pending: Pending | null;
+  /**
+   * 钱包已经扣了、还没能上桌的补码（0.3.4）：0.3.3 及以前补码没回话时还能接着打，到账时人可能正在一手里、加不上。
+   * 先记着，下一次两手之间加上；离桌时一起结回。新版本补码没回话时牌桌停住，不会再有
+   */
+  held?: number;
   /** 这一场的数（离桌的结算页用；老存档没有，读的时候补上） */
   stats?: SessionStats;
   /** 这一份的战绩（0.3.0，离桌结回时报给平台；老存档没有，从现在起记） */
@@ -105,14 +110,28 @@ export class Solo {
   /** 一手打完停着、等发下一手（还没发过第一手的也算：等 next 发第一手） */
   get between(): boolean {
     const t = this.s.table;
-    return t.phase === 'idle' && !this.closing && (t.hold === true || t.handNo === 0);
+    return t.phase === 'idle' && !this.s.pending && (t.hold === true || t.handNo === 0);
+  }
+
+  /**
+   * 补码那一笔还没得到钱包回话（0.3.4）：请求可能已经到了钱包、扣了钱，所以牌桌停住等它（不发下一手），
+   * 用同一个操作 id 再办，钱包只扣一次。原来提示"筹码没动"、照常能打，再补码或离桌会把这一笔覆盖掉，扣了的就丢了
+   */
+  get toppingUp(): boolean {
+    return this.s.pending?.t === 'buyin' && this.s.table.seats[ME]!.owner === 'player';
   }
 
   /** 发下一手（一手打完停着、或者还没发第一手时），电脑接着出手 */
   async next(): Promise<void> {
     if (this.busy || !this.between) return;
     const prev = this.s.table;
-    this.s.table = deal(prev);
+    const held = this.s.held ?? 0;
+    const t = held > 0 ? addChips(prev, ME, held, false) : null;
+    if (t && !isFail(t)) {
+      this.s.table = t;
+      delete this.s.held;
+    }
+    this.s.table = deal(this.s.table);
     this.save();
     await this.d.onStep({ prev, next: this.s.table, seat: null, action: null });
     await this.flush();
@@ -190,8 +209,14 @@ export class Solo {
     if (p.t === 'buyin') {
       const me = prev.seats[ME]!;
       // 坐下那一笔不开第一手（等 next）；补码在两手之间，也不自己发
-      this.s.table = must(me.owner === 'none' ? seatPlayer(prev, ME, p.amount, false) : addChips(prev, ME, p.amount, false));
-      if (this.s.table.seats[ME]!.away) this.s.table = must(apply(this.s.table, ME, { t: 'back' }));
+      const t = me.owner === 'none' ? seatPlayer(prev, ME, p.amount, false) : addChips(prev, ME, p.amount, false);
+      if (isFail(t)) {
+        // 旧存档：到账时人在一手里（或补完超上限）加不上，先记着（见 held）
+        this.s.held = (this.s.held ?? 0) + p.amount;
+      } else {
+        this.s.table = t;
+        if (t.seats[ME]!.away) this.s.table = must(apply(t, ME, { t: 'back' }));
+      }
       this.stats.buyin += p.amount;
     } else {
       // 结完了，这一桌就没了
@@ -261,6 +286,14 @@ export class Solo {
       this.left = this.s.pending!.amount;
       return this.settle();
     }
+    // 补码那一笔还没回话：先办完它（钱包可能已经扣了），办不成就先不走，不然离桌的结回会把它覆盖掉（0.3.4）
+    if (this.s.pending) {
+      const err = await this.settle();
+      if (this.s.pending) {
+        this.stopped = false;
+        return err;
+      }
+    }
     const prev = this.s.table;
     this.step(ME, { t: 'leave' });
     while (this.s.table.seats[ME]!.owner !== 'none') {
@@ -269,13 +302,16 @@ export class Solo {
       this.step(seat, aiAction(this.s.table, seat));
     }
     const payout = this.s.table.out.find((p) => p.seat === ME) ?? null;
-    this.left = payout?.amount ?? 0;
+    // 到账了还没能上桌的补码（held）一起结回
+    const held = this.s.held ?? 0;
+    delete this.s.held;
+    this.left = (payout?.amount ?? 0) + held;
     await this.d.onStep({ prev, next: this.s.table, seat: ME, action: { t: 'leave' } });
     if (this.s.practice) {
       this.d.store.removeItem(SESSION_KEY);
       return null;
     }
-    this.s.pending = { t: 'cashout', op: this.d.newId(), amount: payout?.amount ?? 0, payout: payout?.id ?? null };
+    this.s.pending = { t: 'cashout', op: this.d.newId(), amount: this.left, payout: payout?.id ?? null };
     this.save();
     return this.settle();
   }

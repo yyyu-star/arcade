@@ -323,6 +323,65 @@ describe('单机', () => {
     expect(solo.table.seats[ME]!).toMatchObject({ away: false, stack: 2_000 });
   });
 
+  it('补码时钱包连不上：牌桌停住（不发下一手、不能离桌），连上后用同一个操作 id 再办、只扣一次，补上了接着打（0.3.4）', async () => {
+    const w = new FakeWallet();
+    const d = deps(w);
+    const solo = await open(d, 1_000);
+    await solo.flush();
+    await solo.sitOut(true);
+    while (solo.table.seats[ME]!.status !== 'out') {
+      if (solo.table.toAct === ME) await solo.act({ t: 'fold' });
+    }
+    const stack = solo.table.seats[ME]!.stack;
+    const balance = w.s.balance;
+    // 请求到了、钱包扣了，回话丢了
+    w.lose = true;
+    expect(await solo.topUp(500)).toBe('offline');
+    expect(solo.toppingUp).toBe(true);
+    expect(solo.between).toBe(false);
+    const hand = solo.table.handNo;
+    await solo.next();
+    expect(solo.table.handNo).toBe(hand);
+    // 离桌也先不走：离桌的结回会把这一笔覆盖掉
+    expect(await solo.leave()).toBe('offline');
+    expect(solo.session.pending).toMatchObject({ t: 'buyin', amount: 500 });
+    expect(solo.table.seats[ME]!.owner).toBe('player');
+    // 连上了：同一个操作 id，钱包只扣那一次
+    w.lose = false;
+    expect(await solo.settle()).toBeNull();
+    expect(solo.toppingUp).toBe(false);
+    expect(w.s.balance).toBe(balance - 500);
+    expect(solo.table.seats[ME]!.stack).toBe(stack + 500);
+    expect(solo.between).toBe(true);
+    expect(await solo.leave()).toBeNull();
+    expect(w.s.balance).toBe(balance + stack);
+  });
+
+  it('0.3.3 及以前的存档：补码到账时人正在一手里加不上，不再抛错卡死；先记着，下一次两手之间加上，离桌时一起结回（0.3.4）', async () => {
+    const w = new FakeWallet();
+    const d = deps(w);
+    const solo = await open(d, 1_000);
+    await solo.flush();
+    expect(solo.table.seats[ME]!.status).toBe('active');
+    // 旧版本补码没回话时还能接着打：存档里一手打到一半，挂着一笔补码
+    const saved = { ...solo.session, pending: { t: 'buyin' as const, op: 'old-topup-1', amount: 300 } };
+    const again = new Solo(saved, d);
+    const balance = w.s.balance;
+    expect(await again.settle()).toBeNull();
+    expect(w.s.balance).toBe(balance - 300);
+    expect(again.session.held).toBe(300);
+    expect(again.session.pending).toBeNull();
+    // 这一手打完，下一手发之前加上
+    while (!again.between) {
+      if (again.table.toAct === ME) await again.act({ t: 'fold' });
+      else await again.flush();
+    }
+    const stack = again.table.seats[ME]!.stack;
+    await again.next();
+    expect(again.session.held).toBeUndefined();
+    expect(again.table.seats[ME]!.stack + again.table.seats[ME]!.total).toBe(stack + 300);
+  });
+
   it('练习桌不碰钱包', async () => {
     const w = new FakeWallet();
     const d = deps(w);

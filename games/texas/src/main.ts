@@ -517,7 +517,7 @@ function refresh(): void {
     return;
   }
   // 输光了：先让人看清这一手怎么输的，再问补码
-  if (s.busted && animating === 0 && !asking && !bustTimer) {
+  if (s.busted && animating === 0 && !asking && !bustTimer && !s.toppingUp) {
     bustTimer = window.setTimeout(() => {
       bustTimer = 0;
       if (solo === s && s.busted && animating === 0) void offerTopUp(true);
@@ -739,7 +739,7 @@ function record(prev: View, next: View, me = ME): void {
 let asking = false;
 async function offerTopUp(busted: boolean): Promise<void> {
   const s = solo;
-  if (!s || asking) return;
+  if (!s || asking || s.toppingUp) return;
   const st = stakesOf(s.table.stakes);
   const stack = s.table.seats[ME]!.stack;
   const room = st.max - stack;
@@ -760,12 +760,57 @@ async function offerTopUp(busted: boolean): Promise<void> {
     return;
   }
   const err = await s.topUp(amount);
+  if (err && s.toppingUp) return waitTopUp(s);
+  await toppedUp(s, err);
+}
+
+/** 补码办完了（补上了，或者钱包明确拒了） */
+async function toppedUp(s: Solo, err: string | null): Promise<void> {
   if (err) {
     await dialog(stage, '没补上', walletError(err), [{ label: '好', value: 'ok', primary: true }]);
     refresh();
     return;
   }
+  void refreshWallet();
   await drive(s.flush());
+}
+
+/** 补码那一笔没回话时，最多在牌桌上停着等多久、隔多久用同一个操作 id 再办一次（0.3.4） */
+const TOPUP_WAIT_MS = 60_000;
+const TOPUP_RETRY_MS = 5_000;
+
+/**
+ * 补码时钱包连不上：钱可能已经扣了，牌桌停住等回话（Solo.toppingUp），弹窗说清楚在等什么、等了多久、最多等多久，不让人以为卡死了。
+ * 等到了就接着打；等够了还没回话（或者人点了"先回大厅"），这一桌和那一笔留在本机，大厅里接着自动重试，点"接着打"回来
+ */
+async function waitTopUp(s: Solo): Promise<void> {
+  const body = document.createElement('div');
+  const msg = el('p', '', body, '钱包连不上，补码还没补上。钱可能已经从钱包扣了，所以牌桌先停在这儿等它回话：连上了自动补上、接着打，不会重复扣。');
+  const clock = el('p', 'sum-note', body);
+  const t0 = Date.now();
+  let closed = false;
+  void dialog(stage, '补码在路上', body, [{ label: '先回大厅', value: 'lobby' }]).then(() => (closed = true));
+  let err: string | null = null;
+  while (!closed && s.toppingUp && Date.now() - t0 < TOPUP_WAIT_MS) {
+    setText(clock, `已经等了 ${Math.round((Date.now() - t0) / 1000)} 秒，最多等 ${TOPUP_WAIT_MS / 1000} 秒`);
+    await new Promise((r) => window.setTimeout(r, TOPUP_RETRY_MS));
+    if (!closed) err = await s.settle();
+  }
+  if (!s.toppingUp) {
+    if (!closed) closeDialog();
+    return toppedUp(s, err);
+  }
+  if (!closed) {
+    setText(msg, '等了一分钟，钱包还是连不上。先回大厅：这一桌和这一笔补码记在本机，钱包连上后自动补上，点"接着打"回到这一桌。');
+    setText(clock, '');
+    await dialog(stage, '补码在路上', body, [{ label: '回大厅', value: 'lobby', primary: true }]);
+  }
+  if (solo !== s || !s.toppingUp) return refresh();
+  stopCountdown();
+  walletNote = '补码还在路上：钱包连上后自动补上，点"接着打"回到这一桌';
+  window.clearTimeout(retryTimer);
+  retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
+  showLobby();
 }
 
 /** 离桌回大厅：手里有牌就弃，筹码结回钱包 */
@@ -784,6 +829,12 @@ async function leave(): Promise<boolean> {
   toggle(betweenBar, 'hidden', true);
   const busted = s.busted;
   const err = await s.leave();
+  if (s.toppingUp) {
+    // 补码那一笔还没回话，先不走（钱包可能已经扣了，离桌的结回会把它覆盖掉，0.3.4）
+    await dialog(stage, '先等补码', err === 'login' ? walletError('login') : '补码还在路上：钱包连不上，钱可能已经扣了。等它回话再离桌，这一笔才不会丢；连上后自动补上。', [{ label: '好', value: 'ok', primary: true }]);
+    refresh();
+    return false;
+  }
   await refreshWallet();
   // 这一场的结算页。今天德州 client 模式的净赢到了上限（docs/economy.md 第 4 节）：多赢的照常算在牌桌上，只是不进钱包
   const st = s.stats;
@@ -1023,6 +1074,27 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   const st = o.state;
   const seated = st.you?.seat !== null && st.you?.seat !== undefined;
   const playing = st.room?.status === 'playing';
+  // 断线时离座的消息发不出去（kit 没连上就丢），座位和筹码还留在房间里：不能说"马上结回"，也不能把回房间的路清掉（0.3.4）
+  if (seated && st.status !== 'open') {
+    const how = await dialog(
+      stage,
+      '网络断了',
+      '现在连不上房间，"离开"发不出去：你还坐着，掉线由电脑代打，筹码还在桌上。等连上了再点离开，筹码马上结回；先回大厅也行，回来点"回到房间"再离开。',
+      [
+        { label: '等连上', value: 'wait', primary: true },
+        { label: '先回大厅', value: 'lobby' },
+      ],
+    );
+    if (how !== 'lobby' || online !== o) return;
+    o.close();
+    // 不 forgetRoom：上一次进的房间留着，标题页按钱包里那一份给"回到房间"
+    exitRoom('你还坐在好友房里（掉线由电脑代打）：连上网后点"回到房间"再离开，桌上的筹码才会结回');
+    if (goHome) {
+      cloud.flush();
+      location.href = '/';
+    }
+    return;
+  }
   const ok = await dialog(
     stage,
     '离开房间',
@@ -1033,6 +1105,8 @@ async function leaveRoom(goHome: boolean): Promise<void> {
     ],
   );
   if (ok !== 'yes' || online !== o) return;
+  // 确认的这一会儿断了：按断线的说
+  if (seated && o.state.status !== 'open') return leaveRoom(goHome);
   const rows = summaryRows(o.state, true);
   if (seated) o.leaveSeat();
   // 离座的消息先发出去再断开
