@@ -228,7 +228,7 @@ export class TableUi<V extends TableView, A> {
     b.classList.toggle('won', !!s.won);
     b.classList.toggle('empty', !!meta.empty);
     const av = el('div', 'avatar', b);
-    av.innerHTML = avatarSvg(meta.name, meta.bot);
+    av.appendChild(this.avatarArt(seat, meta.name, meta.bot));
     if (v.dealer === seat) el('span', 'dealer', av, '庄');
     const info = el('div', 'info', b);
     el('div', 'name', info, meta.empty ? '空位' : meta.name);
@@ -239,6 +239,23 @@ export class TableUi<V extends TableView, A> {
     if (meta.away) el('span', 'tag away', tags, meta.auto ? '托管' : '掉线');
     if (s.won) el('div', 'stamp', b, s.won.from === null ? '自摸' : '胡');
     el('div', 'clock', b);
+  }
+
+  /**
+   * 头像的 SVG 每个人只解析一次：整桌每一帧重画，头像是手绘的（一张几十个节点），每帧 innerHTML 四张占了对局里大半的主线程。
+   * 缓存的是节点本身，重画时挪进新的头像框；同一个节点只能在一处，所以按座位 + 名字缓存（几个空位同名也不抢）
+   */
+  private avatars = new Map<string, Element>();
+  private avatarArt(seat: number, name: string, bot: boolean): Element {
+    const key = `${seat}${bot ? 1 : 0}${name}`;
+    let art = this.avatars.get(key);
+    if (!art) {
+      const box = document.createElement('div');
+      box.innerHTML = avatarSvg(name, bot);
+      art = box.firstElementChild!;
+      this.avatars.set(key, art);
+    }
+    return art;
   }
 
   private tile(t: Tile, size: string, parent: HTMLElement): HTMLElement {

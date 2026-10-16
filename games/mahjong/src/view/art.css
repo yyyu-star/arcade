@@ -202,3 +202,9 @@
     inset 0 0 0 5px #f3c86b26,
     var(--sh-3);
 }
+
+/* 木框、暗角、灯笼这些静态的画各占一个合成层：整桌每一帧重画时只重画牌，不再把这几层重新栅格化（B 量过：对局主线程 10% → 见 CHANGELOG 0.8.1） */
+.table::before,
+.table::after {
+  will-change: transform;
+}
