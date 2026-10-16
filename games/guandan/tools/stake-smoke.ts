@@ -4,7 +4,7 @@
  * ② 进小档，第一副没打完就回标题：确认后原样退回，存档删掉；
  * ③ 再进一场，把存档换成"已经打了 7 副"的局（Node 里用规则核心推出来），回标题点"接着打实盘"，电脑代打完最后一副，
  *    结算页点"结算"，结回钱包（这个号今天已经赢满了，看到"到顶了"）；结算页"再来一场"直接开下一场；
- * ④ 打了几副后回标题选"现在结算"；
+ * ④ 打了几副后回标题选"现在结算"；再开一场打两副，点实盘条选"现在结算，回大厅"，结回后到大厅；
  * ⑤ 钱包说余额不够（no_funds）：进不了场、留在标题页；钱包里有一份不在本机的单机实盘：不挡开新的（平台 0.9.5 起能同时有好几份），给"原样退回那一份"。
  * ⑥ 好友房实盘（0.5.0，docs/stake.md 第 3 节）：开实盘房间选小档，大厅写着档位；一个人时开局灰掉；第二个人坐下后开局，两边都到账，
  *    电脑代打（autoplay）打完 5 副，结算页写"已经结回钱包"，两人的分正好相反。约几分钟；--no-room 跳过。
@@ -241,6 +241,23 @@ async function main(): Promise<void> {
     await click(page, 'home');
     await until(page, '回标题', "g.scene === 'title'");
     notes.push('打了几副回标题："先存着 / 现在结算"，现在结算按目前的分结');
+
+    // ④b 打了几副，点右上那条"实盘 · …"（和左上"大厅"同一个框，0.11.2）："现在结算，回大厅"写明结回多少，结回后去大厅
+    await enterTier(page, 'small');
+    await inject(page, 2, [3, 3]);
+    await click(page, 'stake');
+    await until(page, '接着打（2 副）', "g.scene === 'table' && g.overlay === 'settle'");
+    await click(page, 'next');
+    await until(page, '第 3 副', "g.overlay === null && g.view().dealNo === 3 && g.idle");
+    await click(page, 'stakeStrip');
+    await until(page, '实盘条弹出结算框', "'settleNow' in g.controls() && 'ok' in g.controls()");
+    await shot(page, '42-strip-settle-ask');
+    // 大厅是平台的页面，这里没有平台：给个空页接住，免得 404 记成控制台报错
+    await page.route((u) => u.pathname === '/', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>大厅</title>' }));
+    const toLobby = page.waitForURL((u) => u.pathname === '/', { timeout: 30_000 });
+    await click(page, 'settleNow');
+    await toLobby;
+    notes.push('点实盘条：现在结算（写明结回多少）、先存着、接着打；现在结算结回后去大厅');
 
     // ⑤ 钱包说不够：进不了场（手机横屏的尺寸，顺便看选档页排得下）
     const poor = await openPage(browser, stack, 'nofunds-1', { balance: 10_000, stakes: [] }, { width: 844, height: 390 });

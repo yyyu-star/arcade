@@ -31,12 +31,12 @@ import { PLACE_NAMES, fullSeatName, levelName, playDetail, playLabel, seatIdenti
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
-import { ROOM_DEALS, SOLO_DEALS, dealPoints, pointValue } from '../../stake/index.ts';
+import { ROOM_DEALS, SOLO_DEALS, dealPoints, payout, pointValue } from '../../stake/index.ts';
 import type { StakeView } from '../../net/stake.ts';
 import type { Again } from '../../net/rules.ts';
 import { flashTitle, stopFlash, vibrate } from '../attention.ts';
 import { countLeft } from '../counter.ts';
-import { ROOM_STAKE_TEXT, STAKE_ERROR, STAKE_TEXT, TIER_NAME, fmtChips, roomWhy, signed, stakeError } from '../stake-text.ts';
+import { ROOM_STAKE_TEXT, STAKE_ERROR, STAKE_TEXT, TIER_NAME, fmtChips, roomLeaveText, roomWhy, settleNowText, signed, stakeError } from '../stake-text.ts';
 import { StakeSession, buyinStake, refundStake, settleStake, type SettleOutcome } from '../stake.ts';
 import { dealRecap } from '../recap.ts';
 import { suggestFor } from '../suggest.ts';
@@ -115,6 +115,8 @@ export class TableScene extends Phaser.Scene {
   /** 再来一场：正在去新房间（只去一次）。我开的新房间的码记在会话上（NetSession.againCode），场景重开（重连）也不丢 */
   private following = false;
   private lobbyBtn: Button | undefined;
+  /** 单机实盘那条的中心（冒烟点它） */
+  private stakeStrip: { x: number; y: number } | null = null;
   /** 结算弹窗上叠着的"回大厅"确认框（冒烟要找它的按钮） */
   private settleConfirm: Modal | null = null;
   /** 好友房实盘：带入被拒以后的"重新带入"（冒烟点它） */
@@ -462,6 +464,21 @@ export class TableScene extends Phaser.Scene {
       pg.fillStyle(0x1a0e07, 0.7).fillRoundedRect(W - t.width - 36, TOPBAR_H + 6, t.width + 28, 32, 16);
       pg.lineStyle(1.5, COLOR.gold, 0.7).strokeRoundedRect(W - t.width - 36, TOPBAR_H + 6, t.width + 28, 32, 16);
       c.add([pg, t]);
+      // 单机实盘：条子能点，弹和"大厅"一样的结算确认框；右边加个"结算"小字，让人知道能点（所有者 10-16 找不到中途结算）
+      if (st && !st.over) {
+        const tag = text(this, W - t.width - 46, TOPBAR_H + 22, '结算 ›', { size: TYPE.small, bold: true, color: 0xffe08a, ox: 1 });
+        const tg = this.add.graphics();
+        tg.fillStyle(0x8a1a20, 0.92).fillRoundedRect(tag.x - tag.width - 12, TOPBAR_H + 8, tag.width + 22, 28, 14);
+        c.add([tg, tag]);
+        const zx = tag.x - tag.width - 14;
+        const zw = W - 8 - zx;
+        const z = this.add.zone(zx + zw / 2, TOPBAR_H + 22, zw, 32).setInteractive({ useHandCursor: true });
+        setHit(z, zw, Math.max(32, minHit()));
+        z.on('pointerup', () => this.stakeStripTap());
+        // 放在顶栏最底层：手机上点按区域往上会碰到顶栏图标往下伸的那块、往下碰到记牌器，重叠处让它们先接；左头的"结算"小签不在图标下面，照样好点
+        c.addAt(z, 0);
+        this.stakeStrip = { x: zx + 30, y: TOPBAR_H + 22 };
+      } else this.stakeStrip = null;
       // 好友房带入被拒（或者走了又回来、再带入被拒）：条子左边一个"重新带入"（0.6.0）
       const me = ns?.seats[0];
       if (ns && me && !ns.over && (me.paid === 'refused' || me.paid === 'left') && ns.why !== 'need_two') {
@@ -542,8 +559,16 @@ export class TableScene extends Phaser.Scene {
       this.openOverlay('menu', confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
       return;
     }
+    const st = this.stake;
+    if (st && !st.over) return this.leaveStake(st, 'lobby');
     if (!inGame()) return goLobby();
     this.openOverlay('menu', confirm(this, leaveText(), `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
+  }
+
+  private stakeStripTap(): void {
+    const st = this.stake;
+    if (!st || st.over || this.overlay !== null || this.isBusy) return;
+    this.leaveStake(st, 'lobby');
   }
 
   /** 结算弹窗里的"回大厅"：和顶栏的一样先确认一次（确认框叠在结算上，点"算了"回到结算） */
@@ -555,13 +580,15 @@ export class TableScene extends Phaser.Scene {
 
   private onHome(): void {
     const st = this.stake;
-    if (st && !st.over) return this.leaveStake(st);
+    if (st && !st.over) return this.leaveStake(st, 'title');
     const net = this.net;
     if (net && net.room?.status === 'playing') {
       // 好友房：离开就把座位交给电脑（不判输），先问一句
       // 我是最后一个真人：房间就此结束（0.6.0），说清楚
       const others = net.room.seats.some((s, i) => s.kind === 'human' && i !== net.mySeat);
-      const msg = this.netStake && !this.netStake.over ? ROOM_STAKE_TEXT.leave : others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
+      const ns = this.netStake;
+      const me = ns?.seats[0];
+      const msg = ns && !ns.over ? (me?.paid === 'yes' ? roomLeaveText(me.points, me.points * pointValue(ns.tier), payout(ns.tier, me.points)) : ROOM_STAKE_TEXT.leave) : others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
       this.openOverlay('menu', confirm(this, msg, '离开', () => this.leaveRoom(), () => this.closeOverlay()));
       return;
     }
@@ -639,43 +666,52 @@ export class TableScene extends Phaser.Scene {
   }
 
   /**
-   * 实盘中途回标题（2.2）：第一副还没打完就原样退回；打了几副就问"先存着"还是"现在结算"，默认先存着，不强迫人结束。
+   * 实盘中途离开（2.2）：第一副还没打完就原样退回；打了几副就给三个选择——现在结算、先存着、接着打，默认先存着，不强迫人结束。
+   * 左上"大厅"、实盘条（0.11.2，所有者找不到中途结算）去大厅；右上"←"回标题。结算写明按现在的分结回多少。
    */
-  private leaveStake(st: StakeSession): void {
+  private leaveStake(st: StakeSession, to: 'lobby' | 'title'): void {
+    const go = (): void => {
+      this.cancelBot();
+      if (to === 'lobby') goLobby();
+      else this.scene.start('title');
+    };
     if (st.stake.match.deals.length === 0) {
-      this.openOverlay('menu', confirm(this, STAKE_TEXT.refundAsk, '退出', () => void this.refundAndLeave(st), () => this.closeOverlay()));
+      this.openOverlay('menu', confirm(this, STAKE_TEXT.refundAsk, '退出', () => void this.refundAndLeave(st, to), () => this.closeOverlay()));
       return;
     }
-    const m = modal(this, 640, 330, undefined, { closeBtn: false });
+    const where = to === 'lobby' ? `，回${lobbyName()}` : '';
+    const m = modal(this, 680, 380, undefined, { closeBtn: false });
     this.openOverlay('menu', m);
-    m.body.add(text(this, 0, -96, `这场实盘打了 ${st.stake.match.deals.length} 副，本场 ${signed(st.points)} 分`, { size: TYPE.title, bold: true, wrap: 560 }));
-    m.body.add(text(this, 0, -46, '先存着，24 小时内回来接着打；或者按现在的分结算', { size: TYPE.label, color: COLOR.muted, wrap: 560 }));
-    const keep = new Button(this, -150, 30, 260, 60, '先存着', 'red', () => {
-      m.close();
-      this.cancelBot();
-      this.scene.start('title');
-    });
-    const now = new Button(this, 150, 30, 260, 60, '现在结算', 'wood', () => {
+    m.body.add(text(this, 0, -126, `这场实盘打了 ${st.stake.match.deals.length} 副，本场 ${signed(st.points)} 分`, { size: TYPE.title, bold: true, wrap: 600 }));
+    m.body.add(text(this, 0, -76, settleNowText(st.points, st.points * pointValue(st.tier), payout(st.tier, st.points)), { size: TYPE.label, bold: true, color: COLOR.redDark, wrap: 600 }));
+    m.body.add(text(this, 0, -40, '先存着：24 小时内回来接着打', { size: TYPE.label, color: COLOR.muted, wrap: 600 }));
+    const now = new Button(this, -160, 36, 290, 60, `现在结算${where}`, 'red', () => {
       m.close();
       this.overlay = null;
       this.overlayModal = null;
       st.finish();
-      this.showStakeResult();
+      this.showStakeResult(to === 'lobby');
     });
-    const cancel = new Button(this, 0, 110, 200, 52, '接着打', 'wood', () => {
+    const keep = new Button(this, 160, 36, 290, 60, `先存着${where}`, 'wood', () => {
+      m.close();
+      go();
+    });
+    const cancel = new Button(this, 0, 122, 200, 52, '接着打', 'wood', () => {
       m.close();
       this.closeOverlay();
     });
-    m.body.add([keep, now, cancel]);
+    m.body.add([now, keep, cancel]);
     m.body.setData('ok', keep);
     m.body.setData('settleNow', now);
     m.body.setData('cancel', cancel);
   }
 
-  private async refundAndLeave(st: StakeSession): Promise<void> {
+  private async refundAndLeave(st: StakeSession, to: 'lobby' | 'title'): Promise<void> {
     this.cancelBot();
     const r = await refundStake(st.stake);
     if (!this.alive) return;
+    // 去大厅：退成了才走；没退成存档留着（标题页能接着打、到期钱包原样退回），照样走
+    if (to === 'lobby') return goLobby();
     this.scene.start('title');
     if (r.kind === 'later' || r.kind === 'failed') {
       // 没退成：存档留着，标题页还能"接着打"；到期钱包也会原样退回
@@ -1677,7 +1713,8 @@ export class TableScene extends Phaser.Scene {
    * 实盘一场的结算（2.1 第 5、6 步）：先显示这一场的分和筹码，同时去结回钱包；结回成功后写钱包还有多少，到顶了另写一句。
    * 两个按钮一样大、一样颜色，不自动开下一场，没有倒计时（第 5 节）。输了不放失败音效。
    */
-  private showStakeResult(): void {
+  /** toLobby：中途"现在结算，回大厅"——结回了（或者记进存档等下次结）就去大厅，出错就停在这页让人看清 */
+  private showStakeResult(toLobby = false): void {
     const st = this.stake!;
     const save = st.stake;
     const done = save.settle!;
@@ -1730,6 +1767,11 @@ export class TableScene extends Phaser.Scene {
         status.setText(STAKE_TEXT.settleLater);
       } else {
         status.setText(stakeError(r.error));
+        return;
+      }
+      if (toLobby) {
+        status.setText(`${status.text}，正在回${lobbyName()}…`);
+        this.time.delayedCall(1200, () => goLobby());
       }
     });
   }
@@ -1843,6 +1885,7 @@ export class TableScene extends Phaser.Scene {
     if (this.inviteBtn) out['invite'] = { x: this.inviteBtn.x, y: this.inviteBtn.y, enabled: true, visible: true };
     if (this.cloudBtn?.visible) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y, enabled: true, visible: true };
     put('lobby', this.lobbyBtn);
+    if (this.stakeStrip) out['stakeStrip'] = { ...this.stakeStrip, enabled: true, visible: true };
     put('rebuy', this.rebuyBtn);
     this.topIcons.forEach((b, i) => (out[`top${i}`] = { x: b.x, y: b.y, enabled: true, visible: b.visible }));
     const top = this.settleConfirm ?? this.overlayModal;

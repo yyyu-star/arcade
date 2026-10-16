@@ -5,7 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decide } from '../src/ai/index.ts';
 import { seatsToAct, viewFor } from '../src/core/index.ts';
-import { SOLO_DEALS } from '../src/stake/index.ts';
+import { SOLO_DEALS, payout, pointValue } from '../src/stake/index.ts';
+import { roomLeaveText, settleNowText } from '../src/view/stake-text.ts';
 import { STAKE_KEY, StakeSession, buyinStake, clearStake, loadStake, refundStake, settleStake, strayStake, transient, type StakeSave } from '../src/view/stake.ts';
 import { KEYS } from '../src/view/store.ts';
 
@@ -186,5 +187,16 @@ describe('进场', () => {
     expect(strayStake({ balance: 0, stakes: [{ game: 'texas', ref: REF, tier: 'mid' }] }, null)).toBeNull();
     const ses = started();
     expect(strayStake(w(REF), ses.stake)).toBeNull();
+  });
+});
+
+describe('中途结算的话写明数字（0.11.2）', () => {
+  it('单机：按现在的分结回多少（带入一份加输赢，封顶）', () => {
+    // 小档一份 2,000、每分 100：+6 分 → 结回 2,600
+    expect(settleNowText(6, 6 * pointValue('small'), payout('small', 6))).toBe('现在结算：按 +6 分（+600）结回 2,600 筹码');
+    expect(settleNowText(-3, -3 * pointValue('small'), payout('small', -3))).toContain('结回 1,700 筹码');
+  });
+  it('好友房离开：同样写出分、筹码和结回额', () => {
+    expect(roomLeaveText(2, 2 * pointValue('mid'), payout('mid', 2))).toMatch(/^离开房间？按现在的 \+2 分（\+\S+）马上结回 \S+ 筹码/);
   });
 });

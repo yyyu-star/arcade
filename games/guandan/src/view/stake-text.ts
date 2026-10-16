@@ -63,6 +63,16 @@ export const ROOM_STAKE_TEXT = {
   pending: '带入在办，到账之前的分归庄家',
 } as const;
 
+/** 中途结算那一行（0.11.2）：按现在的分结回多少（back = 带入的一份加输赢，调用方用 stake 的 payout 算） */
+export function settleNowText(points: number, chips: number, back: number): string {
+  return `现在结算：按 ${signed(points)} 分（${signed(chips)}）结回 ${fmtChips(back)} 筹码`;
+}
+
+/** 好友房实盘离开（0.6.0 起立即结算）：把数字写出来 */
+export function roomLeaveText(points: number, chips: number, back: number): string {
+  return `离开房间？按现在的 ${signed(points)} 分（${signed(chips)}）马上结回 ${fmtChips(back)} 筹码，之后电脑接着打，输赢不再算你的；回来会重新带入一份`;
+}
+
 /** 筹码数：千分位（不用 toLocaleString，免得跟着系统区域变） */
 export function fmtChips(n: number): string {
   const s = String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
