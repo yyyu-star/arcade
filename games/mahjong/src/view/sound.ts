@@ -74,10 +74,6 @@ export function setVolume(v: number): void {
   applyGain();
 }
 
-export function getVolume(): number {
-  return volume;
-}
-
 /** 给 arcade-kit/fun 的 playFunSound 用；没解锁、关了声音或音量为 0 返回 null。out 是总音量，我们自己的音效也走它 */
 export function audioOut(): { ctx: AudioContext; out: AudioNode } | null {
   if (!enabled || volume <= 0 || !ctx || !master) return null;

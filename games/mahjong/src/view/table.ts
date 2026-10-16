@@ -499,22 +499,30 @@ export class TableUi<V extends TableView, A> {
     // 轮到我、要我做点什么：最后 5 秒每秒嘀嗒一下
     const mine = !!timer && timer.seats.includes(this.me) && !!this.frame?.v.prompt;
     let ticked = -1;
+    const clocks = [0, 1, 2, 3].map((s) => this.badges[this.rel(s)]!.querySelector<HTMLElement>('.clock'));
     const paint = (): void => {
+      let running = false;
       for (let s = 0; s < 4; s++) {
-        const clock = this.badges[this.rel(s)]!.querySelector<HTMLElement>('.clock');
+        const clock = clocks[s];
         if (!clock) continue;
         if (!timer || !timer.seats.includes(s)) {
           clock.textContent = '';
           continue;
         }
         const left = Math.max(0, Math.ceil((timer.until - Date.now()) / 1000));
-        clock.textContent = `${left}`;
+        if (left > 0) running = true;
+        // 一秒才变一次：没变就不碰 DOM
+        const text = `${left}`;
+        if (clock.textContent === text) continue;
+        clock.textContent = text;
         clock.classList.toggle('low', left <= 5);
         if (mine && s === this.me && left <= 5 && left > 0 && left !== ticked) {
           ticked = left;
           play('countdown');
         }
       }
+      // 都走到 0 了就停（之后由下一帧的新计时重开）
+      if (!running) window.clearInterval(this.tick);
     };
     paint();
     if (timer) this.tick = window.setInterval(paint, 250);

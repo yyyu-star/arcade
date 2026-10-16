@@ -19,7 +19,7 @@
 
 ## 本地开发
 
-需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
+需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.2"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
 
 ```bash
 npm ci

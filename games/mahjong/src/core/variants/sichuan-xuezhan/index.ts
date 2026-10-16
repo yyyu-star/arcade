@@ -349,6 +349,3 @@ export const sichuanXuezhan: Variant<XzState, XzAction, XzView, XzOpts> = {
     return next;
   },
 };
-
-/** 一张牌是不是这个座位的缺门（界面画灰用） */
-export const isQueTile = (t: Tile, que: Suit | -1): boolean => que >= 0 && suitOf(kindOf(t)) === que;
