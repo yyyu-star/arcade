@@ -51,10 +51,10 @@ export const STRONG: readonly number[] = [1, 0, 7, 4, 6, 5, 8, 3, 2, 9];
 export const SOLO_LEVEL: Readonly<Record<StakesId, number>> = { small: 0, mid: 2, big: 3, lux: 4 };
 
 /**
- * 好友房（都是实盘）按档位用哪一档电脑（0.5.0）：两个普通水平的真人对电脑期望 ≤ 0 的最弱的一档（3–9 人桌都满足），
- * 往上不比下一档弱、不比单机同档弱。模拟出来四档都是 4：3 在 9 人桌两个人还能小赢（+0.4 ± 3.7），见 DESIGN.md 6.5
+ * 好友房（都是实盘）按档位用哪一档电脑（0.5.0）：四档都是最强（5），和 0.4.0 一样，是维护者定的：
+ * 真人之间能互通、配合，最强档最稳。模拟里第 4 档已经让两个普通玩家期望 ≤ 0（3 在 9 人桌还能小赢），只作对照，见 DESIGN.md 6.5
  */
-export const ROOM_LEVEL: Readonly<Record<StakesId, number>> = { small: 4, mid: 4, big: 4, lux: 4 };
+export const ROOM_LEVEL: Readonly<Record<StakesId, number>> = { small: 5, mid: 5, big: 5, lux: 5 };
 
 /** 电脑带上桌的筹码：60–100 个大盲 */
 export const HOUSE_MIN_BB = 60;

@@ -163,7 +163,7 @@ const SIMPLE = new Set<string>(['fold', 'check', 'call', 'allin', 'away', 'back'
  * 好友房的牌桌（0.4.0，和掼蛋、麻将统一）：好友房都是实盘，不能一个人带电脑赢钱包——
  * 能打的真人至少两个才发牌（规则的 minHumans，一手打着时人走了照样打完，下一手不发）。
  * 一个人开打（旧页面、脚本绕过按钮）也一样：买入照常扣、牌不发，离桌原样结回，不计输赢。
- * 电脑按档位用好友房的强弱档（0.5.0，stakes.ts 的 ROOM_LEVEL：两个普通真人期望 ≤ 0 的最弱一档；0.4.0 一律最强）。期望见 DESIGN.md 6.5
+ * 电脑用好友房的强弱档（0.5.0，stakes.ts 的 ROOM_LEVEL：四档都是最强，和 0.4.0 的 strong 一样）。期望见 DESIGN.md 6.5
  */
 const FRIENDS = { holdHands: true, minHumans: 2 } as const;
 
