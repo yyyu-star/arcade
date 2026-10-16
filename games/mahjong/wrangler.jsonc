@@ -14,7 +14,7 @@
     "not_found_handling": "none",
     // 只有这些先过 Worker：站点根（独立部署时转到 /games/mahjong/）、首页（登录闸门 / 发游客 cookie）、单机带入结回、开房进房；
     // 其余静态资源直接回。/api/*（含 /api/wallet）在本站由平台的路由接，独立部署时没有
-    "run_worker_first": ["/", "/games/mahjong", "/games/mahjong/", "/games/mahjong/index.html", "/games/mahjong/api/stake/*", "/games/mahjong/rooms", "/games/mahjong/rooms/*"]
+    "run_worker_first": ["/", "/api/me", "/games/mahjong", "/games/mahjong/", "/games/mahjong/index.html", "/games/mahjong/api/stake/*", "/games/mahjong/rooms", "/games/mahjong/rooms/*"]
   },
   "durable_objects": {
     "bindings": [

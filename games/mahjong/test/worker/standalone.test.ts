@@ -59,6 +59,12 @@ describe('单独部署（没有平台）', () => {
     expect(new URL(res.headers.get('location')!, SITE).pathname).toBe('/games/mahjong/');
   });
 
+  it('/api/me 回 200 { standalone: true }（页面认作没有平台；不落到静态资源回 404，控制台不红）', async () => {
+    const res = await call(`${SITE}/api/me`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ standalone: true });
+  });
+
   it('首页不拦登录，发游客 cookie', async () => {
     expect(await guest()).toMatch(/^__Host-kit-guest=[A-Za-z0-9_-]{22,64}$/);
   });
