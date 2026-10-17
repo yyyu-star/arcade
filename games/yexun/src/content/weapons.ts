@@ -166,7 +166,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '天雷劈向附近的怪，落点一圈都挨打',
     el: '木',
     type: '符',
-    base: { dmg: 28, cd: 78, area: 50, amount: 1, speed: 0, duration: 430, knock: 4, rehit: 1 },
+    base: { dmg: 28, cd: 62, area: 50, amount: 1, speed: 0, duration: 430, knock: 4, rehit: 1 },
     ups: [
       { text: '多劈一道', delta: { amount: 1 } },
       { text: '伤害 +10', delta: { dmg: 10 } },
@@ -348,7 +348,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '水',
     type: '符',
     // amount：几只纸鹤；area：看多远的怪；speed：俯冲多快；cd：一轮俯冲的间隔（几只轮流）
-    base: { dmg: 24, cd: 60, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
+    base: { dmg: 24, cd: 48, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
     ups: [
       { text: '多一只纸鹤', delta: { amount: 1 } },
       { text: '伤害 +8', delta: { dmg: 8 } },
