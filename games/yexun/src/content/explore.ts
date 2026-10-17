@@ -289,20 +289,22 @@ export const ROAM_SPEED = 0.6;
 /**
  * 实盘结回（DESIGN.md 4.2）：撤出时倍数 = clamp(带出的宝物价值 ÷ 基准价值, 保底, 封顶)；死亡、迷失、认输为 0。结回 = 带入 × 倍数 向下取整，按万分之一传。
  * 基准按"档位 × 镇子"各一个：三个镇子同一档的平均带出价值差三成（模拟器第 3 轮），只按一个数会有"挑镇子赚钱"的空子。
- * 保底 1.5：小白多半第一座门开就走、带得少，没有保底每局要亏一半多；balance.md 4.4 要小档小白 +0.15～0.30，保底 1.3 时只有 +0.01～0.09（0.1.0），提到 1.5。
- *   不按镇子分开定保底：山寺小白死得多，要 1.9 才进区间，可手熟的人专刷保底就能拿 +0.8，保底只能一档一个、不能高。
+ * 保底（1.1）：按撤出时刻从 1 涨到满额，按档分开定（见下面 floor / floorRamp）；不按镇子分开：保底一高，手熟的人"开门就走"就比认真搜还赚。
  * 档位 → 危险：小 0、中 1、大 2（主线 2026-10-17 同意放低一档）；夜探的危险 1、2 走 waves.ts 的 RAID_DANGERS（比守夜缓），0.2.0 起三档都开。
- * 基准是 0.2.0 全量模拟（每格 2,000 局）按普通玩家落在区间中点拟合的，见 DESIGN.md 4.2 的表。
+ * 基准是 1.1 全量模拟（每格 2,000 局）拟合的：普通玩家落在区间里、且比开门就走至少多 0.15 份，见 DESIGN.md 4.2 的表。
  */
 export const RAID_LIVE = {
   cap: 3,
-  /** 保底满额；撤出越早给得越少：从 1.0 线性涨，floorRamp 拍（5 分钟）给满（1.1，认真搜要比开门就走多拿 ≥ 0.15 份） */
-  floor: 1.6,
-  floorRamp: 5 * 60 * 30,
+  /**
+   * 保底满额和几拍给满：撤出越早给得越少，从 1.0 线性涨到满额（1.1：认真搜要比开门就走多拿 ≥ 0.15 份）。
+   * 按档分开：中、大档第一座门 5 分钟才开，开门就走也在 6 分钟左右，同样的保底在那里就等于白送，所以中档给满拖到 10 分钟、大档满额压到 1.25。
+   */
+  floor: { small: 1.6, medium: 1.6, large: 1.25 } as Record<RaidLiveTier, number>,
+  floorRamp: { small: 5 * 60 * 30, medium: 10 * 60 * 30, large: 8 * 60 * 30 } as Record<RaidLiveTier, number>,
   base: {
-    small: { guzhen: 207, dukou: 169, shansi: 202 },
-    medium: { guzhen: 183, dukou: 154, shansi: 142 },
-    large: { guzhen: 165, dukou: 143, shansi: 90 },
+    small: { guzhen: 212, dukou: 173, shansi: 201 },
+    medium: { guzhen: 175, dukou: 150, shansi: 132 },
+    large: { guzhen: 148, dukou: 122, shansi: 82 },
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
   danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
   open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],

@@ -283,16 +283,16 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
 
   it('实盘：撤出时倍数 = 价值 ÷ 基准，至少保底、最多封顶，万分之一向下取整；结回向下取整（4.2）', () => {
     const base = RAID_LIVE.base.small.guzhen;
-    expect(liveBp(0, 'small')).toBe(RAID_LIVE.floor * 10000);
+    expect(liveBp(0, 'small')).toBe(Math.floor(RAID_LIVE.floor.small * 10000));
     expect(liveBp(base * 2, 'small')).toBe(20000);
     expect(liveBp(base * 100, 'small')).toBe(RAID_LIVE.cap * 10000);
     expect(liveBp(Math.ceil(base * 1.8), 'small', 'guzhen')).toBe(Math.floor((Math.ceil(base * 1.8) / base) * 10000));
     // 保底随撤出时刻从 1 涨到满额：开门就走只拿 1 份出头，5 分钟以后给满
-    expect(liveFloor(0)).toBe(1);
-    expect(liveFloor(RAID_LIVE.floorRamp / 2)).toBeCloseTo(1 + (RAID_LIVE.floor - 1) / 2, 9);
-    expect(liveFloor(RAID_LIVE.floorRamp * 3)).toBe(RAID_LIVE.floor);
+    expect(liveFloor(0, 'small')).toBe(1);
+    expect(liveFloor(RAID_LIVE.floorRamp.small / 2, 'small')).toBeCloseTo(1 + (RAID_LIVE.floor.small - 1) / 2, 9);
+    expect(liveFloor(RAID_LIVE.floorRamp.small * 3, 'small')).toBe(RAID_LIVE.floor.small);
     expect(liveBp(0, 'small', 'guzhen', 0)).toBe(10000);
-    expect(liveBp(0, 'small', 'guzhen', RAID_LIVE.floorRamp / 2)).toBe(Math.floor(liveFloor(RAID_LIVE.floorRamp / 2) * 10000));
+    expect(liveBp(0, 'small', 'guzhen', RAID_LIVE.floorRamp.small / 2)).toBe(Math.floor(liveFloor(RAID_LIVE.floorRamp.small / 2, 'small') * 10000));
     expect(liveBp(base * 2, 'small', 'guzhen', 0)).toBe(20000);
     expect(liveBp(base * 2, 'small', 'dukou')).toBe(Math.floor(((base * 2) / RAID_LIVE.base.small.dukou) * 10000));
     let prev = -1;
@@ -306,7 +306,7 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
     const wb = withBag('guzhen', 'escaped', 'small');
     const r = settleRaid(wb, 5);
     expect(r.bp).toBe(liveBp(r.value, 'small', 'guzhen', wb.endTick));
-    wb.endTick = RAID_LIVE.floorRamp;
+    wb.endTick = RAID_LIVE.floorRamp.small;
     expect(settleRaid(wb, 5).bp).toBe(liveBp(r.value, 'small'));
     expect(r.coins).toBe(5);
   });

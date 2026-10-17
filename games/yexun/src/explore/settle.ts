@@ -37,22 +37,23 @@ export function settleRaid(raid: Raid, pickedCoins: number): RaidResult {
   return { outcome: out, kept, lost, value, coins, bp };
 }
 
-/** 撤出时刻的保底：从 1.0 线性涨到 floor，floorRamp 拍给满（撤出越早给得越少，开门就走只拿一点） */
-export function liveFloor(ticks: number): number {
-  const k = ticks >= RAID_LIVE.floorRamp ? 1 : ticks <= 0 ? 0 : ticks / RAID_LIVE.floorRamp;
-  return 1 + (RAID_LIVE.floor - 1) * k;
+/** 撤出时刻的保底：从 1.0 线性涨到这一档的满额，floorRamp 拍给满（撤出越早给得越少，开门就走只拿一点） */
+export function liveFloor(ticks: number, tier: RaidLiveTier): number {
+  const ramp = RAID_LIVE.floorRamp[tier];
+  const k = ticks >= ramp ? 1 : ticks <= 0 ? 0 : ticks / ramp;
+  return 1 + (RAID_LIVE.floor[tier] - 1) * k;
 }
 
 /** 实盘倍数（浮点，显示用）；ticks = 撤出时刻，缺省按保底给满 */
-export function liveMultiplier(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen', ticks: number = RAID_LIVE.floorRamp): number {
+export function liveMultiplier(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen', ticks: number = RAID_LIVE.floorRamp[tier]): number {
   // 撤出了才会调到这里：至少保底，最多封顶
   const m = value / RAID_LIVE.base[tier][template];
-  const floor = liveFloor(ticks);
+  const floor = liveFloor(ticks, tier);
   return m < floor ? floor : m > RAID_LIVE.cap ? RAID_LIVE.cap : m;
 }
 
 /** 实盘倍数的万分之一（向下取整） */
-export function liveBp(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen', ticks: number = RAID_LIVE.floorRamp): number {
+export function liveBp(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen', ticks: number = RAID_LIVE.floorRamp[tier]): number {
   return Math.floor(liveMultiplier(value, tier, template, ticks) * 10000);
 }
 
