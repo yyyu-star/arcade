@@ -34,8 +34,8 @@ export const VIGIL_REGIONS: Partial<Record<MapId, Region>> = {
   // 竹林：竹精从地里钻出来（先冒圈）、蛇精藏着窜出来；竹王 6:30 和 11:00 各一次
   bamboo: {
     mobs: [
-      { kind: 'bamsprout', share: [[1, 0.18], [5, 0.27]] },
-      { kind: 'snakespirit', share: [[3, 0.14], [7, 0.2]] },
+      { kind: 'bamsprout', share: [[1, 0.144], [5, 0.216]] },
+      { kind: 'snakespirit', share: [[3, 0.1], [7, 0.14]] },
     ],
     elites: [
       { at: 390 * S, enemy: 'bambooking', count: 1 },
