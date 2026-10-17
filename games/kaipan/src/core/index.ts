@@ -142,6 +142,7 @@ export {
 } from './meta.ts';
 export type { AchievementHint, AchievementView, Codex, CodexEntry, CodexKind, DifficultyView, PersonaView, SeenSets } from './meta.ts';
 export { DAILY_RULES, DAILY_WIN_BASE, dailyBoardId, dailyScore, dailyScoreView, dailySegmentId } from './daily.ts';
+export { CHALLENGE_FORMAT, canChallenge, challengeOf, challengeScore, challengeSetup, challengeStats, isChallengeRun, parseChallenge, parseChallengeStats, type ChallengePayload, type ChallengeStats } from './challenge.ts';
 export {
   AUTO_SELL_LABEL,
   DIR_LABEL,
