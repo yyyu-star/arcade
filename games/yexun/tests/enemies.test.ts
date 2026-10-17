@@ -1,6 +1,6 @@
 import { Bot } from '../tools/bots.ts';
 import { describe, expect, it } from 'vitest';
-import { BONE, ENEMY_BY_KIND, LORD, PALANQUIN, WATER, WEASEL } from '../src/content/enemies.ts';
+import { BONE, ENEMY_BY_KIND, LORD, PALANQUIN, WATER, WEASEL, WHITEFOX } from '../src/content/enemies.ts';
 import { CALM, DANGERS, EVENTS, OPEN_TICKS } from '../src/content/waves.ts';
 import { createWorld, Drop, Ev, grantWeapon, spawnNow, step, type World } from '../src/core/index.ts';
 
@@ -125,7 +125,7 @@ describe('新怪', () => {
     expect(w.calmUntil).toBeGreaterThan(w.tick + CALM.afterElite - 70);
   });
 
-  it('白狐一次连冲三下', () => {
+  it('白狐一次连冲 WHITEFOX.chain 下', () => {
     const w = quiet();
     const i = spawnNow(w, 'whitefox', w.x + 200, w.y);
     let dashes = 0;
@@ -136,7 +136,7 @@ describe('新怪', () => {
       prev = w.eS[i]!;
       if (w.eS[i] === 0 && dashes > 0) break;
     }
-    expect(dashes).toBe(3);
+    expect(dashes).toBe(WHITEFOX.chain);
   });
 });
 

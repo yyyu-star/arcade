@@ -46,9 +46,9 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 剑: 0.6, 火: 1.25, 镇: 1.3 } },
   { kind: 'boss', code: 7, hp: 20000, speed: 1.55, dmg: 19, r: 44, xp: 0, steady: 0.97, boss: true, vs: { 剑: 0.8, 火: 1.45, 镇: 1.5, 木: 0.85 } },
   // 第 4 步：编号接着往后排（存档、录像里存的是编号，已有的不挪）
-  { kind: 'horse', code: 8, hp: 10, speed: 4, dmg: 7, r: 16, xp: 2, steady: 0.2, vs: { 火: 1.5, 镇: 1.3, 木: 0.8 } },
+  { kind: 'horse', code: 8, hp: 10, speed: 4, dmg: 7, r: 16, xp: 2, steady: 0.2, vs: { 火: 1.5, 镇: 1.15, 木: 0.8 } },
   { kind: 'water', code: 9, hp: 22, speed: 0.9, dmg: 6, r: 15, xp: 2, steady: 0.5, vs: { 土: 1.5, 镇: 1.3 } },
-  { kind: 'bone', code: 10, hp: 16, speed: 1.6, dmg: 7, r: 14, xp: 1, steady: 0.2, vs: { 剑: 0.7, 镇: 1.4, 木: 0.8 } },
+  { kind: 'bone', code: 10, hp: 16, speed: 1.6, dmg: 7, r: 14, xp: 1, steady: 0.2, vs: { 剑: 0.7, 镇: 1.4 } },
   { kind: 'bat', code: 11, hp: 6, speed: 2.7, dmg: 4, r: 10, xp: 1, steady: 0 },
   { kind: 'scarecrow', code: 12, hp: 55, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8, vs: { 剑: 0.6, 火: 1.25 } },
   { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
