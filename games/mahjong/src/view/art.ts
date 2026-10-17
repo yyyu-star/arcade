@@ -63,8 +63,11 @@ function wood(base: string, dark: string, light: string, seed: number): string {
   return `<svg ${NS} width='240' height='40'><rect width='240' height='40' fill='${base}'/>${lines}</svg>`;
 }
 
-/** 茶馆的板壁：竖木板（两块 56 宽一组），往下渐渐透明，叠在呢子上不留接缝 */
-function wall(): string {
+/**
+ * 茶馆的板壁：竖木板（两块 56 宽一组）。fade 时往下渐渐透明（叠在呢子上不留接缝）；
+ * 不 fade 的上下都能接着平铺，选桌页、等候页整页铺它（0.16.1：以前上半木墙、下半呢子硬切成两截）
+ */
+function wall(fade = true): string {
   const rnd = lcg(11);
   let g = '';
   for (const x0 of [0, 56]) {
@@ -77,7 +80,7 @@ function wall(): string {
   return (
     `<svg ${NS} width='112' height='360'><defs>` +
     `<linearGradient id='f' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#fff'/><stop offset='.45' stop-color='#fff'/><stop offset='1' stop-color='#fff' stop-opacity='0'/></linearGradient>` +
-    `<mask id='m'><rect width='112' height='360' fill='url(#f)'/></mask>` +
+    `<mask id='m'><rect width='112' height='360' fill='${fade ? 'url(#f)' : '#fff'}'/></mask>` +
     `<linearGradient id='p' x1='0' x2='1'><stop offset='0' stop-color='#4a2414'/><stop offset='.5' stop-color='#5a2d18'/><stop offset='1' stop-color='#43200f'/></linearGradient>` +
     `</defs><g mask='url(#m)'><rect width='56' height='360' fill='url(#p)'/><rect x='56' width='56' height='360' fill='url(#p)'/>${g}` +
     `<rect x='55' width='2' height='360' fill='#1a0a04' fill-opacity='.7'/><rect x='57' width='1' height='360' fill='#fff' fill-opacity='.06'/>` +
@@ -172,6 +175,7 @@ export function installArt(root: HTMLElement = document.documentElement): void {
     '--art-wood': url(wood('#5b2e17', '#2a1006', '#a8683a', 3)),
     '--art-wood-dark': url(wood('#3d1d0d', '#1a0803', '#7a4524', 5)),
     '--art-wall': url(wall()),
+    '--art-wall-full': url(wall(false)),
     '--art-curtain': url(curtain()),
     '--art-lantern': url(lantern('茶')),
     '--art-cup': url(cup()),

@@ -6,6 +6,8 @@
  * - 舞台是设计尺寸（横屏 1000×560、竖屏 560×1120），按看得见的区域等比缩放，safe-area 由 CSS 让出来；
  *   竖屏的高度跟着屏幕比例在 920–1120 之间变（中间那一截往上挪，CSS 用 --cut），
  *   不然 iPhone SE 工具栏展开时（约 375×553）按 1120 高缩到 0.49 倍，两边留黑、手牌只有 18 像素宽；现在约 0.6 倍。
+ * 横屏的宽度也跟着屏幕比例在 1000–1500 之间变（高按 560 缩放）：电脑宽屏（1920×911 约 2.1:1）以前两边各留一条深色空边，
+ *   现在舞台铺满；牌桌本身还是 1000 宽的几何、居中（style.css），多出来的是同一块呢子，选桌页按宽度排两栏。
  * 牌桌是 DOM + SVG，没有画布和 WebGL，"渲染倍数封顶 2""WebGL 上下文丢失"那两条不适用。
  */
 export type Orient = 'land' | 'port';
@@ -13,11 +15,14 @@ export type Orient = 'land' | 'port';
 export const STAGE: Record<Orient, { w: number; h: number }> = { land: { w: 1000, h: 560 }, port: { w: 560, h: 1120 } };
 /** 竖屏舞台最矮多少：对家贴顶、自己贴底，中间最多让出 200（再矮牌河就碰到对家的副露、自己的头像） */
 const PORT_MIN_H = 920;
+/** 横屏舞台最宽多少：再宽牌桌两边的空呢子太多，按高缩放后两边留边 */
+const LAND_MAX_W = 1500;
 
 export function watchViewport(app: HTMLElement, stage: HTMLElement, onChange: (o: Orient) => void): void {
   let orient: Orient | null = null;
   let scale = 0;
   let height = 0;
+  let width = 0;
   let timer = 0;
   const measure = (): void => {
     const vv = window.visualViewport;
@@ -30,11 +35,13 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onChange: (o
     const o: Orient = r.height > r.width * 1.15 ? 'port' : 'land';
     const st = STAGE[o];
     const h = o === 'port' ? Math.round(Math.min(st.h, Math.max(PORT_MIN_H, (st.w * r.height) / r.width))) : st.h;
-    const s = Math.min(r.width / st.w, r.height / h);
-    if (o === orient && h === height && Math.abs(s - scale) < 0.001) return;
+    const w = o === 'land' ? Math.round(Math.min(LAND_MAX_W, Math.max(st.w, (st.h * r.width) / r.height))) : st.w;
+    const s = Math.min(r.width / w, r.height / h);
+    if (o === orient && h === height && w === width && Math.abs(s - scale) < 0.001) return;
     scale = s;
     height = h;
-    stage.style.width = `${st.w}px`;
+    width = w;
+    stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
     stage.style.setProperty('--cut', `${st.h - h}px`);
     stage.style.transform = `translate(-50%, -50%) scale(${s})`;

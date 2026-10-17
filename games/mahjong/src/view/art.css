@@ -136,16 +136,26 @@
 
 /* ---------- 选桌页：茶馆的板壁、竹帘、两盏灯笼、一碗茶和几张牌 ----------
  * 都是 .screen.lobby 的背景层，不占位置、不挡按钮；background-attachment: local 让它们跟着内容一起滚走。
- * 板壁那张图自己往下渐变成透明，叠在舞台的呢子上没有接缝。 */
+ * 板壁整页铺满（上下都能接着平铺），往下压暗一点；舞台在这两页也换成木色，顶栏底下不透出呢子（0.16.1：以前上半木墙、下半呢子硬切）。 */
+.stage:has(> .screen.lobby),
+.stage:has(> .screen.room) {
+  background: #3a1a0c;
+}
+/* 屏幕比舞台高或宽时露出的边（手机竖屏上下两条）也跟着换木色 */
+html:has(.screen.lobby),
+html:has(.screen.room),
+html:has(.screen.lobby) body,
+html:has(.screen.room) body {
+  background: #24100a;
+}
 .screen.lobby {
   background:
     var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
-    var(--art-lantern, linear-gradient(transparent, transparent)) left 6% top 4px / 70px 144px no-repeat,
-    var(--art-lantern, linear-gradient(transparent, transparent)) right 6% top 4px / 70px 144px no-repeat,
+    var(--art-lantern, linear-gradient(transparent, transparent)) left 24px top 4px / 70px 144px no-repeat,
     var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 172px) 22px / 100px 94px no-repeat,
-    var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 176px) 24px / 110px 89px no-repeat,
-    radial-gradient(ellipse 260px 120px at 50% 70px, #ffb24d26, transparent 70%) no-repeat,
-    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+    radial-gradient(ellipse 260px 120px at 22% 90px, #ffb24d26, transparent 70%) no-repeat,
+    linear-gradient(transparent 35%, #1a0a0499),
+    var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
   background-attachment: local;
 }
 [data-orient='port'] .screen.lobby {
@@ -156,9 +166,11 @@
     var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 132px) 30px / 84px 79px no-repeat,
     var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 134px) 34px / 92px 74px no-repeat,
     radial-gradient(ellipse 220px 110px at 50% 70px, #ffb24d26, transparent 70%) no-repeat,
-    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+    linear-gradient(transparent 35%, #1a0a0499),
+    var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
   background-attachment: local;
 }
+/* 横屏选桌页分两栏（style.css）：灯笼、茶碗、暖光都放在左栏店名这一边，右栏的档位卡上面不压摆设 */
 /* 标题在板壁上：金字压一道深色投影，像刻出来描金 */
 .screen.lobby .lobby-head h1 {
   text-shadow:
@@ -188,7 +200,8 @@
 .screen.room {
   background:
     var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
-    var(--art-wall, linear-gradient(#4a2414, transparent)) 0 0 / 112px 360px repeat-x;
+    linear-gradient(transparent 35%, #1a0a0499),
+    var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
   background-attachment: local;
 }
 .dialog {
