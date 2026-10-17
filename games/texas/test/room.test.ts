@@ -6,7 +6,8 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, it } from 'vitest';
 import { ROOM_LEVEL, STAKES, stakesOf } from '../src/core/stakes.ts';
 import { isFail } from '../src/core/table.ts';
-import { HAND_PAUSE_MS, OPENING_MS, SEATS, TURN_MS, texasRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
+import { HAND_PAUSE_MS, OPENING_MS, roomOp, SEATS, SETTLE_EXTRA, settleCap, TURN_MS, texasRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
+import { SOLO_OP, soloOp } from '../worker/platform.ts';
 import { conserve, SEED } from './helpers.ts';
 
 const MAX = stakesOf('small').max;
@@ -717,5 +718,43 @@ describe('实盘至少两个真人（0.4.0）、电脑按好友房的强弱档�
     const s = settleAll(old);
     expect(s.t).toMatchObject({ minHumans: 2, level: ROOM_LEVEL.small, phase: 'idle', handNo: 0 });
     expect(G.view(s, 0).needTwo).toBe(true);
+  });
+});
+
+describe('钱包 op 和结回上限（0.13.2 审计）', () => {
+  it('好友房每一笔的 op 都以房间号 r 开头，永远不是 solo- 开头（单机的由 Worker 加 solo- 前缀，两边撞不上）', () => {
+    let s = seatedAll(['human', 'human', 'ai', 'ai']);
+    const ops: string[] = [];
+    for (let k = 0; k < 60; k++) {
+      ops.push(...effects(s).map((e) => roomOp(e)));
+      s = settleAll(s);
+      const seat = G.turn(s);
+      if (seat === null) break;
+      s = drive(act(s, seat, { t: 'fold' }));
+    }
+    ops.push(...effects(G.closing!(s)).map((e) => roomOp(e)));
+    expect(ops.length).toBeGreaterThan(0);
+    for (const o of ops) {
+      expect(o.startsWith(SOLO_OP)).toBe(false);
+      expect(o).toMatch(/^r[0-9a-f]{16}s\dn\d+-[bc]\d+$/);
+    }
+    // 单机：加前缀、不重复加、加了超过 64 位不收
+    expect(soloOp('abcdefgh')).toBe('solo-abcdefgh');
+    expect(soloOp('solo-abcdefgh')).toBe('solo-abcdefgh');
+    expect(soloOp('x'.repeat(60))).toBeNull();
+    expect(soloOp(ops[0]!)).toBe(`solo-${ops[0]}`);
+  });
+
+  it('一份结回最多"带上桌的 + 20 份"（平台的上限，多了整笔被拒）：赢超了的封到上限再结，不会整份结不回去', () => {
+    const s = seatedAll(['human', 'human', 'ai', 'ai']);
+    const max = stakesOf(s.t.stakes).max;
+    // 别人前后补码二十多次都输给 0 号：直接把要结回的攒到很大（不经牌桌，筹码守恒不查这一项）
+    const big = { ...s, owed: s.owed.map((x, i) => (i === 0 ? x + 30 * max : x)) };
+    const out = credits(G.closing!(big)).find((e) => e.seat === 0)!;
+    expect(out.amount).toBe(settleCap(max, max));
+    expect(settleCap(max, max)).toBe(max + SETTLE_EXTRA * max);
+    // 没超的照原样结
+    const fine = credits(G.closing!(s)).find((e) => e.seat === 0)!;
+    expect(fine.amount).toBeLessThan(settleCap(max, max));
   });
 });

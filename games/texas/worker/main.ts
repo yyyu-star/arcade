@@ -16,7 +16,7 @@ import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } f
 import { PERSONAS } from '../src/ai/personas.ts';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
 import type { WalletReply } from '../src/net/wallet.ts';
-import { GAME, WALLET_ID, type PlatformWallet } from './platform.ts';
+import { GAME, soloOp, WALLET_ID, type PlatformWallet } from './platform.ts';
 import type { TexasRoom } from './room.ts';
 
 export { RoomMeter } from 'arcade-kit/meter';
@@ -101,10 +101,13 @@ async function solo(request: Request, env: Env, sub: string): Promise<Response> 
   const id = (x: unknown): x is string => typeof x === 'string' && WALLET_ID.test(x);
   const amount = b?.amount;
   if (!b || !id(b.op) || !id(b.session) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return json({ error: 'bad_request' }, 400);
+  // op 由 Worker 加 solo- 前缀再交平台，和好友房的 op 撞不上（worker/platform.ts 的 soloOp）
+  const op = soloOp(b.op);
+  if (!op) return json({ error: 'bad_request' }, 400);
   if (sub === 'buyin' && !STAKES.some((x) => x.id === b.stakes)) return json({ error: 'bad_request' }, 400);
   const who = await whoIs(request, env.ARCADE);
   if (!('user' in who)) return denied(who);
-  const base = { userId: who.user.userId, game: GAME, ref: b.session, mode: 'client' as const, op: b.op };
+  const base = { userId: who.user.userId, game: GAME, ref: b.session, mode: 'client' as const, op };
   let r: WalletReply;
   try {
     r =
