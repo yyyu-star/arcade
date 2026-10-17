@@ -1,18 +1,23 @@
 /**
- * 标题页主视觉：scene/title_keyart.svg，1600×900。
- * 构图：暖色傍晚天空 + 远处 K 线城市 → 山坡 → 正下方的炒股小屋（窗里亮着显示器）→ 两侧一群股票小人 →
- * 左上、右上飘着群聊气泡。中上部（x 380–1220，y 40–440）只留天空和柔光，给 Logo 和按钮。
- * 主体（小屋和前排小人）集中在中间 1400 宽内；裁窄时先丢掉贴角的群聊气泡，再丢最外侧的小人。
+ * 开始菜单（主页）的主视觉。坐标系沿用原来那张 1600×900 的整图（世界坐标 = 这里 × 0.8）。
+ *
+ * 0.14.0（art-v3 ①）拆成几层，分别加载、在画面里叠起来，才能做视差、待机动作，并且铺满不是 16:9 的窗口：
+ * - 天空在画面里用渐变和光带直接画（不占图片）；
+ * - scene/title_city.svg：远处的 K 线城市，比原图左右各宽 400（窗口变宽时露出来）；
+ * - scene/title_hills.svg：山坡和后排的小人，同样加宽，往下画到 1040；
+ * - scene/title_house.svg：炒股小屋（窗里亮着显示器、烟变成 K 线）；
+ * - scene/title_bubble_<0..5>.svg：六个群聊气泡（头像 + 图形，没有字），画面里依次弹出；
+ * - scene/title_cloud.svg：一朵云，画面里慢慢飘。
+ * 前排的股票小人不烤进图里，由画面用 StockGuy 摆（会眨眼、会跳）。
  *
  * 小人和头像直接复用生成器输出，嵌入前把每份 SVG 的 id 按出现顺序重编号，保证结果确定、互不冲突。
  */
 import { readFileSync } from 'node:fs';
 import { avatarSvg } from './avatars.ts';
-import { INK, WHITE, darken, ellipseD, frag, grained, hiArc, lighten, merge, rng, rrectD, shape, smoothClosed, sparkleD, starD, svgDoc } from './lib/svg.ts';
+import { INK, WHITE, darken, ellipseD, frag, grained, hiArc, lighten, merge, rng, rrectD, shape, smoothClosed, starD, svgDoc } from './lib/svg.ts';
 import { buildStock, type StockSpec } from './stocks.ts';
 
 const W = 1600;
-const H = 900;
 
 function line(d: string, color: string, w: number, extra = ''): string {
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
@@ -55,42 +60,12 @@ export function stock(specs: Map<string, StockSpec>, id: string, expr: string, g
   return embed(doc, gx - size / 2, top, size, size, flip);
 }
 
-function sky(): string {
-  const r = rng(20261010);
-  let s =
-    `<defs><linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="760"><stop offset="0" stop-color="#ffc98f"/><stop offset="0.45" stop-color="#ffe2b8"/><stop offset="1" stop-color="#fff3dc"/></linearGradient>` +
-    `<radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="800" cy="300" r="520"><stop offset="0" stop-color="#fffaf0" stop-opacity="0.95"/><stop offset="0.6" stop-color="#fff3dc" stop-opacity="0.4"/><stop offset="1" stop-color="#fff3dc" stop-opacity="0"/></radialGradient></defs>` +
-    `<rect width="${W}" height="${H}" fill="url(#sky)"/>`;
-  // 放射状的淡光带
-  for (let i = 0; i < 14; i++) {
-    const a0 = (-180 + i * (180 / 14)) * (Math.PI / 180);
-    const a1 = a0 + (180 / 14 / 2) * (Math.PI / 180);
-    const R = 1400;
-    s += `<path d="M800 640L${(800 + Math.cos(a0) * R).toFixed(0)} ${(640 + Math.sin(a0) * R).toFixed(0)}L${(800 + Math.cos(a1) * R).toFixed(0)} ${(640 + Math.sin(a1) * R).toFixed(0)}Z" fill="#ffffff" fill-opacity="0.13"/>`;
-  }
-  s += `<rect width="${W}" height="${H}" fill="url(#glow)"/>`;
-  // 云
-  const cloud = (cx: number, cy: number, k: number) => {
-    const pts: [number, number][] = [[-60, 18], [-70, -2], [-40, -26], [-6, -34], [30, -26], [62, -8], [60, 18]];
-    return `<path d="${smoothClosed(pts.map(([x, y]) => [cx + x * k, cy + y * k] as [number, number]), 1)}" fill="#ffffff" fill-opacity="0.75"/>`;
-  };
-  s += cloud(240, 470, 1.4) + cloud(1380, 420, 1.2) + cloud(560, 560, 0.9) + cloud(1120, 590, 1);
-  // 星点
-  for (let i = 0; i < 18; i++) {
-    const x = 60 + r() * 1480;
-    const y = 30 + r() * 320;
-    if (x > 420 && x < 1180 && y < 380) continue;
-    s += `<path d="${sparkleD(x, y, 3 + r() * 4)}" fill="#ffffff" fill-opacity="0.8"/>`;
-  }
-  return s;
-}
-
-function city(): string {
+function city(x0 = -20, x1 = W + 20): string {
   // 远处的 K 线城市：一排红绿方楼（淡紫雾里）
   const r = rng(77);
   let s = '';
-  let x = -20;
-  while (x < W + 20) {
+  let x = x0;
+  while (x < x1) {
     const w = 40 + Math.floor(r() * 50);
     const h = 90 + Math.floor(r() * 170);
     const up = r() > 0.42;
@@ -100,16 +75,7 @@ function city(): string {
     for (let wy = 700 - h + 16; wy < 680; wy += 26) for (let wx = x + 9; wx < x + w - 12; wx += 16) if (r() > 0.45) s += `<rect x="${wx}" y="${wy}" width="7" height="9" rx="1.5" fill="#fff6e0" fill-opacity="0.8"/>`;
     x += w + 6 + Math.floor(r() * 18);
   }
-  return `<g opacity="0.55">${s}</g><rect x="0" y="560" width="${W}" height="200" fill="#ffe8cc" fill-opacity="0.45"/>`;
-}
-
-function hills(): string {
-  return (
-    `<path d="M0 720Q300 640 620 700Q800 730 980 700Q1300 640 1600 710V900H0Z" fill="#b8dc8a" stroke="${INK}" stroke-width="4"/>` +
-    `<path d="M0 800Q400 740 800 790Q1200 840 1600 780V900H0Z" fill="#9fcf72"/>` +
-    `<path d="M0 860Q500 820 800 856Q1100 890 1600 846V900H0Z" fill="#88c060"/>` +
-    [120, 330, 1270, 1480, 640, 960].map((x, i) => line(`M${x} ${820 + (i % 3) * 18}l6 -14l6 14M${x + 16} ${826 + (i % 3) * 18}l5 -11l5 11`, '#6aa84a', 4)).join('')
-  );
+  return `<g opacity="0.55">${s}</g><rect x="${x0}" y="560" width="${x1 - x0}" height="200" fill="#ffe8cc" fill-opacity="0.45"/>`;
 }
 
 function house(): string {
@@ -176,39 +142,135 @@ const dots = (x: number, y: number) => [0, 1, 2].map((i) => `<circle cx="${x + i
 const coin = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="17" fill="#ffd23f" stroke="${INK}" stroke-width="4"/><path d="${starD(x, y + 1, 8)}" fill="#f0a020"/>`;
 const question = (x: number, y: number) => line(`M${x - 9} ${y - 8}Q${x - 9} ${y - 20} ${x + 1} ${y - 20}Q${x + 12} ${y - 20} ${x + 12} ${y - 10}Q${x + 12} ${y - 3} ${x + 2} ${y + 1}V${y + 7}`, '#7a5ad8', 7) + `<circle cx="${x + 2}" cy="${y + 18}" r="4.5" fill="#7a5ad8"/>`;
 
-export function keyartSvg(): string {
+/** 加宽后的范围（原图坐标）：左右各多 400，窗口到 21:9 也铺得满 */
+const BX0 = -400;
+const BX1 = W + 400;
+
+/** 把原图坐标里 (x0, y0) 起、w×h 的一块单独存成一张图 */
+function layerDoc(x0: number, y0: number, w: number, h: number, f: ReturnType<typeof frag>): string {
+  return svgDoc(w, h, { defs: f.defs, content: `<g transform="translate(${-x0} ${-y0})">${f.content}</g>` });
+}
+
+export const CITY_BOX = { x: BX0, y: 420, w: BX1 - BX0, h: 360 } as const;
+export const HILLS_BOX = { x: BX0, y: 620, w: BX1 - BX0, h: 420 } as const;
+export const HOUSE_BOX = { x: 560, y: 470, w: 640, h: 400 } as const;
+
+function cityLayer(): string {
+  const B = CITY_BOX;
+  return layerDoc(B.x, B.y, B.w, B.h, frag(city(BX0 - 20, BX1 + 20)));
+}
+
+/** 山坡加宽、往下画到 1040；后排小人烤进来（前排由画面摆） */
+function hillsLayer(): string {
   embedNo = 0;
   const specs = stockSpecs();
-  // 两侧人群：后排小、前排大；表情以开心和涨停为主，混一两个发愁的
-  const crowd: [string, string, number, number, number, boolean?][] = [
-    // 左后排
+  const B = HILLS_BOX;
+  const bottom = B.y + B.h;
+  const ground =
+    `<path d="M${BX0} 730Q${BX0 + 200} 660 0 720Q300 640 620 700Q800 730 980 700Q1300 640 1600 710Q1800 650 ${BX1} 720V${bottom}H${BX0}Z" fill="#b8dc8a" stroke="${INK}" stroke-width="4"/>` +
+    `<path d="M${BX0} 810Q0 760 400 790Q800 840 1200 800Q1600 760 ${BX1} 800V${bottom}H${BX0}Z" fill="#9fcf72"/>` +
+    `<path d="M${BX0} 870Q300 830 800 866Q1300 900 ${BX1} 856V${bottom}H${BX0}Z" fill="#88c060"/>` +
+    [-260, -90, 120, 330, 1270, 1480, 1690, 1880, 640, 960].map((x, i) => line(`M${x} ${820 + (i % 3) * 18}l6 -14l6 14M${x + 16} ${826 + (i % 3) * 18}l5 -11l5 11`, '#6aa84a', 4)).join('');
+  // 后排小人（小、站在坡上）：原图的六个加上加宽部分各两个
+  const back: [string, string, number, number, number, boolean?][] = [
+    ['la_leader', 'calm', -280, 748, 118], ['fin_follower', 'happy', -120, 756, 124],
     ['ne_follower2', 'happy', 150, 760, 130], ['con_follower2', 'calm', 290, 744, 130], ['gm_follower2', 'happy', 420, 752, 126],
-    // 左前排
-    ['ai_leader', 'limitup', 90, 870, 210], ['con_blue', 'happy', 262, 884, 200], ['fin_blue', 'calm', 440, 878, 190],
-    // 右后排
     ['ai_follower2', 'happy', 1180, 752, 126, true], ['ph_follower', 'worried', 1310, 744, 128, true], ['la_follower', 'happy', 1450, 760, 130, true],
-    // 右前排
-    ['pig_leader', 'limitup', 1160, 878, 200, true], ['ai_meme', 'happy', 1336, 884, 196, true], ['ne_meme', 'happy', 1488, 870, 206, true],
-    // 房前的两只小的
-    ['st_ghost', 'worried', 600, 880, 130], ['fin_leader', 'happy', 1010, 884, 150, true],
+    ['gm_leader', 'happy', 1700, 756, 124, true], ['ph_leader', 'calm', 1860, 748, 118, true],
   ];
-  const people = crowd.map(([id, e, x, y, s, f]) => stock(specs, id, e, x, y, s, f)).join('');
-  const chats =
-    chatBubble('qunzhu', 'smug', 40, 70, 210, (bx, by) => upArrow(bx + 46, by + 38) + flame(bx + 100, by + 40) + rocket(bx + 160, by + 38)) +
-    chatBubble('laowang', 'normal', 90, 180, 170, (bx, by) => coin(bx + 48, by + 38) + dots(bx + 86, by + 38)) +
-    chatBubble('xiaoli', 'awkward', 40, 290, 150, (bx, by) => downArrow(bx + 44, by + 38) + question(bx + 100, by + 38)) +
-    chatBubble('dav', 'smug', 1290, 80, 190, (bx, by) => upArrow(bx + 42, by + 38, '#ff4d4d') + upArrow(bx + 92, by + 38, '#ff4d4d') + upArrow(bx + 142, by + 38, '#ff4d4d'), true) +
-    chatBubble('zhangjie', 'normal', 1330, 196, 150, (bx, by) => `<path d="M${bx + 52} ${by + 54}C${bx + 26} ${by + 36} ${bx + 30} ${by + 18} ${bx + 42} ${by + 18}C${bx + 48} ${by + 18} ${bx + 52} ${by + 24} ${bx + 52} ${by + 26}C${bx + 52} ${by + 24} ${bx + 56} ${by + 18} ${bx + 62} ${by + 18}C${bx + 74} ${by + 18} ${bx + 78} ${by + 36} ${bx + 52} ${by + 54}Z" fill="#ff7a9a" stroke="${INK}" stroke-width="4"/>` + dots(bx + 88, by + 38), true) +
-    chatBubble('neimu', 'smug', 1250, 310, 230, (bx, by) => dots(bx + 40, by + 38) + `<rect x="${bx + 116}" y="${by + 20}" width="34" height="30" rx="6" fill="#ffd23f" stroke="${INK}" stroke-width="4"/><path d="M${bx + 122} ${by + 20}v-8q11 -12 22 0v8" fill="none" stroke="${INK}" stroke-width="5"/>` + flame(bx + 186, by + 40), true);
-  const sparkles = [[560, 640, 12], [1040, 620, 10], [700, 470, 8], [930, 500, 9]].map(([x, y, r]) => `<path d="${sparkleD(x!, y!, r!)}" fill="#ffffff" stroke="${INK}" stroke-width="2.4"/>`).join('');
-  const floor = `<ellipse cx="800" cy="846" rx="300" ry="20" fill="${INK}" fill-opacity="0.15"/>`;
-  const scene = merge(frag(sky() + city()), grained(frag(hills()), 0.06, [0, 600, W, 300]), frag(floor + `<g transform="translate(800 846) scale(1.15) translate(-800 -846)">${house()}</g>` + sparkles + people + chats));
-  return svgDoc(W, H, scene);
+  const people = back.map(([id, e, x, y, sz, f]) => stock(specs, id, e, x, y, sz, f)).join('');
+  return layerDoc(B.x, B.y, B.w, B.h, merge(grained(frag(ground), 0.06, [BX0, 600, BX1 - BX0, 440]), frag(people)));
+}
+
+function houseLayer(): string {
+  const B = HOUSE_BOX;
+  const shadow = `<ellipse cx="800" cy="846" rx="260" ry="18" fill="${INK}" fill-opacity="0.15"/>`;
+  return layerDoc(B.x, B.y, B.w, B.h, frag(shadow + house()));
+}
+
+/** 六个群聊气泡：左边三个（白底）、右边三个（黄底），每个单独一张（画面里依次弹出） */
+export const BUBBLES: { avatar: string; face: 'normal' | 'smug' | 'awkward'; w: number; right: boolean; inner: (bx: number, by: number) => string }[] = [
+  { avatar: 'qunzhu', face: 'smug', w: 210, right: false, inner: (bx, by) => upArrow(bx + 46, by + 38) + flame(bx + 100, by + 40) + rocket(bx + 160, by + 38) },
+  { avatar: 'laowang', face: 'normal', w: 170, right: false, inner: (bx, by) => coin(bx + 48, by + 38) + dots(bx + 86, by + 38) },
+  { avatar: 'xiaoli', face: 'awkward', w: 150, right: false, inner: (bx, by) => downArrow(bx + 44, by + 38) + question(bx + 100, by + 38) },
+  { avatar: 'dav', face: 'smug', w: 190, right: true, inner: (bx, by) => upArrow(bx + 42, by + 38) + upArrow(bx + 92, by + 38) + upArrow(bx + 142, by + 38) },
+  {
+    avatar: 'zhangjie',
+    face: 'normal',
+    w: 150,
+    right: true,
+    inner: (bx, by) =>
+      `<path d="M${bx + 52} ${by + 54}C${bx + 26} ${by + 36} ${bx + 30} ${by + 18} ${bx + 42} ${by + 18}C${bx + 48} ${by + 18} ${bx + 52} ${by + 24} ${bx + 52} ${by + 26}C${bx + 52} ${by + 24} ${bx + 56} ${by + 18} ${bx + 62} ${by + 18}C${bx + 74} ${by + 18} ${bx + 78} ${by + 36} ${bx + 52} ${by + 54}Z" fill="#ff7a9a" stroke="${INK}" stroke-width="4"/>` +
+      dots(bx + 88, by + 38),
+  },
+  {
+    avatar: 'neimu',
+    face: 'smug',
+    w: 230,
+    right: true,
+    inner: (bx, by) =>
+      dots(bx + 40, by + 38) + `<rect x="${bx + 116}" y="${by + 20}" width="34" height="30" rx="6" fill="#ffd23f" stroke="${INK}" stroke-width="4"/><path d="M${bx + 122} ${by + 20}v-8q11 -12 22 0v8" fill="none" stroke="${INK}" stroke-width="5"/>` + flame(bx + 186, by + 40),
+  },
+];
+/** 一个气泡图的尺寸（原图单位）：头像 76 + 间隔 + 气泡宽 + 尾巴，上下留出描边 */
+export function bubbleSize(i: number): { w: number; h: number } {
+  return { w: BUBBLES[i]!.w + 104, h: 92 };
+}
+
+function bubbleLayer(i: number): string {
+  embedNo = 0;
+  const b = BUBBLES[i]!;
+  const { w, h } = bubbleSize(i);
+  // 气泡画在 (8, 6) 起：左边的头像在左、右边的头像在右
+  return layerDoc(-8, -6, w, h, frag(chatBubble(b.avatar, b.face, 0, 0, b.w, b.inner, b.right)));
+}
+
+function cloudLayer(): string {
+  const pts: [number, number][] = [[-60, 18], [-70, -2], [-40, -26], [-6, -34], [30, -26], [62, -8], [60, 18]];
+  const d = smoothClosed(pts.map(([x, y]) => [100 + x * 1.4, 56 + y * 1.4] as [number, number]), 1);
+  return svgDoc(200, 90, frag(`<path d="${d}" fill="#ffffff" fill-opacity="0.8"/>`));
+}
+
+/**
+ * 拼好的一整张（1600×900，和画面里的摆法一样）：游戏不加载，给 README 的配图和平台大厅的封面用
+ * （封面怎么出见 public/assets/art/README.md）。前排小人在这里烤进去（画面里是活的）。
+ */
+function compositeDoc(): string {
+  const specs = stockSpecs();
+  const at = (doc: string, x: number, y: number, w: number, h: number): string => embed(doc, x, y, w, h);
+  const sky =
+    `<defs><linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="760"><stop offset="0" stop-color="#ffc98f"/><stop offset="0.45" stop-color="#ffe2b8"/><stop offset="1" stop-color="#fff3dc"/></linearGradient></defs>` +
+    `<rect width="${W}" height="900" fill="url(#sky)"/>`;
+  // 各层生成时会把嵌入编号清零：先都生成好，再从一个大编号开始嵌，id 不会撞
+  const docs = { city: cityLayer(), hills: hillsLayer(), house: houseLayer(), bubbles: BUBBLES.map((_, i) => bubbleLayer(i)) };
+  embedNo = 1000;
+  const city = at(docs.city, CITY_BOX.x, CITY_BOX.y, CITY_BOX.w, CITY_BOX.h);
+  const hills = at(docs.hills, HILLS_BOX.x, HILLS_BOX.y, HILLS_BOX.w, HILLS_BOX.h);
+  // 画面里小屋按原图 0.7 倍、中心在 800，脚下 862（世界 690 ÷ 0.8）
+  const k = 0.7 / 0.8;
+  const house = at(docs.house, 800 - 240 * k, 862 - 370 * k, HOUSE_BOX.w * k, HOUSE_BOX.h * k);
+  const front: [string, string, number, number, number, boolean?][] = [
+    ['ai_leader', 'happy', 90, 872, 178], ['con_blue', 'calm', 260, 885, 170], ['fin_blue', 'calm', 435, 878, 160], ['st_ghost', 'worried', 598, 882, 112],
+    ['fin_leader', 'happy', 1008, 885, 130, true], ['pig_leader', 'limitup', 1162, 878, 170, true], ['ai_meme', 'happy', 1338, 885, 165, true], ['ne_meme', 'happy', 1495, 872, 175, true],
+  ];
+  const people = front.map(([id, e, x, y, sz, f]) => stock(specs, id, e, x, y, sz, f)).join('');
+  const ys = [210, 310, 410];
+  const bubbles = BUBBLES.map((b, i) => {
+    const { w, h } = bubbleSize(i);
+    const sc = 0.72 / 0.8;
+    return at(docs.bubbles[i]!, b.right ? 1570 - w * sc : 30, ys[i % 3]!, w * sc, h * sc);
+  }).join('');
+  return svgDoc(W, 900, frag(sky + city + hills + house + people + bubbles));
 }
 
 export function build(write: (rel: string, data: string) => void): number {
-  write('scene/title_keyart.svg', keyartSvg());
-  return 1;
+  write('scene/title_city.svg', cityLayer());
+  write('scene/title_hills.svg', hillsLayer());
+  write('scene/title_house.svg', houseLayer());
+  BUBBLES.forEach((_, i) => write(`scene/title_bubble_${i}.svg`, bubbleLayer(i)));
+  write('scene/title_cloud.svg', cloudLayer());
+  write('scene/title_keyart.svg', compositeDoc());
+  return 5 + BUBBLES.length;
 }
 
 export { darken, ellipseD, lighten };

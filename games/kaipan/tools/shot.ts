@@ -435,7 +435,7 @@ async function run(browser: Browser): Promise<void> {
   }
   // 1c. 没有标题主视觉时退回小屋 + 纸面板（模拟文件不存在：开发服务器回退成 index.html）
   {
-    const ctx = await openPage(browser, 'title-no-keyart', '', { routes: [{ pattern: '**/scene/title_keyart.svg', body: '<!doctype html><title>fallback</title>', type: 'text/html' }] });
+    const ctx = await openPage(browser, 'title-no-keyart', '', { routes: [{ pattern: '**/scene/title_house.svg', body: '<!doctype html><title>fallback</title>', type: 'text/html' }] });
     await shot(ctx, '01b-title-no-keyart');
     expect('new' in (await controls(ctx)), '没有主视觉时标题页也应有「新游戏」');
     await ctx.page.context().close();
@@ -888,9 +888,10 @@ async function run(browser: Browser): Promise<void> {
     await ctx.page.setViewportSize({ width: 844, height: 390 });
     await waitIdle(ctx, '横过来之后');
     await ctx.page.waitForTimeout(600);
-    const cw = await ctx.page.evaluate(() => document.querySelector('canvas')?.width ?? 0);
-    expect(cw > 0 && cw % 960 === 0, `竖屏打开再横过来应是手机布局（画布宽 ${cw}，应是 960 的整数倍）`);
-    notes.push(`竖屏打开再横过来：画布宽 ${cw}`);
+    // 0.14.0 EXPAND：844×390 比 960×444 略宽，画布往宽里长（宽不再是 960 的整数倍），高仍是 444 的整数倍；电脑布局会是 720 的倍数
+    const ch = await ctx.page.evaluate(() => document.querySelector('canvas')?.height ?? 0);
+    expect(ch > 0 && ch % 444 === 0, `竖屏打开再横过来应是手机布局（画布高 ${ch}，应是 444 的整数倍）`);
+    notes.push(`竖屏打开再横过来：画布高 ${ch}`);
     await shot(ctx, '61b-portrait-then-landscape');
     await ctx.page.context().close();
   }
@@ -1506,7 +1507,8 @@ async function liveShots(browser: Browser): Promise<void> {
     await ctx.page.reload();
     await waitIdle(ctx, '刷新后', "window.__game.scene === 'title'");
     await ctx.page.waitForTimeout(400);
-    expect(await hasText(ctx, '继续 · 实盘 1月'), `刷新后「继续」应写实盘（${(await texts(ctx)).join(' | ')}）`);
+    // 0.14.0 大卡：标题「继续」，下面一行「人设 · 1月 · 实盘」
+    expect(await hasText(ctx, ' · 1月 · 实盘'), `刷新后「继续」应写实盘（${(await texts(ctx)).join(' | ')}）`);
     await shot(ctx, 'l6-title-resume');
     // 实盘没打完时开别的局：先问继续还是收手
     await press(ctx, 'quick');
@@ -1585,7 +1587,7 @@ async function liveShots(browser: Browser): Promise<void> {
     await shot(ctx, 'l9-title-expired');
     await press(ctx, 'notice:ok');
     await ctx.page.waitForTimeout(300);
-    expect(await hasText(ctx, '继续 · 1月'), '过期的局照样能接着玩（不再写实盘）');
+    expect((await texts(ctx)).some((t) => t.endsWith(' · 1月')), '过期的局照样能接着玩（不再写实盘）');
     await ctx.page.context().close();
   }
 
@@ -2306,7 +2308,7 @@ async function metaShots(browser: Browser): Promise<void> {
   }
   // G. 没有标题主视觉、玩过几局：小屋 + 纸面板里的按钮和档案一行
   {
-    const ctx = await openPage(browser, 'meta-no-keyart', '', { storage: profileStorage('partial'), routes: [{ pattern: '**/scene/title_keyart.svg', body: '<!doctype html><title>fallback</title>', type: 'text/html' }] });
+    const ctx = await openPage(browser, 'meta-no-keyart', '', { storage: profileStorage('partial'), routes: [{ pattern: '**/scene/title_house.svg', body: '<!doctype html><title>fallback</title>', type: 'text/html' }] });
     await shot(ctx, '99c-title-no-keyart-partial');
     await ctx.page.context().close();
   }

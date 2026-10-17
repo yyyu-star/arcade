@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { Rect } from '../rect.ts';
 import { COLOR, RADIUS } from '../theme.ts';
 import { addText } from './text.ts';
-import { viewOf } from '../viewport.ts';
+import { coverOf, viewOf } from '../viewport.ts';
 
 export interface TipContent {
   title: string;
@@ -74,7 +74,8 @@ class Tooltip {
   pin(owner: unknown, rect: Rect, c: TipContent | null): void {
     if (c) this.show(owner, rect, c);
     else this.hide();
-    const shield = this.scene.add.rectangle(0, 0, viewOf(this.scene).w, viewOf(this.scene).h, 0x000000, 0.001).setOrigin(0, 0).setDepth(DEPTH - 1).setInteractive();
+    const cv = coverOf(this.scene);
+    const shield = this.scene.add.rectangle(cv.x, cv.y, cv.w, cv.h, 0x000000, 0.001).setOrigin(0, 0).setDepth(DEPTH - 1).setInteractive();
     // 长按的手指还按着，第一次松手不算；之后的一次完整点击才收起
     let armed = false;
     const stop = (_p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData): void => ev.stopPropagation();

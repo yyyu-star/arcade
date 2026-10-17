@@ -131,8 +131,18 @@ const FACES: readonly Face[] = ['calm', 'happy', 'limitup', 'worried', 'limitdow
 type GuyFrame = Face | 'blink';
 /** 道具图标的光栅化尺寸（世界坐标）：顶栏 24–32，奖励卡 76 */
 const ITEM_RASTER = 80;
-/** 标题页主视觉（可选，单独文件） */
-export const KEYART_KEY = 'scene:title_keyart';
+/**
+ * 0.14.0 开始菜单的主视觉分层（可选，单独文件；tools/art/keyart.ts 生成）：远处城市、山坡和后排小人、小屋、六个群聊气泡、一朵云。
+ * 世界尺寸按电脑布局（原图 × 0.8）；城市和山坡比 1280 宽（窗口不是 16:9 时露出来）。缺任何一张都退回小屋背景。
+ */
+export const TITLE_ART = {
+  city: { key: 'scene:title_city', w: 1920, h: 288 },
+  hills: { key: 'scene:title_hills', w: 1920, h: 336 },
+  house: { key: 'scene:title_house', w: 448, h: 280 },
+  cloud: { key: 'scene:title_cloud', w: 160, h: 72 },
+} as const;
+/** 六个气泡的世界尺寸（原图 (气泡宽 + 104)×92 × 0.72） */
+export const TITLE_BUBBLES = [210, 170, 150, 190, 150, 230].map((w, i) => ({ key: `scene:title_bubble_${i}`, w: Math.round((w + 104) * 0.72), h: Math.round(92 * 0.72), right: i >= 3 }));
 
 export function stockKey(id: string, face: GuyFrame): string {
   return `stock:${id}:${face}`;
@@ -150,7 +160,10 @@ function stockDef(id: string, face: GuyFrame): AssetDef {
 function itemDef(id: string): AssetDef {
   return asset(itemKey(id), `items/${id}.svg`, ITEM_RASTER, ITEM_RASTER, { optional: true });
 }
-const KEYART_DEF = asset(KEYART_KEY, 'scene/title_keyart.svg', 1280, 720, { optional: true });
+const TITLE_DEFS: readonly AssetDef[] = [
+  ...Object.values(TITLE_ART).map((a) => asset(a.key, `scene/${a.key.slice('scene:'.length)}.svg`, a.w, a.h, { optional: true })),
+  ...TITLE_BUBBLES.map((b) => asset(b.key, `scene/${b.key.slice('scene:'.length)}.svg`, b.w, b.h, { optional: true })),
+];
 
 /**
  * 0.3.1「看得懂」：风口五种状态的小图标、收盘新闻图标、收盘小结的纸、新手提示的猫。交易画面用，可选（没到时画面用文字）。
@@ -218,7 +231,7 @@ const DEFS = new Map<string, AssetDef>();
 for (const d of ASSETS) DEFS.set(d.key, d);
 for (const s of STOCKS) for (const f of [...FACES, 'blink' as const]) DEFS.set(stockKey(s.id, f), stockDef(s.id, f));
 for (const it of ITEMS) DEFS.set(itemKey(it.id), itemDef(it.id));
-DEFS.set(KEYART_KEY, KEYART_DEF);
+for (const d of TITLE_DEFS) DEFS.set(d.key, d);
 for (const d of FRIENDLY_DEFS) DEFS.set(d.key, d);
 for (const d of META_DEFS) DEFS.set(d.key, d);
 
@@ -616,13 +629,18 @@ export async function loadOptionalArt(textures: Phaser.Textures.TextureManager, 
   if (opts.friendly && art.groups.friendly) want.push(...FRIENDLY_DEFS);
   if (opts.items && art.groups.items) for (const it of ITEMS) want.push(itemDef(it.id));
   if (opts.stocks && art.groups.blink) for (const id of opts.stocks) want.push(stockDef(id, 'blink'));
-  if (opts.keyart) want.push(KEYART_DEF);
+  if (opts.keyart) want.push(...TITLE_DEFS);
   const todo = want.filter((d) => inAtlas(d)?.group !== 'game' && !inAtlas(d, true) && !textures.exists(d.key) && !tried.has(d.key));
   await Promise.all(todo.map((d) => loadOptional(textures, d)));
   return todo.length;
 }
 
 // ---------------------------------------------------------------- 取图
+
+/** 开始菜单的分层主视觉都在（缺一张就整套退回小屋背景，免得画面缺一块） */
+export function titleArtReady(textures: Phaser.Textures.TextureManager): boolean {
+  return TITLE_DEFS.every((d) => artRef(textures, d.key) !== null);
+}
 
 /** 一张素材在纹理管理器里的位置：纹理 key、帧名，以及每个世界像素对应几个纹理像素。 */
 export interface ArtRef {

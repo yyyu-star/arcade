@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api, errorText, type AdminInviteCode, type AdminUser, type InviteRules, type InviteRulesState } from '../../api.ts';
-import { Field, FormError, Panel, SubmitButton, useSubmit, useWritable } from '../../ui.tsx';
+import { Field, FormError, Panel, Skeleton, SubmitButton, useSubmit, useWritable } from '../../ui.tsx';
 import { num, timeText } from './common.ts';
 
 const KEYS = ['userQuota', 'adminQuota', 'ttlDays', 'perDay'] as const;
@@ -52,7 +52,7 @@ function RulesPanel() {
   return (
     <Panel icon="people" title="邀请额度">
       {loadError && <FormError text={loadError} />}
-      {!state && !loadError && <p className="note">正在读取…</p>}
+      {!state && !loadError && <Skeleton rows={3} />}
       {state && (
         <form className="form" onSubmit={(e) => { setSaved(false); void onSubmit(e); }} data-testid="invite-rules">
           {KEYS.map((k) => (
@@ -185,7 +185,7 @@ function CodesPanel() {
         ))}
       </div>
       {error && <FormError text={error} />}
-      {!codes && !error && <p className="note">正在读取…</p>}
+      {!codes && !error && <Skeleton rows={3} />}
       {codes && codes.length === 0 && <p className="note">还没有。</p>}
       {codes && codes.length > 0 && (
         // 表格放在能横着滑的框里：窄屏不撑破面板；框撑满面板剩下的高度，表格本身按内容高

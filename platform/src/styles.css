@@ -426,7 +426,9 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .career__facts dt { font-size: var(--fs-xs); color: var(--muted); }
 .career__facts dd { margin: 2px 0 0; font-weight: 700; font-size: var(--fs-lg); }
 @media (max-width: 420px) { .career__facts { grid-template-columns: repeat(2, 1fr); } }
-.shelf + .shelf { margin-top: var(--s-4); }
+.shelves { display: grid; gap: var(--s-4); }
+/* 电脑上（0.23.2）战绩页右栏宽：称号墙一排放两三个游戏，不一个游戏占一整行、下面空一大片 */
+@media (min-width: 960px) { .desk .shelves { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); align-items: start; } }
 .shelf__game { margin: 0 0 var(--s-2); font-size: var(--fs-md); display: flex; gap: var(--s-2); align-items: baseline; }
 .shelf__count { color: var(--muted); font-size: 13px; font-weight: 400; }
 .titles { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); }

@@ -39,7 +39,7 @@ function Avatar({ name }: { name: string }) {
 /** 没登录、停服、连不上时好友页和好友链接都显示的提示；返回 null 表示可以往下走。 */
 function useGate(from: string): ReactNode | null {
   const { loading, user, service } = useSession();
-  if (loading) return <p className="note">正在读取…</p>;
+  if (loading) return <Skeleton rows={3} />;
   if (service === 'off') return <p className="note">账号服务暂时休息，过一会儿再来看。</p>;
   if (service === 'unreachable') return <p className="note">连不上服务器，点上面的"重试"。</p>;
   if (!user) {

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, navigate, useLeaveGuard, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Panel } from '../ui.tsx';
+import { Panel, Skeleton } from '../ui.tsx';
 import type { Credentials } from './admin/common.ts';
 import { InvitesSection } from './admin/Invites.tsx';
 import { Overview } from './admin/Overview.tsx';
@@ -45,7 +45,7 @@ export function AdminPage() {
     if (!loading && service !== 'off' && service !== 'unreachable' && !allowed) navigate('/', true);
   }, [loading, service, allowed]);
 
-  if (loading) return <Panel icon="shield" title="管理"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="shield" title="管理"><Skeleton rows={3} /></Panel>;
   if (service === 'off' || service === 'unreachable') return <Panel icon="shield" title="管理"><p className="note">现在连不上账号服务，过一会儿再来。</p></Panel>;
   if (!allowed) return null;
   if (card) {
