@@ -61,7 +61,13 @@
 /* 左边留给小道士立绘，内容整体往右让 */
 .yx-menu { padding-left: max(18vw, env(safe-area-inset-left, 0px)); }
 .yx-menu .yx-home { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
-.yx-menu .yx-codex-btn { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 56px); top: max(10px, env(safe-area-inset-top, 0px)); min-height: 44px; padding: 0 14px; font-size: 16px; }
+.yx-menu .yx-more { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 56px); top: max(10px, env(safe-area-inset-top, 0px)); display: flex; gap: 6px; }
+.yx-menu .yx-more .yx-btn { min-height: 44px; min-width: 44px; padding: 0 12px; font-size: 16px; }
+/* 窄屏：四个按钮挪到回大厅的下面一排，不压标题 */
+@media (max-width: 520px), (max-height: 500px) {
+  /* 手机（竖屏窄、横屏矮）：标题右边放不下，竖着排在"大厅"下面的左边空处 */
+  .yx-menu .yx-more { right: auto; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 56px); flex-direction: column; }
+}
 .yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
 .yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
 .yx-settings {
@@ -114,6 +120,7 @@
 .yx-coin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); background: radial-gradient(circle, transparent 2.5px, #f2c94c 3px); flex: none; }
 .yx-livenote { font-size: 12px; line-height: 1.5; color: #5a4a3a; }
 .yx-tiers small { letter-spacing: 0; }
+.yx-rnote { text-align: center; font-size: 13px; color: #6b6f7a; margin-top: 6px; }
 .yx-rlive { text-align: center; font-size: 20px; font-weight: 700; color: #8a4a1a; }
 .yx-best { font-size: 13px; color: #5a4a3a; min-height: 1.3em; }
 .yx-tpls .yx-chip { min-height: 46px; }
@@ -174,6 +181,7 @@
 .yx-rhead .yx-brush { font-size: 72px; line-height: 1; color: var(--ink); }
 .yx-result-panel.won .yx-rhead .yx-brush { color: var(--red); }
 .yx-rtags { display: flex; align-items: center; gap: 10px; }
+.yx-rshare { min-height: 44px; min-width: 44px; padding: 0 14px; font-size: 15px; }
 .yx-rtags em { font-style: normal; font-size: 14px; color: #5a4a3a; }
 .yx-record {
   position: relative; overflow: hidden; padding: 6px 14px; border: 2.5px solid var(--ink); border-radius: 10px;

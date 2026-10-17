@@ -1,0 +1,12 @@
+.yx-boards { width: min(560px, 100%); }
+.yx-boards .yx-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.yx-boards .yx-tab {
+  min-height: 44px; min-width: 56px; padding: 0 12px; border: 2.5px solid var(--ink); border-radius: 12px;
+  background: #fbf5e4; color: var(--ink); font: inherit; cursor: pointer;
+}
+.yx-boards .yx-tab.on { background: var(--red); color: #fbf5e4; }
+.yx-boards ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow: auto; }
+.yx-boards li { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 8px; align-items: baseline; padding: 4px 8px; border-radius: 8px; }
+.yx-boards li.me { background: rgba(242, 201, 76, 0.55); }
+.yx-boards li em { font-style: normal; color: #5a4a3a; }
+.yx-boards .yx-bnote { color: #5a4a3a; font-size: 14px; min-height: 1.3em; }

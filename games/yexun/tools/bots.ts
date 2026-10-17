@@ -43,13 +43,26 @@ export class Bot {
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
   }
 
+  /** 复用同一个结果对象（每拍一个新对象会让模拟器多花几个百分点在垃圾回收上）：调用方当拍用完，不要留着 */
+  private readonly res = { dir: 0, choice: -1 };
+
   /** 这一拍的输入：方向（0–32）和升级选择（-1 不选） */
   act(w: World): { dir: number; choice: number } {
-    if (w.phase === 'choose') return { dir: 0, choice: this.choose(w) };
-    if (--this.wait > 0) return { dir: this.dir, choice: -1 };
+    const r = this.res;
+    if (w.phase === 'choose') {
+      r.dir = 0;
+      r.choice = this.choose(w);
+      return r;
+    }
+    r.choice = -1;
+    if (--this.wait > 0) {
+      r.dir = this.dir;
+      return r;
+    }
     this.wait = this.skill === 'normal' ? 3 : 10;
     this.dir = this.steer(w);
-    return { dir: this.dir, choice: -1 };
+    r.dir = this.dir;
+    return r;
   }
 
   private steer(w: World): number {
