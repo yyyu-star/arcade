@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="夜巡" />
+    <title>夜巡</title>
+    <meta name="description" content="《夜巡》：道士夜巡雪夜古镇。只管走位，法器自动出手，撑到天亮，或者搜完宝趁门开着撤出去。" />
+    <meta name="theme-color" content="#1c2230" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preload" href="./fonts/brush.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      html, body { margin: 0; height: 100%; background: #1c2230; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+      /*
+       * 画面按看得见的区域铺：iOS Safari 的 100vh 比带着工具栏时看得见的高，横屏时顶上一截被地址栏压住。
+       * 依次 100vh → 100dvh → 脚本按 visualViewport 写的 --app-h；四边让出刘海和圆角（viewport-fit=cover）。
+       */
+      #stage {
+        position: fixed;
+        top: env(safe-area-inset-top, 0px);
+        left: env(safe-area-inset-left, 0px);
+        width: calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+        height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        height: calc(var(--app-h, 100vh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        overflow: hidden;
+      }
+      #app { position: absolute; inset: 0; }
+      #boot {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        color: #c9d2e3; font: 16px/1.5 system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; pointer-events: none;
+      }
+      #boot b { color: #f3e6c4; font-size: 44px; letter-spacing: 10px; }
+      noscript { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #f3e6c4; background: #1c2230; font: 16px system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div id="app"></div></div>
+    <div id="boot"><b>夜巡</b><span>正在载入…</span></div>
+    <noscript>《夜巡》需要启用 JavaScript 才能运行，请在浏览器设置中开启后刷新页面。</noscript>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

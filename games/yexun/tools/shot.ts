@@ -1,0 +1,85 @@
+/**
+ * 无头浏览器冒烟 + 截图：node tools/shot.ts [--out <目录>] [--frames <张数>] [--video] [--lowmem]
+ *
+ * - 自己起一个 vite 开发服务（端口由系统分配，不占 5178/4178，见仓库根 AGENTS.md 第 3 节），用 playwright-core + chromium-headless-shell；
+ * - 电脑横屏 1280×720 和手机横屏 844×390（3 倍屏、触屏）各截一张，--frames 再隔 100 ms 连截 N 张（动态的帧序列），--video 录一段 webm；
+ * - 验收 ④⑤（DESIGN.md 第 1 节）：页面里所有按钮的点击区域 ≥ 44×44 CSS 像素、文字不溢出，控制台没有 error、页面没有未捕获的异常，不过就退出码 1；
+ * - 没有 GPU 的环境 WebGL 走 SwiftShader（启动参数照开盘）。截图里要有中文字体，系统要装 Noto Sans CJK 之类。
+ */
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { chromium, type Page } from 'playwright-core';
+import { createServer } from 'vite';
+
+const argv = process.argv.slice(2);
+const opt = (name: string): string | null => {
+  const i = argv.indexOf(name);
+  return i >= 0 ? (argv[i + 1] ?? null) : null;
+};
+const OUT = opt('--out') ?? join(tmpdir(), 'yexun-shots');
+const FRAMES = Number(opt('--frames') ?? 0);
+const VIDEO = argv.includes('--video');
+const LOWMEM = argv.includes('--lowmem');
+mkdirSync(OUT, { recursive: true });
+
+const VIEWS = [
+  { name: 'desktop', viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
+  { name: 'phone', viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+];
+
+/** 页面里检查：可点的东西 ≥ 44×44、文字没有溢出自己的框 */
+async function layoutProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const bad: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('button, a, [role="button"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (r.width < 44 || r.height < 44) bad.push(`点击区域太小 ${Math.round(r.width)}×${Math.round(r.height)}：${el.getAttribute('aria-label') ?? el.textContent?.trim()}`);
+    }
+    for (const el of document.querySelectorAll<HTMLElement>('.yx-hud *')) {
+      if (el.children.length > 0 || !el.textContent?.trim()) continue;
+      if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible') bad.push(`文字溢出：${el.textContent.trim()}`);
+    }
+    return bad;
+  });
+}
+
+const server = await createServer({ logLevel: 'warn', server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false } });
+await server.listen();
+const addr = server.httpServer?.address();
+if (!addr || typeof addr === 'string') throw new Error('vite 没有监听端口');
+const BASE = `http://127.0.0.1:${addr.port}/${LOWMEM ? '?lowmem' : ''}`;
+
+const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
+const problems: string[] = [];
+try {
+  for (const v of VIEWS) {
+    const ctx = await browser.newContext({ ...v, ...(VIDEO ? { recordVideo: { dir: OUT, size: v.viewport } } : {}) });
+    const page = await ctx.newPage();
+    page.on('console', (m) => {
+      // SwiftShader 截图时的 GPU 驱动提示（ReadPixels）不是页面的问题
+      if (m.type() === 'error' && !/GL Driver Message/.test(m.text())) problems.push(`${v.name} 控制台报错：${m.text()}`);
+    });
+    page.on('pageerror', (e) => problems.push(`${v.name} 未捕获异常：${e.message}`));
+    await page.goto(BASE);
+    await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
+    await page.waitForTimeout(3500);
+    await page.screenshot({ path: join(OUT, `${v.name}.png`) });
+    for (let i = 0; i < FRAMES; i++) {
+      await page.screenshot({ path: join(OUT, `${v.name}-${String(i).padStart(3, '0')}.png`) });
+      await page.waitForTimeout(100);
+    }
+    for (const p of await layoutProblems(page)) problems.push(`${v.name} ${p}`);
+    await ctx.close();
+  }
+} finally {
+  await browser.close();
+  await server.close();
+}
+console.log(`截图在 ${OUT}`);
+if (problems.length) {
+  console.error(problems.join('\n'));
+  process.exit(1);
+}
+console.log('控制台零报错，按钮和文字检查通过');

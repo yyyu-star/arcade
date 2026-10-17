@@ -1,0 +1,19 @@
+// 夜巡的独立配置（DESIGN.md 5.6，仓库根 docs/new-game.md 第 4、7 节）：原样部署就是一个不要平台、谁打开都能玩的夜巡
+// （npm run deploy 得到 yexun.<子域>.workers.dev，打开 / 会转到 /games/yexun/）；没有登录、云存档、排行榜、钱包和实盘。
+// 本站正式部署时由仓库的部署工具（tools/deployer，按 tools/workers.json）补上平台绑定 ARCADE、WALLET 和 GATE=login，关掉 workers_dev，
+// 注入路由（<站点>/games/yexun、<站点>/games/yexun/*）和 SITE_ORIGIN；这些都不写在这里。
+// 不做联机、不在服务端存录像，所以没有 Durable Object。
+{
+  "name": "yexun",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist-cf",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    // 只有这些先过 Worker：站点根和 /api/me（单独部署时）、首页三种写法（登录闸门）；其余静态资源直接回
+    "run_worker_first": ["/", "/api/me", "/games/yexun", "/games/yexun/", "/games/yexun/index.html"]
+  }
+}
