@@ -7,7 +7,7 @@
  * 画面只读核心的状态和事件（w.ev），不自己算规则。
  */
 import Phaser from 'phaser';
-import { ENEMIES, HOP_AIR, HOP_PERIOD, WATER } from '../../content/enemies.ts';
+import { DROWN, ENEMIES, HOP_AIR, HOP_PERIOD, SPROUT, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
@@ -18,7 +18,7 @@ import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
-import { RAID_TEX, makeIcons, type Atlas, type Frame } from '../art/atlas.ts';
+import { MOB_TEX, RAID_TEX, makeIcons, type Atlas, type Frame } from '../art/atlas.ts';
 import { artRng } from '../art/draw.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
 import { MOB_COLOR } from '../art/sprites.ts';
@@ -50,7 +50,9 @@ const MOB_TINT = [
   MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e,
   0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e, 0xf0e0b0,
   // 夜探的守卫：巡夜将（黑甲）、镇门石兽（青石）
-  0x343a4a, 0x7f8da0,
+  0x343a4a, 0x7f8da0, 0xf0c850,
+  // 各地区的特色怪（编号 21 起）：竹精、蛇精、竹王、溺鬼、河蟹、河伯、冰傀、冰凌、冰魄、更夫鬼、石僧
+  0x7fc45a, 0x5faa3e, 0x4a8f3a, 0x8c8676, 0xa48c6c, 0x7c9488, 0xbfe6fa, 0xeaf8ff, 0xdff3ff, 0x46598c, 0xb4b8bf,
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
@@ -58,8 +60,14 @@ const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
   general: ['跳尸将军', '会召小跳尸，打倒掉宝箱'],
   whitefox: ['白狐', '连冲三下，看准了躲'],
   palanquin: ['纸轿', '打碎会放出一群纸人'],
+  bambooking: ['竹王', '隔一阵在你四周种出竹精，看地上的绿圈'],
+  hebo: ['河伯', '涨潮放出一圈水弹，还会放溺鬼'],
+  frostsoul: ['冰魄', '蓄力后震出寒霜圈，躲出圈外'],
 };
 const WATER_CODE = ENEMIES.findIndex((e) => e.kind === 'water');
+const SPROUT_CODE = ENEMIES.findIndex((e) => e.kind === 'bamsprout');
+const DROWN_CODE = ENEMIES.findIndex((e) => e.kind === 'drown');
+const SNAKE_CODE = ENEMIES.findIndex((e) => e.kind === 'snakespirit');
 /** Boss 进下一段的横幅（按种类、段号） */
 const PHASE_BANNER: Partial<Record<string, [string, string][]>> = {
   boss: [['', ''], ['尸王发怒', '会吐尸气了'], ['尸王发狂', '跳砸更大，尸气两圈']],
@@ -76,6 +84,8 @@ export interface GameDeps {
   atlas: Atlas;
   /** 夜探用的第二张图集（buildRaidAtlas）；夜探必传，守夜不用 */
   raidAtlas?: Atlas;
+  /** 各地区特色怪的图集（buildMobAtlas），守夜、夜探都要 */
+  mobAtlas: Atlas;
   hud: Hud;
   cards: Cards;
   banners: Banners;
@@ -211,6 +221,11 @@ export class GameScene extends Phaser.Scene {
     this.frames = new Map(this.d.atlas.frames);
     const tex = this.textures.exists('atlas') ? this.textures.get('atlas') : this.textures.addCanvas('atlas', this.d.atlas.canvas)!;
     for (const f of this.frames.values()) if (!tex.has(f.key)) tex.add(f.key, 0, f.x, f.y, f.w, f.h);
+    const tm = this.textures.exists(MOB_TEX) ? this.textures.get(MOB_TEX) : this.textures.addCanvas(MOB_TEX, this.d.mobAtlas.canvas)!;
+    for (const f of this.d.mobAtlas.frames.values()) {
+      this.frames.set(f.key, f);
+      if (!tm.has(f.key)) tm.add(f.key, 0, f.x, f.y, f.w, f.h);
+    }
     if (this.raid && this.d.raidAtlas) {
       const t8 = this.textures.exists(RAID_TEX) ? this.textures.get(RAID_TEX) : this.textures.addCanvas(RAID_TEX, this.d.raidAtlas.canvas)!;
       for (const f of this.d.raidAtlas.frames.values()) {
@@ -654,6 +669,9 @@ export class GameScene extends Phaser.Scene {
         case Ev.Boss:
           this.onBoss(x, y, ev.a[i]!, ev.b[i]!, ev.c[i]!);
           break;
+        case Ev.Mob:
+          this.onMob(x, y, ev.a[i]!, ev.b[i]!, ev.c[i]!);
+          break;
         case Ev.End:
           if (this.raid) {
             // 夜探：撤出、迷失的提示在 Escape / Lost 里放过了，这里只补倒下的声音
@@ -990,6 +1008,79 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 特色怪的技能（Ev.Mob 的子类见 events.ts）：预警画地上的圈，落下时一圈冲击加碎屑 */
+  private onMob(x: number, y: number, a: number, r: number, ticks: number): void {
+    const tick = 1000 / 30;
+    const warn = (color: number): void => {
+      this.telegraphs.push({ x, y, r, life: 0, max: ticks * tick, round: true, color });
+    };
+    const ring = (tint: number, k = 2.4): void => {
+      this.fx.spawn({ frame: 'ring', x, y, life: 460, s0: 0.4, s1: (r * k) / 128, a0: 1, a1: 0, tint, depth: 60 });
+    };
+    switch (a) {
+      case 0: // 竹精预警
+        warn(0x3fae5a);
+        break;
+      case 1: // 竹精出土
+        ring(0x3fae5a);
+        this.burst(x, y - 10, 0x7fc45a, 1.2);
+        for (let k = 0; k < (LOW_MEMORY ? 3 : 7); k++) this.fx.spawn({ frame: 'shard', x, y, vx: (Math.random() - 0.5) * 160, vy: -90 - Math.random() * 90, g: 420, life: 520, s0: 1.4, s1: 0.7, tint: 0x85613c, rot: Math.random() * 6, spin: 8 });
+        sfx.play('bossStomp', { volume: 0.35 });
+        break;
+      case 2: // 溺鬼抓住了（b > 0）或刚冒出来（b = 0）
+        if (r > 0) {
+          ring(0x6a8c98, 1.1);
+          sfx.play('hurt', { volume: 0.3, pitch: 0.7 });
+        } else this.burst(x, y - 6, 0x9fd0e0, 0.8);
+        break;
+      case 3: // 冰傀碎裂
+        this.burst(x, y - 14, 0xbfe6fa, 1.5);
+        sfx.play('bell', { volume: 0.3, pitch: 1.5 });
+        break;
+      case 4: // 冰刺预警
+        warn(0x4aa8ff);
+        break;
+      case 5: // 冰刺落下
+        ring(0x4aa8ff, 2);
+        this.burst(x, y - 12, 0xeaf8ff, 1.3);
+        sfx.play('talisman', { volume: 0.35, pitch: 0.6 });
+        break;
+      case 6: // 蛇精窜出
+        this.burst(x, y - 8, 0xa6dc72, 0.7);
+        break;
+      case 7: // 河伯涨潮
+        ring(0x5fa9c0, 1.4);
+        sfx.play('bossBreath', { volume: 0.5 });
+        break;
+      case 8: // 冰魄预警
+        warn(0x7fd0ff);
+        break;
+      case 9: // 冰魄霜环
+        ring(0x7fd0ff, 2.2);
+        this.burst(x, y - 14, 0xeaf8ff, 2);
+        sfx.play('bossStomp', { volume: 0.5 });
+        this.shake(140, 0.005);
+        break;
+      case 10: // 更夫敲梆
+        sfx.play('propWood', { volume: 0.5 });
+        this.fx.spawn({ frame: 'ring', x, y, life: 420, s0: 0.3, s1: 1.4, a0: 1, a1: 0, tint: 0xe0a030, depth: 60 });
+        break;
+      case 11: // 石僧预警
+        warn(0xb4b8bf);
+        break;
+      case 12: // 石僧掌击
+        ring(0x9a9ea8, 2);
+        this.burst(x, y - 8, 0xc8ccd4, 1.4);
+        sfx.play('bossStomp', { volume: 0.45 });
+        this.shake(150, 0.006);
+        break;
+      case 13: // 竹王破土
+        sfx.play('boss', { volume: 0.5 });
+        this.shake(200, 0.006);
+        break;
+    }
+  }
+
   private onBoss(x: number, y: number, a: number, r: number, c: number): void {
     if (a === 4) {
       // 进下一段：吼一声 + 横幅
@@ -1186,7 +1277,8 @@ export class GameScene extends Phaser.Scene {
       else if (def.kind === 'bat') lift = 14 + Math.sin(this.now * 0.02 + i * 2.3) * 5;
       else if (def.kind === 'boss' && w.eS[i] === 1) lift = Math.sin((1 - w.eT[i]! / 30) * Math.PI) * 120;
       // 水鬼从地里冒出来：先沉在地下，慢慢升上来
-      const sink = code === WATER_CODE && w.eT[i]! > 0 ? w.eT[i]! / WATER.emerge : 0;
+      // 竹精、溺鬼同理（竹精出土前还在地下）
+      const sink = w.eT[i]! > 0 ? (code === WATER_CODE ? w.eT[i]! / WATER.emerge : code === SPROUT_CODE ? w.eT[i]! / SPROUT.warn : code === DROWN_CODE ? w.eT[i]! / DROWN.emerge : 0) : 0;
       if (sink > 0) lift = -sink * 34;
       const size = w.eSize[i]!;
       const flip = this.renderX < x ? -1 : 1;
@@ -1199,7 +1291,7 @@ export class GameScene extends Phaser.Scene {
         .setPosition(x + (bound ? Math.sin(this.now * 0.09 + i) * 1.8 : 0), y - lift)
         .setScale((flip * size * (2 - squash)) / m.res, (size * squash) / m.res)
         .setRotation(wob)
-        .setAlpha(1 - sink * 0.75)
+        .setAlpha(code === SNAKE_CODE && w.eS[i] === 0 ? 0.4 : 1 - sink * (code === SPROUT_CODE ? 1 : 0.75))
         .setDepth(y);
       if (m.flash > 0) {
         m.flash -= dt;

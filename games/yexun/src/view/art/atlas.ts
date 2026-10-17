@@ -14,6 +14,7 @@ import { SPRITES8 } from './sprites8.ts';
 import { SPRITES9 } from './sprites9.ts';
 import { SPRITES10 } from './sprites10.ts';
 import { SPRITES11 } from './sprites11.ts';
+import { SPRITES12 } from './sprites12.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -70,6 +71,23 @@ export function buildAtlas(res: number): Atlas {
   return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...digitDefs()], res);
 }
 
+/** 各地区的特色怪（sprites12）也装不进主图集，单独一张；守夜、夜探都要用 */
+export const MOB_TEX = 'atlas9';
+
+let mobCache: { res: number; atlas: Atlas } | null = null;
+
+/** 特色怪的图集；同一个 res 只画一次 */
+export function buildMobAtlas(res: number): Atlas {
+  if (mobCache?.res === res) return mobCache.atlas;
+  mobCache = { res, atlas: pack([...SPRITES12], res, MOB_TEX) };
+  return mobCache.atlas;
+}
+
+/** 画好的特色怪图集（没画过回 null） */
+export function peekMobAtlas(): Atlas | null {
+  return mobCache?.atlas ?? null;
+}
+
 let raidCache: { res: number; atlas: Atlas } | null = null;
 
 /** 夜探的第二张图集（巡夜将、石兽、房子、宝箱、门、宝物图标）；同一个 res 只画一次 */
@@ -91,7 +109,7 @@ export function makeIcons(atlas: Atlas): (key: string, px?: number) => string {
     const id = `${key}@${px}`;
     let url = cache.get(id);
     if (url) return url;
-    const hit = atlas.frames.has(key) ? atlas : (peekRaidAtlas()?.frames.has(key) ? peekRaidAtlas()! : atlas);
+    const hit = atlas.frames.has(key) ? atlas : (peekRaidAtlas()?.frames.has(key) ? peekRaidAtlas()! : (peekMobAtlas()?.frames.has(key) ? peekMobAtlas()! : atlas));
     const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
     const c = document.createElement('canvas');
     c.width = px;

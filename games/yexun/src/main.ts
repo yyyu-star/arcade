@@ -31,8 +31,8 @@ import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
-import type { MapId } from './content/maps.ts';
-import { buildAtlas, buildGround, buildRaidAtlas, type Atlas } from './view/art/atlas.ts';
+import { MAPS, type MapId } from './content/maps.ts';
+import { buildAtlas, buildGround, buildMobAtlas, buildRaidAtlas, peekMobAtlas, type Atlas } from './view/art/atlas.ts';
 import { treasureIconKey } from './view/art/sprites8.ts';
 import { Vault } from './view/ui/vault.ts';
 import { settleRaid } from './explore/settle.ts';
@@ -59,11 +59,14 @@ function iconMaker(atlas: Atlas): (key: string, px?: number) => string {
     const id = `${key}@${px}`;
     let url = cache.get(id);
     if (url) return url;
-    const f = atlas.frames.get(key) ?? atlas.frames.get('soul')!;
+    // 特色怪的图在第二张图集里（图鉴要用）
+    const mob = peekMobAtlas();
+    const hit = atlas.frames.has(key) || !mob?.frames.has(key) ? atlas : mob;
+    const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
     const c = document.createElement('canvas');
     c.width = px;
     c.height = Math.round((px * f.h) / f.w);
-    c.getContext('2d')!.drawImage(atlas.canvas, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
+    c.getContext('2d')!.drawImage(hit.canvas, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
     url = c.toDataURL();
     cache.set(id, url);
     return url;
@@ -82,11 +85,14 @@ async function boot(): Promise<void> {
   // 毛笔字体先载好再出横幅（font-display: block 也挡不住第一帧用后备字体量尺寸）
   await document.fonts?.load('40px YxBrush').catch(() => undefined);
   const atlas = buildAtlas(res);
+  const mobAtlas = buildMobAtlas(res);
   const ground = buildGround(512);
   if (q.has('sheet')) {
-    atlas.canvas.style.cssText = 'position:absolute;left:0;top:0;background:#9aa3b5';
+    // ?sheet 看主图集，?sheet=mob 看特色怪的图集
+    const sheet = q.get('sheet') === 'mob' ? mobAtlas : atlas;
+    sheet.canvas.style.cssText = 'position:absolute;left:0;top:0;background:#e4e8f0';
     document.body.style.overflow = 'auto';
-    document.body.appendChild(atlas.canvas);
+    document.body.appendChild(sheet.canvas);
     return;
   }
   const icon = iconMaker(atlas);
@@ -534,6 +540,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: w,
       atlas,
+      mobAtlas,
       ...(w.raid ? { raidAtlas: buildRaidAtlas(res) } : {}),
       hud,
       cards,
@@ -629,6 +636,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: player.world,
       atlas,
+      mobAtlas,
       hud,
       cards,
       banners,
@@ -743,7 +751,7 @@ async function boot(): Promise<void> {
     const dq = q.get('danger');
     const qd: Danger | null = dq && /^[0-5]$/.test(dq) ? (Number(dq) as Danger) : (legacy[q.get('diff') ?? ''] ?? null);
     // ?map=yizhuang 指定地图（冒烟截图用）
-    const qm = q.get('map') === 'yizhuang' ? 'yizhuang' : q.has('map') ? 'snow' : null;
+    const qm = q.get('map') && q.get('map')! in MAPS ? (q.get('map') as MapId) : q.has('map') ? 'snow' : null;
     // ?raid=guzhen|dukou|shansi|teach 直接开一局夜探（冒烟截图用；可带 &auto 机器人代打）
     const qr = q.get('raid');
     if (qr && qr in RAID_TEMPLATES) menu.onRaid(qr as RaidTemplateId, qd ?? 2);

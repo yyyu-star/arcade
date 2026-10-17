@@ -4,22 +4,33 @@
  * 只用四则运算、方向表和 fsqrt；随机都走 World 上分好流的 Rng。
  */
 import {
+  BAMBOO_KING,
   BAT,
   BONE,
   BOSS,
+  CRAB,
+  DROWN,
   ENEMIES,
   ENEMY_BY_KIND,
   FOX,
+  FROSTSOUL,
   GENERAL,
+  HEBO,
   HOP_AIR,
   HOP_PERIOD,
   HOP_SPEED_MUL,
+  ICEGOLEM,
+  ICICLE,
   LANTERN,
   LORD,
+  MONK,
+  NIGHTWATCH,
   PALANQUIN,
   PLAYER_SLOW,
   SCARECROW,
+  SNAKE,
   SNOW,
+  SPROUT,
   WATER,
   WEASEL,
   WHITEFOX,
@@ -30,6 +41,7 @@ import { MAPS, pushOut, type Block } from '../content/maps.ts';
 import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
+import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
 import { CALM, DANGERS, DAWN_TICK, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
@@ -89,7 +101,9 @@ export function createWorld(setup: Setup): World {
 function schedule(w: World): WaveEvent[] {
   const d = DANGERS[w.setup.danger];
   const extra = d.eliteExtra + (w.setup.curses?.includes('elites') ? 1 : 0);
-  const out = EVENTS.map((e): WaveEvent => {
+  // 图专属精英（content/regions.ts）按时间插进定点事件；没登记的图什么都不加
+  const own = VIGIL_REGIONS[w.setup.map ?? 'snow']?.elites?.map((e): WaveEvent => ({ at: e.at, kind: 'elite', enemy: e.enemy, count: e.count })) ?? [];
+  const out = [...EVENTS, ...own].map((e): WaveEvent => {
     if (e.kind === 'elite') return { ...e, at: e.at + d.eliteLate, count: e.count + extra };
     return e;
   });
@@ -338,6 +352,17 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eV[i] = 0;
   if (kind === 'water') w.eT[i] = WATER.emerge;
   else if (kind === 'weasel') w.eAX[i] = -1;
+  else if (kind === 'bamsprout') {
+    // 竹精：先在地上冒一个圈，SPROUT.warn 拍后出土
+    w.eT[i] = SPROUT.warn;
+    w.ev.push(Ev.Mob, w.eX[i]!, w.eY[i]!, 0, SPROUT.r, SPROUT.warn);
+  } else if (kind === 'drown') w.eT[i] = DROWN.emerge;
+  else if (kind === 'bambooking') w.eT[i] = BAMBOO_KING.every[0]!;
+  else if (kind === 'hebo') w.eT[i] = HEBO.every;
+  else if (kind === 'frostsoul') w.eT[i] = FROSTSOUL.every;
+  else if (kind === 'icicle') w.eT[i] = ICICLE.every;
+  else if (kind === 'nightwatch') w.eT[i] = NIGHTWATCH.every;
+  else if (kind === 'stonemonk') w.eT[i] = MONK.every;
   w.eHitAt.fill(0, i * WEAPON_SLOTS, (i + 1) * WEAPON_SLOTS);
   w.eCount++;
   if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
@@ -374,6 +399,22 @@ function pickKind(w: World, mix: Partial<Record<EnemyKind, number>>): EnemyKind 
   return last;
 }
 
+/** 特色怪：本分钟合计占 total，抽中了返回那种怪，没抽中返回 null（交给原来的分钟表）；没登记的地图不抽随机数 */
+function regionPick(w: World, region: Region | undefined, minute: number): EnemyKind | null {
+  if (!region) return null;
+  const t = regionTotal(region, minute);
+  if (t <= 0) return null;
+  const r = w.rSpawn.next();
+  return r < t ? regionKind(region, minute, r) : null;
+}
+
+/** 刷在主角附近的钻地怪（水鬼、竹精、溺鬼）的落点 */
+function nearPoint(w: World): [number, number] {
+  const a = w.rSpawn.int(DIR_N);
+  const d = WATER.near + w.rSpawn.next() * (WATER.far - WATER.near);
+  return [w.x + dcos(a) * d, w.y + dsin(a) * d * 0.8];
+}
+
 /** 夜探的刷怪：先刷排队的守卫（开局地图上的、6:00 和 11:00 游荡的巡夜将），再按夜探的刷怪表补怪；没有尸王、老爷和收获期 */
 function spawnRaid(w: World, raid: Raid): void {
   for (let gi = raid.takeSpawn(); gi >= 0; gi = raid.takeSpawn()) {
@@ -391,8 +432,8 @@ function spawnRaid(w: World, raid: Raid): void {
   w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * zone) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
-    const kind = pickKind(w, m.mix);
-    const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
+    const kind = regionPick(w, RAID_REGIONS[raid.setup.template], Math.floor(w.tick / 1800)) ?? pickKind(w, m.mix);
+    const [x, y] = EMERGE_KINDS.has(kind) ? nearPoint(w) : ringPoint(w, w.rSpawn.int(DIR_N));
     spawnP.x = x;
     spawnP.y = y;
     // 刷在墙里的这只就不刷了（推三次还压着墙）
@@ -457,12 +498,11 @@ function spawnWaves(w: World): void {
   w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * calm) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
-    const kind = pickKind(w, mix);
-    if (kind === 'water') {
-      // 水鬼从主角附近的地里冒出来
-      const a = w.rSpawn.int(DIR_N);
-      const d = WATER.near + w.rSpawn.next() * (WATER.far - WATER.near);
-      spawnEnemy(w, kind, w.x + dcos(a) * d, w.y + dsin(a) * d * 0.8);
+    const kind = regionPick(w, VIGIL_REGIONS[w.setup.map ?? 'snow'], Math.max(0, mi + diff.mixShift)) ?? pickKind(w, mix);
+    if (EMERGE_KINDS.has(kind)) {
+      // 水鬼、竹精、溺鬼从主角附近的地里冒出来
+      const [x, y] = nearPoint(w);
+      spawnEnemy(w, kind, x, y);
     } else {
       const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
       spawnEnemy(w, kind, x, y);
@@ -700,6 +740,25 @@ function moveEnemies(w: World): void {
       case 'lord':
         lordAct(w, i, dx, dy);
         break;
+      case 'bamsprout':
+      case 'snakespirit':
+      case 'bambooking':
+      case 'drown':
+      case 'crab':
+      case 'hebo':
+      case 'icegolem':
+      case 'icicle':
+      case 'frostsoul':
+      case 'nightwatch':
+      case 'stonemonk':
+        mv.vx = vx;
+        mv.vy = vy;
+        mv.sp = sp;
+        mobAct(w, i, kind, d, dx, dy);
+        vx = mv.vx;
+        vy = mv.vy;
+        sp = mv.sp;
+        break;
       case 'boss':
         sp = bossAct(w, i, sp);
         if (w.eS[i] === 1) {
@@ -729,6 +788,202 @@ function blockEnemies(w: World): void {
       w.eX[i] = tmpP.x;
       w.eY[i] = tmpP.y;
     }
+  }
+}
+
+/** 特色怪这一拍对方向和速度的改动（moveEnemies 先填进来，mobAct 改完再取走） */
+const mv = { vx: 0, vy: 0, sp: 0 };
+
+function nearPlayer(w: World, i: number, r: number): boolean {
+  const dx = w.x - w.eX[i]!;
+  const dy = w.y - w.eY[i]!;
+  return dx * dx + dy * dy < r * r;
+}
+
+/** 在 (x, y) 半径 r 里的主角挨 dmg（走 hurt，吃无敌帧和危险档倍数） */
+function areaHurt(w: World, x: number, y: number, r: number, dmg: number): boolean {
+  const dx = w.x - x;
+  const dy = w.y - y;
+  if (dx * dx + dy * dy >= r * r) return false;
+  hurt(w, dmg);
+  return true;
+}
+
+/** 在主角四周 ring 远的一圈上种 n 个怪（kind），起点角度随机 */
+function surroundPlayer(w: World, kind: EnemyKind, n: number, ring: number): void {
+  const off = w.rAi.int(DIR_N);
+  for (let k = 0; k < n; k++) {
+    const a = off + Math.floor((k * DIR_N) / n);
+    spawnEnemy(w, kind, w.x + dcos(a) * ring, w.y + dsin(a) * ring * 0.8);
+  }
+}
+
+/**
+ * 各地区特色怪的行为（regions.ts 登记的怪）。每种的状态记在 eT / eS / eV / eAX / eAY：
+ * - 竹精：eT 是出土前的倒数，出土那一拍砸一下圈里的人，之后就是追人的小怪；
+ * - 蛇精：eS 0 藏着慢游 1 盘身 2 窜出（eAX/eAY 是方向）3 歇着；
+ * - 竹王：eT 倒数到下一次破土；
+ * - 溺鬼：eT 是冒出来的倒数，eS 2 = 抓着人（eV 是还剩几拍），eAX 是下次能抓的拍数；
+ * - 河蟹：eT 数到 swap 换横走方向（eS 0/1）；河伯：eT 倒数到下一次涨潮；
+ * - 冰凌：eT 倒数到下一次标点，eS 是落冰刺前的倒数（eAX/eAY 是落点）；
+ * - 冰魄：eT 倒数到下一次蓄力，eS 是蓄力倒数，eV 数放了几次霜；
+ * - 更夫鬼：eT 倒数到下一次敲梆；石僧：eT 倒数到停下蓄力，eS 是蓄力倒数。
+ */
+function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy: number): void {
+  const x = w.eX[i]!;
+  const y = w.eY[i]!;
+  switch (kind) {
+    case 'bamsprout':
+      if (w.eT[i]! > 0) {
+        mv.sp = 0;
+        if (--w.eT[i]! === 0) {
+          w.ev.push(Ev.Mob, x, y, 1, SPROUT.r);
+          areaHurt(w, x, y, SPROUT.r, SPROUT.dmg);
+        }
+      }
+      break;
+    case 'snakespirit':
+      if (w.eS[i] === 0) {
+        mv.sp *= SNAKE.creep;
+        if (d < SNAKE.trigger) {
+          w.eS[i] = 1;
+          w.eT[i] = SNAKE.windup;
+          w.eAX[i] = dx;
+          w.eAY[i] = dy;
+        }
+      } else if (w.eS[i] === 1) {
+        mv.sp = 0;
+        if (--w.eT[i]! <= 0) {
+          w.eS[i] = 2;
+          w.eT[i] = SNAKE.lunge;
+          w.ev.push(Ev.Mob, x, y, 6, 0);
+        }
+      } else if (w.eS[i] === 2) {
+        mv.sp = SNAKE.lungeSpeed;
+        mv.vx = w.eAX[i]!;
+        mv.vy = w.eAY[i]!;
+        if (--w.eT[i]! <= 0) {
+          w.eS[i] = 3;
+          w.eT[i] = SNAKE.rest;
+        }
+      } else if (--w.eT[i]! <= 0) w.eS[i] = 0;
+      break;
+    case 'bambooking': {
+      const phase = w.eHp[i]! * 2 < w.eHpMax[i]! ? 1 : 0;
+      if (--w.eT[i]! <= 0) {
+        w.eT[i] = BAMBOO_KING.every[phase]!;
+        w.ev.push(Ev.Mob, x, y, 13, 0);
+        surroundPlayer(w, 'bamsprout', BAMBOO_KING.sprouts[phase]!, BAMBOO_KING.ring);
+      }
+      break;
+    }
+    case 'drown':
+      if (w.eT[i]! > 0) {
+        mv.sp = 0;
+        if (--w.eT[i]! === 0) w.ev.push(Ev.Mob, x, y, 2, 0, 0);
+      } else if (w.eS[i] === 2) {
+        // 抓着人：站住，把人往自己身边拖，脚下发沉
+        mv.sp = 0;
+        w.slowUntil = Math.max(w.slowUntil, w.tick + DROWN.slowTicks);
+        if (d > 22) {
+          w.x -= dx * DROWN.pull;
+          w.y -= dy * DROWN.pull;
+          if (w.blocks.length) push(w, w, PLAYER.r);
+        }
+        if (--w.eV[i]! <= 0) {
+          w.eS[i] = 0;
+          w.eAX[i] = w.tick + DROWN.cool;
+        }
+      } else if (d < DROWN.grab && w.tick >= w.eAX[i]! && w.phase === 'play') {
+        w.eS[i] = 2;
+        w.eV[i] = DROWN.hold;
+        w.ev.push(Ev.Mob, x, y, 2, DROWN.grab, 1);
+      }
+      break;
+    case 'crab': {
+      if (++w.eT[i]! >= CRAB.swap) {
+        w.eT[i] = 0;
+        w.eS[i] = 1 - w.eS[i]!;
+      }
+      if (d > CRAB.pinch) {
+        // 横着走：大半的力气用在绕圈上，只留一点往前蹭
+        const sgn = w.eS[i] === 0 ? 1 : -1;
+        const vx = dx * (1 - CRAB.side) - dy * CRAB.side * sgn;
+        const vy = dy * (1 - CRAB.side) + dx * CRAB.side * sgn;
+        const n = fsqrt(vx * vx + vy * vy) || 1;
+        mv.vx = vx / n;
+        mv.vy = vy / n;
+      }
+      break;
+    }
+    case 'hebo':
+      if (--w.eT[i]! <= 0) {
+        w.eT[i] = HEBO.every;
+        w.ev.push(Ev.Mob, x, y, 7, 150);
+        const off = w.rAi.int(DIR_N);
+        for (let k = 0; k < HEBO.ring; k++) {
+          const a = off + Math.floor((k * DIR_N) / HEBO.ring);
+          addShot(w, Shot.Fireball, x, y - 24, dcos(a) * HEBO.shotSpeed, dsin(a) * HEBO.shotSpeed, HEBO.shotLife, HEBO.shotDmg, 11, 0, -1, 0);
+        }
+        surroundPlayer(w, 'drown', HEBO.drowns, HEBO.near);
+      }
+      break;
+    case 'icicle':
+      if (d < ICICLE.range) mv.sp = 0;
+      if (w.eS[i]! > 0) {
+        if (--w.eS[i]! === 0) {
+          w.ev.push(Ev.Mob, w.eAX[i]!, w.eAY[i]!, 5, ICICLE.r);
+          areaHurt(w, w.eAX[i]!, w.eAY[i]!, ICICLE.r, ICICLE.dmg);
+        }
+      } else if (--w.eT[i]! <= 0 && d < ICICLE.range + 80) {
+        w.eT[i] = ICICLE.every;
+        w.eS[i] = ICICLE.warn;
+        w.eAX[i] = w.x;
+        w.eAY[i] = w.y;
+        w.ev.push(Ev.Mob, w.x, w.y, 4, ICICLE.r, ICICLE.warn);
+      }
+      break;
+    case 'frostsoul':
+      if (w.eS[i]! > 0) {
+        mv.sp = 0;
+        if (--w.eS[i]! === 0) {
+          w.ev.push(Ev.Mob, x, y, 9, FROSTSOUL.r);
+          if (areaHurt(w, x, y, FROSTSOUL.r, FROSTSOUL.dmg)) w.slowUntil = Math.max(w.slowUntil, w.tick + FROSTSOUL.slowTicks);
+          if (++w.eV[i]! % 2 === 0) {
+            for (let k = 0; k < FROSTSOUL.golems; k++) spawnEnemy(w, 'icegolem', x + (k === 0 ? -50 : 50), y + 20);
+          }
+        }
+      } else if (--w.eT[i]! <= 0) {
+        w.eT[i] = FROSTSOUL.every;
+        w.eS[i] = FROSTSOUL.warn;
+        w.ev.push(Ev.Mob, x, y, 8, FROSTSOUL.r, FROSTSOUL.warn);
+      }
+      break;
+    case 'nightwatch':
+      if (--w.eT[i]! <= 0) {
+        w.eT[i] = NIGHTWATCH.every;
+        w.ev.push(Ev.Mob, x, y, 10, 0);
+        if (w.eCount < NIGHTWATCH.cap) for (let k = 0; k < NIGHTWATCH.calls; k++) spawnEnemy(w, 'wisp', x + (k === 0 ? -34 : 34), y - 10);
+      }
+      break;
+    case 'stonemonk':
+      if (w.eS[i]! > 0) {
+        mv.sp = 0;
+        if (--w.eS[i]! === 0) {
+          w.ev.push(Ev.Mob, x, y, 12, MONK.r);
+          areaHurt(w, x, y, MONK.r, MONK.dmg);
+        }
+      } else if (--w.eT[i]! <= 0) {
+        w.eT[i] = MONK.every;
+        // 走近了才蓄力，远远的不白费
+        if (nearPlayer(w, i, MONK.r + 60)) {
+          w.eS[i] = MONK.warn;
+          w.ev.push(Ev.Mob, x, y, 11, MONK.r, MONK.warn);
+        }
+      }
+      break;
+    default:
+      break;
   }
 }
 
@@ -1071,6 +1326,19 @@ function killEnemy(w: World, i: number): void {
       if (j < 0) continue;
       w.eSize[j] = BONE.size;
       w.eR[j] = def.r * BONE.size;
+      w.eHp[j] = hp;
+      w.eHpMax[j] = hp;
+    }
+  }
+  // 冰傀碎成两个小的（小的不再碎）
+  if (def.kind === 'icegolem' && w.eSize[i]! > ICEGOLEM.size + 0.1) {
+    const hp = w.eHpMax[i]! * ICEGOLEM.hp;
+    w.ev.push(Ev.Mob, x, y, 3, 36);
+    for (let k = 0; k < 2; k++) {
+      const j = spawnEnemy(w, 'icegolem', x + (k === 0 ? -16 : 16), y);
+      if (j < 0) continue;
+      w.eSize[j] = ICEGOLEM.size;
+      w.eR[j] = def.r * ICEGOLEM.size;
       w.eHp[j] = hp;
       w.eHpMax[j] = hp;
     }
@@ -1929,6 +2197,8 @@ function moveShots(w: World, g: Grid): void {
 // ───────────────────────── 挨打 ─────────────────────────
 
 const WATER_CODE = ENEMY_BY_KIND.water.code;
+const SPROUT_CODE = ENEMY_BY_KIND.bamsprout.code;
+const DROWN_CODE = ENEMY_BY_KIND.drown.code;
 function touchPlayer(w: World, g: Grid): void {
   if (w.invuln > 0) return;
   const n = g.query(w, w.x, w.y, PLAYER.r);
@@ -1939,7 +2209,7 @@ function touchPlayer(w: World, g: Grid): void {
       // 还在冒的水鬼不伤人；冒出来了抓住主角拖慢
       if (w.eT[i]! > 0) continue;
       w.slowUntil = w.tick + WATER.grabTicks;
-    }
+    } else if ((w.eKind[i] === SPROUT_CODE || w.eKind[i] === DROWN_CODE) && w.eT[i]! > 0) continue; // 还没钻出来的不伤人
     if (w.eDmg[i]! > worst) worst = w.eDmg[i]!;
   }
   if (worst > 0) hurt(w, worst);

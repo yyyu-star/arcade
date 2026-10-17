@@ -10,7 +10,12 @@ export type EnemyKind =
   | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin' | 'lord'
   | 'patrol'
   | 'beast'
-  | 'goblin';
+  | 'goblin'
+  // 各地区的特色怪（regions.ts 决定谁在哪出）
+  | 'bamsprout' | 'snakespirit' | 'bambooking'
+  | 'drown' | 'crab' | 'hebo'
+  | 'icegolem' | 'icicle' | 'frostsoul'
+  | 'nightwatch' | 'stonemonk';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -61,6 +66,22 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'patrol', code: 18, ...RAID_ENEMIES.patrol },
   { kind: 'beast', code: 19, ...RAID_ENEMIES.beast },
   { kind: 'goblin', code: 20, ...RAID_ENEMIES.goblin },
+  // 各地区的特色怪（编号 21 起；数值按同一时间段的现有怪定，行为见下面的常量和 step.ts 的 mobAct）
+  // 竹林：竹精（地里钻出来）、蛇精（藏着突然窜）、竹王（精英）
+  { kind: 'bamsprout', code: 21, hp: 16, speed: 1.4, dmg: 8, r: 14, xp: 2, steady: 0.1, vs: { 火: 1.3, 木: 0.7 } },
+  { kind: 'snakespirit', code: 22, hp: 12, speed: 1.5, dmg: 9, r: 13, xp: 2, steady: 0.1, vs: { 火: 1.25, 镇: 1.15 } },
+  { kind: 'bambooking', code: 23, hp: 560, speed: 1.2, dmg: 15, r: 32, xp: 30, steady: 0.85, elite: true, vs: { 剑: 0.7, 火: 1.35, 符: 1.2, 木: 0.8 } },
+  // 河滩（渡口也用溺鬼）：溺鬼（拖住人）、河蟹（横着走的硬壳）、河伯（精英）
+  { kind: 'drown', code: 24, hp: 22, speed: 1.0, dmg: 6, r: 15, xp: 2, steady: 0.4, vs: { 土: 1.4, 镇: 1.2, 火: 0.8 } },
+  { kind: 'crab', code: 25, hp: 28, speed: 1.5, dmg: 7, r: 15, xp: 3, steady: 0.5, vs: { 剑: 0.6, 符: 0.85, 火: 1.6, 镇: 1.15 } },
+  { kind: 'hebo', code: 26, hp: 700, speed: 1.0, dmg: 14, r: 34, xp: 30, steady: 0.9, elite: true, vs: { 土: 1.3, 火: 0.8, 剑: 0.75, 符: 1.2 } },
+  // 冰湖：冰傀（碎成两个）、冰凌（预告落点的冰刺）、冰魄（精英）
+  { kind: 'icegolem', code: 27, hp: 30, speed: 1.0, dmg: 8, r: 17, xp: 3, steady: 0.5, vs: { 剑: 0.6, 火: 1.3, 镇: 1.4 } },
+  { kind: 'icicle', code: 28, hp: 12, speed: 1.5, dmg: 4, r: 13, xp: 2, steady: 0.1, vs: { 火: 1.4, 剑: 0.7 } },
+  { kind: 'frostsoul', code: 29, hp: 620, speed: 1.15, dmg: 14, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 火: 1.3, 剑: 0.6, 符: 1.3 } },
+  // 夜探：古镇的更夫鬼、山寺的石僧（渡口用溺鬼）
+  { kind: 'nightwatch', code: 30, hp: 26, speed: 1.3, dmg: 7, r: 15, xp: 3, steady: 0.3, vs: { 火: 1.3, 镇: 1.3, 剑: 0.8 } },
+  { kind: 'stonemonk', code: 31, hp: 60, speed: 0.9, dmg: 11, r: 19, xp: 4, steady: 0.8, vs: { 剑: 0.5, 火: 0.85, 水: 1.3, 镇: 1.4 } },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
@@ -133,3 +154,26 @@ export const LORD = {
   moneyTurn: 1,
   maxPalanquin: 2,
 };
+
+/** 竹精：钻出来之前地上先冒一个 warn 拍的圈，圈里的人在出土那一下挨 dmg */
+export const SPROUT = { warn: 45, r: 58, dmg: 12 };
+/** 蛇精：藏着时慢慢游（速度乘 creep、画面半透明），进了 trigger 就盘身 windup 拍再窜 lunge 拍，窜完露出来歇 rest 拍 */
+export const SNAKE = { trigger: 170, windup: 10, lunge: 14, lungeSpeed: 6.2, rest: 70, creep: 0.55 };
+/** 竹王：隔 every 拍在主角四周 ring 远的地方种 sprouts 个竹精；血少一半后更勤、更多（下标 0 / 1） */
+export const BAMBOO_KING = { every: [210, 140], sprouts: [4, 6], ring: 120 };
+/** 溺鬼：冒出来 emerge 拍；离主角 grab 以内就抓住，hold 拍里把人往自己身边拖（每拍 pull）并拖慢；松手后 cool 拍内不再抓 */
+export const DROWN = { emerge: 36, grab: 60, hold: 60, pull: 1.3, cool: 150, slowTicks: 8 };
+/** 河蟹：横着走，每 swap 拍换个方向；side 是横走的比例，近身（pinch 以内）才直着夹过来 */
+export const CRAB = { swap: 70, side: 0.85, pinch: 70 };
+/** 河伯：每 every 拍涨一次潮（一圈 ring 颗水弹）并在主角四周放 drowns 个溺鬼 */
+export const HEBO = { every: 210, ring: 8, shotSpeed: 2.2, shotDmg: 8, shotLife: 200, drowns: 2, near: 150 };
+/** 冰傀：被打碎裂成两个小的（个头 size、血是原来的 hp 倍），小的不再裂 */
+export const ICEGOLEM = { size: 0.6, hp: 0.35 };
+/** 冰凌：停在 range 远，每 every 拍在主角脚下标一个圈，warn 拍后落冰刺（圈里的人挨 dmg） */
+export const ICICLE = { range: 280, every: 150, warn: 30, r: 52, dmg: 9 };
+/** 冰魄：每 every 拍蓄力 warn 拍，然后以自己为圆心震出一圈霜（半径 r，伤 dmg，冻脚 slowTicks 拍）；每第二次还放 golems 个冰傀 */
+export const FROSTSOUL = { every: 180, warn: 30, r: 170, dmg: 16, slowTicks: 70, golems: 2 };
+/** 更夫鬼：每 every 拍敲一次梆子，唤来 calls 只小鬼火（场上怪超过 cap 只就不唤） */
+export const NIGHTWATCH = { every: 170, calls: 2, cap: 260 };
+/** 石僧：走 every 拍就停下蓄力 warn 拍，然后一掌拍地（半径 r，伤 dmg） */
+export const MONK = { every: 150, warn: 24, r: 95, dmg: 14 };
