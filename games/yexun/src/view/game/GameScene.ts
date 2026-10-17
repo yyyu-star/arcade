@@ -215,7 +215,8 @@ export class GameScene extends Phaser.Scene {
 
     // 雪地：一张可平铺的贴图铺满场地，四周一圈压暗当边界
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
-    this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
+    // 夜探的街和院子全由 Town 铺满，不再多铺一层雪地（少一次全屏绘制，镇子外圈露出背景的雪色）
+    if (!this.raid) this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
     this.rg = this.add.graphics().setDepth(-500);
     if (this.raid) {
       this.setupRaid(this.raid);
@@ -254,18 +255,21 @@ export class GameScene extends Phaser.Scene {
 
   /** 地图上挡路的东西（义庄的墙、棺材、正堂）：墙按段拼，最后一段压缩到刚好对齐；深度按脚底 */
   private drawBlocks(): void {
+    // 夜探的院墙、房子、台阶墙、摊子由 Town 按样式画（town.ts）
+    if (this.town) {
+      this.town.drawBlocks();
+      return;
+    }
     for (const b of this.w.blocks) {
-      const tint = this.raid && (b.look === 'wall_h' || b.look === 'wall_v') ? this.wallTint(b) : 0xffffff;
       if (b.look === 'wall_h') {
         const n = Math.max(1, Math.round(b.w / 80));
         const step = b.w / n;
-        for (let k = 0; k < n; k++) this.img('wall_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / this.frame('wall_h').res, 1 / this.frame('wall_h').res).setDepth(b.y + b.h).setTint(tint);
+        for (let k = 0; k < n; k++) this.img('wall_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / this.frame('wall_h').res, 1 / this.frame('wall_h').res).setDepth(b.y + b.h);
       } else if (b.look === 'wall_v') {
         const n = Math.max(1, Math.round(b.h / 80));
         const step = b.h / n;
-        for (let k = 0; k < n; k++) this.img('wall_v', b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / this.frame('wall_v').res, step / 80 / this.frame('wall_v').res).setDepth(b.y + step * (k + 1)).setTint(tint);
+        for (let k = 0; k < n; k++) this.img('wall_v', b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / this.frame('wall_v').res, step / 80 / this.frame('wall_v').res).setDepth(b.y + step * (k + 1));
       } else if (b.look === 'coffin') this.img('coffin', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
-      else if (b.look === 'house' || (b.look === 'hall' && this.raid)) this.drawHouse(b, b.look === 'hall');
       else if (b.look === 'stall') this.img('stall', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
       else if (b.look === 'terrace') {
         const n = Math.max(1, Math.round(b.w / 80));
@@ -277,36 +281,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 夜探的院墙颜色：山寺和各处的庙、石兽院是红墙，其余保持灰白 */
-  private wallTint(b: { x: number; y: number; w: number; h: number }): number {
-    const raid = this.raid!;
-    const cx = b.x + b.w / 2;
-    const cy = b.y + b.h / 2;
-    const red = raid.setup.template === 'shansi' || raid.map.yards.some((y) => (y.kind === 'temple' || y.kind === 'vault') && cx >= y.x - 2 && cx <= y.x + y.w + 2 && cy >= y.y - 2 && cy <= y.y + y.h + 2);
-    return red ? 0xe88a76 : 0xffffff;
-  }
-
-  /** 夜探的房子：长边上一段段拼（横的画正面，竖的画俯视的瓦顶）；庙和石兽院的正房换红墙青瓦，横的中间再立一座门楼 */
-  private drawHouse(b: { x: number; y: number; w: number; h: number }, hall: boolean): void {
-    if (b.w >= b.h) {
-      const n = Math.max(1, Math.round(b.w / 80));
-      const step = b.w / n;
-      const key = hall ? 'hall_h' : 'house_h';
-      const f = this.frame(key);
-      for (let k = 0; k < n; k++) this.img(key, b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
-      if (hall && b.w >= 300) this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h + 0.1);
-    } else {
-      const n = Math.max(1, Math.round(b.h / 80));
-      const step = b.h / n;
-      const key = hall ? 'hall_v' : 'house_v';
-      const f = this.frame(key);
-      for (let k = 0; k < n; k++) this.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(b.w / 110 / f.res, step / 80 / f.res).setDepth(b.y + step * (k + 1));
-    }
-  }
-
   /** 夜探场地的地面：街和院子的铺地、河、桥由 Town 分块预渲染；这里摆宝箱和门 */
   private setupRaid(raid: Raid): void {
-    this.town = new Town(this, raid, { img: (key, x, y, scale) => this.img(key, x, y, scale), lowMem: LOW_MEMORY });
+    this.town = new Town(this, raid, { img: (key, x, y, scale) => this.img(key, x, y, scale), res: (key) => this.frame(key).res, lowMem: LOW_MEMORY });
     this.town.prepare(this.w.x, this.w.y);
     const sh = this.frame('shadow');
     for (const c of raid.map.chests) {
@@ -356,7 +333,7 @@ export class GameScene extends Phaser.Scene {
     put('drift', Math.round(60 * dense), true);
     put('puddle', Math.round(26 * dense), true);
     put('slabs', Math.round(30 * dense), true);
-    put('grass', Math.round(220 * dense), true);
+    put('grass', Math.round(220 * (this.raid ? dense / 2 : dense)), true);
     const yz = !this.raid && blocks.length > 0;
     // 山寺的树都是古松（Town 里摆），不再撒枯树
     if (this.raid?.setup.template !== 'shansi') put('tree', Math.round((yz ? 26 : 46) * dense), false);

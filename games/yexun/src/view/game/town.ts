@@ -11,6 +11,7 @@ import type { Raid } from '../../explore/raid.ts';
 import type { RaidBlock } from '../../explore/blocks.ts';
 import type { Yard } from '../../explore/mapgen.ts';
 import { artRng } from '../art/draw.ts';
+import type { Style } from '../art/sprites10.ts';
 
 /** 分块（只放软的东西：积雪、影子、院里的石纹和碎砖）：世界单位边长、贴图每单位几个像素。硬边的石板、方砖、水纹走平铺贴图，手机放大也清楚 */
 const CHUNK = 1200;
@@ -43,6 +44,8 @@ const hash = (a: number, b: number, s: number): number => {
 
 export interface TownDeps {
   img: (key: string, x: number, y: number, scale?: number) => Phaser.GameObjects.Image;
+  /** 图集帧的清晰度（显示时按 1 / res 缩放） */
+  res: (key: string) => number;
   lowMem: boolean;
 }
 
@@ -58,6 +61,8 @@ export class Town {
   private readonly rivers: RaidBlock[];
   private readonly docks: Dock[] = [];
   private readonly statics: Phaser.GameObjects.GameObject[] = [];
+  /** 平铺的各块：只在镜头里的才提交绘制（街、院子、河一共几十块，每块都是大四边形） */
+  private readonly flats: { o: Phaser.GameObjects.TileSprite; x: number; y: number; w: number; h: number }[] = [];
   /** 平铺贴图的清晰度：跟画面的放大倍数走（手机 2 倍屏 × 放大），封顶 2 */
   private readonly tileRes: number;
   private readonly steps: { x0: number; x1: number; y: number }[] = [];
@@ -93,6 +98,89 @@ export class Town {
     this.dark = scene.textures.createCanvas('town-dark', this.dw, this.dh)!;
     this.dctx = this.dark.getContext();
     this.darkImg = scene.add.image(0, 0, 'town-dark').setDepth(7000).setDisplaySize(10, 10);
+  }
+
+  // ───────────────────────── 建筑 ─────────────────────────
+
+  /** 样式：山寺全是红墙黄瓦；其余地方庙和石兽院是红墙黄瓦，渡口的屋子是木板茅草，古镇白墙青瓦 */
+  private styleOf(b: RaidBlock): Style {
+    const tpl = this.raid.setup.template;
+    if (tpl === 'shansi') return 'temple';
+    if (b.look === 'hall') return 'temple';
+    if (b.look === 'house') return tpl === 'dukou' ? 'hut' : 'town';
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const red = this.raid.map.yards.some((y) => (y.kind === 'temple' || y.kind === 'vault') && cx >= y.x - 2 && cx <= y.x + y.w + 2 && cy >= y.y - 2 && cy <= y.y + y.h + 2);
+    return red ? 'temple' : 'town';
+  }
+
+  /** 把规则层挡路的矩形画成俯视角的中式建筑：墙头瓦、正房瓦顶（门窗灯笼、脊头、檐角）、墙角翘檐、院里的棚；深度按脚底 */
+  drawBlocks(): void {
+    const d = this.d;
+    const T = RAID_WALL.thick;
+    for (const b of this.raid.map.blocks) {
+      const foot = b.y + b.h;
+      if (b.look === 'wall_h') {
+        const key = `qh_${this.styleOf(b)}`;
+        const n = Math.max(1, Math.round(b.w / 80));
+        const step = b.w / n;
+        const r = d.res(key);
+        for (let k = 0; k < n; k++) d.img(key, b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
+      } else if (b.look === 'wall_v') {
+        const key = `qv_${this.styleOf(b)}`;
+        const n = Math.max(1, Math.round(b.h / 80));
+        const step = b.h / n;
+        const r = d.res(key);
+        for (let k = 0; k < n; k++) d.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / r, step / 80 / r).setDepth(b.y + step * (k + 1));
+      } else if (b.look === 'house' || b.look === 'hall') this.drawHouse(b);
+      else if (b.look === 'stall') d.img('stall', b.x + b.w / 2, foot + 4).setDepth(foot);
+      else if (b.look === 'terrace') {
+        const n = Math.max(1, Math.round(b.w / 80));
+        const step = b.w / n;
+        const r = d.res('terrace_h');
+        for (let k = 0; k < n; k++) d.img('terrace_h', b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
+      }
+    }
+    // 墙角翘檐：院子四角各一个压在墙头上
+    for (const y of this.raid.map.yards) {
+      const key = `qc_${this.styleOf({ x: y.x + 2, y: y.y + 2, w: 1, h: 1, look: 'wall_h' })}`;
+      const x0 = y.x + T / 2;
+      const x1 = y.x + y.w - T / 2;
+      d.img(key, x0, y.y + T).setDepth(y.y + T + 0.4);
+      d.img(key, x1, y.y + T).setDepth(y.y + T + 0.4);
+      d.img(key, x0, y.y + y.h).setDepth(y.y + y.h + 0.4);
+      d.img(key, x1, y.y + y.h).setDepth(y.y + y.h + 0.4);
+    }
+  }
+
+  /** 正房：横向的一段段拼（中间一段是门，其余是窗），两头立脊头和檐角；竖向的是俯视的瓦顶，上下两头各一个脊头 */
+  private drawHouse(b: RaidBlock): void {
+    const d = this.d;
+    const st = this.styleOf(b);
+    const foot = b.y + b.h;
+    if (b.w >= b.h) {
+      const n = Math.max(1, Math.round(b.w / 80));
+      const step = b.w / n;
+      const door = n >= 2 || b.look === 'hall' ? Math.floor(n / 2) : -1;
+      for (let k = 0; k < n; k++) {
+        const key = `bh_${st}_${k === door ? 'door' : 'win'}`;
+        const r = d.res(key);
+        d.img(key, b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
+        if (k === door) this.light(b.x + step * (k + 0.5), foot - 34, 190, 0.9, 0.3);
+      }
+      const ek = `bhe_${st}`;
+      d.img(ek, b.x, foot).setDepth(foot + 0.3);
+      d.img(ek, b.x + b.w, foot).setFlipX(true).setDepth(foot + 0.3);
+    } else {
+      const key = `bv_${st}`;
+      const n = Math.max(1, Math.round(b.h / 80));
+      const step = b.h / n;
+      const r = d.res(key);
+      for (let k = 0; k < n; k++) d.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(b.w / 110 / r, step / 80 / r).setDepth(b.y + step * (k + 1));
+      const ek = `bve_${st}`;
+      d.img(ek, b.x + b.w / 2, b.y).setDepth(b.y + 40);
+      d.img(ek, b.x + b.w / 2, foot).setFlipY(true).setDepth(foot + 0.3);
+    }
   }
 
   // ───────────────────────── 陈设 ─────────────────────────
@@ -208,6 +296,14 @@ export class Town {
         this.prop('vat', cx - 180, cy + 90, 20);
         this.prop('vat', cx + 190, cy - 90, 20);
       } else if (y.kind === 'yard') {
+        // 贴着北墙内侧的小棚（只是装饰，不挡路）：避开院门、宝箱、守卫
+        const doors = this.doorsOf(y).filter((dd) => dd.side === 0);
+        const sx = rnd() < 0.5 ? y.x + T + 70 : y.x + y.w - T - 70;
+        const sy = y.y + T + 66;
+        if (doors.every((dd) => Math.abs(dd.x - sx) > 150)) {
+          const sk = `shed_${raid.setup.template === 'shansi' ? 'temple' : raid.setup.template === 'dukou' ? 'hut' : 'town'}`;
+          this.prop(sk, sx, sy, 48);
+        }
         for (const [dx, dy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
           if (rnd() < 0.5) this.prop('vat', dx < 0 ? y.x + T + 36 : y.x + y.w - T - 36, dy < 0 ? y.y + T + 60 : y.y + y.h - T - 36, 20);
         }
@@ -505,6 +601,7 @@ export class Town {
     t.setTileScale(1 / res, 1 / res);
     t.setTilePosition(((x % pw) + pw) % pw * res, ((y % ph) + ph) % ph * res);
     this.statics.push(t);
+    this.flats.push({ o: t, x, y, w, h });
   }
 
   /** 画好石板路、各种院子的地面和水的平铺贴图，铺到街、院子、河上 */
@@ -610,6 +707,7 @@ export class Town {
 
   /** 河岸、桥、栈桥、台阶：不多的几块硬边图形，画一次（Graphics 的指令每帧重放，条数要少） */
   private buildShapes(): void {
+    if (this.rivers.length === 0 && this.steps.length === 0) return;
     const g = this.scene.add.graphics().setDepth(-988);
     this.statics.push(g);
     const rect = (x: number, y: number, w: number, h: number, fill: number, a = 1): void => {
@@ -683,6 +781,7 @@ export class Town {
     const vh = cam.height / cam.zoom;
     const v = this.view.setTo(cam.midPoint.x - vw / 2, cam.midPoint.y - vh / 2, vw, vh);
     this.streamChunks(v);
+    for (const f of this.flats) f.o.setVisible(f.x < v.right + 40 && f.x + f.w > v.x - 40 && f.y < v.bottom + 40 && f.y + f.h > v.y - 40);
     const c = this.dctx;
     const sx = this.dw / v.width;
     const sy = this.dh / v.height;
