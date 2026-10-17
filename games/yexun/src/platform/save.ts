@@ -165,12 +165,16 @@ export function loadSave(): Save {
   }
 }
 
+/** 存档写进本机以后通知（main.ts 接云存档：标记 profile 槽待上传） */
+export const saveHooks = { onWrite: (): void => undefined };
+
 export function writeSave(s: Save): void {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(s));
   } catch {
     /* 写不进去就算了 */
   }
+  saveHooks.onWrite();
 }
 
 // ───────────────────────── 成绩 ─────────────────────────

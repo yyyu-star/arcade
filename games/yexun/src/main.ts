@@ -8,7 +8,8 @@ import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
 import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, loadSave, refundPerks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import { startCloud } from './platform/cloud.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
@@ -82,6 +83,14 @@ async function boot(): Promise<void> {
   window.addEventListener('keydown', unlock);
 
   const save = loadSave();
+  // 云存档（DESIGN.md 5.5）：没登录、单独部署时它自己不调接口；云端的进度并进本机后，内存里这份按新存档重读，菜单开着就重画
+  const cloud = startCloud({
+    onApplied: () => {
+      Object.assign(save, loadSave());
+      if (menu.root.style.display !== 'none') menu.show(menuState());
+    },
+  });
+  saveHooks.onWrite = () => cloud.touch('profile');
   const toggles: Toggle[] = [
     { key: 'sfx', label: '音效', get: () => sfx.enabled, set: (on) => sfx.setEnabled(on) },
     { key: 'music', label: '音乐', get: () => music.enabled, set: (on) => music.setEnabled(on) },
