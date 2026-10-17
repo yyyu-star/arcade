@@ -1431,7 +1431,8 @@ async function adminInvites(browser: Browser): Promise<void> {
     const table = page.getByTestId('invite-code-table');
     await table.getByText('K7QM-2RTP-XCWJ').waitFor();
     const rowH = await table.locator('tbody tr').first().evaluate((el) => el.getBoundingClientRect().height);
-    check(rowH < 60, `邀请码表一行不该被撑高：${rowH}px`);
+    // 竖屏上"复制"按钮是 44 高的点击区（0.24.0），一行约 61px；折行撑高时远不止这些
+    check(rowH < (screen === 'portrait' ? 68 : 60), `邀请码表一行不该被撑高：${rowH}px`);
     const panel = page.locator('.panel', { has: table });
     const [pb, sb, segW] = await Promise.all([panel.boundingBox(), page.locator('.table-scroll').boundingBox(), panel.locator('.seg').evaluate((el) => el.getBoundingClientRect().width - [...el.children].reduce((w, c) => w + c.getBoundingClientRect().width, 0))]);
     check(!!pb && !!sb && sb.x + sb.width <= pb.x + pb.width + 1, '表格的框不该超出面板');
