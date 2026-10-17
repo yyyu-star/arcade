@@ -74,18 +74,21 @@ export class SettingsPanel extends Dialog {
     }
     let col: { label: number; ctrl: number } = phone ? PHONE_UI : COLS[0]!;
     let page = 0;
-    let y = 96;
-    const row = (label: string): number => {
+    // 0.18.1 手机第一页有七行（0.17.0 加了「月底账单」），对局里底下还有「回到主菜单」「回大厅」：从 88 起、音量三行收到 38，最后一行的按钮底边 359，不再压到底下按钮（顶边 370）
+    let y = phone ? 88 : 96;
+    let lastAt = y;
+    const row = (label: string, pitch?: number): number => {
       this.box.add(addText(scene, col.label, y, label, { size: 15, color: COLOR.muted, originY: 0.5 }));
       const at = y;
-      y += phone ? PHONE_UI.row[page]! : ROW;
+      lastAt = at;
+      y += pitch ?? (phone ? PHONE_UI.row[page]! : ROW);
       return at;
     };
     const note = (text: string): Phaser.GameObjects.Text => {
       if (phone) {
         // 手机：写在上一行按钮的右边，不另占一行
         const nx = PHONE_UI.note[page]!;
-        const t = addText(scene, nx, y - PHONE_UI.row[page]!, text, { size: 13, color: COLOR.muted, wrap: PHONE_UI.w - nx - 32, originY: 0.5, lineSpacing: 2 });
+        const t = addText(scene, nx, lastAt, text, { size: 13, color: COLOR.muted, wrap: PHONE_UI.w - nx - 32, originY: 0.5, lineSpacing: 2 });
         this.box.add(t);
         return t;
       }
@@ -96,7 +99,7 @@ export class SettingsPanel extends Dialog {
     };
 
     const volume = (label: string, field: 'masterVolume' | 'sfxVolume' | 'musicVolume'): void => {
-      const at = row(label);
+      const at = row(label, phone ? 38 : undefined);
       const pct = addText(scene, col.ctrl + 300, at, '', { size: 15, num: true, originY: 0.5 });
       const slider = new Slider(scene, col.ctrl, at, 280, getSettings()[field], (v) => updateSettings({ [field]: v }));
       this.box.add([slider, pct]);

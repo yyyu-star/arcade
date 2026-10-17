@@ -10,7 +10,7 @@ import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Pro
 import { ensureMetaArt, hasArt, queueLazy, stockKey, type Glyph } from '../assets.ts';
 import { addBackdrop } from '../fx/effects.ts';
 import { confetti, fireworks, rainCloud } from '../fx/particles.ts';
-import { bestText, boardLine, boardScoreText, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
+import { bestText, boardLine, boardScoreText, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows, tradeWord } from '../labels.ts';
 import { funSetup, loadLastSetup, saveLastSetup } from '../meta/prefs.ts';
 import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
@@ -184,7 +184,8 @@ export class EndScene extends BaseScene {
       const card = stockCard(s, sum.bestTrade.stockId);
       new StockGuy(this, guyX, guyFeet, card.id, sum.bestTrade.ret >= 0 ? 'limitup' : 'worried', guySize, { idle: this.lively });
       const ret = sum.bestTrade.ret;
-      stack.push({ h: 22, draw: (yy) => addText(this, colX, yy + 11, '最赚的一笔', { size: TYPE.label, color: COLOR.muted, originY: 0.5 }) });
+      // 0.18.1 每一笔都亏的局，不说「最赚」
+      stack.push({ h: 22, draw: (yy) => addText(this, colX, yy + 11, ret >= 0 ? '最赚的一笔' : '亏得最少的一笔', { size: TYPE.label, color: COLOR.muted, originY: 0.5 }) });
       stack.push({
         h: 34,
         draw: (yy) => {
@@ -239,11 +240,13 @@ export class EndScene extends BaseScene {
       const tx = mx + ((tiles.length) % cols) * (tw + tgx);
       const ty = ty0 + Math.floor(tiles.length / cols) * (th + 10);
       const tm = sum.tradeMoney;
-      const v = tm === null ? '–' : formatMoney(tm, { sign: true });
-      statTile(this, tx, ty, tm !== null && tm < 0 ? 'arrow_down' : 'arrow_up', v, '炒股净赚', { w: tw, icon: G.tileIcon, size: G.tileSize, color: tm === null ? undefined : signColor(tm), tint: tm === null ? undefined : signColor(tm) });
+      // 0.18.1 亏了写「炒股净亏 ¥325万」（以前写「炒股净赚 −¥325万」，和副标题对不上）
+      const word = tm === null ? '炒股净赚' : tradeWord(tm);
+      const v = tm === null ? '–' : tm < 0 ? formatMoney(-tm) : formatMoney(tm, { sign: true });
+      statTile(this, tx, ty, tm !== null && tm < 0 ? 'arrow_down' : 'arrow_up', v, word, { w: tw, icon: G.tileIcon, size: G.tileSize, color: tm === null ? undefined : signColor(tm), tint: tm === null ? undefined : signColor(tm) });
       const hit = this.add.rectangle(tx, ty, tw, th, 0xffffff, 0.001).setOrigin(0, 0);
       bindTooltip(hit, () => ({ x: tx, y: ty, w: tw, h: th }), () => ({
-        title: '炒股净赚',
+        title: word,
         body:
           tm === null
             ? '这局是旧版本开的，没有记下炒股合计。'
