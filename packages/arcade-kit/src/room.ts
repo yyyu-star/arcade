@@ -263,11 +263,6 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   protected onEmote(_from: number, _id: number, _to?: number): void {}
 
   /**
-   * 让电脑座位发一句快捷短语（0.10.0）：广播的消息和真人发的一样（{ t: 'emote', seat, id, to? }），多带 bot: true，客户端可以不管它。
-   * 只有电脑在出手的座位能发：kind 是 ai，或者真人掉线后由电脑托管（auto）。id、to 的校验和真人一样，走同一个座位的令牌桶
-   * （emoteMs / emoteBurst），不写存储、不改 seq。发出去了回 true；座位是真人在打、空位、编号不对、目标不对、房间打完了、太快了，回 false 不广播
-   */
-  /**
    * 搭子战绩（0.13.0，平台 15.19）：一场打完时报一次同桌真人和各自输赢。players 按座位给（电脑座位直接放进来也行，这里按开打后绑的人认，
    * 没绑真人的座位不报），match 是这一场在房间里的序号（同一场重报给同一个数，平台按 op 去重）。
    * 交给 `ctx.waitUntil` 去办、不 await：一般在同步的 `onStep` 里看到一场结束时调，不能卡住广播和下一步；
@@ -288,6 +283,11 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     return list.length;
   }
 
+  /**
+   * 让电脑座位发一句快捷短语（0.10.0）：广播的消息和真人发的一样（{ t: 'emote', seat, id, to? }），多带 bot: true，客户端可以不管它。
+   * 只有电脑在出手的座位能发：kind 是 ai，或者真人掉线后由电脑托管（auto）。id、to 的校验和真人一样，走同一个座位的令牌桶
+   * （emoteMs / emoteBurst），不写存储、不改 seq。发出去了回 true；座位是真人在打、空位、编号不对、目标不对、房间打完了、太快了，回 false 不广播
+   */
   protected botEmote(seat: number, id: number, to?: number): boolean {
     const st = this.st;
     const n = this.game.emotes;
