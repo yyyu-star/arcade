@@ -4,7 +4,8 @@
  * 没摊的底牌一律不进卡（kit 也要求游戏自己别放隐藏信息）；不画牌面，图上不出现任何一张牌。
  */
 import type { ShareCard } from 'arcade-kit/share';
-import { chips, handName } from './text.ts';
+import { CATEGORY_NAMES, categoryOf } from '../core/eval.ts';
+import { chips } from './text.ts';
 import type { RoomSummaryRow, SoloSummary, Title } from './summary.ts';
 import type { Award } from './titles.ts';
 
@@ -28,8 +29,8 @@ export function soloCard(s: SoloSummary, where: string, name: string): ShareCard
     big: { value: signed(net), label: s.practice ? '筹码（娱乐，不算数）' : '筹码' },
     stats: [
       { label: '赢了', value: `${s.won} 手` },
-      // 卡上的大字只放得下几个字：金额做大字，牌型放在下面的小字里
-      ...(s.best ? [{ label: s.best.value === null ? '最大一池 · 弃牌赢' : `最大一手 · ${handName(s.best.value)}`, value: chips(s.best.won) }] : []),
+      // 卡上的大字只放得下几个字：金额做大字，牌型放在下面的小字里；小字也只放得下六七个字（0.17.2 起右下角还有二维码），只写牌型大类
+      ...(s.best ? [{ label: s.best.value === null ? '最大一池' : `最大一手 · ${CATEGORY_NAMES[categoryOf(s.best.value)]}`, value: chips(s.best.won) }] : []),
     ],
     ...(t ? { line: `${t.title}：${t.why}` } : {}),
     player: { name, ...(t ? { badge: t.title } : {}) },

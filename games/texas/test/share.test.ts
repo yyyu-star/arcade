@@ -17,7 +17,7 @@ describe('分享卡', () => {
     expect(JSON.stringify(c)).not.toMatch(/[♠♥♦♣]|\b[2-9TJQKA][shdc]\b/);
     const fold = soloCard({ ...base, practice: true, left: 1_500, best: { won: 120, value: null } }, '娱乐 · 新手', '小明');
     expect(fold).toMatchObject({ title: '娱乐 · 新手 · 37 手', big: { value: '−500', label: '筹码（娱乐，不算数）' } });
-    expect(fold.stats![1]).toEqual({ label: '最大一池 · 弃牌赢', value: '120' });
+    expect(fold.stats![1]).toEqual({ label: '最大一池', value: '120' });
     expect(fold.line).toBeUndefined();
   });
 
