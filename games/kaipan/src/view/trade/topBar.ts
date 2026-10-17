@@ -634,6 +634,11 @@ export class TopBarView {
     if (Math.abs(delta) >= 0.5) pop(anim, this.account, 1.15);
   }
 
+  /** 顶栏钱包图标的中心（卖出、收盘赚钱时金币往这里飞）。 */
+  walletAt(): { x: number; y: number } {
+    return { x: TB.wallet.x, y: TB.wallet.y };
+  }
+
   /** 引导与自动化用的区域。 */
   billRect(): Rect {
     const x = this.tempo ? GOAL_X : TB.billLeft;

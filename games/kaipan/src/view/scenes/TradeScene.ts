@@ -48,6 +48,7 @@ import { recordTape } from '../trade/tape.ts';
 import { MONITOR, OPEN, PHONE_RECT as PHONE, SLOTS, TABS } from '../trade/layout.ts';
 import { PanelTabs, type PanelTab } from '../trade/tabs.ts';
 import { EventPanel, RewardPanel, eventResult, monthIntro, playBill, rewardSlots } from '../trade/monthEnd.ts';
+import { BILL_MS } from '../trade/billTiming.ts';
 import { Room } from '../trade/room.ts';
 import { ThemeBoardView } from '../trade/themeBoard.ts';
 import { coverOf } from '../viewport.ts';
@@ -99,7 +100,6 @@ const T = {
   hold: 300,
   chatGap: 120,
   monthIntro: 1900,
-  billHold: 1300,
   /** 0.5 本月看点卡停留（boss 月多一点；点一下或空格跳过） */
   monthCard: 4600,
   bossCard: 5600,
@@ -815,7 +815,7 @@ export class TradeScene extends BaseScene {
 
   /** 卖出：几枚金币从格子飞回顶栏的钱包（亏了也飞，只是少几枚、颜色灰一点）。 */
   private coinsHome(from: { x: number; y: number }, holdRet: number): void {
-    const to = { x: 312, y: 36 };
+    const to = this.top.walletAt();
     const n = holdRet > 0 ? 7 : 4;
     for (let i = 0; i < n; i++) {
       const c = addImage(this, from.x + (Math.random() - 0.5) * 50, from.y + (Math.random() - 0.5) * 30, 'fx:coin', 22).setDepth(160);
@@ -927,7 +927,10 @@ export class TradeScene extends BaseScene {
     pop(a, this.openBtn, 0.92);
     this.setMonitorLine(fast ? '快进中…' : '开盘！');
     // 快进时一天一两秒，色调来回换会闪：停在清晨，只有月底算账才入夜
-    if (!fast) this.room.setTime('day', a);
+    if (!fast) {
+      this.room.setTime('day', a);
+      this.room.flashLights(a);
+    }
     this.screen.setSub(isTouch() ? '点屏幕跳过' : '空格跳过');
     // 节拍按同一个起点累计（waitUntil），低帧率时不会每段都晚一帧、越拖越长
     const t0 = a.now();
@@ -1086,7 +1089,12 @@ export class TradeScene extends BaseScene {
     if (report) {
       this.setMonitorMoney(report.account.after - report.account.before, report.account.ret);
       this.screen.setSub('收盘');
-      if (!fast) this.room.setTime('dusk', a);
+      if (!fast) {
+        this.room.setTime('dusk', a);
+        // 0.17.0 收盘：总账数字砸一下，赚了的话金币从显示器飞进钱包（都不占节拍）
+        pop(a, this.monitor, 1.25);
+        if (report.account.after - report.account.before >= 1) this.coinsHome({ x: this.monitor.x, y: this.monitor.y }, report.account.ret);
+      }
       // 0.5.1：房间跟着今天的结果——赚了掉金币、亏了飘乌云，大盘大涨挂彩虹
       this.room.celebrate(a, report.account.ret);
       this.room.setRainbow(report.market.ret >= 1.5);
@@ -1147,9 +1155,13 @@ export class TradeScene extends BaseScene {
       const info = paid
         ? { month: paid.month, name: prev.bill.name, amount: paid.amount, before: paid.before, after: paid.after, paid: true, credit: paid.credit, extras, interest: pick(events, 'interestPaid').reduce((n, e) => n + e.amount, 0) }
         : { month: broke?.month ?? prev.month, name: prev.bill.name, amount: broke?.amount ?? 0, before: broke?.account ?? 0, after: broke?.account ?? 0, paid: false, credit: false, extras };
+      // 本月目标写在账单上
+      const mt = monthThemeView(prev);
+      const goal = mt ? { name: mt.name, done: mt.goal.done || !!first(events, 'goalDone') } : undefined;
+      const quick = loadViewPrefs().bill === 'quick';
       a.relax();
       this.room.setTime('night', a);
-      const bill = await playBill(this, a, info);
+      const bill = await playBill(this, a, { ...info, goal }, quick);
       if (paid) this.top.setAccount(paid.after);
       if (billBank) await this.playBank(events);
       if (called) {
@@ -1164,7 +1176,7 @@ export class TradeScene extends BaseScene {
         this.continueBtn = null;
         return; // Session 随后切到结束页
       }
-      await a.wait(T.billHold);
+      await a.wait(quick ? BILL_MS.quick : BILL_MS.hold);
       bill.destroy();
     }
     this.setBusy(false);
@@ -1224,9 +1236,11 @@ export class TradeScene extends BaseScene {
     const failed = first(events, 'goalFailed');
     if (done || failed) {
       this.top.goalChanged(a, next, done ? 'done' : 'failed');
-      if (failed && !done) this.glyphPop('target', SHOUT_AT.x - 150, SHOUT_AT.y, 34, 800);
-      if (failed && !done) floatText(this, a, SHOUT_AT.x, SHOUT_AT.y, `本月目标没达成：${monthThemeView(prev)?.name ?? ''}`, COLOR.muted, { size: 20, pop: true, hold: 900, depth: 170 });
-      await a.wait(900);
+      // 0.17.0 月底那天出结果的：账单上会写，不再单独飘一行字、多停 0.9 秒
+      const billDay = events.some((e) => e.type === 'billPaid' || e.type === 'bankrupt');
+      if (failed && !done && !billDay) this.glyphPop('target', SHOUT_AT.x - 150, SHOUT_AT.y, 34, 800);
+      if (failed && !done && !billDay) floatText(this, a, SHOUT_AT.x, SHOUT_AT.y, `本月目标没达成：${monthThemeView(prev)?.name ?? ''}`, COLOR.muted, { size: 20, pop: true, hold: 900, depth: 170 });
+      if (!billDay) await a.wait(900);
     } else if (first(events, 'goalProgress')) {
       this.top.goalChanged(a, next, 'progress');
     }

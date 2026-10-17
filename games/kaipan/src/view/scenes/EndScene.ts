@@ -9,7 +9,7 @@ import { setColor } from '../ui/text.ts';
 import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Profile, type RecordResult } from '../../platform/profile.ts';
 import { ensureMetaArt, hasArt, queueLazy, stockKey, type Glyph } from '../assets.ts';
 import { addBackdrop } from '../fx/effects.ts';
-import { confetti } from '../fx/particles.ts';
+import { confetti, fireworks, rainCloud } from '../fx/particles.ts';
 import { bestText, boardLine, boardScoreText, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
 import { funSetup, loadLastSetup, saveLastSetup } from '../meta/prefs.ts';
 import { playUnlocks } from '../meta/unlockDialog.ts';
@@ -26,7 +26,8 @@ import { StockGuy } from '../ui/stockGuy.ts';
 import { addText, fitWidth } from '../ui/text.ts';
 import type Phaser from 'phaser';
 import { Room } from '../trade/room.ts';
-import { phoneLayout } from '../viewport.ts';
+import { END_CUTSCENE_MS } from '../trade/billTiming.ts';
+import { coverOf, phoneLayout, viewOf } from '../viewport.ts';
 import { gameLink, shareArt, shareData } from '../shareCard.ts';
 import { onChallengeChange, readChallenge, retryChallengeEnd, runChallenge, startChallenge } from '../challenge.ts';
 import { ChallengeLinkDialog, ChallengePanel } from '../meta/challengePanel.ts';
@@ -631,6 +632,7 @@ export class EndScene extends BaseScene {
   override async enter(): Promise<void> {
     if (!this.summary) return;
     sound.cue({ type: this.summary.won ? 'runWon' : 'runLost' });
+    await this.cutscene(this.summary.won);
     if (this.summary.won) confetti(this, this.anim);
     // 0.11.0 实盘结回 ≥ 3 倍：大字庆祝、再放一次彩带和大赚的音效
     const lv = this.summary.live;
@@ -649,6 +651,36 @@ export class EndScene extends BaseScene {
       return;
     }
     unlocks();
+  }
+
+  /**
+   * 0.17.0 结束页出场前的过场（art-v3 第 5 节）：通关放烟花、出局下雨，一行大字，1.2 秒后收起；点一下跳过。
+   * 一局只有一次；关掉动画、「减少动态效果」时不放。过场时盖一层挡板，免得误点到下面的按钮。
+   */
+  private async cutscene(won: boolean): Promise<void> {
+    const a = this.anim;
+    if (a.instant || !this.lively) return;
+    a.begin();
+    const V = viewOf(this);
+    const cv = coverOf(this);
+    const block = this.add.rectangle(cv.x, cv.y, cv.w, cv.h, COLOR.ink, won ? 0.25 : 0.4).setOrigin(0, 0).setDepth(390).setInteractive();
+    const big = addText(this, V.w / 2, V.h / 2 - 24, won ? '通关！' : '出局', {
+      size: PHONE ? 60 : 76,
+      bold: true,
+      color: won ? COLOR.accent : 0xe2d8e6,
+      originX: 0.5,
+      originY: 0.5,
+      stroke: COLOR.ink,
+      strokeWidth: 10,
+    }).setDepth(395);
+    const sub = addText(this, V.w / 2, V.h / 2 + 40, won ? '带着钱上岸了' : '这一局到这儿了', { size: TYPE.title + 4, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 6 }).setDepth(395);
+    a.fx({ targets: [big, sub], scale: { from: 0.4, to: 1 }, duration: 360, ease: 'Back.Out' }, () => [big, sub].forEach((t) => t.setScale(1)));
+    if (won) [[0.25, 0.3], [0.75, 0.28], [0.5, 0.18]].forEach(([fx, fy], i) => this.time.delayedCall(i * 220, () => this.sys.isActive() && fireworks(this, a, V.w * fx!, V.h * fy!, true)));
+    else [0.3, 0.55, 0.78].forEach((fx, i) => rainCloud(this, a, V.w * fx, V.h * (0.22 + (i % 2) * 0.06)));
+    await a.wait(END_CUTSCENE_MS);
+    const parts = [block, big, sub];
+    a.fx({ targets: parts, alpha: 0, duration: 200 }, () => parts.forEach((p) => p.destroy()));
+    if (a.instant) parts.forEach((p) => p.active && p.destroy());
   }
 
   private async showUnlocks(list: Unlock[], won: boolean): Promise<void> {
