@@ -1375,7 +1375,8 @@ export class TradeScene extends BaseScene {
   /** 账单之后的「继续」按钮（爆仓 / 通关）。 */
   private showContinue(layer: Phaser.GameObjects.Container, label: string): void {
     // 手机上账单卡偏左、高度占满，按钮放到右边印章下面
-    const b = new Button(this, PHONE_MODE ? 590 : VIEW.w / 2 - 110, PHONE_MODE ? 372 : 600, { width: 220, height: 52, label, variant: 'primary', fontSize: 18, hotkey: '空格', onClick: () => this.continueInput() });
+    // 0.19.0 手机世界宽窄不定（718–960）、高 404：按群聊那一块的位置放，底边离画面下沿 8
+    const b = new Button(this, PHONE_MODE ? Math.min(VIEW.w - 8 - 220, PHONE.x + (PHONE.w - 220) / 2) : VIEW.w / 2 - 110, PHONE_MODE ? VIEW.h - 8 - 52 : 600, { width: 220, height: 52, label, variant: 'primary', fontSize: 18, hotkey: '空格', onClick: () => this.continueInput() });
     layer.add(b);
     this.continueBtn = b;
   }

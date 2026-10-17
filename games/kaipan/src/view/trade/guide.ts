@@ -199,7 +199,8 @@ export class Guide {
     let best: { x: number; y: number; side: Side; cost: number } | null = null;
     const away: Side[] = target.y + target.h / 2 < V.h / 2 ? ['below', 'above'] : ['above', 'below'];
     // 手机上只放上下：放左右再沿边滑开，气泡会和指向目标的箭头脱开
-    const sides = PHONE ? away : [...SIDES[step], ...(['left', 'right', 'below', 'above'] as Side[]).filter((x) => !SIDES[step].includes(x))];
+    // 0.19.0 手机世界矮到 404：目标是整块推荐列表时上下都放不下，再试左右（总比放进列表里盖住「买入」好）
+    const sides = PHONE ? [...away, 'left', 'right'] as Side[] : [...SIDES[step], ...(['left', 'right', 'below', 'above'] as Side[]).filter((x) => !SIDES[step].includes(x))];
     for (const [rank, side] of sides.entries()) {
       for (const d of slides) {
         let x: number;

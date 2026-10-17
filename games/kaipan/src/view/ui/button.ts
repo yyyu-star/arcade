@@ -137,6 +137,13 @@ export class Button extends Phaser.GameObjects.Container implements Focusable {
       this.label.x = Math.max(this.label.width / 2 + 6, (opts.width - this.key.width - 10) / 2);
       if (this.sub) this.sub.x = this.label.x;
     }
+    // 0.19.0 更窄（手机上 5 格持仓的「卖出」）：让了还挤就不显示快捷键，文字回到正中
+    if (this.key && this.label.width + this.key.width + 16 > opts.width) {
+      this.keyFits = false;
+      this.key.setVisible(false);
+      this.label.x = opts.width / 2;
+      if (this.sub) this.sub.x = this.label.x;
+    }
     this.labelX = this.label.x;
     this.sound = opts.sound === undefined ? 'click' : opts.sound;
     const even = Math.max(0, (HIT_MIN - (opts.height + 3)) / 2);
@@ -398,6 +405,9 @@ export class Button extends Phaser.GameObjects.Container implements Focusable {
     // 停用时小字用停用色里最深的那档（银行「N月开」以前是浅灰字落在灰底上，看不清）
     if (this.sub) setColor(this.sub, base.slice && this.enabled ? 0xffffff : this.enabled ? COLOR.muted : DISABLED.text);
     if (this.hit.input) this.hit.input.cursor = this.loading ? 'progress' : this.clickable() ? 'pointer' : 'default';
-    this.key?.setVisible(this.enabled && !this.locked && !this.loading);
+    this.key?.setVisible(this.keyFits && this.enabled && !this.locked && !this.loading);
   }
+
+  /** 快捷键角标放得下（窄按钮上放不下就一直不显示） */
+  private keyFits = true;
 }

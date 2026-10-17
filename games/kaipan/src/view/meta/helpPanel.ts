@@ -9,7 +9,7 @@ import { bindTooltip } from '../ui/tooltip.ts';
 import { Button } from '../ui/button.ts';
 import { Dialog, iconChip } from '../ui/dialog.ts';
 import { addText } from '../ui/text.ts';
-import { phoneLayout } from '../viewport.ts';
+import { phoneLayout, viewOf } from '../viewport.ts';
 
 const W = 760;
 const H = 560;
@@ -93,24 +93,33 @@ export class HelpPanel extends Dialog {
   /** 插图左上角（电脑上居中，手机上靠左） */
   private readonly picX: number;
   private readonly picY: number;
+  /** 0.19.0 手机世界窄了以后插图按比例缩小（SE 上约 0.79），右栏跟着插图右边走 */
+  private readonly picK: number;
+  private readonly rx: number;
 
   constructor(scene: Phaser.Scene, onClosed?: () => void) {
     const phone = phoneLayout(scene);
-    super(scene, phone ? PHONE_UI.w : W, phone ? PHONE_UI.h : H, '怎么玩', onClosed);
+    const V = viewOf(scene);
+    const pw = Math.min(PHONE_UI.w, V.w - 16);
+    const phH = Math.min(PHONE_UI.h, V.h - 12);
+    super(scene, phone ? pw : W, phone ? phH : H, '怎么玩', onClosed);
     this.phone = phone;
     this.picX = phone ? PHONE_UI.picX : PIC_X;
     this.picY = phone ? PHONE_UI.picY : PIC_Y;
+    this.picK = phone ? Math.min(1, (pw - PHONE_UI.picX - 268) / PIC_W, (phH - PHONE_UI.picY - 16) / PIC_H) : 1;
+    this.rx = phone ? Math.round(this.picX + PIC_W * this.picK + 24) : PHONE_UI.rx;
     const w = this.dw;
     const h = this.dh;
+    const narrow = phone && w < 900;
     this.pageBox = scene.add.container(0, 0);
     this.inner.add(this.pageBox);
     // 手机：两个翻页按钮都在右栏底部，页码圆点在它们上面
-    this.prevBtn = new Button(scene, phone ? PHONE_UI.rx : 32, phone ? h - 64 : H - 64, { width: 120, height: phone ? 44 : 42, label: '上一页', fontSize: 15, hotkey: '←' });
+    this.prevBtn = new Button(scene, phone ? this.rx : 32, phone ? h - 64 : H - 64, { width: narrow ? 96 : 120, height: phone ? 44 : 42, label: '上一页', fontSize: 15, hotkey: '←' });
     this.prevBtn.setHandler(() => this.go(this.page - 1));
-    this.nextBtn = new Button(scene, w - (phone ? 24 : 32) - 150, h - 66, { width: 150, height: 46, label: '下一页', variant: 'primary', fontSize: 16, hotkey: '回车' });
+    this.nextBtn = new Button(scene, w - (phone ? 24 : 32) - (narrow ? 110 : 150), h - 66, { width: narrow ? 110 : 150, height: 46, label: '下一页', variant: 'primary', fontSize: 16, hotkey: '回车' });
     this.nextBtn.setHandler(() => (this.page + 1 < HELP_PAGES.length ? this.go(this.page + 1) : this.close()));
     this.inner.add([this.prevBtn, this.nextBtn]);
-    const dotsX = phone ? (PHONE_UI.rx + w - 24) / 2 : W / 2;
+    const dotsX = phone ? (this.rx + w - 24) / 2 : W / 2;
     const dotsY = phone ? h - 84 : H - 43;
     HELP_PAGES.forEach((_, i) => {
       const d = scene.add.circle(dotsX - (phone ? 36 : 24) + i * 24, dotsY, 6, COLOR.edge).setStrokeStyle(2, COLOR.ink, 1);
@@ -150,13 +159,16 @@ export class HelpPanel extends Dialog {
     const key = guideKey(p.id as (typeof GUIDE_PAGES)[number]);
     const px0 = this.picX;
     const py0 = this.picY;
-    if (hasArt(s.textures, key)) this.pageBox.add(addImage(s, px0 + PIC_W / 2, py0 + PIC_H / 2, key, PIC_W, PIC_H));
-    else this.pageBox.add(this.sketch(p.id));
+    // 插图（连同纸条上的标题）画在自己的容器里，手机世界窄时整体缩小
+    const pic = s.add.container(px0, py0).setScale(this.picK);
+    if (hasArt(s.textures, key)) pic.add(addImage(s, PIC_W / 2, PIC_H / 2, key, PIC_W, PIC_H));
+    else pic.add(this.sketch(p.id));
     // 标题写在插图下方留白的纸条上，上下居中（0–226 是画）
-    this.pageBox.add(addText(s, px0 + 24, py0 + (STRIP_TOP + PIC_H) / 2, p.title, { size: 20, bold: true, color: COLOR.accentDark, originY: 0.5 }));
+    pic.add(addText(s, 24, (STRIP_TOP + PIC_H) / 2, p.title, { size: 20, bold: true, color: COLOR.accentDark, originY: 0.5 }));
+    this.pageBox.add(pic);
     // 手机：一句话、要点签竖着放在插图右边一栏
-    const colW = this.dw - 24 - PHONE_UI.rx;
-    const colX = PHONE_UI.rx + colW / 2;
+    const colW = this.dw - 24 - this.rx;
+    const colX = this.rx + colW / 2;
     let chipY = PIC_Y + PIC_H + 70;
     if (this.phone) {
       const top = py0 + 10;
@@ -188,8 +200,10 @@ export class HelpPanel extends Dialog {
       }
     }
     // 完整说明在插图的悬停里
-    const hit = s.add.rectangle(px0, py0, PIC_W, PIC_H, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(hit, () => ({ x: this.inner.x + px0, y: this.inner.y + py0, w: PIC_W, h: PIC_H }), () => ({ title: p.title, body: p.body }));
+    const pw = PIC_W * this.picK;
+    const phh = PIC_H * this.picK;
+    const hit = s.add.rectangle(px0, py0, pw, phh, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(hit, () => ({ x: this.inner.x + px0, y: this.inner.y + py0, w: pw, h: phh }), () => ({ title: p.title, body: p.body }));
     this.pageBox.add(hit);
     this.prevBtn.setEnabled(i > 0);
     this.nextBtn.setLabel(i + 1 < HELP_PAGES.length ? '下一页' : '知道了');
@@ -290,8 +304,9 @@ export class HelpPanel extends Dialog {
   /** 没有插图时的示意图（同样的构图：上方画，下方留纸条）。 */
   private sketch(id: (typeof GUIDE_PAGES)[number] | 'ext'): Phaser.GameObjects.GameObject[] {
     const s = this.scene;
-    const PIC_X = this.picX;
-    const PIC_Y = this.picY;
+    // 画在插图容器里（原点是插图左上角）
+    const PIC_X = 0;
+    const PIC_Y = 0;
     const out: Phaser.GameObjects.GameObject[] = [];
     out.push(s.add.rectangle(PIC_X, PIC_Y, PIC_W, PIC_H, 0xfff6e3).setOrigin(0, 0).setRounded(16).setStrokeStyle(3, COLOR.ink, 1));
     out.push(s.add.rectangle(PIC_X + 3, PIC_Y + 3, PIC_W - 6, 223, id === 'sell' ? 0xe9eef7 : 0xfde9c9).setOrigin(0, 0).setRounded(14));

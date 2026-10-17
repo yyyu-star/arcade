@@ -16,7 +16,7 @@ import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
 import { randomSeed, type Session } from '../session.ts';
 import { sound } from '../sound.ts';
-import { COLOR, GAME_WIDTH, PHONE, TYPE, VIEW, arrowOf, mixColor, signColor } from '../theme.ts';
+import { COLOR, GAME_WIDTH, PHONE, TYPE, arrowOf, mixColor, signColor } from '../theme.ts';
 import { addGlyph, addPaper, addPill } from '../ui/art.ts';
 import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
 import { statTile, tipOnButton } from '../meta/bits.ts';
@@ -98,7 +98,8 @@ const PHONE_GEO: Geo = {
  * 本局新达成的成就和解锁；进场后依次弹出成就、新人设、新难度。按钮：同种子再来、新局、主菜单。
  */
 export class EndScene extends BaseScene {
-  protected override readonly phoneReady = PHONE;
+  // 0.19.0 结束页还没按新的手机世界重排（0.19.1）：先按旧的 960×444 整体缩放进来
+  protected override readonly phoneReady = PHONE ? ('legacy' as const) : false;
   private buttons: Record<string, Button> = {};
   private room: Room | null = null;
   private summary: RunSummary | null = null;
@@ -621,7 +622,8 @@ export class EndScene extends BaseScene {
   private celebrate(bp: number, gear: number): void {
     sound.cue({ type: 'settle', ret: 5 });
     confetti(this, this.anim);
-    const t = addText(this, VIEW.w / 2, VIEW.h / 2, `杠杆 ×${gear}　结回 ${(bp / 10_000).toFixed(1)} 倍！`, {
+    const V = viewOf(this);
+    const t = addText(this, V.w / 2, V.h / 2, `杠杆 ×${gear}　结回 ${(bp / 10_000).toFixed(1)} 倍！`, {
       size: PHONE ? 40 : 52,
       bold: true,
       color: COLOR.accentDark,

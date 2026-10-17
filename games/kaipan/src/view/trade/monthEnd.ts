@@ -159,7 +159,8 @@ const RARITY_STARS: Record<string, number> = { common: 1, uncommon: 2, rare: 3 }
 /** 奖励卡卡面上各行的纵坐标（相对卡顶）：手机上卡矮 42，图标小一号、各行往上收 */
 const CARD_LAYOUT = {
   desktop: { icon: 98, iconS: 96, name: 160, big: 208 },
-  phone: { icon: 84, iconS: 80, name: 136, big: 180 },
+  // 0.19.0 手机世界高 404，卡片矮到 286：图标、名字、大数字再往上收
+  phone: { icon: 74, iconS: 70, name: 120, big: 160 },
 } as const;
 
 /** 三选一奖励卡（phase = reward 时常驻，直到选择）：稀有度色框 + 大图标 + 名字 + 大数字 + 一行；详情悬停。 */
@@ -180,7 +181,8 @@ export class RewardPanel {
     this.root.add([addGlyph(scene, V.w / 2 - title.width / 2 - 14, ty, 'gift', ph ? 44 : 52), title]);
     const gap = ph ? 20 : 30;
     const CW = Math.min(236, Math.floor((V.w - 24 - gap * (cards.length - 1)) / cards.length));
-    const CH = ph ? 308 : 350;
+    // 0.19.0 手机世界高 404：卡片高按剩下的算（标题 58 起，下面还要放「都不要」）
+    const CH = ph ? Math.min(308, V.h - 58 - 60) : 350;
     const top = ph ? 58 : 146;
     const x0 = V.w / 2 - (CW * cards.length + gap * (cards.length - 1)) / 2;
     cards.forEach((r, i) => {
@@ -245,6 +247,16 @@ export class RewardPanel {
     // 0.5.1：说明短（≤34 字）就整句写出来，长的用短句；分类标签放在顶部色带左边
     const descShort = r.desc && [...r.desc].length <= 34 ? r.desc : r.brief.line;
     const desc = addText(scene, ax, big || r.stock ? y + L.big + 26 : y + L.big + 4, descShort, { size: TYPE.label, color: COLOR.muted, originX: 0.5, align: 'center', wrap: w - 28, lineSpacing: 2 });
+    // 0.19.0 手机上卡矮：整句放不下就换短句，还放不下就截短（全文在悬停里），不压「就要它」
+    const room = y + h - 66 - desc.y;
+    if (desc.height > room && desc.text !== r.brief.line) desc.setText(r.brief.line);
+    if (desc.height > room) {
+      let cut = Array.from(desc.text);
+      while (desc.height > room && cut.length > 4) {
+        cut = cut.slice(0, -2);
+        desc.setText(`${cut.join('')}…`);
+      }
+    }
     c.add(desc);
     if (r.tag) {
       const tg = addText(scene, x + 16, y + 22, r.tag, { size: 11, bold: true, color: textOn(rc), originY: 0.5 });
@@ -323,7 +335,7 @@ export class EventPanel {
     const L = ph
       ? { W: 720, headH: 104, storyY: 100, storyMax: 44, storyPad: 20, bottom: 16, bigY: 44, textY: 72, btnH: 46, btnUp: 58, optMin: 170, optBase: 138 }
       : { W: 560, headH: 124, storyY: 118, storyMax: 66, storyPad: 26, bottom: 32, bigY: 52, textY: 84, btnH: 54, btnUp: 70, optMin: 196, optBase: 166 };
-    const W = L.W;
+    const W = ph ? Math.min(L.W, V.w - 12) : L.W;
     // 0.5.1：情景原文放回卡面（一个引号框），选项下写原句；高度按内容算
     const story = ev.text && ev.text !== ev.brief ? addText(scene, 0, 0, ev.text, { size: TYPE.label, color: COLOR.ink, wrap: W - 120, lineSpacing: 3 }) : null;
     const storyH = story ? Math.min(L.storyMax, story.height) + L.storyPad : 0;

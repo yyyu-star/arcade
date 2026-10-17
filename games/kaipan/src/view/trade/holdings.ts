@@ -102,6 +102,10 @@ class SlotCard {
   /** 押跌（卡片反色、小人倒着站） */
   readonly short: boolean;
   private units: Phaser.GameObjects.Container | null = null;
+  /** 0.19.0 手机上很窄的卡（SE 上约 104 宽） */
+  private tiny = false;
+  /** 左边 ST / 低吸签的右边缘（连涨签让开它） */
+  private stRight = 0;
 
   constructor(scene: Phaser.Scene, slot: number, rect: Rect, card: HoldingCard | null, idle: boolean, onSell: (slot: number) => void, busy = false, onInspect?: (slot: number) => void, ext: SlotExt | null = null, empty: EmptyLook | null = null, state: GameState | null = null) {
     this.state = state;
@@ -127,6 +131,10 @@ class SlotCard {
       return;
     }
     const small = w < 150;
+    // 0.19.0 手机世界变小以后，SE 上一张卡只有约 104 宽（844×390 上约 129）：小人、走势框收窄，
+    // 「跑赢 / 跑输」挪进卡身的悬停说明，累计那条只写数字（「累计」两个字在悬停里）
+    const tiny = PHONE && w < 120;
+    this.tiny = tiny;
     const frame = addSlice(scene, x, y, w, h, 'card_holding');
     // 押跌：卡片翻成冷色（和普通卡的暖色反过来）
     const flip = this.short ? scene.add.rectangle(x + 5, y + 5, w - 10, h - 10, 0xcdd5f3).setOrigin(0, 0).setRounded(10) : null;
@@ -148,16 +156,18 @@ class SlotCard {
     this.heatNode = scene.add.container(0, 0);
     // 小人（偏左）+ 右边的迷你走势框
     // 仓位玩法：左边有一摞筹码，小人缩一点、往右挪，不和筹码挤
-    const size = ext ? 60 : small ? 60 : 72;
-    const gx = x + (ext ? 72 : small ? 46 : 54);
-    this.guy = new StockGuy(scene, gx, this.short ? y + 60 : y + 124, card.id, card.face, size, { idle });
+    const size = tiny ? 52 : ext ? 60 : small ? 60 : 72;
+    const gx = x + (tiny ? 30 : ext ? 72 : small ? 46 : 54);
+    // 手机：卡矮了 8（214），名字、涨跌、累计、卖出整体上移
+    const dy = PHONE ? -8 : 0;
+    this.guy = new StockGuy(scene, gx, this.short ? y + 60 : y + 124 + dy, card.id, card.face, size, { idle });
     if (this.short) this.guy.setScale(1, -1);
-    const bx = x + w - (ext ? 56 : small ? 50 : 62);
-    const bw = ext ? 50 : small ? 44 : 56;
+    const bx = x + w - (tiny ? 46 : ext ? 56 : small ? 50 : 62);
+    const bw = tiny ? 40 : ext ? 50 : small ? 44 : 56;
     // 0.5.2：框里不再写"近10天"（小字把半个框占了、柱子挤得看不清；卡身的悬停说明里有最近几天）；柱高按这只自己的涨跌幅缩放
     const chartBg = scene.add.rectangle(bx, y + 56, bw, 46, COLOR.screen, 0.9).setOrigin(0, 0).setRounded(7);
     this.spark = addSpark(scene, bx + 5, y + 61, bw - 10, 36, [], { kind: 'bars', capMin: 3, axis: true });
-    this.vs = addText(scene, bx + bw / 2, y + 112, '', { size: 12, bold: true, originX: 0.5, originY: 0.5 });
+    this.vs = addText(scene, bx + bw / 2, y + 112, '', { size: 12, bold: true, originX: 0.5, originY: 0.5 }).setVisible(!PHONE);
     this.vs.setInteractive();
     bindTooltip(this.vs, () => ({ x: bx, y: y + 104, w: bw, h: 16 }), () => ({ title: '和大环境比', body: '同样这几天，这只的涨跌减去大环境的涨跌：跑赢是比大环境强，跑输是比大环境弱，差不到 1% 算持平。' }));
     const body = scene.add.rectangle(x + 4, y + 52, w - 8, h - 92, 0xffffff, 0.001).setOrigin(0, 0);
@@ -172,11 +182,11 @@ class SlotCard {
       if (this.state) openStockDetail(scene, this.state, card.id);
     });
     bindTooltip(mag, () => ({ x: bx + bw - 14, y: y + 46, w: 24, h: 24 }), () => ({ title: '看详情', body: '走势图、连涨连跌、风口热度、比大环境强还是弱。' }));
-    const name = addText(scene, x + w / 2, y + 126, card.name, { size: small ? 13 : 15, bold: true, color: this.short ? SHORT_COLOR : COLOR.ink, originX: 0.5 });
-    this.today = addText(scene, x + w / 2, y + 143, '', { size: small ? 19 : 22, bold: true, num: true, originX: 0.5 });
+    const name = fitWidth(addText(scene, x + w / 2, y + 126 + dy, card.name, { size: small ? 13 : 15, bold: true, color: this.short ? SHORT_COLOR : COLOR.ink, originX: 0.5 }), w - 8);
+    this.today = addText(scene, x + w / 2, y + 143 + (PHONE ? -11 : 0), '', { size: small ? 19 : 22, bold: true, num: true, originX: 0.5 });
     // 持有盈亏色块
     // 手机：卖出键加高到 34，累计条往上挪 4、矮 2，两者不叠；卖出的点击区只往下撑（往上会盖住卡片，点卡片看拆解时误卖）
-    const holdY = PHONE ? y + 166 : y + 170;
+    const holdY = PHONE ? y + 158 : y + 170;
     const holdH = PHONE ? 16 : 18;
     this.holdBg = scene.add.rectangle(x + 10, holdY, w - 20, holdH, COLOR.muted, 0.16).setOrigin(0, 0).setRounded(holdH / 2);
     this.hold = addText(scene, x + w / 2, holdY + holdH / 2, '', { size: 12, bold: true, num: true, color: COLOR.muted, originX: 0.5, originY: 0.5 });
@@ -213,15 +223,16 @@ class SlotCard {
       return;
     }
     const tc = THEME_COLOR[r.stock.theme];
-    const guy = new StockGuy(sc, cx, y + 140, r.stock.id, r.stock.face, 80, { idle: e.idle });
+    // 0.19.0 手机上卡窄了：小人小一号、推荐人往上挪，不和小人叠；按钮放宽，颜色点放进按钮里不压字
+    const guy = new StockGuy(sc, cx, y + (PHONE ? 136 : 140), r.stock.id, r.stock.face, PHONE ? 64 : 80, { idle: e.idle });
     guy.setAlpha(0.6);
-    const name = addText(sc, cx, y + 144, r.stock.name, { size: 14, bold: true, color: COLOR.ink, originX: 0.5 });
-    const btnW = w - 40;
+    const name = fitWidth(addText(sc, cx, y + (PHONE ? 140 : 144), r.stock.name, { size: 14, bold: true, color: COLOR.ink, originX: 0.5 }), w - 8);
+    const btnW = PHONE ? w - 16 : w - 40;
     const btn = addPill(sc, cx - btnW / 2, y + 170, btnW, 26, COLOR.accent);
-    const bt = addText(sc, cx, y + 183, '点我买', { size: 13, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
+    const bt = addText(sc, cx - (PHONE ? 6 : 0), y + 183, '点我买', { size: 13, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
     const dot = sc.add.circle(cx + btnW / 2 - 12, y + 183, 5, tc).setStrokeStyle(1.5, COLOR.ink, 1);
     const who = r.friend ? `${r.friend.name}荐` : '软件荐';
-    const whoT = addText(sc, cx, y + 64, who, { size: 11, bold: true, color: COLOR.accentDark, originX: 0.5 });
+    const whoT = fitWidth(addText(sc, cx, y + (PHONE ? 58 : 64), who, { size: 11, bold: true, color: COLOR.accentDark, originX: 0.5 }), w - 10);
     this.root.add([guy, name, btn, bt, dot, whoT]);
     if (e.idle) {
       // 招手：左右轻晃 + 上下浮一点
@@ -251,9 +262,15 @@ class SlotCard {
     let right = x + w - 10;
     const moves = this.state ? stockMoves(this.state, c.id, 10) : c.history;
     const n = streakOf(moves);
+    // 左边已经有 ST / 低吸签时，连涨签放不下就不放（悬停和详情里有）
+    const fitsStreak = (pw: number): boolean => this.st === null || x + w - 10 - pw >= this.stRight + 4;
     if (c.boards <= 0 && Math.abs(n) >= 2) {
       const t = addText(sc, 0, 0, n > 0 ? `连涨${n}天` : `连跌${-n}天`, { size: 11, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
       const pw = t.width + 12;
+      if (!fitsStreak(pw)) {
+        t.destroy();
+        return;
+      }
       const pill = addPill(sc, -pw / 2, -10, pw, 20, signColor(n), false);
       this.streak = sc.add.container(x + w - 10 - pw / 2, y + 44, [pill, t]);
       this.root.add(this.streak);
@@ -262,6 +279,11 @@ class SlotCard {
     if (this.heatNode && !hideHeat && this.state) {
       const heat = Math.round(this.state.themes[c.theme]?.heat ?? 0);
       const t = addText(sc, x + 12, y + 44, `热${heat}`, { size: 12, bold: true, color: COLOR.ink, originY: 0.5 });
+      // 窄卡上热度字和连涨签放不下就只留连涨签（热度在风口页和悬停说明里）
+      if (t.x + t.width > right) {
+        t.destroy();
+        return;
+      }
       const bx = t.x + t.width + 4;
       const bw = Math.min(40, right - bx);
       if (bw >= 12) {
@@ -297,9 +319,12 @@ class SlotCard {
     // 和走势框同一个来源（含开局前历史），第 1 天也有
     const hist = (this.state ? stockMoves(this.state, c.id, 5) : c.history).map((v) => formatPoints(v)).join(' ');
     const extra = stText(c);
+    // 手机上卡上不写「跑赢 / 跑输」，挪到这里
+    const vs = PHONE && this.state ? vsWord(vsMarket(this.state, c.id, Math.min(5, stockMoves(this.state, c.id, 10).length))) : null;
+    const vsLine = vs ? `\n最近几天比大环境：${vs.sign > 0 ? '跑赢' : vs.sign < 0 ? '跑输' : '持平'}` : '';
     return {
       title: `${c.name}（${c.themeName} · ${ROLE_WORD[c.role]}）`,
-      body: `${ROLE_WORD[c.role]}。占账户的 ${Math.round(c.weight * 100)}%，买入以来 ${formatPoints(c.holdRet)}${c.boards > 1 ? `，已经连续涨停 ${c.boards} 天` : ''}\n最近 5 天：${hist || '—'}${c.lowBuy ? `\n${term('lowbuy').word}：${term('lowbuy').explain}` : ''}${extra ? `\n${extra}` : ''}\n点一下，看今天的涨跌是怎么来的`,
+      body: `${ROLE_WORD[c.role]}。占账户的 ${Math.round(c.weight * 100)}%，买入以来 ${formatPoints(c.holdRet)}${c.boards > 1 ? `，已经连续涨停 ${c.boards} 天` : ''}\n最近 5 天：${hist || '—'}${vsLine}${c.lowBuy ? `\n${term('lowbuy').word}：${term('lowbuy').explain}` : ''}${extra ? `\n${extra}` : ''}\n点一下，看今天的涨跌是怎么来的`,
     };
   }
 
@@ -313,7 +338,9 @@ class SlotCard {
     // 开局就在手里、还没开过盘：和其他日子开盘前一样显示"昨天"的涨跌（开局前历史的最后一天），不写"未开盘"
     const pre = c.todayRet === null && !boughtToday && this.state ? (stockMoves(this.state, c.id, 1).at(-1) ?? null) : null;
     this.setToday(c.todayRet ?? pre, boughtToday && premarket);
+    // 窄卡上「累计 ↑16.4%」放不下就只写数字（「累计」在卡身的悬停说明里）
     this.hold.setText(holdText(c.holdRet));
+    if (this.tiny || (PHONE && this.hold.width > this.rect.w - 20)) this.hold.setText(pctArrow(c.holdRet));
     setColor(this.hold, signColor(c.holdRet));
     this.holdBg?.setFillStyle(Math.abs(c.holdRet) < 0.05 ? COLOR.muted : signColor(c.holdRet), 0.16);
     this.guy?.setFace(c.face);
@@ -394,8 +421,11 @@ class SlotCard {
       const fill = warn ? 0xffd9d2 : st ? 0xffe7a8 : 0xd9f0ff;
       const t = addText(this.scene, 0, 0, left, { size: 11, bold: true, color: warn ? COLOR.danger : COLOR.ink, originX: 0, originY: 0.5 });
       const pw = Math.min(w * 0.55, t.width + 12);
+      // 字比签宽时截短（全文在悬停里），不溢出到右边的连涨签上
+      fitWidth(t, pw - 10, 2);
       const pill = addPill(this.scene, 0, -10, pw, 20, fill);
       t.setX(6);
+      this.stRight = x + 10 + pw;
       this.st = this.scene.add.container(x + 10, y + 44, [pill, t]);
       pill.setInteractive();
       bindTooltip(pill, () => ({ x: x + 10, y: y + 34, w: pw, h: 20 }), () => (st ? termTip('st', st) : termTip('lowbuy')));
@@ -538,13 +568,16 @@ export class HoldingsView {
         root.add(ring);
         if (this.idle) sc.tweens.add({ targets: ring, alpha: { from: 1, to: 0.35 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       }
-      root.add(dashedBox(sc, x + 14, y + 52, w - 28, h - 70, 0xd8c3a8));
+      root.add(dashedBox(sc, x + (PHONE ? 8 : 14), y + (PHONE ? 60 : 52), w - (PHONE ? 16 : 28), h - (PHONE ? 74 : 70), 0xd8c3a8));
       if (k === 0) {
         // 缩小的钱袋 + 现金数（左上角）
-        const bag = addGlyph(sc, x + 28, y + 28, 'moneybag', 34);
-        const lbl = addText(sc, x + 50, y + 12, '现金', { size: 11, bold: true, color: COLOR.muted });
-        const amt = addText(sc, x + 50, y + 26, formatMoney(cash), { size: 16, bold: true, num: true, color: COLOR.accentDark });
-        fitWidth(amt, w - 58);
+        // 0.19.0 手机上卡窄（SE 约 104），金额挪到钱袋下面一整行，不再截成「¥10....」
+        const bag = PHONE ? addGlyph(sc, x + 22, y + 22, 'moneybag', 26) : addGlyph(sc, x + 28, y + 28, 'moneybag', 34);
+        const lbl = addText(sc, PHONE ? x + 38 : x + 50, PHONE ? y + 13 : y + 12, '现金', { size: 11, bold: true, color: COLOR.muted });
+        const amt = PHONE
+          ? addText(sc, x + w / 2, y + 36, formatMoney(cash), { size: 16, bold: true, num: true, color: COLOR.accentDark, originX: 0.5 })
+          : addText(sc, x + 50, y + 26, formatMoney(cash), { size: 16, bold: true, num: true, color: COLOR.accentDark });
+        fitWidth(amt, PHONE ? w - 12 : w - 58);
         root.add([bag, lbl, amt]);
         if (this.cashRect === null) this.cashRect = { x, y, w, h: 44 };
       }

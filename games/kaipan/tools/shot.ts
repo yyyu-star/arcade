@@ -342,6 +342,12 @@ function softExpect(ok: boolean, msg: string): void {
   if (!ok) errors.push(msg);
 }
 
+// 外面用 timeout 限时跑（浏览器锁每次最多 10 分钟）：被停时先把已经记下的软失败打出来，不然什么都看不到
+process.once('SIGTERM', () => {
+  console.log(`\n被停了（超时）。到这里为止的软失败（${errors.length}）：\n${errors.map((e) => `  ${e}`).join('\n') || '  无'}`);
+  process.exit(124);
+});
+
 async function loadState(ctx: Ctx, s: GameState): Promise<void> {
   await ctx.page.evaluate((st) => window.__game?.loadState(st), s);
   await waitIdle(ctx, 'loadState');
@@ -888,9 +894,9 @@ async function run(browser: Browser): Promise<void> {
     await ctx.page.setViewportSize({ width: 844, height: 390 });
     await waitIdle(ctx, '横过来之后');
     await ctx.page.waitForTimeout(600);
-    // 0.14.0 EXPAND：844×390 比 960×444 略宽，画布往宽里长（宽不再是 960 的整数倍），高仍是 444 的整数倍；电脑布局会是 720 的倍数
+    // 0.19.0 手机世界高 404（宽按屏幕比例）：画布高是 404 的整数倍；电脑布局会是 720 的倍数
     const ch = await ctx.page.evaluate(() => document.querySelector('canvas')?.height ?? 0);
-    expect(ch > 0 && ch % 444 === 0, `竖屏打开再横过来应是手机布局（画布高 ${ch}，应是 444 的整数倍）`);
+    expect(ch > 0 && ch % 404 === 0, `竖屏打开再横过来应是手机布局（画布高 ${ch}，应是 404 的整数倍）`);
     notes.push(`竖屏打开再横过来：画布高 ${ch}`);
     await shot(ctx, '61b-portrait-then-landscape');
     await ctx.page.context().close();
