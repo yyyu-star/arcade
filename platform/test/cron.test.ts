@@ -3,7 +3,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { exports } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runCleanup } from '../worker/api/cron';
-import worker from '../worker/index';
+import Arcade from '../worker/index';
 import { count, env, registerUser, resetAll } from './helpers';
 
 const DAY = 86_400_000;
@@ -76,7 +76,7 @@ describe('Cron 清理', () => {
   it('scheduled 入口会跑清理', async () => {
     await env.DB.prepare('INSERT INTO sessions VALUES (?1, ?2, 1, 1, 2)').bind('s', 'u').run();
     const ctx = createExecutionContext();
-    await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 19 * * *' }), env, ctx);
+    await new Arcade(ctx, env).scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 19 * * *' }));
     await waitOnExecutionContext(ctx);
     expect(await count('SELECT COUNT(*) AS n FROM sessions')).toBe(0);
   });
