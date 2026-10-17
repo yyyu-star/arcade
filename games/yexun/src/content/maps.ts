@@ -5,7 +5,7 @@
 import type { EnemyKind } from './enemies.ts';
 import { ARENA } from './player.ts';
 
-export type MapId = 'snow' | 'yizhuang';
+export type MapId = 'snow' | 'yizhuang' | 'bamboo' | 'riverbank' | 'icelake';
 
 /** 一块挡路的东西：x, y 是左上角；look 告诉画面层画什么 */
 export interface Block {
@@ -53,6 +53,10 @@ const coffin = (x: number, y: number): Block => ({ x: x - 34, y: y - 12, w: 68, 
 
 export const MAPS: Record<MapId, MapDef> = {
   snow: { id: 'snow', name: '雪原', blurb: '开阔的雪地，往哪儿跑都行', blocks: [] },
+  // 0.2.0 的三张新图（骨架：地形和特色怪由各自的 PR 填）
+  bamboo: { id: 'bamboo', name: '竹林', blurb: '竹子挡路，砍得倒', blocks: [] },
+  riverbank: { id: 'riverbank', name: '河滩', blurb: '一条河把地分开，桥是要道，水里走不快', blocks: [] },
+  icelake: { id: 'icelake', name: '冰湖', blurb: '冰面打滑，停不住脚', blocks: [] },
   yizhuang: {
     id: 'yizhuang',
     name: '义庄',
