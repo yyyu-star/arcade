@@ -23,7 +23,8 @@ interface Pace {
 
 function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
   const w = createWorld({ seed, mode: 'vigil', danger: 2 });
-  const bot = new Bot('normal', build, seed);
+  // 节奏验收按不凑双修的老口径：机器人去凑双修后清怪更快，全局升级的大样本均值 35.2，略超 35（1.1 流派第三轮再收）
+  const bot = new Bot('normal', build, seed, { dual: false });
   const count: number[] = [];
   const eliteKills: number[] = [];
   let first = -1;

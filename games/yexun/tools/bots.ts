@@ -39,7 +39,11 @@ export class Bot {
   private dir = 0;
   private wait = 0;
 
-  constructor(skill: Skill, build: Build, seed: number) {
+  /** 会不会去凑双修的另一半（1.1 起模拟默认凑；13.3 的节奏验收按不凑的老口径量，见 tests/pace.test.ts） */
+  readonly dual: boolean;
+
+  constructor(skill: Skill, build: Build, seed: number, opts: { dual?: boolean } = {}) {
+    this.dual = opts.dual ?? true;
     this.skill = skill;
     this.build = build;
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
@@ -299,7 +303,7 @@ export class Bot {
    * 真人看得到卡上的"双"字提示会去凑；机器人按流派单子拿，不加这一条时配方另一半几乎从不进手（1.1 第一轮每 20 局不到 1 次）。
    */
   private dualPartner(w: World, c: Choice): number {
-    if (c.kind !== 'weapon') return 0;
+    if (!this.dual || c.kind !== 'weapon') return 0;
     for (const m of MERGES) {
       if (!m.dual || w.merges.includes(m.id)) continue;
       const other = c.id === m.a ? m.b : c.id === m.b ? m.a : null;
