@@ -204,6 +204,8 @@ export class Bot {
     // 沿路走时只推贴得很近的（再远就和路抢方向，来回抖）
     const reach = following ? 28 : 70;
     for (const b of w.blocks) {
+      // 远的块先快速跳过（竹林有九十来丛，每拍都算 hypot 太费）
+      if (w.x < b.x - reach || w.x > b.x + b.w + reach || w.y < b.y - reach || w.y > b.y + b.h + reach) continue;
       const nx = Math.max(b.x, Math.min(w.x, b.x + b.w));
       const ny = Math.max(b.y, Math.min(w.y, b.y + b.h));
       const dx = w.x - nx;
@@ -212,6 +214,30 @@ export class Bot {
       if (d > reach || d < 1e-6) continue;
       vx += (dx / d) * (70 - d) / 35;
       vy += (dy / d) * (70 - d) / 35;
+    }
+    // 河滩：离水 70 以内往岸上推（水里走得慢，会被怪追上）；桥是水区之间的缺口，从缺口里走不受影响
+    for (const r of w.water) {
+      const nx = Math.max(r.x, Math.min(w.x, r.x + r.w));
+      const ny = Math.max(r.y, Math.min(w.y, r.y + r.h));
+      const dx = w.x - nx;
+      const dy = w.y - ny;
+      const d = Math.hypot(dx, dy);
+      if (d > 70) continue;
+      // 已经在水里（d = 0）：朝最近的边外推
+      if (d < 1e-6) {
+        const l = w.x - r.x;
+        const rr = r.x + r.w - w.x;
+        const t = w.y - r.y;
+        const b = r.y + r.h - w.y;
+        const m = Math.min(l, rr, t, b);
+        if (m === l) vx -= 1.2;
+        else if (m === rr) vx += 1.2;
+        else if (m === t) vy -= 1.2;
+        else vy += 1.2;
+        continue;
+      }
+      vx += (dx / d) * (70 - d) / 50;
+      vy += (dy / d) * (70 - d) / 50;
     }
     // 没什么事：绕着场地中心慢慢兜圈（站着不动会被围死）
     if (Math.hypot(vx, vy) < 0.2 && this.goal === 0) {

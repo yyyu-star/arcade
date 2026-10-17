@@ -3,7 +3,8 @@
  * 第一次打开只有一个大按钮（DESIGN.md 13.7：打开到开打 ≤ 30 秒）；玩过一局以后才出模式卡和难度。
  * 所有按钮 ≥ 44×44（tools/shot.ts 检查）；左上角常驻"大厅"，任何界面两步内回到大厅。
  */
-import { MAPS, type MapId } from '../../content/maps.ts';
+import { MAP_IDS, MAP_UNLOCK, MAPS, type MapId } from '../../content/maps.ts';
+import { drawMapThumb } from '../art/terrain.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
 import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, type LiveTier } from '../../content/live.ts';
@@ -83,8 +84,8 @@ export interface MenuState {
   cursesOpen: boolean;
   /** 实盘能不能选（有平台钱包）、上次是不是在实盘、选的档位 */
   live: { available: boolean; on: boolean; tier: LiveTier };
-  /** 义庄开了没有（普通档以上撑到过天亮） */
-  yizhuang: boolean;
+  /** 每张图开了没有（MAP_UNLOCK） */
+  maps: Record<MapId, boolean>;
   /** 夜探：还没进过夜探（第一次固定教学镇，只有一个开始按钮） */
   raidFirst?: boolean;
   /** 夜探卡上"藏宝阁 3/45"那个按钮（没传就不显示） */
@@ -220,7 +221,7 @@ export class Menu {
     this.lastState = s;
     this.live = s.live;
     const live = s.live.available && s.live.on;
-    this.map = s.yizhuang ? s.map : 'snow';
+    this.map = s.maps[s.map] ? s.map : 'snow';
     this.best = s.best;
     const top =
       `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>` +
@@ -257,23 +258,28 @@ export class Menu {
         `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="char"><b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
         (s.cursesOpen ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
         `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
-      const maps = (['snow', 'yizhuang'] as const)
-        .map((m) => {
-          const locked = m === 'yizhuang' && !s.yizhuang;
-          return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '危险 1 撑到天亮开' : MAPS[m].blurb}</small></button>`;
-        })
-        .join('') +
-        (s.cursesOpen
-          ? `<button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button>`
-          : '');
+      // 地图卡：缩略图 + 名字 + 一句话 + 解锁条件；锁着的也摆出来，写清怎么开。横向滑动，手机竖屏一屏看三张多一点
+      const maps = MAP_IDS.map((m) => {
+        const locked = !s.maps[m];
+        const u = MAP_UNLOCK[m];
+        return (
+          `<button type="button" class="yx-mapcard${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}>` +
+          `<canvas class="yx-thumb" data-thumb="${m}" width="144" height="144" aria-hidden="true"></canvas>` +
+          `<b>${MAPS[m].name}</b>` +
+          (locked && u ? `<em>${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[m].blurb}</small>`) +
+          '</button>'
+        );
+      }).join('');
+      const endless = s.cursesOpen ? `<div class="yx-chips"><button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button></div>` : '';
       this.ui.innerHTML =
         top +
         title +
         '<div class="yx-modes">' +
-        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div>${modeChips}${live ? liveHtml : `<div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-chips">${prep}</div><div class="yx-best"></div>`}<button type="button" class="yx-big" data-a="start">开始</button></div>` +
+        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div>${modeChips}${live ? liveHtml : `<div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-maprow" aria-label="地图">${maps}</div>${endless}<div class="yx-chips">${prep}</div><div class="yx-best"></div>`}<button type="button" class="yx-big" data-a="start">开始</button></div>` +
         `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div>${live ? '<div class="yx-livenote">夜探实盘很快开放，现在先玩娱乐</div>' : ''}${this.raidHtml(s)}</div>` +
         '</div>';
       this.renderBest();
+      for (const cv of this.root.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]')) drawMapThumb(cv, MAPS[cv.dataset.thumb as MapId]);
     }
     this.root.style.display = '';
     this.startArt();

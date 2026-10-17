@@ -26,7 +26,8 @@ import {
   type EnemyKind,
 } from '../content/enemies.ts';
 import { BOMB, CHEST, DROPS, MERCY, PICKUP, PLAYER, PROPS, PURSE, xpNeed } from '../content/player.ts';
-import { MAPS, pushOut, type Block } from '../content/maps.ts';
+import { inRects, MAPS, pushOut, TERRAIN, type Block } from '../content/maps.ts';
+import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
@@ -212,7 +213,7 @@ function revive(w: World, g: Grid): void {
 
 /** 推出挡路的块：夜探的块几百个，走分桶的索引（推法和 maps.ts 的 pushOut 逐位一样） */
 function push(w: World, p: { x: number; y: number }, r: number): boolean {
-  return w.raid ? w.raid.map.index.pushOut(p, r) : pushOut(w.blocks as readonly Block[], p, r);
+  return w.raid ? w.raid.map.index.pushOut(p, r) : w.index ? w.index.pushOut(p, r) : pushOut(w.blocks as readonly Block[], p, r);
 }
 
 function end(w: World, won: boolean): void {
@@ -225,14 +226,47 @@ function end(w: World, won: boolean): void {
 
 function movePlayer(w: World, dir: number): void {
   w.moving = dir !== 0;
-  if (dir !== 0) {
-    w.face = ((dir - 1) * (DIR_N / 32)) & (DIR_N - 1);
-    const sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
-    w.x = clamp(w.x + inputCos(dir) * sp, 20, w.arenaW - 20);
-    w.y = clamp(w.y + inputSin(dir) * sp, 20, w.arenaH - 20);
-    if (w.blocks.length) push(w, w, PLAYER.r);
+  const ice = w.ice.length > 0 && inRects(w.ice, w.x, w.y);
+  if (dir !== 0) w.face = ((dir - 1) * (DIR_N / 32)) & (DIR_N - 1);
+  if (ice) slidePlayer(w, dir);
+  else {
+    w.pvx = 0;
+    w.pvy = 0;
+    if (dir !== 0) {
+      let sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
+      if (w.water.length > 0 && inRects(w.water, w.x, w.y)) sp *= TERRAIN.waterMul;
+      w.x = clamp(w.x + inputCos(dir) * sp, 20, w.arenaW - 20);
+      w.y = clamp(w.y + inputSin(dir) * sp, 20, w.arenaH - 20);
+      if (w.blocks.length) push(w, w, PLAYER.r);
+    }
   }
   if (w.invuln > 0) w.invuln--;
+}
+
+/** 冰上：速度逐拍往输入方向靠，松手按摩擦慢慢停；撞到块的那个方向速度清零 */
+function slidePlayer(w: World, dir: number): void {
+  const sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
+  if (dir !== 0) {
+    w.pvx += (inputCos(dir) * sp - w.pvx) * TERRAIN.iceAccel;
+    w.pvy += (inputSin(dir) * sp - w.pvy) * TERRAIN.iceAccel;
+  } else {
+    w.pvx *= 1 - TERRAIN.iceFriction;
+    w.pvy *= 1 - TERRAIN.iceFriction;
+    // 速度小到看不出来就停（免得指纹里永远拖着一串小数）
+    if (w.pvx * w.pvx + w.pvy * w.pvy < 0.0004) {
+      w.pvx = 0;
+      w.pvy = 0;
+    }
+  }
+  if (w.pvx === 0 && w.pvy === 0) return;
+  const x0 = w.x;
+  const y0 = w.y;
+  w.x = clamp(x0 + w.pvx, 20, w.arenaW - 20);
+  w.y = clamp(y0 + w.pvy, 20, w.arenaH - 20);
+  if (w.blocks.length) push(w, w, PLAYER.r);
+  // 被墙、石头、边界挡下的那一轴速度清零，不然会一直顶着滑
+  if (Math.abs(w.x - x0 - w.pvx) > 0.01) w.pvx = 0;
+  if (Math.abs(w.y - y0 - w.pvy) > 0.01) w.pvy = 0;
 }
 
 function regen(w: World): void {
@@ -320,6 +354,8 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.ePY[i] = w.eY[i]!;
   w.eKX[i] = 0;
   w.eKY[i] = 0;
+  w.eVX[i] = 0;
+  w.eVY[i] = 0;
   w.eHp[i] = hp;
   w.eHpMax[i] = hp;
   // 引魂灯：每级怪快 5%
@@ -710,12 +746,39 @@ function moveEnemies(w: World): void {
       default:
         break;
     }
-    w.eX[i] = clamp(w.eX[i]! + vx * sp + w.eKX[i]!, 10, w.arenaW - 10);
-    w.eY[i] = clamp(w.eY[i]! + vy * sp + w.eKY[i]!, 10, w.arenaH - 10);
-    w.eKX[i]! *= 0.72;
-    w.eKY[i]! *= 0.72;
+    let mx = vx * sp;
+    let my = vy * sp;
+    let kd = 0.72;
+    if (w.water.length + w.ice.length > 0 && !FLIES.has(kind)) {
+      const ex = w.eX[i]!;
+      const ey = w.eY[i]!;
+      if (w.water.length > 0 && inRects(w.water, ex, ey)) {
+        mx *= TERRAIN.waterMul;
+        my *= TERRAIN.waterMul;
+      }
+      if (w.ice.length > 0) {
+        if (inRects(w.ice, ex, ey)) {
+          // 冰上：速度往想去的方向靠，停不住；击退也滑得远
+          w.eVX[i]! += (mx - w.eVX[i]!) * TERRAIN.iceEnemyAccel;
+          w.eVY[i]! += (my - w.eVY[i]!) * TERRAIN.iceEnemyAccel;
+          mx = w.eVX[i]!;
+          my = w.eVY[i]!;
+          kd = TERRAIN.iceKnock;
+        } else {
+          w.eVX[i] = mx;
+          w.eVY[i] = my;
+        }
+      }
+    }
+    w.eX[i] = clamp(w.eX[i]! + mx + w.eKX[i]!, 10, w.arenaW - 10);
+    w.eY[i] = clamp(w.eY[i]! + my + w.eKY[i]!, 10, w.arenaH - 10);
+    w.eKX[i]! *= kd;
+    w.eKY[i]! *= kd;
   }
 }
+
+/** 飞的和水里的怪不受水和冰影响（水鬼在水里本来就自在） */
+const FLIES = new Set<EnemyKind>(['bat', 'water']);
 const tmpP = { x: 0, y: 0 };
 
 /** 墙和棺材挡路：怪挪完、互相挤完以后再推出来（Boss 跳砸在空中，不挡） */
@@ -729,6 +792,36 @@ function blockEnemies(w: World): void {
       w.eX[i] = tmpP.x;
       w.eY[i] = tmpP.y;
     }
+  }
+}
+
+/**
+ * 竹子挨砍：以 (x, y) 为圆心、r 为半径的圈碰到哪丛竹子就扣血（法器的伤害 × 主角的威力），同一丛 chopGap 拍内只算一次；
+ * 血到 0 就倒：从 w.blocks 里拿掉（怪和主角都能走过去），不再长回来。别的图 blockHp 是空的，直接返回。
+ */
+function chop(w: World, x: number, y: number, r: number, dmg: number): void {
+  const hp = w.blockHp;
+  if (hp.length === 0) return;
+  let fell = false;
+  const all = w.allBlocks;
+  for (let k = 0; k < all.length; k++) {
+    const h = hp[k]!;
+    if (h <= 0 || h === Infinity || w.blockAt[k]! > w.tick) continue;
+    const b = all[k]!;
+    const nx = x < b.x ? b.x : x > b.x + b.w ? b.x + b.w : x;
+    const ny = y < b.y ? b.y : y > b.y + b.h ? b.y + b.h : y;
+    const dx = x - nx;
+    const dy = y - ny;
+    if (dx * dx + dy * dy > r * r) continue;
+    w.blockAt[k] = w.tick + TERRAIN.chopGap;
+    const left = h - Math.max(1, dmg * w.stats.might);
+    hp[k] = left > 0 ? left : 0;
+    w.ev.push(Ev.Chop, b.x + b.w / 2, b.y + b.h, k, left > 0 ? left / b.hp! : 0, left > 0 ? 0 : 1);
+    if (left <= 0) fell = true;
+  }
+  if (fell) {
+    w.blocks = all.filter((_b, k) => hp[k]! > 0);
+    w.index = new BlockIndex(w.blocks as readonly RaidBlock[], w.arenaW);
   }
 }
 
@@ -1240,6 +1333,7 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
     const c = dcos(half);
     const c2 = c * c;
     if (wp.phase % 2 === 0) w.ev.push(Ev.Flame, w.x, w.y - 18, wp.angle, e.area, half);
+    chop(w, w.x + ux * e.area * 0.55, w.y + uy * e.area * 0.55, e.area * 0.45, e.dmg);
     // 三昧真火：每 6 拍在火舌中段留一摊火
     if (wp.evolved && wp.phase % 6 === 0) {
       const a = wp.angle + w.rWeapon.int(half * 2 + 1) - half;
@@ -1329,6 +1423,7 @@ function shieldTick(w: World, g: Grid, k: number, wp: { timer: number }, s: Weap
   if (w.shieldBurst) {
     w.shieldBurst = false;
     w.ev.push(Ev.Shield, w.x, w.y, 0, e.area);
+    chop(w, w.x, w.y, e.area, e.dmg);
     const n = g.query(w, w.x, w.y, e.area);
     for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
     for (let q = 0; q < n; q++) {
@@ -1397,6 +1492,7 @@ function swordSwing(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: numb
     const ux = dcos(a);
     const uy = dsin(a);
     w.ev.push(Ev.Slash, w.x, w.y, a & (DIR_N - 1), e.area, evolved ? 1 : 0);
+    chop(w, w.x + ux * e.area * 0.55, w.y + uy * e.area * 0.55, e.area * 0.5, e.dmg);
     const n = g.query(w, w.x, w.y, e.area);
     for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
     for (let q = 0; q < n; q++) {
@@ -1569,6 +1665,7 @@ function thunder(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number;
 
 /** 一道雷落在 (x, y)：一圈都挨打（雷符、雷火符箓） */
 function strike(w: World, g: Grid, k: number, x: number, y: number, dmg: number, area: number, knock: number): void {
+  chop(w, x, y, area, dmg);
   const m = g.query(w, x, y, area);
   const local = scratch2;
   for (let q = 0; q < m; q++) local[q] = g.out[q]!;
@@ -1697,6 +1794,8 @@ function moveShots(w: World, g: Grid): void {
       killShot(w, i);
       continue;
     }
+    // 竹子：飞出去的和转着的法器碰到就砍（待命的飞剑、纸鹤不算）
+    if (w.blockHp.length && ((kind !== Shot.Fly && kind !== Shot.Crane) || w.sState[i] !== 0)) chop(w, w.sX[i]!, w.sY[i]!, w.sR[i]! + 4, w.sDmg[i]!);
     if (kind === Shot.Talisman) {
       // 追踪：慢慢转向离符最近的怪（进化后转得更快）
       const t = nearest(w, g, w.sX[i]!, w.sY[i]!, 260);
@@ -2166,6 +2265,7 @@ function props(w: World): void {
 /** 符咒炸弹：半径内的小怪全倒（照常掉魂珠、算击杀），精英和 Boss 掉一截血 */
 function bomb(w: World, x: number, y: number): void {
   w.ev.push(Ev.Bomb, x, y, 0, BOMB.r);
+  chop(w, x, y, BOMB.r * 0.6, 400);
   const hit: number[] = [];
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;

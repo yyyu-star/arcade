@@ -6,7 +6,7 @@
  * 两台设备各玩各花，合并时按 id 取并集再加总，不会因为"取较大的那个总数"白送或者扣成负数（5.5）。
  */
 import { DANGER_IDS, type Danger, type Difficulty } from '../content/waves.ts';
-import type { MapId } from '../content/maps.ts';
+import { MAP_UNLOCK, type MapId } from '../content/maps.ts';
 import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, RUN_BONUS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 import { isLiveTier, type LiveTier } from '../content/live.ts';
@@ -121,7 +121,7 @@ export function reviveSave(o: unknown): Save | null {
   s.tips = strs(r.tips, 20);
   s.tipsOff = r.tipsOff === true;
   if (r.difficulty === 'easy' || r.difficulty === 'normal' || r.difficulty === 'hard') s.difficulty = r.difficulty;
-  if (r.map === 'snow' || r.map === 'yizhuang') s.map = r.map;
+  if (typeof r.map === 'string' && r.map in MAP_UNLOCK) s.map = r.map as MapId;
   if (r.best && typeof r.best === 'object') {
     for (const d of ['easy', 'normal', 'hard'] as const) {
       const b = best((r.best as Record<string, unknown>)[d]);
@@ -317,9 +317,10 @@ export function dangerOpen(s: Save): Danger {
   return (s.runs === 0 ? 0 : Math.min(5, s.cleared + 1)) as Danger;
 }
 
-/** 义庄：雪原危险 1 撑到天亮（DESIGN.md 3.6）；老存档里普通、高手档赢过的也算 */
-export function yizhuangOpen(s: Save): boolean {
-  return s.cleared >= 1 || !!(s.best.normal?.won || s.best.hard?.won);
+/** 这张图开了没有（雪原、义庄一开始就开；别的按守夜最长撑过的时间，MAP_UNLOCK） */
+export function mapOpen(s: Save, id: MapId): boolean {
+  const u = MAP_UNLOCK[id];
+  return !u || s.maxSeconds >= u.seconds;
 }
 
 /** 角色解锁（3.7） */

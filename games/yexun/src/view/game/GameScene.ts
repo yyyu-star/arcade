@@ -9,6 +9,7 @@
 import Phaser from 'phaser';
 import { ENEMIES, HOP_AIR, HOP_PERIOD, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
+import { inRects, MAPS } from '../../content/maps.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
 import { edgeArrow, walkSecs } from '../../explore/view/guide-hud.ts';
@@ -20,6 +21,7 @@ import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, ty
 import { COS, SIN } from '../../core/dirs.ts';
 import { RAID_TEX, makeIcons, type Atlas, type Frame } from '../art/atlas.ts';
 import { artRng } from '../art/draw.ts';
+import { bambooCanvas, bambooKey, GROUND_TINT, paintTerrain, stumpCanvas } from '../art/terrain.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
 import { MOB_COLOR } from '../art/sprites.ts';
 import { music } from '../audio/music.ts';
@@ -128,6 +130,8 @@ export class GameScene extends Phaser.Scene {
   private drops: ({ gen: number; img: Phaser.GameObjects.Image; kind: number; key: string; big: boolean } | null)[] = [];
   private fx!: Fx;
   private ground!: Fx;
+  /** 竹林：第几块竹丛 → 它的图（倒了就删） */
+  private bamboo = new Map<number, Phaser.GameObjects.Image>();
   private nums!: DamageNumbers;
   /** 摆设、符咒炸弹、开箱光效、铜钱袋飘字（items.ts） */
   private items!: Items;
@@ -226,7 +230,9 @@ export class GameScene extends Phaser.Scene {
     // 雪地：一张可平铺的贴图铺满场地，四周一圈压暗当边界
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
     // 夜探的街和院子全由 Town 铺满，不再多铺一层雪地（少一次全屏绘制，镇子外圈露出背景的雪色）
-    if (!this.raid) this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
+    const mapDef = MAPS[this.w.setup.map ?? 'snow'];
+    if (!this.raid) this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(GROUND_TINT[mapDef.tone ?? 'snow']);
+    if (!this.raid) this.paintTerrainLayer();
     this.rg = this.add.graphics().setDepth(-500);
     if (this.raid) {
       this.setupRaid(this.raid);
@@ -325,6 +331,7 @@ export class GameScene extends Phaser.Scene {
       this.town.drawBlocks();
       return;
     }
+    this.drawBamboo();
     for (const b of this.w.blocks) {
       if (b.look === 'wall_h') {
         const n = Math.max(1, Math.round(b.w / 80));
@@ -342,8 +349,76 @@ export class GameScene extends Phaser.Scene {
         const f = this.frame('terrace_h');
         for (let k = 0; k < n; k++) this.img('terrace_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
       } else if (b.look === 'river') continue;
-      else this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h);
+      else if (b.look === 'bamboo') continue;
+      else if (b.look === 'rock') {
+        const f = this.frame('rock');
+        this.img('rock', b.x + b.w / 2, b.y + b.h + 6).setScale(Math.max(b.w, 56) / 60 / f.res, 1 / f.res).setDepth(b.y + b.h);
+      } else this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h);
     }
+  }
+
+  /** 河、冰、桥、落叶这类整张场地的地形叠层：一张 canvas，缩小存（省内存设备更小） */
+  private paintTerrainLayer(): void {
+    const def = MAPS[this.w.setup.map ?? 'snow'];
+    const scale = LOW_MEMORY ? 0.34 : 0.5;
+    const cv = paintTerrain(def, this.w.setup.seed, scale);
+    if (!cv) return;
+    const key = `terrain_${def.id}`;
+    if (this.textures.exists(key)) this.textures.remove(key);
+    this.textures.addCanvas(key, cv);
+    this.add.image(this.arenaW / 2, this.arenaH / 2, key).setScale(1 / scale).setDepth(-950);
+  }
+
+  /** 竹林：每丛竹子一张图（按宽度分三档贴图，横向拉伸到脚底宽），深度按脚底；血少了发黄 */
+  private drawBamboo(): void {
+    const all = this.w.allBlocks;
+    if (!all.some((b) => b.look === 'bamboo')) return;
+    const res = LOW_MEMORY ? 1 : 2;
+    const ensure = (key: string, make: () => HTMLCanvasElement): void => {
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, make());
+    };
+    ensure('bamboo_stump', () => stumpCanvas(res));
+    all.forEach((b, k) => {
+      if (b.look !== 'bamboo') return;
+      const { key, wd } = bambooKey(b, k);
+      ensure(key, () => bambooCanvas(wd, k % 2, res));
+      const img = this.add.image(b.x + b.w / 2, b.y + b.h + 4, key).setOrigin(0.5, 1 - 12 / 250).setDepth(b.y + b.h);
+      img.setScale((b.w / wd) / res, 1 / res);
+      this.bamboo.set(k, img);
+    });
+    // 倒了的（回放、继续的局里可能一开始就有）
+    this.w.allBlocks.forEach((b, k) => {
+      if (b.look === 'bamboo' && this.w.blockHp[k]! <= 0) this.fellBamboo(k, false);
+    });
+  }
+
+  /** 竹丛挨了一下：抖一抖，掉几片叶子；血过半发黄 */
+  private chopBamboo(k: number, x: number, y: number, left: number, fell: boolean): void {
+    if (fell) return this.fellBamboo(k, true);
+    const img = this.bamboo.get(k);
+    if (!img) return;
+    img.setTint(left < 0.5 ? 0xe6d47a : 0xf4f0b0);
+    this.tweens.add({ targets: img, x: { from: img.x - 4, to: img.x }, duration: 140, ease: 'Sine.easeOut' });
+    sfx.play('propWood', { pitch: 1.4, volume: 0.5 });
+    if (!LOW_MEMORY) for (let n = 0; n < 3; n++) this.fx.spawn({ frame: 'mote', x: x + (Math.random() - 0.5) * 50, y: y - 80 - Math.random() * 60, vx: (Math.random() - 0.5) * 80, vy: 40 + Math.random() * 40, life: 520, s0: 0.9, s1: 0.4, tint: 0x5aa84c });
+  }
+
+  /** 竹丛倒了：整丛往一边砸下去、淡出，留一个竹桩 */
+  private fellBamboo(k: number, animate: boolean): void {
+    const b = this.w.allBlocks[k]!;
+    const img = this.bamboo.get(k);
+    this.bamboo.delete(k);
+    const stump = this.add.image(b.x + b.w / 2, b.y + b.h + 2, 'bamboo_stump').setScale(1 / (LOW_MEMORY ? 1 : 2)).setDepth(-800);
+    if (!img) return;
+    if (!animate) {
+      img.destroy();
+      return;
+    }
+    stump.setAlpha(0);
+    this.tweens.add({ targets: stump, alpha: 1, duration: 300 });
+    sfx.play('propWood', { pitch: 0.7 });
+    this.shake(120, 0.4);
+    this.tweens.add({ targets: img, angle: b.x % 2 < 1 ? 80 : -80, alpha: 0, duration: 420, ease: 'Quad.easeIn', onComplete: () => img.destroy() });
   }
 
   /** 夜探场地的地面：街和院子的铺地、河、桥由 Town 分块预渲染；这里摆宝箱和门 */
@@ -374,6 +449,10 @@ export class GameScene extends Phaser.Scene {
   private scatterDecor(): void {
     const r = artRng(this.w.setup.seed);
     const blocks = this.w.blocks;
+    const mdef = MAPS[this.w.setup.map ?? 'snow'];
+    const water = mdef.water ?? [];
+    const ice = mdef.ice ?? [];
+    const bridges = mdef.bridges ?? [];
     const spawnX = this.raid ? this.w.x : this.arenaW / 2;
     const spawnY = this.raid ? this.w.y : this.arenaH / 2;
     const put = (key: string, n: number, ground: boolean): void => {
@@ -387,6 +466,10 @@ export class GameScene extends Phaser.Scene {
         if (this.town?.onStreet(x, y) && key !== 'drift') continue;
         // 不压在墙、棺材上（立着的东西离远一点）
         const pad = ground ? 10 : 50;
+        // 水里、冰面上不撒点缀（桥在水区之间的缺口里，一并避开）
+        if (water.length && (inRects(water, x, y) || bridges.some((r) => x > r.x - 30 && x < r.x + r.w + 30 && y > r.y - 30 && y < r.y + r.h + 30)) && key !== 'rock') continue;
+        if (water.length && ground && water.some((r) => x > r.x - 40 && x < r.x + r.w + 40 && y > r.y - 40 && y < r.y + r.h + 40)) continue;
+        if (ice.length && inRects(ice, x, y) && key !== 'puddle' && key !== 'drift') continue;
         if (blocks.some((b) => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad * 2)) continue;
         const o = this.img(key, x, y, 0.85 + r() * 0.35);
         if (r() < 0.5) o.setFlipX(true);
@@ -399,9 +482,10 @@ export class GameScene extends Phaser.Scene {
     put('puddle', Math.round(26 * dense), true);
     put('slabs', Math.round(30 * dense), true);
     put('grass', Math.round(220 * (this.raid ? dense / 2 : dense)), true);
-    const yz = !this.raid && blocks.length > 0;
+    const yz = !this.raid && this.w.setup.map === 'yizhuang';
     // 山寺的树都是古松（Town 里摆），不再撒枯树
-    if (this.raid?.setup.template !== 'shansi') put('tree', Math.round((yz ? 26 : 46) * dense), false);
+    // 竹林里本来就是竹子，不再撒枯树；冰湖上雪堆多一点
+    if (this.raid?.setup.template !== 'shansi' && mdef.tone !== 'bamboo') put('tree', Math.round((yz ? 26 : mdef.tone === 'ice' ? 24 : 46) * dense), false);
     put('rock', Math.round(60 * dense), false);
     put('stele', Math.round(18 * dense), false);
     put('stonelamp', Math.round(22 * dense), false);
@@ -604,6 +688,9 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Prop:
           this.items.propBreak(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Chop:
+          this.chopBamboo(ev.a[i]!, x, y, ev.b[i]!, ev.c[i] === 1);
           break;
         case Ev.Bomb:
           this.items.bombBlast(x, y, ev.b[i]!);

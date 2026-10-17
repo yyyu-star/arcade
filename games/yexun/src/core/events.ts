@@ -63,6 +63,8 @@ export const Ev = {
   Prop: 29,
   /** 符咒炸弹炸开：x, y, b = 半径 */
   Bomb: 30,
+  /** 竹子挨了一下：x, y = 竹丛脚底中心, a = 第几块（MapDef.blocks 的下标）, b = 剩下的血占几分之几（0–1）, c = 1 倒了 */
+  Chop: 31,
   // 40–54 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,
