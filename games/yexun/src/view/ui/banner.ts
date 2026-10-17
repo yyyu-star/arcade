@@ -81,6 +81,25 @@ export class Banners {
     this.showTimer = setTimeout(finish, evolve ? 1900 : 1300);
   }
 
+  /**
+   * 多件宝箱（3 / 5 件）：升级的几件图标一个个弹出来排一排，整体 1.5–2 秒自己收起。
+   * 和 reveal 不同：不拦点击、不要求继续（核心不暂停，玩家可以接着走位），所以只放在屏幕上方；返回总时长（毫秒）。
+   */
+  chestRow(items: { icon: string; name: string; evolve: boolean }[], title: string, tier: 3 | 5): number {
+    const step = tier === 5 ? 190 : 230;
+    const total = items.length * step + (tier === 5 ? 1000 : 800);
+    const el = document.createElement('div');
+    el.className = `yx-chestrow t${tier}`;
+    const cards = items
+      .map((it, i) => `<div class="c${it.evolve ? ' evo' : ''}" style="animation-delay:${i * step}ms"><img alt="" src="${it.icon}"><span>${it.name}</span></div>`)
+      .join('');
+    el.innerHTML = `<span class="h">${title}</span><div class="row">${cards}</div>`;
+    this.root.appendChild(el);
+    setTimeout(() => el.classList.add('out'), total);
+    setTimeout(() => el.remove(), total + 300);
+    return total;
+  }
+
   /** 演出中按任意键也跳过 */
   skipReveal(): boolean {
     if (!this.skip) return false;

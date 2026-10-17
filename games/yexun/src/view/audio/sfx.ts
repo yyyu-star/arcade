@@ -7,7 +7,8 @@ export type SfxName =
   | 'rope' | 'petal' | 'shieldUp' | 'shieldBreak' | 'crane'
   | 'hit' | 'crit' | 'kill' | 'pickup' | 'coin' | 'heal' | 'levelup' | 'choose' | 'evolve'
   | 'chest' | 'hurt' | 'heartbeat' | 'elite' | 'boss' | 'bossStomp' | 'bossSummon' | 'bossBreath'
-  | 'gateOpen' | 'extract' | 'dawn' | 'death' | 'click';
+  | 'gateOpen' | 'extract' | 'dawn' | 'death' | 'click'
+  | 'bomb' | 'purse' | 'propWood' | 'propPaper' | 'chestGold' | 'chestRainbow';
 
 const SETTINGS_KEY = 'yexun.settings';
 
@@ -354,6 +355,45 @@ const VOICES: Record<SfxName, Voice> = {
   death: (t) => { // 下行
     [4, 3, 2, 0, -2].forEach((d, i) => tone(pent(d, 392), t + i * 0.2, 0.5, { type: 'triangle', vol: 0.14 }));
     tone(90, t + 0.8, 0.7, { f1: 35, vol: 0.5 });
+  },
+  bomb: (t) => { // 符咒炸开：低频闷雷 + 宽噪声冲击 + 金属余响，比 bossStomp 更亮更散
+    tone(70, t, 0.6, { f1: 26, vol: 0.7 });
+    noise(t, 0.5, { type: 'lowpass', f0: 3200, f1: 180, vol: 0.5 });
+    noise(t, 0.12, { type: 'highpass', f0: 2500, vol: 0.3 });
+    metal(880, t + 0.04, 1.1, [1, 2.76, 5.4], 0.12);
+    [0, 2, 4, 7].forEach((d, i) => tone(pent(d, 784), t + 0.12 + i * 0.05, 0.3, { vol: 0.07 }));
+  },
+  purse: (t) => { // 铜钱袋：一串叮当，音调一路往上（pitch 整体移调）
+    for (let i = 0; i < 7; i++) {
+      const f = 1500 * Math.pow(1.1, i);
+      const d = i * 0.055;
+      tone(f, t + d, 0.2, { vol: 0.11 });
+      tone(f * 1.51, t + d, 0.1, { vol: 0.05 });
+      tone(f * 2.3, t + d, 0.06, { vol: 0.025 });
+    }
+    noise(t, 0.05, { type: 'highpass', f0: 5000, vol: 0.1 });
+  },
+  propWood: (t) => { // 灯笼架碎：木头咔嚓 + 一声闷响
+    noise(t, 0.09, { f0: 1800, q: 2, vol: 0.3 });
+    tone(220, t, 0.12, { type: 'triangle', f1: 120, vol: 0.22 });
+    noise(t + 0.07, 0.14, { f0: 900, f1: 500, q: 3, vol: 0.18 });
+    tone(2400, t + 0.02, 0.1, { vol: 0.04 });
+  },
+  propPaper: (t) => { // 纸扎碎：沙沙的纸响
+    noise(t, 0.2, { type: 'highpass', f0: 3500, f1: 6500, vol: 0.2, attack: 0.01 });
+    noise(t + 0.05, 0.14, { f0: 2200, f1: 1200, q: 1.2, vol: 0.14 });
+  },
+  chestGold: (t) => { // 三连箱：开箱音之上再叠一层金钟 + 上行三音
+    noise(t, 0.1, { f0: 4200, q: 3, vol: 0.2 });
+    metal(1046, t, 1.3, [1, 2.76, 5.4], 0.12);
+    [0, 2, 4, 7, 9].forEach((d, i) => tone(pent(d, 659), t + 0.08 + i * 0.06, 0.4, { type: 'triangle', vol: 0.1 }));
+  },
+  chestRainbow: (t) => { // 五连箱：气流上扫 + 两个八度琶音 + 长钟，比 evolve 更满
+    noise(t, 0.8, { f0: 300, f1: 6000, q: 1.2, vol: 0.2, attack: 0.4 });
+    for (let i = 0; i < 12; i++) tone(pent(i, 392), t + 0.05 + i * 0.06, 0.5, { type: 'triangle', vol: 0.1 });
+    metal(1568, t + 0.75, 1.6, [1, 2.76, 5.4], 0.14);
+    metal(784, t + 0.75, 1.6, [1, 1.5, 2.1], 0.1);
+    tone(pent(9, 392), t + 0.75, 1.1, { vol: 0.1, vib: [6, 10], attack: 0.03 });
   },
   click: (t) => {
     tone(1000, t, 0.025, { vol: 0.1 });

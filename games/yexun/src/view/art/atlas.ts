@@ -11,6 +11,7 @@ import { SPRITES5 } from './sprites5.ts';
 import { SPRITES6 } from './sprites6.ts';
 import { SPRITES7 } from './sprites7.ts';
 import { SPRITES8 } from './sprites8.ts';
+import { SPRITES11 } from './sprites11.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -64,7 +65,7 @@ export const RAID_TEX = 'atlas8';
 
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...digitDefs()], res);
+  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...digitDefs()], res);
 }
 
 let raidCache: { res: number; atlas: Atlas } | null = null;

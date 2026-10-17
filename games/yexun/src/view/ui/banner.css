@@ -68,3 +68,29 @@
   min-height: 44px; max-width: 92vw; padding: 0 16px; border: 2.5px solid #17131c; border-radius: 12px;
   background: #f6efdc; color: #17131c; font: 700 15px system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; cursor: pointer;
 }
+
+/* 多件宝箱：升级的几件排一排，不拦点击 */
+.yx-chestrow {
+  position: absolute; left: 0; right: 0; top: max(12vh, 52px); z-index: 24; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.yx-chestrow .h { font-family: 'YxBrush', serif; font-size: 40px; color: #ffd23a; -webkit-text-stroke: 6px #17131c; paint-order: stroke fill; animation: yx-ban-in 0.25s ease-out both; }
+.yx-chestrow.t5 .h { font-size: 52px; color: #ff8a3a; -webkit-text-stroke: 7px #17131c; paint-order: stroke fill; }
+.yx-chestrow .row { display: flex; gap: 8px; justify-content: center; padding: 0 8px; flex-wrap: wrap; }
+.yx-chestrow .c {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; padding: 6px 6px 4px;
+  border: 3px solid #17131c; border-radius: 12px; background: rgba(246, 239, 220, 0.96); box-shadow: 0 4px 0 #17131c;
+  font: 700 12px/1.2 system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #17131c;
+  opacity: 0; animation: yx-card-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.yx-chestrow .c img { width: 52px; height: 52px; }
+.yx-chestrow .c.evo { background: linear-gradient(#fff3b0, #ffd23a); }
+.yx-chestrow.out { animation: yx-ban-out 0.3s ease-in both; }
+@keyframes yx-card-pop { 0% { opacity: 0; transform: translateY(40px) scale(0.3); } 100% { opacity: 1; transform: none; } }
+@media (max-height: 460px) {
+  .yx-chestrow { top: max(15vh, 56px); gap: 2px; }
+  .yx-chestrow .h { font-size: 26px; -webkit-text-stroke-width: 5px; }
+  .yx-chestrow.t5 .h { font-size: 30px; -webkit-text-stroke-width: 5px; }
+  .yx-chestrow .c { min-width: 54px; padding: 3px 4px 2px; font-size: 11px; }
+  .yx-chestrow .c img { width: 32px; height: 32px; }
+}

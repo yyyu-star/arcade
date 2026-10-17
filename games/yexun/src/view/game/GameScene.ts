@@ -29,10 +29,13 @@ import { Cards, describe } from '../ui/cards.ts';
 import type { Hud, HudSlot } from '../ui/hud.ts';
 import { LOW_MEMORY } from '../viewport.ts';
 import { DamageNumbers, Fx } from './fx.ts';
+import { Items } from './items.ts';
 import { weaponLook } from './look.ts';
 import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
+/** 只在 dev 构建里认 ?slowmo=N（截图预览用），正式构建恒为 1 */
+const SLOWMO = import.meta.env.DEV ? Math.max(1, Number(new URLSearchParams(location.search).get('slowmo') ?? 1) || 1) : 1;
 
 /** 夜探院子的铺地：颜色和透明度（盖在雪地上，深度在雪地和点缀之间） */
 const YARD_FLOOR: Record<string, [number, number]> = {
@@ -133,6 +136,10 @@ export class GameScene extends Phaser.Scene {
   private fx!: Fx;
   private ground!: Fx;
   private nums!: DamageNumbers;
+  /** 摆设、符咒炸弹、开箱光效、铜钱袋飘字（items.ts） */
+  private items!: Items;
+  /** 上次看到的铜钱袋累计铜钱：铜钱袋的数额在核心里现掷，事件里没有，靠累计差值得到 */
+  private purseSeen = 0;
   private gfx!: Phaser.GameObjects.Graphics;
   private bolts: { pts: number[]; life: number }[] = [];
   /** 这一帧要画的光波：x, y, 半径, 最大半径 */
@@ -230,6 +237,19 @@ export class GameScene extends Phaser.Scene {
     this.fx = new Fx(this, this.d.atlas, LOW_MEMORY ? 180 : 420);
     this.nums = new DamageNumbers(this, this.d.atlas, 30);
     this.gfx = this.add.graphics().setDepth(8000);
+    this.items = new Items({
+      scene: this,
+      frame: (k) => this.frame(k),
+      fx: this.fx,
+      ground: this.ground,
+      shake: (ms, k) => this.shake(ms, k),
+      whiteFlash: () => this.d.banners.whiteFlash(),
+      freeze: (ms) => {
+        this.freeze = Math.max(this.freeze, ms);
+      },
+    });
+    this.purseSeen = this.w.coinBy.purse;
+    if (import.meta.env.DEV) this.debugItems();
 
     this.aura = this.img('aura', 0, 0, 1).setAlpha(0.9);
     this.heroShadow = this.img('shadow', 0, 0, 1.1).setAlpha(0.9);
@@ -246,6 +266,44 @@ export class GameScene extends Phaser.Scene {
     cam.centerOn(this.w.x, this.w.y);
     music.start('night');
     music.setIntensity(0);
+  }
+
+  /**
+   * 开发预览（只在 dev 构建里有，截图 / 调试用）：?debugitems=row 在主角旁摆一排新图标；
+   * =bomb / purse / prop0 / prop1 / chest1 / chest3 / chest5 在开局 1.5 秒后触发对应演出（不动核心状态，只放画面）。
+   */
+  private debugItems(): void {
+    const what = new URLSearchParams(location.search).get('debugitems');
+    if (!what) return;
+    const { x, y } = this.w;
+    if (what === 'row') {
+      const put = (key: string, dx: number, dy: number, sc = 1): void => {
+        this.img(key, x + dx, y + dy, sc).setDepth(y + dy);
+      };
+      put('drop_bomb', -120, -80);
+      put('drop_purse', -60, -80);
+      put('prop_lantern', 40, -80, 0.85);
+      put('prop_paper', 120, -80, 0.85);
+      put('chest', -90, 40, 1.2);
+      put('coin', -40, 40);
+      put('bun', 0, 40);
+      return;
+    }
+    // &debugat=毫秒：等多久再放（默认 1.5 秒；截图脚本在开局约 3.5 秒后截，机器慢时可以调）
+    this.time.delayedCall(Number(new URLSearchParams(location.search).get('debugat') ?? 1500), () => {
+      if (what === 'bomb') this.items.bombBlast(x, y, 520);
+      else if (what === 'purse') {
+        sfx.play('purse');
+        this.items.floatText(x, y - 74, '+19 铜钱', '#ffd23a');
+        this.burst(x, y - 30, 0xffc928, 1.3);
+      } else if (what === 'prop0' || what === 'prop1') this.items.propBreak(x + 60, y - 30, what === 'prop0' ? 0 : 1, 3);
+      else if (what.startsWith('chest')) {
+        const n = Number(what.slice(5));
+        this.items.chestBig(x, y, n);
+        const codes = n >= 5 ? [0, 1, 100, 101, 2] : n >= 3 ? [0, 100, 2] : [0];
+        this.onChests(codes, n);
+      }
+    });
   }
 
   /** 地图上挡路的东西（义庄的墙、棺材、正堂）：墙按段拼，最后一段压缩到刚好对齐；深度按脚底 */
@@ -432,7 +490,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private frameUpdate(delta: number): void {
-    const dt = Math.min(delta, 100);
+    // dev 预览：&slowmo=N 把画面时间放慢 N 倍，机器慢、截图间隔长时能截到特效的各个阶段
+    const dt = Math.min(delta, 100) / SLOWMO;
     this.now += dt;
     if (this.d.drive) {
       if (!this.paused && this.w.phase !== 'over') this.d.drive(dt, () => this.readEvents());
@@ -504,7 +563,8 @@ export class GameScene extends Phaser.Scene {
   private readEvents(): void {
     const ev = this.w.ev;
     let hits = 0;
-    let chests = 0;
+    const chestCodes: number[] = [];
+    let bigN = 0;
     for (let i = 0; i < ev.n; i++) {
       const x = ev.x[i]!;
       const y = ev.y[i]!;
@@ -598,10 +658,19 @@ export class GameScene extends Phaser.Scene {
           this.hero.setTint(0xff5a4a);
           this.time.delayedCall(90, () => this.hero.clearTint());
           break;
+        case Ev.ChestBig:
+          // 先放光（档位由件数决定），升了什么由紧跟着的 Chest 事件收齐，循环结束后一起演
+          bigN = ev.a[i]!;
+          this.items.chestBig(x, y, bigN);
+          break;
         case Ev.Chest:
-          // 黄历让一个宝箱多升一件：第二件只给一行横幅，不再弹第二次演出
-          if (chests++ === 0) this.onChest(ev.a[i]!);
-          else this.d.banners.say(`另外 ${this.chestTitle(ev.a[i]!)} 也升了`, 'gold', 1600);
+          chestCodes.push(ev.a[i]!);
+          break;
+        case Ev.Prop:
+          this.items.propBreak(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Bomb:
+          this.items.bombBlast(x, y, ev.b[i]!);
           break;
         case Ev.Evolve:
           break;
@@ -660,6 +729,7 @@ export class GameScene extends Phaser.Scene {
           break;
       }
     }
+    if (chestCodes.length > 0) this.onChests(chestCodes, bigN);
     // 命中音：一拍最多一个（几百只同时挨打也不吵），暴击单独
     if (hits > 0 && this.now - this.hitSfxAt > 45) {
       sfx.play('hit', { volume: Math.min(1, 0.4 + hits * 0.05) });
@@ -727,6 +797,16 @@ export class GameScene extends Phaser.Scene {
       sfx.play('heal');
       // 回血数字飘在主角头上（绿色），不占屏幕中间的横幅
       this.nums.show(this.w.x, this.w.y - 70, DROPS.bunHeal, false, 0x5fd38a);
+    } else if (kind === Drop.Purse) {
+      // 一串叮当 + 头上飘"+N 铜钱"；N 是核心现掷的，靠铜钱袋累计的差值得到
+      sfx.play('purse');
+      const got = this.w.coinBy.purse - this.purseSeen;
+      this.purseSeen = this.w.coinBy.purse;
+      if (got > 0) this.items.floatText(this.w.x, this.w.y - 74, `+${got} 铜钱`, '#ffd23a');
+      this.burst(this.w.x, this.w.y - 30, 0xffc928, 1.3);
+    } else if (kind === Drop.Bomb) {
+      // 爆炸的音效、冲击圈、白闪、震屏都跟着同一拍的 Ev.Bomb 放，这里只给捡起一下的小反馈
+      this.spark(this.w.x, this.w.y - 30, 0xff7a2a, 1.4);
     } else if (kind === Drop.Scroll) {
       sfx.play('pickup', { pitch: 1.6 });
       this.fx.spawn({ frame: 'ring', x: this.w.x, y: this.w.y, life: 600, s0: 0.5, s1: 8, a0: 0.8, a1: 0, tint: 0x8ff0c8, depth: 6000 });
@@ -740,49 +820,71 @@ export class GameScene extends Phaser.Scene {
     return '铜钱';
   }
 
-  private onChest(code: number): void {
-    sfx.play('chest');
+  /** 一件升级的展示内容：图标、名字、说明；evolve 表示进化 / 合成（更隆重） */
+  private chestInfo(code: number): { icon: string; title: string; sub: string; evolve: boolean } {
     const w = this.w;
-    let icon = 'coin';
-    let title = '铜钱一袋';
-    let sub = '铜钱 +40，回 30 点血';
-    let evolve = false;
     if (code >= MERGE_CODE) {
-      // 合成：比进化更隆重（白闪 + 进化音），空出一个法器格
       const m = MERGES[code - MERGE_CODE]!;
-      evolve = true;
-      icon = m.icon;
-      title = m.name;
-      sub = `合成！${m.desc}。空出一个法器格`;
-      sfx.play('evolve');
-      this.d.banners.whiteFlash();
-    } else if (code >= 100) {
+      return { icon: m.icon, title: m.name, sub: `合成！${m.desc}。空出一个法器格`, evolve: true };
+    }
+    if (code >= 100) {
       const p = PASSIVES[PASSIVE_IDS[code - 100]!];
-      icon = p.icon;
-      title = p.name;
-      sub = `Lv ${w.passives[p.id] ?? 0} · ${p.text}`;
-    } else if (code >= 0) {
+      return { icon: p.icon, title: p.name, sub: `Lv ${w.passives[p.id] ?? 0} · ${p.text}`, evolve: false };
+    }
+    if (code >= 0) {
       const id = WEAPON_IDS[code]!;
       const o = w.weapons.find((x) => x.id === id);
       const def = WEAPONS[id];
-      if (o?.evolved && def.evolve) {
-        evolve = true;
-        icon = def.evolve.icon;
-        title = def.evolve.name;
-        sub = `进化！${def.evolve.desc}`;
-        sfx.play('evolve');
-      } else {
-        icon = def.icon;
-        title = def.name;
-        sub = `升到 Lv ${o?.level ?? 1}`;
-      }
+      if (o?.evolved && def.evolve) return { icon: def.evolve.icon, title: def.evolve.name, sub: `进化！${def.evolve.desc}`, evolve: true };
+      return { icon: def.icon, title: def.name, sub: `升到 Lv ${o?.level ?? 1}`, evolve: false };
     }
-    if (this.d.autopilot) return;
-    this.hold = 1e9;
-    this.d.banners.reveal(this.d.icon(icon), title, sub, evolve, () => {
-      this.hold = 0;
-      this.d.onChest?.();
+    return { icon: 'coin', title: '铜钱一袋', sub: '铜钱 +40，回 30 点血', evolve: false };
+  }
+
+  /**
+   * 精英宝箱升了几件。一件：原来的整屏演出（点一下或 1.3 秒结束，期间不送拍）；
+   * 三 / 五件：几件依次弹出排一排，不拦点击，只停一小会儿给光柱让位，之后玩家接着走位（核心不暂停）。
+   */
+  private onChests(codes: number[], big: number): void {
+    const infos = codes.map((c) => this.chestInfo(c));
+    const tier = codes.length >= 5 ? 5 : codes.length >= 3 ? 3 : 1;
+    if (tier === 1) {
+      sfx.play('chest');
+      const it = infos[0]!;
+      if (it.evolve) {
+        sfx.play('evolve');
+        this.d.banners.whiteFlash();
+      }
+      // 黄历让一个宝箱多升一件：多出来的只给一行横幅
+      for (let k = 1; k < codes.length; k++) this.d.banners.say(`另外 ${this.chestTitle(codes[k]!)} 也升了`, 'gold', 1600);
+      if (this.d.autopilot) return;
+      this.hold = 1e9;
+      this.d.banners.reveal(this.d.icon(it.icon), it.title, it.sub, it.evolve, () => {
+        this.hold = 0;
+        this.d.onChest?.();
+      });
+      return;
+    }
+    // 光效按核心说的件数（big），列表按实际收到的件数；两者一致，不一致以实际为准
+    const n = Math.max(codes.length, big);
+    this.d.banners.chestRow(
+      infos.map((it) => ({ icon: this.d.icon(it.icon), name: it.title, evolve: it.evolve })),
+      n >= 5 ? '五连宝箱！' : '三连宝箱',
+      tier,
+    );
+    // 每弹出一件叮一声，音调逐件升高；进化 / 合成那件再加一下
+    infos.forEach((it, k) => {
+      this.time.delayedCall(k * (tier === 5 ? 190 : 230) + 120, () => {
+        sfx.play('pickup', { volume: 0.7, pitch: 1.2 + k * 0.14 });
+        if (it.evolve) {
+          sfx.play('evolve', { volume: 0.7 });
+          this.d.banners.whiteFlash();
+        }
+      });
     });
+    // 光柱出来的头一会儿停一停（五件更久），再放开；演出本身继续留在屏幕上方
+    if (!this.d.autopilot) this.hold = Math.max(this.hold, tier === 5 ? 520 : 300);
+    this.d.onChest?.();
   }
 
   // ───────────────────────── 夜探的事件 ─────────────────────────
@@ -1040,11 +1142,13 @@ export class GameScene extends Phaser.Scene {
     this.drawMobs(inter, dt);
     this.drawShots(inter);
     this.drawDrops(inter);
+    this.items.drawProps(w, dt);
     if (this.raid) this.drawRaid(dt);
     this.drawGfx(dt);
     this.fx.update(dt);
     this.ground.update(dt);
     this.nums.update(dt);
+    this.items.update(dt);
     this.drawHud();
   }
 
@@ -1220,10 +1324,10 @@ export class GameScene extends Phaser.Scene {
       }
       const kind = w.dKind[i]!;
       const v = w.dVal[i]!;
-      const key = kind === Drop.Soul ? (v >= 5 ? 'bead3' : v >= 2 ? 'bead2' : 'bead1') : kind === Drop.Coin ? 'coin' : kind === Drop.Bun ? 'bun' : kind === Drop.Scroll ? 'scroll' : 'chest';
+      const key = kind === Drop.Soul ? (v >= 5 ? 'bead3' : v >= 2 ? 'bead2' : 'bead1') : kind === Drop.Coin ? 'coin' : kind === Drop.Bun ? 'bun' : kind === Drop.Scroll ? 'scroll' : kind === Drop.Bomb ? 'drop_bomb' : kind === Drop.Purse ? 'drop_purse' : 'chest';
       // 魂珠比怪小一号、颜色淡，不抢眼；超过上限并成的大珠（经验 ≥ 20）放大、一闪一闪，看得出值得去捡
       const big = kind === Drop.Soul && v >= 20;
-      const sc = kind === Drop.Chest ? 1.2 : kind === Drop.Soul ? (big ? 1.5 : 0.75) : 1;
+      const sc = kind === Drop.Chest ? 1.2 : kind === Drop.Soul ? (big ? 1.5 : 0.75) : kind === Drop.Bomb || kind === Drop.Purse ? 1.2 : 1;
       if (!d || d.gen !== w.dGen[i] || d.kind !== kind || d.key !== key || d.big !== big) {
         const f = this.frame(key);
         const img = d?.img ?? this.add.image(0, 0, 'atlas', f.key);
@@ -1233,7 +1337,10 @@ export class GameScene extends Phaser.Scene {
       if (big) d.img.setScale((sc + Math.sin(this.now * 0.008 + i) * 0.12) / this.frame(key).res);
       const x = inter(w.dPX[i]!, w.dX[i]!);
       const y = inter(w.dPY[i]!, w.dY[i]!);
-      d.img.setPosition(x, y + (kind === Drop.Chest ? 0 : Math.sin(this.now * 0.006 + i) * 2)).setDepth(kind === Drop.Chest ? y : -300 + y * 0.0001);
+      // 炸弹和钱袋比别的掉落更值得捡：浮得高一点、跟着呼吸一胀一缩，带着自己的光晕，远远就认得
+      const special = kind === Drop.Bomb || kind === Drop.Purse;
+      if (special) d.img.setScale((sc + Math.sin(this.now * 0.008 + i) * 0.08) / this.frame(key).res);
+      d.img.setPosition(x, y + (kind === Drop.Chest ? 0 : special ? -4 + Math.sin(this.now * 0.006 + i) * 4 : Math.sin(this.now * 0.006 + i) * 2)).setDepth(kind === Drop.Chest ? y : -300 + y * 0.0001);
     }
   }
 
