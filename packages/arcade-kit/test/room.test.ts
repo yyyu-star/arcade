@@ -9,6 +9,7 @@ import { identityHeader, KIT_HOST, MISS_HEADER, missStub, roomStub, SESSION_COOK
 import type { RoomMeter } from '../src/meter.ts';
 import { isEntropy } from '../src/rng.ts';
 import roomSrc from '../src/room.ts?raw';
+import workerSrc from '../src/worker.ts?raw';
 import { advance, Conn, freezeClock, inspect, join, openRoom, refusedWith, resetMeter, stub, upgrade } from './helpers.ts';
 import type { RoomGame } from '../src/game.ts';
 import { SITE, type ToyAction, type ToyRoom, type ToyView, toyGame } from './worker.ts';
@@ -1320,6 +1321,11 @@ describe('第三轮审计（0.14.0）', () => {
   // 计数存在小实例里，同一个文件的测试共用：设过门槛的清回去，不连累后面用同名账号的测试
   afterEach(async () => {
     for (const k of ['u:u2', 'u:stranger', 'ip:10.0.0.3']) await setMisses(k, 0);
+  });
+
+  it('worker.ts 不在运行时引用 meter.ts、room.ts（它们依赖 cloudflare:workers，游戏会在普通 Node 的测试里加载 worker.ts）', () => {
+    const runtime = [...workerSrc.matchAll(/^import (?!type )[^;]*from '([^']+)'/gm)].map((m) => m[1]);
+    expect(runtime.filter((f) => /meter|room|cloudflare:/.test(f!))).toEqual([]);
   });
 
   it('猜码：码不存在按人、按 IP 各记一次，转给浏览器的回话不带内部头；房间在的不记', async () => {

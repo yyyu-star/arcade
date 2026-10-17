@@ -13,8 +13,9 @@
 import { identify, sameOrigin } from './auth.js';
 import { type GuestOptions, isStandalone, type ModeEnv } from './guest.js';
 import { CLOSE, type CreateError, ROOM_CODE_RE } from './protocol.js';
-import { identityHeader, type Identity, KIT_HOST, LIMITED_HEADER, MISS_HEADER, missStub, newRoomCode, roomStub } from './internal.js';
-import { type MeterEnv, meterReport, parseQuota, type RoomMeter } from './meter.js';
+import { identityHeader, type Identity, KIT_HOST, LIMITED_HEADER, meterStub, MISS_HEADER, missStub, newRoomCode, roomStub } from './internal.js';
+// 只引类型：meter.ts 依赖 cloudflare:workers，游戏会在普通 Node 的测试里加载本文件
+import type { MeterEnv, RoomMeter } from './meter.js';
 import type { CreateOutcome } from './room.js';
 
 /**
@@ -147,19 +148,18 @@ export async function acceptJoin(request: Request, env: KitEnv, code: string, op
 function missGuard(env: KitEnv, userId: string, ip: string | null): { ok(): Promise<boolean>; miss(): Promise<void> } | null {
   const ns = env.METER;
   if (!ns) return null;
-  const lim = parseQuota(env.KIT_QUOTA);
-  const keys: [string, number][] = [[`u:${userId}`, lim.joinMissesPerUser]];
-  if (ip) keys.push([`ip:${ip}`, lim.joinMissesPerIp]);
+  const keys: [string, 'user' | 'ip'][] = [[`u:${userId}`, 'user']];
+  if (ip) keys.push([`ip:${ip}`, 'ip']);
   const stub = (k: string) => missStub(ns, k) as DurableObjectStub<RoomMeter>;
   return {
     async ok() {
-      const n = await Promise.all(keys.map(([k]) => stub(k).kitMisses()));
-      return n.every((x, i) => x < keys[i]![1]);
+      const blocked = await Promise.all(keys.map(([k, kind]) => stub(k).kitMissBlocked(kind)));
+      return !blocked.includes(true);
     },
     async miss() {
       await Promise.all(keys.map(([k]) => stub(k).kitMiss()));
       // 这几行也记进当天的写入（计量自己的规矩），报一次计量再写 1 行
-      await meterReport(env, keys.length);
+      await (meterStub(ns) as DurableObjectStub<RoomMeter>).kitReport(keys.length);
     },
   };
 }

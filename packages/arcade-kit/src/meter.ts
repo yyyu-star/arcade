@@ -141,8 +141,15 @@ export class RoomMeter extends DurableObject<MeterEnv> {
 
   /**
    * 进房猜码（0.14.0）：这两个方法用在 missStub 按人、按 IP 取的小实例上（不是全站那一个），不碰 SQL 表，只存一个 { 第几个小时, 几次 }。
-   * kitMisses 只读，进房前问；kitMiss 记一次（1 行），只有真的进了一个不存在的房间才调，超了门槛的人进不到这一步，所以一小时最多写门槛那么多行
+   * kitMissBlocked 只读，进房前问（门槛在这里按 KIT_QUOTA 算，worker.ts 不用在运行时引用本文件：它要能在普通 Node 里加载）；
+   * kitMiss 记一次（1 行），只有真的进了一个不存在的房间才调，超了门槛的人进不到这一步，所以一小时最多写门槛那么多行
    */
+  async kitMissBlocked(kind: 'user' | 'ip'): Promise<boolean> {
+    const lim = this.limits();
+    return (await this.kitMisses()) >= (kind === 'user' ? lim.joinMissesPerUser : lim.joinMissesPerIp);
+  }
+
+  /** 只读：这一小时记了几次（给测试看） */
   async kitMisses(): Promise<number> {
     const r = await this.ctx.storage.get<{ h: number; n: number }>('miss');
     return r && r.h === hourOf(Date.now()) ? r.n : 0;
