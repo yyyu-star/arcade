@@ -974,6 +974,8 @@ body::before {
 }
 .room-banner .pill { height: 32px; }
 .spectate { font-size: var(--fs-2); color: #9fd6f5; }
+/* 旁观中（docs/social.md 1.4）：顶栏那一行字换成蓝色，一眼看出自己只是在看 */
+.where.watching { color: #9fd6f5; font-weight: 700; }
 .toast {
   position: absolute;
   left: 50%; top: 100px;

@@ -125,7 +125,15 @@ sitBtn.type = 'button';
 // 好友房：离座以后回到自己的座位；没坐下的人看着时的提示
 const backSeatBtn = el('button', 'pill go hidden', hud, '回到我的座位');
 backSeatBtn.type = 'button';
-const spectate = el('span', 'spectate hidden', hud, '点亮着蓝圈的电脑座位接管它，下一手起用你自己的筹码');
+// 旁观（docs/social.md 1.4）：座位满了、已经开打时进来的人只看。有电脑座位能接管时给"坐下"（接第一个亮着蓝圈的，也可以直接点那个座位）
+const sitDownBtn = el('button', 'pill go hidden', hud, '坐下');
+sitDownBtn.type = 'button';
+sitDownBtn.addEventListener('click', () => {
+  const room = online?.state.room;
+  const i = room?.seats.findIndex((x) => x.kind === 'ai' && !x.reserved) ?? -1;
+  if (i >= 0) void takeSeat(i);
+});
+const spectate = el('span', 'spectate hidden', hud, '也可以点蓝圈的座位');
 // 互动（docs/table-fun.md 第 1 节）：左下角的"互动"按钮由 kit 画，这里只占个位置（funSlot 的屏幕矩形交给 TableFun 的 button）；
 // 一手打完按公开发生的事冒 1–2 句顺手提示，一点就发。都在左下，不挡底牌和操作区
 const funSlot = el('div', 'fun-slot hidden', hud);
@@ -1166,6 +1174,7 @@ function exitRoom(note: string | null, keep = false): void {
   stage.classList.remove('in-room', 'at-table');
   toggle(backSeatBtn, 'hidden', true);
   toggle(spectate, 'hidden', true);
+  toggle(sitDownBtn, 'hidden', true);
   tableView.setPeople(null);
   tableView.setClock(null, null, 1);
   drawRoomPause(null);
@@ -1305,6 +1314,7 @@ function drawRoom(s: OnlineState): void {
   syncFun();
   toggle(inviteBtn, 'hidden', false);
   toggle(spectate, 'hidden', !people.some((p) => p.takeable));
+  toggle(sitDownBtn, 'hidden', !people.some((p) => p.takeable));
 
   // 我的买入、补码办完了：钱包的数变了
   const buyingNow = me !== null && v.buying[me]!;
@@ -1402,7 +1412,10 @@ function drawRoomTop(s: OnlineState): void {
   const v = s.view;
   const o = v ? { stakes: v.stakes, size: v.size } : s.opts;
   const st = o ? stakesOf(o.stakes) : null;
-  setText(where, `好友房 ${s.code}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  // 旁观中（docs/social.md 1.4）：开打了、我没坐下也没绑着座位（离座回来的有"回到我的座位"）
+  const watching = s.room?.status === 'playing' && (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
+  setText(where, `${watching ? '旁观中 · ' : ''}好友房 ${s.code}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  toggle(where, 'watching', watching);
   setText(walletChip, wallet ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', false);
   setText(leaveBtn, '离开');

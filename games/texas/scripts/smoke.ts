@@ -649,6 +649,13 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
     await dp.goto(`${base}/games/texas/?room=${code}`);
     await dp.locator('.seat.takeable .avatar').first().waitFor({ timeout: 30_000 });
     await shot(dp, 'room-spectate');
+    // 旁观（docs/social.md 1.4）：顶上写旁观中、有"坐下"、看不到任何人的底牌、不能扔东西（没有互动按钮）
+    await dp.locator('.where.watching', { hasText: '旁观中' }).waitFor({ timeout: 10_000 });
+    await dp.locator('.hud .pill', { hasText: /^坐下$/ }).waitFor();
+    // 一手打完摊牌亮出来的是公开的，下一手发牌前才收；所以连着看两眼都在打牌、都有亮着的底牌才算看到了不该看的
+    const leaked = async (): Promise<boolean> => (await dp.locator('.stage').getAttribute('data-phase')) !== 'idle' && (await dp.locator('.seat .card.up').count()) > 0;
+    if ((await leaked()) && (await dp.waitForTimeout(2_000), await leaked())) throw new Error('spectator sees face-up hole cards during a hand');
+    if (await dp.locator('.atf-btn').isVisible()) throw new Error('spectator should not get the fun button');
     await dp.locator('.seat.takeable .avatar').first().click();
     await dp.locator('.dialog').waitFor();
     await dp.locator('.d-btn.primary').click();
