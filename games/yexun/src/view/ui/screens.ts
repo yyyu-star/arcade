@@ -445,6 +445,19 @@ export class Result {
     if (el) el.textContent = text;
   }
 
+  /** 交分、存录像的结果：结算面板最下面一行小字（同一局只留一行，后来的替换先前的） */
+  setNote(text: string): void {
+    const panel = this.root.querySelector('.yx-result-panel');
+    if (!panel) return;
+    let el = panel.querySelector<HTMLElement>('.yx-rnote');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'yx-rnote';
+      panel.append(el);
+    }
+    el.textContent = text;
+  }
+
   show(r: ResultView): void {
     const title = r.won ? (r.bossKilled ? '尸王伏诛' : '天亮了') : r.quit ? '收工' : '倒下了';
     const dawn = r.dawnSeconds ?? 900;

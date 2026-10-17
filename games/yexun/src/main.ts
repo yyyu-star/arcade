@@ -15,6 +15,12 @@ import { LIVE_TIERS, type LiveTier } from './content/live.ts';
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
+import { Recorder } from './replay/recorder.ts';
+import { storeReplay } from './replay/store.ts';
+import { createSubmitter, outcomeText } from './online/submit.ts';
+import { scoresOfRun } from './online/score.ts';
+import { beijingDate } from './online/daily.ts';
+import type { RunSummary } from './online/types.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
@@ -102,6 +108,39 @@ async function boot(): Promise<void> {
   addEventListener('online', () => void live.resume());
   /** 这一局是实盘时记下种子（每 10 秒报一次撑到哪，结束时结回） */
   let liveRun: { seed: number } | null = null;
+  // 录像（本机，DESIGN.md 5.4）和交分（5.7）：每局一个录像机；每日挑战那天的日期跟着这一局走
+  let rec: Recorder | null = null;
+  let dailyDate: string | null = null;
+  const submitter = createSubmitter({ fetch: (u, i) => fetch(u, i) });
+  /** 一局的小结：交分、录像、分享卡都从它来 */
+  const runSummary = (w: World, quit: boolean): RunSummary => ({
+    runId: `${w.setup.seed.toString(36)}-${rec?.at.toString(36) ?? '0'}`,
+    setup: w.setup,
+    won: w.won,
+    quit,
+    bossKilled: w.bossKilled,
+    seconds: Math.floor(Math.min(w.tick, DAWN_TICK) / 30),
+    kills: w.kills,
+    level: w.level,
+    coins: w.coins,
+    loot: 0,
+    live: liveRun !== null,
+    reducedDamage: !!w.setup.assist,
+    daily: dailyDate,
+    build: w.weapons.map((o) => WEAPONS[o.id].name),
+  });
+  /** 结束时：存录像、交分（实盘、降低伤害、认输的不交总榜，规则在 online/score.ts） */
+  const archive = (w: World, quit: boolean): void => {
+    const run = runSummary(w, quit);
+    if (rec) {
+      const today = beijingDate(Date.now());
+      storeReplay(rec.finish(w, { won: run.won, quit, seconds: run.seconds, kills: run.kills, level: run.level, bossKilled: run.bossKilled, loot: run.loot, daily: run.daily }, scoresOfRun(run, today)));
+      rec = null;
+    }
+    void submitter.submit(run).then((outs) => {
+      if (outs.length) result.setNote(outs.map(outcomeText).join('；'));
+    });
+  };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
   let lastLive: LiveTier | null = null;
   let liveTier: LiveTier = 'small';
@@ -300,6 +339,7 @@ async function boot(): Promise<void> {
     tips.hide();
     banners.clear();
     const seconds = Math.min(w.tick, DAWN_TICK) / 30;
+    archive(w, quit);
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
@@ -334,9 +374,11 @@ async function boot(): Promise<void> {
       });
   };
 
-  const startRun = async (picked: Danger, map: MapId = save.map, debug = false, fixed?: Setup): Promise<void> => {
-    liveRun = fixed ? { seed: fixed.seed } : null;
-    if (!fixed) lastLive = null;
+  /** fixed：实盘、每日挑战用固定配置（kind 说是哪一种）；别的按菜单选的来 */
+  const startRun = async (picked: Danger, map: MapId = save.map, debug = false, fixed?: Setup, kind: 'live' | 'daily' | null = null): Promise<void> => {
+    liveRun = kind === 'live' && fixed ? { seed: fixed.seed } : null;
+    if (kind !== 'live') lastLive = null;
+    dailyDate = kind === 'daily' ? beijingDate(Date.now()) : null;
     // 第一局锁危险 0；没解锁的档、角色不让选（存档被改过、链接参数）。调试参数直接开局的不卡
     const danger = (debug ? picked : Math.min(picked, dangerOpen(save))) as Danger;
     save.danger = danger;
@@ -355,6 +397,8 @@ async function boot(): Promise<void> {
     const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist });
     world = w;
     autopilot = undefined;
+    // 调试参数改过开局、快进过的局不录（录像要从第 0 拍逐拍记）
+    rec = q.has('give') || q.has('warp') ? null : new Recorder(w.setup, Date.now());
     if (import.meta.env.DEV && q.has('give')) {
       // ?give=mirror:8,gourd:8e：开局换成这几件法器（等级后面带 e 是直接进化），再加 &merge 当场开宝箱合成
       w.weapons.length = 0;
@@ -402,6 +446,7 @@ async function boot(): Promise<void> {
         tips.show('法器<b>满级</b> + 对应的<b>被动</b>，宝箱里会开出<b>进化</b>', 6000);
       },
       onEnd: (x: World) => finish(x, false),
+      beforeStep: (x: World, dir: number, choice: number) => rec?.before(x, dir, choice),
       afterStep: (x: World) => {
         tally.feed(x);
         if (liveRun && x.tick % 300 === 0) live.progress(liveRun.seed, x.tick);
@@ -438,7 +483,7 @@ async function boot(): Promise<void> {
     const r = await live.buyin(tier, seed);
     if (r.ok) {
       lastLive = liveTier = tier;
-      return startRun(LIVE_TIERS[tier].danger, 'snow', true, liveSetup(tier, seed));
+      return startRun(LIVE_TIERS[tier].danger, 'snow', true, liveSetup(tier, seed), 'live');
     }
     const o = r.outcome;
     const why =
