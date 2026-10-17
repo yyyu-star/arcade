@@ -114,6 +114,8 @@ export class Menu {
   /** 打开开局准备（角色、咒印、加成） */
   onPrep: (tab: 'char' | 'curse' | 'perk') => void = () => undefined;
   onClick: () => void = () => undefined;
+  /** 图鉴和成就 */
+  onCodex: () => void = () => undefined;
 
   constructor(parent: HTMLElement, toggles: Toggle[]) {
     this.root = layer(parent, 'yx-menu');
@@ -140,6 +142,7 @@ export class Menu {
         this.renderBest();
       },
       settings: () => this.root.classList.toggle('show-settings'),
+      codex: () => this.onCodex(),
       home: () => {
         location.href = '/';
       },
@@ -163,7 +166,8 @@ export class Menu {
     const top =
       `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>` +
       `<button type="button" class="yx-btn yx-gear" data-a="settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-.1-1.3 2-1.6-2-3.4-2.4.9a8 8 0 0 0-2.2-1.3L15 2.8h-4l-.4 2.5a8 8 0 0 0-2.2 1.3L6 5.7 4 9.1l2 1.6L5.9 12l.1 1.3-2 1.6 2 3.4 2.4-.9a8 8 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a8 8 0 0 0 2.2-1.3l2.4.9 2-3.4-2-1.6.1-1.3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
-      `<div class="yx-settings">${togglesHtml(this.toggles)}</div>`;
+      `<div class="yx-settings">${togglesHtml(this.toggles)}</div>` +
+      (s.firstTime ? '' : '<button type="button" class="yx-btn yx-codex-btn" data-a="codex">图鉴</button>');
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     if (s.firstTime) {
       this.ui.innerHTML =

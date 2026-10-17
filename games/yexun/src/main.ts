@@ -8,8 +8,11 @@ import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
 import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
 import { startCloud } from './platform/cloud.ts';
+import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
+import { rewardCoins } from './content/achievements.ts';
+import { AchievementToast, Codex } from './view/ui/codex.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
@@ -106,6 +109,15 @@ async function boot(): Promise<void> {
   const confirm = new Confirm(stage);
   const tips = new Tips(stage);
   const prep = new Prep(stage, (k) => icon(k));
+  // 成就和图鉴（5c）：累计统计存 yexun.records；每局按事件计数，结算时一起算解锁
+  let records = loadRecords();
+  let tally = new RunTally();
+  const codex = new Codex(stage, (k) => icon(k), () => records);
+  const toast = new AchievementToast(stage);
+  codex.onClose = () => {
+    codex.hide();
+    menu.show(menuState());
+  };
   /** 流水 id 的随机后缀：两台设备同时买同一样东西也不会撞成一条（画面层，不进规则核心） */
   const nonce = (): string => Math.random().toString(36).slice(2, 10);
   const prepState = (): PrepState => ({
@@ -157,6 +169,10 @@ async function boot(): Promise<void> {
     menu.show(menuState());
   };
   menu.onPrep = (tab) => prep.show(tab, prepState());
+  menu.onCodex = () => {
+    menu.hide();
+    codex.show();
+  };
   menu.onClick = () => sfx.play('click');
 
   const game = new Phaser.Game({
@@ -256,6 +272,12 @@ async function boot(): Promise<void> {
     const seconds = Math.min(w.tick, DAWN_TICK) / 30;
     // 认输的局算一局、铜钱照拿，但不算纪录
     const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: w.won, quit, ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
+    // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
+    const ach = applyRun(records, summarize(w, tally, quit));
+    records = ach.records;
+    saveRecords(records);
+    for (const id of ach.unlocked) grantCoins(save, `ach:${id}`, rewardCoins([id]));
+    toast.show(ach.unlocked);
     showPlay(false);
     const label = `${DANGERS[w.setup.danger].name}${w.setup.curses?.length ? ` · 咒印 ${w.setup.curses.length}` : ''}${w.setup.assist ? ' · 降低伤害' : ''}`;
     result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: got.coins, coinsTotal: coins(save), label, record: got.record, build: buildRows(w) });
@@ -275,6 +297,7 @@ async function boot(): Promise<void> {
     menu.hide();
     result.hide();
     ended = false;
+    tally = new RunTally();
     if (scene) game.scene.remove('game');
     banners.clear();
     input.reset();
@@ -306,6 +329,7 @@ async function boot(): Promise<void> {
         if (w.tick >= warp && (!stopAtCards || w.phase === 'choose')) break;
         const a = bot.act(w);
         step(w, a.dir, w.phase === 'choose' ? a.choice : -1);
+        tally.feed(w);
       }
     }
     const firstRun = save.runs === 0;
@@ -330,6 +354,7 @@ async function boot(): Promise<void> {
         tips.show('法器<b>满级</b> + 对应的<b>被动</b>，宝箱里会开出<b>进化</b>', 6000);
       },
       onEnd: (x: World) => finish(x, false),
+      afterStep: (x: World) => tally.feed(x),
     });
     scene = game.scene.getScene('game') as unknown as GameScene;
     // 引导第 1 条：开局"拖动走位"，一动就收起（0–10 秒）

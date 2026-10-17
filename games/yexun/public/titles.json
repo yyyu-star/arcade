@@ -1,0 +1,50 @@
+{
+  "dawn_hard": {
+    "name": "老道",
+    "desc": "在危险 4 或更高撑到天亮"
+  },
+  "dawn_20": {
+    "name": "守夜人",
+    "desc": "一共撑到天亮 20 次"
+  },
+  "kills_2000": {
+    "name": "割草宗师",
+    "desc": "一局斩 2,000 只"
+  },
+  "total_50000": {
+    "name": "万鬼克星",
+    "desc": "一共斩 50,000 只"
+  },
+  "boss_kill": {
+    "name": "伏尸",
+    "desc": "打倒尸王"
+  },
+  "boss_hard": {
+    "name": "镇尸人",
+    "desc": "在危险 4 或更高打倒尸王"
+  },
+  "kill_regular_all": {
+    "name": "百鬼录",
+    "desc": "每种常规怪都打倒过"
+  },
+  "kill_elite_all": {
+    "name": "精英克星",
+    "desc": "每种精英怪都打倒过"
+  },
+  "evolve_all": {
+    "name": "万法归宗",
+    "desc": "累计让全部法器都进化过"
+  },
+  "merge_all": {
+    "name": "合成宗师",
+    "desc": "三种合成都做过"
+  },
+  "no_hit": {
+    "name": "不沾尘",
+    "desc": "撑到天亮，一下都没挨"
+  },
+  "close_call": {
+    "name": "命硬",
+    "desc": "撑到天亮时，血只剩一成以下"
+  }
+}
