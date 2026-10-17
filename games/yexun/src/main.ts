@@ -38,7 +38,7 @@ import { Vault } from './view/ui/vault.ts';
 import { settleRaid } from './explore/settle.ts';
 import { recordRaid, vaultProgress } from './explore/vault.ts';
 import { TREASURES } from './content/treasures.ts';
-import { RAID_TEMPLATES, type RaidTemplateId } from './content/explore.ts';
+import { RAID_LIVE, RAID_TEMPLATES, type RaidLiveTemplate, type RaidTemplateId } from './content/explore.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
 import { GameScene } from './view/game/GameScene.ts';
@@ -180,7 +180,7 @@ async function boot(): Promise<void> {
     result.onShare = () => void prepared.share();
   };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
-  let lastLive: LiveTier | null = null;
+  let lastLive: { tier: LiveTier; raid?: RaidLiveTemplate } | null = null;
   let liveTier: LiveTier = 'small';
   /** 结回以后的那一份记录 → 结算页那一行 */
   const recordText = (rec: Readonly<LiveRecord> | null): string => {
@@ -398,13 +398,14 @@ async function boot(): Promise<void> {
   stage.addEventListener('pointerdown', () => banners.skipReveal());
 
   /** 夜探结算：撤出全带走、换铜钱；倒下 / 迷失丢包，铜钱剩一半（教学镇不丢）；宝物记进藏宝阁 */
-  const finishRaid = (w: World, quit: boolean, seconds: number): void => {
+  const finishRaid = (w: World, quit: boolean, seconds: number, liveSeed: number | null = null): void => {
     const raid = w.raid!;
     const st = settleRaid(raid, w.coins);
     const rr = recordRaid(save.vault, st);
     save.vault = rr.vault;
     if (raid.teach) save.raidDone = true;
-    if (st.coins > 0) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
+    // 实盘的夜探不发铜钱（筹码走钱包，按撤出时带出的价值结回），宝物照样记进藏宝阁
+    if (st.coins > 0 && liveSeed === null) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
     writeSave(save);
     showPlay(false);
     const view = (code: number) => {
@@ -419,13 +420,24 @@ async function boot(): Promise<void> {
       seconds,
       kills: w.kills,
       level: w.level,
-      coins: st.coins,
+      coins: liveSeed === null ? st.coins : 0,
       coinsTotal: coins(save),
-      label: `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}`,
+      label: liveSeed === null ? `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}` : `实盘 · 夜探 · ${RAID_TEMPLATES[tpl].name} · ${LIVE_TIERS[liveTier].name}档`,
+      ...(liveSeed === null ? {} : { live: '正在结回…' }),
       record: false,
       build: buildRows(w),
       raid: { outcome: st.outcome === 'escaped' || st.outcome === 'lost' ? st.outcome : 'dead', teach: raid.teach, kept: st.kept.map(view), lost: st.lost.map(view), value: st.value },
     });
+    if (liveSeed !== null) void live.finishRaid(liveSeed, st.bp).then(showLiveResult);
+  };
+  /** 实盘结回完：结算页写结果，结完的记录清掉 */
+  const showLiveResult = (): void => {
+    const rec = live.record;
+    result.setLive(recordText(rec));
+    if (rec?.step === 'done') {
+      live.markTold();
+      live.clearFinished();
+    }
   };
   const finish = (w: World, quit: boolean): void => {
     if (ended) return;
@@ -438,20 +450,19 @@ async function boot(): Promise<void> {
     const run = archive(w, quit);
     social.setWhere('menu');
     offerShare(liveRun ? null : run);
+    if (liveRun && w.raid) {
+      // 夜探实盘：撤出才有钱（按带出的价值），倒下、迷失、认输都是 0
+      const seed = liveRun.seed;
+      liveRun = null;
+      return finishRaid(w, quit, seconds, seed);
+    }
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
       liveRun = null;
       showPlay(false);
       result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: 0, label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
-      void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(() => {
-        const rec = live.record;
-        result.setLive(recordText(rec));
-        if (rec?.step === 'done') {
-          live.markTold();
-          live.clearFinished();
-        }
-      });
+      void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(showLiveResult);
       return;
     }
     if (w.raid) return finishRaid(w, quit, seconds);
@@ -651,12 +662,15 @@ async function boot(): Promise<void> {
     save.liveTier = tier;
     writeSave(save);
   };
-  const startLive = async (tier: LiveTier): Promise<void> => {
+  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate): Promise<void> => {
+    if (raid && tier === 'luxe') return;
     const seed = (Math.random() * 0x100000000) >>> 0;
-    const r = await live.buyin(tier, seed);
+    const r = await live.buyin(tier, seed, raid);
     if (r.ok) {
-      lastLive = liveTier = tier;
-      return startRun(LIVE_TIERS[tier].danger, 'snow', true, liveSetup(tier, seed), 'live');
+      liveTier = tier;
+      lastLive = raid ? { tier, raid } : { tier };
+      const danger = raid ? (RAID_LIVE.danger[tier as Exclude<LiveTier, 'luxe'>] as Danger) : LIVE_TIERS[tier].danger;
+      return startRun(danger, 'snow', true, liveSetup(tier, seed, raid), 'live');
     }
     const o = r.outcome;
     const why =
@@ -678,6 +692,7 @@ async function boot(): Promise<void> {
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
   menu.onLive = (tier) => void startLive(tier);
+  menu.onRaidLive = (tier, tpl) => void startLive(tier, tpl);
   // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
   menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
     const ms = menuState();
@@ -696,7 +711,7 @@ async function boot(): Promise<void> {
     vault.show();
   };
   result.onAgain = () => {
-    if (lastLive) return void startLive(lastLive);
+    if (lastLive) return void startLive(lastLive.tier, lastLive.raid);
     if (world?.setup.mode === 'raid') return menu.onRaid(world.setup.raid?.template ?? 'guzhen', world.setup.danger);
     if (dailyDate) return void startDaily();
     wantEndless = !!world?.setup.endless;
