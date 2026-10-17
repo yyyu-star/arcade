@@ -25,7 +25,7 @@ export const ARENA = { w: 3200, h: 3200 };
  * 升级曲线：每段每级多要多少魂（DESIGN.md 13.3：前 3 分钟 ≥ 10 次、5 分钟前 ≥ 16 次，全局 35–45 次，后半段每分钟 1.5–2 次）。
  * 前段平缓（开局升得快），midFrom 级以后陡一截，lateFrom 级以后再陡。
  */
-export const XP_CURVE = { first: 20, early: 15, midFrom: 20, mid: 54, lateFrom: 34, late: 110 };
+export const XP_CURVE = { first: 20, early: 15, midFrom: 20, mid: 50, lateFrom: 34, late: 110 };
 
 /** 从 level 升到 level + 1 要多少魂 */
 export function xpNeed(level: number): number {
