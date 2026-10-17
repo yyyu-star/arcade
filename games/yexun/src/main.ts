@@ -511,7 +511,8 @@ async function boot(): Promise<void> {
         const [id, lv = '1'] = part.split(':');
         if (id && id in WEAPONS) grantWeapon(w, id as WeaponId, parseInt(lv, 10), lv.endsWith('e'));
       }
-      if (q.has('merge')) for (let k = 0; k < 3; k++) openChestNow(w);
+      // &merge=late：第 28 拍才开宝箱（带合成演出，截图看横幅用）；平时 &merge 开局就合成
+      if (q.has('merge') && q.get('merge') !== 'late') for (let k = 0; k < 3; k++) openChestNow(w);
     }
     if (import.meta.env.DEV && (q.has('auto') || q.has('warp'))) {
       const { Bot } = await import('../tools/bots.ts');
@@ -554,6 +555,7 @@ async function boot(): Promise<void> {
       beforeStep: (x: World, dir: number, choice: number) => rec?.before(x, dir, choice),
       afterStep: (x: World) => {
         tally.feed(x);
+        if (import.meta.env.DEV && x.tick === 28 && q.get('merge') === 'late') openChestNow(x);
         if (liveRun && x.tick % 300 === 0) live.progress(liveRun.seed, x.tick);
       },
     });

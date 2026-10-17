@@ -61,10 +61,12 @@ export class Banners {
   }
 
   /** 宝箱 / 进化演出：图标 + 名字，全屏闪一下（进化），≤ 2 秒或点一下结束，结束时回调 */
-  reveal(icon: string, title: string, sub: string, evolve: boolean, done: () => void): void {
+  reveal(icon: string, title: string, sub: string, evolve: boolean, done: () => void, tint?: string): void {
     this.endReveal();
     const el = document.createElement('div');
-    el.className = `yx-reveal${evolve ? ' evolve' : ''}`;
+    el.className = `yx-reveal${evolve ? ' evolve' : ''}${tint ? ' tinted' : ''}`;
+    // 合成有自己的颜色（双修各一种）：标题、光芒、底光都跟着换
+    if (tint) el.style.setProperty('--tint', tint);
     el.innerHTML = `<div class="rays"></div><img alt="" src="${icon}"><span class="t">${title}</span><span class="s">${sub}</span><span class="k">点一下继续</span>`;
     this.root.appendChild(el);
     if (evolve) this.whiteFlash();

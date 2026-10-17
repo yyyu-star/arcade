@@ -63,6 +63,10 @@ export const Ev = {
   Prop: 29,
   /** 符咒炸弹炸开：x, y, b = 半径 */
   Bomb: 30,
+  /** 符剑合璧：飞剑给怪贴了一张符：x, y；a = 1 炸了，b = 半径 */
+  Seal: 33,
+  /** 焚天金钟：外圈火环烧一下：x, y, b = 半径 */
+  FireRing: 34,
   // 40–54 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,
