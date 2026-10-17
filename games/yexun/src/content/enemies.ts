@@ -37,11 +37,11 @@ export interface EnemyDef {
 }
 
 export const ENEMIES: readonly EnemyDef[] = [
-  { kind: 'paper', code: 0, hp: 5, speed: 1.7, dmg: 5, r: 13, xp: 1, steady: 0, vs: { 火: 1.5, 符: 0.8 } },
+  { kind: 'paper', code: 0, hp: 5, speed: 1.7, dmg: 5, r: 13, xp: 1, steady: 0, vs: { 火: 1.5 } },
   { kind: 'wisp', code: 1, hp: 4, speed: 2.5, dmg: 4, r: 11, xp: 1, steady: 0 },
   { kind: 'jiangshi', code: 2, hp: 18, speed: 1.45, dmg: 9, r: 17, xp: 2, steady: 0.3, vs: { 剑: 0.65, 火: 1.4, 镇: 1.5, 符: 0.85 } },
   { kind: 'lantern', code: 3, hp: 14, speed: 1.2, dmg: 6, r: 15, xp: 2, steady: 0.1, vs: { 剑: 0.6, 水: 1.5, 镇: 1.3 } },
-  { kind: 'fox', code: 4, hp: 12, speed: 1.9, dmg: 8, r: 14, xp: 2, steady: 0.1, vs: { 木: 0.9, 镇: 1.3 } },
+  { kind: 'fox', code: 4, hp: 12, speed: 1.9, dmg: 8, r: 14, xp: 2, steady: 0.1, vs: { 木: 0.9, 镇: 1.15 } },
   { kind: 'shishi', code: 5, hp: 320, speed: 1.15, dmg: 15, r: 30, xp: 20, steady: 0.9, elite: true, vs: { 剑: 0.5 } },
   { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 剑: 0.6, 火: 1.25, 镇: 1.3 } },
   { kind: 'boss', code: 7, hp: 20000, speed: 1.55, dmg: 19, r: 44, xp: 0, steady: 0.97, boss: true, vs: { 剑: 0.8, 火: 1.6, 镇: 1.5, 木: 0.85 } },
@@ -50,7 +50,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'water', code: 9, hp: 22, speed: 0.9, dmg: 6, r: 15, xp: 2, steady: 0.5, vs: { 土: 1.5, 镇: 1.3 } },
   { kind: 'bone', code: 10, hp: 16, speed: 1.6, dmg: 7, r: 14, xp: 1, steady: 0.2, vs: { 剑: 0.7, 镇: 1.4, 木: 0.8 } },
   { kind: 'bat', code: 11, hp: 6, speed: 2.7, dmg: 4, r: 10, xp: 1, steady: 0 },
-  { kind: 'scarecrow', code: 12, hp: 55, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8, vs: { 剑: 0.6, 火: 1.6 } },
+  { kind: 'scarecrow', code: 12, hp: 55, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8, vs: { 剑: 0.6, 火: 1.4 } },
   { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
   { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2, vs: { 剑: 0.5, 火: 1.5, 镇: 1.3 } },
   { kind: 'whitefox', code: 15, hp: 500, speed: 1.7, dmg: 11, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.3, 符: 1.25 } },
