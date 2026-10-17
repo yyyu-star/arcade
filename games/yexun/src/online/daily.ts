@@ -3,6 +3,7 @@
  * 全部从北京时间的日期确定性地派生（同一天所有人一样，换设备也一样），用核心的 sfc32，不碰 Math.random。
  * 守夜、夜探各一个榜：平台的子榜 vigil / raid，榜名 daily-YYYY-MM-DD-<子榜>。
  */
+import type { RaidTemplateId } from '../content/explore.ts';
 import { Rng, hash32 } from '../core/rng.ts';
 import type { MapId } from '../content/maps.ts';
 import { CURSE_IDS, type CurseId, type OnlineSetup, type RunMode } from './types.ts';
@@ -13,6 +14,8 @@ export const DAILY_DANGER = 2;
 export const DAILY_RULES = 0;
 
 export const DAILY_MAPS: readonly MapId[] = ['snow', 'yizhuang'];
+/** 夜探每日挑战抽的模板（不抽教学镇） */
+export const DAILY_RAID: readonly RaidTemplateId[] = ['guzhen', 'dukou', 'shansi'];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -64,7 +67,11 @@ export function dailyPlan(date: string, mode: RunMode): DailyPlan {
   const pool = [...CURSE_IDS];
   const curses: CurseId[] = [];
   for (let i = 0; i < n; i++) curses.push(pool.splice(rng.int(pool.length), 1)[0]!);
-  const setup: OnlineSetup = { seed, mode, difficulty: 'normal', map, danger: DAILY_DANGER, curses };
+  // 夜探的模板最后抽：守夜那天的图和咒印不受影响（快照测试锁着）。固定小道士、不带加成（DESIGN.md 5.7）
+  const setup: OnlineSetup =
+    mode === 'raid'
+      ? { seed, mode, danger: DAILY_DANGER, curses, character: 'xiaodao', perks: {}, raid: { template: DAILY_RAID[rng.int(DAILY_RAID.length)]! } }
+      : { seed, mode, map, danger: DAILY_DANGER, curses, character: 'xiaodao', perks: {} };
   return { date, mode, setup, curses, boardId: dailyBoardId(date, mode) };
 }
 
@@ -72,5 +79,5 @@ export function dailyPlan(date: string, mode: RunMode): DailyPlan {
 export function isDailySetup(date: string | null | undefined, s: OnlineSetup): boolean {
   if (!date || !DATE_RE.test(date)) return false;
   const p = dailyPlan(date, s.mode).setup;
-  return p.seed === s.seed && p.map === s.map && p.danger === s.danger && !s.endless && p.curses.join() === s.curses.join();
+  return p.seed === s.seed && p.map === s.map && p.danger === s.danger && !s.endless && (p.curses ?? []).join() === (s.curses ?? []).join() && p.raid?.template === s.raid?.template && !s.assist && Object.keys(s.perks ?? {}).length === 0;
 }

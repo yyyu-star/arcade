@@ -3,7 +3,7 @@
  * （和实打同一个场景，只是输入来自录像，不读键盘 / 摇杆）。
  * 规则版本和现在不一样的录像照放，但标 `outdated`（"旧版本，可能放不对"）；放完（或放歪了）用最后的状态指纹对一下，`exact` 告诉你放得对不对。
  */
-import { createWorld, fingerprint, RULES_VERSION, step, TICKS_PER_SECOND, type Setup, type World } from '../core/index.ts';
+import { createWorld, fingerprint, RULES_VERSION, step, TICKS_PER_SECOND, type World } from '../core/index.ts';
 import { decodeDirs, decodePicks, type ReplayRecord } from './format.ts';
 
 export type Speed = 1 | 2 | 4;
@@ -36,7 +36,7 @@ export class ReplayPlayer {
     this.picks = picks;
     this.outdated = record.rules !== RULES_VERSION;
     // 设置快照里多出来的字段（danger、curses 等）核心认了就用，不认就被忽略
-    this.world = createWorld(record.setup as unknown as Setup);
+    this.world = createWorld(record.setup);
   }
 
   /** 录像坏了（方向串解不开）返回 null */

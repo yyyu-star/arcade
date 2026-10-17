@@ -3,8 +3,7 @@
  * 核心的 Setup 以后会加 danger / curses / endless / character（第 8 步接线时统一），这里先按同样的字段名声明一份，
  * 接线时把 OnlineSetup 换成核心的 Setup 即可；字段名不变，录像和每日挑战就不用改。
  */
-import type { Difficulty } from '../content/waves.ts';
-import type { MapId } from '../content/maps.ts';
+import type { Setup } from '../core/state.ts';
 
 /** 咒印：每日挑战从里面按日期挑 1–2 条（怪更快、少回血、禁用刷新、怪更多、精英更多、夜更黑） */
 export const CURSE_IDS = ['fast', 'noheal', 'noreroll', 'more', 'elites', 'dark'] as const;
@@ -26,18 +25,8 @@ export type RunMode = 'vigil' | 'raid';
 export type Danger = 0 | 1 | 2 | 3 | 4 | 5;
 
 /** 开一局的设置快照（录像里存的就是它）。现在核心的 Setup 只认前面几项，多出来的字段先被忽略 */
-export interface OnlineSetup {
-  seed: number;
-  mode: RunMode;
-  /** 现在的核心还按难度三档走；danger 接进核心后去掉 */
-  difficulty: Difficulty;
-  map?: MapId;
-  firstRun?: boolean;
-  danger: number;
-  curses: CurseId[];
-  endless?: boolean;
-  character?: string;
-}
+/** 开局设置就是核心的 Setup（录像、每日挑战、交分都按它） */
+export type OnlineSetup = Setup;
 
 /** 一局打完的小结（结算页、交分、分享卡、录像都从它来） */
 export interface RunSummary {

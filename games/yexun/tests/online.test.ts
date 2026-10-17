@@ -11,7 +11,7 @@ function run(over: Partial<Omit<RunSummary, 'setup'>> & { setup?: Partial<Online
   const { setup, ...rest } = over;
   return {
     runId: 'r1',
-    setup: { seed: 1, mode: 'vigil', difficulty: 'normal', danger: 2, curses: [], ...setup },
+    setup: { seed: 1, mode: 'vigil', danger: 2, curses: [], ...setup },
     won: false,
     quit: false,
     bossKilled: false,
@@ -108,7 +108,9 @@ describe('每日挑战', () => {
         seen.add(c);
       });
       counts.add(p.curses.length);
-      maps.add(p.setup.map);
+      // 夜探那天抽的是模板（没有守夜的图）
+      if (p.mode === 'vigil') maps.add(p.setup.map);
+      else expect(['guzhen', 'dukou', 'shansi']).toContain(p.setup.raid?.template);
     }
     expect(seen.size).toBe(6);
     expect(counts.size).toBe(2);

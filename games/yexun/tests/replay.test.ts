@@ -7,7 +7,7 @@ import { ReplayPlayer } from '../src/replay/player.ts';
 import { Recorder } from '../src/replay/recorder.ts';
 import { addReplay, BUDGET_CHARS, loadReplays, RECENT_KEEP, REPLAYS_KEY, sizeOf, storeReplay, type KV } from '../src/replay/store.ts';
 
-const setupOf = (seed: number): OnlineSetup => ({ seed, mode: 'vigil', difficulty: 'normal', danger: 2, curses: [] });
+const setupOf = (seed: number): OnlineSetup => ({ seed, mode: 'vigil', danger: 2, curses: [] });
 
 /** 带种子的伪随机"玩家"：一阵一阵换方向，升级时随机选卡、偶尔刷新 / 跳过 */
 function playAndRecord(seed: number, ticks: number): { w: World; rec: ReplayRecord } {

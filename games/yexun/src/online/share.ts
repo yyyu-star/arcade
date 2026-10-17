@@ -39,7 +39,7 @@ export function buildShareCard(r: RunSummary, player?: { name: string; badge?: s
     { label: raid ? '用时' : '铜钱', value: raid ? mmss(r.seconds) : n(r.coins) },
   ];
   const parts: string[] = [];
-  if (r.setup.curses.length) parts.push(`咒印：${r.setup.curses.map((c) => CURSE_NAMES[c]).join('、')}`);
+  if (r.setup.curses?.length) parts.push(`咒印：${r.setup.curses.map((c) => CURSE_NAMES[c]).join('、')}`);
   if (r.bossKilled) parts.push('斩了尸王');
   else if (r.build?.length) parts.push(r.build.slice(0, 3).join(' · '));
   return { game: '夜巡', title: shareTitle(r), big, stats, line: parts.join('；'), accent: '#2c3a6b', ...(player ? { player } : {}) };
