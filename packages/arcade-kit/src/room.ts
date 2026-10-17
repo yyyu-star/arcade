@@ -18,7 +18,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import type { RoomEffect, RoomGame, RoomSetup } from './game.js';
-import { type Identity, KIT_HOST, meterStub, parseIdentity } from './internal.js';
+import { type Identity, KIT_HOST, LIMITED_HEADER, MISS_HEADER, meterStub, parseIdentity } from './internal.js';
 import type { MeterEnv, MeterLevel, RoomMeter } from './meter.js';
 import { ENTROPY_WORDS } from './rng.js';
 import {
@@ -60,7 +60,9 @@ export interface RoomLimits {
    * 这些重连同时算进 maxInbound，房间一生的写入总数有上限
    */
   maxJoins: number;
-  /** 没入座的连接最多几条（来看的、还没选座位的），超了 4003。入座的人不占这个数，掉线回来总能进 */
+  /**
+   * 没入座的人最多几个（来看的、还没选座位的），超了 4003。按账号算（0.14.0，以前按连接）；入座的人、房主、开打后绑过座位的人不占这个数，掉线回来总能进
+   */
   extraConnections: number;
   /** 房间最长寿命 */
   maxLifeMs: number;
@@ -311,7 +313,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private alarmToSet: number | null = null;
   private pendingInbound = 0;
   private readonly pendingBy = new Map<string, number>();
-  private readonly buckets = new WeakMap<WebSocket, { tokens: number; at: number }>();
+  /** 入站消息的令牌桶，按 userId 记（0.14.0；以前按连接，断开重连就换一个满的桶，第三轮审计） */
+  private readonly buckets = new Map<string, { tokens: number; at: number }>();
   /** 每个座位快捷短语的令牌桶（内存里；被驱逐就重置成满的，驱逐前至少空闲了一阵，本来也该满了） */
   private readonly emoteBuckets = new Map<number, { tokens: number; at: number }>();
   private emoteRateCache: EmoteRate | null = null;
@@ -389,6 +392,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     }
     const me = parseIdentity(request.headers.get('x-kit-user'));
     if (!me) return new Response('no identity', { status: 401 });
+    // 猜码超了门槛（0.14.0）：自己人照常进（断线重连不受牵连），别人不管房间在不在都回 1013，说不出房间在不在
+    if (request.headers.has(LIMITED_HEADER) && !this.insider(me.userId)) return this.refuse(CLOSE.tryLater);
     const gate = await this.newcomerGate(me.userId);
     if (gate !== null) return this.refuse(gate);
     return this.entry(() => this.join(me, url.searchParams.get('cv')));
@@ -639,7 +644,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const st = this.load();
     if (!st) {
       server.close(CLOSE.noRoom, 'no room');
-      return done();
+      // 告诉 acceptJoin 这是一次"码不存在"（0.14.0，进房猜码按人、按 IP 计数）；它转给浏览器前去掉这个头
+      return new Response(null, { status: 101, webSocket: client, headers: { [MISS_HEADER]: '1' } });
     }
     if (st.ending) {
       server.close(CLOSE.roomClosed, st.ending.reason);
@@ -653,10 +659,12 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const seat = this.seatOf(me.userId);
     const others = this.sockets().filter((o) => o !== server && attachmentOf(o));
     const mine = others.filter((o) => attachmentOf(o)!.userId === me.userId);
-    if (seat === null) {
-      // 没入座的连接单独封顶；入座的人不占这个数，旁观的再多也挡不住座位的主人回来
-      const watching = others.filter((o) => o !== server && this.seatOf(attachmentOf(o)!.userId) === null && !mine.includes(o));
-      if (watching.length >= this.limits.extraConnections) {
+    if (seat === null && !this.ownsRoom(st, me.userId)) {
+      // 没入座的单独封顶；入座的人不占这个数，旁观的再多也挡不住座位的主人回来。
+      // 0.14.0（第三轮审计）：按账号数不按连接数（一个人开几个标签页只占一个），房主和开打后绑过座位的人（离座去看的）不占也不受这个限，
+      // 不然几个陌生账号就能占满名额，让房主的朋友连进来选座都进不来
+      const watchers = new Set(others.map((o) => attachmentOf(o)!.userId).filter((u) => u !== me.userId && this.seatOf(u) === null && !this.ownsRoom(st, u)));
+      if (watchers.size >= this.limits.extraConnections) {
         server.close(CLOSE.full, 'room full');
         return done();
       }
@@ -718,7 +726,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (!st || !me || st.ending) return void ws.close(CLOSE.roomClosed, 'room closed');
     const bytes = typeof message === 'string' ? new TextEncoder().encode(message).byteLength : message.byteLength;
     if (bytes > this.limits.maxMessageBytes) return void ws.close(CLOSE.tooBig, 'message too big');
-    if (!this.takeToken(ws)) return void ws.close(CLOSE.policy, 'too fast');
+    if (!this.takeToken(me.userId)) return void ws.close(CLOSE.policy, 'too fast');
     const counted = this.countInbound(st, me.userId);
     if (counted === 'user') return void ws.close(CLOSE.userQuota, 'too many messages');
     if (counted === 'room') return this.closeRoom();
@@ -1600,6 +1608,17 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     };
   }
 
+  /** 这个房间的自己人：房主、坐着的、开打后绑过座位的。猜码超限时只放他们进（0.14.0） */
+  private insider(userId: string): boolean {
+    const st = this.load();
+    return !!st && (st.host === userId || this.seatOf(userId) !== null || this.boundOf(userId) !== null);
+  }
+
+  /** 房主，或者开打后绑过座位的人：旁观名额不算他们（0.14.0） */
+  private ownsRoom(st: Persist<S>, userId: string): boolean {
+    return st.host === userId || st.owners.includes(userId);
+  }
+
   /** 这个人开打后绑定的座位（离座了也还是它）；还没开打、没坐过为 null。 */
   private boundOf(userId: string): number | null {
     const i = this.st!.owners.indexOf(userId);
@@ -1660,15 +1679,18 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     this.send(ws, { t: 'error', code, ...(moveId ? { moveId } : {}) });
   }
 
-  /** 每个连接一个令牌桶（内存里；被驱逐后重置成满的，驱逐前至少空闲了一阵，本来也该满了）。 */
-  private takeToken(ws: WebSocket): boolean {
+  /**
+   * 每个人一个令牌桶（内存里；被驱逐后重置成满的，驱逐前至少空闲了一阵，本来也该满了）。
+   * 按人不按连接（0.14.0）：断开重连、多开几个标签页都还是同一个桶，刷不出新的 burst
+   */
+  private takeToken(userId: string): boolean {
     const now = Date.now();
-    const b = this.buckets.get(ws) ?? { tokens: this.limits.rateBurst, at: now };
+    const b = this.buckets.get(userId) ?? { tokens: this.limits.rateBurst, at: now };
     b.tokens = Math.min(this.limits.rateBurst, b.tokens + ((now - b.at) / 1000) * this.limits.ratePerSec);
     b.at = now;
     if (b.tokens < 1) return false;
     b.tokens -= 1;
-    this.buckets.set(ws, b);
+    this.buckets.set(userId, b);
     return true;
   }
 }
