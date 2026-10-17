@@ -108,6 +108,9 @@ export const THEME_CSS = `
   --gd-green: ${css(BUTTON.green.fill)}; --gd-felt: ${css(COLOR.felt)}; --gd-felt-dark: ${css(COLOR.feltDark)}; --gd-focus: ${css(FOCUS_RING)};
   --gd-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
   --gd-hit: 44px;
+  /* kit 的 DOM 组件（邀请横条、叫朋友来、分享预览、互动菜单）跟着掼蛋的红金木色（kit 0.16 的主题变量，靠继承生效） */
+  --ak-bg: rgba(43, 29, 20, 0.97); --ak-fg: #fff6e0; --ak-accent: var(--gd-red); --ak-accent-fg: #fff6e0;
+  --ak-border: var(--gd-gold); --ak-title: var(--gd-gold-light); --ak-soft: #4a3220; --ak-font: var(--gd-font);
 }
 /* 统一的按钮：常态、悬停、按下（下沉）、禁用、键盘焦点、加载中 */
 .gd-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--gd-s2); min-height: var(--gd-hit); padding: 0 var(--gd-s4);

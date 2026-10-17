@@ -60,8 +60,9 @@ export function patternTile(scene: Phaser.Scene, x: number, y: number, p: Patter
   c.add(g);
   c.add(text(scene, -w / 2 + 14, -38, p.name, { size: TYPE.body, bold: true, color: p.bomb ? COLOR.red : COLOR.ink, ox: 0 }));
   c.add(text(scene, w / 2 - 12, -38, p.note, { size: TYPE.small, color: COLOR.muted, ox: 1 }));
-  const step = p.cards.length > 5 ? 24 : 28;
+  // 示例牌放大到 54 宽（art-v3，手机上 44 宽的牌看不清点数）；6 张时总宽 184，格子 254 放得下
+  const step = p.cards.length > 5 ? 26 : 32;
   const span = (p.cards.length - 1) * step;
-  c.add(miniCards(scene, -span / 2, 16, p.cards, 44, step));
+  c.add(miniCards(scene, -span / 2, 17, p.cards, 54, step));
   return c;
 }

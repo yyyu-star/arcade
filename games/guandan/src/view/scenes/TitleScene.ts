@@ -26,6 +26,9 @@ import { standalone } from '../platform.ts';
 /** 一句玩法：不会掼蛋的人也知道这是什么 */
 const PITCH = '两两搭档，先出完牌、先打过 A 的一队赢';
 
+/** screen= 只在打开页面后的第一次主页生效，回到主页不再弹 */
+let screenOpened = false;
+
 export class TitleScene extends Phaser.Scene {
   private buttons: Record<string, Phaser.GameObjects.Container> = {};
   private cloudBtn: Phaser.GameObjects.Container | null = null;
@@ -174,6 +177,12 @@ export class TitleScene extends Phaser.Scene {
     for (const [key, icon, fn] of icons) {
       this.buttons[key] = iconButton(this, ix, 44, icon, fn, 52).setDepth(20);
       ix -= step;
+    }
+    // URL 的 screen=rules|settings|stats（截图用，params.ts）：主页起来后直接打开那个弹窗，整个页面只开一次
+    const want = icons.find(([key]) => key === app.params?.screen);
+    if (want && !screenOpened) {
+      screenOpened = true;
+      want[2]();
     }
     // 回大厅（平台首页）：主页不在对局中，直接走。单独部署没有账号和大厅：主页就是游戏首页
     this.lobbyBtn = new Button(this, 74, 40, 120, 52, '大厅', 'wood', () => goLobby(), 'home').setDepth(20);

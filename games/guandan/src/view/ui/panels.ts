@@ -17,11 +17,16 @@ export function applyAudio(s: Settings = getSettings()): void {
  * 设置：两栏（0.9.0）。手机横屏上每一行至少 44 CSS 像素高（minHit），一栏九行排不下，所以左边放声音、速度、难度、牌背，
  * 右边放互动、地方规则和"重看引导"。选项组的点按区域高到行距、宽到和邻居相接。
  */
+/** 设置、规则、战绩三个弹窗同一个宽度（art-v3）：世界宽减两边留白，封顶 1200 */
+export function panelW(scene: Phaser.Scene): number {
+  return Math.min(worldW(scene) - SPACE.xxl * 2, 1200);
+}
+
 export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => void; onClose?: () => void } = {}): Modal {
   const P = Math.max(64, minHit());
   // 高度跟着行距走：右栏最长（一行互动 + 规则标题 + 三行规则 + 按钮，约 4.6 行），上面留标题飘带、下面留边
   const PH = Math.round(4.6 * P + 200);
-  const PW = Math.min(worldW(scene) - SPACE.xxl * 2, 1200);
+  const PW = panelW(scene);
   const m = modal(scene, PW, PH, '设置', { onClose: opts.onClose });
   const b = m.body;
   const s = getSettings();
@@ -94,8 +99,16 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
 }
 
 export function openStats(scene: Phaser.Scene): Modal {
-  const m = modal(scene, 640, 440, '战绩');
+  const PW = panelW(scene);
+  const m = modal(scene, PW, 340, '战绩');
   const st = getStats();
+  if (st.games === 0 && st.deals === 0) {
+    // 空状态：还没打过，不摆一排 0
+    m.body.add(scene.add.image(-PW / 2 + 150, 10, 'avatar:me:happy').setDisplaySize(140, 140));
+    m.body.add(text(scene, -PW / 2 + 260, -24, '还没打过一局', { size: TYPE.title, bold: true, color: COLOR.ink, ox: 0 }));
+    m.body.add(text(scene, -PW / 2 + 260, 30, '打完第一局，这里会记下你的胜率、连胜和拿头游的次数', { size: TYPE.label, color: COLOR.muted, ox: 0 }));
+    return m;
+  }
   const rate = st.games > 0 ? Math.round((st.wins / st.games) * 100) : 0;
   const cells: [string, string, number][] = [
     ['局数', String(st.games), COLOR.ink],
@@ -105,14 +118,17 @@ export function openStats(scene: Phaser.Scene): Modal {
     ['打过副数', String(st.deals), COLOR.ink],
     ['拿头游', String(st.firsts), COLOR.red],
   ];
+  // 一排六格，格宽跟着面板宽
+  const gap = SPACE.md;
+  const cw = Math.min(170, (PW - SPACE.xxl * 2 - gap * 5) / 6);
   cells.forEach(([label, val, color], i) => {
-    const x = -190 + (i % 3) * 190;
-    const y = -70 + Math.floor(i / 3) * 150;
+    const x = (i - 2.5) * (cw + gap);
+    const y = 10;
     const g = scene.add.graphics();
-    g.fillStyle(0xf3e6c9, 1).fillRoundedRect(x - 80, y - 58, 160, 120, 14);
-    g.lineStyle(2, 0xd8c39a, 1).strokeRoundedRect(x - 80, y - 58, 160, 120, 14);
+    g.fillStyle(0xf3e6c9, 1).fillRoundedRect(x - cw / 2, y - 64, cw, 128, 14);
+    g.lineStyle(2, 0xd8c39a, 1).strokeRoundedRect(x - cw / 2, y - 64, cw, 128, 14);
     m.body.add(g);
-    m.body.add(text(scene, x, y - 12, val, { size: TYPE.big + 4, bold: true, color, font: 'num' }));
+    m.body.add(text(scene, x, y - 14, val, { size: TYPE.big + 4, bold: true, color, font: 'num' }));
     m.body.add(text(scene, x, y + 38, label, { size: TYPE.label, color: COLOR.muted }));
   });
   return m;
@@ -137,7 +153,7 @@ export function confirm(scene: Phaser.Scene, msg: string, okLabel: string, onOk:
 
 /** 规则页：三页（牌型 / 大小 / 怎么打），全部用图示，文字只做标注。level：牌桌上打开时传本副级数，例子跟着变；标题页没有牌局，用 7 举例。 */
 export function openRules(scene: Phaser.Scene, onClose?: () => void, level?: number): Modal {
-  const m = modal(scene, 1200, 640, '规则', { onClose });
+  const m = modal(scene, panelW(scene), 640, '规则', { onClose });
   const b = m.body;
   const page = scene.add.container(0, 0);
   b.add(page);

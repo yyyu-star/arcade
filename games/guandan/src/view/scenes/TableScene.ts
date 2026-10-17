@@ -292,6 +292,8 @@ export class TableScene extends Phaser.Scene {
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
       send,
       canSend: () => seated() && free(),
+      // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒
+      hintSeat: () => [1, 3].find((v) => !this.isMe(v) && !this.trick.occupied(v)) ?? null,
       enabled: () => getSettings().taunts,
       scope: () => net?.code ?? 'solo',
       localBots: !net,
