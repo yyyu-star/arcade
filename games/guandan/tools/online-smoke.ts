@@ -276,12 +276,15 @@ async function main(): Promise<void> {
     await host.page.waitForTimeout(900);
     await shot(host, '52c-online-prop');
     notes.push('道具：1 号点房主头像扔番茄，房主头像上糊了一层');
-    // 牌桌上也能叫朋友（0.6.1）：无头浏览器没有系统分享，走复制链接或者把链接写出来，不报错
+    // 牌桌上也能叫朋友（0.6.1；0.13.1 起是 kit 的"叫朋友来"面板）：打开、按 Esc 关掉，不报错。本地栈的假平台没有好友接口，面板说"好友列表暂时打不开"
     const inv = (await host.page.evaluate(() => window.__game!.controls()))['invite']!;
     assert(inv, '好友房牌桌上应该有"叫朋友来"');
     await host.page.mouse.click(inv.x, inv.y);
-    await host.page.waitForTimeout(500);
-    notes.push('牌桌上点"叫朋友来"：不报错');
+    await host.page.waitForSelector('#arcade-invite-panel [data-key="invite:copy"]', { timeout: 10_000 });
+    await shot(host, '52d-online-invite');
+    await host.page.keyboard.press('Escape');
+    assert(!(await host.page.$('#arcade-invite-panel')), '按 Esc 后"叫朋友来"面板应该关掉');
+    notes.push('牌桌上点"叫朋友来"：出面板，Esc 关掉');
     // iPhone 带着"上次被杀"标记进来：省内存档（1 倍渲染）
     const iosScale = await clients[1]!.page.evaluate(() => window.__game!.renderScale);
     assert(iosScale === 1, `iPhone 上次被杀过，这次应该是省内存档 1 倍（实际 ${iosScale}）`);

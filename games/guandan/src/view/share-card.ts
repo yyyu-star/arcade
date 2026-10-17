@@ -1,9 +1,9 @@
 /**
  * 结算页的"分享"（0.13.0，仓库根 docs/social.md 1.1）：把这一局 / 这一场的结果整理成 kit 分享卡要的数据，画和分享由 kit 的 `arcade-kit/share` 做。
  * 卡上只有公开的东西（胜负、名次、炸了几次、称号、实盘的分），不画任何人的手牌；那句话从模板拼，不收玩家的自由文字。
- * 拼数据的部分是纯函数（tests/share-card.test.ts），点按钮才去碰 kit 的 DOM。
+ * 拼数据的部分是纯函数（tests/share-card.test.ts）；结算页出来时才去碰 kit 的画布和 DOM。
  */
-import type { ShareCard } from 'arcade-kit/share';
+import type { PreparedShare, ShareCard } from 'arcade-kit/share';
 import { TITLE_INFO, type MatchLog, type Title } from '../stake/titles.ts';
 import { TIER_NAME, signed } from './stake-text.ts';
 
@@ -63,12 +63,25 @@ export function shareUrl(origin: string, path: string, room: string | null): str
 
 let icon: HTMLImageElement | null = null;
 
-/** 点"分享"：画卡、调系统分享或出预览。图标用 favicon（同源，画进画布不污染）；没加载好 kit 会跳过图标照常出卡 */
-export async function shareResult(card: ShareCard, room: string | null): Promise<void> {
-  const { shareCard } = await import('arcade-kit/share');
+/**
+ * 结算页一出来就先画卡（0.13.1，kit 0.12.3 的 prepareShare）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。
+ * 返回"分享"按钮的点击处理：卡画好了就在点击里同步调系统分享，还没画好等画完再试（调不起来 kit 退回预览）。
+ * 图标用 favicon（同源，画进画布不污染）；没加载好 kit 跳过图标照常出卡
+ */
+export function prepareResult(card: ShareCard, room: string | null): () => void {
   if (!icon) {
     icon = new Image();
     icon.src = './favicon.svg';
   }
-  await shareCard({ ...card, art: icon }, { url: shareUrl(location.origin, location.pathname, room), fileName: 'guandan.png' });
+  const art = icon;
+  let ready: PreparedShare | null = null;
+  const loading = import('arcade-kit/share').then(({ prepareShare }) => {
+    ready = prepareShare({ ...card, art }, { url: shareUrl(location.origin, location.pathname, room), fileName: 'guandan.png' });
+    return ready;
+  });
+  return () => {
+    // 前面不能有 await：这一行就在点击的处理函数里
+    if (ready) void ready.share();
+    else void loading.then((p) => p.share());
+  };
 }

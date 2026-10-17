@@ -11,7 +11,7 @@ import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../stake/i
 import { ROOM_STAKE_TEXT, STAKE_TEXT, TIER_NAME, fmtChips } from './stake-text.ts';
 import { fetchWallet } from './stake.ts';
 import { standalone } from './platform.ts';
-import { presenceNow } from './social.ts';
+import { openInvitePanel, presenceNow } from './social.ts';
 import { getNick, setNick } from './store.ts';
 import { loginUrl } from './ui/cloud.ts';
 import { mountThemeCss } from './theme.ts';
@@ -180,29 +180,6 @@ async function create(stake: TierId | null): Promise<void> {
  * 叫朋友来：手机上弹系统分享（微信、短信……），不支持的复制链接；朋友点开链接就进这个房间（没登录的先登录、登录完回来），
  * 开打了就接管电脑的座位。返回要给人看的一句话（弹了系统分享、或者自己关掉了分享面板时没有）。大厅和牌桌（0.6.1）共用
  */
-export async function shareRoom(code: string): Promise<string | null> {
-  const url = `${window.location.origin}${window.location.pathname}?room=${code}`;
-  const msg = `来打掼蛋！房间码 ${code}`;
-  if (typeof navigator.share === 'function') {
-    try {
-      await navigator.share({ title: '掼蛋好友房', text: msg, url });
-      return null;
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return null;
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(`${msg}：${url}`);
-    return '链接复制好了，发给朋友，点开就进房';
-  } catch {
-    return `把这个链接发给朋友：${url}`;
-  }
-}
-
-async function share(code: string): Promise<void> {
-  const note = await shareRoom(code);
-  if (note) setNote(note);
-}
 
 /** 进房（含房主自己）：连上后画房间。prefer：再来一场跟过来的，想坐的真实座位 */
 export function join(code: string, host: boolean, prefer: number | null = null): void {
@@ -261,7 +238,7 @@ function renderRoom(): void {
   head.appendChild(el('span', {}, '房间码'));
   head.appendChild(el('span', { class: 'ol-code', id: 'ol-room-code' }, s.code));
   c.appendChild(head);
-  if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void share(s.code), 'gd-big', 'ol-share'));
+  if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void openInvitePanel(s.code), 'gd-big', 'ol-share'));
   // 实盘房间：开房时定的档位，进房的人都看得到
   const stake = parseRoomOpts(s.room?.opts)?.stake ?? null;
   if (stake) {
