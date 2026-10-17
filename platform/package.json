@@ -19,7 +19,7 @@
     "db:migrate": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.15.0",
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.15.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

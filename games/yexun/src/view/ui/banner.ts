@@ -8,6 +8,7 @@ export class Banners {
   private readonly root: HTMLDivElement;
   private readonly low: HTMLDivElement;
   private readonly flash: HTMLDivElement;
+  private readonly hurtEl: HTMLDivElement;
   private readonly bossBar: HTMLDivElement;
   private readonly bossFill: HTMLElement;
   private showTimer: ReturnType<typeof setTimeout> | null = null;
@@ -20,6 +21,10 @@ export class Banners {
     this.low = document.createElement('div');
     this.low.className = 'yx-lowhp';
     parent.appendChild(this.low);
+    // 受伤红晕：屏幕边缘一圈红，淡出很快；被围着连续挨打时也不晃镜头
+    this.hurtEl = document.createElement('div');
+    this.hurtEl.className = 'yx-hurt';
+    parent.appendChild(this.hurtEl);
     this.flash = document.createElement('div');
     this.flash.className = 'yx-flash';
     parent.appendChild(this.flash);
@@ -29,6 +34,13 @@ export class Banners {
     this.bossFill = this.bossBar.querySelector('b')!;
     this.bossBar.style.display = 'none';
     parent.appendChild(this.bossBar);
+  }
+
+  /** 受伤红晕（画面层不晃镜头，用边缘一圈红表示挨打） */
+  hurt(): void {
+    this.hurtEl.classList.remove('on');
+    void this.hurtEl.offsetWidth;
+    this.hurtEl.classList.add('on');
   }
 
   /** 收起所有横幅、血条和红框（结算、重开时） */

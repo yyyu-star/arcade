@@ -111,6 +111,26 @@ export const LEVEL_NAME: Record<Level, string> = { easy: '新手', normal: '普�
 /** 选档卡片上：电脑多强（1–4 颗星）、适合谁。实盘档越大电脑越强 */
 export const STARS: Record<Level | TierId, number> = { easy: 1, normal: 2, hard: 3, small: 1, mid: 2, big: 3, lux: 4 };
 export const LEVEL_FOR: Record<Level, string> = { easy: '第一次玩', normal: '会打了', hard: '想挑战' };
+
+/** 连输几场起在结算页说一句、给"换个轻松点的档"（单机，DESIGN.md 第 7 节） */
+export const CHEER_FROM = 2;
+/** 降一档：新手已经是最轻松的 */
+export const easierLevel = (l: Level): Level | null => (l === 'hard' ? 'normal' : l === 'normal' ? 'easy' : null);
+/** 单机连输的记录（mahjong.streak）：同一场只记一次（刷新后结算页会再弹一遍），输了加一，赢了、打平清零 */
+export interface Streak {
+  n: number;
+  last: string;
+}
+export function nextStreak(prev: Streak | null, id: string, net: number): Streak {
+  if (prev && prev.last === id) return prev;
+  return { n: net < 0 ? (prev?.n ?? 0) + 1 : 0, last: id };
+}
+
+/** 连输时的一句：不嘲讽、不说"你打得不好"，只说手气和歇口气 */
+export function cheerLine(lost: number): string | null {
+  if (lost < CHEER_FROM) return null;
+  return lost >= 4 ? `连着 ${lost} 场手气都不顺，麻将本来就看牌运，歇口气再来` : `连着输了 ${lost} 场，牌运有起有落，下一场说不定就来了`;
+}
 /**
  * 一局大约几分钟（真人速度）：模拟器按自己每个决定 3 秒、电脑 1.2 秒、每局另加 20 秒估，8 局 p50 约 18 分钟（DESIGN.md 4.1）；
  * 卡片上按选的局数乘出来
