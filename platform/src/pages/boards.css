@@ -21,3 +21,38 @@
  */
 .ranks .rank > .btn { grid-column: 4; grid-row: 1; }
 @media (max-width: 360px) { .ranks .rank > .btn { grid-column: 2 / 4; grid-row: 2; justify-self: end; } }
+/*
+ * 榜单分组（0.23.0）：手机上一组一排、组名在前面小小地写；电脑上（≥960）左边一列竖排，右边是榜，"我"那一行贴在上面
+ */
+.boards { display: flex; flex-direction: column; gap: var(--s-4); }
+.board-nav { display: flex; flex-direction: column; gap: var(--s-2); }
+.board-nav__name { margin: 0 0 var(--s-1); font-size: var(--fs-xs); color: var(--muted); font-weight: 700; }
+.board-nav .tabs { margin-bottom: 0; }
+/* 手机上标签按字宽排，不一个个撑满一行（八个标签撑满会占半屏） */
+.board-nav .tabs a { flex: 0 1 auto; }
+/*
+ * 960 以下（手机、竖着的平板）：所有标签排成一行横着滑，组名不写（八个标签折成几行会占半屏）；
+ * 右沿露半个标签，看得出还能滑
+ */
+@media (max-width: 959px) {
+  .board-nav { flex-direction: row; gap: var(--s-2); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 calc(-1 * var(--s-1)); padding: var(--s-1); }
+  .board-nav::-webkit-scrollbar { display: none; }
+  .board-nav__group { display: contents; }
+  .board-nav__name { display: none; }
+  .board-nav .tabs { display: contents; }
+  .board-nav .tabs a { flex: none; }
+}
+@media (max-width: 560px) {
+  /* 领奖台一格只有三分之一屏宽：长一点的分数（夜巡守夜"危险2 · 12:34 · 斩 1,234"）字小一号 */
+  .podium .rank__value { font-size: var(--fs-sm); }
+}
+.boards__body { min-width: 0; }
+@media (hover: hover) { .ranks .rank:hover { background: var(--highlight-warm); } }
+@media (min-width: 960px) {
+  .boards { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: var(--s-5); }
+  .board-nav { position: sticky; top: var(--s-4); gap: var(--s-4); padding-right: var(--s-4); border-right: 1px solid var(--divider); }
+  .board-nav .tabs { flex-direction: column; flex-wrap: nowrap; gap: var(--s-1); }
+  .board-nav .tabs a { justify-content: flex-start; width: 100%; }
+  /* 往下翻时贴在上面，还没翻到时贴在下面：自己在第几名一直看得到 */
+  .ranks .rank--me { position: sticky; top: var(--s-2); bottom: var(--s-2); z-index: 1; box-shadow: var(--sh-sm); }
+}

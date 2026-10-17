@@ -26,8 +26,10 @@ export interface GameEntry {
   /**
    * 不按日期的固定排行榜（如 endless），名字只用小写字母、数字、短横线，不以 daily 开头。
    * 每日榜 daily-YYYY-MM-DD 不用登记；没登记的榜交分一律不收（防止随便开榜把库撑大）。
+   * 写成 {id, name} 的（0.23.0）在排行页"各游戏总榜"里各有一个标签，名字就是 name；只写 id 的按"<游戏名>·<id>"兜底。
+   * 分数怎么显示读游戏的 /games/<id>/boards.json（格式同 daily.json，src/scores.ts）。
    */
-  boards?: readonly string[];
+  boards?: readonly (string | FixedBoard)[];
   /**
    * 有每日挑战榜（daily-YYYY-MM-DD，规则改版时加 -v<n>，15.5）：排行榜页给它一个"<名字>每日"标签页，显示今天版本最大的那个榜。
    * 分数怎么显示由游戏自己的 /games/<id>/daily.json 给（src/daily.ts），平台不知道各游戏的分数怎么编码。
@@ -53,6 +55,12 @@ export interface DailySub {
   name: string;
 }
 export const DAILY_SUB_RE = /^(?!v\d)[a-z][a-z0-9]{0,15}$/;
+
+/** 固定榜：id 是交分用的榜名，name 是排行页标签上的中文名 */
+export interface FixedBoard {
+  id: string;
+  name: string;
+}
 
 export const GAMES: readonly GameEntry[] = [
   {
@@ -129,7 +137,11 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/yexun/',
     devUrl: 'http://localhost:5178/',
     status: 'playable',
-    boards: ['vigil', 'raid', 'endless'],
+    boards: [
+      { id: 'vigil', name: '夜巡守夜' },
+      { id: 'raid', name: '夜巡夜探' },
+      { id: 'endless', name: '夜巡无尽' },
+    ],
     daily: [
       { id: 'vigil', name: '守夜' },
       { id: 'raid', name: '夜探' },
@@ -142,6 +154,11 @@ export const GAME_IDS: ReadonlySet<string> = new Set(GAMES.map((g) => g.id));
 
 /** 用平台钱包的游戏（界面上按游戏列筹码的地方用） */
 export const WALLET_GAMES: readonly GameEntry[] = GAMES.filter((g) => g.wallet !== false);
+
+/** 登记的固定榜，统一成 {id, name}（只写了 id 的名字按"<游戏名>·<id>"兜底） */
+export function fixedBoards(g: GameEntry): FixedBoard[] {
+  return (g.boards ?? []).map((b) => (typeof b === 'string' ? { id: b, name: `${g.name}·${b}` } : b));
+}
 
 /** 排行榜上的一个每日挑战标签：没有子榜的游戏一个（key 是游戏 id），有子榜的每个子榜一个（key 是"游戏 id:子榜 id"） */
 export interface DailyTab {

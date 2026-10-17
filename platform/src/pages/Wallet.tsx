@@ -1,16 +1,17 @@
 /**
  * /wallet：我的筹码。余额、领每日补给、桌上的筹码（在哪个游戏、怎么拿回来）、今天实盘还能赢多少。
  * 规则见 docs/economy.md 第 3、4 节；筹码不能买、不能换、不能转（docs/project.md 底线）。
+ * 电脑上（0.23.0）左边一列是余额、补给、桌上的、今天的实盘，右边是这周的输赢和"最近进出"（能按游戏筛）。
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api, errorText, type Stake, type Wallet } from '../api.ts';
-import { gameName, num, timeText } from '../format.ts';
+import { gameName, num, signed, timeText, tone } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { LedgerList } from '../ledger.tsx';
 import { playUrl } from '../play.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { Empty, FormError, Panel, Skeleton, useSubmit, useWritable } from '../ui.tsx';
 import { useWallet } from '../wallet.tsx';
 import { CoinIcon } from '../icons.tsx';
 
@@ -59,9 +60,46 @@ function capsText(game: string, c: { net: number; cap: number }): string {
   return left > 0 ? `${gameName(game)}：今天实盘${today}，还能再赢 ${num(left)}。` : `${gameName(game)}：今天实盘${today}，到顶了，明天再来赢。`;
 }
 
+/**
+ * 这周带筹码的局赢了多少（接口的 week，和排行页"本周净赢"同一个数）：合计一个大数，每个游戏一根横条，赢的往右绿、输的往左红。
+ * "今天"不放：流水只留最近 30 笔，拿它算今天的会对不上（主线 2026-10-17）
+ */
+function WeekSummary({ week }: { week: Record<string, number> }) {
+  const list = Object.entries(week).filter(([, v]) => v !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const total = list.reduce((t, [, v]) => t + v, 0);
+  const max = Math.max(1, ...list.map(([, v]) => Math.abs(v)));
+  return (
+    <div className="week-sum" data-testid="week-summary">
+      <p className="week-sum__total">
+        <span className="note">本周净赢</span>
+        <strong className={tone(total) ?? ''}>{signed(total)}</strong>
+      </p>
+      {list.length === 0 ? (
+        <p className="note">这周还没打带筹码的局。</p>
+      ) : (
+        <ul className="week-bars">
+          {list.map(([g, v]) => (
+            <li key={g} className="week-bars__row">
+              <span className="week-bars__name">{gameName(g)}</span>
+              <span className="week-bars__track" aria-hidden="true">
+                <span className={`week-bars__bar ${v > 0 ? 'week-bars__bar--up' : 'week-bars__bar--down'}`} style={{ width: `${(Math.abs(v) / max) * 50}%` }} />
+              </span>
+              <span className={`week-bars__value ${tone(v) ?? ''}`}>{signed(v)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="note">北京时间每周一 0 点清零，和排行榜的"本周净赢"一样。</p>
+    </div>
+  );
+}
+
+const OTHER = '_other';
+
 export function WalletPage() {
   const { loading, user, service } = useSession();
-  const { wallet, reliefTo, winUnits, ledger, error, refresh, set } = useWallet();
+  const { wallet, reliefTo, winUnits, ledger, week, error, refresh, set } = useWallet();
+  const [only, setOnly] = useState<string | null>(null);
   const writable = useWritable();
   const relief = useSubmit(async () => {
     try {
@@ -79,7 +117,7 @@ export function WalletPage() {
     if (user) void refresh();
   }, [user, refresh]);
 
-  if (loading) return <Panel icon="coin" title="我的筹码"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="coin" title="我的筹码"><Skeleton rows={3} /></Panel>;
   if (service === 'off') return <Panel icon="coin" title="我的筹码"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
   if (service === 'unreachable') return <Panel icon="coin" title="我的筹码"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
   if (!user) {
@@ -103,16 +141,21 @@ export function WalletPage() {
             </button>
           </>
         ) : (
-          <p className="note">正在读取…</p>
+          <Skeleton rows={3} />
         )}
       </Panel>
     );
   }
   const blocked = reliefBlocked(wallet, reliefTo);
   const caps = Object.entries(wallet.caps);
+  // 筛选：流水里出现过的游戏各一个，没有游戏的（补给、新号、管理员调整）归"其他"
+  const games = [...new Set(ledger.flatMap((e) => (e.g ? [e.g] : [])))];
+  const hasOther = ledger.some((e) => !e.g);
+  const shown = only === null ? ledger : ledger.filter((e) => (only === OTHER ? !e.g : e.g === only));
   return (
-    <>
+    <div className="desk">
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
+      <div className="desk__col">
       <Panel icon="coin" title="我的筹码">
         <p className="wallet__balance" data-testid="wallet-balance">
           <CoinIcon size={36} />
@@ -149,10 +192,25 @@ export function WalletPage() {
           <p className="note">单机实盘每个游戏每天最多赢 {winUnits} 份（一份按今天带上桌最多的那一次算），好友房不限。</p>
         </Panel>
       )}
-      <Panel icon="coin" title="最近进出">
-        {ledger.length > 0 ? <LedgerList entries={ledger} /> : <Empty>还没有进出。</Empty>}
-        <p className="note">只留最近 30 笔；10 月 16 日以前的没记下来。</p>
-      </Panel>
-    </>
+      </div>
+      <div className="desk__col">
+        <Panel icon="coin" title="这周的输赢">
+          <WeekSummary week={week} />
+        </Panel>
+        <Panel icon="coin" title="最近进出">
+          {games.length + (hasOther ? 1 : 0) > 1 && (
+            <div className="chips" role="group" aria-label="看哪个游戏">
+              {[[null, '全部'] as const, ...games.map((g) => [g, gameName(g)] as const), ...(hasOther ? [[OTHER, '补给和其他'] as const] : [])].map(([id, label]) => (
+                <button key={id ?? 'all'} type="button" className={only === id ? 'chips__on' : ''} aria-pressed={only === id} onClick={() => setOnly(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {shown.length > 0 ? <LedgerList key={only ?? 'all'} entries={shown} /> : <Empty>还没有进出，去玩一局带筹码的吧。</Empty>}
+          <p className="note">只留最近 30 笔；10 月 16 日以前的没记下来。</p>
+        </Panel>
+      </div>
+    </div>
   );
 }

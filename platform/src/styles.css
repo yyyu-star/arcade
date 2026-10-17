@@ -87,6 +87,25 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .down { color: var(--bad); }
 
 /* ---------- 页面骨架 ---------- */
+/*
+ * 电脑版排版（0.23.0）：≥1100 内容区放宽到 1280；做好电脑版的页面（App.tsx 的 DESK_PAGES）≥960 主区不再是 520 的窄列，
+ * 里面用 .desk 分两栏：左边一列放概况和操作，右边放长的列表。960 以下照旧一窄列（手机、竖着的平板）
+ */
+@media (min-width: 1100px) { :root { --content: 1280px; } }
+.desk { display: flex; flex-direction: column; gap: var(--s-5); }
+.desk__col { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
+@media (min-width: 960px) {
+  .narrow.narrow--desk { max-width: none; }
+  .desk { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); align-items: start; }
+  .desk > .banner { grid-column: 1 / -1; }
+}
+/* 读取中的占位条：一条条灰底慢慢闪；不想看动画的不闪 */
+.skeleton { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-1) 0; }
+.skeleton__row { display: block; height: 44px; border-radius: var(--r-md); background: linear-gradient(90deg, var(--soft) 0%, #f7f0e6 50%, var(--soft) 100%) 0 0 / 200% 100%; animation: skeleton 1.2s ease-in-out infinite; }
+.skeleton__row:nth-child(3n + 2) { width: 86%; }
+.skeleton__row:nth-child(3n) { width: 70%; }
+@keyframes skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton__row { animation: none; } }
 .page {
   max-width: calc(var(--content) + 2 * var(--s-5));
   margin: 0 auto;
@@ -433,3 +452,15 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .invite-code { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-2) 0; border-top: 1px dashed var(--line, #ddd); }
 .invite-code--used, .invite-code--expired, .invite-code--revoked { opacity: 0.65; }
 .code-mid { font-size: 18px; font-weight: 700; letter-spacing: 2px; user-select: all; }
+/* 钱包页"这周的输赢"（0.23.0）：合计一个大数，下面每个游戏一根横条，中线左边是输、右边是赢 */
+.week-sum { display: flex; flex-direction: column; gap: var(--s-3); }
+.week-sum__total { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); margin: 0; }
+.week-sum__total strong { font-size: var(--fs-2xl); font-weight: 800; font-variant-numeric: tabular-nums; }
+.week-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+.week-bars__row { display: grid; grid-template-columns: 5em minmax(0, 1fr) 6.5em; align-items: center; gap: var(--s-3); font-size: var(--fs-sm); }
+.week-bars__track { position: relative; height: 12px; border-radius: var(--r-pill); background: var(--soft); overflow: hidden; }
+.week-bars__track::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--line); opacity: 0.35; }
+.week-bars__bar { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); }
+.week-bars__bar--up { left: 50%; background: var(--good); }
+.week-bars__bar--down { right: 50%; background: var(--bad); }
+.week-bars__value { justify-self: end; font-weight: 800; font-variant-numeric: tabular-nums; }
