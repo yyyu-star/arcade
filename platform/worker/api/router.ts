@@ -19,6 +19,7 @@ import {
   setWalletRules,
 } from './admin';
 import { getMe, login, logout, patchMe, recover, register } from './auth';
+import { dismissInvite, inviteParams, listInvites, sendInvite } from './invites';
 import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
 import {
@@ -88,6 +89,9 @@ const ROUTES: Route[] = [
   { method: 'GET', path: '/api/friends', cat: 'social', auth: 'user', handler: listFriends },
   // 好友在线（0.13.0，15.13）：每人每 2 分钟最多写 1 行；写不了就静默 204
   { method: 'POST', path: '/api/presence', cat: 'live', auth: 'user', quiet: true, handler: postPresence },
+  { method: 'POST', path: '/api/invites', cat: 'live', auth: 'user', handler: sendInvite },
+  { method: 'GET', path: '/api/invites', cat: 'live', auth: 'user', handler: listInvites },
+  { method: 'POST', path: /^\/api\/invites\/([^/]+)\/dismiss$/, params: inviteParams, cat: 'live', auth: 'user', handler: dismissInvite },
   // 战绩（0.10.3，5.10）：对登录的人公开，只读
   { method: 'GET', path: /^\/api\/stats\/([^/]+)$/, params: statsParams, cat: 'social', auth: 'user', handler: getStats },
   // 排行榜页（0.10.4，15.12）：本周净赢、称号收集，读走缓存

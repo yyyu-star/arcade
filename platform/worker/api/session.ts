@@ -130,6 +130,9 @@ export function deleteUserStatements(db: Db, userId: string, username: string): 
     db.stmt('DELETE FROM wallets WHERE user_id = ?1', userId),
     db.stmt('DELETE FROM friendships WHERE user_a = ?1 OR user_b = ?1', userId),
     db.stmt('DELETE FROM blocks WHERE blocker = ?1 OR blocked = ?1', userId),
+    // 邀请（迁移 0007）：发出的、收到的都删；两个方向各走一个索引
+    db.stmt('DELETE FROM invites WHERE from_id = ?1', userId),
+    db.stmt('DELETE FROM invites WHERE to_id = ?1', userId),
     db.stmt(`DELETE FROM rate_counters WHERE key IN (${counterKeys.map((_, i) => `?${i + 1}`).join(', ')})`, ...counterKeys),
     db.stmt('DELETE FROM users WHERE id = ?1', userId),
   ];
