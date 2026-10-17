@@ -71,7 +71,7 @@ export const CALM = { afterElite: 25 * S, afterSpike: 30 * S, keepMul: 0.5, drop
 export const DAWN_TICK = 15 * 60 * S;
 
 /** 怪随时间变硬：血量 × (1 + 每分钟 hpPerMin)，伤害 × (1 + 每分钟 dmgPerMin) */
-export const SCALE = { hpPerMin: 0.34, dmgPerMin: 0.09 };
+export const SCALE = { hpPerMin: 0.29, dmgPerMin: 0.09 };
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
