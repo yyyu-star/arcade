@@ -2092,7 +2092,7 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 | `GET /api/admin/settings/invites` | — | 200 `{"rules", "defaults", "range", "log", "updatedAt"}`（同钱包规则） | 0 |
 | `POST /api/admin/settings/invites` | `{"userQuota"?, "adminQuota"?, "ttlDays"?, "perDay"?}` | 200 同上；超出范围 400 | 有变化 2（settings 1 + `admin` 计数 1），没变化 0 |
 | `POST /api/admin/users/<用户 id>/invite-quota` | `{"quota": 整数 0–1000 \| null}`（null 恢复默认） | 200 `{"quota", "custom": boolean}` | 2（users 1 + 计数 1） |
-| `GET /api/admin/invite-codes` | `?status=unused\|used\|all`（默认 all） | 200 `{"codes": [{"id", "hint", "owner": {"username", "displayName"}, "status", "createdAt", "expiresAt", "usedBy"?: {"username", "displayName"}, "usedAt"?}]}`，全站最近 100 条 | 0 |
+| `GET /api/admin/invite-codes` | `?status=unused\|used\|all`（默认 all） | 200 `{"codes": [{"id", "hint", "code"?, "owner": {"username", "displayName"}, "status", "createdAt", "expiresAt", "usedBy"?: {"username", "displayName"}, "usedAt"?}]}`，全站最近 100 条；`code` 和本人列表一样只有没用的才给（0.21.2 起，管理员复制给人） | 0 |
 | `POST /api/admin/invite-codes/<id>/revoke` | `{}` | 204；已用的、已撤回的 404 | 2（码 1 + 计数 1） |
 
 **存储**（迁移 `0011_invite_codes.sql`；表名避开好友房邀请的 `invites`）

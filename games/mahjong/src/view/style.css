@@ -1742,12 +1742,51 @@ button {
   border-radius: var(--r-pill);
   padding: 0 var(--sp-2);
 }
+.summary .fair {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}
+/* 一局打完每家最后的牌（碰杠、手牌、胡的那张） */
+.summary .hand-line {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+.summary .hand-line .group {
+  display: flex;
+}
+.summary .mini {
+  width: 20px;
+  height: 28px;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.summary .mini.won {
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--gold);
+}
 .summary .flows {
   margin-top: var(--sp-2);
   font-size: var(--fs-xs);
   line-height: 1.6;
   opacity: 0.85;
   columns: 2;
+}
+.cheer {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.cheer p {
+  margin: 0;
+  opacity: 0.9;
 }
 .settle-note {
   margin-top: var(--sp-3);

@@ -24,7 +24,7 @@ import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { awardsCard, cardOf, prepareCard } from './view/share.ts';
-import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, STAKES_NAME, VARIANT_NAME, walletError } from './view/text.ts';
+import { cheerLine, easierLevel, GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, nextStreak, num, STAKES_NAME, VARIANT_NAME, walletError, type Streak } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
 import { awardsSummary, fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
@@ -680,6 +680,7 @@ const soloUi = {
           box.appendChild(matchSummary(v, names, unit));
           if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
+          cheer(box, mine, v.result?.seats[v.me!.seat]?.net ?? 0);
           const row = el('div', 'row', box);
           button('act soft', row, '回选桌', () => {
             closeDialog();
@@ -715,6 +716,33 @@ const soloUi = {
     void refreshWallet();
   },
 };
+
+const STREAK_KEY = 'mahjong.streak';
+
+/**
+ * 单机连输时结算页说一句（不嘲讽），娱乐局再给"换到轻松一档"（DESIGN.md 第 7 节）。只换难度，不改牌、不放水：
+ * 每一档的电脑本来就是那么强，公平底线不动
+ */
+function cheer(box: HTMLElement, s: Solo, net: number): void {
+  let streak: Streak;
+  try {
+    const prev = JSON.parse(localStorage.getItem(STREAK_KEY) ?? 'null') as Streak | null;
+    streak = nextStreak(prev && typeof prev.n === 'number' && typeof prev.last === 'string' ? prev : null, s.save.id ?? '', net);
+    localStorage.setItem(STREAK_KEY, JSON.stringify(streak));
+  } catch {
+    return;
+  }
+  const line = cheerLine(streak.n);
+  if (!line) return;
+  const c = el('div', 'cheer', box);
+  el('p', '', c, line);
+  const lower = stakesOf(s.stakes)?.wallet ? null : easierLevel(s.save.level ?? 'easy');
+  if (lower)
+    button('act soft', c, `换到${LEVEL_NAME[lower]}档再来一场`, () => {
+      closeDialog();
+      void startSolo('fun', prefs.opts, lower);
+    });
+}
 
 /** 冒烟用：?turbo 让电脑几乎不停顿（npm run smoke） */
 const TURBO = new URLSearchParams(location.search).has('turbo');

@@ -34,6 +34,10 @@ export function showGuide(parent: HTMLElement, page = 0, onDone?: () => void): v
 
 export function showRules(parent: HTMLElement): void {
   dialog(parent, 'rules', (box) => {
+    // 电脑不看牌（DESIGN.md 5.4 的测试）玩家看不见，写在最上面；一局结束的结算里亮出所有人的牌，自己能对
+    el('h2', '', box, '电脑公平吗');
+    el('p', '', box, '电脑和你一样看不到别人的牌：它只知道自己的手牌和桌上打出来、碰杠亮出来的牌，牌墙也不知道。每局打完，结算里亮出所有人的牌，可以对一对。');
+    el('p', '', box, '牌河里变暗的牌，是被人碰走、杠走或者胡走的。');
     el('h2', '', box, '番型表');
     el('p', 'note', box, '一把 = 底分 × 2 的番数次方，番数相加，到封顶为止。自摸每家多付一个底分。');
     const t = el('table', '', box);

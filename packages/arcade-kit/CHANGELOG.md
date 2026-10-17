@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.15.1
+
+急修：桌面上点"分享"每次失败（所有者在 Windows Chrome 上点德州"分享这一场"）。
+- **系统分享只给手机、平板**：新纯函数 `useSystemShare(ua, maxTouchPoints)`。Windows Chrome 的 `canShare` 对文件回 true，以前会弹出 Windows 系统共享，选微信后微信 PC 版窗口空白、报"共享失败"；
+  现在 Windows、Mac、Linux 桌面（含触屏笔记本）一律直接出预览。iPadOS（桌面版 UA）靠多点触控认成平板；微信内置浏览器照旧不调。
+- **桌面预览加"复制图片"**（`navigator.clipboard.write` + `ClipboardItem`，不支持就不摆），成功提示"已复制，去微信里粘贴"；按钮顺序：复制图片、保存图片、复制链接、关闭。`data-key` 是 `share:copy-image`。
+- 测试：`share.test` 加 `useSystemShare` 的表驱动（Windows Chrome / Edge、触屏 Windows、Mac Chrome / Safari、Linux、iPadOS、老 iPad、iPhone、安卓手机和平板、鸿蒙、iOS 和 Windows 的微信）和桌面预览的按钮；反证过。
+  浏览器实测（Windows UA，`canShare` 假装回 true）：不调系统分享、直接出预览，"复制图片"后剪贴板里是 `image/png`。
+
 ## 0.15.0
 
 分享卡加强（主线派，所有者要"晒战绩、一键分享、发朋友圈"）。

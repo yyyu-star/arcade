@@ -371,8 +371,11 @@ const r = await shareCard(
 
 - `art` 可以直接给一个 `CanvasImageSource`（img、canvas、ImageBitmap），或者 `{ image, crop?, fit? }` 从图集里切一块（`crop` 是源图像素，`fit` 默认 `contain`，`cover` 铺满裁中间）。
   是 img 时先 `await img.decode()`，没加载完、坏图、跨域画不上都**不画 art、照常出卡**。
+- **系统分享只给手机、平板**（0.15.1，`useSystemShare(ua, maxTouchPoints)`）：UA 带 Android、iPhone、iPad、iPod、HarmonyOS、Mobile，或者 Macintosh 且多点触控（iPadOS 默认报桌面 UA）才调；
+  Windows、Mac、Linux 桌面（含触屏笔记本）一律直接出预览：Windows Chrome 的 `canShare` 对文件回 true，弹出系统共享，选微信后微信 PC 版是空白窗口、再报"共享失败"。
+  桌面的预览第一个按钮是"复制图片"（`navigator.clipboard.write` + `ClipboardItem` 的 `image/png`，浏览器不支持就不摆），成功提示"已复制，去微信里粘贴"；按钮顺序：复制图片、保存图片、复制链接、关闭。
 - 系统分享要 `navigator.canShare({ files })` 为真（手机浏览器）；不支持、或出错（用户取消除外）就出预览层：图 + "保存图片"（下载 `share.png`）+ "复制链接" + "关闭"。
-  预览层 z-index 默认 11000（0.12.4 起），按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
+  预览层 z-index 默认 11000（0.12.4 起），按钮的 `data-key` 是 `share:copy-image`（0.15.1，桌面）、`share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 复制图片`、`分享 保存`、`分享 复制`。
 - **结算页一出现就先画好**（0.12.3，iOS 必须）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。结算页出来时 `const p = prepareShare(card, opts)`，
   "分享"按钮的点击里直接 `void p.share()`（前面别 await）：画好了就同步调 `navigator.share`，没画好等画完再试、调不起来出预览。`shareCard` 是"点了才画"的简写。
 - **二维码**（0.15.0）：朋友圈里的图不能点，扫码是唯一入口。码的内容是 `shareLink(opts.url, location.origin)`：运行时的 origin 加上 `url` 的路径、查询和 `#` 后面，

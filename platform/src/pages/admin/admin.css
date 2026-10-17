@@ -118,3 +118,24 @@
   .stats-table { display: table; background: none; }
 }
 .game-today .nowrap { white-space: nowrap; }
+/*
+ * 邀请码（0.21.3）：上面一排两块表单（等高），下面码表占满整行；原来套 console__grid 的两列，面板最后一块被撑满，
+ * 表格跟着拉高（一行两三百像素），右半栏又装不下六列。≤900 一列排下来，表格在框里横着滑，不撑破面板
+ */
+.invites-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); align-items: stretch; }
+.invites-grid > .panel { min-width: 0; }
+.invites-grid > .panel:last-child { grid-column: 1 / -1; }
+@media (max-width: 900px) { .invites-grid { grid-template-columns: minmax(0, 1fr); } }
+.table-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll > .stats-table { display: table; background: none; }
+.invite-table th, .invite-table td { padding: var(--s-2); text-align: left; vertical-align: middle; }
+.invite-table th:last-child, .invite-table td:last-child { text-align: right; }
+.invite-table__user { display: block; font-size: var(--fs-xs); }
+.invite-table .btn--small + .btn--small { margin-left: var(--s-1); }
+.invite-table__spent td.mono { color: var(--muted); }
+.muted { color: var(--muted); }
+.code-status { display: inline-block; padding: 0 var(--s-2); border: var(--bw-thin) solid transparent; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 700; line-height: 20px; }
+.code-status--unused { background: #e3f4e8; border-color: #4fae6f; color: #24663b; }
+.code-status--used { background: var(--highlight-warm); border-color: var(--accent); color: #9a4416; }
+.code-status--expired { background: var(--soft); border-color: #b9aaa2; color: var(--muted); }
+.code-status--revoked { background: #f6e3e3; border-color: #c46a6a; color: #8a3434; }

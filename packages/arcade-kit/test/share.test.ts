@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  CARD_H, CARD_W, MAX_STATS, QR_BOX, accentOf, artRect, cardDate, clip, isWeChat, normalizeCard, prepareShare, previewMode, qrLayout, shade, shareLink, shareText, wrapLines,
+  CARD_H, CARD_W, MAX_STATS, QR_BOX, accentOf, useSystemShare, artRect, cardDate, clip, isWeChat, normalizeCard, prepareShare, previewMode, qrLayout, shade, shareLink, shareText, wrapLines,
 } from '../src/share.ts';
 
 describe('分享卡的字', () => {
@@ -181,7 +181,53 @@ describe('微信内置浏览器（0.15.0）', () => {
   });
 
   it('微信里：预览用 data: URL、提示长按、不给"保存图片"；别处照旧', () => {
-    expect(previewMode(wx)).toEqual({ dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false });
-    expect(previewMode(safari)).toEqual({ dataUrl: false, tip: '手机上也可以长按图片保存', save: true });
+    expect(previewMode(wx)).toEqual({ dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false, copyImage: false });
+    expect(previewMode(safari)).toEqual({ dataUrl: false, tip: '手机上也可以长按图片保存', save: true, copyImage: false });
+  });
+});
+
+describe('系统分享只给手机、平板（0.15.1）', () => {
+  const UA = {
+    winChrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    winEdge: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0',
+    macChrome: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    macSafari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    // iPadOS 默认"桌面版网站"：UA 和 Mac Safari 一样，只能靠多点触控认
+    iPadOS: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    iPadOld: 'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+    iPhone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36',
+    androidTablet: 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    harmony: 'Mozilla/5.0 (Phone; OpenHarmony 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 ArkWeb/4.1.6.1 Mobile HuaweiBrowser/5.0 HarmonyOS',
+    wxIOS: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50(0x1800322d) NetType/WIFI Language/zh_CN',
+    wxWin: 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36 NetType/WIFI MicroMessenger/7.0.20.1781(0x6700143B) WindowsWechat(0x63090c11)',
+  };
+  const cases: [keyof typeof UA, number, boolean][] = [
+    ['winChrome', 0, false],
+    ['winChrome', 10, false], // 触屏笔记本也算桌面
+    ['winEdge', 0, false],
+    ['macChrome', 0, false],
+    ['macSafari', 0, false],
+    ['linux', 0, false],
+    ['iPadOS', 5, true],
+    ['iPadOld', 5, true],
+    ['iPhone', 5, true],
+    ['android', 5, true],
+    ['androidTablet', 5, true],
+    ['harmony', 5, true],
+    ['wxIOS', 5, false],
+    ['wxWin', 0, false],
+  ];
+  it.each(cases)('%s（触控点 %i）：%s', (k, touch, want) => {
+    expect(useSystemShare(UA[k], touch)).toBe(want);
+  });
+
+  it('桌面的预览多"复制图片"、提示去粘贴；手机、微信没有', () => {
+    expect(previewMode(UA.winChrome)).toMatchObject({ copyImage: true, save: true, dataUrl: false });
+    expect(previewMode(UA.winChrome).tip).toContain('粘贴');
+    expect(previewMode(UA.iPadOS, 5).copyImage).toBe(false);
+    expect(previewMode(UA.android).copyImage).toBe(false);
+    expect(previewMode(UA.wxWin)).toMatchObject({ copyImage: false, save: false, dataUrl: true });
   });
 });

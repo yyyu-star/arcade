@@ -233,7 +233,10 @@ describe('管理', () => {
     const list = (await (await call('/api/admin/invite-codes', { cookie: admin.cookie })).json()) as { codes: (Code & { owner: { username: string }; usedBy?: { username: string } })[] };
     expect(list.codes).toHaveLength(2);
     expect(list.codes.find((c) => c.id === y.id)).toMatchObject({ status: 'used', owner: { username: a.username }, usedBy: { username: 'invited_one' } });
-    expect(JSON.stringify(list)).not.toContain(x.code.replaceAll('-', ''));
+    // 没用的给全码（管理员复制给人，0.21.2），用过的只给末四位
+    expect(list.codes.find((c) => c.id === x.id)?.code).toBe(x.code);
+    expect(list.codes.find((c) => c.id === y.id)?.code).toBeUndefined();
+    expect(JSON.stringify(list)).not.toContain(y.code.replaceAll('-', ''));
     const ids = async (status: string) =>
       ((await (await call(`/api/admin/invite-codes?status=${status}`, { cookie: admin.cookie })).json()) as { codes: Code[] }).codes.map((c) => c.id);
     expect(await ids('unused')).toEqual([x.id]);

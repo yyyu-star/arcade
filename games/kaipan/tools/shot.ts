@@ -787,6 +787,8 @@ async function run(browser: Browser): Promise<void> {
     // 0.12.0 分享卡（共用包画）：无头 Chromium 不能带文件调系统分享，出预览层；点「保存图片」存下来看一眼，再关掉
     await click(ctx, 'share');
     await ctx.page.waitForSelector('[data-key="share:save"]', { timeout: 15_000 });
+    // kit 0.15.1：桌面不调系统分享、直接出预览，多一个「复制图片」（去微信里粘贴）
+    expect((await ctx.page.locator('[data-key="share:copy-image"]').count()) === 1, '桌面的分享预览应有「复制图片」');
     await shot(ctx, '51b-share-preview');
     const dl = ctx.page.waitForEvent('download', { timeout: 15_000 });
     await ctx.page.click('[data-key="share:save"]');
