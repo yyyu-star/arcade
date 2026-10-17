@@ -138,20 +138,22 @@
  * 都是 .screen.lobby 的背景层，不占位置、不挡按钮；background-attachment: local 让它们跟着内容一起滚走。
  * 板壁整页铺满（上下都能接着平铺），往下压暗一点；舞台在这两页也换成木色，顶栏底下不透出呢子（0.16.1：以前上半木墙、下半呢子硬切）。 */
 .stage:has(> .screen.lobby),
+.stage:has(> .screen.front),
 .stage:has(> .screen.room) {
   background: #3a1a0c;
 }
 /* 屏幕比舞台高或宽时露出的边（手机竖屏上下两条）也跟着换木色 */
 html:has(.screen.lobby),
+html:has(.screen.front),
 html:has(.screen.room),
 html:has(.screen.lobby) body,
+html:has(.screen.front) body,
 html:has(.screen.room) body {
   background: #24100a;
 }
 .screen.lobby {
   background:
     var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
-    var(--art-lantern, linear-gradient(transparent, transparent)) left 24px top 4px / 70px 144px no-repeat,
     var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 172px) 22px / 100px 94px no-repeat,
     radial-gradient(ellipse 260px 120px at 22% 90px, #ffb24d26, transparent 70%) no-repeat,
     linear-gradient(transparent 35%, #1a0a0499),
@@ -161,7 +163,6 @@ html:has(.screen.room) body {
 [data-orient='port'] .screen.lobby {
   background:
     var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
-    var(--art-lantern, linear-gradient(transparent, transparent)) left 4px top 4px / 54px 111px no-repeat,
     var(--art-lantern, linear-gradient(transparent, transparent)) right 4px top 4px / 54px 111px no-repeat,
     var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 132px) 30px / 84px 79px no-repeat,
     var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 134px) 34px / 92px 74px no-repeat,
@@ -170,7 +171,7 @@ html:has(.screen.room) body {
     var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
   background-attachment: local;
 }
-/* 横屏选桌页分两栏（style.css）：灯笼、茶碗、暖光都放在左栏店名这一边，右栏的档位卡上面不压摆设 */
+/* 横屏选桌页分两栏（style.css）：茶碗、暖光放在左栏店名这一边，右栏的档位卡上面不压摆设；左上角是"‹ 主页"，0.17.0 起不挂灯笼（灯笼在主页的画里） */
 /* 标题在板壁上：金字压一道深色投影，像刻出来描金 */
 .screen.lobby .lobby-head h1 {
   text-shadow:
@@ -302,6 +303,103 @@ html:has(.screen.room) body {
 @media (prefers-reduced-motion: reduce), (pointer: coarse) {
   .art-lantern,
   .art-cup b {
+    animation: none;
+  }
+}
+
+/* ---------- 游戏主页（0.17.0）：板壁做底，主视觉是 art.ts 的 homeScene() ----------
+ * 游戏名、主按钮、模式卡用标题字（Noto Serif SC Black 的子集，只含页面上用到的几十个字，见 ASSETS.md），没有的字退回系统字体 */
+@font-face {
+  font-family: 'Quehall Title';
+  src: url('./fonts/noto-serif-sc-black-subset.woff2') format('woff2');
+  font-weight: 900;
+  font-display: swap;
+}
+.screen.front {
+  background:
+    var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
+    radial-gradient(ellipse 60% 50% at 30% 40%, #ffb24d1f, transparent 70%) no-repeat,
+    linear-gradient(transparent 40%, #1a0a04b3),
+    var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
+}
+.home-head .brand,
+.act.quick,
+.mode b,
+.pitch {
+  font-family: 'Quehall Title', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+.home-head .brand {
+  font-weight: 900;
+  background: linear-gradient(#fff2b8, #f3c86b 45%, #c98a3a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 #3a1608) drop-shadow(0 0 16px #ffb24d55);
+}
+.pitch {
+  color: #f6efdc;
+  letter-spacing: 2px;
+}
+.mode {
+  background:
+    linear-gradient(#ffffff0d, transparent 40%),
+    linear-gradient(#2a120ab0, #1a0a05c0);
+  box-shadow: inset 0 1px 0 #ffffff14, var(--sh-1);
+}
+.mode .art-icon {
+  width: 36px;
+  height: 36px;
+}
+/* 主视觉里会动的几样：灯笼轻摆（两盏错开）、远处的窗慢慢明暗、热气上升、麻雀隔一阵跳两下 */
+.scene .sc-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  animation: art-sway 6s ease-in-out infinite;
+}
+.scene .sc-sway2 {
+  animation-duration: 7s;
+  animation-delay: -2.5s;
+}
+.scene .sc-lit {
+  animation: sc-lit 9s ease-in-out infinite;
+}
+.scene .sc-steam {
+  transform-box: fill-box;
+  animation: sc-steam 4.6s ease-out infinite;
+}
+.scene .sc-steam2 {
+  animation-delay: -2.2s;
+}
+.scene .sc-bird {
+  animation: sc-hop 7s ease-in-out infinite;
+}
+@keyframes sc-lit {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.35; }
+}
+@keyframes sc-steam {
+  0% { transform: translateY(8px); opacity: 0; }
+  35% { opacity: 0.5; }
+  100% { transform: translateY(-18px); opacity: 0; }
+}
+@keyframes sc-hop {
+  0%, 84%, 100% { transform: translateY(0); }
+  87% { transform: translateY(-12px); }
+  90% { transform: translateY(0); }
+  93% { transform: translateY(-7px); }
+  96% { transform: translateY(0); }
+}
+[data-lite] .scene .sc-sway,
+[data-lite] .scene .sc-lit,
+[data-lite] .scene .sc-steam,
+[data-lite] .scene .sc-bird {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .scene .sc-sway,
+  .scene .sc-lit,
+  .scene .sc-steam,
+  .scene .sc-bird {
     animation: none;
   }
 }

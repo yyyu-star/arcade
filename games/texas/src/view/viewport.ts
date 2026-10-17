@@ -35,6 +35,8 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onFit: (f: F
     // 一个屏幕像素合几个设计单位（大屏是 1）：小字的下限、触屏按钮能点的范围按它放大（style.css 的 --fs-1..3、--hit）。
     // 写在根上，根上那几个变量才算得到
     document.documentElement.style.setProperty('--ui', Math.max(1, 1 / f.scale).toFixed(3));
+    // 舞台放大了多少（大屏大于 1）：kit 画在舞台外面的"互动"按钮按它放大字和图标（style.css 的 .atf-btn）
+    document.documentElement.style.setProperty('--stage-scale', f.scale.toFixed(3));
     // 手机横屏（缩到 0.9 倍以下）：字和按钮放大以后标题页放不下，换紧凑的排法（style.css 的 .stage.tight）
     stage.classList.toggle('tight', f.scale < 0.9);
     onFit(f);

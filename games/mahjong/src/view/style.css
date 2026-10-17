@@ -351,6 +351,138 @@ button {
   opacity: 0.8;
 }
 
+/* ---------- 游戏主页（0.17.0，docs/art-v3.md 第 4 节） ----------
+ * 横屏左边主视觉、右边店名和按钮；竖屏上面主视觉、下面按钮。一屏放下不滚动，8px 网格 */
+.screen.front {
+  display: grid;
+  overflow: hidden;
+}
+[data-orient='land'] .screen.front {
+  grid-template-columns: 1.15fr 1fr;
+}
+[data-orient='port'] .screen.front {
+  grid-template-rows: 48% 1fr;
+}
+.home-art {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.home-art .scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* 画的边缘渐隐进板壁：横屏往右、竖屏往下，不和按钮那一栏硬切 */
+[data-orient='land'] .home-art .scene {
+  -webkit-mask-image: linear-gradient(to right, #000 80%, transparent);
+  mask-image: linear-gradient(to right, #000 80%, transparent);
+}
+[data-orient='port'] .home-art .scene {
+  -webkit-mask-image: linear-gradient(#000 82%, transparent);
+  mask-image: linear-gradient(#000 82%, transparent);
+}
+.home-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-5) var(--sp-6);
+  min-height: 0;
+}
+[data-orient='port'] .home-main {
+  padding-top: 0;
+}
+.home-head {
+  text-align: center;
+}
+.home-head .brand {
+  margin: 0;
+  font-size: 72px;
+  line-height: 1.1;
+  letter-spacing: 12px;
+  /* 字距加在每个字后面，最后一个字后面那截让回去，才真正居中 */
+  margin-right: -12px;
+}
+[data-orient='port'] .home-head .brand {
+  font-size: 56px;
+}
+.home-head .variant {
+  font-size: var(--fs-lg);
+  opacity: 0.85;
+}
+.pitch {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.act.quick {
+  flex-direction: column;
+  min-width: 288px;
+  height: auto;
+  padding: var(--sp-2) var(--sp-6);
+  line-height: 1.3;
+}
+.act.quick small {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  opacity: 0.8;
+}
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: var(--sp-3);
+  width: min(100%, 480px);
+}
+.mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-2);
+  border: 2px solid #f3c86b33;
+  border-radius: var(--r-md);
+}
+.mode b {
+  font-size: var(--fs-xl);
+}
+.mode small {
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}
+.mode.off {
+  opacity: 0.45;
+}
+.record {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-pill);
+  background: #0000004d;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.record .down {
+  color: var(--red-hi);
+}
+.screen.front .ver {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: var(--sp-3);
+  font-size: var(--fs-xs);
+  opacity: 0.45;
+}
+/* 选桌页左上角回主页 */
+.screen.lobby > .back {
+  position: absolute;
+  left: var(--sp-4);
+  top: 40px;
+  z-index: 1;
+  background: #00000059;
+}
+
 /* 横屏选桌页分两栏（0.16.1）：左边店名、开打、进房，右边选档和规则设置。横屏舞台只有 520 高，排成一列要在框里滚动；
  * DOM 不动（竖屏照旧一列），按格子放。舞台随屏幕变宽（viewport.ts），两栏跟着撑开 */
 [data-orient='land'] .screen.lobby {

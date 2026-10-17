@@ -52,7 +52,8 @@ export class ActionBar {
     this.slider = el('input', 'slider', line);
     this.slider.type = 'range';
     const plus = el('button', 'step', line, '+');
-    this.amount = el('span', 'raise-amt', this.panel);
+    // 下注额放在滑杆这一行的最右边（0.18.2）：原来单独占一行，面板高出一截，6 人桌右下角的座位被挤成只剩名牌
+    this.amount = el('span', 'raise-amt', line);
     minus.type = plus.type = 'button';
     minus.addEventListener('click', () => this.nudge(-1));
     plus.addEventListener('click', () => this.nudge(1));
