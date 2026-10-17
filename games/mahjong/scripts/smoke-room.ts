@@ -196,6 +196,9 @@ try {
   let botEmotes = 0;
   pa.on('websocket', (ws) => ws.on('framereceived', (f) => typeof f.payload === 'string' && f.payload.includes('"bot":true') && botEmotes++));
   pages.push(pa, pb);
+  // 好友部件报的位置（docs/social.md 1.2）：进房以后要有一次 place: room、带房间号和人数
+  const presence: string[] = [];
+  pa.on('request', (r) => r.url().endsWith('/api/presence') && presence.push(r.postData() ?? ''));
   watch(pa, 'A');
   watch(pb, 'B');
   const A: Player = { page: pa, tag: 'A', round: 0, discards: 0 };
@@ -216,6 +219,8 @@ try {
   check(freed, 'B 在等人页点"离开房间"，A 这边他的座位空出来');
   await joinAndStart(pa, pb, base, code);
   check(true, `娱乐房开打，两边进牌桌（${Math.round((Date.now() - t) / 1000)} 秒）`);
+  const here = presence.map((x) => JSON.parse(x || '{}') as { place?: string; room?: string; seats?: string }).find((x) => x.place === 'room');
+  check(here?.room === code && /^[1-4]\/4$/.test(here.seats ?? ''), `A 进房后报了位置：在房间里（${JSON.stringify(here)}）`);
   // 开局换三张时操作条最宽：截一张看"互动"按钮、自己的头像牌有没有压住它
   await pa.screenshot({ path: join(SHOTS, 'room-start-a.png') });
   await pb.screenshot({ path: join(SHOTS, 'room-start-b.png') });
