@@ -25,7 +25,7 @@ import {
   WHITEFOX,
   type EnemyKind,
 } from '../content/enemies.ts';
-import { DROPS, MERCY, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
+import { BOMB, CHEST, DROPS, MERCY, PICKUP, PLAYER, PROPS, PURSE, xpNeed } from '../content/player.ts';
 import { MAPS, pushOut, type Block } from '../content/maps.ts';
 import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
@@ -54,7 +54,7 @@ import { Ev } from './events.ts';
 import { DIR_N } from './dirs.ts';
 import { clamp, dcos, dirIndex, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
 import { Grid } from './grid.ts';
-import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Pick, Shot, WEAPON_SLOTS, World, type Choice, type Setup } from './state.ts';
+import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, WEAPON_SLOTS, World, type Choice, type Setup } from './state.ts';
 
 /** 法器在事件里的编号 */
 export const WEAPON_CODE: Record<WeaponId, number> = Object.fromEntries(WEAPON_IDS.map((id, i) => [id, i])) as Record<WeaponId, number>;
@@ -81,6 +81,7 @@ export function createWorld(setup: Setup): World {
   w.schedule = schedule(w);
   addWeapon(w, CHARACTERS[w.setup.character ?? 'xiaodao'].start);
   w.hp = w.stats.hpMax;
+  if (!w.raid) scatterProps(w);
   return w;
 }
 
@@ -160,6 +161,7 @@ export function step(w: World, dir: number, choice = -1): void {
     w.ev.push(Ev.Gong, w.x, w.y, 0, CHAR_FX.gongArea);
   }
   movePickups(w);
+  if (!w.raid) props(w);
   regen(w);
   if (w.phase !== 'play') return;
   if (w.raid) {
@@ -1032,7 +1034,7 @@ function killEnemy(w: World, i: number): void {
   if (def.kind === 'lord') {
     // 中期 Boss：掉宝箱和一把魂珠，进收获期
     w.calmUntil = Math.max(w.calmUntil, w.tick + CALM.afterElite);
-    addDrop(w, Drop.Chest, x, y, 1);
+    addDrop(w, Drop.Chest, x, y, chestSize(w, CHEST.lordMin));
     for (let k = 0; k < 10; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 90, y + (w.rDrop.next() - 0.5) * 60, def.xp / 10);
     return;
   }
@@ -1045,7 +1047,7 @@ function killEnemy(w: World, i: number): void {
       }
     }
     // 纸扎老爷召来的纸轿（eV = 1）不掉宝箱
-    if (!(def.kind === 'palanquin' && w.eV[i] === 1)) addDrop(w, Drop.Chest, x, y, 1);
+    if (!(def.kind === 'palanquin' && w.eV[i] === 1)) addDrop(w, Drop.Chest, x, y, w.raid ? 1 : chestSize(w, 1));
     for (let k = 0; k < 6; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 60, y + (w.rDrop.next() - 0.5) * 40, def.xp / 6);
     return;
   }
@@ -1074,6 +1076,15 @@ function killEnemy(w: World, i: number): void {
     addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
   }
   else if (r < DROPS.scroll + DROPS.bun * more * mercy + DROPS.coin * more) addDrop(w, Drop.Coin, x + 8, y, 1);
+  else if (r < DROPS.scroll + DROPS.bun * more * mercy + DROPS.coin * more + DROPS.bomb) addDrop(w, Drop.Bomb, x + 8, y, 1);
+  else if (r < DROPS.scroll + DROPS.bun * more * mercy + DROPS.coin * more + DROPS.bomb + DROPS.purse) addDrop(w, Drop.Purse, x + 8, y, 1);
+}
+
+/** 精英宝箱升几件：1 / 3 / 5（至少 min） */
+function chestSize(w: World, min: number): number {
+  const r = w.rChest.next();
+  const n = r < CHEST.five ? 5 : r < CHEST.five + CHEST.three ? 3 : 1;
+  return n < min ? min : n;
 }
 
 function eff(w: World, s: WeaponStats): { dmg: number; cd: number; area: number; amount: number } {
@@ -2026,7 +2037,20 @@ function collect(w: World, i: number): void {
       break;
     case Drop.Coin:
       // 引魂灯：有一定概率多给一枚（铜钱保持整数）
-      w.coins += val + (w.stats.coinBonus > 0 && w.rDrop.next() < w.stats.coinBonus ? 1 : 0);
+      {
+        const c = val + (w.stats.coinBonus > 0 && w.rDrop.next() < w.stats.coinBonus ? 1 : 0);
+        w.coins += c;
+        w.coinBy.drop += c;
+      }
+      break;
+    case Drop.Purse: {
+      const c = PURSE.min + w.rDrop.int(PURSE.span);
+      w.coins += c;
+      w.coinBy.purse += c;
+      break;
+    }
+    case Drop.Bomb:
+      bomb(w, w.x, w.y);
       break;
     case Drop.Bun:
       heal(w, val * (has(w, 'noheal') ? CURSE_FX.noheal : 1) * (w.setup.character === 'caiyao' ? CHAR_FX.caiyaoBun : 1));
@@ -2034,9 +2058,14 @@ function collect(w: World, i: number): void {
     case Drop.Scroll:
       for (let s = 0; s < MAX_DROPS; s++) if (w.dAlive[s] && w.dKind[s] === Drop.Soul) w.dPull[s] = PICKUP.pull;
       break;
-    case Drop.Chest:
-      openChest(w);
+    case Drop.Chest: {
+      // 守夜的精英箱一次升 val 件（1 / 3 / 5）；夜探的箱子另有一套（explore/raid.ts）
+      const n = Math.max(1, val);
+      w.chests++;
+      w.ev.push(Ev.ChestBig, w.x, w.y, n);
+      for (let k = 0; k < n; k++) openChest(w);
       break;
+    }
   }
 }
 
@@ -2050,6 +2079,92 @@ function gainXp(w: World, v: number): void {
     w.pendingLevels++;
     w.ev.push(Ev.LevelUp, w.x, w.y, w.level);
     if (w.setup.character === 'xiaodao' && w.level % CHAR_FX.xiaodaoEvery === 0) recompute(w);
+  }
+}
+
+// ───────────────────────── 摆设、炸弹 ─────────────────────────
+
+/** 开局在场地里散摆设：离出生点 300 以外，避开墙和棺材 */
+function scatterProps(w: World): void {
+  for (let k = 0; k < PROPS.start; k++) {
+    const x = 60 + w.rProp.next() * (w.arenaW - 120);
+    const y = 60 + w.rProp.next() * (w.arenaH - 120);
+    const dx = x - w.x;
+    const dy = y - w.y;
+    if (dx * dx + dy * dy < 300 * 300) continue;
+    addProp(w, x, y);
+  }
+  w.propAt = PROPS.every;
+}
+
+function addProp(w: World, x: number, y: number): void {
+  for (let i = 0; i < MAX_PROPS; i++) {
+    if (w.pAlive[i]) continue;
+    tmpP.x = clamp(x, 40, w.arenaW - 40);
+    tmpP.y = clamp(y, 40, w.arenaH - 40);
+    if (w.blocks.length) push(w, tmpP, PROPS.r + 6);
+    w.pAlive[i] = 1;
+    w.pGen[i]!++;
+    w.pKind[i] = w.rProp.int(2);
+    w.pX[i] = tmpP.x;
+    w.pY[i] = tmpP.y;
+    return;
+  }
+}
+
+/** 每拍：主角碰到的摆设碎掉掉东西；隔一阵在主角附近补摆设，走到哪都有得砸 */
+function props(w: World): void {
+  const rr = (PROPS.r + PLAYER.r) * (PROPS.r + PLAYER.r);
+  for (let i = 0; i < MAX_PROPS; i++) {
+    if (!w.pAlive[i]) continue;
+    const dx = w.pX[i]! - w.x;
+    const dy = w.pY[i]! - w.y;
+    if (dx * dx + dy * dy > rr) continue;
+    w.pAlive[i] = 0;
+    w.propsBroken++;
+    const x = w.pX[i]!;
+    const y = w.pY[i]!;
+    const L = PROPS.loot;
+    const r = w.rProp.next();
+    let got: number = 0;
+    if (r < L.bun) (got = Drop.Bun), addDrop(w, Drop.Bun, x, y, DROPS.bunHeal);
+    else if (r < L.bun + L.coins) {
+      got = Drop.Coin;
+      for (let k = 0; k < PROPS.coins; k++) addDrop(w, Drop.Coin, x + (w.rProp.next() - 0.5) * 40, y + (w.rProp.next() - 0.5) * 30, 1);
+    } else if (r < L.bun + L.coins + L.scroll) (got = Drop.Scroll), addDrop(w, Drop.Scroll, x, y, 1);
+    else if (r < L.bun + L.coins + L.scroll + L.bomb) (got = Drop.Bomb), addDrop(w, Drop.Bomb, x, y, 1);
+    else if (r < L.bun + L.coins + L.scroll + L.bomb + L.purse) (got = Drop.Purse), addDrop(w, Drop.Purse, x, y, 1);
+    w.ev.push(Ev.Prop, x, y, w.pKind[i]!, got);
+  }
+  if (w.tick < w.propAt) return;
+  w.propAt = w.tick + PROPS.every;
+  let near = 0;
+  for (let i = 0; i < MAX_PROPS; i++) {
+    if (!w.pAlive[i]) continue;
+    const dx = w.pX[i]! - w.x;
+    const dy = w.pY[i]! - w.y;
+    if (dx * dx + dy * dy < PROPS.nearR * PROPS.nearR) near++;
+  }
+  if (near >= PROPS.near) return;
+  const a = w.rProp.int(DIR_N);
+  const d = PROPS.minR + w.rProp.next() * (PROPS.nearR - PROPS.minR);
+  addProp(w, w.x + dcos(a) * d, w.y + dsin(a) * d);
+}
+
+/** 符咒炸弹：半径内的小怪全倒（照常掉魂珠、算击杀），精英和 Boss 掉一截血 */
+function bomb(w: World, x: number, y: number): void {
+  w.ev.push(Ev.Bomb, x, y, 0, BOMB.r);
+  const hit: number[] = [];
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (!w.eAlive[i]) continue;
+    const dx = w.eX[i]! - x;
+    const dy = w.eY[i]! - y;
+    if (dx * dx + dy * dy <= BOMB.r * BOMB.r) hit.push(i);
+  }
+  for (const i of hit) {
+    const def = ENEMIES[w.eKind[i]!]!;
+    const big = def.elite || def.boss || def.kind === 'lord';
+    hitEnemy(w, i, big ? w.eHpMax[i]! * BOMB.eliteFrac : w.eHp[i]! + 1, -1, w.eX[i]! - x, w.eY[i]! - y, 30, 0, -1);
   }
 }
 
@@ -2252,8 +2367,10 @@ function openChest(w: World): void {
       return;
     }
   }
+  w.chestUps++;
   if (!chestUpgrade(w)) {
     w.coins += 40;
+    w.coinBy.chest += 40;
     heal(w, 30);
     w.ev.push(Ev.Chest, w.x, w.y, -1);
     return;

@@ -1,3 +1,4 @@
+import { Bot } from '../tools/bots.ts';
 import { describe, expect, it } from 'vitest';
 import { BONE, ENEMY_BY_KIND, LORD, PALANQUIN, WATER, WEASEL } from '../src/content/enemies.ts';
 import { CALM, DANGERS, EVENTS, OPEN_TICKS } from '../src/content/waves.ts';
@@ -161,9 +162,11 @@ describe('新手保护', () => {
 
   it('新手档前几次升级至少两张是法器', () => {
     const w = createWorld({ seed: 4, mode: 'vigil', danger: 0 });
+    // 机器人走位捡魂（站着不动捡不到几颗，开局升级放慢以后等不到第 4 次升级）
+    const bot = new Bot('novice', 'sword', 4);
     let seen = 0;
-    while (seen < DANGERS[0]!.armsFirst && w.tick < 30 * 300 && w.phase !== 'over') {
-      step(w, 0, -1);
+    while (seen < DANGERS[0]!.armsFirst && w.tick < 30 * 600 && w.phase !== 'over') {
+      step(w, bot.act(w).dir, -1);
       if (w.phase === 'choose') {
         expect(w.choices.filter((c) => c.kind === 'weapon').length).toBeGreaterThanOrEqual(2);
         seen++;

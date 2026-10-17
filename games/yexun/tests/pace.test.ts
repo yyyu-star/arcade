@@ -10,6 +10,8 @@ const S = 30;
 
 interface Pace {
   first: number;
+  /** 前 30 秒升了几级 */
+  by30: number;
   by3: number;
   by5: number;
   total: number;
@@ -25,6 +27,7 @@ function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
   const count: number[] = [];
   const eliteKills: number[] = [];
   let first = -1;
+  let by30 = 0;
   let by3 = 0;
   let by5 = 0;
   let late = 0;
@@ -36,6 +39,7 @@ function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
     for (let i = 0; i < w.ev.n; i++) {
       if (w.ev.type[i] === Ev.LevelUp) {
         if (first < 0) first = w.tick / S;
+        if (w.tick <= 30 * S) by30++;
         if (w.tick <= 180 * S) by3++;
         if (w.tick <= 300 * S) by5++;
         if (w.tick > 450 * S) late++;
@@ -56,21 +60,28 @@ function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
     if (before > 0) (ratio += avg(k + 5 * S, k + 25 * S) / before), m++;
   }
   const lateMin = Math.max(1, (w.tick - 450 * S) / (60 * S));
-  return { first, by3, by5, total: w.level - 1, late: late / lateMin, calm: m ? ratio / m : 0 };
+  return { first, by30, by3, by5, total: w.level - 1, late: late / lateMin, calm: m ? ratio / m : 0 };
 }
 
 describe('一局节奏（13.3）', () => {
   const runs = BUILD_IDS.map((b, i) => pace(i + 1, b));
   const mean = (f: (p: Pace) => number): number => runs.reduce((s, p) => s + f(p), 0) / runs.length;
 
-  it('第一次升级 ≤ 10 秒', () => expect(mean((p) => p.first)).toBeLessThanOrEqual(10));
-  it('前 3 分钟升级 ≥ 10 次，5 分钟前 ≥ 16 次', () => {
-    expect(mean((p) => p.by3)).toBeGreaterThanOrEqual(10);
-    expect(mean((p) => p.by5)).toBeGreaterThanOrEqual(16);
+  // 所有者 2026-10-17 试玩："打死一个怪就升级了？"——开局放慢：第一次升级 10–20 秒、前 30 秒最多 2 级，全程少一截
+  it('第一次升级 10–20 秒，前 30 秒最多 2 级', () => {
+    expect(mean((p) => p.first)).toBeGreaterThanOrEqual(10);
+    expect(mean((p) => p.first)).toBeLessThanOrEqual(20);
+    expect(Math.max(...runs.map((p) => p.by30))).toBeLessThanOrEqual(2);
   });
-  it('全局升级 35–45 次，后半段每分钟 1.5–2.5 次（主线 4c 放宽）', () => {
-    expect(mean((p) => p.total)).toBeGreaterThanOrEqual(35);
-    expect(mean((p) => p.total)).toBeLessThanOrEqual(45);
+  it('前 3 分钟升级 6–9 次，5 分钟前 10–14 次', () => {
+    expect(mean((p) => p.by3)).toBeGreaterThanOrEqual(6);
+    expect(mean((p) => p.by3)).toBeLessThanOrEqual(9);
+    expect(mean((p) => p.by5)).toBeGreaterThanOrEqual(10);
+    expect(mean((p) => p.by5)).toBeLessThanOrEqual(14);
+  });
+  it('全局升级 25–35 次，后半段每分钟 1.5–2.5 次', () => {
+    expect(mean((p) => p.total)).toBeGreaterThanOrEqual(25);
+    expect(mean((p) => p.total)).toBeLessThanOrEqual(35);
     expect(mean((p) => p.late)).toBeGreaterThanOrEqual(1.5);
     expect(mean((p) => p.late)).toBeLessThanOrEqual(2.5);
   });

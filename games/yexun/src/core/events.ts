@@ -57,6 +57,12 @@ export const Ev = {
   Gong: 26,
   /** 复活：x, y, a = 还剩几次, b = 震开的半径 */
   Revive: 27,
+  /** 守夜开宝箱（精英、老爷掉的）：x, y, a = 一共升几件（1 / 3 / 5） */
+  ChestBig: 28,
+  /** 碰碎摆设：x, y, a = 摆设种类（0 灯笼架 1 纸扎）, b = 掉了什么（Drop，0 没掉） */
+  Prop: 29,
+  /** 符咒炸弹炸开：x, y, b = 半径 */
+  Bomb: 30,
   // 40–49 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,

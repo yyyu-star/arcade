@@ -14,7 +14,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import type { RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 11;
+export const RULES_VERSION = 12;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -22,6 +22,8 @@ export const MAX_ENEMIES = 300;
 export const WEAPON_SLOTS = MAX_WEAPONS + MERGES.length;
 export const MAX_SHOTS = 400;
 export const MAX_DROPS = 400;
+/** 场上可碰碎的摆设（灯笼架、纸扎）最多几个 */
+export const MAX_PROPS = 48;
 
 /** 子弹种类 */
 export const Shot = {
@@ -48,6 +50,10 @@ export const Drop = {
   Bun: 3,
   Scroll: 4,
   Chest: 5,
+  /** 符咒炸弹：捡到时附近的小怪全倒，精英和 Boss 掉一截血 */
+  Bomb: 6,
+  /** 铜钱袋：一次给一把铜钱 */
+  Purse: 7,
 } as const;
 export type Drop = (typeof Drop)[keyof typeof Drop];
 
@@ -162,6 +168,12 @@ export class World {
   bossKilled = false;
   kills = 0;
   coins = 0;
+  /** 铜钱从哪来的（结算页列来源用，只记不影响规则）：地上捡的、铜钱袋、摆设、宝箱 */
+  readonly coinBy = { drop: 0, purse: 0, prop: 0, chest: 0 };
+  /** 开过几个宝箱、一共升了几件；碰碎几个摆设（结算页用） */
+  chests = 0;
+  chestUps = 0;
+  propsBroken = 0;
 
   // 随机数，按用途分流
   readonly rSpawn: Rng;
@@ -171,6 +183,7 @@ export class World {
   readonly rAi: Rng;
   readonly rHit: Rng;
   readonly rWeapon: Rng;
+  readonly rProp: Rng;
 
   // 主角
   x = ARENA.w / 2;
@@ -296,6 +309,15 @@ export class World {
   /** 地上的魂珠数（超过上限就合并） */
   soulCount = 0;
 
+  // 摆设（守夜才有）：走过去碰碎，掉吃的、铜钱、磁符、炸弹
+  readonly pAlive = new Uint8Array(MAX_PROPS);
+  readonly pGen = new Uint32Array(MAX_PROPS);
+  readonly pKind = new Uint8Array(MAX_PROPS);
+  readonly pX = new Float64Array(MAX_PROPS);
+  readonly pY = new Float64Array(MAX_PROPS);
+  /** 下次在主角附近补摆设的拍数 */
+  propAt = 0;
+
   // 刷怪
   spawnAcc = 0;
   /** 这一局的定点事件（按危险档、咒印排好；createWorld 填） */
@@ -335,6 +357,7 @@ export class World {
     this.rAi = new Rng(s, 'ai');
     this.rHit = new Rng(s, 'hit');
     this.rWeapon = new Rng(s, 'weapon');
+    this.rProp = new Rng(s, 'prop');
     this.stats = baseStats();
   }
 }

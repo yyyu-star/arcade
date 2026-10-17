@@ -430,16 +430,18 @@ async function boot(): Promise<void> {
     }
     if (w.raid) return finishRaid(w, quit, seconds);
     // 认输的局算一局、铜钱照拿，但不算纪录
-    const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: dawned(w), quit, ticks: Math.min(w.tick, DAWN_TICK), kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
+    const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: dawned(w), quit, ticks: Math.min(w.tick, DAWN_TICK), kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0, boss: w.bossKilled, coinBy: w.coinBy, day: beijingDate(Date.now()) });
     // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
     const ach = applyRun(records, summarize(w, tally, quit));
     records = ach.records;
     saveRecords(records);
     for (const id of ach.unlocked) grantCoins(save, `ach:${id}`, rewardCoins([id]));
+    const achCoins = rewardCoins(ach.unlocked);
+    const sources = achCoins > 0 ? [...got.sources, { label: `成就 ${ach.unlocked.length} 个`, coins: achCoins }] : got.sources;
     toast.show(ach.unlocked);
     showPlay(false);
     const label = `${dailyDate ? '每日挑战 · ' : ''}${w.setup.endless ? '无尽 · ' : ''}${DANGERS[w.setup.danger].name}${w.setup.curses?.length ? ` · 咒印 ${w.setup.curses.length}` : ''}${w.setup.assist ? ' · 降低伤害' : ''}`;
-    result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: got.coins, coinsTotal: coins(save), label, record: got.record, build: buildRows(w) });
+    result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: got.coins + achCoins, coinsTotal: coins(save), sources, label, record: got.record, build: buildRows(w) });
     if (got.askAssist)
       confirm.ask('连着倒下好几局了。要不要把挨打的伤害降低 30%？开着时成绩不进总榜，设置里随时能关。', '降低伤害', '不用', (ok) => {
         save.assist = ok;

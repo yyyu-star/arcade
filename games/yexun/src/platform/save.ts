@@ -7,7 +7,7 @@
  */
 import { DANGER_IDS, type Danger, type Difficulty } from '../content/waves.ts';
 import type { MapId } from '../content/maps.ts';
-import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
+import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, RUN_BONUS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 import { isLiveTier, type LiveTier } from '../content/live.ts';
 import { emptyVault, herbalistUnlocked, normalizeVault, type VaultSave } from '../explore/vault.ts';
@@ -222,6 +222,18 @@ export interface RunEnd {
   /** 局里捡到的铜钱 */
   coins: number;
   curses: number;
+  /** 打倒了尸王 */
+  boss?: boolean;
+  /** 局里铜钱的来源（核心 w.coinBy）；没传就整笔算"捡到的" */
+  coinBy?: { drop: number; purse: number; prop: number; chest: number };
+  /** 今天的日期（北京时间 YYYY-MM-DD），每日首胜用；没传不发 */
+  day?: string;
+}
+
+/** 结算页的一行：从哪来、几枚 */
+export interface CoinSource {
+  label: string;
+  coins: number;
 }
 
 export interface RunReward {
@@ -232,6 +244,32 @@ export interface RunReward {
   unlockedDanger: Danger | null;
   /** 该问"要不要降低伤害"了 */
   askAssist: boolean;
+  /** 按来源分的明细（加起来 = coins，加上每日首胜那笔） */
+  sources: CoinSource[];
+}
+
+/** 一局的铜钱明细：局里捡的按来源，再加撑的时间、击杀、天亮、尸王（按危险档放大）、咒印加成 */
+export function runCoins(r: RunEnd): CoinSource[] {
+  const out: CoinSource[] = [];
+  const add = (label: string, n: number): void => {
+    if (n > 0) out.push({ label, coins: Math.floor(n) });
+  };
+  const by = r.coinBy;
+  if (by) {
+    const rest = Math.max(0, r.coins - by.purse - by.chest - by.prop);
+    add('捡到的铜钱', rest);
+    add('碰碎的摆设', by.prop);
+    add('铜钱袋', by.purse);
+    add('宝箱', by.chest);
+  } else add('捡到的铜钱', r.coins);
+  const k = 1 + RUN_BONUS.dangerStep * r.danger;
+  add(`撑了 ${Math.floor(r.ticks / 1800)} 分钟`, Math.floor(r.ticks / 1800) * RUN_BONUS.perMin * k);
+  add(`打倒 ${r.kills} 只`, Math.floor(r.kills / RUN_BONUS.killsPer) * k);
+  if (r.won) add('撑到天亮', RUN_BONUS.dawn * k);
+  if (r.boss) add('打倒尸王', RUN_BONUS.boss * k);
+  const sum = out.reduce((a, c) => a + c.coins, 0);
+  if (r.curses > 0) add(`咒印 ${r.curses} 条`, sum * CURSE_COIN_BONUS * r.curses);
+  return out;
 }
 
 /**
@@ -242,9 +280,19 @@ export function finishRun(s: Save, r: RunEnd): RunReward {
   const first = s.ledger.every(([id]) => !id.startsWith('run:')) && s.coinBase === 0;
   s.runs++;
   if (r.won) s.wins++;
-  let coins = Math.floor(r.coins * (1 + CURSE_COIN_BONUS * r.curses));
-  if (first) coins = Math.max(coins, FIRST_RUN_COINS);
+  const sources = runCoins(r);
+  let coins = sources.reduce((a, c) => a + c.coins, 0);
+  if (first && coins < FIRST_RUN_COINS) {
+    sources.push({ label: '第一局见面礼', coins: FIRST_RUN_COINS - coins });
+    coins = FIRST_RUN_COINS;
+  }
   if (coins > 0) earn(s, `run:${r.id}`, coins);
+  // 每日首胜：流水 id 带日期，同一天（两台设备也算）只记一次
+  if (r.won && r.day && !s.ledger.some(([x]) => x === `dailywin:${r.day}`)) {
+    earn(s, `dailywin:${r.day}`, RUN_BONUS.dailyWin);
+    sources.push({ label: '今天第一次天亮', coins: RUN_BONUS.dailyWin });
+    coins += RUN_BONUS.dailyWin;
+  }
   const run: Best = { ticks: r.ticks, kills: r.kills, won: r.won };
   const record = !r.quit && better(run, s.bestD[r.danger]);
   if (record) s.bestD[r.danger] = run;
@@ -259,7 +307,7 @@ export function finishRun(s: Save, r: RunEnd): RunReward {
   const askAssist = !s.assist && !s.assistAsked && s.streak >= ASSIST.deaths;
   if (askAssist) s.assistAsked = true;
   writeSave(s);
-  return { coins, record, unlockedDanger, askAssist };
+  return { coins, record, unlockedDanger, askAssist, sources };
 }
 
 // ───────────────────────── 解锁 ─────────────────────────

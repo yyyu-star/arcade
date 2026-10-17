@@ -105,6 +105,13 @@ export const PERK_FX = { liliang: 0.05, huti: 1, tipo: 10, shenxing: 0.04, lingq
 /** 第一局（无论胜负）结束至少给这么多铜钱：正好够买一级最便宜的加成 */
 export const FIRST_RUN_COINS = 100;
 
+/**
+ * 一局结束另给的铜钱（所有者 2026-10-17："筹码要丰富"，娱乐模式收益别抠）：每局都看得到进账，结算页按来源列。
+ * 撑的时间、击杀、天亮、打倒尸王四项按危险档放大（每档 +dangerStep）；每日首胜一天一次（按北京时间的日期）。
+ * 量级：危险 2 撑到天亮约 600–900 枚一局，最便宜的加成 100 枚，一套加成十几局攒齐。
+ */
+export const RUN_BONUS = { perMin: 10, killsPer: 40, dawn: 120, boss: 200, dangerStep: 0.2, dailyWin: 150 };
+
 /** 复活：站起来时的血和无敌拍数，身边的怪震开 */
 export const REVIVE = { hp: 0.5, invuln: 90, area: 260, knock: 90 };
 

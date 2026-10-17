@@ -48,6 +48,8 @@ describe('法器', () => {
     w.weapons.length = 0;
     w.wstats.length = 0;
     grantWeapon(w, 'rope', 1);
+    // 只看绳子的效果：站着不动只靠一根 1 级绳子撑不了多久（开局升级放慢以后十几秒就倒），血给足
+    w.hp = 1e9;
     let bound = 0;
     let boundMove = 0;
     let free = 0;

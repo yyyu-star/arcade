@@ -504,6 +504,8 @@ export interface ResultView {
   build: BuildRow[];
   /** 可选：结算后铜钱总数（本局的 coins 已加进去）。有就画"飞进总数"的动画，没有就只显示本局收获 */
   coinsTotal?: number;
+  /** 本局铜钱的来源明细（按顺序显示）；让玩家看懂钱是怎么挣的，没有或为空就不显示 */
+  sources?: { label: string; coins: number }[];
   /** 可选：本局的目标时长（秒），默认 900；用于"离天亮还差" */
   dawnSeconds?: number;
   /** 夜探：有就按夜探排版（won 填"撤出了"；seconds 是在镇里待了多久；coins 填这一局到手的铜钱，已含宝物换的） */
@@ -617,6 +619,12 @@ export class Result {
       : total !== undefined
         ? `<div class="yx-rcoins"><span class="yx-gain"><img alt="" src="${coinImg}">+${fmt(r.coins)}</span><span class="yx-arrow">→</span><span class="yx-tot"><img alt="" src="${coinImg}"><b data-from="${Math.max(0, total - r.coins)}" data-to="${total}">${fmt(Math.max(0, total - r.coins))}</b><small>铜钱</small></span>${Array.from({ length: 6 }, (_, i) => `<img class="yx-fly" alt="" src="${coinImg}" style="--i:${i}">`).join('')}</div>`
         : '';
+    const src = r.live === undefined && !rr && total !== undefined ? (r.sources ?? []).filter((x) => x.coins > 0) : [];
+    const srcHtml = src.length
+      ? `<div class="yx-rsrc${src.length > 6 ? ' two' : ''}">${src
+          .map((x, i) => `<div style="animation-delay:${0.3 + i * 0.06}s"><img alt="" src="${coinImg}"><span>${esc(x.label)}</span><b>+${fmt(x.coins)}</b></div>`)
+          .join('')}</div>`
+      : '';
     this.root.innerHTML =
       `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}${rr ? ' raid' : ''}">` +
       `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${esc(r.label)}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}${this.onShare ? '<button type="button" class="yx-btn yx-rshare" data-a="share">分享</button>' : ''}</div></div>` +
@@ -633,6 +641,7 @@ export class Result {
       (rr ? this.raidItems(rr) : `<div class="yx-rbuild"><label>法器伤害</label>${rows}${passives ? `<div class="yx-rpasses">${passives}</div>` : ''}</div>`) +
       '</div>' +
       coinRow +
+      srcHtml +
       '<div class="yx-row3">' +
       '<button type="button" class="yx-big ghost" data-a="home">大厅</button>' +
       `<button type="button" class="yx-big ghost" data-a="menu">${rr ? '回菜单' : '换难度'}</button>` +

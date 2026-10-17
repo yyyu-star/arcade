@@ -7,7 +7,7 @@
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
 import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
-import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
+import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
 
 export type Skill = 'novice' | 'normal';
@@ -121,17 +121,32 @@ export class Bot {
       const dx = w.dX[i]! - w.x;
       const dy = w.dY[i]! - w.y;
       let d2 = dx * dx + dy * dy;
-      if (w.dKind[i] === Drop.Chest || w.dKind[i] === Drop.Bun) d2 *= 0.25;
+      if (w.dKind[i] === Drop.Chest || w.dKind[i] === Drop.Bun || w.dKind[i] === Drop.Bomb || w.dKind[i] === Drop.Purse) d2 *= 0.25;
       if (d2 < bd) {
         bd = d2;
         best = i;
       }
     }
+    let tx = best >= 0 ? w.dX[best]! : 0;
+    let ty = best >= 0 ? w.dY[best]! : 0;
+    // 摆设：顺路的碰碎（算得比魂珠远一点，不专门绕远路）
+    for (let i = 0; i < MAX_PROPS; i++) {
+      if (!w.pAlive[i]) continue;
+      const dx = w.pX[i]! - w.x;
+      const dy = w.pY[i]! - w.y;
+      const d2 = (dx * dx + dy * dy) * 1.5;
+      if (d2 < bd) {
+        bd = d2;
+        best = MAX_DROPS + i;
+        tx = w.pX[i]!;
+        ty = w.pY[i]!;
+      }
+    }
     let gx = 0;
     let gy = 0;
     if (best >= 0) {
-      const dx = w.dX[best]! - w.x;
-      const dy = w.dY[best]! - w.y;
+      const dx = tx - w.x;
+      const dy = ty - w.y;
       const d = Math.hypot(dx, dy) || 1;
       const pull = threat > 0 ? 0.3 : 1;
       gx = (dx / d) * pull;

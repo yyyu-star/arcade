@@ -37,10 +37,10 @@ describe('确定性', () => {
     const w = play(20261016, 30 * 180);
     expect({ tick: w.tick, kills: w.kills, level: w.level, fp: fingerprint(w) }).toMatchInlineSnapshot(`
       {
-        "fp": 2943774310,
-        "kills": 746,
-        "level": 7,
-        "tick": 5394,
+        "fp": 3645206262,
+        "kills": 691,
+        "level": 4,
+        "tick": 5397,
       }
     `);
   });
@@ -74,7 +74,7 @@ describe('一局', () => {
     expect(w.phase).toBe('play');
   });
 
-  it('开场节奏（DESIGN.md 13.3）：第一次升级 ≤ 10 秒，前 3 分钟升级 ≥ 10 次（普通玩家、普通难度，20 局均值）', () => {
+  it('开场节奏（DESIGN.md 13.3）：第一次升级 10–20 秒，前 3 分钟升级 6–9 次（普通玩家、普通难度，20 局均值）', () => {
     let first = 0;
     let three = 0;
     const n = 20;
@@ -90,8 +90,10 @@ describe('一局', () => {
       first += f;
       three += w.level - 1;
     }
-    expect(first / n).toBeLessThanOrEqual(10);
-    expect(three / n).toBeGreaterThanOrEqual(10);
+    expect(first / n).toBeGreaterThanOrEqual(10);
+    expect(first / n).toBeLessThanOrEqual(20);
+    expect(three / n).toBeGreaterThanOrEqual(6);
+    expect(three / n).toBeLessThanOrEqual(9);
   }, 30_000);
 });
 

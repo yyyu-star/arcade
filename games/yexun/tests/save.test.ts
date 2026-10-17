@@ -22,7 +22,7 @@ describe('本机存档', () => {
 });
 
 describe('局外成长（第 5 步）', () => {
-  const end = (over: Partial<import('../src/platform/save.ts').RunEnd> = {}) => ({ id: 'r' + Math.floor(Math.abs(over.ticks ?? 1)), danger: 0 as const, won: false, quit: false, ticks: 3000, kills: 50, coins: 30, curses: 0, ...over });
+  const end = (over: Partial<import('../src/platform/save.ts').RunEnd> = {}) => ({ id: 'r' + Math.floor(Math.abs(over.ticks ?? 1)), danger: 0 as const, won: false, quit: false, ticks: 1000, kills: 30, coins: 30, curses: 0, ...over });
   it('第一局至少给够买一级最便宜加成的铜钱；咒印每条多 25%', async () => {
     const { fresh, finishRun, coins, buyPerk } = await import('../src/platform/save.ts');
     const { FIRST_RUN_COINS, PERKS } = await import('../src/content/meta.ts');
@@ -34,6 +34,21 @@ describe('局外成长（第 5 步）', () => {
     expect(buyPerk(s, 'liliang', 'x')).toBe(true);
     expect(s.perks.liliang).toBe(1);
     expect(coins(s)).toBe(FIRST_RUN_COINS + 150 - PERKS.liliang.cost[0]!);
+  });
+  it('一局的铜钱按来源列明细，加起来等于进账；每日首胜一天只给一次', async () => {
+    const { fresh, finishRun, coins } = await import('../src/platform/save.ts');
+    const { RUN_BONUS } = await import('../src/content/meta.ts');
+    const s = fresh();
+    finishRun(s, end({ id: 'warm' }));
+    const before = coins(s);
+    const r = finishRun(s, end({ id: 'w1', danger: 2, won: true, boss: true, ticks: 27_000, kills: 4000, coins: 300, coinBy: { drop: 200, purse: 40, prop: 30, chest: 30 }, day: '2026-10-17' }));
+    expect(r.sources.reduce((a, c) => a + c.coins, 0)).toBe(r.coins);
+    expect(coins(s) - before).toBe(r.coins);
+    expect(r.sources.map((c) => c.label)).toEqual(['捡到的铜钱', '碰碎的摆设', '铜钱袋', '宝箱', '撑了 15 分钟', '打倒 4000 只', '撑到天亮', '打倒尸王', '今天第一次天亮']);
+    const k = 1 + RUN_BONUS.dangerStep * 2;
+    expect(r.sources[4]!.coins).toBe(Math.floor(15 * RUN_BONUS.perMin * k));
+    const again = finishRun(s, end({ id: 'w2', won: true, ticks: 27_000, day: '2026-10-17' }));
+    expect(again.sources.some((c) => c.label === '今天第一次天亮')).toBe(false);
   });
   it('钱不够买不了；全退把花的都还回来', async () => {
     const { fresh, finishRun, coins, buyPerk, refundPerks } = await import('../src/platform/save.ts');
