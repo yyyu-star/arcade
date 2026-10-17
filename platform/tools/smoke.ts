@@ -1917,6 +1917,11 @@ async function phoneAudit(browser: Browser): Promise<void> {
     wallet: ['[data-testid="wallet-balance"]', '.wallet__relief button'],
     boards: ['[data-testid="my-rank"]'],
   };
+  // 主按钮（主线清单里的主操作）：大厅的"回去接着打"和"领补给"、钱包的补给
+  const reach: Record<string, string[]> = {
+    home: ['[data-testid="nudge-stake"] a', '[data-testid="nudge-relief"] button'],
+    wallet: ['.wallet__relief button'],
+  };
   const problems: string[] = [];
   for (const [label, viewport] of PHONES) {
     console.log(`手机清单（${label} ${viewport.width}×${viewport.height}）：${pages.map((p) => p[0]).join('、')}`);
@@ -1945,6 +1950,14 @@ async function phoneAudit(browser: Browser): Promise<void> {
         for (const sel of firstScreen[name] ?? []) {
           const box = await page.locator(sel).first().boundingBox();
           if (!box || box.y < 0 || box.y + box.height > viewport.height) problems.push(`${label} ${name}：第一屏看不到 ${sel}${box ? `（在 ${Math.round(box.y)}–${Math.round(box.y + box.height)}）` : ''}`);
+        }
+      }
+      // 单手够得着：手机竖着拿时主按钮的中心不在屏幕最上面三分之一（拇指最难够的地方）；iPad 一般两手拿，不量
+      if (label === 'se' || label === 'iphone') {
+        for (const sel of reach[name] ?? []) {
+          const box = await page.locator(sel).first().boundingBox();
+          const mid = box ? box.y + box.height / 2 : -1;
+          if (mid < viewport.height / 3) problems.push(`${label} ${name}：主按钮 ${sel} 在屏幕最上面三分之一，单手够不着（中心 ${Math.round(mid)}，要 ≥ ${Math.round(viewport.height / 3)}）`);
         }
       }
       await shot(page, `phone-${label}-${name}`);
