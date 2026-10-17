@@ -34,7 +34,7 @@ The rest of this README, the code comments and the API contract (`docs/platform-
 - **大厅**：游戏卡片（最近玩过的排前面）、提醒条（桌上的筹码、就地领补给）、本周净赢、公告。
   有好友房的游戏（`src/games.ts` 里写了 `online`）在"进入游戏"旁边多一个"好友房"按钮，链到游戏地址加参数（`?online=1`）。
 - **账号**：注册、登录、找回密码（恢复码）、改昵称和密码、换恢复码、退出其他设备、注销。
-- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名。
+- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名；好友在不在线、在哪个游戏哪个房间（0.13.0，`POST /api/presence`），本人可以在"我的"里关掉。
 - **钱包**（`/wallet`）：筹码余额、每日补给、"最近进出"流水。带入、结回、放弃只能由游戏的服务端经 `WalletService` RPC 调。
 - **战绩和排行榜**：战绩页（`/me/stats`、别人的 `/u/<id>`），排行榜（`/boards`：本周净赢、各游戏的每日挑战、称号收集，可只看好友）。
 - **云存档**：`/api/saves/<游戏>/<槽>`，游戏白名单就是 `src/games.ts`。
@@ -173,7 +173,7 @@ platform/
 │  └─ format.ts、ui.tsx、ledger.tsx、next.ts、play.ts   格式化、表单和恢复码卡片、流水列表、登录后跳回的地址、进游戏的地址
 ├─ worker/              Worker
 │  ├─ index.ts          入口：/api/* 交给 api/router.ts；Cron；导出钱包 RPC 入口 WalletService（wallet-service.ts）
-│  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、boards、saves、stats、leaderboard、settings；
+│  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、presence、boards、saves、stats、leaderboard、settings；
 │                       钱包 wallet.ts（核心）→ wallet-store.ts（读写）→ wallet-api.ts（接口），只能 api → store → 核心这样 import；
 │                       crypto、validate、ratelimit、meter、db、time、config（所有上限和阈值的默认值）
 ├─ migrations/          D1 迁移，只增不删

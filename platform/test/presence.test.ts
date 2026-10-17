@@ -48,6 +48,8 @@ describe('报位置', () => {
       { place: 'game', game: 'chess' },
       { place: 'room', game: 'guandan' },
       { place: 'room', game: 'guandan', room: '12' },
+      { place: 'room', game: 'guandan', room: 'abc123' },
+      { place: 'room', game: 'guandan', room: '1234567' },
       { place: 'room', game: 'guandan', room: '123456', seats: 'three' },
     ]) {
       const res = await report(a, body);

@@ -18,8 +18,8 @@ export interface Where {
 }
 
 const PLACES = new Set<Place>(['lobby', 'game', 'room']);
-/** 房间码：kit 的码是 6 位数字，这里放宽到 4–12 位字母数字，换了格式也不用改平台 */
-const ROOM_RE = /^[A-Za-z0-9]{4,12}$/;
+/** 房间码：kit 的码是 6 位数字。卡死这个格式：好友页、kit 直接拿它拼 /games/<game>/?room=<room>，不能放进别的字符 */
+export const ROOM_RE = /^\d{6}$/;
 /** 几个人 / 几个座位，如 "3/4" */
 const SEATS_RE = /^\d{1,2}\/\d{1,2}$/;
 
