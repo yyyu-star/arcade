@@ -46,6 +46,7 @@ tests/         vitest
 | `npm test` | 类型检查（页面 + Worker）+ vitest |
 | `npm run build:cf` | 部署用构建到 `dist-cf/games/yexun/` |
 | `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward,wood,fire` | 机器人模拟，出胜率和节奏表（`--map yizhuang` 跑义庄）；`tests/pace.test.ts` 是 13.3 的节奏验收 |
+| `node tools/sim.ts ... --from 500 --json 片.json`、`node tools/sim-merge.ts <目录> [--json 合并.json]` | 一格拆成几片（`--from` 错开种子）分到 GitHub runner 上跑，下载后按格拼表（第 7 步全量确认用；片不连续会报错） |
 | `npm run bench -- <种子> <难度>` | 核心每拍耗时 |
 | `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--query "auto&give=mirror:8,crane:8e&merge"` 开局换成这几件法器（带 e 直接进化，&merge 当场合成），`&map=yizhuang` 换义庄，`--tag` 加文件名前缀；`--pause` 停在暂停面板上；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时；`--cpu 4` 按 4 倍 CPU 降速、`--view phone` 只跑一种视口 |
 | 页面加 `?fps` | 左下角显示每秒帧数、最长一帧、场上怪数（真机验收用，不写存储） |

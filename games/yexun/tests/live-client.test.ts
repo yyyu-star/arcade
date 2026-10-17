@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LIVE_KEY, LiveClient, classify, liveSetup, reviveLive } from '../src/platform/live.ts';
-import { LIVE_TIERS, vigilBp } from '../src/content/live.ts';
+import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, vigilBp } from '../src/content/live.ts';
 import { normalizeSetup } from '../src/core/state.ts';
 
 const res = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const OK = { ok: true, wallet: { balance: 1 }, credited: 0, capped: 0, user: 'u1' };
+
+describe('守夜结回倍数', () => {
+  it('每档：3:00 前为 0、随撑的时间不减、天亮 = dawnBp、尸王再加且封顶', () => {
+    for (const t of LIVE_TIER_IDS) {
+      const dawn = LIVE_TIERS[t].dawnBp;
+      expect(vigilBp(t, 180 * 30, false, false)).toBe(0);
+      let prev = 0;
+      for (let tick = 0; tick < 900 * 30; tick += 97) {
+        const b = vigilBp(t, tick, false, false);
+        expect(Number.isInteger(b) && b >= prev && b <= dawn).toBe(true);
+        prev = b;
+      }
+      expect(vigilBp(t, 27_000, true, false)).toBe(dawn);
+      expect(vigilBp(t, 27_000, true, true)).toBe(Math.min(LIVE_MAX_BP, dawn + VIGIL_BOSS_ADD_BP));
+    }
+  });
+});
 
 function mem(): { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void; m: Map<string, string> } {
   const m = new Map<string, string>();
@@ -122,7 +139,7 @@ describe('结回', () => {
     await c.finish(5, { ticks: 9000, won: false, bossKilled: false }, stats);
     const last = calls.at(-1)!;
     expect(last.url).toBe('api/live/settle');
-    expect(last.body).toMatchObject({ tier: 'small', bp: vigilBp(9000, false, false), user: 'u1', stats });
+    expect(last.body).toMatchObject({ tier: 'small', bp: vigilBp('small', 9000, false, false), user: 'u1', stats });
     expect(typeof last.body.ref).toBe('string');
     expect(saved(store)).toMatchObject({ step: 'done', credited: 3_600 });
     expect(c.busy).toBe(false);
@@ -131,11 +148,11 @@ describe('结回', () => {
   });
 
   it('天亮和尸王的倍数', async () => {
-    for (const [won, boss, bp] of [[true, false, 18_000], [true, true, 30_000]] as const) {
+    for (const [won, boss] of [[true, false], [true, true]] as const) {
       const { c, calls } = rig();
       await c.buyin('small', 5);
       await c.finish(5, { ticks: 27_000, won, bossKilled: boss });
-      expect(calls.at(-1)!.body.bp).toBe(bp);
+      expect(calls.at(-1)!.body.bp).toBe(vigilBp('small', 27_000, won, boss));
     }
   });
 
@@ -211,7 +228,7 @@ describe('重开页面', () => {
     const b = rig(() => res(200, OK), store);
     expect(b.c.record?.step).toBe('settling');
     await b.c.resume();
-    expect(b.calls[0]!.body).toMatchObject({ ref, bp: vigilBp(9000, false, false), user: 'u1' });
+    expect(b.calls[0]!.body).toMatchObject({ ref, bp: vigilBp('small', 9000, false, false), user: 'u1' });
     expect(saved(store).step).toBe('done');
   });
 
@@ -225,7 +242,7 @@ describe('重开页面', () => {
     const b = rig(undefined, store);
     await b.c.resume();
     expect(b.calls[0]!.url).toBe('api/live/settle');
-    expect(b.calls[0]!.body.bp).toBe(vigilBp(6000, false, false));
+    expect(b.calls[0]!.body.bp).toBe(vigilBp('small', 6000, false, false));
     expect(saved(store).step).toBe('done');
   });
 

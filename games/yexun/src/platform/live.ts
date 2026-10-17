@@ -5,7 +5,7 @@
  * - 带入前先把记录写成 buying：回话丢了也知道那个 ref 可能已经带入，下次 resume() 先 refund 收回（没带入则钱包回 no_stake，清掉）。
  * - 结回、放弃先写成 settling 再发，连不上就停在 settling，之后每次打开、回到前台、联网时重发；操作 id 按 ref 固定，重发钱包只算一次。
  * - 中途离开（局没打完就关页面、刷新、崩溃）算输：夜巡不存打到一半的局，没法接着打，所以重开页面时 resume() 把 playing 的那一份按
- *   "最后一次 progress 记下的拍数" 结回（vigilBp(ticks, false, false)：撑过 3:00 才有钱，没记过拍数就是 0）。
+ *   "最后一次 progress 记下的拍数" 结回（vigilBp(tier, ticks, false, false)：撑过 3:00 才有钱，没记过拍数就是 0）。
  *   这样关页面既不能躲掉损失，也不会比留在局里多拿：main.ts 打局时每隔约 10 秒调一次 progress。
  * - 带入时记下账号（Worker 回的 user）：结回、放弃时带上，换了账号 Worker 回 409 wrong_user，不动钱包，等换回去再发。
  * - 501（单独部署，没有钱包）：unavailable 为 true，实盘入口藏起来；带入返回 { ok:false, outcome:{kind:'unavailable'} }。
@@ -211,7 +211,7 @@ export class LiveClient {
   finish(seed: number, res: { ticks: number; won: boolean; bossKilled: boolean }, stats?: unknown): Promise<void> {
     const r = this.refresh();
     if (!r || r.step !== 'playing' || r.seed !== seed) return this.inflight ?? Promise.resolve();
-    const bp = Math.max(0, Math.min(LIVE_MAX_BP, vigilBp(res.ticks, res.won, res.bossKilled)));
+    const bp = Math.max(0, Math.min(LIVE_MAX_BP, vigilBp(r.tier, res.ticks, res.won, res.bossKilled)));
     this.save({ ...r, step: 'settling', kind: 'settle', bp, ...(stats === undefined ? {} : { stats }) }, r.ref);
     return this.retry();
   }
@@ -234,7 +234,7 @@ export class LiveClient {
     if (!r) return;
     if (r.step === 'playing' && !this.inflight) {
       if (this.d.now() > r.until) this.save({ ...r, step: 'void', error: 'expired' }, r.ref);
-      else this.save({ ...r, step: 'settling', kind: 'settle', bp: vigilBp(r.ticks ?? 0, false, false) }, r.ref);
+      else this.save({ ...r, step: 'settling', kind: 'settle', bp: vigilBp(r.tier, r.ticks ?? 0, false, false) }, r.ref);
     }
     await this.retry();
   }

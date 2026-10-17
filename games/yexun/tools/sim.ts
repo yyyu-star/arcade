@@ -1,14 +1,19 @@
 /**
- * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--map snow|yizhuang] [--threads N]
+ * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--danger 0,2,4 | --diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--map snow|yizhuang] [--threads N] [--json 文件] [--from 偏移]
+ * --json：把每局的结局（赢没赢、打没打倒尸王、撑了几拍）按格存下来，第 7 步离线调实盘倍数曲线用（曲线不影响对局，改曲线不用重跑）。
  *
- * 每个组合跑 N 局（种子 1..N），报：胜率（撑到天亮）± 2 倍标准误、平均撑了多久、打倒尸王的比例、
+ * --from：种子从 from+1 起（默认 0），把一格拆成几片分到不同机器上跑，再用 tools/sim-merge.ts 拼表。
+ *
+ * 每个组合跑 N 局（种子 from+1..from+N），报：胜率（撑到天亮）± 2 倍标准误、平均撑了多久、打倒尸王的比例、
  * 节奏指标（第一次升级、3 分钟 / 5 分钟内升级次数、全局升级次数、7:30 以后每分钟升级次数，DESIGN.md 13.3）、击杀、一局耗时。
  * 多线程：每个线程跑一部分种子，结果按种子顺序合并，和线程数无关。
  */
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { createWorld, step, Ev } from '../src/core/index.ts';
-import { DIFFICULTIES, type Difficulty } from '../src/content/waves.ts';
+import { writeFileSync } from 'node:fs';
+import { DIFFICULTIES, type Danger } from '../src/content/waves.ts';
+import { tierOfDanger, vigilBp } from '../src/content/live.ts';
 import type { MapId } from '../src/content/maps.ts';
 import { Bot, type Build, type Skill } from './bots.ts';
 
@@ -24,10 +29,12 @@ export interface RunResult {
   late: number;
   kills: number;
   elites: number;
+  /** 撑了几拍（实盘倍数按它算） */
+  ticks: number;
 }
 
-export function runOne(seed: number, diff: Difficulty, skill: Skill, build: Build, map: MapId = 'snow'): RunResult {
-  const w = createWorld({ seed, mode: 'vigil', danger: DIFFICULTIES[diff].danger, map });
+export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow'): RunResult {
+  const w = createWorld({ seed, mode: 'vigil', danger, map });
   const bot = new Bot(skill, build, seed);
   let firstLevel = -1;
   let levels3 = 0;
@@ -49,11 +56,11 @@ export function runOne(seed: number, diff: Difficulty, skill: Skill, build: Buil
       } else if (t === Ev.Kill && ev.b[i] === 1) elites++;
     }
   }
-  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites };
+  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick };
 }
 
 interface Cell {
-  diff: Difficulty;
+  diff: Danger;
   skill: Skill;
   build: Build;
 }
@@ -77,7 +84,12 @@ if (!isMainThread) {
     return i >= 0 ? process.argv[i + 1]! : def;
   };
   const n = Number(arg('--n', '200'));
-  const diffs = arg('--diff', 'easy,normal,hard').split(',') as Difficulty[];
+  const seedFrom = Number(arg('--from', '0'));
+  // --danger 0–5；老的 --diff easy,normal,hard 照认（危险 0 / 2 / 4）
+  const diffs: Danger[] = process.argv.includes('--danger')
+    ? arg('--danger', '2').split(',').map((d) => Number(d) as Danger)
+    : arg('--diff', 'easy,normal,hard').split(',').map((d) => DIFFICULTIES[d as keyof typeof DIFFICULTIES].danger);
+  const jsonOut = arg('--json', '');
   const skills = arg('--skill', 'novice,normal').split(',') as Skill[];
   const builds = arg('--build', 'sword').split(',') as Build[];
   const threads = Math.max(1, Number(arg('--threads', String(availableParallelism()))));
@@ -96,16 +108,25 @@ if (!isMainThread) {
   cells.forEach((cell, ci) => {
     for (let from = 0; from < n; from += chunk) {
       const seeds: number[] = [];
-      for (let s = from; s < Math.min(n, from + chunk); s++) seeds.push(s + 1);
+      for (let s = from; s < Math.min(n, from + chunk); s++) seeds.push(seedFrom + s + 1);
       owner.push({ cell: ci, from });
       tasks.push({ id: tid++, cell, map, seeds });
     }
   });
 
   const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  /** 按现在的倍数曲线：每局结回 − 1 份的均值 ± 2SE（实盘只有危险 0/2/3/4，别的档出 -） */
+  const ev = (rs: RunResult[], diff: Danger): string => {
+    const tier = tierOfDanger(diff);
+    if (!tier) return '-';
+    const xs = rs.map((r) => vigilBp(tier, r.ticks, r.won, r.boss) / 10_000 - 1);
+    const m = mean(xs);
+    const sd = Math.sqrt(mean(xs.map((x) => (x - m) * (x - m))));
+    return `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(Math.max(1, xs.length))).toFixed(2)}`;
+  };
   const se2 = (p: number, m: number): number => 2 * Math.sqrt((p * (1 - p)) / Math.max(1, m));
-  console.log(`${map === 'snow' ? '雪原' : '义庄'}，每格 ${n} 局，${threads} 线程`);
-  console.log('难度 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英');
+  console.log(`${map === 'snow' ? '雪原' : '义庄'}，每格 ${n} 局（种子 ${seedFrom + 1}..${seedFrom + n}），${threads} 线程`);
+  console.log('危险 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英 | 实盘期望 ±2SE（份）');
   const lines: string[] = [];
   let printed = 0;
   let tPrev = Date.now();
@@ -130,6 +151,7 @@ if (!isMainThread) {
           mean(rs.filter((r) => r.seconds > 600).map((r) => r.late)).toFixed(2),
           mean(rs.map((r) => r.kills)).toFixed(0),
           mean(rs.map((r) => r.elites)).toFixed(1),
+          ev(rs, diff),
         ].join(' | ') + `   (${((now - tPrev) / 1000).toFixed(1)} s)`,
       );
       console.log(lines[lines.length - 1]);
@@ -164,5 +186,9 @@ if (!isMainThread) {
     if (!tasks.length) resolve();
   });
   const total = cells.length * n;
+  if (jsonOut) {
+    writeFileSync(jsonOut, JSON.stringify(cells.map((c, i) => ({ ...c, map, from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, r.boss ? 1 : 0, r.ticks]) }))));
+    console.log(`每局结局写到 ${jsonOut}`);
+  }
   console.log(`共 ${total} 局，${((Date.now() - t0) / 1000).toFixed(1)} 秒，${(total / ((Date.now() - t0) / 1000)).toFixed(2)} 局/秒`);
 }

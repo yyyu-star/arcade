@@ -114,16 +114,16 @@ export const OPEN_TICKS = 30 * S;
 export const FIRST_RUN_GUARD = 180 * S;
 
 /**
- * 逐档继承（13.2）：D0 新手照顾 → D1 怪种按时出 → D2 精英按时出（配平基准）→ D3 血和伤害 +12% → D4 +26%、精英多一只 → D5 +40%、两只尸王。
+ * 逐档继承（13.2）：D0 新手照顾 → D1 怪种按时出 → D2 精英按时出（配平基准）→ D3 血和伤害比 D2 +15% → D4 +21%、精英多一只 → D5 +35%、两只尸王（第 7 步按模拟器定的数）。
  * 实盘四档固定用危险 0 / 2 / 3 / 4（DESIGN.md 4.1）。
  */
 export const DANGERS: Record<Danger, DangerDef> = {
   0: { id: 0, name: '危险 0', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, mixShift: -1, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '第一次玩选这个' },
-  1: { id: 1, name: '危险 1', stars: 1, hpMul: 0.86, dmgMul: 0.8, countMul: 0.92, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '怪种按时出' },
-  2: { id: 2, name: '危险 2', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '会躲会选就能撑到天亮' },
-  3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.12, dmgMul: 1.12, countMul: 1.05, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '怪更硬、下手更重' },
-  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.26, dmgMul: 1.26, countMul: 1.1, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
-  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.4, dmgMul: 1.4, countMul: 1.15, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
+  1: { id: 1, name: '危险 1', stars: 1, hpMul: 1.12, dmgMul: 1.0, countMul: 1.0, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '怪种按时出' },
+  2: { id: 2, name: '危险 2', stars: 2, hpMul: 1.2, dmgMul: 1.2, countMul: 1.06, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '会躲会选就能撑到天亮' },
+  3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.38, dmgMul: 1.38, countMul: 1.12, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '怪更硬、下手更重' },
+  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.45, dmgMul: 1.45, countMul: 1.14, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
+  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.62, dmgMul: 1.62, countMul: 1.2, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
 };
 /** 两只尸王时每只的血 */
 export const TWIN_BOSS_HP = 0.75;

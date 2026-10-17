@@ -32,9 +32,11 @@ describe('危险档', () => {
     for (let i = 1; i < s.length; i++) expect(s[i]!.at).toBeGreaterThanOrEqual(s[i - 1]!.at);
   });
   it('危险 3–5 血和伤害逐档涨，危险 5 两只尸王各 75% 血、两只都倒了才算打倒', () => {
-    expect(DANGERS[3].hpMul).toBeCloseTo(1.12);
-    expect(DANGERS[4].hpMul).toBeCloseTo(1.26);
-    expect(DANGERS[5].hpMul).toBeCloseTo(1.4);
+    // 具体倍数第 7 步按模拟器调，这里只锁"逐档涨"
+    for (const d of [3, 4, 5] as const) {
+      expect(DANGERS[d].hpMul).toBeGreaterThan(DANGERS[(d - 1) as 2 | 3 | 4].hpMul);
+      expect(DANGERS[d].dmgMul).toBeGreaterThan(DANGERS[(d - 1) as 2 | 3 | 4].dmgMul);
+    }
     const w = make({ danger: 5 });
     w.nextEvent = w.schedule.findIndex((e) => e.kind === 'boss' && e.enemy === 'boss');
     w.tick = w.schedule[w.nextEvent]!.at - 1;
