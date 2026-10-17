@@ -29,6 +29,10 @@ const TAG = opt('--tag') ?? '';
 const FLOW = argv.includes('--flow');
 /** 开打后点暂停再截（看暂停页的构筑和套装） */
 const PAUSE = argv.includes('--pause');
+/** CPU 降速倍数（CDP Emulation.setCPUThrottlingRate），模拟低端手机 */
+const CPU = Number(opt('--cpu') ?? 1);
+/** 只跑某个视口（desktop | phone） */
+const ONLY = opt('--view');
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -63,15 +67,17 @@ const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '-
 const problems: string[] = [];
 try {
   for (const v of VIEWS) {
+    if (ONLY && v.name !== ONLY) continue;
     const ctx = await browser.newContext({ ...v, ...(VIDEO ? { recordVideo: { dir: OUT, size: v.viewport } } : {}) });
     const page = await ctx.newPage();
+    if (CPU > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: CPU });
     page.on('console', (m) => {
       // SwiftShader 截图时的 GPU 驱动提示（ReadPixels）不是页面的问题
       if (m.type() === 'error' && !/GL Driver Message/.test(m.text())) problems.push(`${v.name} 控制台报错：${m.text()}`);
     });
     page.on('pageerror', (e) => problems.push(`${v.name} 未捕获异常：${e.message}`));
-    await page.goto(BASE);
-    await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
+    await page.goto(BASE, { timeout: 30_000 * Math.max(1, CPU) * 2 });
+    await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 * Math.max(1, CPU) * 2 });
     if (FLOW) {
       const snap = async (name: string): Promise<void> => {
         await page.waitForTimeout(400);

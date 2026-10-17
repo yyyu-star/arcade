@@ -145,7 +145,6 @@ export function step(w: World, dir: number, choice = -1): void {
   movePlayer(w, dir);
   spawnWaves(w);
   const g = gridOf(w);
-  g.build(w);
   markSlow(w, g);
   moveEnemies(w);
   g.build(w);
@@ -474,8 +473,12 @@ function spawnWaves(w: World): void {
 function markSlow(w: World, g: Grid): void {
   w.eSlow.fill(0);
   w.bellArea = 0;
+  // 格子只有减速的查询要用（移动完会重建）：没有镇 3 件也没有镇魂铃就不建
+  let built = false;
   // 镇 3 件：靠近主角（120 以内）的怪减速 20%（记 3；镇魂铃的光环更狠，后写覆盖）
   if (w.stats.nearSlow) {
+    g.build(w);
+    built = true;
     const n = g.query(w, w.x, w.y, 120);
     for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = 3;
   }
@@ -486,6 +489,10 @@ function markSlow(w: World, g: Grid): void {
     // 阴阳镇魂：光环里减速一半（记 2）；往生铃：光环里的怪死了回血（记下半径）
     const mark = w.merges.includes('yinyang') ? 2 : 1;
     if (o.evolved) w.bellArea = area;
+    if (!built) {
+      g.build(w);
+      built = true;
+    }
     const n = g.query(w, w.x, w.y, area);
     for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = mark;
   }
@@ -500,6 +507,8 @@ const guardFx = {
 };
 
 function moveEnemies(w: World): void {
+  // 开局减速对每只怪都一样，循环外算一次
+  const openMul = w.tick < OPEN_TICKS ? DANGERS[w.setup.danger].openSlow : 1;
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;
     if (w.eBind[i]! > w.tick) {
@@ -510,7 +519,8 @@ function moveEnemies(w: World): void {
       w.eKY[i]! *= 0.72;
       continue;
     }
-    const kind = ENEMIES[w.eKind[i]!]!.kind;
+    const def = ENEMIES[w.eKind[i]!]!;
+    const kind = def.kind;
     let dx = w.x - w.eX[i]!;
     let dy = w.y - w.eY[i]!;
     const d = fsqrt(dx * dx + dy * dy) || 1;
@@ -523,7 +533,7 @@ function moveEnemies(w: World): void {
       w.eCount--;
       continue;
     }
-    if (d > 900 && !ENEMIES[w.eKind[i]!]!.boss && !ENEMIES[w.eKind[i]!]!.elite && !(kind === 'weasel' && w.eS[i] === 1)) {
+    if (d > 900 && !def.boss && !def.elite && !(kind === 'weasel' && w.eS[i] === 1)) {
       if (kind === 'horse') w.eS[i] = 0;
       const [x, y] = ringPoint(w, w.face + w.rAi.int(64) - 32);
       w.eX[i] = x;
@@ -533,7 +543,7 @@ function moveEnemies(w: World): void {
       continue;
     }
     const slow = w.eSlow[i];
-    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * (w.tick < OPEN_TICKS ? DANGERS[w.setup.danger].openSlow : 1);
+    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * openMul;
     let vx = dx;
     let vy = dy;
     // 夜探的守卫：守在原地、追人、回家由 explore/guards.ts 算；own 为真时照这种怪自己的行为走（比如守铜箱的白狐追人时照常连冲）
@@ -855,31 +865,66 @@ function lordAct(w: World, i: number, dx: number, dy: number): void {
 }
 const PALANQUIN_CODE = ENEMY_BY_KIND.palanquin.code;
 
-/** 怪与怪之间轻推挤：只和同格、邻格的比 */
+/**
+ * 挤开的力度：每次推的比例。原来每拍推 0.5，现在隔一拍推一次，补成 2 倍（平均力度不变：实测对局里重叠对数、重叠深度和每拍推 0.5 时一致）。
+ * 两只怪互相推的份额加起来正好是重叠的深度，所以 1.0 一次最多推到刚好不重叠，不会过冲。
+ */
+const SEP_PUSH = 1.0;
+
+/** 怪与怪之间轻推挤：只和同格、邻格的比；隔一拍做一次（按拍的奇偶），省一半的格子扫描 */
 function separate(w: World, g: Grid): void {
-  for (let i = 0; i < MAX_ENEMIES; i++) {
+  if ((w.tick & 1) === 0) return;
+  const alive = w.eAlive;
+  const bind = w.eBind;
+  const ex = w.eX;
+  const ey = w.eY;
+  const er = w.eR;
+  const start = g.start;
+  const items = g.items;
+  const cols = g.cols;
+  const tick = w.tick;
+  let left = w.eCount;
+  for (let i = 0; i < MAX_ENEMIES && left > 0; i++) {
+    if (!alive[i]) continue;
+    left--;
     // 被捆住的像钉在地上：别的怪挤它，它不让开（挤的那只自己绕开）
-    if (!w.eAlive[i] || w.eBind[i]! > w.tick) continue;
-    const n = g.query(w, w.eX[i]!, w.eY[i]!, w.eR[i]!);
-    for (let j = 0; j < n; j++) {
-      const o = g.out[j]!;
-      if (o === i) continue;
-      const dx = w.eX[i]! - w.eX[o]!;
-      const dy = w.eY[i]! - w.eY[o]!;
-      const rr = w.eR[i]! + w.eR[o]!;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= rr * rr) continue;
-      if (d2 < 1e-6) {
-        // 完全重叠：按槽位号错开，方向确定
-        w.eX[i]! += i < o ? -0.5 : 0.5;
-        continue;
+    if (bind[i]! > tick) continue;
+    // 和 g.query 一样的格子范围和顺序；候选的判断用挤之前的位置（xi, yi），挤的时候只改 i 自己，
+    // 所以边找边挤和"先找齐再挤"结果逐位相同，省掉中间的结果数组
+    const xi = ex[i]!;
+    const yi = ey[i]!;
+    const ri = er[i]!;
+    g.span(xi, yi, ri + 50);
+    const cx0 = g.x0;
+    const cx1 = g.x1;
+    const cy0 = g.y0;
+    const cy1 = g.y1;
+    for (let cy = cy0; cy <= cy1; cy++) {
+      const k1 = start[cy * cols + cx1 + 1]!;
+      for (let k = start[cy * cols + cx0]!; k < k1; k++) {
+        const o = items[k]!;
+        if (alive[o] === 0) continue;
+        const rr = ri + er[o]!;
+        const qx = ex[o]! - xi;
+        const qy = ey[o]! - yi;
+        if (qx * qx + qy * qy > rr * rr) continue;
+        if (o === i) continue;
+        const dx = ex[i]! - ex[o]!;
+        const dy = ey[i]! - ey[o]!;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= rr * rr) continue;
+        if (d2 < 1e-6) {
+          // 完全重叠：按槽位号错开，方向确定
+          ex[i]! += i < o ? -0.5 : 0.5;
+          continue;
+        }
+        const d = fsqrt(d2);
+        // 大的推小的：按半径分配
+        const share = er[o]! / rr;
+        const push = ((rr - d) / d) * SEP_PUSH * share;
+        ex[i]! += dx * push;
+        ey[i]! += dy * push;
       }
-      const d = fsqrt(d2);
-      // 大的推小的：按半径分配
-      const share = w.eR[o]! / rr;
-      const push = ((rr - d) / d) * 0.5 * share;
-      w.eX[i]! += dx * push;
-      w.eY[i]! += dy * push;
     }
   }
 }
