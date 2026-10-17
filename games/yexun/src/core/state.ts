@@ -10,7 +10,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 7;
+export const RULES_VERSION = 8;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
