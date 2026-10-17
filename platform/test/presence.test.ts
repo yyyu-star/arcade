@@ -39,7 +39,7 @@ describe('报位置', () => {
     expect((await call('/api/presence', { body: { place: 'lobby' }, cookie: a.cookie, csrf: false })).status).toBe(403);
   });
 
-  it('位置变了马上写（0.13.1）：进房那一下好友立刻看到；10 秒内再变不写；没变照旧 2 分钟一次；只是人数变了不算变', async () => {
+  it('位置变了马上写（0.14.1）：进房那一下好友立刻看到；10 秒内再变不写；没变照旧 2 分钟一次；只是人数变了不算变', async () => {
     const a = await newUser();
     const b = await newUser();
     await befriend(a, b);

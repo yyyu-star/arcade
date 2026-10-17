@@ -39,7 +39,7 @@ export function parseWhere(body: Record<string, unknown>): Where {
 /**
  * POST /api/presence：204。写 1 行（位置、时间、last_seen_at 一起）或 0 行：
  * - 位置没变（place、game、room 都一样；只是人数变了不算）：离上次写不到 presenceEveryMs 不写；
- * - 位置变了：马上写，好友立刻看到"在房间里"（0.13.1；之前进房那一下的补报被 2 分钟节流吞掉，好友要等两分钟），
+ * - 位置变了：马上写，好友立刻看到"在房间里"（0.14.1；之前进房那一下的补报被 2 分钟节流吞掉，好友要等两分钟），
  *   但同一个人最快 presenceMoveGapMs 写一次，来回切页面刷不了写入。
  * 比较和写在同一条 UPDATE 里，不先读位置。
  * 只读档、live 类预算用完时路由直接回 204 不写（可丢的写，router.ts 的 quiet）：报位置失败不该打扰玩家。
