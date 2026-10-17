@@ -13,7 +13,7 @@ export default {
     if (wallet) return wallet;
     // 好友（docs/social.md 1.2、1.3，kit 的 social 部件每 2 分钟报位置、每 30 秒问邀请）：报了就收下，没有邀请
     const path = new URL(request.url).pathname;
-    if (path === '/api/presence') return new Response(null, { status: 204 });
+    if (path === '/api/presence' || path === '/api/feed') return new Response(null, { status: 204 });
     if (path === '/api/invites') return request.method === 'POST' ? Response.json({ id: 'inv-smoke-1' }) : Response.json({ invites: [] });
     if (path === '/api/friends') return Response.json({ friends: [{ userId: 'friend-wang', displayName: '老王', online: true }] });
     const sid = /__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];

@@ -4,6 +4,12 @@
  */
 import type { Danger } from './waves.ts';
 
+/**
+ * 实盘开没开。第 7 步按 balance.md 把倍数曲线配平以前关着：4c 的模拟器预估期望倍数−1 有 0.6–1.9，远高于 balance.md，开着就是白送筹码。
+ * 关着时菜单不显示实盘，Worker 拒绝带入（直接调接口也带不进去）；结回、退回照常，免得万一有挂着的一份结不掉。
+ */
+export const LIVE_OPEN = false;
+
 export type LiveTier = 'small' | 'medium' | 'large' | 'luxe';
 export const LIVE_TIER_IDS: readonly LiveTier[] = ['small', 'medium', 'large', 'luxe'];
 

@@ -53,6 +53,9 @@ export const usage = (userId: string) => runInDurableObject(bankOf(userId), (b: 
 /** 这个人结回时带上来的小结（平台 0.10.0 settle.stats） */
 export const statsOf = (userId: string) => runInDurableObject(bankOf(userId), (b: FakeBank) => b.stats);
 
+/** 报到这个人头上的搭子战绩（0.17.0，平台 15.19 together） */
+export const togetherOf = (userId: string) => runInDurableObject(bankOf(userId), (b: FakeBank) => b.together);
+
 let n = 0;
 /** 不重复的操作 id（平台要 8–64 位） */
 export const op = (): string => `op-${(n++).toString().padStart(6, '0')}`;

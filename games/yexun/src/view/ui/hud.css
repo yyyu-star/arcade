@@ -114,6 +114,27 @@
 .yx-tlabel { font-size: calc(11px * var(--s)); opacity: 0.75; letter-spacing: 2px; }
 .yx-time { font-size: calc(26px * var(--s)); line-height: 1; letter-spacing: 1px; }
 
+/* 夜探：14:00 起顶上的倒计时醒目，最后 30 秒变红闪 */
+.yx-timer.warn { background: rgba(120, 70, 16, 0.92); }
+.yx-timer.warn .yx-time { color: #ffd23a; }
+.yx-timer.red { background: rgba(150, 28, 24, 0.94); animation: yx-dawn 0.9s ease-in-out infinite; }
+.yx-timer.red .yx-time { color: #fff; }
+@keyframes yx-dawn {
+  0%, 100% { box-shadow: 0 3px 0 var(--ink), 0 0 0 rgba(255, 70, 50, 0); }
+  50% { box-shadow: 0 3px 0 var(--ink), 0 0 18px rgba(255, 70, 50, 0.9); }
+}
+
+/* 撤离箭头：贴着屏幕边，位置由脚本写（transform），图标按朝向转 */
+.yx-xa { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.yx-xa-ico { position: absolute; left: 0; top: 0; width: calc(40px * var(--s)); height: calc(40px * var(--s)); animation: yx-xa 0.8s ease-in-out infinite alternate; }
+.yx-xa-ico svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 4px rgba(255, 210, 58, 0.8)); }
+@keyframes yx-xa { from { opacity: 0.75; } to { opacity: 1; } }
+.yx-xa-text {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  padding: 2px 8px; border: 2px solid var(--ink); border-radius: 8px;
+  background: rgba(28, 34, 48, 0.9); color: #ffe9a0; font-size: calc(13px * var(--s));
+}
+
 /* 右上 */
 .yx-tr { position: absolute; right: 10px; top: 10px; display: flex; align-items: center; gap: 8px; }
 .yx-stat {
@@ -126,6 +147,9 @@
 .yx-ico { width: calc(20px * var(--s)); height: calc(20px * var(--s)); flex: none; }
 .yx-ico-kill {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1.5c-4.4 0-7.5 3-7.5 7 0 2.4 1.2 4 2.6 4.9V16a1.5 1.5 0 0 0 1.5 1.5h6.8a1.5 1.5 0 0 0 1.5-1.5v-2.6c1.4-.9 2.6-2.5 2.6-4.9 0-4-3.1-7-7.5-7z' fill='%23f4f1ea' stroke='%2317131c' stroke-width='1.8'/%3E%3Cellipse cx='7' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cellipse cx='13' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cpath d='M8.2 14.4v2.4M11.8 14.4v2.4' stroke='%2317131c' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.yx-ico-bag {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7 4.5h6l1.4 3C16.6 9 17.5 11.5 17 14c-.4 2.2-2 3.5-4 3.5H7c-2 0-3.6-1.3-4-3.5-.5-2.5.4-5 2.6-6.5z' fill='%23d9503e' stroke='%2317131c' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M6.8 5.5c1.8 1.2 4.6 1.2 6.4 0' fill='none' stroke='%2317131c' stroke-width='1.6'/%3E%3Ccircle cx='10' cy='12' r='2.2' fill='%23ffe08a' stroke='%2317131c' stroke-width='1.2'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .yx-ico-coin {
   border-radius: 50%; border: 2px solid var(--ink); box-sizing: border-box;

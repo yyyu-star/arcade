@@ -10,7 +10,7 @@
   `src/` 里相互引用写 `.js` 扩展名（`./auth.js`），游戏的 tsconfig 不用特别配置。发布（`npm publish`）由维护者做。
 - 两种部署方式（0.10.0，`src/guest.ts`）：有 `ARCADE` 绑定是平台模式，行为和以前一样、游客 cookie 一律不认；没有 `ARCADE`、`GATE` 也不是 `"login"` 是独立模式（游客）。
   `GATE: "login"` 没绑 `ARCADE` 必须 fail-closed。改认人的代码时 `test/guest.test.ts` 的"平台模式不认游客"几条必须守住。
-- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts`、`share.ts`、`social.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
+- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts`、`share.ts`、`qr.ts`、`social.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
   `fun.ts`（0.7.0）只在调用时碰 DOM，import 时不碰；只动 transform、opacity，不读布局；素材只用 `fun-art.ts` 里手写的 SVG，不用 emoji 字体、不引外部资源，新素材也照这个来。`auth.ts`、`internal.ts` 不依赖运行时以外的东西。
 - 牌桌互动（0.11.0，规范是仓库根 `docs/table-fun.md`）：`fun-logic.ts` 是纯函数（不碰 DOM、时间和随机数由调用方给，房间也 import），数字的默认值就是规范，改了同步改测试和 README；
   `table-fun.ts` 和 `fun.ts` 同样的规矩：import 时不碰 DOM，动画只动 transform、opacity，量位置只在开菜单和 `controls()` 时。kit 里不出现任何游戏的名字、短语和人物，这些都由游戏传进来。
@@ -18,6 +18,7 @@
   `internal.ts` 不进 `package.json` 的 `exports`，游戏引用不到；新加的内部工具也放 `internal.ts`。`auth.ts` 从 0.3.1 起导出（游戏的登录闸门用），只认人，不碰内部地址和身份头。
 - 能被别人挤占的额度不能挂在房间上：按座位（人）分开算，没入座的连接单独封顶，入座的人回来永远进得了；一个人也不能用光整个房间的额度（`maxInboundShare`）。
 - 开打后座位绑人（`owners`）：一个 userId 一局只对应一个座位，放宽这条就会漏别人的手牌。
+- 进房猜码限次（0.14.0）：超限的人进任何房间都同一个 1013，房间在不在不能从回话里看出来（关闭码、头都一样）；只有自己人放行。改 `acceptJoin` 或房间 `fetch` 时守住 `room.test` 的"第三轮审计"几条。
 - 房间的硬规矩（每条都有测试，改的时候测试要跟着守住）：只用 `ctx.acceptWebSocket`、只用一个闹钟、不用 `setTimeout`/`setInterval`；
   每步写入 ≤ 2 行（开房含建表另算）、状态没变不写；构造函数和读路径不碰存储（探不存在的房间码不留东西）；下发前按座位过滤；
   续局"接受、快照、记座位"中间没有 `await`，广播在 `setAlarm` 之前；闹钟以 `getAlarm()` 为准、出错时不丢；闹钟里不往外抛异常。
@@ -32,5 +33,8 @@
 - 电脑短语（0.10.0）：`onStep` 是同步钩子（广播之后、不 await、不写存储、抛错只记日志），`botEmote` 只给电脑座位（`ai`、托管 `auto`），和真人共用座位令牌桶。
   真人的短语不交给规则、`onStep`，也不要加这样的入口（公平：电脑不读真人互动）。
   唯一的例外是 `onEmote`（0.10.1）：真人短语广播后调，不给牌局状态，只许用来调 `botEmote` 让电脑回一句；`botEmote` 不触发它。改的时候这几条测试（`test/emote.test.ts` 的 ChattyRoom）要守住。
+- 搭子战绩（0.13.0，`src/together.ts`，平台 15.19）：只在房间服务端经 `WALLET.together()` 报，不重试、不写房间状态（交给 `ctx.waitUntil`）；`reportMatch` 按 `owners` 认人，电脑座位不报。
+  假钱包的 `together` 照平台的 parseTogether 查形状，平台改了同步改 `src/testing.ts` 和 `test/together.test.ts`。
 - 分享卡和邀请（0.12.0，规范是仓库根 `docs/social.md`）：`share.ts`、`social.ts` 和 `table-fun.ts` 同样的规矩（import 时不碰 DOM、动画只动 transform、opacity）。
   `social.ts` 只在 `detectPlatform` 说有平台且已登录时挂，前台才发请求；接口形状以 `docs/platform-backend.md` 为准，改了同步改 `test/social.test.ts`。分享卡只画游戏给的数据，kit 不认识任何游戏（游戏名、图标、主题色都由游戏给）。
+  分享卡的二维码（0.15.0）：链接只用运行时的 `location.origin` 拼，代码里不写域名；`qr.ts` 是纯函数，改它时 `test/qr.test.ts` 的解码和已知向量都要过。kit 不加运行时依赖。

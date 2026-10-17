@@ -14,6 +14,8 @@
  *   结回、放弃照收：桌上的筹码总要能回来。停增长档不建新钱包。
  * - 业务上的拒绝都用返回值（{ ok: false, error }），不抛异常：RPC 抛出去的异常只保证 name 和 message。
  */
+import { feedFromSettle } from './api/feed';
+import { parseTogether, recordTogether } from './api/mates';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { GAME_IDS } from '../src/games';
 import { limitsOf } from './api/config';
@@ -32,8 +34,12 @@ interface Props {
 /** 最近一次 RPC 调用的读写统计。只给测试断言写入行数用（同一 isolate 里读得到）。 */
 export let lastWalletStats: RequestStats = newStats();
 
-/** 带入：会让筹码离开余额，按只读档、钱包预算停；回：结回、放弃，任何时候都收（停服档除外）；看：不停 */
-type Kind = 'view' | 'stake' | 'return';
+/** together() 的回话：记上了几对 */
+export type TogetherReply = { ok: true; pairs: number } | { ok: false; error: 'bad_request' | 'bad_game' | 'busy' | 'internal' };
+
+/** 带入：会让筹码离开余额，按只读档、钱包预算停；回：结回、放弃，任何时候都收（停服档除外）；看：不停；
+ *  搭子：搭子战绩，记在排行榜类，只在正常档、排行榜类预算没用完时写 */
+type Kind = 'view' | 'stake' | 'return' | 'mates';
 
 export class WalletService extends WorkerEntrypoint<Env, Props> {
   /** 看钱包：余额、各游戏桌上那一份、今天能不能领补给、还能写几次、client 模式的净赢和上限 */
@@ -59,6 +65,18 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
     return this.#op('refund', req, 'return');
   }
 
+  /**
+   * 搭子战绩（0.19.0，docs/platform-backend.md 15.19）{ op, players: [{ userId, team?, win }] }：好友房打完一场，房间的服务端报一次整桌真人，
+   * 平台给其中已经是好友的每一对累计。浏览器碰不到（只有这条服务绑定）。回话 pairs 是记上的对数；写不了回 busy，游戏不用重试
+   */
+  async together(req: unknown): Promise<TogetherReply> {
+    const bound = this.#bound();
+    if (!bound) return { ok: false, error: 'bad_game' };
+    const parsed = parseTogether(req);
+    if (!parsed) return { ok: false, error: 'bad_request' };
+    return this.#run('mates', async (db, now) => ({ ok: true, pairs: await recordTogether(db.as('board'), bound, parsed, now) }));
+  }
+
   // 内部方法用 JS 私有方法（#）：TS 的 private 在运行时仍在原型上，会经 RPC 暴露，游戏就能直接调 op(…, 'return') 绕过只读档对带入的拦截
   #op(t: 'buyin' | 'settle' | 'refund', req: unknown, kind: Kind): Promise<WalletReply> {
     const bound = this.#bound();
@@ -68,7 +86,21 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
     const cmd = parseCmd(t, req);
     if (typeof cmd === 'string') return Promise.resolve({ ok: false, error: cmd });
     if ((cmd as Exclude<Cmd, { t: 'relief' } | { t: 'admin' }>).game !== bound) return Promise.resolve({ ok: false, error: 'bad_game' });
-    return this.#run(kind, (db, now, tier) => runOp(db, userId, cmd, now, { create: tier === 'normal' }));
+    return this.#run(kind, (db, now, tier) =>
+      runOp(db, userId, cmd, now, {
+        create: tier === 'normal',
+        // 好友动态（0.17.0）记在"在线"类：只读档、在线类预算用完就不发；写出错只记日志，结回照常
+        onFeed: async (feed) => {
+          const limits = limitsOf(this.env);
+          if (tier !== 'normal' || meter.exhausted('live', limits, now)) return;
+          try {
+            await feedFromSettle(db.as('live'), userId, feed, now, limits);
+          } catch (e) {
+            console.error('feed from settle failed', e instanceof Error ? e.name : 'unknown');
+          }
+        },
+      }),
+    );
   }
 
   /** 绑定上写的游戏；没写、写的不是认识的游戏都算没绑 */
@@ -77,7 +109,7 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
     return typeof game === 'string' && GAME_IDS.has(game) ? game : null;
   }
 
-  async #run(kind: Kind, fn: (db: Db, now: number, tier: string) => Promise<WalletReply>): Promise<WalletReply> {
+  async #run<R extends { ok: boolean }>(kind: Kind, fn: (db: Db, now: number, tier: string) => Promise<R>): Promise<R | { ok: false; error: 'busy' | 'internal' }> {
     const env = this.env;
     const now = Date.now();
     const limits = limitsOf(env);
@@ -91,6 +123,7 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
       tier = effectiveTier(env, meter.tier(limits, now));
       if (tier === 'off') return { ok: false, error: 'busy' };
       if (kind === 'stake' && (tier === 'readonly' || meter.exhausted('wallet', limits, now))) return { ok: false, error: 'busy' };
+      if (kind === 'mates' && (tier !== 'normal' || meter.exhausted('board', limits, now))) return { ok: false, error: 'busy' };
       return await fn(db, now, tier);
     } catch (e) {
       // 只记错误类型，不记参数（里面有 userId）。回话照旧是 internal：游戏拿同一个 op 重发是安全的（wallet.ts 的 apply 去重）

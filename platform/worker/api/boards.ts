@@ -6,6 +6,7 @@
  * - 交分写入单独记在"排行榜"类（预算从存档里分出来）：刷榜只停排行榜，不连累云存档；每人每天 scorePerDay 次。
  * - 榜单 ID 只收两种形式，别的一律不收，免得随便开榜把库撑大：
  *   每日榜 daily-YYYY-MM-DD（规则大改时可带 -v<n>），交分时日期只能是北京时间的昨天、今天、明天（时区差和跨零点的一局）；
+ *   一天几个每日榜的游戏（games.ts 的 daily 写了子榜，0.16.0）是 daily-YYYY-MM-DD-<子榜>[-v<n>]，子榜要登记过，不再收不带子榜的；
  *   固定榜（如 endless）要在 src/games.ts 的 boards 里登记。
  *   日期放在版本号前面：同一个游戏的所有每日榜按 board_id 排序时就按日期排，Cron 按范围删旧榜只读要删的行。
  * - 读榜只给公开资料（昵称、头像），不给用户名和 userId。
@@ -13,31 +14,44 @@
 import { checkBodyUser, type Ctx, DAY } from './context';
 import { ApiError, json } from './http';
 import { hit } from './ratelimit';
-import { GAME_IDS, GAMES } from '../../src/games';
+import { DAILY_SUB_RE, GAME_IDS, GAMES } from '../../src/games';
+import { daily } from './daily';
 import { beijingDate } from './time';
 import { avatarOf } from './session';
 
-const DAILY_RE = /^daily-(\d{4}-\d{2}-\d{2})(?:-v[1-9]\d?)?$/;
+// 子榜不能像版本号（v2）：不然 daily-…-v2 会被认成子榜"v2"
+const DAILY_RE = /^daily-(\d{4}-\d{2}-\d{2})(?:-((?!v\d)[a-z][a-z0-9]{0,15}))?(?:-v([1-9]\d?))?$/;
 /** 固定榜的名字：小写字母、数字、短横线，不以 daily 开头（和每日榜分开，也不落进 Cron 删每日榜的范围）。 */
 export const FIXED_BOARD_RE = /^(?!daily)[a-z0-9-]{1,40}$/;
 const FIXED_BOARDS: ReadonlyMap<string, ReadonlySet<string>> = new Map(GAMES.map((g) => [g.id, new Set(g.boards ?? [])]));
 
-/** 每日榜的日期；不是每日榜的形式时为 null。 */
-function dailyDate(boardId: string): string | null {
-  return DAILY_RE.exec(boardId)?.[1] ?? null;
+/** 每日榜的日期、子榜、版本号（没有版本号是 0）；不是每日榜的形式时为 null。"v2" 这样的不当子榜（是版本号）。 */
+export function parseDaily(boardId: string): { date: string; sub: string | null; v: number } | null {
+  const m = DAILY_RE.exec(boardId);
+  if (!m) return null;
+  const sub = m[2] ?? null;
+  if (sub !== null && !DAILY_SUB_RE.test(sub)) return null;
+  return { date: m[1]!, sub, v: Number(m[3] ?? 0) };
+}
+
+/** 这个游戏收不收这种每日榜：写了子榜的只收登记过的子榜，没写的只收不带子榜的 */
+function dailyFits(gameId: string, sub: string | null, subs: ReadonlyMap<string, ReadonlySet<string>>): boolean {
+  const list = subs.get(gameId);
+  return list ? sub !== null && list.has(sub) : sub === null;
 }
 
 /** 读榜时认的榜：每日榜（任何日期，过期的 Cron 会删）或登记过的固定榜。 */
-export function isKnownBoard(gameId: string, boardId: string, fixed = FIXED_BOARDS): boolean {
-  if (dailyDate(boardId) !== null) return true;
+export function isKnownBoard(gameId: string, boardId: string, fixed = FIXED_BOARDS, subs = daily().subs): boolean {
+  const d = parseDaily(boardId);
+  if (d) return dailyFits(gameId, d.sub, subs);
   return FIXED_BOARD_RE.test(boardId) && (fixed.get(gameId)?.has(boardId) ?? false);
 }
 
 /** 交分时收的榜：每日榜只收北京时间昨天、今天、明天的，固定榜要登记过。 */
-export function acceptsScore(gameId: string, boardId: string, now: number, fixed = FIXED_BOARDS): boolean {
-  const date = dailyDate(boardId);
-  if (date === null) return isKnownBoard(gameId, boardId, fixed);
-  return [now - DAY, now, now + DAY].some((t) => beijingDate(t) === date);
+export function acceptsScore(gameId: string, boardId: string, now: number, fixed = FIXED_BOARDS, subs = daily().subs): boolean {
+  const d = parseDaily(boardId);
+  if (!d) return isKnownBoard(gameId, boardId, fixed, subs);
+  return dailyFits(gameId, d.sub, subs) && [now - DAY, now, now + DAY].some((t) => beijingDate(t) === d.date);
 }
 /** |score| 的上限：安全整数以内，留足余量。 */
 const SCORE_MAX = 1e12;

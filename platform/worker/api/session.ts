@@ -19,6 +19,10 @@ export interface UserRow {
   presence_at: number;
   /** 让好友看到我在不在线、在哪（0.13.0），1 开 0 关 */
   show_where: number;
+  /** 好友动态（0.17.0）：0 是关了，好友看不到我的动态，也不再生成 */
+  show_feed: number;
+  /** 搭子战绩（0.19.0）：0 是关了，我和好友一起打的场数两边都看不到（照样记） */
+  show_mates: number;
 }
 
 export interface Session {
@@ -44,13 +48,15 @@ export function userJson(u: UserRow) {
     catchphraseId: u.catchphrase_id,
     createdAt: u.created_at,
     showWhere: u.show_where !== 0,
+    showFeed: u.show_feed !== 0,
+    showMates: u.show_mates !== 0,
     // 只增不改（15.1）：普通用户没有这个字段，前端据此决定露不露"管理"入口；接口另有服务端检查
     ...(u.role === 'admin' ? { isAdmin: true as const } : {}),
   };
 }
 
 export const USER_COLUMNS =
-  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role, u.presence_at, u.show_where';
+  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role, u.presence_at, u.show_where, u.show_feed, u.show_mates';
 
 /** 没带 cookie、cookie 格式不对、会话不存在或过期，都返回 null。 */
 export async function loadSession(request: Request, env: Env, db: Db, now: number): Promise<Session | null> {
@@ -103,11 +109,13 @@ export async function newSession(
   userId: string,
   limits: Limits,
   now: number,
+  /** 带邀请码注册（0.20.0）：和新号同一个 batch，users 里有这个 id 才插（码被别人先占了就不插） */
+  ifUserExists = false,
 ): Promise<{ stmt: D1PreparedStatement; cookies: string[] }> {
   const t = await newSessionToken(env);
   return {
     stmt: db.stmt(
-      'INSERT INTO sessions (token_hash, user_id, created_at, renewed_at, expires_at) VALUES (?1, ?2, ?3, ?3, ?4)',
+      `INSERT INTO sessions (token_hash, user_id, created_at, renewed_at, expires_at) SELECT ?1, ?2, ?3, ?3, ?4${ifUserExists ? ' WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2)' : ''}`,
       t.hash, userId, now, now + limits.sessionTtlMs,
     ),
     cookies: sessionCookies(t.cookie, limits.sessionTtlMs),
@@ -118,7 +126,7 @@ export async function newSession(
 export function deleteUserStatements(db: Db, userId: string, username: string): D1PreparedStatement[] {
   const counterKeys = [
     `login:fail:${username}`, `reauth:fail:${userId}`, `profile:${userId}`, `acct:${userId}`,
-    `save:${userId}`, `freq:${userId}`, `fcode:${userId}`, `fcnew:${userId}`, `block:${userId}`, `score:${userId}`, `admin:${userId}`,
+    `save:${userId}`, `freq:${userId}`, `fcode:${userId}`, `fcnew:${userId}`, `block:${userId}`, `score:${userId}`, `admin:${userId}`, `react:${userId}`, `chal:${userId}`,
   ];
   return [
     db.stmt('DELETE FROM sessions WHERE user_id = ?1', userId),
@@ -133,6 +141,21 @@ export function deleteUserStatements(db: Db, userId: string, username: string): 
     // 邀请（迁移 0007）：发出的、收到的都删；两个方向各走一个索引
     db.stmt('DELETE FROM invites WHERE from_id = ?1', userId),
     db.stmt('DELETE FROM invites WHERE to_id = ?1', userId),
+    // 好友动态（迁移 0008）：本人发的走 (user_id, created_at) 索引；本人赞的没有按人的索引，要扫全表——表只留 7 天，注销很少，接受。
+    // 别人给本人动态的赞留着，7 天后跟着 Cron 删
+    db.stmt('DELETE FROM feed WHERE user_id = ?1', userId),
+    db.stmt('DELETE FROM feed_reactions WHERE user_id = ?1', userId),
+    // 异步挑战（迁移 0009）：本人发起的连同所有人的结果一起删；本人交的结果没有按人的索引，要扫全表——表只留 30 天、注销很少，接受
+    db.stmt('DELETE FROM challenge_results WHERE challenge_id IN (SELECT id FROM challenges WHERE owner_id = ?1)', userId),
+    db.stmt('DELETE FROM challenges WHERE owner_id = ?1', userId),
+    db.stmt('DELETE FROM challenge_results WHERE user_id = ?1', userId),
+    // 搭子战绩（迁移 0010）：本人在 lo 一边的走主键前缀，在 hi 一边的走 mates_hi 索引
+    db.stmt('DELETE FROM mates WHERE lo = ?1', userId),
+    db.stmt('DELETE FROM mates WHERE hi = ?1', userId),
+    // 邀请码（迁移 0011）：本人生成的全删（走 owner 索引）；本人用过的那个只清 used_by，used_at 留着，邀请人的额度不还（主线定）。
+    // used_by 没有索引，要扫全表——表只有"每人几个码"那么大、注销很少，接受
+    db.stmt('DELETE FROM invite_codes WHERE owner_id = ?1', userId),
+    db.stmt('UPDATE invite_codes SET used_by = NULL WHERE used_by = ?1', userId),
     db.stmt(`DELETE FROM rate_counters WHERE key IN (${counterKeys.map((_, i) => `?${i + 1}`).join(', ')})`, ...counterKeys),
     db.stmt('DELETE FROM users WHERE id = ?1', userId),
   ];

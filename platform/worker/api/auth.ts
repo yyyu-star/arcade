@@ -1,6 +1,9 @@
 /** 注册、登录、退出、找回、本人资料（docs/platform-backend.md 5.1、15.2）。 */
 import { type Ctx, DAY, HOUR } from './context';
+import { claimStatement, findUsableCode, inviteFriendStatement } from './invite-codes';
 import {
+  burnPasswordHash,
+  normalizeInviteCode,
   hashPassword,
   hashRecoveryCode,
   newFriendCode,
@@ -13,7 +16,7 @@ import {
 } from './crypto';
 import { ApiError, clearCookies, json, noContent, rateLimited, withCookies } from './http';
 import { meter } from './meter';
-import { checkCached, checkFailLock, clearStatement, hit, recordFailure, takeAnonToken } from './ratelimit';
+import { checkCached, checkFailLock, clearStatement, hit, reserveAttempt, takeAnonToken } from './ratelimit';
 import { newSession, touchSession, USER_COLUMNS, type UserRow, userJson } from './session';
 import { noticeCached, registrationOpenCached, registrationOpenFresh } from './settings';
 import {
@@ -60,21 +63,28 @@ async function touch(c: Ctx): Promise<string[]> {
   return touchSession(c.db.as('social'), c.session, c.sidCookie, c.limits, c.now);
 }
 
-/** PATCH /api/me：改昵称、开关"让好友看到我在哪"（0.13.0），和改昵称共用每人每天 profilePerDay 次。 */
+/** PATCH /api/me：改昵称和几个隐私开关，共用每人每天 profilePerDay 次。 */
 export async function patchMe(c: Ctx): Promise<Response> {
   const user = c.session!.user;
-  // 改昵称、"让好友看到我在哪"开关（0.13.0）：至少带一样，两样一起带就一起改（一次计数、一行）
+  // 改昵称、"让好友看到我在哪"（0.13.0）、"好友动态"（0.17.0）、"搭子战绩"（0.19.0）三个开关：至少带一样，几样一起带就一起改（一次计数、一行）
   const hasName = c.body.displayName !== undefined;
-  const showWhere = c.body.showWhere;
-  if (!hasName && showWhere === undefined) throw new ApiError(400, 'bad_request');
-  if (showWhere !== undefined && typeof showWhere !== 'boolean') throw new ApiError(400, 'bad_request');
+  const { showWhere, showFeed, showMates } = c.body;
+  if (!hasName && showWhere === undefined && showFeed === undefined && showMates === undefined) throw new ApiError(400, 'bad_request');
+  for (const v of [showWhere, showFeed, showMates]) if (v !== undefined && typeof v !== 'boolean') throw new ApiError(400, 'bad_request');
   const displayName = hasName ? normalizeDisplayName(str(c.body.displayName)) : user.display_name;
   if (hasName) check(checkDisplayName(displayName));
-  const flag = showWhere === undefined ? user.show_where : showWhere ? 1 : 0;
+  const flagOf = (v: unknown, old: number) => (v === undefined ? old : v ? 1 : 0);
+  const flag = flagOf(showWhere, user.show_where);
+  const feed = flagOf(showFeed, user.show_feed);
+  const mates = flagOf(showMates, user.show_mates);
   await hit(c.db, `profile:${user.id}`, c.limits.profilePerDay, DAY, c.now);
-  await c.db.run(c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2 WHERE id = ?3', displayName, flag, user.id));
+  await c.db.run(
+    c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2, show_feed = ?3, show_mates = ?4 WHERE id = ?5', displayName, flag, feed, mates, user.id),
+  );
   user.display_name = displayName;
   user.show_where = flag;
+  user.show_feed = feed;
+  user.show_mates = mates;
   const cookies = await touch(c);
   return withCookies(json(200, { user: userJson(user) }), cookies);
 }
@@ -90,6 +100,9 @@ export async function register(c: Ctx): Promise<Response> {
   const { db, env, limits, now } = c;
   const ip = await c.ipHash();
   takeAnonToken(ip, limits, now);
+  // 邀请码（0.20.0，15.20）：开着时可填可不填，关着时必须带。带了就要对，填错不回落成普通注册
+  const rawCode = c.body.inviteCode;
+  const withCode = rawCode !== undefined && rawCode !== null && rawCode !== '';
   let open = false;
   try {
     open = await registrationOpenFresh(c);
@@ -98,7 +111,7 @@ export async function register(c: Ctx): Promise<Response> {
     console.error('registration switch read failed', e instanceof Error ? e.message : e);
     open = false;
   }
-  if (!open) throw new ApiError(403, 'registration_closed');
+  if (!open && !withCode) throw new ApiError(403, 'registration_closed');
   const username = normalizeUsername(str(c.body.username));
   const password = normalizePassword(str(c.body.password));
   const displayName = normalizeDisplayName(str(c.body.displayName));
@@ -106,14 +119,31 @@ export async function register(c: Ctx): Promise<Response> {
   check(checkPassword(password, username));
   check(checkDisplayName(displayName));
 
+  // 试码：每 IP 每小时 invitePerIpHour 次，成败都算（带条件的 UPSERT，超了 429、0 行）。不设全站上限：
+  // 全站计数只要算了乱试的，几个 IP 段就能耗光、挡住所有拿着真码的人（0.19.2 的教训）；码 60 bit，按 IP 限住就猜不中
+  let invite: { id: string; owner_id: string } | null = null;
+  if (withCode) {
+    checkCached([`inv:ip:${ip}`], now);
+    await hit(db, `inv:ip:${ip}`, limits.invitePerIpHour, HOUR, now);
+    const code = normalizeInviteCode(str(rawCode));
+    invite = code ? await findUsableCode(db, code, now) : null;
+    if (!invite) throw new ApiError(400, 'invite_invalid');
+  }
+
   checkCached([`reg:ip:${ip}`, 'reg:all'], now);
   await hit(db, `reg:ip:${ip}`, limits.regPerIpDay, DAY, now);
   await hit(db, 'reg:all', limits.regAllDay, DAY, now);
   await checkUsernameFree(c, username);
 
   const userId = newUserId();
-  const session = await newSession(env, db, userId, limits, now);
-  const { user, recoveryCode } = await insertUser(c, { userId, username, displayName, password, role: 'user' }, [session.stmt]);
+  const session = await newSession(env, db, userId, limits, now, !!invite);
+  const extra = invite ? [session.stmt, inviteFriendStatement(db, invite.owner_id, userId, now, limits.friendsMax)] : [session.stmt];
+  const { user, recoveryCode } = await insertUser(
+    c,
+    { userId, username, displayName, password, role: 'user' },
+    extra,
+    invite ? { id: invite.id, claim: claimStatement(db, invite.id, userId, now) } : undefined,
+  );
   return withCookies(json(201, { user: userJson(user), recoveryCode }), session.cookies);
 }
 
@@ -130,11 +160,16 @@ export async function checkUsernameFree(c: Ctx, username: string): Promise<void>
 /**
  * 建号：users 1 行、密码和恢复码各 1 行，再加上调用方的语句（注册的新会话、管理员的每日计数），一个 batch。
  * 注册和管理员建号共用，校验已经在调用方做完。返回新用户和只给看这一次的恢复码。
+ *
+ * invite（0.20.0，15.20）：带邀请码注册。batch 第一条是占码（claim，条件更新），users 那条以"码的 used_by 是这个新 id"为条件，
+ * 密码、恢复码和 extra 里的语句（调用方要让它们以"users 里有这个新 id"为条件）跟着 users 走。D1 的 batch 是一个事务、按顺序执行：
+ * 同一个码两个人同时用，后到的那个占码改了 0 行，后面一行都不写，这里抛 409 invite_used。
  */
 export async function insertUser(
   c: Ctx,
   u: { userId: string; username: string; displayName: string; password: string; role: UserRow['role'] },
   extra: D1PreparedStatement[],
+  invite?: { id: string; claim: D1PreparedStatement },
 ): Promise<{ user: UserRow; recoveryCode: string }> {
   const { db, env, limits, now } = c;
   const recoveryCode = newRecoveryCode();
@@ -144,19 +179,30 @@ export async function insertUser(
   for (let attempt = 0; ; attempt++) {
     const friendCode = newFriendCode();
     try {
-      await db.batch([
-        db.stmt(
-          `INSERT INTO users (id, username, display_name, friend_code, created_at, last_seen_at, role)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)`,
-          u.userId, u.username, u.displayName, friendCode, now, u.role,
-        ),
-        db.stmt("INSERT INTO credentials (user_id, type, secret, created_at) VALUES (?1, 'password', ?2, ?3)", u.userId, pwHash, now),
-        db.stmt("INSERT INTO credentials (user_id, type, secret, created_at) VALUES (?1, 'recovery', ?2, ?3)", u.userId, rcHash, now),
+      const userInsert = invite
+        ? db.stmt(
+            `INSERT INTO users (id, username, display_name, friend_code, created_at, last_seen_at, role)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6 WHERE EXISTS (SELECT 1 FROM invite_codes WHERE id = ?7 AND used_by = ?1)`,
+            u.userId, u.username, u.displayName, friendCode, now, u.role, invite.id,
+          )
+        : db.stmt(
+            `INSERT INTO users (id, username, display_name, friend_code, created_at, last_seen_at, role)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)`,
+            u.userId, u.username, u.displayName, friendCode, now, u.role,
+          );
+      // 带码时：users 没插进去（码被别人先占了），这两行也不插
+      const ifUser = invite ? ' WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)' : '';
+      const rs = await db.batch([
+        ...(invite ? [invite.claim] : []),
+        userInsert,
+        db.stmt(`INSERT INTO credentials (user_id, type, secret, created_at) SELECT ?1, 'password', ?2, ?3${ifUser}`, u.userId, pwHash, now),
+        db.stmt(`INSERT INTO credentials (user_id, type, secret, created_at) SELECT ?1, 'recovery', ?2, ?3${ifUser}`, u.userId, rcHash, now),
         ...extra,
       ]);
+      if (invite && !rs[0]!.meta.changes) throw new ApiError(409, 'invite_used');
       const user: UserRow = {
         id: u.userId, username: u.username, display_name: u.displayName, friend_code: friendCode, avatar_json: null,
-        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1,
+        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1, show_feed: 1, show_mates: 1,
       };
       return { user, recoveryCode };
     } catch (e) {
@@ -167,7 +213,14 @@ export async function insertUser(
   }
 }
 
-/** 先查用户名有没有被暂时锁住、再算 PBKDF2，被锁时不花 CPU。用户名不存在时不记失败计数（5.4）。 */
+/**
+ * 先查用户名有没有被暂时锁住、再算 PBKDF2，被锁时不花 CPU。用户名不存在时不记失败计数（5.4）。
+ * 第三轮审计（0.19.2）：
+ * - 全站每小时的名额只算"用户名存在"的尝试：原来查用户名之前就计，拿不存在的用户名换几个 IP 段就能把全站一小时的登录耗光。
+ *   撞库要猜的是真账号，这部分照旧全算；乱填的用户名伤不到任何账号，由每个 IP 的上限和令牌桶管；
+ * - 算 PBKDF2 之前先占一次尝试（reserveAttempt），对了再清零，堵住锁到期那一刻的并发；
+ * - 用户名不存在也白算一次哈希，两种情况响应时间一样。
+ */
 export async function login(c: Ctx): Promise<Response> {
   const { db, env, limits, now } = c;
   const username = normalizeUsername(str(c.body.username));
@@ -178,9 +231,8 @@ export async function login(c: Ctx): Promise<Response> {
   takeAnonToken(ip, limits, now);
   checkHourly(c, 'login', limits.loginAllHour);
   const failKey = `login:fail:${username}`;
-  const hadFailures = (await checkFailLock(db, failKey, now)) !== null;
+  await checkFailLock(db, failKey, now);
   await hit(db, `login:ip:${ip}`, limits.loginPerIpHour, HOUR, now);
-  meter.countAnon('login');
 
   const row = await db.first<UserRow & { secret: string }>(
     db.stmt(
@@ -189,16 +241,18 @@ export async function login(c: Ctx): Promise<Response> {
       username,
     ),
   );
-  if (!row) throw badCredentials();
-  const v = await verifyPassword(env, password, row.secret, limits.pbkdf2Iterations);
-  if (!v.ok) {
-    await recordFailure(db, failKey, limits, now);
+  if (!row) {
+    await burnPasswordHash(env, password, limits.pbkdf2Iterations);
     throw badCredentials();
   }
+  await reserveAttempt(db, failKey, limits, now);
+  meter.countAnon('login');
+  const v = await verifyPassword(env, password, row.secret, limits.pbkdf2Iterations);
+  // 失败在占位时已经记过
+  if (!v.ok) throw badCredentials();
 
   const session = await newSession(env, db, row.id, limits, now);
-  const stmts = [session.stmt, db.stmt('UPDATE users SET last_seen_at = ?1 WHERE id = ?2', now, row.id)];
-  if (hadFailures) stmts.push(clearStatement(db, failKey));
+  const stmts = [session.stmt, db.stmt('UPDATE users SET last_seen_at = ?1 WHERE id = ?2', now, row.id), clearStatement(db, failKey)];
   if (v.rehash) {
     const h = await hashPassword(env, password, limits.pbkdf2Iterations);
     stmts.push(db.stmt("UPDATE credentials SET secret = ?1 WHERE user_id = ?2 AND type = 'password'", h, row.id));
@@ -235,7 +289,6 @@ export async function recover(c: Ctx): Promise<Response> {
   takeAnonToken(ip, limits, now);
   checkHourly(c, 'recover', limits.recoverAllHour);
   await hit(db, `rec:ip:${ip}`, limits.recoverPerIpHour, HOUR, now);
-  meter.countAnon('recover');
 
   const row = await db.first<UserRow & { secret: string }>(
     db.stmt(
@@ -245,6 +298,8 @@ export async function recover(c: Ctx): Promise<Response> {
     ),
   );
   if (!row) throw badCredentials();
+  // 全站名额只算用户名存在的（0.19.2，同登录）；恢复码是 HMAC，不存在时不用白算
+  meter.countAnon('recover');
   if (!(await verifyRecoveryCode(env, row.id, code, row.secret))) throw badCredentials();
 
   const nextCode = newRecoveryCode();

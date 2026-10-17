@@ -70,7 +70,7 @@ export default {
     const path = url.pathname;
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
-    if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST });
+    if (path === `${BASE}/` || path === `${BASE}/index.html`) return secure(await loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST }), url);
     if (path.startsWith(SOLO)) return solo(request, env, path.slice(SOLO.length));
     if (path === ROOMS) return acceptCreate(request, env, { siteOrigin: env.SITE_ORIGIN, options: await roomOpts(request), guest: GUEST });
     const join = JOIN.exec(path);
@@ -78,6 +78,32 @@ export default {
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
+
+
+/**
+ * 游戏页的安全响应头（0.17.1，安全审计低危；DESIGN.md 10.3）。页面只经这里出去（首页三个路径都过登录闸门），别的静态资源不是文档，不用带。
+ * 按页面实际用到的收紧：脚本只有打包出来的同源文件（没有内联脚本、没有 eval）；样式要 'unsafe-inline'，kit 的互动、叫人面板往页面里插 style 元素；
+ * 图片要 data:（CSS 里的小图标）和 blob:（分享卡的预览图）；连接只许同源，WebSocket 写明这个站点的 wss
+ * （Safari 的 'self' 不认 ws/wss，所以按请求的 host 拼，不写死域名，单独部署也对）。不许别的站点用 iframe 嵌（frame-ancestors 只许同源）。
+ * Cloudflare Web Analytics 的统计脚本是线上边缘自动插进页面的（本地冒烟看不到）：它的脚本和上报地址单独放行，不然线上报违规、统计也丢了
+ */
+function secure(res: Response, url: URL): Response {
+  const ws = `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`;
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    `connect-src 'self' ${ws} https://cloudflareinsights.com`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join('; ');
+  const out = new Response(res.body, res);
+  out.headers.set('Content-Security-Policy', csp);
+  return out;
+}
 
 /**
  * 开房请求体里的 { opts }。德州的房间一律开房就定档位和人数：没带、太长、不是 JSON 都当 null，kit 回 400 bad_options。

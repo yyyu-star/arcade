@@ -10,6 +10,7 @@ import type { MapId } from '../content/maps.ts';
 import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 import { isLiveTier, type LiveTier } from '../content/live.ts';
+import { emptyVault, herbalistUnlocked, normalizeVault, type VaultSave } from '../explore/vault.ts';
 
 const SAVE_KEY = 'yexun.save';
 
@@ -53,8 +54,10 @@ export interface Save {
   /** 单局最长撑了几秒、最多打死几只（解锁角色用） */
   maxSeconds: number;
   maxKills: number;
-  /** 藏宝阁收了哪些宝物（夜探，第 6 步填） */
-  vault: string[];
+  /** 藏宝阁：带出过的宝物（各几件）和见过的（夜探） */
+  vault: VaultSave;
+  /** 打过教学镇了（之后夜探才能选模板和危险档） */
+  raidDone: boolean;
   /** 连着倒下几局（赢了、认输都清零） */
   streak: number;
   /** "降低伤害"开着（成绩不进总榜）；问过了没有（问过不再追着问，设置里能随时开关） */
@@ -88,7 +91,8 @@ export const fresh = (): Save => ({
   coinBase: 0,
   maxSeconds: 0,
   maxKills: 0,
-  vault: [],
+  vault: emptyVault(),
+  raidDone: false,
   streak: 0,
   assist: false,
   assistAsked: false,
@@ -155,7 +159,8 @@ export function reviveSave(o: unknown): Save | null {
   s.coinBase = num(r.coinBase, -1e9, 1e12) ?? 0;
   s.maxSeconds = num(r.maxSeconds) ?? 0;
   s.maxKills = num(r.maxKills) ?? 0;
-  s.vault = strs(r.vault, 200);
+  s.vault = normalizeVault(r.vault);
+  s.raidDone = r.raidDone === true;
   s.streak = num(r.streak, 0, 1000) ?? 0;
   s.assist = r.assist === true;
   s.assistAsked = r.assistAsked === true;
@@ -283,7 +288,7 @@ export function charOpen(s: Save, c: CharacterId): boolean {
     case 'gengfu':
       return s.cleared >= 2;
     case 'caiyao':
-      return s.vault.length >= 20;
+      return herbalistUnlocked(s.vault);
   }
 }
 
@@ -388,7 +393,11 @@ export function mergeSave(local: Save, cloud: Save): Save {
   m.coinBase = Math.max(local.coinBase, cloud.coinBase);
   m.maxSeconds = Math.max(local.maxSeconds, cloud.maxSeconds);
   m.maxKills = Math.max(local.maxKills, cloud.maxKills);
-  m.vault = [...new Set([...local.vault, ...cloud.vault])];
+  // 藏宝阁：每件取两边多的那个数，见过的取并集（两台设备各打各的都不丢）
+  const got: Record<string, number> = { ...cloud.vault.got };
+  for (const [id, n] of Object.entries(local.vault.got)) got[id] = Math.max(n, got[id] ?? 0);
+  m.vault = normalizeVault({ got, seen: [...local.vault.seen, ...cloud.vault.seen] });
+  m.raidDone = local.raidDone || cloud.raidDone;
   m.assistAsked = local.assistAsked || cloud.assistAsked;
   if (m.ledger.length > LEDGER_MAX) {
     const old = m.ledger.splice(0, m.ledger.length - LEDGER_MAX);

@@ -7,9 +7,14 @@ import { MAPS, type MapId } from '../../content/maps.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
 import { LIVE_TIER_IDS, LIVE_TIERS, type LiveTier } from '../../content/live.ts';
+import { RAID_TEMPLATES, type RaidTemplateId } from '../../content/explore.ts';
+import type { TreasureTier } from '../../content/treasures.ts';
 import type { Best } from '../../platform/save.ts';
 import { drawFlakes, drawModeScene, drawTitleLive, drawTitleStill, makeFlakes, type Flake } from '../art/sprites7.ts';
 import './screens.css';
+
+/** 锁：不用表情字符（有的设备、无头浏览器没有表情字体，显示成方框） */
+const LOCK_SVG = '<svg class="yx-lock" viewBox="0 0 12 12" aria-label="没解锁"><rect x="2" y="5.5" width="8" height="6" rx="1.2" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
 
 const HOME_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10.5V20h12v-9.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2.2"/></svg><span>大厅</span>';
@@ -80,7 +85,14 @@ export interface MenuState {
   live: { available: boolean; on: boolean; tier: LiveTier };
   /** 义庄开了没有（普通档以上撑到过天亮） */
   yizhuang: boolean;
+  /** 夜探：还没进过夜探（第一次固定教学镇，只有一个开始按钮） */
+  raidFirst?: boolean;
+  /** 夜探卡上"藏宝阁 3/45"那个按钮（没传就不显示） */
+  vault?: { got: number; total: number };
 }
+
+/** 夜探卡能选的镇子（教学镇不在里面：第一次固定进） */
+const RAID_PICK: readonly RaidTemplateId[] = ['guzhen', 'dukou', 'shansi'];
 
 /** 模式卡上的小场景图（画一次缓存成 data URL） */
 const sceneCache = new Map<string, string>();
@@ -112,6 +124,7 @@ export class Menu {
   private last = 0;
   private diff: Danger = 0;
   private map: MapId = 'snow';
+  private tpl: RaidTemplateId = 'guzhen';
   private readonly toggles: Toggle[];
   onStart: (d: Danger, map: MapId, endless: boolean) => void = () => undefined;
   /** 无尽：天亮不收工，一直打到倒下（撑到过一次天亮才开） */
@@ -119,6 +132,10 @@ export class Menu {
   onBoards: () => void = () => undefined;
   onReplays: () => void = () => undefined;
   onDaily: () => void = () => undefined;
+  /** 夜探开局：镇子（第一次是 'teach'）和危险档（教学镇固定 0；其余用守夜那一排选的档） */
+  onRaid: (template: RaidTemplateId, danger: Danger) => void = () => undefined;
+  /** 打开藏宝阁 */
+  onVault: () => void = () => undefined;
   /** 实盘开局（固定小道士、雪原，档位定危险档） */
   onLive: (tier: LiveTier) => void = () => undefined;
   /** 切娱乐 / 实盘、换档位（main 记进存档） */
@@ -153,6 +170,14 @@ export class Menu {
         this.onLiveMode(this.live.on, this.live.tier);
         if (this.lastState) this.show({ ...this.lastState, live: this.live });
       },
+      raid: () => (this.lastState?.raidFirst ? this.onRaid('teach', 0) : this.onRaid(this.tpl, this.diff)),
+      tpl: (el) => {
+        this.tpl = el.dataset.t as RaidTemplateId;
+        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="tpl"]')) b.classList.toggle('on', b.dataset.t === this.tpl);
+        const note = this.root.querySelector('.yx-tplnote');
+        if (note) note.textContent = RAID_TEMPLATES[this.tpl].blurb;
+      },
+      vault: () => this.onVault(),
       map: (el) => {
         if (el.classList.contains('locked')) return;
         this.map = el.dataset.m as MapId;
@@ -219,7 +244,7 @@ export class Menu {
     } else {
       const chips = DANGER_IDS.map((d) => {
         const locked = d > s.dangerOpen;
-        return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? '🔒' : '★'.repeat(DANGERS[d].stars)}</small></button>`;
+        return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? LOCK_SVG : '★'.repeat(DANGERS[d].stars)}</small></button>`;
       }).join('');
       const modeChips = s.live.available
         ? `<div class="yx-chips yx-modesw"><button type="button" class="yx-chip${live ? '' : ' on'}" data-a="mode" data-m="fun"><b>娱乐</b><small>不花筹码</small></button><button type="button" class="yx-chip${live ? ' on' : ''}" data-a="mode" data-m="live"><b>实盘</b><small>带一份筹码</small></button></div>`
@@ -246,12 +271,29 @@ export class Menu {
         title +
         '<div class="yx-modes">' +
         `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div>${modeChips}${live ? liveHtml : `<div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-chips">${prep}</div><div class="yx-best"></div>`}<button type="button" class="yx-big" data-a="start">开始</button></div>` +
-        `<div class="yx-mode off"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>` +
+        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div>${this.raidHtml(s)}</div>` +
         '</div>';
       this.renderBest();
     }
     this.root.style.display = '';
     this.startArt();
+  }
+
+  /** 夜探卡的内容：第一次只有教学镇一个按钮；之后三个镇子可选，危险档沿用守夜那一排 */
+  private raidHtml(s: MenuState): string {
+    const vault = s.vault ? `<button type="button" class="yx-chip yx-vaultbtn" data-a="vault"><b>藏宝阁</b><small>${s.vault.got} / ${s.vault.total}</small></button>` : '';
+    if (s.raidFirst) {
+      return (
+        `<div class="yx-raidnote"><b>${RAID_TEMPLATES.teach.name}</b>${RAID_TEMPLATES.teach.blurb}</div>` +
+        '<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid">开始夜探</button></div>'
+      );
+    }
+    const chips = RAID_PICK.map((t) => `<button type="button" class="yx-chip yx-tpl${t === this.tpl ? ' on' : ''}" data-a="tpl" data-t="${t}"><b>${RAID_TEMPLATES[t].name}</b></button>`).join('');
+    return (
+      `<div class="yx-chips yx-tpls" aria-label="镇子">${chips}</div>` +
+      `<div class="yx-tplnote">${RAID_TEMPLATES[this.tpl].blurb}</div>` +
+      `<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid">开始夜探</button>${vault}</div>`
+    );
   }
 
   hide(): void {
@@ -423,6 +465,29 @@ export class Confirm {
 
 // ───────────────────────── 结算 ─────────────────────────
 
+/** 结算页上的一件宝物 */
+export interface RaidItemView {
+  /** 图集帧名（treasureIconKey(def.icon)），页面用 icons() 换成图 */
+  icon: string;
+  name: string;
+  tier: TreasureTier;
+  value: number;
+  /** 这一局第一次收藏到（藏宝阁新点亮） */
+  fresh?: boolean;
+}
+
+/** 夜探的结果（ResultView.raid 有就按夜探排版） */
+export interface RaidResultView {
+  outcome: 'escaped' | 'dead' | 'lost';
+  /** 教学镇：死了、迷失也不丢包 */
+  teach: boolean;
+  /** 带出来的、丢在镇里的宝物 */
+  kept: RaidItemView[];
+  lost: RaidItemView[];
+  /** 带出的宝物总价值（铜钱） */
+  value: number;
+}
+
 export interface ResultView {
   won: boolean;
   quit: boolean;
@@ -441,6 +506,8 @@ export interface ResultView {
   coinsTotal?: number;
   /** 可选：本局的目标时长（秒），默认 900；用于"离天亮还差" */
   dawnSeconds?: number;
+  /** 夜探：有就按夜探排版（won 填"撤出了"；seconds 是在镇里待了多久；coins 填这一局到手的铜钱，已含宝物换的） */
+  raid?: RaidResultView;
 }
 
 export class Result {
@@ -480,17 +547,52 @@ export class Result {
     el.textContent = text;
   }
 
+  /** 夜探的右半边：带出的宝物（按档上色的格子），丢在镇里的灰着排在后面 */
+  private raidItems(rr: RaidResultView): string {
+    const cell = (it: RaidItemView, lost: boolean): string =>
+      `<div class="yx-item t-${it.tier}${lost ? ' lost' : ''}${it.fresh ? ' fresh' : ''}" title="${esc(it.name)} · ${it.value}"><img alt="" src="${this.icons(it.icon)}"><span>${esc(it.name)}</span><em>${it.value}</em>${it.fresh ? '<i>新</i>' : ''}</div>`;
+    const kept = rr.kept.map((it) => cell(it, false)).join('');
+    const lost = rr.lost.map((it) => cell(it, true)).join('');
+    const headKept = rr.outcome === 'escaped' || rr.teach ? `带出 ${rr.kept.length} 件 · 值 ${rr.value} 铜钱` : '';
+    return (
+      '<div class="yx-rbuild yx-ritemsbox">' +
+      (kept ? `<label>${headKept}</label><div class="yx-ritems">${kept}</div>` : `<label>${rr.outcome === 'escaped' ? '背包是空的' : '什么也没带出来'}</label>`) +
+      (lost ? `<label>丢在镇里 ${rr.lost.length} 件</label><div class="yx-ritems">${lost}</div>` : '') +
+      '</div>'
+    );
+  }
+
   show(r: ResultView): void {
-    const title = r.won ? (r.bossKilled ? '尸王伏诛' : '天亮了') : r.quit ? '收工' : '倒下了';
+    const rr = r.raid;
+    const title = rr
+      ? rr.outcome === 'escaped'
+        ? '撤出了'
+        : rr.outcome === 'lost'
+          ? '迷失了'
+          : '倒下了'
+      : r.won
+        ? r.bossKilled
+          ? '尸王伏诛'
+          : '天亮了'
+        : r.quit
+          ? '收工'
+          : '倒下了';
     const dawn = r.dawnSeconds ?? 900;
-    // 无尽局过了天亮才倒下：说多撑了多久，不说"离天亮还差 0:00"
-    const sub = r.won
-      ? r.bossKilled
-        ? '打倒尸王，天提前亮了'
-        : '撑过了一整夜'
-      : r.seconds >= dawn
-        ? `天亮后又撑了 ${mmss(r.seconds - dawn)}`
-        : `离天亮还差 ${mmss(dawn - r.seconds)}`;
+    const sub = rr
+      ? rr.outcome === 'escaped'
+        ? '平平安安走出了镇子'
+        : rr.teach
+          ? '教学镇不丢包，东西照样带出来'
+          : rr.outcome === 'lost'
+            ? '天亮时还在镇里，背包丢了'
+            : '背包丢在了镇里'
+      : r.won
+        ? r.bossKilled
+          ? '打倒尸王，天提前亮了'
+          : '撑过了一整夜'
+        : r.seconds >= dawn
+          ? `天亮后又撑了 ${mmss(r.seconds - dawn)}`
+          : `离天亮还差 ${mmss(dawn - r.seconds)}`;
     const fmt = (n: number): string => Math.round(n).toLocaleString('zh-CN');
     const weapons = r.build.filter((b) => b.dmg >= 0).sort((a, b) => b.dmg - a.dmg);
     const top = Math.max(1, ...weapons.map((b) => b.dmg));
@@ -513,24 +615,24 @@ export class Result {
         ? `<div class="yx-rcoins"><span class="yx-gain"><img alt="" src="${coinImg}">+${fmt(r.coins)}</span><span class="yx-arrow">→</span><span class="yx-tot"><img alt="" src="${coinImg}"><b data-from="${Math.max(0, total - r.coins)}" data-to="${total}">${fmt(Math.max(0, total - r.coins))}</b><small>铜钱</small></span>${Array.from({ length: 6 }, (_, i) => `<img class="yx-fly" alt="" src="${coinImg}" style="--i:${i}">`).join('')}</div>`
         : '';
     this.root.innerHTML =
-      `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}">` +
+      `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}${rr ? ' raid' : ''}">` +
       `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${esc(r.label)}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}</div></div>` +
       '<div class="yx-rmain">' +
       '<div class="yx-rleft">' +
-      `<div class="yx-rtime"><span>撑了</span><b>${mmss(r.seconds)}</b><small>${sub}</small></div>` +
+      `<div class="yx-rtime"><span>${rr ? '在镇里' : '撑了'}</span><b>${mmss(r.seconds)}</b><small>${sub}</small></div>` +
       '<div class="yx-rstats">' +
       `<div><b>${r.kills.toLocaleString('zh-CN')}</b><span>斩</span></div>` +
       `<div><b>${r.level}</b><span>级</span></div>` +
       (total === undefined ? `<div><b>${r.coins.toLocaleString('zh-CN')}</b><span>铜钱</span></div>` : '') +
       '</div>' +
-      (best ? `<div class="yx-rbest"><img alt="" src="${this.icons('ui_medal')}"><div><small>本局最强</small><b>${esc(best.name)}</b><span>${fmt(best.dmg)} 伤 · ${best.kills} 斩</span></div></div>` : '') +
+      (best && !rr ? `<div class="yx-rbest"><img alt="" src="${this.icons('ui_medal')}"><div><small>本局最强</small><b>${esc(best.name)}</b><span>${fmt(best.dmg)} 伤 · ${best.kills} 斩</span></div></div>` : '') +
       '</div>' +
-      `<div class="yx-rbuild"><label>法器伤害</label>${rows}${passives ? `<div class="yx-rpasses">${passives}</div>` : ''}</div>` +
+      (rr ? this.raidItems(rr) : `<div class="yx-rbuild"><label>法器伤害</label>${rows}${passives ? `<div class="yx-rpasses">${passives}</div>` : ''}</div>`) +
       '</div>' +
       coinRow +
       '<div class="yx-row3">' +
       '<button type="button" class="yx-big ghost" data-a="home">大厅</button>' +
-      '<button type="button" class="yx-big ghost" data-a="menu">换难度</button>' +
+      `<button type="button" class="yx-big ghost" data-a="menu">${rr ? '回菜单' : '换难度'}</button>` +
       '<button type="button" class="yx-big yx-again" data-a="again">再来一局</button>' +
       '</div></div>';
     this.root.style.display = '';

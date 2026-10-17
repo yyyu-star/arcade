@@ -418,8 +418,10 @@ function recordLive(profile: Readonly<Profile>, summary: Readonly<RunSummary>, b
  * - 难度：非每日挑战的局通关第 N 级，解锁第 N+1 级（最高 8）。
  * - 纪录：非每日挑战记在 best[persona:difficulty]（短局另记 best[persona:difficulty:short]）；每日挑战记在 daily[date]。
  *   每日挑战要校验种子、人设、难度和 dailySetup(日期) 完全一致，不一致的按普通局记（"每日打卡"成就同样校验）。
+ * - 0.13.0 好友挑战的局（opts.challenge，调用方按这台设备接下的挑战认）照每日挑战的规矩：人设、难度由发起人定，可以是还没解锁的；
+ *   不解锁难度、不记最好成绩（成绩挂在挑战下），图鉴和成就照常。
  */
-export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSummary>, today: string): RecordResult {
+export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSummary>, today: string, opts: { challenge?: boolean } = {}): RecordResult {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error('recordRun 的 today 要是本地日期 YYYY-MM-DD');
   const none: SeenSets = { stocks: [], friends: [], items: [], events: [] };
   const base: RecordResult = {
@@ -440,8 +442,9 @@ export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSumma
   if (summary.daily && summary.daily > today) return { ...base, ignored: 'future' };
   // 每日挑战要货真价实：种子、人设、难度都和 dailySetup(日期) 一致，否则按普通局记
   const daily = summary.daily && isDailyRun(summary.daily, summary.seed, summary.persona, summary.difficulty) ? summary.daily : null;
-  // 普通局只能用已经解锁的人设和难度（每日挑战的人设、难度由日期决定，可以是还没解锁的）
-  if (!daily && (!isPersonaUnlocked(profile, summary.persona) || !isDifficultyUnlocked(profile, summary.difficulty))) {
+  const challenge = !daily && opts.challenge === true;
+  // 普通局只能用已经解锁的人设和难度（每日挑战的人设、难度由日期决定，好友挑战由发起人定，可以是还没解锁的）
+  if (!daily && !challenge && (!isPersonaUnlocked(profile, summary.persona) || !isDifficultyUnlocked(profile, summary.difficulty))) {
     return { ...base, ignored: 'locked' };
   }
   if (profile.last === summary.runId) return { ...base, ignored: 'duplicate' };
@@ -501,7 +504,7 @@ export function recordRun(profile: Readonly<Profile>, summary: Readonly<RunSumma
     }
     if (summary.won) rec.won = true;
     p.daily[daily] = rec;
-  } else {
+  } else if (!challenge) {
     const key = bestKey(summary.persona, summary.difficulty, summary.short);
     const rec: BestRecord = p.best[key] ? { ...p.best[key] } : { runs: 0, wins: 0, bestAccount: 0, bestMonths: 0 };
     rec.runs += 1;

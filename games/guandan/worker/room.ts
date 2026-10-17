@@ -10,6 +10,7 @@ import { PHRASES, dealMoment, momentOf, victimOf } from '../src/net/fun-moments.
 import { funBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
 import type { RoomOpts, StakeEffect } from '../src/net/stake.ts';
 import { CLIENT_VERSION } from '../src/net/version.ts';
+import { matchEnd } from '../src/net/together.ts';
 import { ROOM_HOURS } from '../src/stake/index.ts';
 import type { Env } from './gate.ts';
 
@@ -36,6 +37,10 @@ export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, 
 
   /** 每一步广播完：看这一步的公开事件（谁炸了谁、谁头游、双下），电脑按性格起哄 */
   protected override onStep(s: NetState): void {
+    // 搭子战绩（0.16.0）：一场打完的那一步报一次同桌真人（kit 按座位绑的人认，电脑座位不报；交给 waitUntil，不卡这一步）。
+    // 一个房间只打一场（再来一场是换新房间），场次写 1
+    const end = matchEnd(s);
+    if (end) this.reportMatch(end, 1);
     this.bots = funBots(s);
     if (this.bots.length === 0) return;
     for (const e of s.ev) {

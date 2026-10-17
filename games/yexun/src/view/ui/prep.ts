@@ -5,6 +5,9 @@ import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, CURSES, MAX_CUR
 import { WEAPONS } from '../../content/weapons.ts';
 import './prep.css';
 
+/** 锁：不用表情字符（有的设备、无头浏览器没有表情字体，显示成方框） */
+const LOCK_SVG = '<svg class="yx-lock" viewBox="0 0 12 12" aria-label="没解锁"><rect x="2" y="5.5" width="8" height="6" rx="1.2" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+
 export type PrepTab = 'char' | 'curse' | 'perk';
 
 export interface PrepState {
@@ -117,7 +120,7 @@ export class Prep {
         const st = s.chars[id];
         const on = id === s.character;
         const action = st.open ? `data-a="char" data-id="${id}"` : st.price !== undefined ? `data-a="buychar" data-id="${id}"${s.coins < st.price ? ' aria-disabled="true"' : ''}` : 'aria-disabled="true"';
-        const foot = st.open ? (on ? '出战中' : '选他') : st.price !== undefined ? `<span class="yx-coin"></span>${st.price}` : `🔒 ${esc(c.unlock)}`;
+        const foot = st.open ? (on ? '出战中' : '选他') : st.price !== undefined ? `<span class="yx-coin"></span>${st.price}` : `${LOCK_SVG} ${esc(c.unlock)}`;
         return (
           `<button type="button" class="yx-pcard${on ? ' on' : ''}${st.open ? '' : ' locked'}" ${action}>` +
           `<img alt="" src="${this.icons(WEAPONS[c.start].icon)}"><b>${esc(c.name)}</b><small>起手 ${esc(WEAPONS[c.start].name)}</small><p>${esc(c.perk)}</p><em>${foot}</em></button>`

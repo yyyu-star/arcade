@@ -41,10 +41,10 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/meter` | 游戏 Worker（Durable Object） | 计量 `RoomMeter`（0.2.0）：每天的写入额度、按人和全站的开房名额，游戏原样导出、绑成 `METER` 就行；`meterReport` / `meterLevel`（0.3.0）给房间以外的 DO 记写入、问门槛 |
 | `arcade-kit/game` | 两边、规则测试 | 规则接口 `RoomGame`；`snapshotBytes`：算进房快照最大有多大，游戏在自己的测试里断言上限 |
 | `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台和网络恢复时马上连、认得出静默死掉的连接（0.11.1）、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
-| `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
+| `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`（0.13.0 起有搭子战绩的 `together`）、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 | `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
-| `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere` 等接口小函数；只在有平台且已登录时挂 |
+| `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment`（0.12.5）等接口小函数；只在有平台且已登录时挂 |
 
 **发布和仓库内引用是两种形态**（0.10.0）：
 - npm 上的包是编译好的 `dist/`（JS + `.d.ts`），`exports` 每个入口给 `types` 和 `default`；
@@ -289,7 +289,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 import { TableFun, funIdCount, type FunSeat } from 'arcade-kit/table-fun';
 
 const fun = new TableFun({
-  storageKey: 'mygame',                          // 存储前缀：mygame.hint.fun（localStorage）、mygame.fun.blocked（sessionStorage）
+  storageKey: 'mygame',                          // 存储前缀：mygame.hint.fun（localStorage）、mygame.fun.blocked（sessionStorage）；只认游戏 id 的写法，不合格构造时抛错（0.13.1）
   phrases: PHRASES,                              // 本游戏的短语表；编号 0..P-1 是短语，P..P+11 表情，P+12..P+19 道具
   named: [3, 4, 2],                              // 头像菜单里的 3 句点名短语（短语表下标）
   seats: (): (FunSeat | null)[] => view.seats.map((s, i) => s && ({
@@ -351,7 +351,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
 
 ### 分享卡
 
-游戏只交数据，画法统一（主题色渐变底、图标、游戏名、一个大数字、最多 3 条小数据、一句名场面、昵称和称号、北京时间日期）：
+游戏只交数据，画法统一（主题色渐变底、图标、游戏名、一个大数字、最多 3 条小数据、一句名场面、昵称和称号、北京时间日期、右下角扫码来玩的二维码）：
 
 ```ts
 import { shareCard } from 'arcade-kit/share';
@@ -365,7 +365,7 @@ const r = await shareCard(
     art: { image: atlasImg, crop: { x: 128, y: 0, w: 128, h: 128 }, fit: 'contain' },
     player: { name: '小明', badge: '炸弹狂人' },
   },
-  { url: location.href /* 好友房结算带房间码 */, log: (l) => smokeLog.push(l) },
+  { url: './?room=123456' /* 只取路径，域名用运行时的 origin；好友房结算带房间码 */, log: (l) => smokeLog.push(l) },
 );   // 'shared' | 'preview' | 'cancelled'
 ```
 
@@ -375,7 +375,14 @@ const r = await shareCard(
   预览层 z-index 默认 11000（0.12.4 起），按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
 - **结算页一出现就先画好**（0.12.3，iOS 必须）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。结算页出来时 `const p = prepareShare(card, opts)`，
   "分享"按钮的点击里直接 `void p.share()`（前面别 await）：画好了就同步调 `navigator.share`，没画好等画完再试、调不起来出预览。`shareCard` 是"点了才画"的简写。
-- 只要图不分享：`drawShareCard(card, canvas?)` 返回画好的 canvas，`shareCardBlob(card)` 返回 PNG。
+- **二维码**（0.15.0）：朋友圈里的图不能点，扫码是唯一入口。码的内容是 `shareLink(opts.url, location.origin)`：运行时的 origin 加上 `url` 的路径、查询和 `#` 后面，
+  游戏给相对路径还是绝对地址都行，kit 和游戏都不写域名（单独部署的游戏扫出来就是它自己的 `workers.dev`）。系统分享、"复制链接"也用这个链接，系统分享的 `text` 末尾自动带上它（有的 App 只取 text）。
+  码画在右下角的纯白框里（`#111` 的格、每格整数像素、四周留白 ≥ 4 格、下面写"扫码来玩"），名场面和日期往左让；JPEG 压缩、缩到三分之一宽的截图实测照样解得出。
+  编码器是 `src/qr.ts`，自己写的最小子集（字节模式、纠错 M、版本 1–10，最长 213 字节，约 9 KB 源码），不引运行时依赖：kit 一个运行时依赖都没有，引一个就进每个游戏的 lockfile 和审阅范围。
+  链接太长编不了码就不画码，卡照常出。测试用 jsQR（Apache-2.0，只是 devDependency，不进包）把码解回原文，再对格式信息、版本信息做规范表的已知向量核对。
+- **微信内置浏览器**（0.15.0，UA 带 `MicroMessenger`）：没有 `navigator.share`，下载链接也常常不生效。检测到微信就不试系统分享，直接出预览：图用 `data:` URL（`blob:` 的图在微信里长按经常存不下来），
+  提示"长按图片 → 发送给朋友，或保存后发朋友圈"，不给"保存图片"按钮（"复制链接""关闭"照旧）。判断在 `isWeChat`、`previewMode`（纯函数）。
+- 只要图不分享：`drawShareCard(card, canvas?, link?)` 返回画好的 canvas（给了 `link` 才画码），`shareCardBlob(card, link?)` 返回 PNG。
 - **图上只有游戏给的数据**：别人没摊的牌、手牌这类隐藏信息游戏自己别放进来。
 
 ### 报位置、收邀请
@@ -398,10 +405,37 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   "不了"`dismiss` 后弹下一条，到期自己收起。按钮 `data-key` 是 `invite:go`、`invite:no`；`log` 给 `位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期`。
 - 发邀请 `sendInvite({ to, game, room })` → `{ ok: true, id }` 或 `{ ok: false, error: 'limit' | 'blocked' | 'login' | 'failed', retryAfter? }`（429 是每天 50 条、同一好友 1 分钟 1 条超了）。
   `fetchFriends()` 把平台每项的公开资料 `{ userId, displayName, avatar }` 统一成 `id`、`name`（原样字段留着），带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
+- 报名场面（0.12.5，好友动态）`postMoment(game, moment, n?, n2?, n3?)` → `POST /api/feed`：只报编号和最多 3 个整数，文字由游戏的 `public/moments.json` 给模板
+  （`{"double_down": {"text": "{name}和搭档双下了对面"}}`，只认 `{name}`、`{n}`、`{n2}`、`{n3}`，≤ 40 字）。返回 HTTP 状态，平台超了每天 10 条也回 204，游戏不用管；
+  编号要字母开头、1–24 位 `[a-z0-9_]`，不合格的本地就不发（回 400）。只在真有看头的时候报（一局一两条），平台每人每天 10 条是所有游戏合计。
 - **"叫朋友来"面板**（0.12.2）：`social.openInvite({ game, room })`（`social` 是 `mountSocial` 的返回值；没挂上时用导出的 `openInvite({ game, room, friends: false })`，只有"复制邀请链接"）。
   列好友（在线的在前，写在哪），每人一个"叫他来"，发出后 1 分钟内是灰的"已叫"，叫不了的写成大白话；底下"复制邀请链接"（能系统分享就分享）。
   样式和 table-fun 一样，z-index 默认 10600（0.12.4 起；游戏自己的弹窗更高时传 `zIndex`）；好友"在哪"先用平台给的 `where.gameName`，没有再用 `gameName` 回调，都没有说"在玩游戏"；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。
 - 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
+
+## 搭子战绩（reportTogether，0.13.0）
+
+好友房打完一场，房间的服务端把同桌真人和各自输赢报给平台（`docs/platform-backend.md` 15.19），平台给其中已经是好友的每一对累计"一起打了几场、谁赢了几场、做搭档几场"。
+只走钱包服务绑定 `WALLET` 的 `together()`，浏览器碰不到；娱乐、实盘都报，单机不报。
+
+```ts
+import { GameRoom } from 'arcade-kit/room';
+
+export class CardRoom extends GameRoom<State, Action, View, Env> {
+  protected override onStep(s: State): void {
+    // 一场刚分出输赢的那一步报一次；"一场"和 win 怎么算由游戏定，写进 DESIGN
+    if (justEnded(s)) this.reportMatch([0, 1, 2, 3].map((seat) => ({ seat, team: seat % 2, win: seat % 2 === s.winner })), s.matchNo);
+  }
+}
+```
+
+- `reportMatch(players, match)`（`GameRoom` 的 protected 方法）：players 按座位给，按开打后绑在座位上的人（`owners`）认 userId，没绑真人的座位（电脑）不报；
+  `match` 是这一场在房间里的序号，op 拼成 `<房间码>-<开房时刻>-<match>`（`togetherOp`）——房间码会被别的房间重用，带上开房时刻才不会撞；同一场重报给同一个 match，平台按 op 去重。
+  交给 `ctx.waitUntil` 去办、不 await：`onStep` 是同步的，不能卡住广播；也不走 `effects`/`perform`，那条路会退避重试、要写状态，而这件事平台忙（`busy`）时少记一场就算了。
+- `reportTogether(env, op, players)`：底下那个函数，自己拼 userId 时直接用。没有 `env.WALLET`（单独部署）或它没有 `together` 时跳过；去重后少于 2 人、多于 8 人、op 不是 8–64 位 `[A-Za-z0-9_-]` 时跳过；
+  回话原样返回（`{ ok: true, pairs }` 或 `{ ok: false, error }`），RPC 抛错吞掉、只记错误类型（不记 userId），都**不重试**。
+- `team` 只有分队的游戏带（同一个数字是一队，0–3）；`win` 由游戏定、写进游戏自己的 DESIGN（分队的按这一场赢的那队，按分算的按这一场分数为正，平台 15.19 列了几种）。
+- 测试：`arcade-kit/testing` 的假钱包有 `together`，形状照平台查、按 op 去重，每个人的 `FakeBank.together` 记一笔给测试核对（假钱包不管好友关系，两两都算一对）。
 
 ## 房间怎么守规矩
 
@@ -425,14 +459,17 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   - 客户端重发没确认的操作带原来的 `baseSeq`：牌局变过就回 `stale`，旧操作不会被套到新的一手上。有人进出不算牌局变了。
   - 重复的 moveId 每个座位记最近 8 个（0.11.1，和座位一起存在状态那一行里，不多写）：连发 A、B 时 A 的 ack 丢了，补发 A 仍然只回 ack，不轮流的操作不会做第二遍。
 - **硬限制**（4.6）：
-  - 单条入站消息 4 KB（1009）；每连接每秒 5 条、最多攒 10 条（1008）；房间一生 3,000 条入站消息；寿命 3 小时；没人 10 分钟——到了就关房间：
+  - 单条入站消息 4 KB（1009）；每人每秒 5 条、最多攒 10 条（1008；0.14.0 起按人记，断开重连、多开标签页都还是同一个桶）；房间一生 3,000 条入站消息；寿命 3 小时；没人 10 分钟——到了就关房间：
     断开所有人（4000）、删闹钟、删存储；
-  - 没入座的连接最多 4 条（4003）；入座的人不占这个数，旁观的再多也挡不住座位的主人回来；
+  - 没入座的最多 4 个账号（4003）；入座的人、房主、开打后绑过座位（离座去看）的人不占这个数，也不受它限，旁观的再多也挡不住座位的主人回来；
   - 每人一生最多 300 次"掉线后回来"（只数会写库的那种，4029）。按 userId 记，只管他自己，别人刷不光，离座再坐下也不清零；
     这些重连同时算进房间一生的 3,000 条入站额度，所以房间一生的写入总数有上限。没入座的人进出不写库，不受这个管；
   - 一个人最多用掉房间入站额度的 `maxInboundShare`（默认四成，1,200 条）：超了只断开他（4030），以后也进不来，房间和别人照常；
   - 入站额度用完关房时，日志里记下发得最多的那个 userId 和条数（不记消息内容），方便事后查；
   - 每个入口都包一层，游戏代码抛错只记日志；闹钟里不往外抛（会自动重试 6 次，每次都计费）。
+  - 闹钟设不上（0.13.1）：当场再试一次；还不行就按 `getAlarm()` 核对，存储里没有闹钟就补一个 60 秒后的（顶替没写成的那次，不多算一行）；
+    补也补不上时，浏览器的 `RoomClient` 看门狗兜底：房间说的时限（按消息里房间给的 `now` 算，不看浏览器的钟）过了 20–30 秒还没有新状态，就重连一次，
+    进房这个入口会让房间重排闹钟、把过期的那一手照常处理；同一个 seq 只踢一次。
 - **座位绑人**（0.1.1）：开局时记下每个座位坐的是谁。开打后坐过某个座位的人只能回这个座位；没坐过的人只能接管没绑人的电脑座位，接管后绑给他；
   绑给别人的座位（主人离座了也算）谁也接管不了，电脑一直替主人打，主人回来照样能坐。一个 userId 一局只对应一个座位，所以离座、换到对手座位看牌、再回来这条路走不通；
   也不能由同伙先占掉你的原座位、把你变成"没绑座位"的人。0.1.0 存下的已开打房间读出来时，电脑座位一律算已绑（旧格式看不出谁离过座）。
@@ -459,6 +496,8 @@ social?.presenceNow(true);                          // 进房、换房时马上�
 | `stopWrites` | 85,000 | 在打的房间走到 `breakPoint`（这一副打完）时收场：把这一步发给大家，再以 4000 + 原因 `quota` 关房；等人的、已经打完的马上关 |
 | `emoteMs`（0.7.0，房间读） | 1000 | 快捷短语每个座位多少毫秒补 1 个令牌，0 不限速 |
 | `emoteBurst`（0.7.0，房间读） | 3 | 快捷短语每个座位最多攒几个令牌 |
+| `joinMissesPerUser`（0.14.0） | 20 | 这个人这一小时进房时"码不存在"到了这么多次：进任何房间都回 1013（房间在不在都一样），只有这个房间的自己人（房主、坐着的、开打后绑过座位的）照常进 |
+| `joinMissesPerIp`（0.14.0） | 60 | 同一个 IP 这一小时的"码不存在"次数，到了同上（一个 IP 后面可能是一家人、一个宿舍，放宽些） |
 
 - **改门槛**：在游戏的 `wrangler.jsonc` 里写 `"vars": { "KIT_QUOTA": { "busyWrites": 50000 } }`（对象或 JSON 字符串都行），只写要改的字段，部署后生效；
   不认识的字段、不是非负整数的值记日志后忽略，用默认值。门槛按每个游戏各算各的，有几个联机游戏就要分一分（见下面"多个游戏怎么分额度"）。
@@ -468,6 +507,7 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   计量每报一次写 1 行，200 行一报摊下来多花 0.5%；开房（这个人一行、当天一行）、还名额（同样两行）另算，也都记进当天的数。
   没报的数随房间那一行一起存，被驱逐后接着数；被驱逐前刚报过、还没存下去的那一批会再报一次，偏保守。房间跨 UTC 0 点报上来的记在新的一天。
 - **计量连不上**：不开新房（503 `unavailable`）、不进新人（1013，客户端过会儿自己重试）；在打的照常，报不上的攒着，60 秒后再试。
+- **进房猜码**（0.14.0，第三轮审计）：房间码只有 6 位，不限的话能一个个试出谁开着房、进去旁观或坐空位。`acceptJoin` 按人、按 IP 数"码不存在"（计量类的小实例 `kit-miss:u:<userId>` / `kit-miss:ip:<地址>`，每次各写 1 行、再报进当天的数；没绑 `METER` 不管，没有 `cf-connecting-ip` 只按人）。超了门槛不直接拒，而是带一个内部头进房，由房间判断是不是自己人：自己人照常进，别人一律 1013，这样超限的人说不出房间在不在，在打的人断线重连也不受牵连。计量连不上时同样处理。每次进房多问一次小实例（只读）。
 - **房间怎么知道门槛**：每次报数、还名额时计量顺便回现在的门槛；有新人来进房时房间也会问（记 30 秒，只读不写）。所以 stop 以后在打的房间最晚再写一批（≤ 200 行）加上这一副剩下的才收场，
   按同时最多二三十个房间算，8.5 万离 10 万还有余量。
 - 名额只按游戏算：同一个人在两个游戏里可以各开一个房间。
@@ -571,6 +611,7 @@ packages/arcade-kit/
 │  ├─ fun-logic.ts   牌桌互动的规则：冷却、护盾、连击、回敬、电脑反应、菜单位置（纯函数）
 │  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示）
 │  ├─ share.ts       分享卡（Canvas 画战绩图、系统分享或预览）
+│  ├─ qr.ts          二维码编码器（字节模式、纠错 M、版本 1–10，纯函数，分享卡用）
 │  ├─ social.ts      报位置、收邀请的横条、好友和邀请的接口小函数
 │  ├─ testing.ts     假平台钱包（只给测试和本地开发）
 │  └─ internal.ts    内部地址、身份头（不在 exports 里）

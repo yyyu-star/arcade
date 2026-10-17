@@ -7,6 +7,7 @@ import { ApiError, json } from './http';
 import { beijingWeek } from './time';
 import { type Career, type CareerView, careerView } from './wallet';
 import { avatarOf } from './session';
+import { togetherWith } from './mates';
 
 /** 我和对方的关系：和查好友码（15.4）用同一套取值，战绩页上决定给不给"加好友" */
 export type Relation = 'self' | 'friends' | 'pending_out' | 'pending_in' | 'none';
@@ -17,7 +18,8 @@ export function statsParams(segments: string[]): Record<string, string> {
 }
 
 /**
- * GET /api/stats/<userId|me>：一个人的公开资料、各游戏战绩、和我的关系。一次查询读 users、wallets 各 1 行，好友、屏蔽各查 1 行，写 0 行。
+ * GET /api/stats/<userId|me>：一个人的公开资料、各游戏战绩、和我的关系。一次查询读 users、wallets 各 1 行，好友、屏蔽各查 1 行；
+ * 是好友时再查一次搭子战绩（这一对每个游戏 1 行）。写 0 行。
  * 对方屏蔽了我：当没有这个人（404），和好友链接一样看不出被屏蔽。
  */
 export async function getStats(c: Ctx): Promise<Response> {
@@ -33,9 +35,10 @@ export async function getStats(c: Ctx): Promise<Response> {
     requested_by: string | null;
     blocked_me: number;
     i_blocked: number;
+    show_mates: number;
   }>(
     c.db.stmt(
-      `SELECT u.id, u.display_name, u.avatar_json,
+      `SELECT u.id, u.display_name, u.avatar_json, u.show_mates,
          (SELECT json_extract(w.state, '$.career') FROM wallets w WHERE w.user_id = u.id) AS career,
          f.status, f.requested_by,
          EXISTS (SELECT 1 FROM blocks bl WHERE bl.blocker = u.id AND bl.blocked = ?2) AS blocked_me,
@@ -65,10 +68,13 @@ export async function getStats(c: Ctx): Promise<Response> {
   for (const [game, career] of Object.entries((row.career ? JSON.parse(row.career) : {}) as Record<string, Career>)) {
     if (career.n > 0) games[game] = careerView(career, week);
   }
+  // 搭子战绩（0.19.0）：只给好友，两边都开着才给；一起没打过就不带
+  const together = relation === 'friends' && row.show_mates !== 0 && c.session!.user.show_mates !== 0 ? await togetherWith(c.db, me, id) : {};
   return json(200, {
     user: { userId: row.id, displayName: row.display_name, avatar: avatarOf(row.avatar_json) },
     relation,
     week,
     games,
+    ...(Object.keys(together).length ? { together } : {}),
   });
 }

@@ -5,6 +5,7 @@
  */
 import { dialog } from './dialog.ts';
 import { el } from './dom.ts';
+import type { Award } from './titles.ts';
 import { chips, handName } from './text.ts';
 
 export interface SoloSummary {
@@ -63,22 +64,22 @@ export function soloSummary(parent: HTMLElement, s: SoloSummary): Promise<unknow
   return dialog(parent, s.practice ? '这一场（娱乐）' : '这一场', body, [{ label: '回标题', value: 'ok', primary: true }]);
 }
 
-/** 好友房：这一场每个人的输赢（我排第一） */
+/** 好友房：先颁奖，再列这一场每个人的输赢（我排第一） */
 export function roomSummary(
   parent: HTMLElement,
   title: string,
   note: string | null,
   rows: RoomSummaryRow[],
-  titles: Title[] = [],
+  awards: Award[] = [],
   share?: () => void,
 ): Promise<unknown> {
   const body = el('div', 'summary');
   if (note) el('p', 'sum-note', body, note);
+  awardBox(body, awards);
   const grid = el('div', 'sum-grid', body);
   const sorted = [...rows].sort((a, b) => Number(b.me) - Number(a.me) || b.net - a.net);
   for (const r of sorted) row(grid, r.me ? `${r.name}（你）` : r.name, signed(r.net), r.net > 0 ? 'plus' : r.net < 0 ? 'minus' : '');
   if (!rows.length) el('p', 'sum-note', body, '这一场没人带筹码上桌。');
-  titleBox(body, titles);
   shareButton(body, share);
   return dialog(parent, title, body, [{ label: '回标题', value: 'ok', primary: true }]);
 }
@@ -99,6 +100,18 @@ function titleBox(body: HTMLElement, titles: Title[]): void {
     const tag = el('div', 'sum-title', box);
     el('b', '', tag, t.title);
     el('span', '', tag, `${t.name} · ${t.why}`);
+  }
+}
+
+/** 颁奖（0.15.0）：好友房一场结束，放在最上面、大字 */
+function awardBox(body: HTMLElement, awards: Award[]): void {
+  if (!awards.length) return;
+  const box = el('div', 'sum-awards', body);
+  for (const a of awards) {
+    const card = el('div', `sum-award ${a.kind}`, box);
+    el('div', 'sum-award-t', card, a.title);
+    el('div', 'sum-award-n', card, a.name);
+    el('div', 'sum-award-l', card, a.line);
   }
 }
 

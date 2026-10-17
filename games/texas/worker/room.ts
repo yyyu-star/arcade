@@ -40,8 +40,15 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
   private seed: Entropy | null = null;
   private seats: { owner: string; persona: number }[] = [];
   private replies = 0;
+  /** 报到第几场了（搭子战绩）：只在内存里，被驱逐后醒来把最近切的那几场再报一次，平台按 op 去重、不多记 */
+  private matches = -1;
 
   protected override onStep(s: RoomState): void {
+    // 搭子战绩（0.17.0，平台 15.19；DESIGN.md 6.10）：规则在有人离桌、散桌时切出的场，按座位报（电脑座位 kit 跳过），不 await、不重试
+    if (s.mates && s.mates.n > this.matches) {
+      for (const m of s.mates.last) this.reportMatch(m.players, m.match);
+      this.matches = s.mates.n;
+    }
     this.seed = s.t.seed;
     this.seats = s.t.seats.map((x) => ({ owner: x.owner, persona: x.persona }));
     const r = s.t.lastHand;

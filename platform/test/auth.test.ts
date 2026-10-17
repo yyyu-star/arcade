@@ -152,12 +152,13 @@ describe('注册', () => {
 });
 
 describe('登录', () => {
-  it('成功：写 4 行（会话 2 + IP 计数 1 + last_seen_at 1），发新 cookie', async () => {
+  it('成功：写 6 行（会话 2 + IP 计数 1 + last_seen_at 1 + 占一次尝试 1 + 清零 1，0.19.2），发新 cookie', async () => {
     const u = await registerUser();
     const res = await call('/api/auth/login', { body: { username: u.username.toUpperCase(), password: u.password } });
     expect(res.status).toBe(200);
-    expect(rowsWritten()).toBe(4);
-    expect(rowsBy('auth')).toBe(4);
+    expect(rowsWritten()).toBe(6);
+    expect(rowsBy('auth')).toBe(6);
+    expect(await count('SELECT COUNT(*) AS n FROM rate_counters WHERE key = ?1', `login:fail:${u.username}`)).toBe(0);
     expect(sidOf(res)).not.toBe(u.cookie);
     expect(((await res.json()) as { user: { id: string } }).user.id).toBe(u.user.id);
   });
@@ -174,7 +175,7 @@ describe('登录', () => {
     expect(await count("SELECT COUNT(*) AS n FROM rate_counters WHERE key LIKE 'login:fail:ghost%'")).toBe(0);
   });
 
-  it('连续错 5 次后要等 30 秒：第 6 次 429、不验密码、0 行；到时间后登录成功并清零（5 行）', async () => {
+  it('连续错 5 次后要等 30 秒：第 6 次 429、不验密码、0 行；到时间后登录成功并清零（6 行）', async () => {
     const u = await registerUser();
     for (let i = 0; i < 5; i++) {
       expect((await call('/api/auth/login', { body: { username: u.username, password: 'Wrong-Pass-1' } })).status).toBe(401);
@@ -191,7 +192,7 @@ describe('登录', () => {
     await resetAll.cacheOnly();
     const ok = await call('/api/auth/login', { body: { username: u.username, password: u.password } });
     expect(ok.status).toBe(200);
-    expect(rowsWritten()).toBe(5);
+    expect(rowsWritten()).toBe(6);
     expect(await count('SELECT COUNT(*) AS n FROM rate_counters WHERE key = ?1', `login:fail:${u.username}`)).toBe(0);
   });
 
@@ -225,18 +226,21 @@ describe('登录', () => {
     expect(row!.count).toBeLessThanOrEqual(5);
   });
 
-  it('锁到期那一刻并发打进来的失败：只有 1 次写进去，随即重新锁上', async () => {
+  it('锁到期那一刻并发打进来的：只有 1 次能验密码（先占位，0.19.2），其余 429，随即重新锁上', async () => {
     const u = await registerUser();
     const key = `login:fail:${u.username}`;
     const now = Date.now();
     await env.DB.prepare('INSERT INTO rate_counters (key, window_start, count, blocked_until) VALUES (?1, ?2, 5, ?3)')
       .bind(key, now - 60_000, now - 1)
       .run();
-    await Promise.all(
+    const res = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         call('/api/auth/login', { body: { username: u.username, password: 'Wrong-Pass-1' }, ip: `192.0.2.${150 + i}` }),
       ),
     );
+    // 原来查锁和记失败中间隔着 PBKDF2，20 个都过了查锁、都试了一次密码（20 个 401）
+    expect(res.filter((r) => r.status === 401)).toHaveLength(1);
+    expect(res.filter((r) => r.status === 429)).toHaveLength(19);
     const row = await env.DB.prepare('SELECT count, blocked_until FROM rate_counters WHERE key = ?1').bind(key).first<{ count: number; blocked_until: number }>();
     expect(row!.count).toBe(6);
     expect(row!.blocked_until).toBeGreaterThan(now);
@@ -252,14 +256,34 @@ describe('登录', () => {
     expect(rowsWritten()).toBe(0);
   });
 
-  it('全站每小时上限（随计量上报）', async () => {
+  it('全站每小时上限（随计量上报）只算用户名存在的尝试（0.19.2）：不存在的用户名耗不掉全站名额', async () => {
     await resetAll({ loginAllHour: 2, anonPerIpPerMinute: 100 });
-    const body = { username: 'ghost_user', password: 'Wrong-Pass-1' };
-    await call('/api/auth/login', { body, ip: '192.0.2.61' });
-    await call('/api/auth/login', { body, ip: '192.0.2.62' });
-    const res = await call('/api/auth/login', { body, ip: '192.0.2.63' });
-    expect(res.status).toBe(429);
-    expect(rowsWritten()).toBe(0);
+    const u = await registerUser();
+    const ghost = { username: 'ghost_user', password: 'Wrong-Pass-1' };
+    // 原来这 5 次就把全站 2 次的名额占满，第 3 次起谁都登不上
+    for (let i = 0; i < 5; i++) expect((await call('/api/auth/login', { body: ghost, ip: `192.0.2.${61 + i}` })).status).toBe(401);
+    expect((await call('/api/auth/login', { body: { username: u.username, password: 'Wrong-Pass-1' }, ip: '192.0.2.70' })).status).toBe(401);
+    expect((await call('/api/auth/login', { body: { username: u.username, password: u.password }, ip: '192.0.2.71' })).status).toBe(200);
+    // 存在的用户名用掉了 2 次：满了以后谁都 429、0 行（防撞库照旧）
+    for (const body of [ghost, { username: u.username, password: u.password }]) {
+      const res = await call('/api/auth/login', { body, ip: '192.0.2.72' });
+      expect(res.status).toBe(429);
+      expect(rowsWritten()).toBe(0);
+    }
+  });
+
+  it('用户名不存在也白算一次 PBKDF2（0.19.2）：响应时间和密码错差不多，看快慢猜不出用户名在不在', async () => {
+    await resetAll({ pbkdf2Iterations: 100_000, anonPerIpPerMinute: 100 });
+    const u = await registerUser();
+    const time = async (username: string, ip: string) => {
+      const t = performance.now();
+      expect((await call('/api/auth/login', { body: { username, password: 'Wrong-Pass-1' }, ip })).status).toBe(401);
+      return performance.now() - t;
+    };
+    // 各取 3 次里最快的，去掉抖动；原来不存在的只查一次库，快一个数量级以上
+    const real = Math.min(await time(u.username, '192.0.2.80'), await time(u.username, '192.0.2.81'), await time(u.username, '192.0.2.82'));
+    const ghost = Math.min(await time('ghost_user', '192.0.2.83'), await time('ghost_user', '192.0.2.84'), await time('ghost_user', '192.0.2.85'));
+    expect(ghost).toBeGreaterThan(real * 0.5);
   });
 });
 
@@ -388,6 +412,19 @@ describe('找回密码', () => {
     expect(blocked.status).toBe(429);
     expect(rowsWritten()).toBe(0);
     expect((await call('/api/auth/login', { body: { username: u.username, password: 'Brand-New-Pass-2' } })).status).toBe(200);
+  });
+
+  it('全站每小时上限只算用户名存在的（0.19.2）：不存在的用户名耗不掉全站名额', async () => {
+    await resetAll({ recoverAllHour: 2, anonPerIpPerMinute: 100 });
+    const u = await registerUser();
+    const ghost = { username: 'ghost_user', recoveryCode: 'AAAAA-AAAAA-AAAAA-AAAAA', newPassword: 'Brand-New-Pass-2' };
+    for (let i = 0; i < 5; i++) expect((await call('/api/auth/recover', { body: ghost, ip: `192.0.2.${90 + i}` })).status).toBe(401);
+    const wrong = { ...ghost, username: u.username };
+    expect((await call('/api/auth/recover', { body: wrong, ip: '192.0.2.96' })).status).toBe(401);
+    expect((await call('/api/auth/recover', { body: { ...wrong, recoveryCode: u.recoveryCode }, ip: '192.0.2.97' })).status).toBe(200);
+    const full = await call('/api/auth/recover', { body: ghost, ip: '192.0.2.98' });
+    expect(full.status).toBe(429);
+    expect(rowsWritten()).toBe(0);
   });
 
   it('新密码太弱：422，0 行', async () => {

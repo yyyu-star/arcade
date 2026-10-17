@@ -3,11 +3,13 @@
  * 每个用例断言每一步写入 ≤ 2 行（4.2）；开房那一步如实算上建表。
  */
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StateMsg } from '../src/protocol.ts';
-import { identityHeader, KIT_HOST, roomStub, SESSION_COOKIE } from '../src/internal.ts';
+import { identityHeader, KIT_HOST, MISS_HEADER, missStub, roomStub, SESSION_COOKIE } from '../src/internal.ts';
+import type { RoomMeter } from '../src/meter.ts';
 import { isEntropy } from '../src/rng.ts';
 import roomSrc from '../src/room.ts?raw';
+import workerSrc from '../src/worker.ts?raw';
 import { advance, Conn, freezeClock, inspect, join, openRoom, refusedWith, resetMeter, stub, upgrade } from './helpers.ts';
 import type { RoomGame } from '../src/game.ts';
 import { SITE, type ToyAction, type ToyRoom, type ToyView, toyGame } from './worker.ts';
@@ -514,9 +516,28 @@ describe('只用一个闹钟', () => {
     expect((await inspect(code)).persist).not.toBeNull();
   });
 
-  it('setAlarm 自己出错（0.11.1）：不往外抛；闹钟改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排', async () => {
+  it('setAlarm 出错一次（0.13.1）：当场再试一次就设上了，不用等下一个入口', async () => {
     const { code, conns } = await fullTable();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     await failSetAlarm(code, 1);
+    await startAll(conns);
+    expect(await alarmOf(code)).toBe(Date.now() + 30_000);
+    // 只算一行写入（失败的那次没写）
+    expect((await inspect(code)).max).toBeLessThanOrEqual(2);
+    err.mockRestore();
+  });
+
+  it('状态消息带房间的时间 now（0.13.1，浏览器的看门狗用它算时限还剩多久）', async () => {
+    const { conns } = await fullTable();
+    conns[0]!.send({ t: 'start' });
+    const s = await conns[0]!.state();
+    expect(s.now).toBe(Date.now());
+    expect(s.room.turn!.deadline! - s.now!).toBe(30_000);
+  });
+
+  it('setAlarm 连着出错（0.11.1、0.13.1 两次都失败）：不往外抛；闹钟改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排', async () => {
+    const { code, conns } = await fullTable();
+    await failSetAlarm(code, 2);
     await startAll(conns);
     // 开局要设的出牌超时（30 秒后）没设上，存储里还是开局前的那个
     expect(await alarmOf(code)).not.toBe(Date.now() + 30_000);
@@ -526,10 +547,30 @@ describe('只用一个闹钟', () => {
     expect(await alarmOf(code)).toBe(Date.now() + 30_000);
   });
 
-  it('闹钟里重设闹钟失败（0.11.1）：过 60 秒再醒来，不会从此没有闹钟', async () => {
+  it('不是闹钟的那一步 setAlarm 两次都失败、存储里也没有闹钟（0.13.1，第三轮审计）：当场补一个 60 秒后的，不等下一个入口', async () => {
+    const { code, conns } = await fullTable();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // 存储里没有闹钟，内存里也不知道
+    await runInDurableObject(stub(code), async (room: ToyRoom, state) => {
+      await state.storage.deleteAlarm();
+      (room as unknown as { alarmAt: undefined }).alarmAt = undefined;
+    });
+    await failSetAlarm(code, 2);
+    await startAll(conns);
+    expect(await alarmOf(code)).toBe(Date.now() + 60_000);
+    // 补设的这次顶替没写成的那次：这一步仍然最多 2 行
+    expect((await inspect(code)).max).toBeLessThanOrEqual(2);
+    // 醒来时按状态重新算：出牌超时（30 秒）已经过了，照常代出
+    advance(60_000);
+    expect(await runDurableObjectAlarm(stub(code))).toBe(true);
+    expect(await played(code)).toBeGreaterThan(0);
+    err.mockRestore();
+  });
+
+  it('闹钟里重设闹钟失败（0.11.1；0.13.1 起当场再试一次，两次都失败才走这条）：过 60 秒再醒来，不会从此没有闹钟', async () => {
     const { code, conns } = await fullTable();
     await startAll(conns);
-    await failSetAlarm(code, 1);
+    await failSetAlarm(code, 2);
     advance(30_000);
     expect(await runDurableObjectAlarm(stub(code))).toBe(true);
     expect(await alarmOf(code)).toBe(Date.now() + 60_000);
@@ -1267,5 +1308,90 @@ describe('一组人：组标识、卡住、中途接管（0.1.1）', () => {
     const sat = (await late.until((m) => m.t === 'state' && m.you.seat === 2)) as StateMsg<ToyView>;
     expect(sat.room.turn).toStrictEqual({ seat: 0, deadline: t0 + 20_000, seats: [0, 2] });
     expect((await inspect(code)).persist.turnSince).toBe(t0);
+  });
+});
+
+describe('第三轮审计（0.14.0）', () => {
+  const missStore = (key: string) => missStub(env.METER, key) as DurableObjectStub<RoomMeter>;
+  const misses = (key: string) => missStore(key).kitMisses();
+  /** 直接把某个人 / IP 这一小时的"码不存在"次数设成 n（省得真的猜 20 次） */
+  const setMisses = (key: string, n: number) =>
+    runInDurableObject(missStore(key), (_m: RoomMeter, state) => state.storage.put('miss', { h: Math.floor(Date.now() / 3_600_000), n }));
+  const probe = (code: string, user: string, ip: string) => upgrade(code, user, { headers: { 'cf-connecting-ip': ip } });
+  // 计数存在小实例里，同一个文件的测试共用：设过门槛的清回去，不连累后面用同名账号的测试
+  afterEach(async () => {
+    for (const k of ['u:u2', 'u:stranger', 'ip:10.0.0.3']) await setMisses(k, 0);
+  });
+
+  it('worker.ts 不在运行时引用 meter.ts、room.ts（它们依赖 cloudflare:workers，游戏会在普通 Node 的测试里加载 worker.ts）', () => {
+    const runtime = [...workerSrc.matchAll(/^import (?!type )[^;]*from '([^']+)'/gm)].map((m) => m[1]);
+    expect(runtime.filter((f) => /meter|room|cloudflare:/.test(f!))).toEqual([]);
+  });
+
+  it('猜码：码不存在按人、按 IP 各记一次，转给浏览器的回话不带内部头；房间在的不记', async () => {
+    const res = await probe('000002', 'guesser', '10.0.0.1');
+    expect(res.headers.has(MISS_HEADER)).toBe(false);
+    expect(await refusedWith(res)).toBe(4004);
+    expect(await misses('u:guesser')).toBe(1);
+    expect(await misses('ip:10.0.0.1')).toBe(1);
+    const code = await openRoom('gh');
+    const w = await upgrade(code, 'guesser', { headers: { 'cf-connecting-ip': '10.0.0.1' } });
+    await expect(new Conn(w.webSocket!, 'guesser').next()).resolves.toMatchObject({ t: 'welcome' });
+    expect(await misses('u:guesser')).toBe(1);
+    // 到了下一个小时重新数
+    advance(3_600_000);
+    expect(await misses('u:guesser')).toBe(0);
+  });
+
+  it('猜码超了门槛（人或 IP）：码不存在、房间在都回 1013，说不出房间在不在，也不再记数；自己人（房主、坐着的、绑过座位的）照常进', async () => {
+    const { code, conns } = await fullTable();
+    await startAll(conns);
+    await setMisses('u:u2', 20);
+    await setMisses('u:stranger', 20);
+    expect(await refusedWith(await probe('000003', 'stranger', '10.0.0.2'))).toBe(1013);
+    expect(await refusedWith(await probe(code, 'stranger', '10.0.0.2'))).toBe(1013);
+    expect(await misses('u:stranger')).toBe(20);
+    expect(await misses('ip:10.0.0.2')).toBe(0);
+    // 同一个 IP 后面的人超了：换个账号也不行
+    await setMisses('ip:10.0.0.3', 60);
+    expect(await refusedWith(await probe(code, 'other', '10.0.0.3'))).toBe(1013);
+    // 自己人：坐着的 u2 换设备照样进
+    const back = await probe(code, 'u2', '10.0.0.2');
+    expect(await new Conn(back.webSocket!, 'u2').next()).toMatchObject({ t: 'welcome', you: { seat: 1 } });
+    expect(await conns[1]!.closedWith()).toBe(4001);
+    // 房主在超限的 IP 后面也进得来
+    const host = await probe(code, 'u1', '10.0.0.3');
+    expect(await new Conn(host.webSocket!, 'u1').next()).toMatchObject({ t: 'welcome', you: { seat: 0 } });
+  });
+
+  it('令牌桶按人记：断开重连拿不到一个满的桶', async () => {
+    const code = await openRoom('tb');
+    const first = (await join(code, 'tbw')).conn;
+    // 没入座的人发 9 条会被拒的消息，令牌桶剩 1 个（时间冻着，不补）
+    for (let i = 0; i < 9; i++) first.send({ t: 'sit', seat: 9 });
+    for (let i = 0; i < 9; i++) await first.until((m) => m.t === 'error');
+    first.ws.close(1000, 'bye');
+    await first.closedWith();
+    await quiet();
+    const again = (await join(code, 'tbw')).conn;
+    again.send({ t: 'sit', seat: 9 });
+    await again.until((m) => m.t === 'error');
+    again.send({ t: 'sit', seat: 9 });
+    expect(await again.closedWith()).toBe(1008);
+  });
+
+  it('旁观名额：开打后离座去看的人不占、也不受限；房主同样', async () => {
+    const { code, conns } = await fullTable();
+    await startAll(conns);
+    // u2 离座（座位还绑着他），留在房间里看
+    conns[1]!.send({ t: 'leave' });
+    await conns[1]!.until((m) => m.t === 'state' && m.you.seat === null);
+    // 4 个陌生人照样能进（u2 不占名额），第 5 个 4003
+    const watchers: Conn[] = [];
+    for (let i = 0; i < 4; i++) watchers.push((await join(code, `aw${i}`)).conn);
+    expect(await refusedWith(await upgrade(code, 'aw-more'))).toBe(4003);
+    // 占满以后，离座的 u2 换设备照样进
+    expect((await join(code, 'u2')).welcome.you.seat).toBeNull();
+    expect(await conns[1]!.closedWith()).toBe(4001);
   });
 });

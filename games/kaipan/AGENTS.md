@@ -67,7 +67,7 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 ## 6. 浏览器存储 key（全部 `kaipan.` 前缀）
 
 `kaipan.save`、`kaipan.save.corrupt`、`kaipan.profile`、`kaipan.settings`、`kaipan.view.prefs`、`kaipan.setup.last`、`kaipan.tutorial.v3`、
-`kaipan.extTips.v1`、`kaipan.codex.viewed.v1`、`kaipan.soundboard`、`kaipan.errors`、`kaipan.run.unscored`、`kaipan.cloud`（云同步元数据）、`kaipan.homeTip.off`（关掉了「添加到主屏幕」提示）、`kaipan.live`（0.6.0 实盘这一局的筹码走到哪一步，见 `src/platform/live.ts`）；
+`kaipan.extTips.v1`、`kaipan.codex.viewed.v1`、`kaipan.soundboard`、`kaipan.errors`、`kaipan.run.unscored`、`kaipan.cloud`（云同步元数据）、`kaipan.homeTip.off`（关掉了「添加到主屏幕」提示）、`kaipan.live`（0.6.0 实盘这一局的筹码走到哪一步，见 `src/platform/live.ts`）、`kaipan.challenge`（0.13.0 这台设备接下的好友挑战，见 `src/platform/challenge.ts`）；
 云同步备份类：`kaipan.<槽>.pre-sync`、`kaipan.<槽>.pre-switch.<userId>`、`kaipan.<槽>.pre-switch.<userId>.restored`（槽是 `profile`、`tutorial`）；
 `kaipan.profile.corrupt`。
 启动时清掉（0.6.15，`src/platform/storage.ts` 的 `LEGACY_KEYS`）：`kaipan.records`（0.3 的本地纪录，档案取代了它）、`kaipan.save.v1`、`kaipan.save.v0.1/v0.2/v0.3/v0.3a/v0.4a/v0.3.restored`、

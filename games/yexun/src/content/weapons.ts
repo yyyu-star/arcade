@@ -106,7 +106,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '天师符雨',
       icon: 'i_talisman_evo',
       desc: '符咒几乎不停地飞出去',
-      stats: { dmg: 30, cd: 9, area: 56, amount: 3, speed: 16, duration: 80, knock: 8, rehit: 8 },
+      stats: { dmg: 36, cd: 9, area: 56, amount: 3, speed: 16, duration: 80, knock: 8, rehit: 8 },
     },
   },
   coins: {

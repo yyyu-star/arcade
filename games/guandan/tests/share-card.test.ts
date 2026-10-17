@@ -3,7 +3,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { SHARE_ACCENT, myTitle, shareCardOf, shareUrl } from '../src/view/share-card.ts';
-import { presenceOf } from '../src/view/social.ts';
+import { INVITE_Z, presenceOf } from '../src/view/social.ts';
+import onlineSrc from '../src/view/online.ts?raw';
+import rotateSrc from '../src/view/orientation.ts?raw';
+import errorsSrc from '../src/view/errors.ts?raw';
 import { emptyMatchLog, type MatchLog, type Title } from '../src/stake/titles.ts';
 import type { NetSession } from '../src/view/net.ts';
 
@@ -60,5 +63,16 @@ describe('报位置', () => {
     expect(presenceOf(ses('reconnecting', 'playing', ['human', 'ai', 'ai', 'ai']))).toEqual({ place: 'game', game: 'guandan' });
     expect(presenceOf(ses('open', 'over', ['human', 'ai', 'ai', 'ai']))).toEqual({ place: 'game', game: 'guandan' });
     expect(presenceOf(null)).toEqual({ place: 'game', game: 'guandan' });
+  });
+});
+
+describe('"叫朋友来"面板的层级（0.13.2）', () => {
+  const z = (src: string, sel: string): number => Number(new RegExp(`${sel} \\{[^}]*z-index: (\\d+)`).exec(src)?.[1]);
+
+  it('盖住房间弹窗 #online，在"请横过来"和出错面板之下', () => {
+    expect(z(onlineSrc, '#online')).toBe(8500);
+    expect(INVITE_Z).toBeGreaterThan(z(onlineSrc, '#online'));
+    expect(INVITE_Z).toBeLessThan(z(rotateSrc, '#rotate-hint'));
+    expect(INVITE_Z).toBeLessThan(z(errorsSrc, '#error-panel'));
   });
 });
