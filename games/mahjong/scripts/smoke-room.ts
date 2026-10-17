@@ -80,6 +80,10 @@ async function newContext(browser: Browser, base: string, sid: string, viewport:
     { name: '__Host-arcade_li', value: '1', domain: host, path: '/', secure: true },
   ]);
   await ctx.addInitScript(() => localStorage.setItem('mahjong.guide', '1'));
+  // CSP 违规（cf/_headers）打成控制台报错，和别的报错一起算进"零报错"
+  await ctx.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error(`csp ${e.disposition}: ${e.effectiveDirective} ${e.blockedURI || '(inline)'} ${e.sourceFile}:${e.lineNumber}`)),
+  );
   return ctx;
 }
 
@@ -142,7 +146,9 @@ async function playUntil(players: Player[], done: () => boolean, ms: number, wha
 
 /** 选桌页开房，返回房间号 */
 async function openRoom(page: Page, base: string, stake: '娱乐' | '小档'): Promise<string> {
-  await page.goto(`${base}/games/mahjong/`);
+  const res = await page.goto(`${base}/games/mahjong/`);
+  const csp = res?.headers()['content-security-policy'] ?? '';
+  check(/frame-ancestors 'self'/.test(csp) && /script-src 'self';/.test(csp), `首页带安全响应头（${csp.slice(0, 40)}…）`);
   await page.waitForSelector('.lobby-head');
   // 娱乐分三个难度（0.10.0），好友房用哪个都一样（房间按自己的场地表挑电脑），点"新手"那张
   await page.click(`.stakes .stake:has-text("${stake === '娱乐' ? '新手' : stake}")`);

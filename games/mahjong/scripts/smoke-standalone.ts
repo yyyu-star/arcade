@@ -56,6 +56,10 @@ async function startWorker(port: number, state: string): Promise<ChildProcess> {
 async function guest(browser: Browser, tag: string, viewport: { width: number; height: number }): Promise<Page> {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   await ctx.addInitScript(() => localStorage.setItem('mahjong.guide', '1'));
+  // CSP 违规（cf/_headers）打成控制台报错，和别的报错一起算进"零报错"
+  await ctx.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error(`csp ${e.disposition}: ${e.effectiveDirective} ${e.blockedURI || '(inline)'} ${e.sourceFile}:${e.lineNumber}`)),
+  );
   const page = await ctx.newPage();
   page.on('console', (m) => {
     // 没有平台：/api/me、/api/wallet 不存在，detectPlatform 问的那一下 404 是预期的

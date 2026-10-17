@@ -80,7 +80,7 @@ function persist(s: SoloSave, own: boolean): void {
   }
 }
 
-/** 开一场：密钥浏览器现生成；chips 是实盘带进来的（一整份，0.15.2 起不少带） */
+/** 开一场：密钥浏览器现生成；chips 是实盘带进来的（一整份，0.15.1 起不少带） */
 export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: string | null, chips: number, level: Level = 'easy'): SoloSave {
   const st = stakesOf(stakes)!;
   const key = [...crypto.getRandomValues(new Uint32Array(8))];

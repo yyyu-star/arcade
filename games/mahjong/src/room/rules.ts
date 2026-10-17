@@ -332,7 +332,7 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     if (e.kind === 'credit') return sync(next);
     if (!isOk(result)) {
       const why = errorOf(result);
-      // 钱包不够一份也不少带（0.15.2）：底分和"最多赢 3 份"都按整份，少带的人输得少、赢得一样多（第三轮审计）。
+      // 钱包不够一份也不少带（0.15.1）：底分和"最多赢 3 份"都按整份，少带的人输得少、赢得一样多（第三轮审计）。
       // 这一份没开成（下次带入还用这个号），座位由庄家出筹码、电脑接着打
       const g = s.closed ? s.g : vOf(s).seated(s.g, e.seat, 'ai');
       return sync({ ...next, g, refused: set(s.refused, e.seat, why), sealed: set(s.sealed, e.seat, true), share: set(s.share, e.seat, s.share[e.seat]! - 1) });

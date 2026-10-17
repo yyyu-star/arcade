@@ -300,7 +300,7 @@ async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.le
   if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level), soloUi));
   await refreshWallet();
   if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-  // 实盘只带整份（0.15.2）：底分和"最多赢 3 份"按整份算，少带等于输得少、赢得一样多
+  // 实盘只带整份（0.15.1）：底分和"最多赢 3 份"按整份算，少带等于输得少、赢得一样多
   if (wallet.balance < chips) return showError(walletError('no_funds').text, 'less');
   // 带入前先存"带入中"（ref、操作号），回包丢了下次用同一个号重发（自审 C3）
   const save = newSolo(stakes, opts, myName, randomId(), chips);
@@ -329,6 +329,9 @@ async function resumeSolo(): Promise<void> {
     const r = await s.buyin();
     if (!r.ok) {
       lobby();
+      // 0.15.1 以前少带开的、带入一直没确认的存档：现在只收整份，重发被拒，这一场已经作废（buyin 里标了 done）。
+      // 当时要是扣了，那一份到期（24 小时）平台原样退回
+      if (r.error === 'bad_amount') return showError('上一场是按旧规矩少带筹码开的，现在实盘只能带整份，那一场作废了。当时要是扣了筹码，24 小时内会原样退回钱包。重新开一局吧。');
       return buyinFailed(r);
     }
   }

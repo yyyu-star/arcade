@@ -425,7 +425,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - 好友房用 `packages/arcade-kit`：房间类继承 `GameRoom`，Worker 路由只接 `acceptCreate` / `acceptJoin`，浏览器用 `RoomClient`。遵守 `platform-backend.md` 第 4 节：
   只用 `ctx.acceptWebSocket`、一个闹钟、每步 ≤ 2 行写入、电脑批量出牌、绝不下发别人的手牌和牌墙、密钥只在状态里。
 - 开房就定选项（kit 0.4.0）：`{ variant, stakes: 'fun' | 档位, rules: { rounds, cap, swap, zimo, transfer } }`（`rules` 由玩法的 `options` 校验），进房的人都看得到。
-- `KIT_QUOTA`：`roomsPerUser: 5`、`dailyRoomsPerUser: 100`；`busyWrites` / `stopWrites` 要从全账户 10 万行里分（6.2）。"开房间"永远开新房。
+- `KIT_QUOTA`：`roomsPerUser: 5`、`dailyRoomsPerUser: 30`（0.15.2 从 100 调下来：正常一场 40 分钟起，一天开不满 30 个，卡的是脚本刷房）；`busyWrites` / `stopWrites` 要从全账户 10 万行里分（6.2）。"开房间"永远开新房。
 - 真人掉线由 kit 托管；离座交给电脑并结算（实盘一局中途走的，打完这一局再结）；中途可以接管没绑人的电脑座位（带入一份）；桌上没真人了房间就算打完（over）。
   实盘：开局真人不到两个不计输赢；开打后下注的真人不到两个，这一场当场结束（第 4 节）。
 - **旁观**（0.12.0，`docs/social.md` 1.4）：没入座的连接 kit 发 `view(状态, null)`（只有公开的），最多 4 条。座位满了、或者开打后才进来的人就是旁观：
@@ -570,6 +570,16 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | `mahjong.hint.fun` | "点头像扔道具"的提示出过没有 |
 | `mahjong.fun.blocked`（sessionStorage，kit 写） | 按人屏蔽、全部屏蔽，按房间分开 |
 
+**安全响应头**（0.15.2，`cf/_headers`）：页面和静态资源带 `Content-Security-Policy` 和 `X-Frame-Options: SAMEORIGIN`。
+- **脚本**：只许本站，不许内联、不许 eval。
+- **样式**：放内联，因为共用包的好友面板、互动组件会往页面里塞 `<style>`；不用哈希，kit 一升级哈希就变。
+- **图片**：多放 `data:`（牌面、头像的 SVG）和 `blob:`（分享卡）。
+- **连接**：只有 `'self'`，含同源的好友房 wss。
+- **嵌入**：`frame-ancestors 'self'`，只许同源的页面用 iframe 嵌。
+- **为什么不放 `public/`**：Cloudflare 只认静态资源目录根上的 `_headers`，页面又在 `dist-cf/games/mahjong/` 下，放 `public/` 会落进子目录、不生效，还会被当成公开文件发出去。所以由 `build:cf` 拷到 `dist-cf/` 根上。
+- **哪些带、哪些不带**：首页经 Worker（登录闸门）回的是 ASSETS 的响应，照样带；Worker 自己生成的 503 页不带。
+- **冒烟**：两个冒烟把 `securitypolicyviolation` 打成控制台报错，算进"零报错"；smoke:room 另外查首页带了这个头。
+
 ## 9. 写入和请求估算（好友房）
 
 - 每步 1 行（状态），最早期限变早时 2 行。电脑连续出手一批算一步。
@@ -649,3 +659,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.14.0 | 娱乐局的名场面报进好友动态（`public/moments.json`）；kit 0.12.5 |
 | 0.15.0 | 好友房一场打完报搭子战绩（净赢为正算赢）；kit 0.13.0 |
 | 0.15.1 | 第三轮审计：实盘只带整份（不少带）；真人一起中途离座时电脑把这一局打完再结回 |
+| 0.15.2 | 安全响应头（CSP、只许同源嵌入）；好友房每人每天 30 个；老存档少带的提示；kit 0.13.1 |
