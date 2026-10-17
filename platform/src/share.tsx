@@ -6,8 +6,8 @@
 import { useEffect, useRef } from 'react';
 import { prepareShare, type PreparedShare, type ShareCard } from 'arcade-kit/share';
 import type { CareerView } from './api.ts';
-import { gameName, num } from './format.ts';
-import { GAMES } from './games.ts';
+import { num } from './format.ts';
+import { pickStats } from './share-pick.ts';
 
 /** 平台的主题色（和大厅的橙色一致） */
 export const SHARE_ACCENT = '#e8742c';
@@ -31,33 +31,19 @@ function avatarArt(name: string): HTMLCanvasElement {
   return c;
 }
 
-const rate = (c: CareerView) => (c.rounds > 0 ? Math.round((c.wins / c.rounds) * 100) : 0);
-
 /**
- * 战绩卡：大数字是一共打了多少局；小数据挑局数最多的三个游戏写胜率（kit 每条值最多 10 个字，写长了会被截）；一句话写最大一把和称号数。
- * 称号名给了就挂在昵称旁边（第一个），读不到就不挂。
+ * 战绩卡：大数字是一共打了多少局；三个小格和底下一句怎么挑见 share-pick.ts（0.21.1）。
+ * 称号名给了就挂在昵称旁边（调用方用 pickBadge 挑过体面的），没有就不挂。
  */
 export function statsCard(name: string, games: Record<string, CareerView>, badge?: string): ShareCard {
-  const list = Object.entries(games).filter(([, c]) => c.n > 0);
-  const rounds = list.reduce((t, [, c]) => t + c.rounds, 0);
-  const titles = list.reduce((t, [, c]) => t + c.titles.length, 0);
-  const best = list.reduce<[string, number] | null>((b, [g, c]) => (c.best > (b?.[1] ?? 0) ? [g, c.best] : b), null);
-  const top = [...list]
-    .sort(([a, x], [b, y]) => y.rounds - x.rounds || GAMES.findIndex((g) => g.id === a) - GAMES.findIndex((g) => g.id === b))
-    .slice(0, 3)
-    .map(([g, c]) => {
-      if (c.rounds <= 0) return { label: gameName(g), value: `上桌 ${num(c.n)} 次` };
-      // kit 把值截到 10 个字：放得下就带上局数（"62% · 48局"），放不下只写胜率
-      const both = `${rate(c)}% · ${num(c.rounds)}局`;
-      return { label: `${gameName(g)}胜率`, value: Array.from(both).length <= 10 ? both : `${rate(c)}%` };
-    });
-  const line = [best && `最大一把 ${gameName(best[0])} ${num(best[1])}`, titles > 0 && `称号 ${titles} 个`].filter(Boolean).join(' · ');
+  const list = Object.values(games).filter((c) => c.n > 0);
+  const { stats, line } = pickStats(games);
   return {
     game: '街机厅战绩',
     title: `${list.length} 个游戏`,
     accent: SHARE_ACCENT,
-    big: { value: num(rounds), label: '局' },
-    stats: top,
+    big: { value: num(list.reduce((t, c) => t + c.rounds, 0)), label: '局' },
+    stats,
     ...(line ? { line } : {}),
     art: avatarArt(name),
     player: badge ? { name, badge } : { name },
