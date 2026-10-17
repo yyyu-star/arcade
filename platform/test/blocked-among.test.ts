@@ -70,7 +70,8 @@ describe('ARCADE.blockedAmong', () => {
     expect((await call('/api/blocked-among', { body: [A, B] })).status).toBe(404);
   });
 
-  it('默认入口经 RPC 只露出 fetch、scheduled、blockedAmong', () => {
-    expect(Object.getOwnPropertyNames(Arcade.prototype).sort()).toEqual(['blockedAmong', 'constructor', 'fetch', 'scheduled']);
+  // RPC 只认原型上的方法：scheduled 写成实例字段，游戏经绑定调不到（定时触发照常找得到，worker/index.ts）
+  it('默认入口经 RPC 只露出 fetch、blockedAmong', () => {
+    expect(Object.getOwnPropertyNames(Arcade.prototype).sort()).toEqual(['blockedAmong', 'constructor', 'fetch']);
   });
 });

@@ -32,9 +32,15 @@ export default class Arcade extends WorkerEntrypoint<Env> {
     return this.env.ASSETS.fetch(request);
   }
 
-  async scheduled(controller: ScheduledController): Promise<void> {
-    this.ctx.waitUntil(runCleanup(this.env, controller.scheduledTime));
-  }
+  /**
+   * 定时清理。写成实例字段、不写成方法是故意的：RPC 只认原型上的方法（实测：调实例字段报
+   * "The RPC receiver's prototype does not implement"），写成方法的话，任何绑了 ARCADE 的游戏都能 env.ARCADE.scheduled(…) 自己触发清理。
+   * cron 照常找得到它（wrangler dev --test-scheduled 实测）。时间再兜一层：不信调用方给的，最晚按现在算，
+   * 免得有人传一个很远的将来，让会话、邀请这些按时间过期的数据被提前清掉
+   */
+  scheduled = async (controller: ScheduledController): Promise<void> => {
+    this.ctx.waitUntil(runCleanup(this.env, cleanupTime(controller?.scheduledTime)));
+  };
 
   /**
    * 这几个人之间谁屏蔽了谁（好友房聊天用，0.25.0，15.8）：回 [屏蔽的人, 被屏蔽的人] 的列表。最多 9 个人、去重、不像用户编号的忽略；
@@ -58,4 +64,11 @@ export default class Arcade extends WorkerEntrypoint<Env> {
       return [];
     }
   }
+}
+
+/** 清理按哪个时间算：调用方给的时间和现在取早的那个；给的不是数（或日期）就按现在 */
+function cleanupTime(given: unknown): number {
+  const now = Date.now();
+  const t = Number(given);
+  return Number.isFinite(t) ? Math.min(t, now) : now;
 }

@@ -1785,6 +1785,9 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
   `blockedAmong(userIds)`：回这几个人之间的屏蔽关系 `[[屏蔽的人, 被屏蔽的人], …]`。`userIds` 去重、不像用户编号的忽略，最多 9 个（超过回 `[]`、不查）；
   只读，一条查询，一行不写；停服（`API_MODE=off`）或出错回 `[]`、不抛异常，房间退回只用本地屏蔽。`/api` 里没有这条路（浏览器拿到了就能试出谁屏蔽了自己）。
   旧平台、单独部署的游戏没有这个方法，游戏要当它可能不存在（调用抛错时同样退回本地屏蔽）。测试：`platform/test/blocked-among.test.ts`。
+  入口改成类以后，RPC 能调到类原型上的每个公开方法（Cloudflare 文档的保留名里没有 `scheduled`）。所以定时清理 `scheduled` 写成实例字段：RPC 只认原型上的方法（实测调实例字段报
+  "The RPC receiver's prototype does not implement"），cron 照常找得到它（`wrangler dev --test-scheduled` 实测）。清理用的时间再兜一层，取调用方给的时间和现在里早的那个。
+  经 RPC 只露出 `fetch` 和 `blockedAmong`，测试锁住了原型上的方法名。
 - 测试：`platform/test/admin.test.ts`「游戏登录闸门」模拟了服务绑定请求（登录着回 user，没登录或会话无效回 null，Host 不对 404，计量正好 +1，停服 503）。
 
 ### 15.9 钱包（0.9.0，5.9）
