@@ -8,6 +8,8 @@ export interface User {
   createdAt: number;
   /** 让好友看到我在不在线、在哪（0.13.0）；旧的回话里没有，按开着算 */
   showWhere?: boolean;
+  /** 好友动态开关（0.17.0）；没有就是开着 */
+  showFeed?: boolean;
   /** 只有管理员有，值总是 true。 */
   isAdmin?: true;
 }
@@ -35,6 +37,18 @@ export interface Profile {
 }
 
 /** 在哪（0.13.0，15.13）：大厅、在玩某个游戏、在某个游戏的房间里（带房间码和人数） */
+/** 好友动态的一条（0.17.0，15.17）：data 是编号和数字，文字在 src/feed.tsx 里拼 */
+export interface FeedItem {
+  id: string;
+  user: Profile;
+  game: string;
+  kind: 'settle' | 'moment';
+  at: number;
+  data: { tier?: string; units?: number; titles?: string[]; m?: string; n?: number[] };
+  reactions: Record<string, number>;
+  mine?: string;
+}
+
 /** 给我的邀请（0.14.0，docs/social.md 1.3）：until 是过期时间（毫秒） */
 export interface Invite {
   id: string;
@@ -340,6 +354,10 @@ export const api = {
   presence: (where: Where) => request<void>('POST', '/api/presence', where),
   /** 邀请（0.14.0）：收是只读；"不了"只改自己收到的那条 */
   invites: () => request<{ invites: Invite[] }>('GET', '/api/invites'),
+  /** 好友动态（0.17.0）：我和好友最近 7 天的；赞或扔道具每条每人一次 */
+  feed: () => request<{ items: FeedItem[] }>('GET', '/api/feed'),
+  react: (id: string, kind: string) => request<void>('POST', `/api/feed/${encodeURIComponent(id)}/react`, { kind }),
+  setShowFeed: (showFeed: boolean) => request<{ user: User }>('PATCH', '/api/me', { showFeed }),
   dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),

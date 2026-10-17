@@ -708,6 +708,14 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
     // 坐着离开的：每个人这一场的输赢
     await p.locator('.summary').waitFor({ timeout: 5_000 });
     if (tag === 'phone') await shot(p, 'room-summary');
+    // 颁奖（0.15.0）：打了好几手，真人里总有人输赢（电脑不进这张表，可能全是输的），至少一个奖；第一个走的点一下分享，卡能出来
+    if ((await p.locator('.sum-award').count()) < 1) throw new Error(`[${tag}] room summary: expected awards`);
+    if (tag === 'phone') {
+      await p.locator('.sum-share').tap();
+      await p.locator('[data-key="share:close"]').waitFor();
+      await shot(p, 'room-share');
+      await p.locator('[data-key="share:close"]').tap();
+    }
     await p.locator('.d-btn.primary').click();
     await p.locator('.lobby').waitFor();
     log(tag, 'left, wallet', await settled(p, tag));

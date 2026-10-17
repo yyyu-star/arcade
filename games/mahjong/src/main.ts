@@ -9,6 +9,7 @@ import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
 import { createError, Online, roomUrl, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
+import { awardsOf, type Award } from './game/awards.ts';
 import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/banter.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
@@ -21,10 +22,10 @@ import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { cardOf, prepareCard } from './view/share.ts';
+import { awardsCard, cardOf, prepareCard } from './view/share.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, STAKES_NAME, VARIANT_NAME, walletError } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
-import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
+import { awardsSummary, fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
@@ -547,7 +548,11 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
   if (g.phase === 'over' || rv.done) {
     const me = s.you?.seat ?? null;
     if (!(replay && document.querySelector('.mask.end'))) {
+      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面
+      const prizes = g.result ? awardsOf(g.result.seats.map((x) => x.net), g.seats.map((x) => x.stats)) : [];
+      const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
+        if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
         box.appendChild(roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
         if (fame.length) box.appendChild(fameSummary(fame, names));
@@ -560,7 +565,10 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           lobby();
         });
         // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页
-        shareButton(row, g, `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`, wallet, new URL(`?room=${s.code}`, location.href).toString());
+        const title = `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`;
+        const url = new URL(`?room=${s.code}`, location.href).toString();
+        awardsButton(row, prizes, names, prizeUnit, `${title} · 颁奖`, url);
+        shareButton(row, g, title, wallet, url);
         // 再来一场：我开个同样规则的新房间，这一桌跟过来。房间等 3 分钟，过了再点就自己先去新房间、再叫朋友
         if (me !== null && s.room?.seats[me]?.kind === 'human' && !rv.next) {
           const b = button('act go rematch', row, '再来一场', () => void rematch(b));
@@ -604,6 +612,14 @@ function shareButton(row: HTMLElement, v: XzView, title: string, wallet: boolean
   // 结算页出来就画好，点的那一下直接调系统分享（iOS 要求，见 view/share.ts）
   const p = prepareCard(card, url);
   button('act soft share-card', row, '分享', () => void p.share());
+}
+
+/** 颁奖的分享卡（旁观的也能分享：奖和名字都是公开的） */
+function awardsButton(row: HTMLElement, prizes: readonly Award[], names: string[], unit: string, title: string, url: string): void {
+  const card = awardsCard(prizes, names, unit, title, myName);
+  if (!card) return;
+  const p = prepareCard(card, url);
+  button('act soft share-awards', row, '分享颁奖', () => void p.share());
 }
 
 async function rematch(b: HTMLButtonElement): Promise<void> {

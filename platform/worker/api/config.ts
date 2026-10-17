@@ -93,6 +93,10 @@ export const DEFAULT_LIMITS = {
   inviteTtlMs: 600_000,
   invitesPerDay: 50,
   inviteGapMs: 60_000,
+  /** 好友动态（0.17.0，15.17）：每人每天（北京时间）最多几条（结回生成的和游戏报的合计）、留几天、每人每天赞和扔道具最多几次 */
+  feedPerDay: 10,
+  feedKeepMs: 7 * 86_400_000,
+  feedReactPerDay: 100,
   /** 异步挑战（0.18.0，15.18）：有效期、每人每天发起几个、每个挑战最多几个人交 */
   challengeTtlMs: 30 * 86_400_000,
   challengesPerDay: 20,

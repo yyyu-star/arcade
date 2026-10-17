@@ -209,7 +209,10 @@ export async function hashIp(env: Env, ip: string): Promise<string> {
   return b64url((await hmac(pepper.key, ipPrefix(ip))).slice(0, 16));
 }
 
-/** 带时间前缀的 id：毫秒时间的 36 进制（补到 9 位）+ 64 位随机，共 20 位。按 id 的字典序就是按创建时间，Cron 能按主键范围删旧的。 */
+/**
+ * 带时间前缀的 id：毫秒时间的 36 进制（补到 9 位）+ 64 位随机，共 20 位。按 id 的字典序就是按创建时间，Cron 能按主键范围删旧的。
+ * 好友动态（0.17.0）和异步挑战（0.18.0）共用。
+ */
 export function newTimeId(now: number): string {
   return timeIdPrefix(now) + b64url(randomBytes(8));
 }

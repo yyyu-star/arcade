@@ -14,6 +14,7 @@
  *   结回、放弃照收：桌上的筹码总要能回来。停增长档不建新钱包。
  * - 业务上的拒绝都用返回值（{ ok: false, error }），不抛异常：RPC 抛出去的异常只保证 name 和 message。
  */
+import { feedFromSettle } from './api/feed';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { GAME_IDS } from '../src/games';
 import { limitsOf } from './api/config';
@@ -68,7 +69,21 @@ export class WalletService extends WorkerEntrypoint<Env, Props> {
     const cmd = parseCmd(t, req);
     if (typeof cmd === 'string') return Promise.resolve({ ok: false, error: cmd });
     if ((cmd as Exclude<Cmd, { t: 'relief' } | { t: 'admin' }>).game !== bound) return Promise.resolve({ ok: false, error: 'bad_game' });
-    return this.#run(kind, (db, now, tier) => runOp(db, userId, cmd, now, { create: tier === 'normal' }));
+    return this.#run(kind, (db, now, tier) =>
+      runOp(db, userId, cmd, now, {
+        create: tier === 'normal',
+        // 好友动态（0.17.0）记在"在线"类：只读档、在线类预算用完就不发；写出错只记日志，结回照常
+        onFeed: async (feed) => {
+          const limits = limitsOf(this.env);
+          if (tier !== 'normal' || meter.exhausted('live', limits, now)) return;
+          try {
+            await feedFromSettle(db.as('live'), userId, feed, now, limits);
+          } catch (e) {
+            console.error('feed from settle failed', e instanceof Error ? e.name : 'unknown');
+          }
+        },
+      }),
+    );
   }
 
   /** 绑定上写的游戏；没写、写的不是认识的游戏都算没绑 */
