@@ -1853,7 +1853,7 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 |---|---|---|---|---|---|
 | `POST /api/presence` | 登录；平台页和游戏页（kit 的 `arcade-kit/social`） | `{"place": "lobby" \| "game" \| "room", "game"?: 游戏 id, "room"?: 房间码, "seats"?: "3/4"}` | 204 | 400 `bad_request`（`game` 不是登记的游戏、`room` 不是 6 位数字的房间码、`seats` 不是"数/数"）；401；403（CSRF） | 见下 |
 | `PATCH /api/me` | 登录；平台页 | 加一个可选字段 `{"showWhere": boolean}`，可以和 `displayName` 一起或单独给 | 200 `{"user"}`，`user` 多一个 `showWhere` | 400 两个都没给、`showWhere` 不是布尔；429（和改昵称共用每天 10 次） | 2 |
-| `GET /api/friends` | 不变 | — | 每个好友多 `"online": boolean`，在线又开着开关时还有 `"where": {place, game?, room?, seats?}`；在线的排前面 | — | 0 |
+| `GET /api/friends` | 不变 | — | 每个好友多 `"online": boolean`，在线又开着开关时还有 `"where": {place, game?, gameName?, room?, seats?}`（`gameName` 是 `games.ts` 登记的名字，有 `game` 才有，0.15.1；kit 不认识各游戏的名字，好友面板拿它写"在玩掼蛋"）；在线的排前面 | — | 0 |
 
 - **节流**：位置没变（`place`、`game`、`room` 都一样，只是 `seats` 变了不算）时按 `presenceEveryMs`（默认 110 秒，比页面 2 分钟一报稍短，免得每两次丢一次）节流：上次写入以来不到这么久的，直接 204、写 0 行。
   位置变了（进房、换游戏、回大厅）马上写，好友立刻看到；但同一个人最快 `presenceMoveGapMs`（10 秒）写一次，10 秒内的变化不记（0.14.1：之前进房那一下的补报被 2 分钟节流吞掉，好友要等约 2 分钟）。

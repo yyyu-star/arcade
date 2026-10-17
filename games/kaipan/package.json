@@ -2,7 +2,7 @@
   "name": "kaipan",
   "private": true,
   "license": "MIT",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,7 +24,7 @@
     "wrangler": "^4.149.0"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.12.1",
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.12.3",
     "phaser": "^4.2.1"
   }
 }

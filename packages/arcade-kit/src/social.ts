@@ -16,7 +16,15 @@ export interface Presence {
   game?: string;
   room?: string;
   seats?: string;
+  /** 游戏的显示名：平台在好友列表的 where 里给（0.12.4 起 kit 优先用它）；报位置时不用带 */
+  gameName?: string;
 }
+
+/**
+ * 默认的层级（0.12.4）：游戏自己的弹窗可能很高（掼蛋的房间弹窗 8500），kit 的横条、面板、分享预览默认都在 10000 以上，
+ * 顺序是横条 < 面板 < 预览。游戏有更高的层再用 zIndex 选项往上提
+ */
+export const SOCIAL_Z = { banner: 10500, panel: 10600, preview: 11000 } as const;
 
 /** 收到的一条邀请；until 是过期时间（毫秒时间戳，平台给字符串也认） */
 export interface Invite {
@@ -219,7 +227,8 @@ export function whereText(f: Pick<Friend, 'online' | 'where'> & { lastSeenDaysAg
   const w = f.where;
   if (!w) return '在线';
   if (w.place === 'lobby') return '在大厅';
-  const g = w.game ? gameName?.(w.game) : undefined;
+  // 平台给的显示名优先（它认识所有登记的游戏），没有再问游戏的回调
+  const g = w.gameName || (w.game ? gameName?.(w.game) : undefined);
   if (w.place === 'room') return `在${g ? `${g}的` : ''}好友房${w.seats ? ` · ${w.seats}` : ''}`;
   return g ? `在${g}` : '在玩游戏';
 }
@@ -261,7 +270,7 @@ export interface SocialOptions extends ApiOptions {
   platform?: PlatformInfo;
   /** 点"去"：默认先告诉平台这条办了，再跳到 `/games/<id>/?room=<码>`；游戏要先确认离开（打到一半）就自己接 */
   onGo?(invite: Invite): void;
-  /** 横条的 z-index，默认 1500（在牌桌互动之上，在分享预览之下） */
+  /** 横条的 z-index，默认 10500（SOCIAL_Z.banner：盖得住游戏的弹窗，在"叫朋友来"面板和分享预览之下） */
   zIndex?: number;
   /** 冒烟、调试看的流水：`位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期` */
   log?(line: string): void;
@@ -376,7 +385,7 @@ class Social implements SocialHandle {
       'position:fixed',
       'left:50%',
       'top:calc(env(safe-area-inset-top, 0px) + 8px)',
-      `z-index:${this.o.zIndex ?? 1500}`,
+      `z-index:${this.o.zIndex ?? SOCIAL_Z.banner}`,
       'display:flex',
       'align-items:center',
       'gap:8px',
@@ -469,7 +478,7 @@ export interface InvitePanelOptions extends ApiOptions {
   text?: string;
   /** 游戏 id → 名字（好友"在哪"那一行） */
   gameName?(id: string): string | undefined;
-  /** 默认 1600（在邀请横条之上，在分享预览之下） */
+  /** 默认 10600（SOCIAL_Z.panel：在游戏的弹窗、邀请横条之上，在分享预览之下）；游戏的层更高就传更大的 */
   zIndex?: number;
   /** 冒烟、调试看的流水：`叫人 打开 <n>`、`叫人 <id> ok|<错误>`、`叫人 复制`、`叫人 关闭` */
   log?(line: string): void;
@@ -530,7 +539,7 @@ export function openInvite(o: InvitePanelOptions): InvitePanel {
   };
   const back = el('div', 'aiv-back');
   back.id = PANEL_ID;
-  back.style.zIndex = String(o.zIndex ?? 1600);
+  back.style.zIndex = String(o.zIndex ?? SOCIAL_Z.panel);
   const box = el('div', 'aiv-box');
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', '叫朋友来');

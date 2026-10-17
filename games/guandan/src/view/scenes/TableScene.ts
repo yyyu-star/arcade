@@ -44,7 +44,7 @@ import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type Title
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
 import { COLOR, TYPE, css, minHit } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
-import { join, shareRoom } from '../online.ts';
+import { join } from '../online.ts';
 import { cloudButton } from '../ui/cloud.ts';
 import { Button, iconButton, setHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { applyAudio, confirm, openRules, openSettings } from '../ui/panels.ts';
@@ -62,8 +62,8 @@ import { hasLayer } from '../ui/focus.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { TrickView } from '../table/trick.ts';
 import { lobbyName, platformInfo, standalone } from '../platform.ts';
-import { presenceNow } from '../social.ts';
-import { shareCardOf, shareResult, type ShareKind } from '../share-card.ts';
+import { openInvitePanel, presenceNow } from '../social.ts';
+import { prepareResult, shareCardOf, type ShareKind } from '../share-card.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
 
@@ -419,7 +419,7 @@ export class TableScene extends Phaser.Scene {
     c.add(this.cloudBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：云朵右边，中途进来的人接管电脑的座位。右边的图标和名次条已经排满了
     const net = this.net;
-    this.inviteBtn = net ? iconButton(this, 412 + lp * 1.5, 29, 'invite', () => void this.invite(net.code), 46) : null;
+    this.inviteBtn = net ? iconButton(this, 412 + lp * 1.5, 29, 'invite', () => void openInvitePanel(net.code), 46) : null;
     if (this.inviteBtn) {
       setHit(this.inviteBtn, lp, barH(412 + lp, 412 + lp * 2));
       c.add(this.inviteBtn);
@@ -1759,7 +1759,9 @@ export class TableScene extends Phaser.Scene {
   private addShare(b: Phaser.GameObjects.Container, x: number, y: number, k: ShareKind): void {
     this.logMatch();
     const card = shareCardOf(k, this.matchLog, matchTitles(this.matchLog), this.myShareName());
-    const btn = iconButton(this, x, y, 'share', () => void shareResult(card, k.room), 56);
+    // 结算页一出来就先画好卡，点的时候在同一个点击里调系统分享（iOS 要这样）
+    const share = prepareResult(card, k.room);
+    const btn = iconButton(this, x, y, 'share', share, 56);
     b.add(btn);
     b.setData('share', btn);
   }
@@ -1786,12 +1788,6 @@ export class TableScene extends Phaser.Scene {
   private titleLine(t: Title, why: boolean): string {
     const who = t.pair ? `${seatName(t.seat)}、${seatName((t.seat + 2) % 4)}` : seatName(t.seat);
     return `${TITLE_INFO[t.id].name} ${who}${why ? ` · ${t.why}` : ''}`;
-  }
-
-  private async invite(code: string): Promise<void> {
-    const note = await shareRoom(code);
-    if (!note || !this.alive) return;
-    toast(this, note, worldW(this) / 2, BUTTON_Y - 92);
   }
 
   newGame(seed = randomSeed()): void {

@@ -50,7 +50,7 @@ describe('报位置', () => {
     // 进房：变了，马上写
     await report(a, { place: 'room', game: 'guandan', room: '123456', seats: '1/4' });
     expect(rowsWritten()).toBe(1);
-    expect(await at()).toEqual({ place: 'room', game: 'guandan', room: '123456', seats: '1/4' });
+    expect(await at()).toEqual({ place: 'room', game: 'guandan', gameName: '掼蛋', room: '123456', seats: '1/4' });
     // 10 秒内又换了房：不写，好友那边还是上一个房
     advance(5_000);
     await report(a, { place: 'room', game: 'guandan', room: '654321' });
@@ -67,7 +67,7 @@ describe('报位置', () => {
     advance(90_000);
     await report(a, { place: 'room', game: 'guandan', room: '654321', seats: '3/4' });
     expect(rowsWritten()).toBe(1);
-    expect(await at()).toEqual({ place: 'room', game: 'guandan', room: '654321', seats: '3/4' });
+    expect(await at()).toEqual({ place: 'room', game: 'guandan', gameName: '掼蛋', room: '654321', seats: '3/4' });
     // 换游戏、回大厅也算变
     advance(11_000);
     await report(a, { place: 'game', game: 'texas' });
@@ -75,6 +75,7 @@ describe('报位置', () => {
     advance(11_000);
     await report(a, { place: 'lobby' });
     expect(rowsWritten()).toBe(1);
+    expect(await at()).toEqual({ place: 'lobby' });
   });
 
   it('格式不对 400：不认识的地方、不认识的游戏、房间没带码、码和人数格式不对', async () => {
@@ -117,6 +118,8 @@ describe('好友列表里的在线和在哪', () => {
     expect((await friendsOf(b))[0]!.where).toBeUndefined();
     await report(a, { place: 'room', game: 'guandan', room: '123456', seats: '3/4' });
     expect((await friendsOf(b))[0]).toMatchObject({ online: true, where: { place: 'room', game: 'guandan', room: '123456', seats: '3/4' } });
+    // 0.15.1：带上 games.ts 登记的中文名，kit 的好友面板直接拿来写；大厅没有游戏，就没有 gameName
+    expect((await friendsOf(b))[0]!.where).toEqual({ place: 'room', game: 'guandan', gameName: '掼蛋', room: '123456', seats: '3/4' });
     expect(await friendsOf(stranger)).toEqual([]);
     advance(5 * 60_000);
     const later = (await friendsOf(b))[0]!;

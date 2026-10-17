@@ -22,7 +22,7 @@ import { tauntId, TAUNTS } from './fun/taunts.ts';
 import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow, type SoloSummary } from './view/summary.ts';
 import { roomCard, soloCard } from './view/share.ts';
-import { shareCard, type ShareCard } from 'arcade-kit/share';
+import { prepareShare, type ShareCard } from 'arcade-kit/share';
 import { mountSocial, openInvite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
@@ -871,7 +871,7 @@ async function leave(): Promise<boolean> {
     titles,
   };
   // 分享卡（docs/social.md 1.1）：单独部署没有，还没打完一手的也不给
-  await soloSummary(stage, site.standalone || !st.hands ? sum : { ...sum, share: () => shareIt(soloCard(sum, soloWhere(s), myName)) });
+  await soloSummary(stage, site.standalone || !st.hands ? sum : { ...sum, share: shareIt(soloCard(sum, soloWhere(s), myName)) });
   if (err && s.closing) {
     walletNote = err === 'login' ? LOGIN_NOTE : '钱包暂时连不上：这一桌的筹码先记在本机，稍后会自动结回钱包';
     if (err !== 'login') retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
@@ -1142,7 +1142,8 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   // 确认的这一会儿断了：按断线的说
   if (seated && o.state.status !== 'open') return leaveRoom(goHome);
   const rows = summaryRows(o.state, true);
-  const share = rows ? roomShare(o.state, rows, true) : undefined;
+  // 回大厅的不出结算页，也就不用先画分享卡
+  const share = rows && !goHome ? roomShare(o.state, rows, true) : undefined;
   if (seated) o.leaveSeat();
   // 离座的消息先发出去再断开
   await new Promise((done) => window.setTimeout(done, 300));
@@ -1197,13 +1198,17 @@ function roomShare(s: OnlineState, rows: RoomSummaryRow[], withRoom: boolean): (
   const v = s.view;
   if (site.standalone || !v) return undefined;
   const card = roomCard(rows, tally.titles(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
-  return card ? () => shareIt(card, withRoom ? s.code : null) : undefined;
+  return card ? shareIt(card, withRoom ? s.code : null) : undefined;
 }
 
-/** 分享卡交给 kit（系统分享或预览层）；链接是游戏首页，好友房带房间码 */
-function shareIt(card: ShareCard, room: string | null = null): void {
+/**
+ * 分享卡交给 kit（系统分享或预览层）；链接是游戏首页，好友房带房间码。
+ * 结算页一出来就先画好（kit 0.12.3）：iOS 只许在点击那一下里调系统分享，点了再画就过期了，所以点击里不能先 await
+ */
+function shareIt(card: ShareCard, room: string | null = null): () => void {
   const url = `${location.origin}${location.pathname}${room ? `?room=${room}` : ''}`;
-  void shareCard(card, { url }).catch((e: unknown) => console.warn('texas: share failed', e));
+  const p = prepareShare(card, { url });
+  return () => void p.share().catch((e: unknown) => console.warn('texas: share failed', e));
 }
 
 function summaryRows(s: OnlineState, leaving: boolean): RoomSummaryRow[] | null {

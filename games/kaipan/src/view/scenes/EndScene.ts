@@ -28,7 +28,7 @@ import type Phaser from 'phaser';
 import { Room } from '../trade/room.ts';
 import { phoneLayout } from '../viewport.ts';
 import { gameLink, shareArt, shareData } from '../shareCard.ts';
-import { shareCard } from 'arcade-kit/share';
+import { prepareShare, type PreparedShare } from 'arcade-kit/share';
 import { myName } from '../../platform/mode.ts';
 import { BaseScene } from './BaseScene.ts';
 
@@ -332,30 +332,45 @@ export class EndScene extends BaseScene {
 
   /**
    * 「分享」（0.12.0，docs/design-share.md）：数据交给共用包画卡、分享；手机能带图片就调系统分享，不能就出预览（存图、复制链接）。
-   * 每日挑战点的时候读到了名次就带上。
+   * 0.12.1 起结束页一出来就先画好（共用包 prepareShare）：iOS 只许在点的那一下里调系统分享，点了再画就过期了、只能出预览。
+   * 所以点击里直接调 share()，前面不能有 await。每日挑战读到名次后再画一张带名次的，画好了才换上，之前点分享的是手上那张。
    */
   private shareButton(at: { x: number; y: number; w: number; h: number }, sum: RunSummary): void {
     const label = '分享';
-    let busy = false;
-    const b = new Button(this, at.x, at.y, { width: at.w, height: at.h, label, icon: 'star', fontSize: 16, onClick: () => {
-      if (busy) return;
-      busy = true;
-      b.setLoading(true, '画卡片');
-      const r = sum.daily ? runBoard(sum.runId) : null;
-      const { artKey, text, ...card } = shareData(sum, r?.state === 'done' ? r.rank : null);
+    const prepare = (rank: number | null): PreparedShare => {
+      const { artKey, text, ...card } = shareData(sum, rank);
       const name = myName();
       const art = shareArt(this.textures, artKey);
-      void shareCard(
+      return prepareShare(
         { ...card, ...(art && { art }), ...(name && { player: { name, badge: sum.title } }) },
         { url: gameLink(location.href), text, fileName: `kaipan-${sum.seed}.png` },
-      )
-        .then((res) => res !== 'cancelled' && sound.ui('select'), () => sound.ui('denied'))
-        .finally(() => {
-          busy = false;
-          if (b.scene) b.setLoading(false, label);
-        });
+      );
+    };
+    const rankNow = (): number | null => {
+      const r = sum.daily ? runBoard(sum.runId) : null;
+      return r?.state === 'done' && r.rank ? r.rank : null;
+    };
+    let shown = rankNow();
+    let prepared = prepare(shown);
+    const b = new Button(this, at.x, at.y, { width: at.w, height: at.h, label, icon: 'star', fontSize: 16, onClick: () => {
+      void prepared.share().then((res) => b.scene && res !== 'cancelled' && sound.ui('select'), () => b.scene && sound.ui('denied'));
     } });
+    // 画好之前转圈（一般几百毫秒）；画不出来也放开，点了由共用包出预览或报错
+    b.setLoading(true, '画卡片');
+    void prepared.ready.then(() => b.scene && b.setLoading(false, label));
     this.buttons.share = b;
+    if (!sum.daily) return;
+    const update = (): void => {
+      const rank = rankNow();
+      if (!rank || rank === shown || !b.scene) return;
+      shown = rank;
+      const next = prepare(rank);
+      void next.ready.then(() => {
+        if (shown === rank) prepared = next;
+      });
+    };
+    const off = onBoardChange(update);
+    this.events.once('shutdown', off);
   }
 
   /**

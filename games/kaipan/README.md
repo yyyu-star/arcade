@@ -114,7 +114,7 @@ The rest of this README, the in-game text, code comments and design docs (`docs/
   - 战绩小结（0.6.5，平台 5.10）：结回时带 `stats`（`src/core/career.ts`，Worker 原样转发）；称号的中文名在 `public/titles.json`（平台称号墙读 `/games/kaipan/titles.json`），
     由 `titlesJson()` 生成、测试锁一致。钱包和平台的错误照平台 15.10 的对照表说（设计稿第 6 节的表）。
 - 每日榜的分数怎么显示（0.6.13）：`public/daily.json`（平台每日榜读 `/games/kaipan/daily.json`；通关分 = 1e11 + 账户元数，没通关 = 还上了几个月，`tests/daily-json.test.ts` 按平台的解析规则锁一致）。
-- 分享卡（0.12.0，`src/view/shareCard.ts`，设计 `docs/design-share.md`）：结束页「分享」，开盘只交数据（大数字是资产涨跌幅或实盘结回倍数、最多 3 条小数据、一句名场面、最赚那只股票小人的图集切片），画卡和分享在共用包 `arcade-kit/share`：手机能带图片就调系统分享，不能就出预览（存图、复制链接）。分享的链接是 `gameLink` 按当前页面推的游戏地址，代码里不写站点地址。取代 0.6.5 起开盘自己画的结局海报。
+- 分享卡（0.12.0，`src/view/shareCard.ts`，设计 `docs/design-share.md`）：结束页「分享」，开盘只交数据（大数字是资产涨跌幅或实盘结回倍数、最多 3 条小数据、一句名场面、最赚那只股票小人的图集切片），画卡和分享在共用包 `arcade-kit/share`：结束页一出来就先画好（`prepareShare`，0.12.1），点了手机能带图片就调系统分享，不能就出预览（存图、复制链接）。分享的链接是 `gameLink` 按当前页面推的游戏地址，代码里不写站点地址。取代 0.6.5 起开盘自己画的结局海报。
 - 社交（0.12.0，`src/main.ts`）：有登录提示 cookie 时挂共用包 `arcade-kit/social`，开着开盘就报"在玩开盘"、收好友的邀请；点"去"走回大厅那条路（先补传云存档）。单独部署、没登录不挂。
 - 回大厅（0.5.8，`src/view/lobby.ts`）：跳平台首页 `/`。开始菜单左上角常驻「大厅」，点了直接走；一局里点齿轮 → 「回大厅」，先确认
   （这局存在这台设备上，不算放弃，回来点「继续」）；手机竖屏的"横过来"提示层左上角也有，一局里同样先问。点下后提示"正在离开……"；走之前先等还在确认账号的交分发出去（最多 1.5 秒），再把待上传的槽都补传一次（keepalive，连同在途的 keepalive 合起来不超 60 KB，

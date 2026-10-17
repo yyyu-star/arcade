@@ -7,8 +7,8 @@ import type { Presence, SocialHandle } from 'arcade-kit/social';
 import { platformInfo } from './platform.ts';
 import type { NetSession } from './net.ts';
 
-/** 横条上"老王叫你来<…>"：只认自己；别的游戏 kit 说"一起玩" */
-const GAME_NAME: Record<string, string> = { guandan: '打掼蛋' };
+/** 横条上"老王叫你来掼蛋"、面板里好友"在掼蛋的好友房"：只认自己；别的游戏 kit 说"一起玩""在玩游戏" */
+const GAME_NAME: Record<string, string> = { guandan: '掼蛋' };
 
 /** 现在在哪：连着的好友房（大厅里或牌桌上）报房间，不然报在掼蛋 */
 export function presenceOf(s: Pick<NetSession, 'code' | 'room' | 'status'> | null): Presence {
@@ -28,6 +28,20 @@ export async function mountSocialOnce(session: () => NetSession | null): Promise
   if (info.platform !== true || !info.user) return;
   const { mountSocial } = await import('arcade-kit/social');
   handle = await mountSocial({ platform: info, where: () => presenceOf(session()), gameName: (id) => GAME_NAME[id] });
+}
+
+/**
+ * 房间里的"叫朋友来"（0.13.1）：kit 的面板，列好友、"叫他来"、复制邀请链接。没挂上（单独部署、没登录）时只有复制链接。
+ * 链接按现在的页面地址拼（单独部署时站点不一样），点开就进这个房间
+ */
+export async function openInvitePanel(code: string): Promise<void> {
+  const inv = { game: 'guandan', room: code, url: `${location.origin}${location.pathname}?room=${code}`, text: `来打掼蛋！房间码 ${code}` };
+  if (handle) {
+    handle.openInvite(inv);
+    return;
+  }
+  const { openInvite } = await import('arcade-kit/social');
+  openInvite({ ...inv, friends: false });
 }
 
 /** 位置变了（进房、离开房间、开打）：马上报一次 */
