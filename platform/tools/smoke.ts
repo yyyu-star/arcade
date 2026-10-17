@@ -1494,6 +1494,8 @@ async function clickShare(page: Page, testId: string, shotName: string): Promise
   await shot(page, shotName);
   const log = await page.evaluate(() => (window as Window & { __arcadeShareLog?: string[] }).__arcadeShareLog ?? []);
   check(log.some((l) => l.includes('分享 预览')), `分享日志里该有"分享 预览"：${log.join(' | ')}`);
+  // kit 0.15.1：电脑上不弹系统共享，直接出预览，多一个"复制图片"（去微信粘贴）
+  if (shotName.endsWith('desktop')) check((await page.locator('#arcade-share-preview [data-key="share:copy-image"]').count()) === 1, '电脑上的分享预览该有"复制图片"');
   await page.locator('#arcade-share-preview [data-key="share:close"]').click();
   await page.locator('#arcade-share-preview').waitFor({ state: 'detached' });
 }
