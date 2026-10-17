@@ -7,7 +7,7 @@
  * 画面只读核心的状态和事件（w.ev），不自己算规则。
  */
 import Phaser from 'phaser';
-import { ENEMIES, HOP_AIR, HOP_PERIOD, PLAYER_SLOW, WATER } from '../../content/enemies.ts';
+import { ENEMIES, HOP_AIR, HOP_PERIOD, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
@@ -18,7 +18,6 @@ import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
-import { inputCos, inputSin } from '../../core/fmath.ts';
 import { RAID_TEX, type Atlas, type Frame } from '../art/atlas.ts';
 import { artRng } from '../art/draw.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
@@ -594,7 +593,8 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Hurt:
           sfx.play('hurt');
-          this.shake(90, 0.004);
+          // 被围时每隔一会儿就挨一下，震屏会变成一直抖；改成主角红闪 + 屏幕边缘红晕
+          this.d.banners.hurt();
           this.hero.setTint(0xff5a4a);
           this.time.delayedCall(90, () => this.hero.clearTint());
           break;
@@ -694,9 +694,10 @@ export class GameScene extends Phaser.Scene {
     this.ground.spawn({ frame: `ink${Math.floor(Math.random() * 3)}`, x, y, life: 2200, s0: big ? 1.6 : 0.7, s1: big ? 1.8 : 0.85, a0: 0.45, a1: 0, rot: Math.random() * 6, ground: true });
     this.burst(x, y - 16, tint, big ? 2 : 0.8);
     sfx.play('kill', { volume: 0.5 });
+    // 精英常有，只留一小下顿帧；真正的大怪（code 7）才震屏
     if (big) {
-      this.shake(180, 0.006);
-      this.freeze = Math.max(this.freeze, 90);
+      if (code === 7) this.shake(180, 0.006);
+      this.freeze = Math.max(this.freeze, code === 7 ? 90 : 40);
     }
     // 连斩：2 秒内接着杀就一直涨
     if (this.now - this.comboAt > 2000) this.comboN = 0;
@@ -937,7 +938,7 @@ export class GameScene extends Phaser.Scene {
     return pts;
   }
 
-  /** 天雷落点；chained：连锁跳过来的那几下不从天上劈（电弧由 Chain 事件画），震屏和停顿也轻一点 */
+  /** 天雷落点；chained：连锁跳过来的那几下不从天上劈（电弧由 Chain 事件画），天雷是常驻法器，不震屏也不顿帧（顿帧会让走位一卡一卡） */
   private thunder(x: number, y: number, r: number, chained = false): void {
     if (!chained) {
       const x0 = x + (Math.random() - 0.5) * 80;
@@ -948,8 +949,6 @@ export class GameScene extends Phaser.Scene {
     this.fx.spawn({ frame: 'haze', x, y: y - 10, life: 260, s0: r / 30, s1: r / 18, a0: 0.9, a1: 0, tint: 0xbfe6ff, depth: 61 });
     this.burst(x, y - 10, 0x55c8ff, chained ? 0.9 : 1.4);
     if (chained) return;
-    this.shake(110, 0.004);
-    this.freeze = Math.max(this.freeze, 55);
   }
 
   /** 火葫芦的一口火：沿扇面撒几团火苗往外飞 */
@@ -983,17 +982,14 @@ export class GameScene extends Phaser.Scene {
     const w = this.w;
     const alpha = Math.min(1, this.acc / TICK_MS);
     const inter = (p: number, c: number): number => p + (c - p) * alpha;
-    // 主角：本地预测（用"现在"的输入往前推半拍到一拍），再柔和地追
+    // 主角：始终在核心给的上一拍和这一拍之间插值，和怪、弹幕同一套时间轴。
+    // 以前移动时用"预测"（现在的输入往前推）、停下时用插值，起停那一帧两套结果差约一拍，看上去一顿一跳；
+    // 代价是比输入晚最多一拍（33 ms），换整条运动曲线连续
     const moving = !this.paused && !this.d.cards.open && this.freeze <= 0 && this.hold <= 0 && w.phase === 'play';
     const dir = moving ? (this.d.autopilot ? 0 : this.d.input.dir()) : 0;
     const slowed = w.tick < w.slowUntil;
-    const speed = w.stats.speed * (slowed ? PLAYER_SLOW : 1);
-    const tx = moving && dir ? w.x + inputCos(dir) * speed * alpha : inter(w.px, w.x);
-    const ty = moving && dir ? w.y + inputSin(dir) * speed * alpha : inter(w.py, w.y);
-    this.renderX += (tx - this.renderX) * 0.6;
-    this.renderY += (ty - this.renderY) * 0.6;
-    if (Math.abs(tx - this.renderX) > 40) this.renderX = tx;
-    if (Math.abs(ty - this.renderY) > 40) this.renderY = ty;
+    this.renderX = inter(w.px, w.x);
+    this.renderY = inter(w.py, w.y);
     const hx = this.renderX;
     const hy = this.renderY;
     const walking = w.moving || dir !== 0;
@@ -1001,11 +997,12 @@ export class GameScene extends Phaser.Scene {
     const bob = walking ? Math.abs(Math.sin(this.walk)) : 0;
     const f = this.frame('hero');
     const face = COS[w.face]! < -0.1 ? -1 : COS[w.face]! > 0.1 ? 1 : this.hero.scaleX < 0 ? -1 : 1;
-    const sx = (1 / f.res) * (1 + (1 - bob) * 0.05 * (walking ? 1 : 0)) * face;
-    const sy = (1 / f.res) * (1 - (walking ? (1 - bob) * 0.05 - bob * 0.03 : Math.sin(this.now * 0.004) * 0.015));
+    // 走路基本是平移：只留不到 1 像素的起伏和极小的挤压，当脚步感（幸存者类走位多，大幅上下晃会让人觉得在抖）
+    const sx = (1 / f.res) * (1 + (1 - bob) * 0.012 * (walking ? 1 : 0)) * face;
+    const sy = (1 / f.res) * (1 - (walking ? (1 - bob) * 0.012 - bob * 0.008 : Math.sin(this.now * 0.004) * 0.015));
     const blink = w.invuln > 0 && Math.floor(this.now / 60) % 2 === 0;
-    this.hero.setPosition(hx, hy - bob * 3).setScale(sx, sy).setRotation(walking ? Math.sin(this.walk) * 0.05 : 0).setDepth(hy).setAlpha(blink ? 0.5 : 1);
-    this.heroBack.setPosition(hx, hy - bob * 3 + 1).setScale(sx * 1.07, sy * 1.05).setRotation(this.hero.rotation).setDepth(hy - 0.1).setAlpha(this.hero.alpha);
+    this.hero.setPosition(hx, hy - bob * 0.8).setScale(sx, sy).setRotation(0).setDepth(hy).setAlpha(blink ? 0.5 : 1);
+    this.heroBack.setPosition(hx, hy - bob * 0.8 + 1).setScale(sx * 1.07, sy * 1.05).setRotation(this.hero.rotation).setDepth(hy - 0.1).setAlpha(this.hero.alpha);
     this.heroShadow.setPosition(hx, hy).setDepth(-400);
     // 被冰锥、水鬼拖慢：脚下冒冰屑
     if (slowed && !LOW_MEMORY && (this.frost += dt) > 90) {
@@ -1033,11 +1030,9 @@ export class GameScene extends Phaser.Scene {
         this.ground.spawn({ frame: 'footprint', x: hx + px, y: hy + py + 2, life: 3200, a0: 0.8, a1: 0, rot: Math.atan2(SIN[w.face]!, COS[w.face]!), ground: true });
       }
     }
-    // 镜头：跟人，朝移动方向前瞻一点
-    const cam = this.cameras.main;
-    const lookX = hx + COS[w.face]! * (walking ? 40 : 0);
-    const lookY = hy - 20 + SIN[w.face]! * (walking ? 24 : 0);
-    cam.centerOn(cam.midPoint.x + (lookX - cam.midPoint.x) * 0.15, cam.midPoint.y + (lookY - cam.midPoint.y) * 0.15);
+    // 镜头：紧跟主角（幸存者类的标准做法）。以前每帧追 15% 并朝面向方向前瞻 40px：追的快慢跟帧率有关，
+    // 转向时前瞻点一跳镜头就荡一下；主角本身已经按拍插值，镜头直接钉在他身上，屏幕上主角就不会晃
+    this.cameras.main.centerOn(hx, hy - 20);
 
     this.gfx.clear();
     this.waves.length = 0;

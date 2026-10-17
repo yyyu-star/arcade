@@ -296,6 +296,29 @@ async function boot(): Promise<void> {
     audio: { noAudio: true },
     fps: { smoothStep: false },
   });
+  // WebGL 上下文丢了（显存吃紧时 iOS 会收回）Phaser 会等它恢复；3 秒还没恢复才提示刷新，恢复就收起，同一时间只有一条
+  game.events.once(Phaser.Core.Events.READY, () => {
+    let wait: ReturnType<typeof setTimeout> | null = null;
+    let tip: HTMLButtonElement | null = null;
+    game.canvas.addEventListener('webglcontextlost', () => {
+      if (wait || tip) return;
+      wait = setTimeout(() => {
+        wait = null;
+        tip = document.createElement('button');
+        tip.type = 'button';
+        tip.className = 'yx-glitch';
+        tip.textContent = '画面出了点问题，点这里刷新（进度都存着）';
+        tip.addEventListener('click', () => location.reload());
+        document.body.appendChild(tip);
+      }, 3000);
+    });
+    game.canvas.addEventListener('webglcontextrestored', () => {
+      if (wait) clearTimeout(wait);
+      wait = null;
+      tip?.remove();
+      tip = null;
+    });
+  });
 
   let scene: GameScene | null = null;
   let world: World | null = null;
@@ -344,8 +367,11 @@ async function boot(): Promise<void> {
   const askHome = (): void => {
     if (!pause.open) setPaused(true);
     confirm.ask('这一局不会保存，确定回大厅吗？', '回大厅', '接着打', (ok) => {
-      if (ok) location.href = '/';
-      else if (!pause.open) setPaused(false);
+      if (ok) {
+        // 离开前把待上传的云存档补传一次（keepalive，页面走了也能发完）
+        cloud.hidden(true);
+        location.href = '/';
+      } else if (!pause.open) setPaused(false);
     });
   };
   pause.onHome = askHome;
