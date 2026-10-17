@@ -30,9 +30,9 @@ import { isTouch } from '../input.ts';
 import type { Rect } from '../rect.ts';
 import type { Session } from '../session.ts';
 import { sound } from '../sound.ts';
-import { COLOR, PHONE as PHONE_MODE, VIEW, signColor } from '../theme.ts';
+import { COLOR, PHONE as PHONE_MODE, VIEW, mixColor, signColor } from '../theme.ts';
 import { pctArrow } from '../labels.ts';
-import { addGlyph, addImage, addPaper } from '../ui/art.ts';
+import { addGlyph, addImage, addPaper, addWood } from '../ui/art.ts';
 import type { Glyph } from '../assets.ts';
 import { Button, DENIED_EVENT } from '../ui/button.ts';
 import { addText, setColor } from '../ui/text.ts';
@@ -194,6 +194,8 @@ export class TradeScene extends BaseScene {
     const onDetail = (d: Dialog): void => this.trackDialog(d);
     this.events.on(DETAIL_EVENT, onDetail);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(DETAIL_EVENT, onDetail));
+    // 0.18.0 开盘台：按钮下面垫一块木头（art-v3 的木材质）
+    addWood(this, OPEN.x - 14, OPEN.y + OPEN.h - 20, OPEN.w + 28, PHONE_MODE ? 28 : 36);
     this.openBtn = new Button(this, OPEN.x, OPEN.y, {
       width: OPEN.w,
       height: OPEN.h,
@@ -1645,10 +1647,4 @@ export class TradeScene extends BaseScene {
     if (this.extTipNow) out[`tip:${this.extTipNow.id}`] = this.hint?.rect() ?? { x: 0, y: 0, w: 0, h: 0 };
     return out;
   }
-}
-
-/** 两色按比例混合（屏幕深底上的涨跌色调亮一点）。 */
-function mixColor(a: number, b: number, t: number): number {
-  const ch = (sh: number): number => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh;
-  return ch(16) | ch(8) | ch(0);
 }

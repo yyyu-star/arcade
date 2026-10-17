@@ -16,7 +16,7 @@ import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
 import { randomSeed, type Session } from '../session.ts';
 import { sound } from '../sound.ts';
-import { COLOR, GAME_WIDTH, PHONE, TYPE, VIEW, arrowOf, signColor } from '../theme.ts';
+import { COLOR, GAME_WIDTH, PHONE, TYPE, VIEW, arrowOf, mixColor, signColor } from '../theme.ts';
 import { addGlyph, addPaper, addPill } from '../ui/art.ts';
 import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
 import { statTile, tipOnButton } from '../meta/bits.ts';
@@ -193,6 +193,12 @@ export class EndScene extends BaseScene {
         },
       });
       stack.push({ h: ph ? 40 : 46, draw: (yy) => addText(this, colX, yy + (ph ? 20 : 23), `${arrowOf(ret)}${formatPoints(Math.abs(ret), 1, false)}`, { size: ph ? TYPE.big : TYPE.big + 6, bold: true, num: true, color: signColor(ret), originY: 0.5 }) });
+      // 0.18.0 电脑上框里地方大：再写一行最亏的一笔（以前框里只有一只小人）
+      const worst = s.stats.trades.reduce<(typeof s.stats.trades)[number] | null>((w, t) => (!w || t.ret < w.ret ? t : w), null);
+      if (!ph && worst && worst.ret < -5 && worst.stockId !== sum.bestTrade.stockId) {
+        const wn = stockCard(s, worst.stockId).name;
+        stack.push({ h: 30, draw: (yy) => addText(this, colX, yy + 15, `最亏：${wn} ${arrowOf(worst.ret)}${formatPoints(Math.abs(worst.ret), 1, false)}`, { size: TYPE.label, bold: true, color: signColor(worst.ret), originY: 0.5 }) });
+      }
     } else {
       // 没有交易：让本局第一个题材的龙头哭一下
       const id = s.themeIds.map((t) => stocksOf(t)[0]?.id).find((v) => v && hasArt(this.textures, stockKey(v, 'limitdown')));
@@ -255,20 +261,37 @@ export class EndScene extends BaseScene {
     this.gains(ph ? mx + gl.width + 10 : mx, ph ? gy : gy + 34, sum, G.chipIcon);
 
     // ---- 12 个月账单轨道（0.5.1）：还上的绿格、没还上的红格、没走到的灰格；实盘只有 6 格
+    // 0.18.0 屏幕材质（art-v3：数字在跳的地方用夜蓝小屏）：整条放在一块小屏上，每格上面一根这个月账户涨跌的小柱
     const ky = ph ? gy + 56 : gy + 98;
-    addGlyph(this, mx + 12, ky + 14, 'house', 24);
+    const barH = ph ? 8 : 14;
+    const rets = s.stats.monthRets;
+    const maxRet = Math.max(1, ...rets.map((r) => Math.abs(r)));
+    this.add.rectangle(mx - 4, ky - barH - 8, 34 + months * 31 + 6, barH + 8 + 34, COLOR.screen).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.ink, 1);
+    addGlyph(this, mx + 14, ky + 14, 'house', 22);
+    const bars = this.add.graphics();
     for (let m = 0; m < months; m++) {
       const px = mx + 34 + m * 31;
       const paid = m < sum.billsPaid;
       const failed = !sum.won && m === sum.billsPaid;
-      const fill = paid ? 0xc8ecd2 : failed ? 0xffd2cc : COLOR.paperLo;
-      const box = this.add.rectangle(px, ky, 27, 28, fill).setOrigin(0, 0).setRounded(7).setStrokeStyle(1.5, failed ? COLOR.danger : COLOR.edge, 1);
-      addText(this, px + 13.5, ky + 14, `${m + 1}`, { size: paid || failed ? 13 : 11, bold: true, color: paid ? COLOR.down : failed ? COLOR.danger : COLOR.dim, originX: 0.5, originY: 0.5 });
+      const fill = paid ? 0x1f6f4a : failed ? 0x6a2430 : 0x2e3d4f;
+      const edge = paid ? 0x45d68f : failed ? 0xff6b6b : 0x3e5066;
+      const box = this.add.rectangle(px, ky, 27, 28, fill).setOrigin(0, 0).setRounded(7).setStrokeStyle(1.5, edge, 1);
+      addText(this, px + 13.5, ky + 14, `${m + 1}`, { size: paid || failed ? 13 : 11, bold: true, num: true, color: paid ? 0xc8ffe0 : failed ? 0xffd2cc : 0x8a9bb0, originX: 0.5, originY: 0.5 });
+      const r = rets[m];
+      if (r !== undefined && Math.abs(r) >= 0.5) {
+        const h = Math.max(2, (Math.abs(r) / maxRet) * barH);
+        bars.fillStyle(mixColor(signColor(r), 0xffffff, 0.25), 1).fillRoundedRect(px + 8.5, ky - 3 - h, 10, h, 2);
+      }
       if (this.lively && (paid || failed)) {
         box.setScale(0.2);
         this.tweens.add({ targets: box, scale: 1, duration: 200, delay: 40 * m, ease: 'Back.easeOut' });
       }
     }
+    const trackHit = this.add.rectangle(mx - 4, ky - barH - 8, 34 + months * 31 + 6, barH + 42, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(trackHit, () => ({ x: mx - 4, y: ky - barH - 8, w: 34 + months * 31 + 6, h: barH + 42 }), () => ({
+      title: '每个月',
+      body: `格子：这个月的账单还上了（绿）、没还上（红）、没走到（灰）。\n小柱：这个月炒股让账户涨了还是跌了，越高越多。\n${rets.map((r, i) => `${i + 1}月 ${formatPoints(r, 1)}`).join('　')}`,
+    }));
     // 实盘：最好成绩、经历两行的位置换成结算的说明（实盘局不进最好成绩）
     if (lv0) {
       this.liveBody = addText(this, mx + 12, ky + 44, '', { size: TYPE.label, color: COLOR.ink, wrap: ph ? G.rightW - 24 : 392, lineSpacing: 3 });

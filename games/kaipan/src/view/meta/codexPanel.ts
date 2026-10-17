@@ -298,8 +298,8 @@ export class CodexPanel extends Dialog {
       if (!lit) {
         // 0.9.0 没解锁的卡和解锁的一样大（以前用 120×160 的竖图，按高缩放后比解锁的窄一圈，一排卡宽窄不齐）
         c.add(lockedCard(s, cw, ch));
-        c.add(addText(s, cw / 2, ch / 2 - 10, '?', { size: 44, bold: true, color: 0xffd23f, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 6 }));
-        c.add(addText(s, cw / 2, ch - 22, '？？？', { size: 11, bold: true, color: 0xe8dde4, originX: 0.5, originY: 0.5 }));
+        c.add(addText(s, cw / 2, ch / 2 - 10, '?', { size: 44, bold: true, color: 0xb7a592, originX: 0.5, originY: 0.5 }));
+        c.add(addText(s, cw / 2, ch - 22, '？？？', { size: 11, bold: true, color: COLOR.muted, originX: 0.5, originY: 0.5 }));
       } else {
         c.add(addSlice(s, 0, 0, cw, ch, 'codex_card'));
         const color = this.cardColor(e);
@@ -507,9 +507,9 @@ export class CodexPanel extends Dialog {
   private knowledgeCardBody(c: Phaser.GameObjects.Container, k: KnowledgeCard, cw: number, ch: number): void {
     const s = this.scene;
     if (!k.lit) {
-      c.add(s.add.rectangle(0, 0, cw, ch, 0x4a3a46).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.ink, 1));
-      c.add(addText(s, cw / 2, ch / 2 - 10, '?', { size: 40, bold: true, color: 0xe8dde4, originX: 0.5, originY: 0.5 }));
-      c.add(addText(s, cw / 2, ch - 24, '？？？', { size: 13, bold: true, color: 0xe8dde4, originX: 0.5, originY: 0.5 }));
+      c.add(s.add.rectangle(0, 0, cw, ch, 0xe9dfd2).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, 0xb9a9ad, 1));
+      c.add(addText(s, cw / 2, ch / 2 - 10, '?', { size: 40, bold: true, color: 0xb7a592, originX: 0.5, originY: 0.5 }));
+      c.add(addText(s, cw / 2, ch - 24, '？？？', { size: 13, bold: true, color: COLOR.muted, originX: 0.5, originY: 0.5 }));
       return;
     }
     c.add(s.add.rectangle(0, 0, cw, ch, COLOR.paperHi).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.edge, 1));
@@ -748,16 +748,16 @@ export function achievementBadge(scene: Phaser.Scene, x: number, y: number, tier
 }
 
 /**
- * 没解锁的卡：深紫底、一层小点、描边，配色沿用原来那张问号卡素材。
+ * 没解锁的卡：0.18.0 改成浅一号的纸（以前深紫底，四行里两行深色压得很重）：纸色底、一层淡点、虚一点的描边。
  * 和解锁卡的九宫格素材对齐：素材四周留 4 的透明边，底下 8 里有一道阴影，所以卡身是 (4, 4) 起 (w-8)×(h-12)。
  */
 function lockedCard(s: Phaser.Scene, w: number, h: number): Phaser.GameObjects.Graphics {
   const [x, y, bw, bh] = [4, 4, w - 8, h - 12];
   const g = s.add.graphics();
   g.fillStyle(COLOR.ink, 0.2).fillRoundedRect(x + 3, y + 4, bw, bh, RADIUS.md);
-  g.fillStyle(0x4a3d58, 1).fillRoundedRect(x, y, bw, bh, RADIUS.md);
-  g.fillStyle(0x6a5a7a, 1);
+  g.fillStyle(0xe9dfd2, 1).fillRoundedRect(x, y, bw, bh, RADIUS.md);
+  g.fillStyle(0xd8cabb, 1);
   for (let yy = y + 10; yy < y + bh - 8; yy += 12) for (let xx = x + 10 + ((yy / 12) % 2) * 6; xx < x + bw - 8; xx += 12) g.fillCircle(xx, yy, 1.4);
-  g.lineStyle(3, COLOR.ink, 1).strokeRoundedRect(x, y, bw, bh, RADIUS.md);
+  g.lineStyle(2.5, 0xb9a9ad, 1).strokeRoundedRect(x, y, bw, bh, RADIUS.md);
   return g;
 }

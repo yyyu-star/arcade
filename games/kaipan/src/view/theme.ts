@@ -190,6 +190,12 @@ export const TYPE = { big: 28, title: 18, label: 13 } as const;
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const RADIUS = { sm: 8, md: 12, lg: 16 } as const;
 
+/** 两色按比例混合（屏幕深底上的涨跌色调亮一点）。 */
+export function mixColor(a: number, b: number, t: number): number {
+  const ch = (sh: number): number => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh;
+  return ch(16) | ch(8) | ch(0);
+}
+
 /** 涨跌箭头（↑ / ↓ / 平），配合 signColor 用。 */
 export function arrowOf(v: number): string {
   return v > 0.004 ? '↑' : v < -0.004 ? '↓' : '–';
