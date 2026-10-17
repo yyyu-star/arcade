@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { handleLive, type LiveEnv } from '../worker/live.ts';
-import { LIVE_MAX_BP, LIVE_TIERS, liveReturn } from '../src/content/live.ts';
+import { LIVE_MAX_BP, LIVE_OPEN, LIVE_TIERS, liveReturn } from '../src/content/live.ts';
 
 /** 实盘钱包接口：平台 /api/me 和钱包 RPC 都用假的绑定代替，记录调用参数。 */
 
@@ -154,6 +154,16 @@ describe('入口校验', () => {
     expect(await res.json()).toEqual({ ok: false, error: 'closed' });
     expect(w.calls).toHaveLength(0);
     expect((await handleLive(post('refund', { ref: REF }), e, 200, false)).status).not.toBe(501);
+  });
+
+  it('上线后实盘开着：不传 open 时按 LIVE_OPEN 放行带入', async () => {
+    expect(LIVE_OPEN).toBe(true);
+    const e = env({ ARCADE: arcade(() => json(LOGGED_IN)) });
+    const w = wallet({ ok: true, wallet: { balance: 8000 } });
+    e.WALLET = w.rpc;
+    const res = await handleLive(post('buyin', { ref: REF, tier: 'small' }), e, 200);
+    expect(res.status).toBe(200);
+    expect(w.calls).toHaveLength(1);
   });
 
   it('GATE=login 却没有 ARCADE：当平台不可用（503）', async () => {
