@@ -609,7 +609,9 @@ export class TableScene extends Phaser.Scene {
       const others = net.room.seats.some((s, i) => s.kind === 'human' && i !== net.mySeat);
       const ns = this.netStake;
       const me = ns?.seats[0];
-      const msg = ns && !ns.over ? (me?.paid === 'yes' ? roomLeaveText(me.points, me.points * pointValue(ns.tier), payout(ns.tier, me.points)) : ROOM_STAKE_TEXT.leave) : others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
+      const ph = net.view().phase;
+      const mid = ph === 'play' || ph === 'tribute' || ph === 'return';
+      const msg = ns && !ns.over ? (me?.paid === 'yes' ? roomLeaveText(me.points, me.points * pointValue(ns.tier), payout(ns.tier, me.points), mid) : ROOM_STAKE_TEXT.leave) : others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
       this.openOverlay('menu', confirm(this, msg, '离开', () => this.leaveRoom(), () => this.closeOverlay()));
       return;
     }

@@ -28,7 +28,17 @@ export const RESERVED_PERSONAS: Readonly<Record<string, readonly string[]>> = {
   mahjong: ['幺妹儿', '熊猫哥', '盖碗儿', '兔头哥', '火锅婆婆', '板凳儿'], // 0.10.9，麻将上线前先加上
   racing: ['嘟嘟', '慢半拍', '冲冲', '跟屁虫', '刹车王', '弯道王', '精算师'], // 0.10.22，飞驰上线前先加上
 };
-const PERSONA_NAMES = new Set(Object.values(RESERVED_PERSONAS).flat());
+/**
+ * 繁体折成简体，只收保留名和保留词里用到的字（0.12.2）：'老張' 和 '老张' 在牌桌上看着是同一个人。
+ * 不做全量繁简转换：那要一张几千字的表，而这里只要拦得住冒充；保留名加了新字时，有繁体写法的顺手补进来。
+ */
+const TRAD_TO_SIMP: Readonly<Record<string, string>> = {
+  張: '张', 強: '强', 趙: '赵', 穩: '稳', 飆: '飙', 飈: '飙', 盤: '盘', 鷹: '鹰', 兒: '儿', 貓: '猫', 蓋: '盖',
+  頭: '头', 鍋: '锅', 衝: '冲', 沖: '冲', 蟲: '虫', 剎: '刹', 車: '车', 彎: '弯', 師: '师', 電: '电', 腦: '脑',
+  員: '员', 統: '统',
+};
+const foldTrad = (s: string): string => s.replace(/[^\x00-\x7f]/gu, (ch) => TRAD_TO_SIMP[ch] ?? ch);
+const PERSONA_NAMES = Object.values(RESERVED_PERSONAS).flat();
 /** 昵称里出现就拒绝的词：冒充电脑、官方。 */
 const RESERVED_WORDS = ['电脑', '官方', '管理员', '系统', '客服'];
 /**
@@ -78,10 +88,10 @@ export function checkDisplayName(name: string): 'ok' | 'invalid_display_name' | 
   const n = [...name].length;
   // 控制字符、零宽等格式字符、私用区和未分配码点、行/段分隔符
   if (n < 2 || n > 12 || /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u.test(name)) return 'invalid_display_name';
-  const bare = name.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+  const bare = foldTrad(name.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''));
   if (SENSITIVE_WORDS.some((w) => bare.includes(w))) return 'invalid_display_name';
   if (RESERVED_WORDS.some((w) => bare.includes(w))) return 'reserved_display_name';
-  const persona = bare.replace(/\d+$/u, '');
-  if (PERSONA_NAMES.has(persona)) return 'reserved_display_name';
+  // 电脑人物名按"包含"查（0.12.2，和 kit 游客昵称一样）：'老张a'、'小美丽' 摆在牌桌上一样像那个电脑
+  if (PERSONA_NAMES.some((w) => bare.includes(w))) return 'reserved_display_name';
   return 'ok';
 }

@@ -1,5 +1,18 @@
 # 更新日志
 
+## 0.12.0
+
+社交第一期的两个部件（仓库根 `docs/social.md` 1.1–1.3；接口形状主线定、平台实现）。都只在调用时碰 DOM，import 时不碰；已有入口没改。
+- **分享卡** `arcade-kit/share`：`drawShareCard` 用 Canvas 画 1080×1350 的战绩图（游戏给 `{ game, title, big, stats≤3, line, accent, art?, player?, date? }`），
+  `shareCard` 能带文件就调 `navigator.share`，不能就出预览（保存图片、复制链接、关闭）。不上传、0 行写入。
+  `art` 接受一个 `CanvasImageSource`，或者 `{ image, crop?, fit?: 'contain' | 'cover' }` 从图集切一块；是 img 时先 `decode()`，失败就不画 art、照常出卡。
+- **报位置、收邀请** `arcade-kit/social`：`mountSocial` 只在有平台、已登录时挂；页面在前台时每 2 分钟 `POST /api/presence`、每 30 秒 `GET /api/invites`，
+  顶上弹"老王叫你来<游戏> [去] [不了]"，过期不弹、已经在那个房间的不弹，"去""不了"都 `POST /api/invites/<id>/dismiss`；401 自己停。
+  接口小函数 `postPresence`、`fetchInvites`、`dismissInvite`、`sendInvite`（429 → `limit`）、`fetchFriends`、`setShowWhere`，写的请求带 `x-arcade: 1`、同源 cookie。
+- 测试：`test/share.test.ts`（截短、颜色、日期、折行、图集切片和 contain/cover 的位置）、`test/social.test.ts`（假 fetch 查每个接口的方法、地址、头、请求体和各种状态码，挑哪条邀请弹）。
+  浏览器里用演示页 `demo/share.html`、`demo/social.html` 核对过：三种卡（图标、图集切片、坏图）都出 1080×1350，切片取到对的那格；无头 Chromium 没有带文件的分享，走预览，保存和复制都通；
+  横条按到期先后弹、过期收起、"去""不了"各发一次 dismiss、和自己同房间的那条不弹，控制台零报错。
+
 ## 0.11.2
 
 - **table-fun 窄屏**：互动面板（440 宽）、点头像的菜单（432 宽）在 390 竖屏上伸出屏幕（麻将接入时发现，先用 CSS 收窄了）。盒子宽度改成 `min(<宽度>px, calc(100vw - 16px))`，

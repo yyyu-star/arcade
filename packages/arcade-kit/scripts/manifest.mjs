@@ -45,7 +45,7 @@ if (cmd === 'pack') {
   const missing = Object.values(exp).flatMap((t) => [t.types, t.default]).filter((f) => !existsSync(join(root, f)));
   if (missing.length) throw new Error(`dist 里缺：${missing.join('、')}（先 npm run build）`);
   // 浏览器和普通 Node 测试会用的入口：Node 原生 ESM 能直接 import（相互引用带了 .js、没有 cloudflare:workers）
-  for (const name of ['protocol', 'rng', 'game', 'client', 'guest', 'auth', 'fun', 'fun-logic', 'table-fun']) {
+  for (const name of ['protocol', 'rng', 'game', 'client', 'guest', 'auth', 'fun', 'fun-logic', 'table-fun', 'share', 'social']) {
     const t = exp[`./${name}`];
     if (t) await import(pathToFileURL(join(root, t.default)).href);
   }

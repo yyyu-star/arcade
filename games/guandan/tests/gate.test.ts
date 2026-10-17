@@ -250,3 +250,45 @@ describe('平台下发的 Set-Cookie（会话续期、清掉失效 cookie）', (
     expect(r2.headers.getSetCookie()).toEqual([]);
   });
 });
+
+describe('房间路由交给 kit 的 env（0.12.4 审计）', () => {
+  /** 假的房间命名空间：只记有没有被碰到（真开房走 RPC，这里不该走到） */
+  function rooms(): DurableObjectNamespace & { touched: number } {
+    const ns = {
+      touched: 0,
+      idFromName() {
+        ns.touched++;
+        throw new Error('不该开房');
+      },
+    };
+    return ns as unknown as DurableObjectNamespace & { touched: number };
+  }
+  const create = (body?: string, headers: Record<string, string> = {}) =>
+    new Request('https://game.example.com/games/guandan/room/rooms', {
+      method: 'POST',
+      headers: { Origin: 'https://game.example.com', Cookie: '__Host-sid=abc', ...(body ? { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(body).length) } : {}), ...headers },
+      ...(body ? { body } : {}),
+    });
+
+  it('GATE=login 却没绑 ARCADE：开房按平台不可用拒绝，不退成游客', async () => {
+    const ROOM = rooms();
+    const res = await handle(create(), { ASSETS: assets(), GATE: 'login', ONLINE: 'on', ROOM });
+    expect(res.status).toBe(503);
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(ROOM.touched).toBe(0);
+  });
+
+  it('开房的请求体超过 512 字节不解析（按娱乐房交给 kit，认人照样先做）', async () => {
+    const ROOM = rooms();
+    const big = JSON.stringify({ stake: 'small', pad: 'x'.repeat(600) });
+    const res = await handle(create(big), { ASSETS: assets(), GATE: 'login', ONLINE: 'on', ROOM, ARCADE: arcade(async () => json({ user: null })) });
+    expect(res.status).toBe(401);
+    expect(ROOM.touched).toBe(0);
+  });
+
+  it('小的 { stake } 照样认：没有钱包回 409 no_wallet', async () => {
+    const res = await handle(create(JSON.stringify({ stake: 'small' })), { ASSETS: assets(), GATE: 'login', ONLINE: 'on', ROOM: rooms(), ARCADE: arcade(async () => json({ user: U })) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'no_wallet' });
+  });
+});
