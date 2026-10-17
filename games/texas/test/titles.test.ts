@@ -90,6 +90,42 @@ describe('称号', () => {
   });
 });
 
+describe('颁奖（0.15.0，好友房一场结束）', () => {
+  const who = (i: number) => ({ key: `k${i}`, name: `p${i}` });
+  const rows = [
+    { name: 'p0', net: 500 },
+    { name: 'p1', net: -300 },
+    { name: 'p2', net: -200 },
+  ];
+  it('本场 MVP、最惨的人、最会诈（摊牌亮出来的诈唬），每个奖一句话；一个人能拿两个', () => {
+    const t = new Tally();
+    t.observe(result([sh(0, 'Ad Qc'), sh(1, '4h 3h')], 0), [e(0, 'call', 20), e(-1, 'flop'), e(1, 'bet', 40), e(0, 'call', 40)], who);
+    const got = t.awards(rows);
+    expect(got.map((x) => [x.kind, x.title, x.name])).toEqual([
+      ['mvp', '本场 MVP', 'p0'],
+      ['worst', '最惨的人', 'p1'],
+      ['bluff', '最会诈', 'p1'],
+    ]);
+    expect(got[0]!.line).toBe('p0 这一场赢了 500，全桌最多');
+    expect(got[1]!.line).toBe('p1 这一场输了 300，下一场翻本');
+    expect(got[2]!.line).toBe('p1 摊牌亮出 1 次诈唬，演技在线');
+  });
+  it('只认亮出来的牌：下注后别人都弃了（底牌没亮）不算诈唬；没人亮过诈唬时第三个奖换成天选之人', () => {
+    const t = new Tally();
+    t.observe(result([], 1, { byFold: true }), [e(-1, 'flop'), e(1, 'bet', 40), e(0, 'fold')], who);
+    expect(t.awards(rows).map((x) => x.kind)).toEqual(['mvp', 'worst']);
+    t.observe(result([sh(0, 'Kd 9d'), sh(1, 'Ac 3d')], 0), [], who);
+    expect(t.awards(rows).map((x) => [x.kind, x.name])).toEqual([
+      ['mvp', 'p0'],
+      ['worst', 'p1'],
+      ['river', 'p0'],
+    ]);
+  });
+  it('没人输赢、没出过事：不颁奖', () => {
+    expect(new Tally().awards([{ name: 'p0', net: 0 }])).toEqual([]);
+  });
+});
+
 describe('嘲讽（0.3.0）', () => {
   it('短语表和房间允许的编号一样多；只能往后加', () => {
     expect(TAUNTS.length).toBe(TAUNT_COUNT);
