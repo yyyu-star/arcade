@@ -159,8 +159,10 @@ export class TitleScene extends Phaser.Scene {
       ? `胜率 ${Math.round((st.wins / st.games) * 100)}%  ·  最高连胜 ${st.bestStreak}  ·  头游 ${st.firsts} 次`
       : '打完第一局，这里会记下你的战绩';
     text(this, cx, sy, line, { size: TYPE.label, color: st.games > 0 ? COLOR.goldLight : 0xd8c6a6 }).setDepth(20);
-    const statsHit = this.add.zone(cx, sy, inner, 60).setDepth(21);
-    setHit(statsHit, inner, 60);
+    // 条只有 60 高，手机横屏缩下来不到 44 CSS 像素：点按区按 minHit() 往上下扩（上面的模式卡底边离得够远）
+    const statsH = Math.max(60, minHit());
+    const statsHit = this.add.zone(cx, sy, inner, statsH).setDepth(21);
+    setHit(statsHit, inner, statsH);
     statsHit.on('pointerup', () => (this.overlay = openStats(this)));
 
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间

@@ -558,7 +558,8 @@ export class TableScene extends Phaser.Scene {
       if (lv) g.fillStyle(COLOR.red, 0.16).fillRoundedRect(x - cw / 2 + 2, y0 + 4, cw - 4, h - 8, 5);
       const name = cell.rank === 17 ? '大' : cell.rank === 16 ? '小' : levelName(cell.rank);
       const a = cell.left === 0 ? 0.3 : 1;
-      c.add(text(this, x, y0 + 14, name, { size: 14, bold: true, color: lv || cell.rank >= 16 ? COLOR.red : 0x6a4a2a }).setAlpha(a));
+      // 点数 16、张数 19：iPad 横屏（缩到 ×0.92）都到 14 CSS 像素；手机上更小的由手机字号档管
+      c.add(text(this, x, y0 + 14, name, { size: 16, bold: true, color: lv || cell.rank >= 16 ? COLOR.red : 0x6a4a2a }).setAlpha(a));
       c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: lv ? COLOR.red : PAPER_INK }).setAlpha(a));
     });
     const z = this.add.zone(x0, y0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: true });

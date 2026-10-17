@@ -199,7 +199,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run typecheck` / `npm run typecheck:core` | 全量 / 只查核心与电脑 |
 | `npm run sim -- --deals 5000 --mode random` | 机器人对打验收 |
 | `npm run shot` / `npm run shot -- --playtest` | 无头冒烟截图 / 真实速度鼠标试玩一副 |
-| `npm run shot -- --gallery --out <目录>` | 美术图集：1280 / 1920 / 手机三种尺寸 × 全部画面（主页、选难度、牌桌、结算、整局结束、分享、设置、规则、战绩、好友房）+ 竖屏，改前改后对比用（`docs/art-v3.md`）；浏览器任务一律 `flock -w 3600 <仓库>/.local/locks/browser.lock` 排队 |
+| `npm run shot -- --gallery --out <目录>` | 美术图集：1280 / 1920 / 手机三种尺寸 × 全部画面（主页、选难度、牌桌、结算、整局结束、分享、设置、规则、战绩、好友房）+ 竖屏，改前改后对比用（`docs/art-v3.md`）；加 `--audit --sizes 667x375,844x390` 逐屏量字号和点按区（写 `audit.md`，手机审计用）；浏览器任务一律 `flock -w 3600 <仓库>/.local/locks/browser.lock` 排队 |
 | `node tools/mem.ts [--scales auto,1,2,3]` | 内存估算：模拟老 iPhone 横屏，列纹理/画布像素（MB）和 Chromium PSS，再模拟地址栏收放看会不会攒背景图 |
 | `node tools/replay-log.ts <log.jsonl>` | 试玩日志复盘：还原每一手，看现在的电脑和提示会怎么出 |
 | `npm run build:cf` / `npm run deploy` | 部署产物 / 拆成独立仓库后才用；在总仓库里正式部署只经 PR 合并进 main 后由 CI 完成 |
