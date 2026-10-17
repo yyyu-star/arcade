@@ -162,7 +162,7 @@ export const SNAKE = { trigger: 170, windup: 10, lunge: 14, lungeSpeed: 6.2, res
 /** 竹王：隔 every 拍在主角四周 ring 远的地方种 sprouts 个竹精；血少一半后更勤、更多（下标 0 / 1） */
 export const BAMBOO_KING = { every: [210, 140], sprouts: [4, 6], ring: 120 };
 /** 溺鬼：冒出来 emerge 拍；离主角 grab 以内就抓住，hold 拍里把人往自己身边拖（每拍 pull）并拖慢；松手后 cool 拍内不再抓 */
-export const DROWN = { emerge: 36, grab: 60, hold: 42, pull: 1.3, cool: 150, slowTicks: 8 };
+export const DROWN = { emerge: 36, grab: 60, hold: 30, pull: 1.0, cool: 150, slowTicks: 8 };
 /** 河蟹：横着走，每 swap 拍换个方向；side 是横走的比例，近身（pinch 以内）才直着夹过来 */
 export const CRAB = { swap: 70, side: 0.85, pinch: 70 };
 /** 河伯：每 every 拍涨一次潮（一圈 ring 颗水弹）并在主角四周放 drowns 个溺鬼 */
