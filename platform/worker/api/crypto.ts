@@ -208,3 +208,10 @@ export async function hashIp(env: Env, ip: string): Promise<string> {
   const pepper = await currentPepper(env, 'PEPPER_IP');
   return b64url((await hmac(pepper.key, ipPrefix(ip))).slice(0, 16));
 }
+
+/** 带时间前缀的 id：毫秒时间的 36 进制（补到 9 位）+ 64 位随机，共 20 位。按 id 的字典序就是按创建时间，Cron 能按主键范围删旧的。 */
+export function newTimeId(now: number): string {
+  return timeIdPrefix(now) + b64url(randomBytes(8));
+}
+export const timeIdPrefix = (ms: number): string => Math.max(0, Math.floor(ms)).toString(36).padStart(9, '0');
+

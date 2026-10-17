@@ -3,6 +3,7 @@
  * 清理前先记一行昨天的全站筹码统计（5.9）。
  * 写入记在"系统"类；每次最多删 cleanupMaxRows 行，删不完留到第二天，系统类预算用完就当天不清。
  */
+import { timeIdPrefix } from './crypto';
 import type { Env } from '../env';
 import { limitsOf } from './config';
 import { DAY } from './context';
@@ -66,6 +67,20 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
           `DELETE FROM boards WHERE (user_id, game_id, board_id) IN
              (SELECT user_id, game_id, board_id FROM boards WHERE game_id = ?1 AND board_id >= 'daily-' AND board_id < ?2 LIMIT ?3)`,
           gameId, `daily-${beijingDate(now - limits.dailyBoardKeepDays * DAY)}`, budget(),
+        ),
+      );
+    }
+    // 异步挑战：按创建时间过期（challengeTtlMs）；id 带时间前缀，挑战和结果都按主键范围删
+    if (budget() > 0) {
+      const cutoff = timeIdPrefix(now - limits.challengeTtlMs);
+      await db.run(db.stmt('DELETE FROM challenges WHERE id IN (SELECT id FROM challenges WHERE id < ?1 LIMIT ?2)', cutoff, budget()));
+    }
+    if (budget() > 0) {
+      const cutoff = timeIdPrefix(now - limits.challengeTtlMs);
+      await db.run(
+        db.stmt(
+          'DELETE FROM challenge_results WHERE (challenge_id, user_id) IN (SELECT challenge_id, user_id FROM challenge_results WHERE challenge_id < ?1 LIMIT ?2)',
+          cutoff, budget(),
         ),
       );
     }

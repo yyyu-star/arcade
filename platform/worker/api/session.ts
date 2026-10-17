@@ -118,7 +118,7 @@ export async function newSession(
 export function deleteUserStatements(db: Db, userId: string, username: string): D1PreparedStatement[] {
   const counterKeys = [
     `login:fail:${username}`, `reauth:fail:${userId}`, `profile:${userId}`, `acct:${userId}`,
-    `save:${userId}`, `freq:${userId}`, `fcode:${userId}`, `fcnew:${userId}`, `block:${userId}`, `score:${userId}`, `admin:${userId}`,
+    `save:${userId}`, `freq:${userId}`, `fcode:${userId}`, `fcnew:${userId}`, `block:${userId}`, `score:${userId}`, `admin:${userId}`, `chal:${userId}`,
   ];
   return [
     db.stmt('DELETE FROM sessions WHERE user_id = ?1', userId),
@@ -133,6 +133,10 @@ export function deleteUserStatements(db: Db, userId: string, username: string): 
     // 邀请（迁移 0007）：发出的、收到的都删；两个方向各走一个索引
     db.stmt('DELETE FROM invites WHERE from_id = ?1', userId),
     db.stmt('DELETE FROM invites WHERE to_id = ?1', userId),
+    // 异步挑战（迁移 0009）：本人发起的连同所有人的结果一起删；本人交的结果没有按人的索引，要扫全表——表只留 30 天、注销很少，接受
+    db.stmt('DELETE FROM challenge_results WHERE challenge_id IN (SELECT id FROM challenges WHERE owner_id = ?1)', userId),
+    db.stmt('DELETE FROM challenges WHERE owner_id = ?1', userId),
+    db.stmt('DELETE FROM challenge_results WHERE user_id = ?1', userId),
     db.stmt(`DELETE FROM rate_counters WHERE key IN (${counterKeys.map((_, i) => `?${i + 1}`).join(', ')})`, ...counterKeys),
     db.stmt('DELETE FROM users WHERE id = ?1', userId),
   ];

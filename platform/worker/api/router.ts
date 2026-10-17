@@ -23,6 +23,7 @@ import { dismissInvite, inviteParams, listInvites, sendInvite } from './invites'
 import { friendsWeek, overtakes, weekParams } from './friends-week';
 import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
+import { challengeParams, createChallenge, getChallenge, submitChallenge } from './challenges';
 import {
   acceptRequest,
   block,
@@ -128,6 +129,9 @@ const ROUTES: Route[] = [
   { method: 'POST', path: /^\/api\/admin\/users\/([^/]+)\/delete$/, params: userParams, cat: 'acct', auth: 'admin', acct: 'capped', handler: deleteUser },
   // 新上榜会让库变大：停增长档停交分（和新建存档槽一样）
   { method: 'POST', path: '/api/scores', cat: 'board', auth: 'user', growth: true, handler: submitScore },
+  { method: 'POST', path: '/api/challenges', cat: 'board', auth: 'user', growth: true, handler: createChallenge },
+  { method: 'GET', path: /^\/api\/challenges\/([^/]+)$/, params: challengeParams, cat: 'board', auth: 'user', handler: getChallenge },
+  { method: 'POST', path: /^\/api\/challenges\/([^/]+)\/results$/, params: challengeParams, cat: 'board', auth: 'user', growth: true, handler: submitChallenge },
   { method: 'GET', path: /^\/api\/boards\/([^/]+)\/([^/]+)$/, params: boardParams, cat: 'board', auth: 'user', handler: getBoard },
   { method: 'GET', path: /^\/api\/saves\/([^/]+)$/, params: saveParams, cat: 'save', auth: 'user', handler: getSaves },
   // 钱包（5.9）：浏览器只能看和领补给；带入、结回、放弃只有游戏的服务端经 RPC 能调（worker/wallet-service.ts），这里没有这几条路
