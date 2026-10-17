@@ -2,8 +2,11 @@
 # 页面在 dist-cf/games/mahjong/ 下，所以它不放 public/（会落进子目录、不生效，还被当成公开文件发出去），由 build:cf 拷到 dist-cf/ 根上。
 # 首页经 Worker（登录闸门）时回的是 ASSETS 的响应，同样带上；Worker 自己生成的页（平台不可用的 503 页）不带。
 # 脚本只许本站、不许内联；样式要放内联：共用包的好友面板、互动组件往页面里塞 <style>（升级就变，不用哈希）。
-# 图片的 data:（牌面、头像的 SVG）和 blob:（分享卡）都用到；连接只有本站的 /api 和好友房的 wss（'self' 含同源的 wss）。
+# 图片的 data:（牌面、头像的 SVG）和 blob:（分享卡）都用到；连接是本站的 /api 和好友房的 wss。
+# 好友房的 wss 另写 scheme 级的 wss:：老 Safari 的 'self' 不认 ws/wss（WebKit bug 201591），这里是静态文件、写不了域名；
+# 不让 Worker 按 host 拼：两条 CSP 要都放行才算，这条照样会拦，得把整条挪进 Worker。放宽的只是"能连哪"，脚本仍只许本站。
+# Cloudflare Web Analytics 的统计脚本由边缘注入（本地没有）：脚本放 static.cloudflareinsights.com，上报放 cloudflareinsights.com。
 # 不许别的站点用 iframe 嵌（frame-ancestors，老浏览器看 X-Frame-Options）。
 /games/mahjong/*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss: https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
   X-Frame-Options: SAMEORIGIN

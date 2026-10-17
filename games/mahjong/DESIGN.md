@@ -574,7 +574,10 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - **脚本**：只许本站，不许内联、不许 eval。
 - **样式**：放内联，因为共用包的好友面板、互动组件会往页面里塞 `<style>`；不用哈希，kit 一升级哈希就变。
 - **图片**：多放 `data:`（牌面、头像的 SVG）和 `blob:`（分享卡）。
-- **连接**：只有 `'self'`，含同源的好友房 wss。
+- **连接**：`'self'`，另写 scheme 级的 `wss:`（0.15.3）。老 Safari 的 `'self'` 不认 ws/wss（WebKit bug 201591），而 `_headers` 是静态文件，写不了域名。
+  不让 Worker 按 host 拼 `wss://<host>`：浏览器收到两条 CSP 时要两条都放行才算，`_headers` 那条照样会拦，得把整条 CSP 挪进 Worker。
+  放宽的只是"能连到哪"；脚本只许本站，注入不进来。
+- **访问统计**：Cloudflare Web Analytics 的统计脚本由边缘注入，本地冒烟看不到。所以脚本放行 `https://static.cloudflareinsights.com`，上报放行 `https://cloudflareinsights.com`（0.15.3；0.15.2 上线后控制台报过违规）。
 - **嵌入**：`frame-ancestors 'self'`，只许同源的页面用 iframe 嵌。
 - **为什么不放 `public/`**：Cloudflare 只认静态资源目录根上的 `_headers`，页面又在 `dist-cf/games/mahjong/` 下，放 `public/` 会落进子目录、不生效，还会被当成公开文件发出去。所以由 `build:cf` 拷到 `dist-cf/` 根上。
 - **哪些带、哪些不带**：首页经 Worker（登录闸门）回的是 ASSETS 的响应，照样带；Worker 自己生成的 503 页不带。
@@ -660,3 +663,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.15.0 | 好友房一场打完报搭子战绩（净赢为正算赢）；kit 0.13.0 |
 | 0.15.1 | 第三轮审计：实盘只带整份（不少带）；真人一起中途离座时电脑把这一局打完再结回 |
 | 0.15.2 | 安全响应头（CSP、只许同源嵌入）；好友房每人每天 30 个；老存档少带的提示；kit 0.13.1 |
+| 0.15.3 | CSP 放行 Cloudflare 访问统计；connect-src 写明 wss:（老 Safari） |

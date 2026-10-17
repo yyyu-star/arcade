@@ -148,7 +148,8 @@ async function playUntil(players: Player[], done: () => boolean, ms: number, wha
 async function openRoom(page: Page, base: string, stake: '娱乐' | '小档'): Promise<string> {
   const res = await page.goto(`${base}/games/mahjong/`);
   const csp = res?.headers()['content-security-policy'] ?? '';
-  check(/frame-ancestors 'self'/.test(csp) && /script-src 'self';/.test(csp), `首页带安全响应头（${csp.slice(0, 40)}…）`);
+  const script = /script-src ([^;]*)/.exec(csp)?.[1] ?? '';
+  check(/frame-ancestors 'self'/.test(csp) && script.startsWith("'self'") && !/unsafe/.test(script), `首页带安全响应头（script-src ${script}）`);
   await page.waitForSelector('.lobby-head');
   // 娱乐分三个难度（0.10.0），好友房用哪个都一样（房间按自己的场地表挑电脑），点"新手"那张
   await page.click(`.stakes .stake:has-text("${stake === '娱乐' ? '新手' : stake}")`);
