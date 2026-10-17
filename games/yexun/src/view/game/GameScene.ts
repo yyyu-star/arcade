@@ -80,6 +80,8 @@ export interface GameDeps {
   onChest?: () => void;
   /** 冒烟、截图用：由机器人代替输入 */
   autopilot?: (w: World) => { dir: number; choice: number };
+  /** 回放：时间、选卡都交给它推（录像驱动、可变速），每推一拍回调一次 each；场景自己不推 */
+  drive?: (dtMs: number, each: () => void) => void;
 }
 
 interface MobView {
@@ -268,7 +270,9 @@ export class GameScene extends Phaser.Scene {
   private frameUpdate(delta: number): void {
     const dt = Math.min(delta, 100);
     this.now += dt;
-    if (!this.paused && !this.d.cards.open) {
+    if (this.d.drive) {
+      if (!this.paused && this.w.phase !== 'over') this.d.drive(dt, () => this.readEvents());
+    } else if (!this.paused && !this.d.cards.open) {
       if (this.freeze > 0) this.freeze -= dt;
       else if (this.hold > 0) this.hold -= dt;
       else if (this.w.phase === 'play') {

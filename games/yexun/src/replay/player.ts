@@ -22,6 +22,8 @@ export class ReplayPlayer {
   readonly outdated: boolean;
   speed: Speed = 1;
   paused = false;
+  /** 每推一拍之后（画面层读这一拍的事件：特效、音效、数字） */
+  onStep: () => void = () => undefined;
   private readonly dirs: Uint8Array;
   private readonly picks: { tick: number; choice: number }[];
   private at = 0;
@@ -85,14 +87,17 @@ export class ReplayPlayer {
       const p = this.picks[this.pickAt];
       if (p) this.pickAt++;
       step(w, 0, p ? p.choice : FALLBACK_PICK);
+      this.onStep();
     }
     if (phaseOf(w) !== 'play') return;
     step(w, this.dirs[this.at]!, -1);
     this.at++;
+    this.onStep();
     // 这一拍把局推进到了选卡：马上把这一拍后面录好的选择喂掉，画面不用停在一张看不出谁点的卡上
     guard = 0;
     while (phaseOf(w) === 'choose' && this.pickAt < this.picks.length && guard++ < 64) {
       step(w, 0, this.picks[this.pickAt++]!.choice);
+      this.onStep();
     }
   }
 }

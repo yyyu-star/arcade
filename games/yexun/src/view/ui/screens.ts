@@ -113,7 +113,12 @@ export class Menu {
   private diff: Danger = 0;
   private map: MapId = 'snow';
   private readonly toggles: Toggle[];
-  onStart: (d: Danger, map: MapId) => void = () => undefined;
+  onStart: (d: Danger, map: MapId, endless: boolean) => void = () => undefined;
+  /** 无尽：天亮不收工，一直打到倒下（撑到过一次天亮才开） */
+  private endless = false;
+  onBoards: () => void = () => undefined;
+  onReplays: () => void = () => undefined;
+  onDaily: () => void = () => undefined;
   /** 实盘开局（固定小道士、雪原，档位定危险档） */
   onLive: (tier: LiveTier) => void = () => undefined;
   /** 切娱乐 / 实盘、换档位（main 记进存档） */
@@ -137,7 +142,7 @@ export class Menu {
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
-      start: () => (this.live.on && this.live.available ? this.onLive(this.live.tier) : this.onStart(this.diff, this.map)),
+      start: () => (this.live.on && this.live.available ? this.onLive(this.live.tier) : this.onStart(this.diff, this.map, this.endless)),
       mode: (el) => {
         this.live = { ...this.live, on: el.dataset.m === 'live' };
         this.onLiveMode(this.live.on, this.live.tier);
@@ -162,6 +167,13 @@ export class Menu {
       },
       settings: () => this.root.classList.toggle('show-settings'),
       codex: () => this.onCodex(),
+      boards: () => this.onBoards(),
+      replays: () => this.onReplays(),
+      daily: () => this.onDaily(),
+      endless: (el) => {
+        this.endless = !this.endless;
+        el.classList.toggle('on', this.endless);
+      },
       home: () => {
         location.href = '/';
       },
@@ -189,7 +201,14 @@ export class Menu {
       `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>` +
       `<button type="button" class="yx-btn yx-gear" data-a="settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-.1-1.3 2-1.6-2-3.4-2.4.9a8 8 0 0 0-2.2-1.3L15 2.8h-4l-.4 2.5a8 8 0 0 0-2.2 1.3L6 5.7 4 9.1l2 1.6L5.9 12l.1 1.3-2 1.6 2 3.4 2.4-.9a8 8 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a8 8 0 0 0 2.2-1.3l2.4.9 2-3.4-2-1.6.1-1.3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
       `<div class="yx-settings">${togglesHtml(this.toggles)}</div>` +
-      (s.firstTime ? '' : '<button type="button" class="yx-btn yx-codex-btn" data-a="codex">图鉴</button>');
+      (s.firstTime
+        ? ''
+        : '<div class="yx-more">' +
+          '<button type="button" class="yx-btn" data-a="daily">每日</button>' +
+          '<button type="button" class="yx-btn" data-a="boards">排行</button>' +
+          '<button type="button" class="yx-btn" data-a="replays">回放</button>' +
+          '<button type="button" class="yx-btn" data-a="codex">图鉴</button>' +
+          '</div>');
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     if (s.firstTime) {
       this.ui.innerHTML =
@@ -218,7 +237,10 @@ export class Menu {
           const locked = m === 'yizhuang' && !s.yizhuang;
           return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '危险 1 撑到天亮开' : MAPS[m].blurb}</small></button>`;
         })
-        .join('');
+        .join('') +
+        (s.cursesOpen
+          ? `<button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button>`
+          : '');
       this.ui.innerHTML =
         top +
         title +
@@ -461,7 +483,14 @@ export class Result {
   show(r: ResultView): void {
     const title = r.won ? (r.bossKilled ? '尸王伏诛' : '天亮了') : r.quit ? '收工' : '倒下了';
     const dawn = r.dawnSeconds ?? 900;
-    const sub = r.won ? (r.bossKilled ? '打倒尸王，天提前亮了' : '撑过了一整夜') : `离天亮还差 ${mmss(Math.max(0, dawn - r.seconds))}`;
+    // 无尽局过了天亮才倒下：说多撑了多久，不说"离天亮还差 0:00"
+    const sub = r.won
+      ? r.bossKilled
+        ? '打倒尸王，天提前亮了'
+        : '撑过了一整夜'
+      : r.seconds >= dawn
+        ? `天亮后又撑了 ${mmss(r.seconds - dawn)}`
+        : `离天亮还差 ${mmss(dawn - r.seconds)}`;
     const fmt = (n: number): string => Math.round(n).toLocaleString('zh-CN');
     const weapons = r.build.filter((b) => b.dmg >= 0).sort((a, b) => b.dmg - a.dmg);
     const top = Math.max(1, ...weapons.map((b) => b.dmg));

@@ -16,10 +16,15 @@ import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
 import { Recorder } from './replay/recorder.ts';
-import { storeReplay } from './replay/store.ts';
+import { loadReplays, storeReplay } from './replay/store.ts';
+import { ReplayPlayer } from './replay/player.ts';
+import { ReplayList } from './replay/view/list.ts';
+import { ReplayBar } from './replay/view/bar.ts';
+import type { ReplayRecord } from './replay/format.ts';
+import { BoardsPanel } from './online/view/boards.ts';
 import { createSubmitter, outcomeText } from './online/submit.ts';
 import { scoresOfRun } from './online/score.ts';
-import { beijingDate } from './online/daily.ts';
+import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
@@ -111,15 +116,19 @@ async function boot(): Promise<void> {
   // 录像（本机，DESIGN.md 5.4）和交分（5.7）：每局一个录像机；每日挑战那天的日期跟着这一局走
   let rec: Recorder | null = null;
   let dailyDate: string | null = null;
+  /** 菜单上开了"无尽"（再来一局沿用上一局的） */
+  let wantEndless = false;
   const submitter = createSubmitter({ fetch: (u, i) => fetch(u, i) });
+  /** 撑到了天亮：无尽局过了天亮再倒下也算（解锁、战绩按这个） */
+  const dawned = (w: World): boolean => w.won || (!!w.setup.endless && w.tick >= DAWN_TICK);
   /** 一局的小结：交分、录像、分享卡都从它来 */
   const runSummary = (w: World, quit: boolean): RunSummary => ({
     runId: `${w.setup.seed.toString(36)}-${rec?.at.toString(36) ?? '0'}`,
     setup: w.setup,
-    won: w.won,
+    won: dawned(w),
     quit,
     bossKilled: w.bossKilled,
-    seconds: Math.floor(Math.min(w.tick, DAWN_TICK) / 30),
+    seconds: Math.floor((w.setup.endless ? w.tick : Math.min(w.tick, DAWN_TICK)) / 30),
     kills: w.kills,
     level: w.level,
     coins: w.coins,
@@ -338,7 +347,7 @@ async function boot(): Promise<void> {
     music.stop();
     tips.hide();
     banners.clear();
-    const seconds = Math.min(w.tick, DAWN_TICK) / 30;
+    const seconds = (w.setup.endless ? w.tick : Math.min(w.tick, DAWN_TICK)) / 30;
     archive(w, quit);
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
@@ -357,7 +366,7 @@ async function boot(): Promise<void> {
       return;
     }
     // 认输的局算一局、铜钱照拿，但不算纪录
-    const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: w.won, quit, ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
+    const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: dawned(w), quit, ticks: Math.min(w.tick, DAWN_TICK), kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
     // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
     const ach = applyRun(records, summarize(w, tally, quit));
     records = ach.records;
@@ -365,7 +374,7 @@ async function boot(): Promise<void> {
     for (const id of ach.unlocked) grantCoins(save, `ach:${id}`, rewardCoins([id]));
     toast.show(ach.unlocked);
     showPlay(false);
-    const label = `${DANGERS[w.setup.danger].name}${w.setup.curses?.length ? ` · 咒印 ${w.setup.curses.length}` : ''}${w.setup.assist ? ' · 降低伤害' : ''}`;
+    const label = `${dailyDate ? '每日挑战 · ' : ''}${w.setup.endless ? '无尽 · ' : ''}${DANGERS[w.setup.danger].name}${w.setup.curses?.length ? ` · 咒印 ${w.setup.curses.length}` : ''}${w.setup.assist ? ' · 降低伤害' : ''}`;
     result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: got.coins, coinsTotal: coins(save), label, record: got.record, build: buildRows(w) });
     if (got.askAssist)
       confirm.ask('连着倒下好几局了。要不要把挨打的伤害降低 30%？开着时成绩不进总榜，设置里随时能关。', '降低伤害', '不用', (ok) => {
@@ -381,9 +390,11 @@ async function boot(): Promise<void> {
     dailyDate = kind === 'daily' ? beijingDate(Date.now()) : null;
     // 第一局锁危险 0；没解锁的档、角色不让选（存档被改过、链接参数）。调试参数直接开局的不卡
     const danger = (debug ? picked : Math.min(picked, dangerOpen(save))) as Danger;
-    save.danger = danger;
-    save.map = map;
-    writeSave(save);
+    if (!fixed) {
+      save.danger = danger;
+      save.map = map;
+      writeSave(save);
+    }
     menu.hide();
     result.hide();
     ended = false;
@@ -394,7 +405,7 @@ async function boot(): Promise<void> {
     const seed = fixed?.seed ?? (q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0);
     // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）；实盘用固定配置
     const ms = menuState();
-    const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist });
+    const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist, ...(wantEndless ? { endless: true } : {}) });
     world = w;
     autopilot = undefined;
     // 调试参数改过开局、快进过的局不录（录像要从第 0 拍逐拍记）
@@ -472,7 +483,75 @@ async function boot(): Promise<void> {
     if (first) markTip('cards');
   };
 
-  menu.onStart = (d, m) => void startRun(d, m);
+  menu.onStart = (d, m, endless) => {
+    wantEndless = endless;
+    void startRun(d, m);
+  };
+  // 每日挑战（DESIGN.md 5.7）：今天的守夜挑战，配置全服一样；夜探的每日等夜探接进来再开
+  const startDaily = (): Promise<void> => {
+    const plan = dailyPlan(beijingDate(Date.now()), 'vigil');
+    return startRun(plan.setup.danger, plan.setup.map ?? 'snow', true, plan.setup, 'daily');
+  };
+  menu.onDaily = () => void startDaily();
+  const boards = new BoardsPanel(stage, { deps: { fetch: (u, i) => fetch(u, i) }, today: () => beijingDate(Date.now()), onClose: () => menu.show(menuState()) });
+  menu.onBoards = () => {
+    menu.hide();
+    boards.show();
+  };
+  const replays = new ReplayList(stage, { onPlay: (r0) => startReplay(r0), onClose: () => menu.show(menuState()) });
+  menu.onReplays = () => {
+    menu.hide();
+    replays.show(loadReplays());
+  };
+  /** 回放：同一个对局场景，输入换成录像（不录、不交分、不发铜钱；ended 先置上，暂停面板和结算都不出） */
+  const startReplay = (record: ReplayRecord): void => {
+    const player = ReplayPlayer.from(record);
+    if (!player) {
+      confirm.ask('这段录像坏了，放不了', '知道了', '回菜单', () => menu.show(menuState()));
+      return;
+    }
+    menu.hide();
+    ended = true;
+    liveRun = null;
+    lastLive = null;
+    rec = null;
+    if (scene) game.scene.remove('game');
+    banners.clear();
+    input.reset();
+    world = player.world;
+    showPlay(true);
+    setPaused(false);
+    const bar = new ReplayBar(stage, player, {
+      onExit: () => {
+        bar.destroy();
+        game.scene.remove('game');
+        scene = null;
+        world = null;
+        showPlay(false);
+        music.stop();
+        menu.show(menuState());
+      },
+    });
+    game.scene.add('game', GameScene, true, {
+      world: player.world,
+      atlas,
+      hud,
+      cards,
+      banners,
+      input,
+      zoom: worldZoom(css().w, css().h) * r,
+      icon: (k: string) => icon(k, 128),
+      firstRun: false,
+      shake: () => settings.shake,
+      onEnd: () => undefined,
+      drive: (dt: number, each: () => void) => {
+        player.onStep = each;
+        player.advance(dt);
+        bar.update();
+      },
+    });
+    scene = game.scene.getScene('game') as unknown as GameScene;
+  };
   menu.onLiveMode = (on, tier) => {
     save.liveOn = on;
     save.liveTier = tier;
@@ -507,6 +586,8 @@ async function boot(): Promise<void> {
   menu.onLive = (tier) => void startLive(tier);
   result.onAgain = () => {
     if (lastLive) return void startLive(lastLive);
+    if (dailyDate) return void startDaily();
+    wantEndless = !!world?.setup.endless;
     void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
   };
   result.onMenu = () => {
