@@ -152,6 +152,7 @@ export default {
     if (url.pathname === '/api/presence') return new Response(null, { status: 204 });
     if (url.pathname === '/api/invites' && request.method === 'GET') return Response.json({ invites: [] });
     if (url.pathname === '/api/friends') return Response.json({ friends: [] });
+    if (url.pathname === '/api/feed' && request.method === 'POST') return new Response(null, { status: 204 });
     if (url.pathname !== '/api/me') return new Response('not found', { status: 404 });
     const id = /(?:^|;\s*)__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];
     if (id === 'down') return new Response('down', { status: 503 });

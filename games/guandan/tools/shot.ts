@@ -84,6 +84,11 @@ async function serveApi(name: string, route: Route, api: FakeApi | undefined): P
     return route.fulfill({ status: 204 });
   }
   if (path === '/api/invites' && req.method() === 'GET') return reply({ invites: [] });
+  // 好友动态的名场面（0.15.0）：一副打完可能报一条
+  if (path === '/api/feed' && req.method() === 'POST') {
+    if (h['x-arcade'] !== '1') errors.push(`[${name}] 报名场面没带 X-Arcade`);
+    return route.fulfill({ status: 204 });
+  }
   const body = req.method() === 'PUT' ? (JSON.parse(req.postData() ?? 'null') as { baseRev: number; data: unknown; userId?: unknown }) : null;
   api.log.push({ method: req.method(), path, xArcade: h['x-arcade'] ?? null, type: h['content-type'] ?? null, body });
   if (api.mode === 'hang') return;

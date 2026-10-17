@@ -61,6 +61,8 @@ import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun
 import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
+import { feedPick } from '../feed.ts';
+import { postFeed } from '../social.ts';
 import { TrickView } from '../table/trick.ts';
 import { lobbyName, platformInfo, standalone } from '../platform.ts';
 import { openInvitePanel, presenceNow } from '../social.ts';
@@ -100,6 +102,8 @@ export class TableScene extends Phaser.Scene {
   private botEmotes: { from: number; id: number; to: number | undefined }[] = [];
   /** 整局称号用：攒到第几副了（场景重开不清，新的一局从第 1 副重新攒） */
   private matchLog = emptyMatchLog();
+  /** 这一局已经报到好友动态的名场面编号（0.15.0，feed.ts）：一局最多两条、同一种一次 */
+  private feedPosted: string[] = [];
   /** 这一副播过几次接风（结算页的复盘用；重连后只算之后看到的） */
   private dealJiefeng = 0;
   private loggedDeal = 0;
@@ -1308,6 +1312,7 @@ export class TableScene extends Phaser.Scene {
         if (e.dealNo === 1) {
           this.matchLog = emptyMatchLog();
           this.loggedDeal = 0;
+          this.feedPosted = [];
         }
         await this.trick.clearAll();
         this.trick.forget();
@@ -1420,6 +1425,7 @@ export class TableScene extends Phaser.Scene {
       }
       case 'dealEnd':
         this.funMoment(dealMoment(e.result));
+        this.feedDeal(e.result);
         // 最后一手和名次章留在桌上看清楚，再弹结算
         await wait(this, 1500);
         break;
@@ -1779,6 +1785,18 @@ export class TableScene extends Phaser.Scene {
     const u = platformInfo().platform === true ? (platformInfo() as { user: unknown }).user : null;
     const n = (u as { displayName?: unknown } | null)?.displayName;
     return typeof n === 'string' && n ? n : null;
+  }
+
+  /**
+   * 一副打完：挑一条和我有关的名场面报到好友动态（0.15.0，src/view/feed.ts）。只报娱乐（实盘结回时平台自己会生成），旁观、调试代打不报；
+   * 没平台、没登录时 postFeed 什么都不发
+   */
+  private feedDeal(r: DealResult): void {
+    if (this.stake || this.netStake || this.watching || this.ses.autoplay) return;
+    const m = feedPick(dealHighlights(r, this.ses.view().history), this.feedPosted);
+    if (!m) return;
+    this.feedPosted.push(m.moment);
+    postFeed(m);
   }
 
   /** 把最近一副记进整局的称号统计（同一副只记一次） */
