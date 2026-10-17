@@ -204,7 +204,8 @@ async function boot(): Promise<void> {
     banners.clear();
     input.reset();
     const seed = q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0;
-    const w = createWorld({ seed, mode: 'vigil', difficulty });
+    // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）
+    const w = createWorld({ seed, mode: 'vigil', difficulty, firstRun: save.runs === 0 });
     world = w;
     autopilot = undefined;
     if (import.meta.env.DEV && q.has('give')) {

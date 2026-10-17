@@ -26,7 +26,7 @@ function num(h: number, v: number): number {
 
 export function fingerprint(w: World): number {
   let h = 0x811c9dc5;
-  for (const v of [w.tick, w.x, w.y, w.hp, w.face, w.invuln, w.level, w.xp, w.pendingLevels, w.kills, w.coins, w.spawnAcc, w.nextEvent, w.regenAcc]) h = num(h, v);
+  for (const v of [w.tick, w.x, w.y, w.hp, w.face, w.invuln, w.level, w.xp, w.pendingLevels, w.kills, w.coins, w.spawnAcc, w.nextEvent, w.regenAcc, w.slowUntil, w.calmUntil]) h = num(h, v);
   h = mix(h, w.phase === 'play' ? 1 : w.phase === 'choose' ? 2 : 3);
   for (const o of w.weapons) for (const v of [o.level, o.evolved ? 1 : 0, o.timer, o.phase, o.angle]) h = num(h, v);
   for (const [k, v] of Object.entries(w.passives).sort()) h = num(h ^ k.charCodeAt(0), v ?? 0);

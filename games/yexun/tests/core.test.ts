@@ -37,10 +37,10 @@ describe('确定性', () => {
     const w = play(20261016, 30 * 180);
     expect({ tick: w.tick, kills: w.kills, level: w.level, fp: fingerprint(w) }).toMatchInlineSnapshot(`
       {
-        "fp": 834428826,
-        "kills": 706,
-        "level": 6,
-        "tick": 5395,
+        "fp": 467210694,
+        "kills": 664,
+        "level": 7,
+        "tick": 5394,
       }
     `);
   });
@@ -98,7 +98,7 @@ describe('一局', () => {
 describe('魂珠', () => {
   it('地上的魂珠不超过上限，多出来的经验并进大珠，不丢', () => {
     // 小白只顾躲，不专门去捡珠子，地上会越积越多
-    const w = createWorld({ seed: 11, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 11, mode: 'vigil', difficulty: 'normal' });
     const bot = new Bot('novice', 'ward', 11);
     let maxVal = 0;
     while (w.tick < 30 * 240 && w.phase !== 'over') {

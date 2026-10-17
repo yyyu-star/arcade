@@ -9,25 +9,26 @@ export interface Minute {
   keep: number;
   /** 每秒补多少只（不到 keep 的一半时翻倍） */
   rate: number;
+  /** 各种怪的比例（会远程的灯笼鬼、雪魅压在 8% 以下：场上几十只一起吐弹，近战流派没法打） */
   mix: Partial<Record<EnemyKind, number>>;
 }
 
 export const MINUTES: readonly Minute[] = [
   { keep: 22, rate: 3, mix: { paper: 1 } },
-  { keep: 40, rate: 4, mix: { paper: 0.7, wisp: 0.3 } },
-  { keep: 60, rate: 5, mix: { paper: 0.5, wisp: 0.3, jiangshi: 0.2 } },
-  { keep: 80, rate: 6, mix: { paper: 0.3, wisp: 0.2, jiangshi: 0.5 } },
-  { keep: 100, rate: 7, mix: { paper: 0.3, wisp: 0.2, jiangshi: 0.5 } },
-  { keep: 115, rate: 7.5, mix: { paper: 0.3, wisp: 0.1, jiangshi: 0.4, lantern: 0.2 } },
-  { keep: 130, rate: 8, mix: { paper: 0.35, jiangshi: 0.4, lantern: 0.25 } },
-  { keep: 150, rate: 9, mix: { paper: 0.3, jiangshi: 0.4, fox: 0.3 } },
-  { keep: 170, rate: 10, mix: { wisp: 0.15, jiangshi: 0.4, lantern: 0.15, fox: 0.3 } },
-  { keep: 190, rate: 11, mix: { paper: 0.25, jiangshi: 0.35, lantern: 0.15, fox: 0.25 } },
-  { keep: 210, rate: 12, mix: { paper: 0.2, wisp: 0.1, jiangshi: 0.35, lantern: 0.1, fox: 0.25 } },
-  { keep: 230, rate: 13, mix: { paper: 0.25, jiangshi: 0.4, lantern: 0.1, fox: 0.25 } },
-  { keep: 250, rate: 14, mix: { paper: 0.2, wisp: 0.15, jiangshi: 0.4, fox: 0.25 } },
-  { keep: 265, rate: 15, mix: { paper: 0.2, jiangshi: 0.45, lantern: 0.1, fox: 0.25 } },
-  { keep: 240, rate: 13, mix: { paper: 0.3, jiangshi: 0.45, fox: 0.25 } },
+  { keep: 40, rate: 4, mix: { paper: 0.6, wisp: 0.25, bat: 0.15 } },
+  { keep: 60, rate: 5, mix: { paper: 0.45, wisp: 0.25, bat: 0.3 } },
+  { keep: 80, rate: 6, mix: { paper: 0.25, jiangshi: 0.45, horse: 0.15, bat: 0.15 } },
+  { keep: 100, rate: 7, mix: { paper: 0.2, wisp: 0.15, jiangshi: 0.45, horse: 0.2 } },
+  { keep: 115, rate: 7.5, mix: { paper: 0.15, jiangshi: 0.4, lantern: 0.08, bone: 0.25 } },
+  { keep: 130, rate: 8, mix: { jiangshi: 0.35, lantern: 0.08, bone: 0.3, horse: 0.15 } },
+  { keep: 150, rate: 9, mix: { jiangshi: 0.3, lantern: 0.08, bone: 0.3, bat: 0.2 } },
+  { keep: 165, rate: 10, mix: { paper: 0.15, jiangshi: 0.25, fox: 0.3, water: 0.2, scarecrow: 0.1 } },
+  { keep: 185, rate: 11, mix: { jiangshi: 0.3, fox: 0.3, water: 0.2, scarecrow: 0.1, bone: 0.1 } },
+  { keep: 210, rate: 12, mix: { jiangshi: 0.25, lantern: 0.08, fox: 0.2, snow: 0.07, weasel: 0.1, bone: 0.15 } },
+  { keep: 230, rate: 13, mix: { jiangshi: 0.25, fox: 0.2, snow: 0.07, weasel: 0.1, bone: 0.15, bat: 0.1 } },
+  { keep: 250, rate: 14, mix: { jiangshi: 0.3, fox: 0.2, snow: 0.07, water: 0.1, bone: 0.15, horse: 0.1 } },
+  { keep: 265, rate: 15, mix: { jiangshi: 0.35, lantern: 0.08, fox: 0.2, snow: 0.07, bone: 0.15, scarecrow: 0.05 } },
+  { keep: 240, rate: 13, mix: { paper: 0.2, jiangshi: 0.4, fox: 0.2, bone: 0.2 } },
 ];
 
 export type WaveEvent =
@@ -38,25 +39,38 @@ export type WaveEvent =
   | { at: number; kind: 'boss' };
 
 const S = 30;
-/** 定点事件，at 是拍数 */
+/**
+ * 定点事件，at 是拍数。精英 5 次（3:00、5:00、7:30、10:00、12:00）；"小爆点"在 2:30（纸人围圈）、7:30（小鬼火群冲）、12:30（纸人海），
+ * 纸马群冲在 4:00、9:00 垫一下（DESIGN.md 2.2、13.3）。
+ */
 export const EVENTS: readonly WaveEvent[] = [
   // 开场 2 秒：正面近处来一小群纸人，保证 10 秒内第一次升级（验收 ①）
   { at: 2 * S, kind: 'front', enemy: 'paper', count: 12 },
   { at: 150 * S, kind: 'ring', enemy: 'paper', count: 56, radius: 400 },
-  { at: 300 * S, kind: 'elite', enemy: 'shishi', count: 1 },
-  { at: 450 * S, kind: 'line', enemy: 'wisp', count: 30 },
-  { at: 540 * S, kind: 'elite', enemy: 'shishi', count: 1 },
+  { at: 180 * S, kind: 'elite', enemy: 'shishi', count: 1 },
+  { at: 240 * S, kind: 'line', enemy: 'horse', count: 14 },
+  { at: 300 * S, kind: 'elite', enemy: 'whitefox', count: 1 },
+  { at: 450 * S, kind: 'elite', enemy: 'palanquin', count: 1 },
+  { at: 452 * S, kind: 'line', enemy: 'wisp', count: 34 },
+  { at: 540 * S, kind: 'line', enemy: 'horse', count: 20 },
   { at: 600 * S, kind: 'elite', enemy: 'general', count: 2 },
+  { at: 720 * S, kind: 'elite', enemy: 'shishi', count: 1 },
+  { at: 721 * S, kind: 'elite', enemy: 'whitefox', count: 1 },
   { at: 750 * S, kind: 'ring', enemy: 'paper', count: 90, radius: 430 },
-  { at: 780 * S, kind: 'elite', enemy: 'general', count: 1 },
   { at: 840 * S, kind: 'boss' },
 ];
+
+/**
+ * 收获期（DESIGN.md 2.2）：精英倒下、爆点刷出来以后的一段时间里，场上保持的数量和补怪速度打 keepMul 折，铜钱、肉包掉率乘 dropMul。
+ * 爆点的收获期从刷出来那一刻算，所以是"先挤一下、再松一口气"。
+ */
+export const CALM = { afterElite: 25 * S, afterSpike: 30 * S, keepMul: 0.5, dropMul: 2 };
 
 /** 一局多长：15 分钟天亮 */
 export const DAWN_TICK = 15 * 60 * S;
 
 /** 怪随时间变硬：血量 × (1 + 每分钟 hpPerMin)，伤害 × (1 + 每分钟 dmgPerMin) */
-export const SCALE = { hpPerMin: 0.22, dmgPerMin: 0.08 };
+export const SCALE = { hpPerMin: 0.3, dmgPerMin: 0.08 };
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -69,12 +83,23 @@ export interface DifficultyDef {
   dmgMul: number;
   /** 刷怪量 */
   countMul: number;
+  /** 开场 OPEN_TICKS 拍里怪走路的速度倍数（新手档：怪只会慢慢靠近，原地不动也撑得过第一次升级） */
+  openSlow: number;
+  /** 吸魂珠的范围倍数（新手档：剑砍死的怪掉的珠子站着也吸得到） */
+  magnetMul: number;
+  /** 前几次升级保证至少两张是法器（新手档：先给能打的） */
+  armsFirst: number;
   /** 一句话 */
   blurb: string;
 }
 
+/** 开场保护多长：30 秒 */
+export const OPEN_TICKS = 30 * S;
+/** 第一局：3 分钟前血最少留 1（DESIGN.md 13.2 新手保护） */
+export const FIRST_RUN_GUARD = 180 * S;
+
 export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
-  easy: { id: 'easy', name: '新手', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, blurb: '第一次玩选这个' },
-  normal: { id: 'normal', name: '普通', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, blurb: '会躲会选就能撑到天亮' },
-  hard: { id: 'hard', name: '高手', stars: 3, hpMul: 1.4, dmgMul: 1.35, countMul: 1.15, blurb: '怪更多更硬' },
+  easy: { id: 'easy', name: '新手', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, armsFirst: 4, blurb: '第一次玩选这个' },
+  normal: { id: 'normal', name: '普通', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, armsFirst: 0, blurb: '会躲会选就能撑到天亮' },
+  hard: { id: 'hard', name: '高手', stars: 3, hpMul: 1.4, dmgMul: 1.35, countMul: 1.15, openSlow: 1, magnetMul: 1, armsFirst: 0, blurb: '怪更多更硬' },
 };

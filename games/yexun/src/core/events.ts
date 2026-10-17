@@ -49,6 +49,10 @@ export const Ev = {
   Merge: 22,
   /** 三昧真火在地上留了一摊火：x, y, b = 半径, c = 烧几拍 */
   Burn: 23,
+  /** 黄鼠狼叼走铜钱：a = 一共叼了几枚 */
+  Steal: 24,
+  /** 铜钱挡下一颗敌方的弹 */
+  Block: 25,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

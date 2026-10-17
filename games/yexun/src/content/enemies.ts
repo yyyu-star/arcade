@@ -2,7 +2,9 @@
  * 怪物（DESIGN.md 3.4）。速度按每拍单位（主角 3.0），血量是第 0 分钟、"普通"难度的值，随时间和难度放大（waves.ts）。
  */
 
-export type EnemyKind = 'paper' | 'wisp' | 'jiangshi' | 'lantern' | 'fox' | 'shishi' | 'general' | 'boss';
+export type EnemyKind =
+  | 'paper' | 'wisp' | 'jiangshi' | 'lantern' | 'fox' | 'shishi' | 'general' | 'boss'
+  | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -31,6 +33,16 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'shishi', code: 5, hp: 320, speed: 1.15, dmg: 15, r: 30, xp: 20, steady: 0.9, elite: true },
   { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true },
   { kind: 'boss', code: 7, hp: 14000, speed: 1.55, dmg: 22, r: 44, xp: 0, steady: 0.97 },
+  // 第 4 步：编号接着往后排（存档、录像里存的是编号，已有的不挪）
+  { kind: 'horse', code: 8, hp: 10, speed: 4, dmg: 7, r: 16, xp: 2, steady: 0.2 },
+  { kind: 'water', code: 9, hp: 22, speed: 0.9, dmg: 6, r: 15, xp: 2, steady: 0.5 },
+  { kind: 'bone', code: 10, hp: 16, speed: 1.6, dmg: 7, r: 14, xp: 1, steady: 0.2 },
+  { kind: 'bat', code: 11, hp: 6, speed: 2.7, dmg: 4, r: 10, xp: 1, steady: 0 },
+  { kind: 'scarecrow', code: 12, hp: 70, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8 },
+  { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
+  { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2 },
+  { kind: 'whitefox', code: 15, hp: 500, speed: 1.7, dmg: 13, r: 26, xp: 25, steady: 0.85, elite: true },
+  { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
@@ -44,6 +56,24 @@ export const HOP_SPEED_MUL = 1.6;
 export const LANTERN = { range: 270, every: 96, speed: 3.2, dmg: 7, life: 160, r: 9 };
 /** 狐妖：近了停一下再冲 */
 export const FOX = { trigger: 250, windup: 14, dash: 18, dashSpeed: 6.5, rest: 110 };
+/** 狐妖、白狐的冲刺；白狐一次连冲 chain 下，两下之间只蓄力 rewind 拍 */
+export const WHITEFOX = { chain: 3, rewind: 14 };
+/** 雪魅：停在这个距离丢冰锥，打中主角走路变慢 slowTicks 拍 */
+export const SNOW = { range: 300, every: 150, speed: 3.6, dmg: 5, life: 150, r: 9, slowTicks: 45 };
+/** 主角被冰锥打中、被水鬼抓住时的走路速度倍数 */
+export const PLAYER_SLOW = 0.62;
+/** 水鬼：在主角附近冒出来，冒的那几拍不动也不伤人；抓住主角拖慢 grabTicks 拍 */
+export const WATER = { emerge: 40, near: 200, far: 280, grabTicks: 50 };
+/** 枯骨：打散成两只小的（个头 size、血是原来的 hp 倍），小的不再散 */
+export const BONE = { split: 2, size: 0.62, hp: 0.4 };
+/** 蝙蝠精：每隔几拍换一个侧向的晃动 */
+export const BAT = { every: 8, wobble: 0.9 };
+/** 稻草人：站着不动，主角走到 wake 以内才醒 */
+export const SCARECROW = { wake: 190 };
+/** 黄鼠狼：每 scan 拍找一次 range 以内的铜钱，叼走就跑（跑出 lose 就带着钱消失），打死还双倍 */
+export const WEASEL = { scan: 15, range: 520, flee: 1.25, lose: 1000, payback: 2 };
+/** 纸轿：每 every 拍从轿后放 drop 个纸人，打碎放出 burst 个 */
+export const PALANQUIN = { every: 240, drop: 3, burst: 14 };
 /** 跳尸将军：隔一阵召一圈小跳尸 */
 export const GENERAL = { every: 260, count: 6, ring: 70 };
 /** 尸王：三段技能轮流放，血少于一半时更勤 */

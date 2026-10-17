@@ -7,7 +7,7 @@
  * 画面只读核心的状态和事件（w.ev），不自己算规则。
  */
 import Phaser from 'phaser';
-import { ENEMIES, HOP_AIR, HOP_PERIOD } from '../../content/enemies.ts';
+import { ENEMIES, HOP_AIR, HOP_PERIOD, PLAYER_SLOW, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
@@ -30,9 +30,24 @@ import type { Input } from './input.ts';
 const TICK_MS = 1000 / 30;
 
 /** 怪种类编号 → 图集帧（没画好的先借相近的） */
-const MOB_FRAME = ['paper', 'wisp', 'jiangshi', 'lantern', 'fox', 'shishi', 'general', 'boss'];
-const MOB_FALLBACK: Record<string, string> = { fox: 'wisp', shishi: 'jiangshi_big', general: 'jiangshi_big', boss: 'jiangshi_big' };
-const MOB_TINT = [MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e];
+const MOB_FRAME = ENEMIES.map((e) => e.kind as string);
+const MOB_FALLBACK: Record<string, string> = {
+  fox: 'wisp', shishi: 'jiangshi_big', general: 'jiangshi_big', boss: 'jiangshi_big',
+  horse: 'paper', water: 'wisp', bone: 'paper', bat: 'wisp', scarecrow: 'jiangshi', weasel: 'fox', snow: 'wisp', whitefox: 'fox', palanquin: 'shishi', ice: 'fireball',
+};
+/** 怪的主色（按编号）：没画好的怪借图时上这个色，死亡碎片也用它 */
+const MOB_TINT = [
+  MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e,
+  0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e,
+];
+/** 精英出场的横幅：名字 + 一句怎么打 */
+const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
+  shishi: ['石狮怪', '打倒掉宝箱'],
+  general: ['跳尸将军', '会召小跳尸，打倒掉宝箱'],
+  whitefox: ['白狐', '连冲三下，看准了躲'],
+  palanquin: ['纸轿', '打碎会放出一群纸人'],
+};
+const WATER_CODE = ENEMIES.findIndex((e) => e.kind === 'water');
 
 /** 子弹种类 → 图集帧（光波画在 Graphics 上，这里给个占位） */
 const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane', [Shot.Burn]: 'burn' };
@@ -74,6 +89,8 @@ export class GameScene extends Phaser.Scene {
   private w!: World;
   private acc = 0;
   private freeze = 0;
+  /** 冰屑的间隔计时 */
+  private frost = 0;
   /** 演出（宝箱、进化、升级光柱）中不送拍 */
   private hold = 0;
   private paused = false;
@@ -294,6 +311,14 @@ export class GameScene extends Phaser.Scene {
         case Ev.Kill:
           this.onKill(x, y, ev.a[i]!, ev.b[i] === 1);
           break;
+        case Ev.Block:
+          this.spark(x, y, 0xf2c94c, 0.9);
+          break;
+        case Ev.Steal:
+          // 黄鼠狼叼走铜钱：金色一闪 + 一声，追上打死双倍还
+          sfx.play('coin');
+          this.spark(x, y - 20, 0xf2c94c, 1);
+          break;
         case Ev.Slash:
           this.slash(x, y, ev.a[i]!, ev.b[i]!, ev.c[i] === 1);
           break;
@@ -511,7 +536,8 @@ export class GameScene extends Phaser.Scene {
       this.bossOn = true;
     } else {
       sfx.play('elite');
-      this.d.banners.say(def.kind === 'shishi' ? '石狮怪' : '跳尸将军', 'warn', 1600, '打倒掉宝箱');
+      const [name, tip] = ELITE_BANNER[def.kind] ?? ['精英', '打倒掉宝箱'];
+      this.d.banners.say(name, 'warn', 1600, tip);
     }
   }
 
@@ -609,8 +635,10 @@ export class GameScene extends Phaser.Scene {
     // 主角：本地预测（用"现在"的输入往前推半拍到一拍），再柔和地追
     const moving = !this.paused && !this.d.cards.open && this.freeze <= 0 && this.hold <= 0 && w.phase === 'play';
     const dir = moving ? (this.d.autopilot ? 0 : this.d.input.dir()) : 0;
-    const tx = moving && dir ? w.x + inputCos(dir) * w.stats.speed * alpha : inter(w.px, w.x);
-    const ty = moving && dir ? w.y + inputSin(dir) * w.stats.speed * alpha : inter(w.py, w.y);
+    const slowed = w.tick < w.slowUntil;
+    const speed = w.stats.speed * (slowed ? PLAYER_SLOW : 1);
+    const tx = moving && dir ? w.x + inputCos(dir) * speed * alpha : inter(w.px, w.x);
+    const ty = moving && dir ? w.y + inputSin(dir) * speed * alpha : inter(w.py, w.y);
     this.renderX += (tx - this.renderX) * 0.6;
     this.renderY += (ty - this.renderY) * 0.6;
     if (Math.abs(tx - this.renderX) > 40) this.renderX = tx;
@@ -628,6 +656,11 @@ export class GameScene extends Phaser.Scene {
     this.hero.setPosition(hx, hy - bob * 3).setScale(sx, sy).setRotation(walking ? Math.sin(this.walk) * 0.05 : 0).setDepth(hy).setAlpha(blink ? 0.5 : 1);
     this.heroBack.setPosition(hx, hy - bob * 3 + 1).setScale(sx * 1.07, sy * 1.05).setRotation(this.hero.rotation).setDepth(hy - 0.1).setAlpha(this.hero.alpha);
     this.heroShadow.setPosition(hx, hy).setDepth(-400);
+    // 被冰锥、水鬼拖慢：脚下冒冰屑
+    if (slowed && !LOW_MEMORY && (this.frost += dt) > 90) {
+      this.frost = 0;
+      this.fx.spawn({ frame: 'mote', x: hx + (Math.random() - 0.5) * 30, y: hy - 4, vy: -30, life: 420, s0: 1.2, s1: 0.2, tint: 0x8fd0f0, rot: 0 });
+    }
     if (w.shield > 0) {
       const sf = this.frame('goldbell');
       this.shieldImg
@@ -689,7 +722,11 @@ export class GameScene extends Phaser.Scene {
         const t = w.eT[i]! % HOP_PERIOD;
         lift = t < HOP_AIR ? Math.sin((t / HOP_AIR) * Math.PI) * (def.kind === 'general' ? 16 : 11) : 0;
       } else if (def.kind === 'wisp' || def.kind === 'lantern') lift = 8 + Math.sin(this.now * 0.005 + i) * 4;
+      else if (def.kind === 'bat') lift = 14 + Math.sin(this.now * 0.02 + i * 2.3) * 5;
       else if (def.kind === 'boss' && w.eS[i] === 1) lift = Math.sin((1 - w.eT[i]! / 30) * Math.PI) * 120;
+      // 水鬼从地里冒出来：先沉在地下，慢慢升上来
+      const sink = code === WATER_CODE && w.eT[i]! > 0 ? w.eT[i]! / WATER.emerge : 0;
+      if (sink > 0) lift = -sink * 34;
       const size = w.eSize[i]!;
       const flip = this.renderX < x ? -1 : 1;
       // 被捆住的发抖
@@ -701,6 +738,7 @@ export class GameScene extends Phaser.Scene {
         .setPosition(x + (bound ? Math.sin(this.now * 0.09 + i) * 1.8 : 0), y - lift)
         .setScale((flip * size * (2 - squash)) / m.res, (size * squash) / m.res)
         .setRotation(wob)
+        .setAlpha(1 - sink * 0.75)
         .setDepth(y);
       if (m.flash > 0) {
         m.flash -= dt;
@@ -750,7 +788,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const kind = w.sKind[i]!;
-      const key = SHOT_FRAME[kind] ?? 'fireball';
+      const key = kind === Shot.Fireball && w.sState[i] === 1 ? 'ice' : (SHOT_FRAME[kind] ?? 'fireball');
       if (!s || s.gen !== w.sGen[i]) {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
@@ -770,6 +808,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       s.img.setPosition(x, y).setDepth(y + 40);
+      if (kind === Shot.Fireball && w.sState[i] === 1) s.img.setRotation(Math.atan2(w.sVY[i]!, w.sVX[i]!));
       if (kind === Shot.Talisman) {
         s.img.rotation += 0.35;
         if (!LOW_MEMORY && ++s.trail % 2 === 0) this.fx.spawn({ frame: 'mote', x, y, life: 320, s0: 1.1, s1: 0.2, tint: 0xffb42e, rot: Math.random() * 3 });

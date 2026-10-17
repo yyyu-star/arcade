@@ -3,9 +3,29 @@
  * 顺序固定：主角走 → 刷怪 → 怪的行为和移动 → 重建格子、推挤 → 法器 → 子弹 → 挨打 → 掉落 → 升级 → 结束。
  * 只用四则运算、方向表和 fsqrt；随机都走 World 上分好流的 Rng。
  */
-import { BOSS, ENEMIES, ENEMY_BY_KIND, FOX, GENERAL, HOP_AIR, HOP_PERIOD, HOP_SPEED_MUL, LANTERN, type EnemyKind } from '../content/enemies.ts';
+import {
+  BAT,
+  BONE,
+  BOSS,
+  ENEMIES,
+  ENEMY_BY_KIND,
+  FOX,
+  GENERAL,
+  HOP_AIR,
+  HOP_PERIOD,
+  HOP_SPEED_MUL,
+  LANTERN,
+  PALANQUIN,
+  PLAYER_SLOW,
+  SCARECROW,
+  SNOW,
+  WATER,
+  WEASEL,
+  WHITEFOX,
+  type EnemyKind,
+} from '../content/enemies.ts';
 import { ARENA, DROPS, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
-import { DAWN_TICK, DIFFICULTIES, EVENTS, MINUTES, SCALE } from '../content/waves.ts';
+import { CALM, DAWN_TICK, DIFFICULTIES, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE } from '../content/waves.ts';
 import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
@@ -125,8 +145,9 @@ function movePlayer(w: World, dir: number): void {
   w.moving = dir !== 0;
   if (dir !== 0) {
     w.face = ((dir - 1) * (DIR_N / 32)) & (DIR_N - 1);
-    w.x = clamp(w.x + inputCos(dir) * w.stats.speed, 20, ARENA.w - 20);
-    w.y = clamp(w.y + inputSin(dir) * w.stats.speed, 20, ARENA.h - 20);
+    const sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
+    w.x = clamp(w.x + inputCos(dir) * sp, 20, ARENA.w - 20);
+    w.y = clamp(w.y + inputSin(dir) * sp, 20, ARENA.h - 20);
   }
   if (w.invuln > 0) w.invuln--;
 }
@@ -155,6 +176,8 @@ function hurt(w: World, dmg: number): void {
   }
   const d = Math.max(1, Math.round(dmg * DIFFICULTIES[w.setup.difficulty].dmgMul - w.stats.armor));
   w.hp -= d;
+  // 第一局 3 分钟前不会死：血最少留 1
+  if (w.setup.firstRun && w.tick < FIRST_RUN_GUARD && w.hp < 1) w.hp = 1;
   w.invuln = PLAYER.invuln;
   w.ev.push(Ev.Hurt, w.x, w.y, d);
 }
@@ -218,6 +241,9 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eAY[i] = 0;
   w.eSlow[i] = 0;
   w.eBind[i] = 0;
+  w.eV[i] = 0;
+  if (kind === 'water') w.eT[i] = WATER.emerge;
+  else if (kind === 'weasel') w.eAX[i] = -1;
   w.eHitAt.fill(0, i * WEAPON_SLOTS, (i + 1) * WEAPON_SLOTS);
   w.eCount++;
   if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
@@ -270,9 +296,19 @@ function spawnWaves(w: World): void {
         const a = (k * DIR_N) / e.count;
         spawnEnemy(w, e.enemy, w.x + dcos(a) * e.radius, w.y + dsin(a) * e.radius * 0.8);
       }
+      w.calmUntil = Math.max(w.calmUntil, w.tick + CALM.afterSpike);
     } else if (e.kind === 'line') {
       const side = w.rSpawn.chance(0.5) ? -1 : 1;
-      for (let k = 0; k < e.count; k++) spawnEnemy(w, e.enemy, w.x + side * 720, w.y + (k - e.count / 2) * 30);
+      for (let k = 0; k < e.count; k++) {
+        const i = spawnEnemy(w, e.enemy, w.x + side * 720, w.y + (k - e.count / 2) * 30);
+        // 纸马排成一列横着冲过去（不追人）
+        if (i >= 0 && e.enemy === 'horse') {
+          w.eS[i] = 1;
+          w.eAX[i] = -side;
+          w.eAY[i] = 0;
+        }
+      }
+      w.calmUntil = Math.max(w.calmUntil, w.tick + CALM.afterSpike);
     } else {
       for (let k = 0; k < e.count; k++) {
         const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.85);
@@ -285,13 +321,22 @@ function spawnWaves(w: World): void {
   const diff = DIFFICULTIES[w.setup.difficulty];
   // 引魂灯：每级怪多 10%
   const curse = 1 + 0.1 * w.stats.curse;
-  const keep = m.keep * diff.countMul * curse;
+  const calm = w.tick < w.calmUntil ? CALM.keepMul : 1;
+  const keep = m.keep * diff.countMul * curse * calm;
   if (w.eCount >= keep) return;
-  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse) / 30;
+  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * calm) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
-    const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
-    spawnEnemy(w, pickKind(w, m.mix), x, y);
+    const kind = pickKind(w, m.mix);
+    if (kind === 'water') {
+      // 水鬼从主角附近的地里冒出来
+      const a = w.rSpawn.int(DIR_N);
+      const d = WATER.near + w.rSpawn.next() * (WATER.far - WATER.near);
+      spawnEnemy(w, kind, w.x + dcos(a) * d, w.y + dsin(a) * d * 0.8);
+    } else {
+      const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
+      spawnEnemy(w, kind, x, y);
+    }
   }
 }
 
@@ -336,7 +381,14 @@ function moveEnemies(w: World): void {
     dx /= d;
     dy /= d;
     // 离得太远的普通怪挪到主角前面的圈上（一直有压力，也不会被甩开）
-    if (d > 900 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite) {
+    if (kind === 'weasel' && w.eS[i] === 1 && d > WEASEL.lose) {
+      // 叼着铜钱跑远了：连钱一起没了
+      w.eAlive[i] = 0;
+      w.eCount--;
+      continue;
+    }
+    if (d > 900 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite && !(kind === 'weasel' && w.eS[i] === 1)) {
+      if (kind === 'horse') w.eS[i] = 0;
       const [x, y] = ringPoint(w, w.face + w.rAi.int(64) - 32);
       w.eX[i] = x;
       w.eY[i] = y;
@@ -345,7 +397,7 @@ function moveEnemies(w: World): void {
       continue;
     }
     const slow = w.eSlow[i];
-    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1);
+    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * (w.tick < OPEN_TICKS ? DIFFICULTIES[w.setup.difficulty].openSlow : 1);
     let vx = dx;
     let vy = dy;
     switch (kind) {
@@ -375,8 +427,9 @@ function moveEnemies(w: World): void {
         }
         break;
       }
-      case 'fox': {
-        // 0 走近 1 蓄力 2 冲刺
+      case 'fox':
+      case 'whitefox': {
+        // 0 走近 1 蓄力 2 冲刺；白狐连冲 WHITEFOX.chain 下（eV 记冲了几下）
         if (w.eS[i] === 0) {
           if (w.eT[i]! > 0) w.eT[i]!--;
           else if (d < FOX.trigger) {
@@ -396,12 +449,85 @@ function moveEnemies(w: World): void {
           vx = w.eAX[i]!;
           vy = w.eAY[i]!;
           if (--w.eT[i]! <= 0) {
-            w.eS[i] = 0;
-            w.eT[i] = FOX.rest;
+            if (kind === 'whitefox' && ++w.eV[i]! < WHITEFOX.chain) {
+              w.eS[i] = 1;
+              w.eT[i] = WHITEFOX.rewind;
+              w.eAX[i] = dx;
+              w.eAY[i] = dy;
+            } else {
+              w.eS[i] = 0;
+              w.eV[i] = 0;
+              w.eT[i] = FOX.rest;
+            }
           }
         }
         break;
       }
+      case 'horse':
+        // 认准一个方向冲过去，不拐弯
+        if (w.eS[i] === 0) {
+          w.eS[i] = 1;
+          w.eAX[i] = dx;
+          w.eAY[i] = dy;
+        }
+        vx = w.eAX[i]!;
+        vy = w.eAY[i]!;
+        break;
+      case 'water':
+        if (w.eT[i]! > 0) {
+          w.eT[i]!--;
+          sp = 0;
+        }
+        break;
+      case 'bat': {
+        // 侧着乱晃：每 BAT.every 拍换一次（eAX 是侧向的分量）
+        if (--w.eT[i]! <= 0) {
+          w.eT[i] = BAT.every + w.rAi.int(BAT.every);
+          w.eAX[i] = (w.rAi.next() - 0.5) * 2 * BAT.wobble;
+        }
+        const j = w.eAX[i]!;
+        const n = 1 / fsqrt(1 + j * j);
+        vx = (dx - dy * j) * n;
+        vy = (dy + dx * j) * n;
+        break;
+      }
+      case 'scarecrow':
+        if (w.eS[i] === 0) {
+          if (d < SCARECROW.wake) w.eS[i] = 1;
+          else sp = 0;
+        }
+        break;
+      case 'weasel':
+        weaselAct(w, i, d);
+        if (w.eS[i] === 1) {
+          // 叼着钱往远处跑
+          vx = -dx;
+          vy = -dy;
+          sp *= WEASEL.flee;
+        } else if (w.eAX[i]! >= 0) {
+          const t = w.eAX[i]!;
+          const tx = w.dX[t]! - w.eX[i]!;
+          const ty = w.dY[t]! - w.eY[i]!;
+          const td = fsqrt(tx * tx + ty * ty) || 1;
+          vx = tx / td;
+          vy = ty / td;
+        }
+        break;
+      case 'snow': {
+        if (d < SNOW.range) sp = 0;
+        w.eT[i]!--;
+        if (w.eT[i]! <= 0 && d < SNOW.range + 80) {
+          w.eT[i] = SNOW.every;
+          addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 20, dx * SNOW.speed, dy * SNOW.speed, SNOW.life, SNOW.dmg, SNOW.r, 1, -1, 0);
+        }
+        break;
+      }
+      case 'palanquin':
+        if (++w.eS[i]! >= PALANQUIN.every) {
+          w.eS[i] = 0;
+          for (let k = 0; k < PALANQUIN.drop; k++) spawnEnemy(w, 'paper', w.eX[i]! - dx * 50 + (k - 1) * 24, w.eY[i]! - dy * 50);
+        }
+        break;
       case 'boss':
         sp = bossAct(w, i, sp);
         if (w.eS[i] === 1) {
@@ -416,6 +542,42 @@ function moveEnemies(w: World): void {
     w.eY[i] = clamp(w.eY[i]! + vy * sp + w.eKY[i]!, 10, ARENA.h - 10);
     w.eKX[i]! *= 0.72;
     w.eKY[i]! *= 0.72;
+  }
+}
+
+/**
+ * 黄鼠狼：eAX 是盯上的那枚铜钱（掉落数组下标，-1 = 没盯上），eS 1 = 叼到了在跑，eV 是叼走了几枚。
+ * 每 WEASEL.scan 拍找一次附近的铜钱；碰到就叼走。
+ */
+function weaselAct(w: World, i: number, d: number): void {
+  if (w.eS[i] === 1) return;
+  let t = w.eAX[i]!;
+  if (t >= 0 && (!w.dAlive[t] || w.dKind[t] !== Drop.Coin || w.dPull[t] !== 0)) t = w.eAX[i] = -1;
+  if (t >= 0) {
+    const tx = w.dX[t]! - w.eX[i]!;
+    const ty = w.dY[t]! - w.eY[i]!;
+    if (tx * tx + ty * ty < 18 * 18) {
+      w.eV[i]! += w.dVal[t]!;
+      w.dAlive[t] = 0;
+      w.dCount--;
+      w.eS[i] = 1;
+      w.eAX[i] = -1;
+      w.ev.push(Ev.Steal, w.eX[i]!, w.eY[i]!, w.eV[i]!);
+    }
+    return;
+  }
+  if (--w.eT[i]! > 0 || d > WEASEL.range * 1.5) return;
+  w.eT[i] = WEASEL.scan;
+  let bd = WEASEL.range * WEASEL.range;
+  for (let s = 0; s < MAX_DROPS; s++) {
+    if (!w.dAlive[s] || w.dKind[s] !== Drop.Coin || w.dPull[s] !== 0) continue;
+    const dx = w.dX[s]! - w.eX[i]!;
+    const dy = w.dY[s]! - w.eY[i]!;
+    const dd = dx * dx + dy * dy;
+    if (dd < bd) {
+      bd = dd;
+      w.eAX[i] = s;
+    }
   }
 }
 
@@ -517,7 +679,9 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck) + w.stats.critAdd;
   // 捆仙绳：捆住的挨打加倍
   const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
-  const d = Math.max(1, Math.round(dmg * bound * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
+  // 镇 3 件：被减速（近身、镇魂铃光环）的怪挨打 +25%
+  const pinned = w.stats.nearSlow && w.eSlow[i] !== 0 ? 1.25 : 1;
+  const d = Math.max(1, Math.round(dmg * bound * pinned * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
   w.eHp[i]! -= d;
   // 结算页的"每件法器打了多少"：只记，不影响规则
   const owned = credit >= 0 ? w.weapons[credit] : undefined;
@@ -578,15 +742,37 @@ function killEnemy(w: World, i: number): void {
     return;
   }
   if (def.elite) {
+    w.calmUntil = Math.max(w.calmUntil, w.tick + CALM.afterElite);
+    if (def.kind === 'palanquin') {
+      for (let k = 0; k < PALANQUIN.burst; k++) {
+        const a = (k * DIR_N) / PALANQUIN.burst;
+        spawnEnemy(w, 'paper', x + dcos(a) * 40, y + dsin(a) * 32);
+      }
+    }
     addDrop(w, Drop.Chest, x, y, 1);
     for (let k = 0; k < 6; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 60, y + (w.rDrop.next() - 0.5) * 40, def.xp / 6);
     return;
   }
+  // 枯骨散成两只小的（小的不再散）
+  if (def.kind === 'bone' && w.eSize[i]! > BONE.size + 0.1) {
+    const hp = w.eHpMax[i]! * BONE.hp;
+    for (let k = 0; k < BONE.split; k++) {
+      const j = spawnEnemy(w, 'bone', x + (k === 0 ? -14 : 14), y);
+      if (j < 0) continue;
+      w.eSize[j] = BONE.size;
+      w.eR[j] = def.r * BONE.size;
+      w.eHp[j] = hp;
+      w.eHpMax[j] = hp;
+    }
+  }
+  // 黄鼠狼：叼走的铜钱双倍还回来
+  if (def.kind === 'weasel' && w.eS[i] === 1) addDrop(w, Drop.Coin, x, y, w.eV[i]! * WEASEL.payback);
   addDrop(w, Drop.Soul, x, y, def.xp);
   const r = w.rDrop.next();
+  const more = w.tick < w.calmUntil ? CALM.dropMul : 1;
   if (r < DROPS.scroll) addDrop(w, Drop.Scroll, x + 8, y, 1);
-  else if (r < DROPS.scroll + DROPS.bun) addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
-  else if (r < DROPS.scroll + DROPS.bun + DROPS.coin) addDrop(w, Drop.Coin, x + 8, y, 1);
+  else if (r < DROPS.scroll + DROPS.bun * more) addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
+  else if (r < DROPS.scroll + (DROPS.bun + DROPS.coin) * more) addDrop(w, Drop.Coin, x + 8, y, 1);
 }
 
 function eff(w: World, s: WeaponStats): { dmg: number; cd: number; area: number; amount: number } {
@@ -680,10 +866,23 @@ function fireWeapons(w: World, g: Grid): void {
           // 这一阵最多回 2 点血（十里桃林 5 点；记在 phase 上，花瓣砸中时扣）
           wp.phase = wp.evolved ? 5 : 2;
           w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.petals);
+          // 一半以上的花瓣落在范围里的怪头上（带点偏），其余随手撒；全随机的话大多砸在空地上
+          const n = g.query(w, w.x, w.y, e.area);
+          for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
           for (let j = 0; j < e.amount; j++) {
-            const a = w.rWeapon.int(DIR_N);
-            const r = fsqrt(w.rWeapon.next()) * e.area;
-            addShot(w, Shot.Petal, w.x + dcos(a) * r, w.y + dsin(a) * r * 0.8, 0, 0, s.duration + j * 2, e.dmg, 34, 0, k, j);
+            let px: number;
+            let py: number;
+            if (n > 0 && j % 3 !== 2) {
+              const t = scratch[w.rWeapon.int(n)]!;
+              px = w.eX[t]! + (w.rWeapon.next() - 0.5) * 30;
+              py = w.eY[t]! + (w.rWeapon.next() - 0.5) * 24;
+            } else {
+              const a = w.rWeapon.int(DIR_N);
+              const r = fsqrt(w.rWeapon.next()) * e.area;
+              px = w.x + dcos(a) * r;
+              py = w.y + dsin(a) * r * 0.8;
+            }
+            addShot(w, Shot.Petal, px, py, 0, 0, s.duration + j * 2, e.dmg, 34, 0, k, j);
           }
         }
         break;
@@ -701,10 +900,15 @@ function fireWeapons(w: World, g: Grid): void {
 function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number; angle: number; evolved: boolean }, s: WeaponStats, e: { dmg: number; cd: number; area: number; amount: number }): void {
   if (wp.phase > 0) {
     wp.phase--;
+    // 火舌跟着最近的怪转（每 6 拍重新瞄一次）：人一直在走，定死方向的话喷一会儿就喷空了
+    if (wp.phase % 6 === 0) {
+      const t = nearest(w, g, w.x, w.y, e.area * 1.2);
+      if (t >= 0) wp.angle = dirIndex(w.eX[t]! - w.x, w.eY[t]! - w.y);
+    }
     const ux = dcos(wp.angle);
     const uy = dsin(wp.angle);
-    // 半宽：基础 ±22°，扇面每宽 1 级多 6°（换算成方向表格数）
-    const half = Math.round(((22 + 6 * (e.amount - 1)) * DIR_N) / 360);
+    // 半宽：基础 ±28°，扇面每宽 1 级多 6°（换算成方向表格数）
+    const half = Math.round(((28 + 6 * (e.amount - 1)) * DIR_N) / 360);
     const c = dcos(half);
     const c2 = c * c;
     if (wp.phase % 2 === 0) w.ev.push(Ev.Flame, w.x, w.y - 18, wp.angle, e.area, half);
@@ -1092,18 +1296,42 @@ function removeShots(w: World, kind: Shot, slot: number): void {
   for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === kind && w.sSlot[i] === slot) killShot(w, i);
 }
 
+/** 这一拍在转的铜钱（挡弹用；每拍开头收一次，免得每颗弹都扫一遍子弹表） */
+const coinList = new Int32Array(MAX_SHOTS);
+let coinN = 0;
+function blockedByCoin(w: World, i: number): boolean {
+  for (let q = 0; q < coinN; q++) {
+    const c = coinList[q]!;
+    if (!w.sAlive[c]) continue;
+    const dx = w.sX[c]! - w.sX[i]!;
+    const dy = w.sY[c]! - w.sY[i]!;
+    const rr = w.sR[c]! + w.sR[i]! + 4;
+    if (dx * dx + dy * dy < rr * rr) return true;
+  }
+  return false;
+}
+
 function moveShots(w: World, g: Grid): void {
+  coinN = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Coin) coinList[coinN++] = i;
   for (let i = 0; i < MAX_SHOTS; i++) {
     if (!w.sAlive[i]) continue;
     const kind = w.sKind[i] as Shot;
     if (kind === Shot.Fireball) {
       w.sX[i]! += w.sVX[i]!;
       w.sY[i]! += w.sVY[i]!;
+      // 铜钱剑挡弹：转着的铜钱碰到就消掉（远程清场时它也不是摆设）
+      if (blockedByCoin(w, i)) {
+        w.ev.push(Ev.Block, w.sX[i]!, w.sY[i]!);
+        killShot(w, i);
+        continue;
+      }
       const dx = w.sX[i]! - w.x;
       const dy = w.sY[i]! + 16 - w.y;
       const rr = w.sR[i]! + PLAYER.r;
       if (dx * dx + dy * dy < rr * rr && w.invuln === 0) {
         hurt(w, w.sDmg[i]!);
+        if (w.sState[i] === 1) w.slowUntil = w.tick + SNOW.slowTicks;
         killShot(w, i);
         continue;
       }
@@ -1348,12 +1576,18 @@ function moveShots(w: World, g: Grid): void {
 
 // ───────────────────────── 挨打 ─────────────────────────
 
+const WATER_CODE = ENEMY_BY_KIND.water.code;
 function touchPlayer(w: World, g: Grid): void {
   if (w.invuln > 0) return;
   const n = g.query(w, w.x, w.y, PLAYER.r);
   let worst = 0;
   for (let j = 0; j < n; j++) {
     const i = g.out[j]!;
+    if (w.eKind[i] === WATER_CODE) {
+      // 还在冒的水鬼不伤人；冒出来了抓住主角拖慢
+      if (w.eT[i]! > 0) continue;
+      w.slowUntil = w.tick + WATER.grabTicks;
+    }
     if (w.eDmg[i]! > worst) worst = w.eDmg[i]!;
   }
   if (worst > 0) hurt(w, worst);
@@ -1421,7 +1655,7 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
 
 function movePickups(w: World): void {
   // 磁吸半径随等级涨（每级 +1.5%，40 级封顶 +60%）：后期怪多、走位忙，不用一颗颗去碰
-  const m = w.stats.magnet * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
+  const m = w.stats.magnet * DIFFICULTIES[w.setup.difficulty].magnetMul * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
   const m2 = m * m;
   for (let i = 0; i < MAX_DROPS; i++) {
     if (!w.dAlive[i]) continue;
@@ -1552,6 +1786,11 @@ export function grantWeapon(w: World, id: WeaponId, level = 1, evolved = false):
   recompute(w);
 }
 
+/** 测试和调试用：在 (x, y) 放一只怪，返回编号 */
+export function spawnNow(w: World, kind: EnemyKind, x: number, y: number): number {
+  return spawnEnemy(w, kind, x, y);
+}
+
 /** 测试和调试用：当场开一个宝箱 */
 export function openChestNow(w: World): void {
   openChest(w);
@@ -1599,13 +1838,18 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
 function openChoices(w: World): void {
   const pool = choicePool(w);
   const picks: Choice[] = [];
+  // 新手档前几次升级：先从法器里抽两张，保证有能打的（主线 #144）
+  const arms = w.level <= DIFFICULTIES[w.setup.difficulty].armsFirst + 1 ? 2 : 0;
   while (picks.length < 3 && pool.length > 0) {
+    const only = picks.length < arms && pool.some((p) => p.c.kind === 'weapon');
     let total = 0;
-    for (const p of pool) total += p.weight;
+    for (const p of pool) if (!only || p.c.kind === 'weapon') total += p.weight;
     let r = w.rUp.next() * total;
-    let k = 0;
-    for (; k < pool.length - 1; k++) {
-      r -= pool[k]!.weight;
+    let k = -1;
+    for (let q = 0; q < pool.length; q++) {
+      if (only && pool[q]!.c.kind !== 'weapon') continue;
+      k = q;
+      r -= pool[q]!.weight;
       if (r < 0) break;
     }
     picks.push(pool[k]!.c);
