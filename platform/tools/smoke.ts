@@ -150,12 +150,14 @@ const json = (body: unknown, status = 200) => ({ status, contentType: 'applicati
  */
 async function mockSession(
   page: Page,
-  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET }: { user?: object; me?: Record<string, unknown>; wallet?: object | (() => object) } = {},
+  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET, overtakes = [] }: { user?: object; me?: Record<string, unknown>; wallet?: object | (() => object); overtakes?: object[] } = {},
 ): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill(json({ user, service: 'ok', saves: 'ok', registration: 'closed', ...me })));
   await page.route('**/api/wallet', (r) => r.fulfill(json(typeof wallet === 'function' ? wallet() : wallet)));
   // 登录后的大厅会报在线（0.13.0）；模拟的人在真接口那边不认识，回 401
   await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
+  // 大厅问一次"这周哪个好友超过了我"（0.15.0）
+  await page.route('**/api/friends/overtakes', (r) => r.fulfill(json({ overtakes })));
   await fakeLoginHint(page);
 }
 
@@ -1018,10 +1020,15 @@ async function mobile(browser: Browser): Promise<void> {
   }
   await shot(page, 'mobile-privacy');
   // 用模拟的登录状态打开"我的账号"，量点击区
-  await mockSession(page);
+  // 0.15.0：好友超过了我这周的开盘每日挑战，大厅顶上提一句
+  await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }] });
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
   // 登录后的首页：掼蛋卡片的"进入游戏""好友房"并排，都至少 44 高
   await page.goto(`${BASE}/`);
+  const overtake = page.getByTestId('nudge-overtake');
+  await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
+  check((await overtake.getByRole('link', { name: '去挑战' }).getAttribute('href'))?.startsWith('/games/kaipan/') === true, '"去挑战"该进开盘');
+  await shot(page, 'mobile-home-overtake');
   const guandan = page.locator('.card', { hasText: '掼蛋' });
   await guandan.getByRole('link', { name: '好友房' }).waitFor();
   for (const name of ['进入游戏', '好友房']) {
@@ -1397,6 +1404,9 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.route('**/api/boards/kaipan/daily-2026-10-15-v2?scope=*', (r) =>
       r.fulfill(json({ entries: [{ rank: 1, userId: u(1), displayName: '小明', avatar: null, score: 1e11 + 3_820_000, isMe: false }, { rank: 2, userId: u(4), displayName: '韭菜', avatar: null, score: 7, isMe: false }], me: null })),
     );
+    await page.route('**/api/friends/week/kaipan', (r) =>
+      r.fulfill(json({ week: '2026-10-12', entries: [{ rank: 1, displayName: '小明', avatar: null, score: 12, isMe: false }, { rank: 2, displayName: '某人', avatar: null, score: 9, isMe: true }], me: { rank: 2, score: 9 } })),
+    );
     // 跟开盘约定的格式（docs/platform-backend.md 15.12）
     await page.route('**/games/kaipan/daily.json', (r) =>
       r.fulfill(json({ note: '每天一样的行情，比谁打得好。', score: [{ from: 1e11, text: '通关 · {n} 元' }, { text: '撑了 {n} 个月' }] })),
@@ -1419,6 +1429,12 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.getByText('通关 · 3,820,000 元').waitFor();
     await page.getByText('撑了 7 个月').waitFor();
     await page.getByText('开盘的每日挑战：每天一样的行情，比谁打得好。').waitFor();
+    // 0.15.0：每日挑战只看好友时比这周每人最好的一天
+    await page.getByRole('button', { name: '只看好友' }).click();
+    await page.getByText('只看好友时比的是这周每人最好的一天').waitFor();
+    await page.locator('.rank--me').getByText('撑了 9 个月').waitFor();
+    if (screen === 'desktop') await shot(page, 'boards-friends-week');
+    await page.getByRole('button', { name: '全部' }).click();
     await page.getByRole('link', { name: '称号收集' }).click();
     await page.getByTestId('my-rank').getByText('第 73 名').waitFor();
     if (screen === 'portrait') await shot(page, 'boards-titles-portrait');
@@ -1726,6 +1742,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_USER, service: 'ok', saves: 'ok' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(FAKE_WALLET)));
     await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
+    await page.route('**/api/friends/overtakes', (r) => r.fulfill(json({ overtakes: [] })));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();
