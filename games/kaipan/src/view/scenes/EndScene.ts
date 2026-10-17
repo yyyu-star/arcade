@@ -27,7 +27,9 @@ import { addText } from '../ui/text.ts';
 import type Phaser from 'phaser';
 import { Room } from '../trade/room.ts';
 import { phoneLayout } from '../viewport.ts';
-import { posterArtFor, posterContent, renderPoster, sharePoster } from '../poster.ts';
+import { gameLink, shareArt, shareData } from '../shareCard.ts';
+import { shareCard } from 'arcade-kit/share';
+import { myName } from '../../platform/mode.ts';
 import { BaseScene } from './BaseScene.ts';
 
 const W = 960;
@@ -294,7 +296,7 @@ export class EndScene extends BaseScene {
     const mk = (key: string, label: string, bx: number, w: number, variant: 'primary' | 'default', fn: () => void, hotkey?: string): void => {
       this.buttons[key] = new Button(this, bx, by, { width: w, height: G.btnH, label, variant, fontSize: 16, hotkey, onClick: fn });
     };
-    // 手机：三个按钮加「晒战绩」撑满右栏（486 宽），手指好点
+    // 手机：三个按钮加「分享」撑满右栏（486 宽），手指好点
     const bw = ph ? [104, 140, 104] : [120, 150, 110];
     // 实盘局只有一个「回开始菜单」：不在结束页推"再开一局"（设计稿第 5 节），同种子重玩也会开出一局没带入的实盘
     if (lv0) mk('menu', '回开始菜单', mx + (ph ? 0 : bw[0]! + 12), ph ? 180 : bw[1]!, 'primary', () => this.session.toTitle(), 'Esc');
@@ -310,9 +312,9 @@ export class EndScene extends BaseScene {
     // 手机横屏纸卡几乎铺满，挪到左栏标题行的右端（每日挑战的标签到 x≈312）
     const lobbyAt = ph ? { x: L + G.leftW - 96, y: y + 8 } : { x: 14, y: 10 };
     this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: ph ? 96 : 104, height: 42, label: lobbyLabel(), icon: 'house', fontSize: 16, onClick: () => goLobby() });
-    // 0.6.5 结局海报：电脑上放在右上角（和「大厅」对称），手机上放在按钮那一排的最右边
-    const posterAt = ph ? { x: mx + (lv0 ? 192 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: ph && lv0 ? 140 : 102, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };
-    this.posterButton(posterAt, sum);
+    // 分享（0.6.5 起的海报位置，0.12.0 换成共用包的分享卡）：电脑上放在右上角（和「大厅」对称），手机上放在按钮那一排的最右边
+    const shareAt = ph ? { x: mx + (lv0 ? 192 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: ph && lv0 ? 140 : 102, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };
+    this.shareButton(shareAt, sum);
   }
 
   /** 「下次可以试试」一行：星星 + 成就名 + 这局的进度，悬停看每个成就怎么拿 */
@@ -329,50 +331,31 @@ export class EndScene extends BaseScene {
   }
 
   /**
-   * 「晒战绩」：进场就在后台画好海报，点了马上分享或下载（iOS 的分享要在点的同一下里调用）。
-   * 每日挑战交完分读到名次后再画一张带名次的（0.6.10）；画好之前点，分享的是手上那张。
+   * 「分享」（0.12.0，docs/design-share.md）：数据交给共用包画卡、分享；手机能带图片就调系统分享，不能就出预览（存图、复制链接）。
+   * 每日挑战点的时候读到了名次就带上。
    */
-  private posterButton(at: { x: number; y: number; w: number; h: number }, sum: RunSummary): void {
-    let content = posterContent(sum);
-    let blob: Blob | null = null;
-    const b = new Button(this, at.x, at.y, { width: at.w, height: at.h, label: '晒战绩', icon: 'star', fontSize: 16, onClick: () => {
-      if (!blob) return;
-      const done = (text: string): void => {
-        if (!b.scene) return;
-        sound.ui(text === '没存上' ? 'denied' : text === '晒战绩' ? 'close' : 'select');
-        b.setLabel(text);
-        this.time.delayedCall(1800, () => b.scene && b.setLabel('晒战绩'));
-      };
-      void sharePoster(blob, `kaipan-${sum.seed}.png`, content.shareTitle).then((r) => done(r === 'shared' ? '分享了' : r === 'saved' ? '已保存' : r === 'failed' ? '没存上' : '晒战绩'));
+  private shareButton(at: { x: number; y: number; w: number; h: number }, sum: RunSummary): void {
+    const label = '分享';
+    let busy = false;
+    const b = new Button(this, at.x, at.y, { width: at.w, height: at.h, label, icon: 'star', fontSize: 16, onClick: () => {
+      if (busy) return;
+      busy = true;
+      b.setLoading(true, '画卡片');
+      const r = sum.daily ? runBoard(sum.runId) : null;
+      const { artKey, text, ...card } = shareData(sum, r?.state === 'done' ? r.rank : null);
+      const name = myName();
+      const art = shareArt(this.textures, artKey);
+      void shareCard(
+        { ...card, ...(art && { art }), ...(name && { player: { name, badge: sum.title } }) },
+        { url: gameLink(location.href), text, fileName: `kaipan-${sum.seed}.png` },
+      )
+        .then((res) => res !== 'cancelled' && sound.ui('select'), () => sound.ui('denied'))
+        .finally(() => {
+          busy = false;
+          if (b.scene) b.setLoading(false, label);
+        });
     } });
-    b.setLoading(true, '画海报');
-    this.buttons.poster = b;
-    const paint = (c: typeof content): void => {
-      void renderPoster(c, posterArtFor(this.textures, c)).then((x) => {
-        // 不带名次的那张晚于带名次的画完：不拿旧的盖掉新的
-        if (x && (c === content || !blob)) blob = x;
-        if (!b.scene || b.isEnabled()) return;
-        if (blob) b.setLoading(false, '晒战绩').setEnabled(true);
-        else if (c === content) b.setLoading(false, '画不出来').setEnabled(false);
-      });
-    };
-    paint(content);
-    if (!sum.daily) return;
-    const rankNow = (): number | null => {
-      const r = runBoard(sum.runId);
-      return r.state === 'done' && r.rank ? r.rank : null;
-    };
-    let shown: number | null = null;
-    const update = (): void => {
-      const rank = rankNow();
-      if (!rank || rank === shown || !b.scene) return;
-      shown = rank;
-      content = posterContent(sum, rank);
-      paint(content);
-    };
-    update();
-    const off = onBoardChange(update);
-    this.events.once('shutdown', off);
+    this.buttons.share = b;
   }
 
   /**

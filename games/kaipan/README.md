@@ -34,7 +34,7 @@ The rest of this README, the in-game text, code comments and design docs (`docs/
 
 当前版本见 `package.json`，每版改了什么见 `CHANGELOG.md`。涨跌由真实历史行情驱动：每局从 135 段真实走势里随机抽一段，大环境、风口和股票小人跟着它走；
 画面不说是哪一年、哪家公司，局末用花名讲一篇"这段日子"小故事。玩法上有仓位、押跌、银行抵押借钱、小知识；
-局外有每日挑战和排行榜、带平台筹码进场的实盘、结局海报。
+局外有每日挑战和排行榜、带平台筹码进场的实盘、分享卡。
 
 ![开盘的开始菜单](public/assets/art/v3/scene/title_keyart.svg)
 
@@ -114,7 +114,8 @@ The rest of this README, the in-game text, code comments and design docs (`docs/
   - 战绩小结（0.6.5，平台 5.10）：结回时带 `stats`（`src/core/career.ts`，Worker 原样转发）；称号的中文名在 `public/titles.json`（平台称号墙读 `/games/kaipan/titles.json`），
     由 `titlesJson()` 生成、测试锁一致。钱包和平台的错误照平台 15.10 的对照表说（设计稿第 6 节的表）。
 - 每日榜的分数怎么显示（0.6.13）：`public/daily.json`（平台每日榜读 `/games/kaipan/daily.json`；通关分 = 1e11 + 账户元数，没通关 = 还上了几个月，`tests/daily-json.test.ts` 按平台的解析规则锁一致）。
-- 结局海报（0.6.5，`src/view/poster.ts`）：结束页「晒战绩」，进场就在浏览器里用 canvas 画好（1080×1350 PNG），点了用系统分享（带图片），不支持就下载；不走服务器。每日挑战的海报读到名次后重画一张带名次的，分享标题是一句邀请（0.6.10），分享文字带上游戏地址（0.6.11，`gameLink` 按当前页面推）；海报右下角写当前页面的站点（`location.host`），代码里不写站点地址。
+- 分享卡（0.12.0，`src/view/shareCard.ts`，设计 `docs/design-share.md`）：结束页「分享」，开盘只交数据（大数字是资产涨跌幅或实盘结回倍数、最多 3 条小数据、一句名场面、最赚那只股票小人的图集切片），画卡和分享在共用包 `arcade-kit/share`：手机能带图片就调系统分享，不能就出预览（存图、复制链接）。分享的链接是 `gameLink` 按当前页面推的游戏地址，代码里不写站点地址。取代 0.6.5 起开盘自己画的结局海报。
+- 社交（0.12.0，`src/main.ts`）：有登录提示 cookie 时挂共用包 `arcade-kit/social`，开着开盘就报"在玩开盘"、收好友的邀请；点"去"走回大厅那条路（先补传云存档）。单独部署、没登录不挂。
 - 回大厅（0.5.8，`src/view/lobby.ts`）：跳平台首页 `/`。开始菜单左上角常驻「大厅」，点了直接走；一局里点齿轮 → 「回大厅」，先确认
   （这局存在这台设备上，不算放弃，回来点「继续」）；手机竖屏的"横过来"提示层左上角也有，一局里同样先问。点下后提示"正在离开……"；走之前先等还在确认账号的交分发出去（最多 1.5 秒），再把待上传的槽都补传一次（keepalive，连同在途的 keepalive 合起来不超 60 KB，
   记账在 `src/platform/keepalive.ts`；不受切后台 3 分钟间隔限制；普通请求在途的槽也补一个 keepalive，补过的不再补；额度不够没补成的，原来排好的普通上传照旧，没排的给排一个）。结束页左上角也有「大厅」，直接走。

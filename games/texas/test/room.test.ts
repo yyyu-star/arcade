@@ -758,3 +758,38 @@ describe('钱包 op 和结回上限（0.13.2 审计）', () => {
     expect(fine.amount).toBeLessThan(settleCap(max, max));
   });
 });
+
+describe('旁观（docs/social.md 1.4）', () => {
+  it('座位 -1（没入座的连接，kit 按 null 要视图）：一路打几手，视图里从不出现任何人没亮的底牌；上一手只带真的亮出来的牌', () => {
+    // 两个真人、两个电脑；真人轮流跟注或过牌，让牌打到摊牌，也有弃牌赢的手
+    let s = seatedAll(['human', 'human', 'ai', 'ai']);
+    /** 视图里所有两张一组的牌（任何字段、任何深度） */
+    const pairs = (x: unknown, out: string[] = []): string[] => {
+      if (Array.isArray(x)) {
+        if (x.length === 2 && x.every((c) => typeof c === 'number')) out.push(`${x[0]},${x[1]}`);
+        for (const y of x) pairs(y, out);
+      } else if (x && typeof x === 'object') for (const y of Object.values(x)) pairs(y, out);
+      return out;
+    };
+    let checked = 0;
+    let showdowns = 0;
+    for (let step = 0; step < 400 && s.t.handNo < 12; step++) {
+      const v = G.view(s, null);
+      expect(v.hole).toEqual([]);
+      expect(JSON.stringify(v)).not.toMatch(/"(deck|seed)"/);
+      // 这一刻每个人手里的底牌，都不许出现在旁观的视图里（摊牌亮出来的在 lastHand.shown 里，那是上一手的、公开的）
+      const seen = new Set(pairs(v));
+      const shown = new Set((s.t.lastHand?.shown ?? []).map((x) => `${x.hole[0]},${x.hole[1]}`));
+      for (const c of s.t.seats) if (c.hole.length === 2 && s.t.phase !== 'idle') expect(seen.has(`${c.hole[0]},${c.hole[1]}`) && !shown.has(`${c.hole[0]},${c.hole[1]}`)).toBe(false);
+      expect((v.lastHand?.shown ?? []).map((x) => x.seat)).toEqual((s.t.lastHand?.shown ?? []).map((x) => x.seat));
+      if (s.t.lastHand?.shown.length) showdowns++;
+      checked++;
+      const seat = G.turn(s);
+      if (seat === null) break;
+      const lg = G.view(s, seat).legal!;
+      s = drive(act(s, seat, lg.check ? { t: 'check' } : { t: 'call' }));
+    }
+    expect(checked).toBeGreaterThan(30);
+    expect(showdowns).toBeGreaterThan(0);
+  });
+});

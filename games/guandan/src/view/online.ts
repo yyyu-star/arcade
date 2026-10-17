@@ -11,6 +11,7 @@ import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../stake/i
 import { ROOM_STAKE_TEXT, STAKE_TEXT, TIER_NAME, fmtChips } from './stake-text.ts';
 import { fetchWallet } from './stake.ts';
 import { standalone } from './platform.ts';
+import { presenceNow } from './social.ts';
 import { getNick, setNick } from './store.ts';
 import { loginUrl } from './ui/cloud.ts';
 import { mountThemeCss } from './theme.ts';
@@ -212,7 +213,15 @@ export function join(code: string, host: boolean, prefer: number | null = null):
   ses = s;
   roomInUrl(code);
   app.net = null;
-  offSes = s.on(() => renderRoom());
+  // 进了房间（第一次连上）马上报一次位置，好友那边看得到"在掼蛋好友房 3/4"
+  let told = false;
+  offSes = s.on((k) => {
+    if (!told && k === 'reset') {
+      told = true;
+      presenceNow();
+    }
+    renderRoom();
+  });
   renderRoom();
 }
 
@@ -317,6 +326,7 @@ function leave(): void {
   ses?.leave();
   ses = null;
   app.net = null;
+  presenceNow();
   note = '';
   openOnline();
 }

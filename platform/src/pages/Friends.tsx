@@ -325,6 +325,12 @@ function Friend({ p, onChanged }: { p: FriendLists['friends'][number]; onChanged
         ) : null
       }
     >
+      {p.online && p.where?.place === 'room' && p.where.game && p.where.room && (
+        // 0.14.0：好友在房间里，直接进他的房间（满了或开打了就旁观，房间那头管）；游戏页不在大厅的单页里，用整页跳转
+        <a className="btn btn--small btn--primary" href={`/games/${encodeURIComponent(p.where.game)}/?room=${encodeURIComponent(p.where.room)}`} data-testid="join-room">
+          加入
+        </a>
+      )}
       <button className="btn btn--small" type="button" disabled={!writable} aria-expanded={open === 'remove'} onClick={() => toggle('remove')}>
         删好友
       </button>

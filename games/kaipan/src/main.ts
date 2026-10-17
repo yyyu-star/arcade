@@ -3,12 +3,13 @@ import { createRun, type GameEvent, type GameState } from './core/index.ts';
 import { mountBridge } from './debug/bridge.ts';
 import { mountOverlay } from './debug/overlay.ts';
 import { parseParams } from './debug/params.ts';
-import { detectPlatform, onPlatformMode } from './platform/mode.ts';
+import { detectPlatform, onPlatformMode, platformInfo } from './platform/mode.ts';
+import { inviteUrl, mountSocial } from 'arcade-kit/social';
 import { mountRotateHint, setRotateLobbyLabel } from './platform/orientation.ts';
 import { fitViewport } from './platform/viewportFit.ts';
 import { getSettings, onSettingsChange } from './platform/settings.ts';
 import { loadProfile } from './platform/profile.ts';
-import { startCloudSync } from './view/cloudSync.ts';
+import { cloudUserId, onCloudChange, startCloudSync } from './view/cloudSync.ts';
 import { goLobby, lobbyLabel } from './view/lobby.ts';
 import { live, lobbyConfirm, startLive } from './view/live.ts';
 import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
@@ -108,7 +109,21 @@ const platformKnown = import.meta.env.DEV ? Promise.resolve('unknown' as const) 
 // 云存档：调试会话（?debug=1，看得到隐藏信息、不计档案）不同步；单独部署没有平台，也不同步。
 // 云端的进度写进本地后，开始菜单按新档案重画；别的画面不打断，下次回到开始菜单自然读到新档案
 void platformKnown.then((m) => {
-  if (!params.debug && m !== 'standalone') startCloudSync(() => session.sceneKey === 'title' && session.redraw());
+  if (params.debug || m === 'standalone') return;
+  startCloudSync(() => session.sceneKey === 'title' && session.redraw());
+  // 0.12.0 社交（共用包 arcade-kit/social）：开着开盘时每 2 分钟报一次"在玩开盘"、收好友的邀请。
+  // 等云存档问 /api/me 认出账号再挂（它只在有登录提示 cookie 时问），不为社交再问一次；没登录就一直不挂。
+  // 点"去"走回大厅那条路（先补传云存档再跳）；这局照常存在这台设备上，点了"去"就不再问一次
+  const mountWhenKnown = (): void => {
+    const id = cloudUserId();
+    if (!id || socialMounted) return;
+    socialMounted = true;
+    offCloud();
+    void mountSocial({ platform: platformInfo() ?? { platform: true, user: { id } }, where: () => ({ place: 'game', game: 'kaipan' }), onGo: (inv) => void goLobby(inviteUrl(inv)) });
+  };
+  let socialMounted = false;
+  const offCloud = onCloudChange(mountWhenKnown);
+  mountWhenKnown();
 });
 if (import.meta.env.DEV || params.debug) mountBridge(session);
 if (params.debug) mountOverlay(session);

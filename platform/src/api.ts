@@ -35,6 +35,15 @@ export interface Profile {
 }
 
 /** 在哪（0.13.0，15.13）：大厅、在玩某个游戏、在某个游戏的房间里（带房间码和人数） */
+/** 给我的邀请（0.14.0，docs/social.md 1.3）：until 是过期时间（毫秒） */
+export interface Invite {
+  id: string;
+  from: { id: string; name: string };
+  game: string;
+  room: string;
+  until: number;
+}
+
 export interface Where {
   place: 'lobby' | 'game' | 'room';
   game?: string;
@@ -83,6 +92,14 @@ export interface LeaderboardResponse {
 }
 
 /** GET /api/boards/<game>/<board>（15.5）；rank 为 null 是"太靠后，没数" */
+/** 好友这周的最好成绩超过了我的（0.15.0，读的时候比） */
+export interface Overtake {
+  gameId: string;
+  by: { userId: string; displayName: string };
+  score: number;
+  mine: number;
+}
+
 export interface ScoreBoard {
   entries: (BoardRow & { score: number })[];
   me: { rank: number | null; score: number } | null;
@@ -304,6 +321,10 @@ export const api = {
   leaderboard: (scope: 'all' | 'friends') => request<LeaderboardResponse>('GET', `/api/leaderboard?scope=${scope}`),
   board: (game: string, board: string, scope: 'all' | 'friends') =>
     request<ScoreBoard>('GET', `/api/boards/${encodeURIComponent(game)}/${encodeURIComponent(board)}?scope=${scope}`),
+  /** 我和好友这周在每日挑战上的最好成绩（0.15.0）；week 是这周一的日期 */
+  friendsWeek: (game: string) => request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}`),
+  /** 这周哪个好友超过了我（0.15.0）：每个游戏最多一条 */
+  overtakes: () => request<{ overtakes: Overtake[] }>('GET', '/api/friends/overtakes'),
   register: (username: string, password: string, displayName: string) =>
     request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName }),
   login: (username: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { username, password }),
@@ -314,6 +335,9 @@ export const api = {
   setShowWhere: (showWhere: boolean) => request<{ user: User }>('PATCH', '/api/me', { showWhere }),
   /** 报位置（0.13.0）：平台每 2 分钟最多记一次，写不了时也回 204 */
   presence: (where: Where) => request<void>('POST', '/api/presence', where),
+  /** 邀请（0.14.0）：收是只读；"不了"只改自己收到的那条 */
+  invites: () => request<{ invites: Invite[] }>('GET', '/api/invites'),
+  dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),
   newRecoveryCode: (currentPassword: string) =>

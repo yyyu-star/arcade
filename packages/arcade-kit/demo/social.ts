@@ -15,7 +15,24 @@ const fake = (async (url: RequestInfo | URL, init?: RequestInit) => {
   calls.push(`${init?.method ?? 'GET'} ${u} ${(init?.headers as Record<string, string> | undefined)?.['x-arcade'] ?? '-'}`);
   document.getElementById('log')!.textContent = calls.join('\n');
   if (u === '/api/me') return new Response(JSON.stringify({ user: { id: 'me' } }), { headers: { 'content-type': 'application/json' } });
+  if (u === '/api/invites' && init?.method === 'POST') {
+    const to = (JSON.parse(String(init.body)) as { to: string }).to;
+    // 小李被屏蔽了（403 not_friend），阿明今天叫满了（429 等 1 小时）
+    if (to === 'u2') return new Response(JSON.stringify({ error: 'not_friend' }), { status: 403, headers: { 'content-type': 'application/json' } });
+    if (to === 'u3') return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '3600' } });
+    return new Response(JSON.stringify({ id: `i-${to}` }), { headers: { 'content-type': 'application/json' } });
+  }
   if (u === '/api/invites') return new Response(JSON.stringify({ invites }), { headers: { 'content-type': 'application/json' } });
+  if (u === '/api/friends') {
+    // 平台的真实形状：公开资料 + lastSeenDaysAgo + online、where
+    const friends = [
+      { userId: 'u1', displayName: '老王', avatar: null, lastSeenDaysAgo: 0, online: true, where: { place: 'room', game: 'cards', room: 'ABC123', seats: '3/4' } },
+      { userId: 'u2', displayName: '小李', avatar: null, lastSeenDaysAgo: 0, online: true, where: { place: 'lobby' } },
+      { userId: 'u4', displayName: '一个名字特别特别长的好友啊啊啊', avatar: null, lastSeenDaysAgo: 3, online: false },
+      { userId: 'u3', displayName: '阿明', avatar: null, lastSeenDaysAgo: 0, online: true, where: { place: 'game', game: 'cards' } },
+    ];
+    return new Response(JSON.stringify({ friends, incoming: [], outgoing: [] }), { headers: { 'content-type': 'application/json' } });
+  }
   const m = /^\/api\/invites\/([^/]+)\/dismiss$/.exec(u);
   if (m) {
     const i = invites.findIndex((v) => v.id === m[1]);
@@ -32,4 +49,6 @@ const handle = await mountSocial({
   onGo: (v) => went.push(`${v.game}/${v.room}`),
   log: (l) => log.push(l),
 });
-Object.assign(window, { social: { calls, log, went, handle, mounted: !!handle } });
+const openPanel = (): void => void handle?.openInvite({ game: 'demo', room: 'ROOM01', log: (l) => log.push(l) });
+document.getElementById('invite')?.addEventListener('click', openPanel);
+Object.assign(window, { social: { calls, log, went, handle, mounted: !!handle, openPanel } });

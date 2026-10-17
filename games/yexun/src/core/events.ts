@@ -9,7 +9,7 @@ export const Ev = {
   Kill: 2,
   /** 桃木剑一道斩：x, y, a = 方向表下标, b = 半径, c = 1 进化 */
   Slash: 3,
-  /** 天雷：x, y, b = 半径 */
+  /** 天雷：x, y, a = 连锁的第几下, b = 半径, c = 1 是连锁跳过来的（不从天上劈） */
   Thunder: 4,
   /** 镇魂铃响一下：x, y, b = 半径 */
   Bell: 5,
@@ -33,6 +33,22 @@ export const Ev = {
   End: 14,
   /** 符咒爆开：x, y, b = 半径 */
   Burst: 15,
+  /** 八卦镜放一道光波：x, y, a = 晚几拍放, b = 推到多远, c = 每拍扩多少 */
+  Wave: 16,
+  /** 火葫芦喷火：x, y, a = 方向表下标, b = 火舌长, c = 半宽（方向表格数） */
+  Flame: 17,
+  /** 缚妖索捆住一只：x, y, a = 这一串里第几只, c = 怪的槽位 */
+  Bind: 18,
+  /** 桃花落地：x, y, b = 半径 */
+  Petal: 19,
+  /** 金钟罩：x, y, a = 0 碎了震开 1 回了一层, b = 震的半径 */
+  Shield: 20,
+  /** 连锁雷的一跳：从 (x, y) 到 (b, c) */
+  Chain: 21,
+  /** 合成：a = MERGES 的下标 */
+  Merge: 22,
+  /** 三昧真火在地上留了一摊火：x, y, b = 半径, c = 烧几拍 */
+  Burn: 23,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

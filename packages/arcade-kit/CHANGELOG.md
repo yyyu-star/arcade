@@ -1,5 +1,15 @@
 # 更新日志
 
+## 0.12.2
+
+- **"叫朋友来"面板** `openInvite({ game, room })`（`arcade-kit/social`；mountSocial 返回的 handle 上也有 `openInvite`，自动带上游戏名）：0.12.0 只有 `sendInvite` 接口，游戏里没有叫人的界面。
+  - 列好友，在线的在前，写在哪（"在<游戏名>的好友房 · 3/4""在大厅""3 天前来过"）；每人一个"叫他来"，发出后变"已叫"、1 分钟内灰着（这一页里记着，关了再开也灰着）。
+  - 叫不了的换成大白话：429 等两分钟以内是"刚叫过他，过一会儿再叫"，更久是"今天叫人的次数用完了，明天再叫"；403 `not_friend` 是"叫不了他（可能已经不是好友了）"。
+  - 底下"复制邀请链接"：能系统分享就分享，不能就复制，复制不了把链接写出来。`friends: false` 只有这个按钮（单独部署、没登录）。
+  - DOM，样式和 table-fun 一样（同一套颜色、圆角、44px 按钮）；点空白处、✕、Esc 关掉；只在调用时碰 DOM。
+- 新的纯函数 `whereText`、`inviteErrorText`，常数 `INVITE_GAP_MS`。
+- 测试：`test/social.test.ts` 加两条（在哪的话、叫不了的话）。浏览器里用 `demo/social.html` 的"叫朋友来"按 390×844 和 1200×800 核对过：列表顺序和"在哪"、叫成功变"已叫"、被拒的、次数用完的、复制链接、Esc 关掉、再开还灰着，控制台零报错。
+
 ## 0.12.1
 
 - **social 的好友列表一直是空的**：`fetchFriends` 只认每项的 `id`、`name`，平台 `GET /api/friends` 每项一直是公开资料 `{ userId, displayName, avatar }`（`docs/platform-backend.md` 15.4），

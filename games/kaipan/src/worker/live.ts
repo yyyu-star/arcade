@@ -8,7 +8,7 @@
  *
  * 认人沿用 gate.ts 的 checkLogin，而不用 arcade-kit 的 whoIs：whoIs 只在 fetch 上挂 AbortSignal.timeout，
  * 平台不理会中止信号、或响应头回来了响应体迟迟不来时会一直挂住；checkLogin 对"等响应"和"读响应体"两段都用 Promise.race 限时，
- * 有测试锁住（tests/worker-gate.test.ts）。这样模块也不必为此依赖共用包。
+ * 有测试锁住（tests/worker-gate.test.ts）。这样 Worker 也不必为此引共用包（0.12.0 起只有页面用它的分享卡和社交部件）。
  *
  * 不管 GATE 开关都认人：钱包动的是真账户。校验顺序是 方法/路径 → 单独部署 → CSRF → 请求体 → 认人 → 钱包，前面不过就不去问平台和钱包。
  * 钱包的业务拒绝（no_funds、at_table……）是正常回话，原样 200 交给浏览器按 error 处理；钱包连不上才回 503。

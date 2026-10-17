@@ -7,6 +7,7 @@ import { CLOSE, CLOSE_REASON, type RoomInfo, type StateMsg, type WelcomeMsg } fr
 import { describe, expect, it } from 'vitest';
 import { testKey, guandanRoom as R, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
 import { seatIdentity, seatName } from '../src/view/labels.ts';
+import { fullSeatName, isWatching } from '../src/view/labels.ts';
 import { NetSession, QUOTA_TEXT, autoSeat, closeText, createRoom, currentUserId, isFinalForRoom, roomOwnerCheck, type SavedRoom } from '../src/view/net.ts';
 
 class FakeClient {
@@ -364,9 +365,9 @@ describe('进房自动坐下（0.6.0）', () => {
   const seat = (kind: 'human' | 'ai' | 'empty', reserved = false) => ({ kind, name: kind === 'human' ? '玩家' : null, away: false, auto: false, reserved });
   const room = (status: RoomInfo['status'], seats: ReturnType<typeof seat>[], opts?: unknown) => ({ code: '123456', status, seats, ...(opts ? { opts } : {}) }) as unknown as RoomInfo;
 
-  it('等人时坐第一个空位；开打了接管没绑人的电脑座位；绑着座位的回自己的座位；已经坐着的不动', () => {
+  it('等人时坐第一个空位；开打了先旁观、不替人接管（0.13.0）；绑着座位的回自己的座位；已经坐着的不动', () => {
     expect(autoSeat(room('waiting', [seat('human'), seat('empty'), seat('empty'), seat('empty')]), { seat: null })).toBe(1);
-    expect(autoSeat(room('playing', [seat('human'), seat('ai', true), seat('ai'), seat('human')]), { seat: null, bound: null })).toBe(2);
+    expect(autoSeat(room('playing', [seat('human'), seat('ai', true), seat('ai'), seat('human')]), { seat: null, bound: null })).toBeNull();
     expect(autoSeat(room('playing', [seat('human'), seat('ai', true), seat('ai'), seat('human')]), { seat: null, bound: 1 })).toBe(1);
     expect(autoSeat(room('playing', [seat('human'), seat('ai', true), seat('human'), seat('human')]), { seat: null, bound: null })).toBeNull();
     expect(autoSeat(room('waiting', [seat('human'), seat('empty'), seat('empty'), seat('empty')]), { seat: 0 })).toBeNull();
@@ -377,12 +378,52 @@ describe('进房自动坐下（0.6.0）', () => {
     const r = room('waiting', [seat('human'), seat('empty'), seat('empty'), seat('empty')]);
     expect(autoSeat(r, { seat: null }, 2)).toBe(2);
     expect(autoSeat(r, { seat: null }, 0)).toBe(1);
-    expect(autoSeat(room('playing', [seat('human'), seat('ai'), seat('ai'), seat('human')]), { seat: null, bound: null }, 2)).toBe(1);
+    expect(autoSeat(room('playing', [seat('human'), seat('ai'), seat('ai'), seat('human')]), { seat: null, bound: null }, 2)).toBeNull();
   });
 
   it('实盘房间坐下就要带入：不替人坐（回自己的座位除外）', () => {
     const r = room('waiting', [seat('human'), seat('empty'), seat('empty'), seat('empty')], { stake: 'mid' });
     expect(autoSeat(r, { seat: null })).toBeNull();
     expect(autoSeat(room('playing', [seat('human'), seat('ai', true), seat('ai'), seat('ai')], { stake: 'mid' }), { seat: null, bound: 1 })).toBe(1);
+  });
+});
+
+describe('旁观（0.13.0，docs/social.md 1.4）', () => {
+  const st = walk(3);
+  const spectate = (msgRoom: RoomInfo): WelcomeMsg<NetView> => ({ t: 'welcome', v: 1, minClientVersion: 1, seq: 5, you: { seat: null }, room: msgRoom, view: R.view(st[3]!, -1) });
+
+  it('开打后没坐下也进牌桌，看的是公开视图：没有任何人的手牌；画面座位 0 是真实 0 号，名字不叫"你"', () => {
+    const { ses, fake } = make();
+    ses.handle(spectate(room(R.turn(st[3]!))));
+    expect(ses.watching).toBe(true);
+    expect(ses.canEnterTable).toBe(true);
+    expect(ses.view().hand).toEqual([]);
+    expect(fake.sent.filter((m) => m.t === 'sit')).toEqual([]);
+    expect(isWatching()).toBe(true);
+    expect(fullSeatName(0)).toBe('阿一');
+    ses.close();
+    expect(isWatching()).toBe(false);
+    expect(fullSeatName(0)).toBe('你');
+  });
+
+  it('"坐下"坐哪儿：娱乐房间接管没绑人的电脑座位；绑着座位的回自己的；实盘房间只看（自己的座位除外）；没地方坐是 null', () => {
+    const a = make().ses;
+    a.handle(spectate(room(null)));
+    expect(a.freeSeat()).toBe(1);
+    const b = make().ses;
+    b.handle({ ...spectate(room(null)), you: { seat: null, bound: 3 } });
+    expect(b.freeSeat()).toBe(3);
+    const c = make().ses;
+    c.handle(spectate({ ...room(null), opts: { stake: 'mid' } } as RoomInfo));
+    expect(c.freeSeat()).toBeNull();
+    const d = make().ses;
+    d.handle(spectate({ ...room(null), seats: room(null).seats.map((x) => ({ ...x, kind: 'human' as const })) }));
+    expect(d.freeSeat()).toBeNull();
+    // 坐着的人不是旁观
+    const e = make().ses;
+    e.handle(welcome(st[3]!, 1));
+    expect(e.watching).toBe(false);
+    expect(e.freeSeat()).toBeNull();
+    for (const x of [a, b, c, d, e]) x.close();
   });
 });

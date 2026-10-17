@@ -14,9 +14,10 @@ import { LOW_MEMORY, appBox, fitAppToViewport, isIOS, markForeground, markRender
 import { hideErrorPanel, installErrorHandler, showErrorPanel } from './view/errors.ts';
 import { installIdleLimiter } from './view/idle.ts';
 import { goLobby, inOnlineGame, leaveText, savedGameInProgress } from './view/lobby.ts';
-import { autoJoin, forgetRoom, openOnline } from './view/online.ts';
+import { autoJoin, forgetRoom, lobbySession, openOnline } from './view/online.ts';
 import { mountRotateHint, setRotateLobbyLabel } from './view/orientation.ts';
 import { detectOnce, lobbyName, standalone } from './view/platform.ts';
+import { mountSocialOnce } from './view/social.ts';
 import { BootScene } from './view/scenes/BootScene.ts';
 import { TableScene } from './view/scenes/TableScene.ts';
 import { TitleScene } from './view/scenes/TitleScene.ts';
@@ -89,7 +90,11 @@ window.addEventListener('pagehide', () => cloud.flushOnHide());
 // 单独部署没有账号，云存档不启动（没有登录提示 cookie 时它本来也一个请求都不发，这里说清楚）
 void platform.then(() => {
   if (standalone()) setRotateLobbyLabel(lobbyName());
-  else void cloud.start();
+  else {
+    void cloud.start();
+    // 报位置、收好友邀请（0.13.0）：没登录 mountSocialOnce 自己不挂
+    void mountSocialOnce(() => app.net ?? lobbySession());
+  }
 });
 
 applyAudio();

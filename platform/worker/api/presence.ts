@@ -37,18 +37,34 @@ export function parseWhere(body: Record<string, unknown>): Where {
 }
 
 /**
- * POST /api/presence：204。离上次写不到 presenceEveryMs 就不写（0 行），否则 1 行（位置、时间、last_seen_at 一起）。
+ * POST /api/presence：204。写 1 行（位置、时间、last_seen_at 一起）或 0 行：
+ * - 位置没变（place、game、room 都一样；只是人数变了不算）：离上次写不到 presenceEveryMs 不写；
+ * - 位置变了：马上写，好友立刻看到"在房间里"（0.14.1；之前进房那一下的补报被 2 分钟节流吞掉，好友要等两分钟），
+ *   但同一个人最快 presenceMoveGapMs 写一次，来回切页面刷不了写入。
+ * 比较和写在同一条 UPDATE 里，不先读位置。
  * 只读档、live 类预算用完时路由直接回 204 不写（可丢的写，router.ts 的 quiet）：报位置失败不该打扰玩家。
  */
 export async function postPresence(c: Ctx): Promise<Response> {
   const where = parseWhere(c.body);
   const user = c.session!.user;
-  if (c.now - user.presence_at < c.limits.presenceEveryMs) return noContent();
-  await c.db.run(
-    c.db.stmt('UPDATE users SET presence_json = ?1, presence_at = ?2, last_seen_at = ?2 WHERE id = ?3', JSON.stringify(where), c.now, user.id),
+  const { now, limits } = c;
+  const since = now - user.presence_at;
+  if (since < limits.presenceMoveGapMs) return noContent();
+  const meta = await c.db.run(
+    c.db.stmt(
+      `UPDATE users SET presence_json = ?1, presence_at = ?2, last_seen_at = ?2
+       WHERE id = ?3 AND (presence_at <= ?4
+         OR presence_json IS NULL
+         OR json_extract(presence_json, '$.place') IS NOT ?5
+         OR json_extract(presence_json, '$.game') IS NOT ?6
+         OR json_extract(presence_json, '$.room') IS NOT ?7)`,
+      JSON.stringify(where), now, user.id, now - limits.presenceEveryMs, where.place, where.game ?? null, where.room ?? null,
+    ),
   );
-  user.presence_at = c.now;
-  user.last_seen_at = c.now;
+  if ((meta.changes ?? 0) > 0) {
+    user.presence_at = now;
+    user.last_seen_at = now;
+  }
   return noContent();
 }
 

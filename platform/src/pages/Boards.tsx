@@ -86,21 +86,23 @@ function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: str
 function DailyBoard({ game, board, scope }: { game: GameEntry; board: string | null; scope: Scope }) {
   const [data, setData] = useState<{ board: ScoreBoard; format: DailyFormat } | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // 只看好友时比的是这周（北京时间周一 0 点起）每人最好的一天（0.15.0，docs/social.md 1.5），今天没人打也有榜
+  const week = scope === 'friends';
   useEffect(() => {
-    if (!board) return;
+    if (!board && !week) return;
     let alive = true;
     setData(null);
     setError(null);
-    Promise.all([api.board(game.id, board, scope), loadDailyFormat(game.id)]).then(
+    Promise.all([week ? api.friendsWeek(game.id) : api.board(game.id, board!, scope), loadDailyFormat(game.id)]).then(
       ([b, format]) => alive && setData({ board: b, format }),
       (e: unknown) => alive && setError(e),
     );
     return () => {
       alive = false;
     };
-  }, [game.id, board, scope]);
-  const empty = `今天还没人打${game.name}的每日挑战，去当第一个！`;
-  if (!board) return <Empty testId="board-empty">{empty}</Empty>;
+  }, [game.id, board, scope, week]);
+  const empty = week ? `这周你和好友都还没打${game.name}的每日挑战，去当第一个！` : `今天还没人打${game.name}的每日挑战，去当第一个！`;
+  if (!board && !week) return <Empty testId="board-empty">{empty}</Empty>;
   if (error) return <p className="note">{errorText(error)}</p>;
   if (!data) return <p className="note">正在读取…</p>;
   const { board: b, format } = data;
@@ -109,6 +111,7 @@ function DailyBoard({ game, board, scope }: { game: GameEntry; board: string | n
   return (
     <>
       <RankList rows={rows} me={me} empty={empty} />
+      {week && <p className="note">只看好友时比的是这周每人最好的一天，北京时间每周一 0 点清零。</p>}
       {format.note && <p className="note">{game.name}的每日挑战：{format.note}</p>}
     </>
   );
