@@ -11,6 +11,7 @@ import { SPRITES5 } from './sprites5.ts';
 import { SPRITES6 } from './sprites6.ts';
 import { SPRITES7 } from './sprites7.ts';
 import { SPRITES8 } from './sprites8.ts';
+import { SPRITES9 } from './sprites9.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -72,7 +73,7 @@ let raidCache: { res: number; atlas: Atlas } | null = null;
 /** 夜探的第二张图集（巡夜将、石兽、房子、宝箱、门、宝物图标）；同一个 res 只画一次 */
 export function buildRaidAtlas(res: number): Atlas {
   if (raidCache?.res === res) return raidCache.atlas;
-  raidCache = { res, atlas: pack(SPRITES8, res, RAID_TEX) };
+  raidCache = { res, atlas: pack([...SPRITES8, ...SPRITES9], res, RAID_TEX) };
   return raidCache.atlas;
 }
 

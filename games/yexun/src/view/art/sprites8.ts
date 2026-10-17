@@ -305,7 +305,14 @@ function houseH(c: Ctx, hall: boolean): void {
   for (const x of [-3, 77]) blob(c, rrect(x, 78, 6, 40, 1.4), hall ? '#7e2519' : '#6a4a38', null, 1.8);
   // 窗：格子窗，里面透出暖光
   blob(c, rrect(26, 88, 28, 24, 2), hall ? '#7e2519' : '#4a3328', null, 2.2);
-  dab(c, rrect(29, 91, 22, 18, 1), '#f6d58a', 0.9);
+  // 夜里这是镇子上最显眼的暖光：窗外的光晕洒到墙上，窗纸里亮黄、中心偏白
+  const wg = c.createRadialGradient(40, 100, 4, 40, 100, 34);
+  wg.addColorStop(0, 'rgba(255,200,110,0.5)');
+  wg.addColorStop(1, 'rgba(255,200,110,0)');
+  c.fillStyle = wg;
+  c.fillRect(0, 78, 80, 40);
+  dab(c, rrect(29, 91, 22, 18, 1), '#ffd36e', 1);
+  dab(c, rrect(33, 94, 14, 12, 1), '#fff1b8', 0.7);
   for (const x of [34.5, 40, 45.5]) stroke(c, (k) => { k.moveTo(x, 91); k.lineTo(x, 109); }, 1.2, wood);
   stroke(c, (k) => { k.moveTo(29, 100); k.lineTo(51, 100); }, 1.2, wood);
   // 瓦顶

@@ -1,0 +1,51 @@
+/* 夜探 HUD：目标条、背包面板、小地图（样式跟 hud.css 一致：宣纸色、墨边；都在 .yx-hud 里，沿用它的 --s 缩放） */
+.yx-rs {
+  position: absolute; left: 50%; top: calc(68px * var(--s)); transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  pointer-events: none; text-align: center; white-space: nowrap;
+}
+.yx-rs-1, .yx-rs-2 {
+  padding: 3px 12px; border: 2.5px solid var(--ink); border-radius: 10px;
+  font-size: calc(14px * var(--s)); box-shadow: 0 2px 0 var(--ink);
+}
+.yx-rs-1 { background: rgba(246, 239, 220, 0.94); }
+.yx-rs.go .yx-rs-1 { background: #ffe08a; color: #5a3a00; }
+.yx-rs.wait .yx-rs-1 { background: rgba(228, 232, 240, 0.9); color: #3a4256; }
+.yx-rs-2 { background: rgba(92, 30, 24, 0.95); color: #ffe0d0; font-size: calc(15px * var(--s)); }
+.yx-rs.warn .yx-rs-2 { background: rgba(120, 70, 16, 0.95); color: #ffe9a0; }
+.yx-rs.red .yx-rs-2 { background: rgba(176, 30, 26, 0.97); color: #fff; animation: yx-dawn 0.9s ease-in-out infinite; }
+
+/* 镇门石兽的血条在顶上时，目标条让到它下面 */
+.yx-rs.lower { top: calc(128px * var(--s)); }
+
+/* 背包按钮：原来只是个计数，现在可点（≥ 44 像素），展开看装了什么 */
+.yx-bag { pointer-events: auto; cursor: pointer; min-height: 44px; font: inherit; color: var(--ink); }
+.yx-bag:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.yx-bagpanel {
+  position: absolute; right: 10px; top: calc(64px * var(--s)); z-index: 6;
+  width: min(300px, 60vw); max-height: 62%; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px; padding: 8px;
+  border: 3px solid var(--ink); border-radius: 12px; background: rgba(246, 239, 220, 0.97); box-shadow: 0 4px 0 var(--ink);
+  pointer-events: auto; font-size: calc(14px * var(--s));
+}
+.yx-bagpanel .hd { font-size: calc(15px * var(--s)); padding: 0 2px 4px; border-bottom: 2px solid rgba(23, 19, 28, 0.25); }
+.yx-bagpanel .empty { opacity: 0.7; padding: 6px 2px; font-weight: 500; }
+.yx-bagpanel .it {
+  display: flex; align-items: center; gap: 8px; padding: 3px 6px 3px 4px;
+  border: 2.5px solid var(--tc); border-radius: 8px; background: rgba(255, 255, 255, 0.55);
+}
+.yx-bagpanel .it img { width: calc(30px * var(--s)); height: calc(30px * var(--s)); flex: none; }
+.yx-bagpanel .it .n { flex: 1; }
+.yx-bagpanel .it .v { font-variant-numeric: tabular-nums; }
+.yx-bagpanel .it i {
+  font-style: normal; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 3px;
+  background: var(--tc); color: #fff; text-shadow: 0 0 2px #17131c; font-size: 0.85em;
+}
+
+/* 小地图：左下角，半透明，不拦点击（摇杆照样按得下去） */
+.yx-mm {
+  position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  width: calc(124px * var(--s)); height: calc(124px * var(--s));
+  border-radius: 10px; opacity: 0.74; pointer-events: none;
+  box-shadow: 0 0 0 2.5px var(--ink);
+}
