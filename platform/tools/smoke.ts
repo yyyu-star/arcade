@@ -675,10 +675,10 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
 
   console.log('改昵称；写接口的 429、503、断网提示（浏览器里模拟）');
   let d = await openFold(page, '改昵称');
-  await d.getByLabel('新昵称').fill('冒烟老王');
+  await d.getByLabel('新昵称').fill('冒烟大刘');
   await d.getByRole('button', { name: '保存' }).click();
   await d.getByText('改好了').waitFor();
-  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
   const patchOnly = (handle: (r: Route) => Promise<void>) => (r: Route) => (r.request().method() === 'PATCH' ? handle(r) : r.continue());
   for (const [what, handler, text, status] of [
     ['429', patchOnly((r) => r.fulfill(json({ error: 'rate_limited', message: '操作太频繁，过一会儿再试', retryAfter: 120 }, 429))), '操作太频繁，过一会儿再试（2 分钟后）', 429],
@@ -746,7 +746,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await page.waitForTimeout(300);
   check(logouts() === before, '点了"取消"却还是发了退出请求');
   await codeEl.waitFor();
-  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
   await shot(page, 'new-recovery-code');
   await d.getByLabel('我已经存好了').check();
   await d.getByRole('button', { name: '好了' }).click();
@@ -760,7 +760,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await d.getByLabel('现在的密码').fill(PW2);
   await d.getByRole('button', { name: '退出其他设备' }).click();
   await d.getByText('别的设备都已退出').waitFor();
-  await od.getByLabel('新昵称').fill('冒烟小李');
+  await od.getByLabel('新昵称').fill('冒烟小刘');
   expectHttp(401, '/api/me');
   await od.getByRole('button', { name: '保存' }).click();
   await other.page.getByRole('link', { name: '去登录' }).waitFor();
@@ -836,7 +836,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await shot(page, 'forgot-done');
   await page.getByLabel('我已经存好了').check();
   await page.getByRole('button', { name: '回首页' }).click();
-  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
 
   console.log('注销：恢复码错时说"恢复码不对"；勾选前按钮不能点；注销后回首页，提示只出现一次');
   await page.getByTitle('我的账号').click();
