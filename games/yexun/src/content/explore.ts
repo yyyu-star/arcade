@@ -289,20 +289,21 @@ export const ROAM_SPEED = 0.6;
 /**
  * 实盘结回（DESIGN.md 4.2）：撤出时倍数 = clamp(带出的宝物价值 ÷ 基准价值, 保底, 封顶)；死亡、迷失、认输为 0。结回 = 带入 × 倍数 向下取整，按万分之一传。
  * 基准按"档位 × 镇子"各一个：三个镇子同一档的平均带出价值差三成（模拟器第 3 轮），只按一个数会有"挑镇子赚钱"的空子。
- * 保底 1.3：小白多半第一座门开就走、带得少，没有保底每局要亏一半多；有了保底，"撤出来就有赚"，冒险多搜的人照样拿得多（balance.md 4.4）。
- * 档位 → 危险：小 0、中 1、大 2（主线 2026-10-17 同意放低一档）。0.1.0 只开小档：第 3 轮里机器人普通玩家危险 1 只撤出 45%、危险 2 约 30%，
- * 中、大档怎么定基准都够不着 4.4 的目标，等 0.2.0 调过夜探难度再开（open 里没有的档菜单上灰着）。
+ * 保底 1.5：小白多半第一座门开就走、带得少，没有保底每局要亏一半多；balance.md 4.4 要小档小白 +0.15～0.30，保底 1.3 时只有 +0.01～0.09（0.1.0），提到 1.5。
+ *   不按镇子分开定保底：山寺小白死得多，要 1.9 才进区间，可手熟的人专刷保底就能拿 +0.8，保底只能一档一个、不能高。
+ * 档位 → 危险：小 0、中 1、大 2（主线 2026-10-17 同意放低一档）；夜探的危险 1、2 走 waves.ts 的 RAID_DANGERS（比守夜缓），0.2.0 起三档都开。
+ * 基准是 0.2.0 全量模拟（每格 2,000 局）按普通玩家落在区间中点拟合的，见 DESIGN.md 4.2 的表。
  */
 export const RAID_LIVE = {
   cap: 3,
   floor: 1.5,
   base: {
-    small: { guzhen: 206, dukou: 162, shansi: 215 },
-    medium: { guzhen: 196, dukou: 150, shansi: 199 },
-    large: { guzhen: 196, dukou: 150, shansi: 199 },
+    small: { guzhen: 207, dukou: 169, shansi: 202 },
+    medium: { guzhen: 183, dukou: 154, shansi: 142 },
+    large: { guzhen: 165, dukou: 143, shansi: 90 },
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
   danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
-  open: ['small'] as readonly RaidLiveTier[],
+  open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],
 };
 export type RaidLiveTier = 'small' | 'medium' | 'large';
 /** 能开实盘的镇子（教学镇不能） */

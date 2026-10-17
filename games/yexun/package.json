@@ -1,7 +1,7 @@
 {
   "name": "yexun",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "夜巡：道士夜巡雪夜古镇的幸存者类动作游戏，守夜和夜探两个模式；筹码无任何现金价值",
