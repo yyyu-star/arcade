@@ -387,6 +387,17 @@ try {
     await sleep(300);
   }
   check(true, `一整场打完，两边结算上都有"再来一场"（${Math.round((Date.now() - t) / 1000)} 秒）`);
+  // 颁奖（docs/social.md 第 2 节）：两边看到的奖一样；"分享颁奖"出 kit 的分享预览，关掉
+  const prizes = (p: Page): Promise<string[]> => p.$$eval('.mask.end .award', (xs) => xs.map((x) => x.textContent ?? ''));
+  const [pa1, pb1] = [await prizes(pa), await prizes(pb)];
+  check(pa1.length >= 1 && pa1.length <= 3 && JSON.stringify(pa1) === JSON.stringify(pb1), `结算上有颁奖，两边一样（${pa1.join(' / ')}）`);
+  await pa.screenshot({ path: join(SHOTS, 'room-awards-a.png') });
+  await pb.screenshot({ path: join(SHOTS, 'room-awards-b.png') });
+  await pa.click('.mask.end .share-awards');
+  await pa.waitForSelector('[data-key="share:close"]', { timeout: 5_000 });
+  await pa.screenshot({ path: join(SHOTS, 'room-awards-share.png') });
+  await pa.click('[data-key="share:close"]');
+  check(true, '"分享颁奖"出了分享预览');
   await pa.click('.mask.end .rematch');
   await pa.waitForFunction((old) => /^\d{6}$/.test(document.querySelector('.room-code')?.textContent?.trim() ?? '') && document.querySelector('.room-code')?.textContent?.trim() !== old, code);
   const code2 = ((await pa.textContent('.room-code')) ?? '').trim();

@@ -3,6 +3,7 @@
  */
 import type { RoomTexts } from 'arcade-kit/client';
 import type { FanId } from '../core/variants/sichuan-xuezhan/index.ts';
+import type { Award, AwardId } from '../game/awards.ts';
 import type { HighlightId } from '../game/banter.ts';
 import type { Level } from '../ai/venues.ts';
 import type { StakesId, TierId } from '../game/stakes.ts';
@@ -72,6 +73,23 @@ export const TITLE_NAME: Record<string, string> = {
 };
 
 /** 名场面（game/banter.ts 的 highlightsOf） */
+/** 好友房一场结束的颁奖（game/awards.ts） */
+export const AWARD_NAME: Record<AwardId, string> = { mvp: '本场 MVP', unlucky: '手气最背', gang: '杠王', zimo: '自摸王' };
+
+/** 每个奖一句话：模板只填名字和数，不收任何人写的字；"最背"的那句给个台阶，不挖苦人 */
+export function awardLine(a: Award, name: string, unit: string): string {
+  switch (a.id) {
+    case 'mvp':
+      return `${name} 净赢 ${num(a.n)}${unit}，全场最旺`;
+    case 'unlucky':
+      return `${name} 这场手气背，输了 ${num(a.n)}${unit}，下一场雄起`;
+    case 'gang':
+      return `${name} 一场杠了 ${a.n} 个，刮风下雨停不下来`;
+    case 'zimo':
+      return `${name} 自摸了 ${a.n} 次，手气巴适`;
+  }
+}
+
 export const HIGHLIGHT_NAME: Record<HighlightId, string> = {
   multi2: '一炮双响',
   multi3: '一炮三响',
