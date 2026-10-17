@@ -251,9 +251,11 @@ export function StatsPage() {
           </ul>
         </Panel>
         <Panel icon="trophy" title="称号墙">
-          {games.map(([g, c]) => (
-            <TitleShelf key={g} game={g} earned={c.titles} />
-          ))}
+          <div className="shelves">
+            {games.map(([g, c]) => (
+              <TitleShelf key={g} game={g} earned={c.titles} />
+            ))}
+          </div>
           {titles === 0 && <p className="note">还没拿到称号。打出名场面，游戏会发给你。</p>}
         </Panel>
       </div>

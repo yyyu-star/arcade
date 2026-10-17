@@ -1,0 +1,104 @@
+/*
+ * 分层背景（scene.ts，docs/art-v3.md 第 3、5 节）："深夜的私人牌室"。不在舞台里，按屏幕像素画（vmin），超宽屏两边也是房间，不是黑边。
+ * 颜色全走 --sc-*，主题房（PR 2）只换这几个变量。动画只动 transform / opacity。
+ */
+.scene {
+  --sc-wall-hi: #173528;
+  --sc-wall: #0b1c15;
+  --sc-wall-lo: #040a07;
+  --sc-light: #ffd890;
+  --sc-b0: rgba(255, 196, 110, .5);
+  --sc-b1: rgba(120, 220, 170, .32);
+  --sc-b2: rgba(255, 150, 120, .34);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 38%, var(--sc-wall-hi), transparent 75%),
+    /* 墙上竖着的护墙板：很淡的竖纹 */
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 2px, transparent 2px 9vmin),
+    linear-gradient(var(--sc-wall), var(--sc-wall-lo));
+}
+/* 暗角压在最上面，让四周沉下去、中间的桌子和标题浮出来 */
+.scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 85% 75% at 50% 45%, transparent 50%, rgba(0, 0, 0, .62));
+}
+
+/* ---------- 远景：散景光斑（径向渐变的圆，慢慢漂、一明一暗） ---------- */
+.sc-bokeh { position: absolute; inset: 0; transition: opacity .6s; }
+.sc-bokeh i {
+  position: absolute;
+  width: calc(var(--d) * .16vmin);
+  aspect-ratio: 1;
+  margin: calc(var(--d) * -.08vmin) 0 0 calc(var(--d) * -.08vmin);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--bc) 0 35%, transparent 70%);
+  opacity: .7;
+  animation: sc-drift 24s ease-in-out infinite alternate;
+}
+.sc-bokeh .c0 { --bc: var(--sc-b0); }
+.sc-bokeh .c1 { --bc: var(--sc-b1); }
+.sc-bokeh .c2 { --bc: var(--sc-b2); }
+@keyframes sc-drift {
+  0% { transform: translate(0, 0); opacity: .35; }
+  50% { opacity: .85; }
+  100% { transform: translate(3vmin, -2.5vmin); opacity: .45; }
+}
+
+/* ---------- 中景：吊灯和吧台剪影 ---------- */
+.sc-lamps, .sc-bar { position: absolute; left: 0; width: 100%; }
+.sc-lamps { top: 0; height: 30vmin; }
+.sc-bar { bottom: 0; height: 26vmin; opacity: .9; }
+.sc-lamps .cord { stroke: rgba(0, 0, 0, .7); stroke-width: 2; }
+.sc-lamps .shade { fill: #0a0f0c; stroke: rgba(255, 216, 144, .28); stroke-width: 1.5; }
+.sc-lamps .rim { fill: var(--sc-light); opacity: .85; }
+.sc-lamps .halo { fill: url(#sc-halo); }
+.sc-bar .bottles path { fill: rgba(0, 0, 0, .5); stroke: rgba(255, 216, 144, .16); stroke-width: 1.2; }
+.sc-bar .counter { fill: #0a0705; }
+.sc-bar .edge { fill: rgba(255, 216, 144, .3); }
+
+/* ---------- 近景：光锥 + 浮尘（主页打在左边的扇形牌上） ---------- */
+.sc-cone {
+  position: absolute;
+  top: 0;
+  left: 30%;
+  width: 70vmin;
+  height: 100%;
+  translate: -50% 0;
+  background: linear-gradient(rgba(255, 224, 160, .2), rgba(255, 224, 160, .07) 60%, transparent 92%);
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  transition: opacity .6s;
+}
+.sc-dust { position: absolute; inset: 0; }
+.sc-dust i {
+  position: absolute;
+  width: .5vmin;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 236, 190, .8);
+  opacity: 0;
+  animation: sc-dust 13s linear infinite;
+}
+@keyframes sc-dust {
+  0% { transform: translate(0, 0); opacity: 0; }
+  20% { opacity: .9; }
+  80% { opacity: .6; }
+  100% { transform: translate(2vmin, -30vmin); opacity: 0; }
+}
+
+/* 竖屏：标题在上半屏中间 */
+.scene.tall .sc-cone { left: 50%; width: 110vmin; }
+/* 牌桌、等人页：桌面有自己的聚光，光锥收起来，光斑暗一点 */
+.scene.table .sc-cone { opacity: 0; }
+.scene.table .sc-bokeh { opacity: .55; }
+
+/* 减少动态效果、省内存：同一张画面，不动 */
+.scene.still *, .scene.still *::before, .scene.still *::after { animation: none !important; }
+/* 触屏在牌桌上也不动（打牌时省电），主页上照常 */
+@media (pointer: coarse) {
+  .scene.table * { animation: none; }
+}

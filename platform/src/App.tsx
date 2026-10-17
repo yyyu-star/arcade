@@ -176,7 +176,7 @@ function Home({ deleted }: { deleted: boolean }) {
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }, [deleted]);
   return (
-    <>
+    <div className="lobby">
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
       {user && <OvertakeNudge />}
@@ -199,7 +199,7 @@ function Home({ deleted }: { deleted: boolean }) {
           </div>
         </article>
       </main>
-    </>
+    </div>
   );
 }
 

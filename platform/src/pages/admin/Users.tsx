@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AdminUser, errorText } from '../../api.ts';
 import { LedgerList } from '../../ledger.tsx';
-import { Empty, Field, FormError, Panel, SubmitButton, useSubmit } from '../../ui.tsx';
+import { Empty, Field, FormError, Panel, Skeleton, SubmitButton, useSubmit } from '../../ui.tsx';
 import { signed, tone } from '../../format.ts';
 import { num, type Credentials, dateText, gameName } from './common.ts';
 
@@ -80,7 +80,7 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
         </button>
         {error && <FormError text={error} />}
         {notice && <p className="ok" role="status">{notice}</p>}
-        {!users && !error && <p className="note">正在读取…</p>}
+        {!users && !error && <Skeleton rows={3} />}
         <ul className="users">
           {users?.map((u) => (
             <li key={u.id}>
@@ -137,7 +137,11 @@ export function UserList({ version, selfId, onCard, onChanged }: { version: numb
             }}
           />
         ) : (
-          users && users.length > 0 && <p className="note users-split__hint">点左边的一个人，看钱包、战绩和流水。</p>
+          users && users.length > 0 && (
+            <div className="users-split__hint">
+              <Empty>点左边的一个人，看钱包、战绩和流水。</Empty>
+            </div>
+          )
         )}
       </div>
     </div>
@@ -211,7 +215,7 @@ function UserDetail({ username }: { username: string }) {
     };
   }, [username]);
   if (error) return <FormError text={error} />;
-  if (!data) return <p className="note">正在读取…</p>;
+  if (!data) return <Skeleton rows={3} />;
   const career = Object.entries(data.career ?? {});
   return (
     <div className="user-detail" data-testid="user-detail">

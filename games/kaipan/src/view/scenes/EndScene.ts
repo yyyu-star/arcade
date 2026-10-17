@@ -7,7 +7,7 @@ import { live, onLiveChange } from '../live.ts';
 import { chips, liveEndText } from '../liveText.ts';
 import { setColor } from '../ui/text.ts';
 import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Profile, type RecordResult } from '../../platform/profile.ts';
-import { ensureMetaArt, hasArt, stockKey, type Glyph } from '../assets.ts';
+import { ensureMetaArt, hasArt, queueLazy, stockKey, type Glyph } from '../assets.ts';
 import { addBackdrop } from '../fx/effects.ts';
 import { confetti } from '../fx/particles.ts';
 import { bestText, boardLine, boardScoreText, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
@@ -110,6 +110,11 @@ export class EndScene extends BaseScene {
     super('end', session);
   }
 
+  /** 直接从存档打开结束页（没进过对局）时，补上小屋延伸出来的那圈和雨天图层。 */
+  preload(): void {
+    queueLazy(this.load, this.textures);
+  }
+
   protected override build(): void {
     this.buttons = {};
     this.liveHead = null;
@@ -122,6 +127,8 @@ export class EndScene extends BaseScene {
     this.result = this.session.recordEnd();
     const profile: Profile = this.result?.profile ?? loadProfile().profile;
     this.room = new Room(this, sum.won ? 'bull' : 'bear', { ambient: this.lively });
+    // 通关是傍晚的暖光，出局是夜里
+    this.room.setTime(sum.won ? 'dusk' : 'night', null);
     addBackdrop(this, 0.35).disableInteractive();
     const G = phoneLayout(this) ? PHONE_GEO : DESK_GEO;
     const ph = G !== DESK_GEO;

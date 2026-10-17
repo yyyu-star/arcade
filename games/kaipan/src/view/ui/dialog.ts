@@ -5,7 +5,7 @@ import { COLOR, TYPE } from '../theme.ts';
 import { Button, HIT_MIN } from './button.ts';
 import type { Glyph } from '../assets.ts';
 import { addGlyph, addPaper } from './art.ts';
-import { bindTooltip, type TipContent } from './tooltip.ts';
+import { bindTooltip, hideTooltip, type TipContent } from './tooltip.ts';
 import { addText } from './text.ts';
 import { viewOf } from '../viewport.ts';
 import { group } from '../../core/format.ts';
@@ -32,6 +32,8 @@ export class Dialog extends Phaser.GameObjects.Container {
     this.dw = w;
     this.dh = h;
     this.onClosed = onClosed;
+    // 点开弹窗的那下鼠标多半还停在按钮上：按钮的悬停说明先收起，不然会盖在弹窗上面
+    hideTooltip(scene);
     const V = viewOf(scene);
     const x = Math.round((V.w - w) / 2);
     const y = Math.round((V.h - h) / 2);
