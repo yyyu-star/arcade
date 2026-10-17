@@ -43,7 +43,7 @@ import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
-import { CALM, DANGERS, DAWN_TICK, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
+import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
   MAX_PASSIVES,
@@ -100,7 +100,7 @@ export function createWorld(setup: Setup): World {
 
 /** 这一档、这几条咒印下的定点事件：精英按危险档晚到、多来几只，危险 5 两只尸王；按时间重排 */
 function schedule(w: World): WaveEvent[] {
-  const d = DANGERS[w.setup.danger];
+  const d = dangerDef(w.setup.mode, w.setup.danger);
   const extra = d.eliteExtra + (w.setup.curses?.includes('elites') ? 1 : 0);
   // 图专属精英（content/regions.ts）按时间插进定点事件；没登记的图什么都不加
   const own = VIGIL_REGIONS[w.setup.map ?? 'snow']?.elites?.map((e): WaveEvent => ({ at: e.at, kind: 'elite', enemy: e.enemy, count: e.count })) ?? [];
@@ -319,7 +319,7 @@ function hurt(w: World, dmg: number): void {
     w.invuln = PLAYER.invuln;
     return;
   }
-  const diff = DANGERS[w.setup.danger];
+  const diff = dangerDef(w.setup.mode, w.setup.danger);
   const d = Math.max(1, Math.round(dmg * diff.dmgMul * (w.tick < EARLY_TICKS ? diff.earlyDmg : 1) * (w.setup.assist ? ASSIST.dmg : 1) - w.stats.armor));
   w.hp -= d;
   // 胖师叔：挨打时震开身边（下一拍有格子时结算）
@@ -363,7 +363,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   const i = freeEnemySlot(w);
   if (i < 0) return -1;
   const def = ENEMY_BY_KIND[kind];
-  const diff = DANGERS[w.setup.danger];
+  const diff = dangerDef(w.setup.mode, w.setup.danger);
   const min = minuteOf(w);
   const big = def.elite || def.boss;
   const size = big ? 1 : 0.88 + w.rSpawn.next() * 0.24;
@@ -473,7 +473,7 @@ function spawnRaid(w: World, raid: Raid): void {
     if (i >= 0) raid.bindGuard(gi, i, w);
   }
   const m = raidMinute(w.tick);
-  const diff = DANGERS[w.setup.danger];
+  const diff = dangerDef(w.setup.mode, w.setup.danger);
   const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
   // 离镇子中心越近怪越多（按主角站的地方）
   const zone = raidZoneMul(raid.map, w.x, w.y).count;
@@ -498,7 +498,7 @@ function spawnWaves(w: World): void {
   while (w.nextEvent < w.schedule.length && w.tick >= w.schedule[w.nextEvent]!.at) {
     const e = w.schedule[w.nextEvent++]!;
     if (e.kind === 'boss') {
-      const n = e.enemy === 'boss' && DANGERS[w.setup.danger].twinBoss ? 2 : 1;
+      const n = e.enemy === 'boss' && dangerDef(w.setup.mode, w.setup.danger).twinBoss ? 2 : 1;
       for (let k = 0; k < n; k++) {
         const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.8);
         spawnEnemy(w, e.enemy, x, y);
@@ -537,7 +537,7 @@ function spawnWaves(w: World): void {
   // 按分钟补怪
   const mi = Math.min(MINUTES.length - 1, Math.floor(minuteOf(w)));
   const m = MINUTES[mi]!;
-  const diff = DANGERS[w.setup.danger];
+  const diff = dangerDef(w.setup.mode, w.setup.danger);
   // 危险 0：怪种比例晚一分钟（更难的常规怪晚出）
   const mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
   // 引魂灯：每级怪多 10%；咒印"众"：多 25%
@@ -600,7 +600,7 @@ const guardFx = {
 
 function moveEnemies(w: World): void {
   // 开局减速对每只怪都一样，循环外算一次
-  const openMul = w.tick < OPEN_TICKS ? DANGERS[w.setup.danger].openSlow : 1;
+  const openMul = w.tick < OPEN_TICKS ? dangerDef(w.setup.mode, w.setup.danger).openSlow : 1;
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;
     if (w.eBind[i]! > w.tick) {
@@ -2394,7 +2394,7 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
 
 function movePickups(w: World): void {
   // 磁吸半径随等级涨（每级 +1.5%，40 级封顶 +60%）：后期怪多、走位忙，不用一颗颗去碰
-  const m = w.stats.magnet * DANGERS[w.setup.danger].magnetMul * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
+  const m = w.stats.magnet * dangerDef(w.setup.mode, w.setup.danger).magnetMul * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
   const m2 = m * m;
   for (let i = 0; i < MAX_DROPS; i++) {
     if (!w.dAlive[i]) continue;
@@ -2711,7 +2711,7 @@ function openChoices(w: World): void {
   const pool = choicePool(w);
   const picks: Choice[] = [];
   // 新手档前几次升级：先从法器里抽两张，保证有能打的（主线 #144）
-  const arms = w.level <= DANGERS[w.setup.danger].armsFirst + 1 ? 2 : 0;
+  const arms = w.level <= dangerDef(w.setup.mode, w.setup.danger).armsFirst + 1 ? 2 : 0;
   while (picks.length < w.cardCount && pool.length > 0) {
     const only = picks.length < arms && pool.some((p) => p.c.kind === 'weapon');
     let total = 0;

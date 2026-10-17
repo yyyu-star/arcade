@@ -295,9 +295,9 @@ export const ROAM_SPEED = 0.6;
  */
 export const RAID_LIVE = {
   cap: 3,
-  floor: 1.3,
+  floor: 1.5,
   base: {
-    small: { guzhen: 196, dukou: 150, shansi: 199 },
+    small: { guzhen: 206, dukou: 162, shansi: 215 },
     medium: { guzhen: 196, dukou: 150, shansi: 199 },
     large: { guzhen: 196, dukou: 150, shansi: 199 },
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,

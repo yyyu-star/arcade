@@ -125,6 +125,34 @@ export const DANGERS: Record<Danger, DangerDef> = {
   4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.45, dmgMul: 1.45, countMul: 1.14, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
   5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.46, dmgMul: 1.46, countMul: 1.2, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
 };
+/**
+ * 夜探的危险档（DESIGN.md 4.2）：夜探没有天亮可撑、还有巡夜将，同一档比守夜难得多（第 3 轮：普通玩家危险 0 撤出 80%，危险 1 只剩 45%），
+ * 所以单独一条更缓的坡：危险 1、2 取守夜危险 0 到 1 的三分之一、三分之二处，危险 3 起顺延守夜的 1、2、3。
+ * 实盘中、大档（危险 1、2）就落在这两档上。整数项四舍五入。
+ */
+function lerpDanger(a: DangerDef, b: DangerDef, t: number, id: Danger): DangerDef {
+  const f = (x: number, y: number): number => x + (y - x) * t;
+  const i = (x: number, y: number): number => Math.round(f(x, y));
+  return {
+    ...a, id, name: `危险 ${id}`,
+    hpMul: f(a.hpMul, b.hpMul), dmgMul: f(a.dmgMul, b.dmgMul), countMul: f(a.countMul, b.countMul), openSlow: f(a.openSlow, b.openSlow),
+    magnetMul: f(a.magnetMul, b.magnetMul), earlyDmg: f(a.earlyDmg, b.earlyDmg), armsFirst: i(a.armsFirst, b.armsFirst), mixShift: i(a.mixShift, b.mixShift),
+    eliteLate: i(a.eliteLate, b.eliteLate), eliteExtra: i(a.eliteExtra, b.eliteExtra),
+  };
+}
+export const RAID_DANGERS: Record<Danger, DangerDef> = {
+  0: DANGERS[0],
+  1: lerpDanger(DANGERS[0], DANGERS[1], 1 / 3, 1),
+  2: lerpDanger(DANGERS[0], DANGERS[1], 2 / 3, 2),
+  3: { ...DANGERS[1], id: 3, name: '危险 3' },
+  4: { ...DANGERS[2], id: 4, name: '危险 4' },
+  5: { ...DANGERS[3], id: 5, name: '危险 5' },
+};
+/** 这一局用的危险档参数：夜探走 RAID_DANGERS */
+export function dangerDef(mode: 'vigil' | 'raid', d: Danger): DangerDef {
+  return mode === 'raid' ? RAID_DANGERS[d] : DANGERS[d];
+}
+
 /** 两只尸王时每只的血 */
 export const TWIN_BOSS_HP = 0.75;
 
