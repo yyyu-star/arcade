@@ -21,7 +21,9 @@ arcade/
 │  ├─ kaipan/              模块：《开盘》（Worker 名 kaipan，路径 /games/kaipan/）
 │  ├─ guandan/             模块：掼蛋（Worker 名 guandan，路径 /games/guandan/）
 │  ├─ texas/               模块：德州扑克（Worker 名 texas，路径 /games/texas/；设计见 games/texas/DESIGN.md）
-│  └─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法，先做川麻·血战到底，设计见 games/mahjong/DESIGN.md）
+│  ├─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法，先做川麻·血战到底，设计见 games/mahjong/DESIGN.md）
+│  ├─ racing/              模块：《飞驰》回合制卡牌赛车（社区贡献者的游戏，Worker 名 racing，路径 /games/racing/）
+│  └─ yexun/               模块：《夜巡》幸存者类动作游戏，守夜 / 夜探两个模式（Worker 名 yexun，路径 /games/yexun/，设计见 games/yexun/DESIGN.md）
 └─ packages/
    └─ arcade-kit/          共用包：联机房间基类、开房进房入口、浏览器连接器、协议、计量、表情道具（版本见它的 package.json；入场票以后加）。只测不部署（pkg-arcade-kit.yml）
 ```
@@ -94,7 +96,8 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 | games/texas | 5175 | 4175 |
 | games/mahjong | 5176 | 4176 |
 | games/racing | 5177 | 4177 |
-| 下一个游戏 | 5178 | 4178 |
+| games/yexun | 5178 | 4178 |
+| 下一个游戏 | 5179 | 4179 |
 
 模块里的截图、音频检查等工具也只用本模块登记的端口，或者由系统分配的临时端口（端口写 0），不占别的模块的。
 允许临时端口是因为登记的两个端口常被开着的 dev 和 preview 占着，工具再去抢只会冲突，或者连到旧服务上。
