@@ -47,6 +47,8 @@ export class Cards {
   private items: HTMLButtonElement[] = [];
   private openedAt = 0;
   private readonly icons: (key: string) => string;
+  /** 弹出时通知（引导记一笔：带说明的卡片看过了） */
+  onShow: (firstTime: boolean) => void = () => undefined;
 
   constructor(parent: HTMLElement, icons: (key: string) => string) {
     this.icons = icons;
@@ -98,6 +100,7 @@ export class Cards {
     this.root.appendChild(row);
     this.root.style.display = '';
     this.setFocus(0);
+    this.onShow(firstTime);
   }
 
   private setFocus(i: number): void {

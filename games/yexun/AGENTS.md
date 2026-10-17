@@ -13,7 +13,7 @@
 src/core/      模拟核心：固定节拍（每秒 30 拍）、确定性；state.ts（状态）、step.ts（一拍）、grid.ts（格子分区）、fmath.ts + dirs.ts（数学）、rng.ts、events.ts、fingerprint.ts
 src/content/   内容表：法器、被动、进化、怪物、刷怪表、角色、地图、实盘倍数；改数值只改这里
 src/view/      画面层：art/（程序画的图集和雪地）、game/（对局场景、输入、特效）、audio/（合成音效和音乐）、ui/（DOM 界面：HUD、菜单、卡片）、viewport.ts（iOS 适配）
-src/platform/  本地存储、云存档、平台接口
+src/platform/  本地存储（save.ts）、云存档、平台接口
 worker/        Worker（登录闸门、单独部署的根路径；第 5 步加实盘带入结回），自己一份 tsconfig（workers-types）
 tools/         shot.ts（冒烟截图）、subset-font.ts（毛笔字子集）、gen-dirs.ts（生成方向表）、bots.ts + sim.ts（机器人配平）、bench.ts（核心耗时）
 tests/         vitest
@@ -47,11 +47,11 @@ tests/         vitest
 | `npm run build:cf` | 部署用构建到 `dist-cf/games/yexun/` |
 | `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward` | 机器人模拟，出胜率和节奏表 |
 | `npm run bench -- <种子> <难度>` | 核心每拍耗时 |
-| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--tag` 加文件名前缀；每次打印帧率和场景脚本耗时 |
+| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--tag` 加文件名前缀；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时 |
 
 ## 6. 浏览器存储 key（全部 `yexun.` 前缀）
 
-在用：`yexun.settings`（音效、音乐开关；0.0.3 起）。计划（DESIGN.md 5.5）：`yexun.save`、`yexun.settings`、`yexun.replays`、`yexun.live`、`yexun.cloud`。新增 key 必须带前缀并补进这张表。
+在用：`yexun.settings`（音效、音乐、震屏、固定摇杆开关；0.0.3 起）、`yexun.save`（局数、最好成绩、引导进度；0.0.4 起，`src/platform/save.ts`）。计划（DESIGN.md 5.5）：`yexun.save`、`yexun.settings`、`yexun.replays`、`yexun.live`、`yexun.cloud`。新增 key 必须带前缀并补进这张表。
 
 ## 7. 发布
 

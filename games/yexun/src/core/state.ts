@@ -9,7 +9,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -43,6 +43,9 @@ export interface OwnedWeapon {
   evolved: boolean;
   /** 离下次出手还有几拍 */
   timer: number;
+  /** 这一局打出的伤害和击杀（结算页用） */
+  dmg: number;
+  kills: number;
   /** 铜钱：这一轮还转几拍；飞剑：轮到第几把出手 */
   phase: number;
   /** 铜钱：绕身的角度（方向表下标） */
@@ -182,6 +185,8 @@ export class World {
   /** 被吸着走：速度 */
   readonly dPull = new Float64Array(MAX_DROPS);
   dCount = 0;
+  /** 地上的魂珠数（超过上限就合并） */
+  soulCount = 0;
 
   // 刷怪
   spawnAcc = 0;

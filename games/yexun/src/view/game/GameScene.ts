@@ -8,7 +8,7 @@
  */
 import Phaser from 'phaser';
 import { ENEMIES, HOP_AIR, HOP_PERIOD } from '../../content/enemies.ts';
-import { ARENA, xpNeed } from '../../content/player.ts';
+import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
 import { PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, step, type World } from '../../core/index.ts';
@@ -47,6 +47,10 @@ export interface GameDeps {
   /** 第一局：卡片上带一行说明 */
   firstRun: boolean;
   onEnd: (w: World) => void;
+  /** 设置里的"震屏"开关（手感清单第 2 条：能关） */
+  shake: () => boolean;
+  /** 开了宝箱（引导用：第一次开宝箱时提示进化） */
+  onChest?: () => void;
   /** 冒烟、截图用：由机器人代替输入 */
   autopilot?: (w: World) => { dir: number; choice: number };
 }
@@ -76,7 +80,7 @@ export class GameScene extends Phaser.Scene {
   private aura!: Phaser.GameObjects.Image;
   private mobs: (MobView | null)[] = [];
   private shots: ({ gen: number; img: Phaser.GameObjects.Image; trail: number } | null)[] = [];
-  private drops: ({ gen: number; img: Phaser.GameObjects.Image; kind: number } | null)[] = [];
+  private drops: ({ gen: number; img: Phaser.GameObjects.Image; kind: number; key: string; big: boolean } | null)[] = [];
   private fx!: Fx;
   private ground!: Fx;
   private nums!: DamageNumbers;
@@ -97,6 +101,8 @@ export class GameScene extends Phaser.Scene {
   private hitSfxAt = 0;
   private lastMinute = -1;
   private bossOn = false;
+  /** 这一局弹过卡片了（第一局只有第一次带说明） */
+  private cardsSeen = false;
   private now = 0;
 
   constructor() {
@@ -106,6 +112,10 @@ export class GameScene extends Phaser.Scene {
   init(d: GameDeps): void {
     this.d = d;
     this.w = d.world;
+  }
+
+  private shake(ms: number, k: number): void {
+    if (this.d.shake()) this.cameras.main.shake(ms, k);
   }
 
   private frame(key: string): Frame {
@@ -239,8 +249,9 @@ export class GameScene extends Phaser.Scene {
     this.d.cards.show(
       w.level - w.pendingLevels + 1,
       w.choices.map((c) => describe(w, c)),
-      this.d.firstRun && w.level <= 2,
+      this.d.firstRun && !this.cardsSeen,
       (i) => {
+        this.cardsSeen = true;
         sfx.play('choose');
         step(w, 0, i);
         this.readEvents();
@@ -297,7 +308,7 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Hurt:
           sfx.play('hurt');
-          this.cameras.main.shake(90, 0.004);
+          this.shake(90, 0.004);
           this.hero.setTint(0xff5a4a);
           this.time.delayedCall(90, () => this.hero.clearTint());
           break;
@@ -353,7 +364,7 @@ export class GameScene extends Phaser.Scene {
     this.burst(x, y - 16, tint, big ? 2 : 0.8);
     sfx.play('kill', { volume: 0.5 });
     if (big) {
-      this.cameras.main.shake(180, 0.006);
+      this.shake(180, 0.006);
       this.freeze = Math.max(this.freeze, 90);
     }
     // 连斩：2 秒内接着杀就一直涨
@@ -362,11 +373,12 @@ export class GameScene extends Phaser.Scene {
     this.comboAt = this.now;
     if (this.comboN >= 10) this.d.hud.setCombo(this.comboN);
     const k = this.w.kills;
-    for (const m of [100, 500, 1000, 2000, 5000]) {
-      if (k >= m && this.milestone < m) {
-        this.milestone = m;
-        this.d.banners.say(`${m} 斩`, 'gold', 1500);
-      }
+    // 里程碑只报跨过的最高一档（一拍里连杀很多时不会一口气弹好几条）
+    let hit = 0;
+    for (const m of [100, 500, 1000, 2000, 5000]) if (k >= m && this.milestone < m) hit = m;
+    if (hit) {
+      this.milestone = hit;
+      this.d.banners.say(`${hit} 斩`, 'gold', 1500);
     }
   }
 
@@ -381,7 +393,8 @@ export class GameScene extends Phaser.Scene {
     } else if (kind === Drop.Coin) sfx.play('coin');
     else if (kind === Drop.Bun) {
       sfx.play('heal');
-      this.d.banners.say('+30', 'gold', 700);
+      // 回血数字飘在主角头上（绿色），不占屏幕中间的横幅
+      this.nums.show(this.w.x, this.w.y - 70, DROPS.bunHeal, false, 0x5fd38a);
     } else if (kind === Drop.Scroll) {
       sfx.play('pickup', { pitch: 1.6 });
       this.fx.spawn({ frame: 'ring', x: this.w.x, y: this.w.y, life: 600, s0: 0.5, s1: 8, a0: 0.8, a1: 0, tint: 0x8ff0c8, depth: 6000 });
@@ -420,6 +433,7 @@ export class GameScene extends Phaser.Scene {
     this.hold = 1e9;
     this.d.banners.reveal(this.d.icon(icon), title, sub, evolve, () => {
       this.hold = 0;
+      this.d.onChest?.();
     });
   }
 
@@ -428,7 +442,7 @@ export class GameScene extends Phaser.Scene {
     if (def.kind === 'boss') {
       sfx.play('boss');
       this.d.banners.say('尸王来了', 'warn', 2600, '天亮前打倒它，天就提前亮');
-      this.cameras.main.shake(400, 0.006);
+      this.shake(400, 0.006);
       music.start('boss');
       this.bossOn = true;
     } else {
@@ -443,7 +457,7 @@ export class GameScene extends Phaser.Scene {
       this.telegraphs.push({ x, y, r, life: 0, max: 1000 });
     } else if (a === 1) {
       sfx.play('bossStomp');
-      this.cameras.main.shake(260, 0.012);
+      this.shake(260, 0.012);
       this.freeze = Math.max(this.freeze, 100);
       this.fx.spawn({ frame: 'ring', x, y, life: 500, s0: 0.4, s1: (r * 2.4) / 128, a0: 1, a1: 0, tint: 0x8a5a2a, depth: 60 });
       for (let k = 0; k < 14; k++) {
@@ -456,13 +470,20 @@ export class GameScene extends Phaser.Scene {
 
   /** 桃木剑一道斩：半径跟着法器的范围走（主线：月牙半径 ~120 一次两三道），进化后金红色更大 */
   private slash(x: number, y: number, dirIdx: number, r: number, evolved: boolean): void {
-    // 斩痕画在主角身后（深度低于主角），满级、进化后范围很大，太实会把主角整个盖住
+    // 斩痕画在主角身后（深度低于主角），满级、进化后范围很大，太实会把主角整个盖住。
+    // 等级越高斩痕越长越亮（主线 2b 意见）：外面多一层金色的光，弧再拉长一点
+    const o = this.w.weapons.find((x) => x.id === 'sword');
+    const k = o ? Math.min(1, (o.evolved ? 9 : o.level) / 8) : 0;
     const scale = r / 72;
     const rot = Math.atan2(SIN[dirIdx]!, COS[dirIdx]!);
     const d = this.renderY - 1;
-    this.fx.spawn({ frame: 'slash', x: x + COS[dirIdx]! * 6, y: y - 24 + SIN[dirIdx]! * 6, life: 220, s0: scale * 0.8, s1: scale * 1.15, a0: evolved ? 0.8 : 1, a1: 0, rot, tint: evolved ? 0xff8a5a : undefined, depth: d });
+    const sx = 1 + 0.35 * k;
+    const cx = x + COS[dirIdx]! * 6;
+    const cy = y - 24 + SIN[dirIdx]! * 6;
+    if (k > 0.4) this.fx.spawn({ frame: 'slash', x: cx, y: cy, life: 300, s0: scale * 0.95, s1: scale * 1.35, a0: 0.35 + 0.35 * k, a1: 0, rot: rot - 0.06, sx, tint: evolved ? 0xff5a2a : 0xffd34a, depth: d - 0.5 });
+    this.fx.spawn({ frame: 'slash', x: cx, y: cy, life: 220 + 60 * k, s0: scale * 0.8, s1: scale * 1.15, a0: evolved ? 0.85 : 1, a1: 0, rot, sx, tint: evolved ? 0xff8a5a : undefined, depth: d });
     // 第二层：细一点的白锋，晚一点出来，看起来是"刷"的一下
-    this.fx.spawn({ frame: 'slash', x: x + COS[dirIdx]! * 10, y: y - 24 + SIN[dirIdx]! * 10, life: 170, s0: scale * 0.95, s1: scale * 1.2, a0: 0.55, a1: 0, rot: rot + 0.08, tint: 0xffffff, depth: d + 0.5 });
+    this.fx.spawn({ frame: 'slash', x: x + COS[dirIdx]! * 10, y: y - 24 + SIN[dirIdx]! * 10, life: 170 + 40 * k, s0: scale * 0.95, s1: scale * 1.2, a0: 0.55 + 0.3 * k, a1: 0, rot: rot + 0.08, sx, tint: 0xffffff, depth: d + 0.5 });
   }
 
   private thunder(x: number, y: number, r: number): void {
@@ -475,7 +496,7 @@ export class GameScene extends Phaser.Scene {
     this.fx.spawn({ frame: 'ring', x, y, life: 360, s0: 0.2, s1: (r * 2.6) / 128, a0: 1, a1: 0, tint: 0x3a8fe0, depth: 60 });
     this.fx.spawn({ frame: 'haze', x, y: y - 10, life: 260, s0: r / 30, s1: r / 18, a0: 0.9, a1: 0, tint: 0xbfe6ff, depth: 61 });
     this.burst(x, y - 10, 0x55c8ff, 1.4);
-    this.cameras.main.shake(110, 0.004);
+    this.shake(110, 0.004);
     this.freeze = Math.max(this.freeze, 55);
   }
 
@@ -594,7 +615,7 @@ export class GameScene extends Phaser.Scene {
     }
     // Boss 血条
     const b = w.bossSlot;
-    if (b >= 0 && w.eAlive[b]) this.d.banners.setBoss('尸王', w.eHp[b]! / w.eHpMax[b]!);
+    if (b >= 0 && w.eAlive[b] && w.phase !== 'over') this.d.banners.setBoss('尸王', w.eHp[b]! / w.eHpMax[b]!);
     else if (this.bossOn) {
       this.d.banners.setBoss(null);
       this.bossOn = false;
@@ -674,12 +695,16 @@ export class GameScene extends Phaser.Scene {
       const kind = w.dKind[i]!;
       const v = w.dVal[i]!;
       const key = kind === Drop.Soul ? (v >= 5 ? 'bead3' : v >= 2 ? 'bead2' : 'bead1') : kind === Drop.Coin ? 'coin' : kind === Drop.Bun ? 'bun' : kind === Drop.Scroll ? 'scroll' : 'chest';
-      if (!d || d.gen !== w.dGen[i] || d.kind !== kind) {
+      // 魂珠比怪小一号、颜色淡，不抢眼；超过上限并成的大珠（经验 ≥ 20）放大、一闪一闪，看得出值得去捡
+      const big = kind === Drop.Soul && v >= 20;
+      const sc = kind === Drop.Chest ? 1.2 : kind === Drop.Soul ? (big ? 1.5 : 0.75) : 1;
+      if (!d || d.gen !== w.dGen[i] || d.kind !== kind || d.key !== key || d.big !== big) {
         const f = this.frame(key);
         const img = d?.img ?? this.add.image(0, 0, 'atlas', f.key);
-        img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).setScale((kind === Drop.Chest ? 1.2 : 1) / f.res);
-        d = this.drops[i] = { gen: w.dGen[i]!, img, kind };
+        img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).setScale(sc / f.res);
+        d = this.drops[i] = { gen: w.dGen[i]!, img, kind, key, big };
       }
+      if (big) d.img.setScale((sc + Math.sin(this.now * 0.008 + i) * 0.12) / this.frame(key).res);
       const x = inter(w.dPX[i]!, w.dX[i]!);
       const y = inter(w.dPY[i]!, w.dY[i]!);
       d.img.setPosition(x, y + (kind === Drop.Chest ? 0 : Math.sin(this.now * 0.006 + i) * 2)).setDepth(kind === Drop.Chest ? y : -300 + y * 0.0001);
@@ -736,7 +761,7 @@ export class GameScene extends Phaser.Scene {
       passives: PASSIVE_IDS.filter((id) => w.passives[id] !== undefined).map((id) => ({ icon: PASSIVES[id].icon, level: w.passives[id]! })),
     });
     // 低血：屏幕边红框 + 心跳（手感清单第 9 条）
-    const low = w.hp > 0 && w.hp < w.stats.hpMax * 0.3 && w.phase === 'play';
+    const low = w.hp > 0 && w.hp < w.stats.hpMax * 0.3 && w.phase === 'play' && !this.paused;
     this.d.banners.setLow(low);
     if (low && this.now - this.lowBeat > 1000) {
       sfx.play('heartbeat', { volume: 0.7 });

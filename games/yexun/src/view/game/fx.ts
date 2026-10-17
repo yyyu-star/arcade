@@ -165,7 +165,7 @@ export class DamageNumbers {
     return this.pool.filter((p) => p.life >= 0).length;
   }
 
-  show(x: number, y: number, n: number, crit: boolean): void {
+  show(x: number, y: number, n: number, crit: boolean, tint?: number): void {
     // 普通伤害满了就不出（暴击优先占位）
     let slot = this.pool.find((p) => p.life < 0);
     if (!slot) {
@@ -182,7 +182,8 @@ export class DamageNumbers {
           .setVisible(true)
           .setScale(1 / this.res)
           .setPosition((k - (s.length - 1) / 2) * this.digitW, 0);
-        if (crit) im.setTint(0xffcf2e);
+        if (tint !== undefined) im.setTint(tint);
+        else if (crit) im.setTint(0xffcf2e);
         else im.clearTint();
       } else im.setVisible(false);
     }

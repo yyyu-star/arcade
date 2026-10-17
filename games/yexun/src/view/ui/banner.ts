@@ -31,6 +31,13 @@ export class Banners {
     parent.appendChild(this.bossBar);
   }
 
+  /** 收起所有横幅、血条和红框（结算、重开时） */
+  clear(): void {
+    this.root.innerHTML = '';
+    this.setLow(false);
+    this.setBoss(null);
+  }
+
   /** 一行横幅，几秒后自己收起；kind 决定配色 */
   say(text: string, kind: 'warn' | 'gold' | 'ink' = 'ink', ms = 1800, sub?: string): void {
     const el = document.createElement('div');

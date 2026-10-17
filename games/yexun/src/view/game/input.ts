@@ -17,8 +17,12 @@ export class Input {
   /** 第一次有输入（引导用："拖动走位"的提示看到它就收起） */
   moved = false;
   enabled = true;
+  /** 固定摇杆：底座钉在左下角，左半屏按下就以它为中心（设置里可选；默认浮动） */
+  private fixed = false;
+  private readonly layer: HTMLElement;
 
   constructor(layer: HTMLElement) {
+    this.layer = layer;
     this.stick = document.createElement('div');
     this.stick.className = 'yx-stick';
     this.stick.style.display = 'none';
@@ -38,48 +42,80 @@ export class Input {
 
     layer.addEventListener('pointerdown', (e) => {
       if (!this.enabled || this.pid !== null) return;
-      this.pid = e.pointerId;
-      this.ox = e.clientX;
-      this.oy = e.clientY;
-      layer.setPointerCapture(e.pointerId);
       const r = layer.getBoundingClientRect();
-      this.stick.style.left = `${e.clientX - r.left}px`;
-      this.stick.style.top = `${e.clientY - r.top}px`;
+      if (this.fixed) {
+        // 只认左半屏：右半屏留给以后的按键
+        if (e.clientX - r.left > r.width / 2) return;
+        const c = this.fixedCenter();
+        this.ox = r.left + c.x;
+        this.oy = r.top + c.y;
+      } else {
+        this.ox = e.clientX;
+        this.oy = e.clientY;
+        this.stick.style.left = `${e.clientX - r.left}px`;
+        this.stick.style.top = `${e.clientY - r.top}px`;
+      }
+      this.pid = e.pointerId;
+      layer.setPointerCapture(e.pointerId);
       this.stick.style.display = '';
       this.knob.style.transform = '';
+      this.follow(e);
       e.preventDefault();
     });
     layer.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== this.pid) return;
-      let dx = e.clientX - this.ox;
-      let dy = e.clientY - this.oy;
-      const d = Math.hypot(dx, dy);
-      if (d < DEAD) {
-        this.touchDir = 0;
-      } else {
-        this.touchDir = toDir(dx, dy);
-        this.moved = true;
-      }
-      if (d > MAX) {
-        // 拖过头了：底座跟着手指走，松手前方向一直跟手
-        this.ox += (dx / d) * (d - MAX);
-        this.oy += (dy / d) * (d - MAX);
-        const r = layer.getBoundingClientRect();
-        this.stick.style.left = `${this.ox - r.left}px`;
-        this.stick.style.top = `${this.oy - r.top}px`;
-        dx = (dx / d) * MAX;
-        dy = (dy / d) * MAX;
-      }
-      this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      if (e.pointerId === this.pid) this.follow(e);
     });
     const up = (e: PointerEvent): void => {
       if (e.pointerId !== this.pid) return;
       this.pid = null;
       this.touchDir = 0;
-      this.stick.style.display = 'none';
+      this.knob.style.transform = '';
+      if (!this.fixed) this.stick.style.display = 'none';
     };
     layer.addEventListener('pointerup', up);
     layer.addEventListener('pointercancel', up);
+  }
+
+  /** 左下角（离左边、下边各 110 像素，矮屏 90） */
+  private fixedCenter(): { x: number; y: number } {
+    const r = this.layer.getBoundingClientRect();
+    const m = r.height < 500 ? 90 : 110;
+    return { x: m, y: r.height - m };
+  }
+
+  setFixed(on: boolean): void {
+    this.fixed = on;
+    this.reset();
+    if (on) {
+      const c = this.fixedCenter();
+      this.stick.style.left = `${c.x}px`;
+      this.stick.style.top = `${c.y}px`;
+    }
+  }
+
+  private follow(e: PointerEvent): void {
+    let dx = e.clientX - this.ox;
+    let dy = e.clientY - this.oy;
+    const d = Math.hypot(dx, dy);
+    if (d < DEAD) {
+      this.touchDir = 0;
+    } else {
+      this.touchDir = toDir(dx, dy);
+      this.moved = true;
+    }
+    if (d > MAX && !this.fixed) {
+      // 拖过头了：底座跟着手指走，松手前方向一直跟手
+      this.ox += (dx / d) * (d - MAX);
+      this.oy += (dy / d) * (d - MAX);
+      const r = this.layer.getBoundingClientRect();
+      this.stick.style.left = `${this.ox - r.left}px`;
+      this.stick.style.top = `${this.oy - r.top}px`;
+    }
+    if (d > MAX) {
+      dx = (dx / d) * MAX;
+      dy = (dy / d) * MAX;
+    }
+    this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
   }
 
   /** 这一拍的方向（0–32） */
@@ -102,7 +138,8 @@ export class Input {
     this.keys.clear();
     this.touchDir = 0;
     this.pid = null;
-    this.stick.style.display = 'none';
+    this.knob.style.transform = '';
+    this.stick.style.display = this.fixed ? '' : 'none';
   }
 }
 

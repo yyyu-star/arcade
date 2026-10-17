@@ -25,6 +25,8 @@ const LOWMEM = argv.includes('--lowmem');
 const QUERY = opt('--query');
 /** 截图文件名前缀 */
 const TAG = opt('--tag') ?? '';
+/** 走一遍界面：首次菜单 → 开打 → 暂停 → 认输确认 → 结算 → 换难度回菜单，每一屏截图并检查 */
+const FLOW = argv.includes('--flow');
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -68,6 +70,38 @@ try {
     page.on('pageerror', (e) => problems.push(`${v.name} 未捕获异常：${e.message}`));
     await page.goto(BASE);
     await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
+    if (FLOW) {
+      const snap = async (name: string): Promise<void> => {
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: join(OUT, `${TAG}${v.name}-${name}.png`) });
+        for (const p of await layoutProblems(page)) problems.push(`${v.name} ${name} ${p}`);
+      };
+      const click = async (sel: string): Promise<void> => {
+        await page.locator(sel).first().click();
+      };
+      await snap('menu-first');
+      const t0 = Date.now();
+      await click('[data-a="start"]');
+      await page.waitForFunction(() => {
+        const w = (window as unknown as { __yx: { world: { eAlive: Uint8Array } | null } }).__yx.world;
+        return !!w && w.eAlive.some((x) => x === 1);
+      });
+      console.log(`${v.name}：点开始到出怪 ${Date.now() - t0} ms`);
+      await page.waitForTimeout(2500);
+      await snap('play');
+      await click('.yx-pause');
+      await snap('pause');
+      await click('[data-a="quit"]');
+      await snap('confirm');
+      await click('.yx-confirm [data-a="yes"]');
+      await snap('result');
+      await click('[data-a="menu"]');
+      await snap('menu');
+      await page.locator('.yx-gear').click();
+      await snap('settings');
+      await ctx.close();
+      continue;
+    }
     await page.waitForTimeout(3500);
     await page.screenshot({ path: join(OUT, `${TAG}${v.name}.png`) });
     for (let i = 0; i < FRAMES; i++) {
