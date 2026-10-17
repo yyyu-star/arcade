@@ -72,8 +72,8 @@ describe('特色怪的登记', () => {
   it('占比随分钟递增，抽签落在对应的怪上', () => {
     const r = VIGIL_REGIONS.bamboo!;
     expect(regionTotal(r, 0)).toBe(0);
-    expect(regionTotal(r, 1)).toBeCloseTo(0.12);
-    expect(regionTotal(r, 3)).toBeCloseTo(0.22);
+    expect(regionTotal(r, 1)).toBeCloseTo(0.144);
+    expect(regionTotal(r, 3)).toBeCloseTo(0.244);
     expect(regionKind(r, 3, 0.05)).toBe('bamsprout');
     expect(regionKind(r, 3, 0.2)).toBe('snakespirit');
   });

@@ -280,6 +280,7 @@ export class Menu {
           `<button type="button" class="yx-mapcard${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}>` +
           `<canvas class="yx-thumb" data-thumb="${m}" width="144" height="144" aria-hidden="true"></canvas>` +
           `<b>${MAPS[m].name}</b>` +
+          (m === 'yizhuang' ? '<i class="yx-hard">难</i>' : '') +
           (locked && u ? `<em>${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[m].blurb}</small>`) +
           '</button>'
         );

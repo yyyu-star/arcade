@@ -68,15 +68,16 @@ function yard(): Block[] {
 }
 
 /** 地图卡的顺序 */
-export const MAP_IDS: readonly MapId[] = ['snow', 'yizhuang', 'bamboo', 'riverbank', 'icelake'];
+export const MAP_IDS: readonly MapId[] = ['snow', 'bamboo', 'icelake', 'riverbank', 'yizhuang'];
 
 /** 解锁条件：守夜最长撑过多少秒（null = 一开始就开）；text 是卡上写的一句话 */
 export const MAP_UNLOCK: Record<MapId, { seconds: number; text: string } | null> = {
   snow: null,
   yizhuang: null,
   bamboo: { seconds: 240, text: '守夜撑过 4 分钟' },
+  icelake: { seconds: 480, text: '守夜撑过 8 分钟' },
+  // 河滩按难度该排在冰湖后面（12 分钟），但解锁是按"最长撑过多久"现算的、不存档：改成 12 分钟会把已经开了河滩的老玩家锁回去，所以两张都 8 分钟
   riverbank: { seconds: 480, text: '守夜撑过 8 分钟' },
-  icelake: { seconds: 720, text: '守夜撑过 12 分钟' },
 };
 
 /** 地形手感（核心用，改数值只改这里） */

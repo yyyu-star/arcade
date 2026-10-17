@@ -120,6 +120,8 @@
 .yx-mapcard b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 18px; line-height: 1.1; letter-spacing: 2px; }
 .yx-mapcard small { font-size: 10px; line-height: 1.25; color: #5a4a3a; text-align: center; }
 .yx-mapcard em { font-style: normal; font-size: 10px; line-height: 1.25; color: #b8322a; text-align: center; }
+.yx-mapcard { position: relative; }
+.yx-mapcard .yx-hard { position: absolute; top: 3px; right: 3px; font-style: normal; font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
 .yx-mapcard.on { background: var(--ink); color: #fbf5e4; }
 .yx-mapcard.on small { color: #e6dcc0; }
 .yx-mapcard.locked { cursor: default; }
