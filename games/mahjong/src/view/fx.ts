@@ -7,6 +7,7 @@
  */
 import './fx.css';
 import { el } from './dom.ts';
+import { signed } from './text.ts';
 
 export type CelebrateKind = 'hu' | 'zimo' | 'kan';
 
@@ -71,4 +72,57 @@ export function celebrate(layer: HTMLElement, x: number, y: number, text: string
   }
   // 动画结束后清掉所有节点；时间到了不管动画事件有没有触发都删，页面切到后台时不会攒节点
   window.setTimeout(() => box.remove(), ms + 150);
+}
+
+/**
+ * 一局结算的动画（docs/art-v3.md 第 5 节，0.17.2）：每家的分从 0 数到最后的数（0.6 秒），同时几枚铜钱从输家那一行飞到赢家那一行。
+ * box 是 roundSummary() 画的那块（行上有 data-seat，分上有 data-n，box 上有 data-moves）。省内存、减少动态效果时只数数不飞钱。
+ * 返回飞没飞钱（飞了由调用的放一声筹码响）。只动 transform / opacity；数字是改文字，一共几十次
+ */
+export function settleFx(box: HTMLElement): boolean {
+  const nets = [...box.querySelectorAll<HTMLElement>('.net[data-n]')];
+  const t0 = performance.now();
+  const tick = (now: number): void => {
+    const k = Math.min(1, (now - t0) / 600);
+    const e = 1 - (1 - k) ** 3;
+    for (const x of nets) x.textContent = `${signed(Math.round(Number(x.dataset.n) * e))}${x.dataset.unit ?? ''}`;
+    if (k < 1 && box.isConnected) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+
+  const lite = reduced() || document.documentElement.dataset.lite === '1';
+  const host = box.closest<HTMLElement>('.dialog');
+  const moves = (JSON.parse(box.dataset.moves ?? '[]') as string[]).slice(0, 6);
+  if (lite || !host || !moves.length) return false;
+  // 等弹窗里的东西都摆好（调用时后面可能还要加总结算、按钮，弹窗会重新居中）再量位置
+  requestAnimationFrame(() => flyCoins(box, host, moves));
+  return true;
+}
+
+function flyCoins(box: HTMLElement, host: HTMLElement, moves: string[]): void {
+  // 舞台整体缩放过：屏幕坐标除以缩放倍数才是弹窗里的设计像素
+  const hb = host.getBoundingClientRect();
+  const scale = hb.width / host.offsetWidth || 1;
+  const at = (seat: string): { x: number; y: number } | null => {
+    const r = box.querySelector(`.row[data-seat='${seat}'] .net`)?.getBoundingClientRect();
+    return r ? { x: (r.left + r.width / 2 - hb.left) / scale, y: (r.top + r.height / 2 - hb.top) / scale + host.scrollTop } : null;
+  };
+  moves.forEach((m, i) => {
+    const [from, to] = m.split('>') as [string, string];
+    const a = at(from);
+    const b = at(to);
+    if (!a || !b) return;
+    const c = el('i', 'settle-coin', host);
+    c.style.left = `${a.x}px`;
+    c.style.top = `${a.y}px`;
+    c.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(0.6)', opacity: 0 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.15 },
+        { transform: `translate(calc(-50% + ${b.x - a.x}px), calc(-50% + ${b.y - a.y}px)) scale(1)`, opacity: 1, offset: 0.85 },
+        { transform: `translate(calc(-50% + ${b.x - a.x}px), calc(-50% + ${b.y - a.y}px)) scale(0.6)`, opacity: 0 },
+      ],
+      { duration: 650, delay: 120 + i * 90, easing: 'ease-in-out', fill: 'both' },
+    ).onfinish = () => c.remove();
+  });
 }

@@ -185,9 +185,6 @@ html:has(.screen.room) body {
 [data-orient='port'] .screen.lobby {
   background:
     var(--art-curtain, linear-gradient(transparent, transparent)) 0 0 / 24px 30px repeat-x,
-    var(--art-lantern, linear-gradient(transparent, transparent)) right 4px top 4px / 54px 111px no-repeat,
-    var(--art-cup, linear-gradient(transparent, transparent)) calc(50% - 132px) 30px / 84px 79px no-repeat,
-    var(--art-tiles, linear-gradient(transparent, transparent)) calc(50% + 134px) 34px / 92px 74px no-repeat,
     radial-gradient(ellipse 220px 110px at 50% 70px, #ffb24d26, transparent 70%) no-repeat,
     linear-gradient(transparent 35%, #1a0a0499),
     var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
@@ -261,6 +258,7 @@ html:has(.screen.room) body {
     var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat;
 }
 .home-head .brand,
+.screen.lobby .lobby-head h1,
 .act.quick,
 .mode b,
 .pitch {

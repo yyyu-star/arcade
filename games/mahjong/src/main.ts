@@ -20,6 +20,7 @@ import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
+import { settleFx } from './view/fx.ts';
 import { renderHome, type HomeMode } from './view/home.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
@@ -287,18 +288,26 @@ function homePage(): void {
     record: readRecord(),
     onQuick: () => startSolo(st ? prefs.stakes : 'fun', prefs.opts),
     onResume: () => void resumeSolo(),
-    onMode: (m) => lobby(m === 'room', m),
+    onMode: (m) => lobby(false, m),
     onRules: () => showRules(stage),
   });
 }
 
-/** 选桌页（主页点模式卡进来）：mode 是从哪张卡进来的，实盘卡进来先选中小档，好友房卡进来开房、进房亮一下 */
+/**
+ * 选桌页（主页点模式卡进来）：mode 是从哪张模式卡进来的，实盘卡进来先选中小档；从平台大厅的"好友房"来（friends）开房、进房亮一下。
+ * 从牌桌"回选桌"、离开时没带 mode：按上次打的是娱乐还是实盘回到那一页
+ */
+/** 选桌页现在摆的是哪个模式（钱包刷新后重画时不换页） */
+let lobbyMode: HomeMode = 'fun';
+
 function lobby(friends = false, mode: HomeMode | null = null): void {
   teardown();
   screen.className = 'screen lobby';
   let stakes = prefs.stakes;
-  if (mode === 'real' && !stakesOf(stakes)?.wallet) stakes = 'small';
-  if (mode === 'fun') stakes = 'fun';
+  const m: HomeMode = standalone && mode === 'real' ? 'fun' : (mode ?? (friends ? 'room' : stakesOf(stakes)?.wallet && !standalone ? 'real' : 'fun'));
+  if (m === 'real' && !stakesOf(stakes)?.wallet) stakes = 'small';
+  if (m === 'fun') stakes = 'fun';
+  lobbyMode = m;
   renderLobby(screen, {
     wallet,
     walletNote,
@@ -314,6 +323,7 @@ function lobby(friends = false, mode: HomeMode | null = null): void {
     friends,
     ...(standalone ? { standalone: { nick: nick(), onNick: setNick } } : {}),
     onBack: homePage,
+    mode: m,
   });
 }
 
@@ -375,7 +385,7 @@ async function resumeSolo(): Promise<void> {
 /** 上一场已经离开、结回没成：再结一次，成了说一声 */
 async function settleLeftover(s: Solo): Promise<void> {
   const r = await s.finish();
-  if (screen.classList.contains('lobby')) lobby();
+  if (screen.classList.contains('lobby')) lobby(false, lobbyMode);
   else if (screen.classList.contains('front')) homePage();
   if (r?.ok) toast('上一场的筹码已经结回钱包');
   else if (r) toast(`上一场的筹码还没结上：${walletError(r.error).text}`);
@@ -482,7 +492,7 @@ const onlineUi = {
       el('p', '', box, text);
       button('act go', box, '回选桌', () => {
         closeDialog();
-        lobby();
+        lobby(false, 'room');
       });
     }, false);
   },
@@ -504,7 +514,7 @@ function drawWaiting(s: OnlineState): void {
     // 等人页离开：先离座再断开（只断开的话 kit 只记掉线、座位还占着，房主开打会照样从他钱包带一份，自审 C4）
     onLeave: () => {
       if (s.you?.seat !== null && s.you?.seat !== undefined) online?.leaveSeat();
-      lobby();
+      lobby(false, 'room');
     },
   });
 }
@@ -594,7 +604,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
       const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
         if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
-        box.appendChild(roundSummary(g, names, unit));
+        settle(box, roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
         if (fame.length) box.appendChild(fameSummary(fame, names));
         if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
@@ -603,7 +613,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
         const row = el('div', 'row end-acts', box);
         button('act soft', row, '回选桌', () => {
           closeDialog();
-          lobby();
+          lobby(false, 'room');
         });
         // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页
         const title = `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`;
@@ -638,7 +648,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
   if (g.phase === 'end') {
     if (replay && document.querySelector('.mask.end')) return;
     dialog(stage, 'end', (box) => {
-      box.appendChild(roundSummary(g, names, unit));
+      settle(box, roundSummary(g, names, unit));
       el('p', 'room-hint', box, '几秒后自动开下一局');
     });
     return;
@@ -711,7 +721,7 @@ const soloUi = {
       if (!solo || solo !== mine) return;
       if (v.phase === 'over') {
         dialog(stage, 'end', (box) => {
-          box.appendChild(roundSummary(v, names, unit));
+          settle(box, roundSummary(v, names, unit));
           box.appendChild(matchSummary(v, names, unit));
           if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
@@ -733,7 +743,7 @@ const soloUi = {
         return;
       }
       dialog(stage, 'end', (box) => {
-        box.appendChild(roundSummary(v, names, unit));
+        settle(box, roundSummary(v, names, unit));
         button('act go', el('div', 'row end-acts', box), '下一局', () => {
           closeDialog();
           solo?.next();
@@ -751,6 +761,12 @@ const soloUi = {
     void refreshWallet();
   },
 };
+
+/** 结算弹窗里放一局的结算，分从 0 数上去、铜钱飞，飞了就响一声筹码 */
+function settle(box: HTMLElement, summary: HTMLElement): void {
+  box.appendChild(summary);
+  if (settleFx(summary)) play('chips');
+}
 
 const STREAK_KEY = 'mahjong.streak';
 /** 单机打完了几场、赢了几场（主页的战绩卡）；last 同 mahjong.streak，刷新后结算页再弹一遍不重复记 */
@@ -948,7 +964,7 @@ async function leaveRoom(): Promise<void> {
     // 等房间收到离座再断开（结回由房间办，断开也不影响）
     await new Promise((r) => window.setTimeout(r, 300));
   }
-  lobby();
+  lobby(false, 'room');
 }
 
 async function leave(): Promise<void> {

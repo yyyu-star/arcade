@@ -20,6 +20,7 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
   const rows = el('div', 'rows', box);
   for (let seat = 0; seat < 4; seat++) {
     const row = el('div', `row${seat === v.me?.seat ? ' me' : ''}`, rows);
+    row.dataset.seat = `${seat}`;
     el('span', 'who', row, names[seat]!);
     const w = h.wins.find((x) => x.seat === seat);
     const what = el('span', 'what', row);
@@ -31,7 +32,10 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
     const fed = h.wins.filter((x) => x.from === seat).map((x) => names[x.seat]!);
     if (fed.length) what.textContent += ` · 点炮给 ${fed.join('、')}`;
     const n = h.net[seat]!;
-    el('span', `net ${n > 0 ? 'up' : n < 0 ? 'down' : ''}`, row, `${signed(n)}${unit}`);
+    const net = el('span', `net ${n > 0 ? 'up' : n < 0 ? 'down' : ''}`, row, `${signed(n)}${unit}`);
+    // 结算的动画（fx.ts 的 settleFx）从 0 数到这个数
+    net.dataset.n = `${n}`;
+    net.dataset.unit = unit;
     handLine(v, seat, row);
   }
   // 钱的流水：按种类合起来，一行一种
@@ -40,6 +44,8 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
     const key = `${p.kind}|${p.from}|${p.to}`;
     flows.set(key, (flows.get(key) ?? 0) + p.amount);
   }
+  // 钱从谁那儿飞到谁那儿（settleFx 用）：只要方向，不分种类
+  box.dataset.moves = JSON.stringify([...new Set([...flows.keys()].map((k) => k.split('|').slice(1).join('>')))]);
   if (flows.size) {
     const list = el('div', 'flows', box);
     for (const [key, amount] of flows) {
