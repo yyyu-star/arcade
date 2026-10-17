@@ -19,6 +19,19 @@
     var(--art-speck, linear-gradient(transparent, transparent)) 0 0 / 37px 37px,
     radial-gradient(ellipse at 50% 45%, #187152 0%, var(--felt) 45%, var(--felt-dark) 100%);
 }
+/* 牌桌页（0.17.1，docs/art-v3.md 第 5 节）：舞台是茶馆的板壁（远景），呢子只铺在木框里面（.table::after），
+ * 电脑宽屏牌桌两边露出的就是板壁和顶灯的一团暖光，不再是压暗的同一块呢子 */
+.stage:has(> .screen.game) {
+  background:
+    radial-gradient(ellipse 55% 70% at 50% 0%, #ffb24d24, transparent 70%) no-repeat,
+    linear-gradient(#0000, #0000008c),
+    var(--art-wall-full, linear-gradient(#4a2414, #3a1a0c)) 0 0 / 112px 360px repeat,
+    #3a1a0c;
+}
+html:has(.screen.game),
+html:has(.screen.game) body {
+  background: #24100a;
+}
 
 /* ---------- 牌桌：木框和暗角 ----------
  * 木框不能用 .table 的 border：border 会把所有绝对定位的块往里推。改用两个伪元素垫在最底下（z-index -1，
@@ -59,28 +72,37 @@
     inset 0 0 0 2px #1a0a0480,
     inset 0 8px 14px #0009,
     inset 0 -4px 10px #0006;
+  /* 从上到下：顶灯照在桌心的一团暖光、四周压暗（眼睛自然落到牌河和中控盘）、呢子的织纹和底色。
+   * 0.17.1 起去掉了印在呢子上的半透明灯笼、茶碗（看着像污渍），摆件只在主页的画里 */
   background:
-    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 204px top -30px / 46px 94px no-repeat,
-    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 196px top 2px / 60px 56px no-repeat,
-    /* 暗角：中间亮、四周暗，眼睛自然落到牌河和中控盘 */
-    radial-gradient(ellipse 70% 75% at 50% 48%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+    radial-gradient(ellipse 42% 38% at 50% 46%, #fff1c21f, transparent 100%),
+    radial-gradient(ellipse 70% 75% at 50% 48%, transparent 45%, #00000059 100%),
+    var(--art-felt, linear-gradient(transparent, transparent)) 0 0 / 6px 6px,
+    var(--art-speck, linear-gradient(transparent, transparent)) 0 0 / 37px 37px,
+    radial-gradient(ellipse at 50% 45%, #187152 0%, var(--felt) 45%, var(--felt-dark) 100%);
 }
-/* 横屏的灯笼、茶碗挂在两个上角的头像里侧（对家一排居中，碰杠多到第四副才够得着） */
-/* 竖屏：两个上角是头像，摆设往下挪到左右两家竖排上面的空处 */
 [data-orient='port'] .table::after {
   background:
-    var(--art-lantern-dim, linear-gradient(transparent, transparent)) left 14px top 110px / 54px 111px no-repeat,
-    var(--art-cup-dim, linear-gradient(transparent, transparent)) right 12px top 150px / 66px 62px no-repeat,
-    radial-gradient(ellipse 80% 60% at 50% 45%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
+    radial-gradient(ellipse 50% 30% at 50% 45%, #fff1c21f, transparent 100%),
+    radial-gradient(ellipse 80% 60% at 50% 45%, transparent 45%, #00000059 100%),
+    var(--art-felt, linear-gradient(transparent, transparent)) 0 0 / 6px 6px,
+    var(--art-speck, linear-gradient(transparent, transparent)) 0 0 / 37px 37px,
+    radial-gradient(ellipse at 50% 45%, #187152 0%, var(--felt) 45%, var(--felt-dark) 100%);
 }
 
 /* ---------- 中控盘 ----------
- * 一块漆木圆角方盘：深红木底、一圈金线，中间一圈圈细纹像车削出来的盘面；四边的灯条按座位配色（座位不等于风位，所以不写东南西北），
- * 平时是暗的，轮到谁谁亮起发光，胡了的变灰。 */
+ * 一块漆木圆角方盘，像个罗盘（0.17.1）：深红木底、一圈金线，中间一圈金色的表盘圈住剩余张数，四角各一颗铜钉；
+ * 四边的灯条按座位配色（座位不等于风位，所以不写东南西北），平时是暗的，轮到谁谁亮起发光，胡了的变灰。 */
 .center {
   border-color: #f3c86b66;
   background:
     radial-gradient(ellipse 60% 45% at 50% 22%, #ffffff26, transparent 70%),
+    radial-gradient(circle at 12px 12px, #f7d488 0 2px, #8a5a12 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #f7d488 0 2px, #8a5a12 3px, transparent 4px),
+    radial-gradient(circle at 12px calc(100% - 12px), #f7d488 0 2px, #8a5a12 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #f7d488 0 2px, #8a5a12 3px, transparent 4px),
+    radial-gradient(circle 40px at 50% 50%, transparent 36px, #f3c86b59 37px, #f3c86b59 38px, #00000040 39px, transparent 41px),
+    radial-gradient(circle 36px at 50% 50%, #00000033, transparent),
     repeating-radial-gradient(ellipse at 50% 50%, transparent 0 3px, #00000018 3px 4px),
     radial-gradient(ellipse at 50% 40%, #6a2c1a, #3a140b 70%, #250b05);
   box-shadow:
@@ -223,90 +245,6 @@ html:has(.screen.room) body {
   will-change: transform;
 }
 
-/* ---------- 牌桌角落的常驻小动画：灯笼轻摆、茶杯冒热气 ----------
- * art.ts 的 watchTable() 往牌桌里加 .art-decor（省内存设备和减少动态效果时不加，那时仍是 ::after 里的静态背景）。
- * 容器和 ::after 同样的位置与圆角、同样垫在牌下面（z-index -1），所以下面的坐标就是 ::after 里 background 的偏移。
- * 只动 transform / opacity，各自一个合成层。 */
-.art-decor {
-  position: absolute;
-  inset: var(--art-rim);
-  border-radius: 10px;
-  overflow: hidden;
-  z-index: -1;
-  pointer-events: none;
-}
-.art-decor i {
-  position: absolute;
-  display: block;
-  pointer-events: none;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-}
-.art-lantern {
-  left: 204px;
-  top: -30px;
-  width: 46px;
-  height: 94px;
-  background-image: var(--art-lantern-dim);
-  /* 绳子顶端是支点（图里绳子在正中、最上面） */
-  transform-origin: 50% 0;
-  will-change: transform;
-  animation: art-sway 6s ease-in-out infinite;
-}
-.art-cup {
-  right: 196px;
-  top: 2px;
-  width: 60px;
-  height: 56px;
-  background-image: var(--art-cup-dim);
-}
-.art-cup b {
-  position: absolute;
-  left: 26px;
-  top: 8px;
-  width: 4px;
-  height: 14px;
-  border-radius: 4px;
-  background: linear-gradient(#ffffff8c, #ffffff00);
-  opacity: 0;
-  will-change: transform, opacity;
-  animation: art-steam 5s ease-out infinite;
-}
-.art-cup b:nth-child(2) { left: 31px; animation-duration: 4.2s; animation-delay: -1.6s; }
-.art-cup b:nth-child(3) { left: 36px; animation-duration: 5.6s; animation-delay: -3.1s; }
-@keyframes art-sway {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
-}
-@keyframes art-steam {
-  0% { transform: translateY(6px) scaleY(0.6); opacity: 0; }
-  30% { opacity: 0.8; }
-  100% { transform: translateY(-14px) translateX(2px) scaleY(1.2); opacity: 0; }
-}
-[data-orient='port'] .art-lantern { left: 14px; top: 110px; width: 54px; height: 111px; }
-[data-orient='port'] .art-cup { right: 12px; top: 150px; width: 66px; height: 62px; }
-[data-orient='port'] .art-cup b { left: 29px; top: 9px; }
-[data-orient='port'] .art-cup b:nth-child(2) { left: 34px; }
-[data-orient='port'] .art-cup b:nth-child(3) { left: 40px; }
-/* 摆设改由上面的元素画，::after 里只留暗角（带 data-decor 才换，没挂上时仍是原来的静态背景） */
-.table[data-decor]::after {
-  background: radial-gradient(ellipse 70% 75% at 50% 48%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
-}
-[data-orient='port'] .table[data-decor]::after {
-  background: radial-gradient(ellipse 80% 60% at 50% 45%, #fff1c20f 0%, transparent 45%, #0000004d 100%);
-}
-/* 省内存设备、减少动态效果：不动（art.ts 判断后写 data-lite；这里再用媒体查询兜一层，用户中途改系统设置也生效） */
-[data-lite] .art-lantern,
-[data-lite] .art-cup b {
-  animation: none;
-}
-@media (prefers-reduced-motion: reduce), (pointer: coarse) {
-  .art-lantern,
-  .art-cup b {
-    animation: none;
-  }
-}
-
 /* ---------- 游戏主页（0.17.0）：板壁做底，主视觉是 art.ts 的 homeScene() ----------
  * 游戏名、主按钮、模式卡用标题字（Noto Serif SC Black 的子集，只含页面上用到的几十个字，见 ASSETS.md），没有的字退回系统字体 */
 @font-face {
@@ -372,6 +310,10 @@ html:has(.screen.room) body {
 }
 .scene .sc-bird {
   animation: sc-hop 7s ease-in-out infinite;
+}
+@keyframes art-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
 }
 @keyframes sc-lit {
   0%, 100% { opacity: 0.9; }

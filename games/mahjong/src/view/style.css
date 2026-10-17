@@ -522,12 +522,16 @@ button {
   column-gap: var(--sp-4);
 }
 [data-orient='land'] .rules-opts summary { grid-column: 1 / -1; }
-/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边是同一块呢子 */
+/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边露出茶馆的板壁（art.css，0.17.1） */
 [data-orient='land'] .table {
   inset: 0 auto 0 calc(50% - 500px);
   width: 1000px;
-  /* 木框外面压暗，看得出桌子到哪为止（外阴影只画在框外，盖不到框和桌面） */
-  box-shadow: 0 0 0 400px #0000004d;
+  /* 木框的倒角高光（同 art.css 的 .table）加一圈落在板壁上的投影，桌子像是摆在屋里 */
+  box-shadow:
+    inset 0 1px 0 #ffd9a040,
+    inset 0 0 0 1px #1a0a04,
+    0 10px 28px #000000b3,
+    0 0 0 1px #00000080;
 }
 
 /* ---------- 好友房 ---------- */
@@ -1739,7 +1743,8 @@ html .atf-btn svg {
 [data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
 [data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
 [data-orient='land'] .banner.r3 { left: 20%; top: 46%; }
-[data-orient='land'] .banner.center { left: 50%; top: 46%; }
+/* 换三张的方向写在中控盘和我的手牌之间，不压在盘上（0.17.1） */
+[data-orient='land'] .banner.center { left: 50%; top: 66%; }
 
 /* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
  * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
@@ -1780,7 +1785,7 @@ html .atf-btn svg {
 [data-orient='port'] .banner.r1 { left: 78%; top: 40%; }
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
 [data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
-[data-orient='port'] .banner.center { left: 50%; top: 46%; }
+[data-orient='port'] .banner.center { left: 50%; top: 64%; }
 [data-orient='port'] .lobby-head h1 { font-size: 46px; }
 
 /* ---------- 弹窗 ---------- */
