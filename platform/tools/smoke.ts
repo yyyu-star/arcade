@@ -1725,6 +1725,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.unroute('**/api/me');
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_USER, service: 'ok', saves: 'ok' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(FAKE_WALLET)));
+    await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();
