@@ -57,6 +57,8 @@
 .game-today li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s-3); padding: var(--s-2) var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-md); background: var(--white); align-content: center; }
 @media (max-width: 560px) { .game-today { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto; } }
 .game-today li > span:not(.tnum), .game-today li > small { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); }
+/* 触屏上数字至少 14px（0.24.0）：这一行里有带入、结回的数 */
+@media (pointer: coarse), (max-width: 959px) { .game-today li > span:not(.tnum), .game-today li > small { font-size: var(--fs-sm); } }
 /* 用户：左边列表、右边详情；窄屏一次只看一边 */
 /* 两边底边对齐：列表和详情谁矮谁撑到和对方一样高 */
 .users-split { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: var(--s-5); align-items: stretch; }
@@ -93,6 +95,8 @@
     radial-gradient(farthest-side at 100% 50%, rgb(58 43 51 / 22%), transparent) right / 12px 100% no-repeat scroll;
 }
 .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* 触屏上表格里的数字至少 14px（0.24.0）；这份样式在 styles.css 之后加载，所以要在这里再写一次 */
+@media (pointer: coarse), (max-width: 959px) { .stats-table { font-size: var(--fs-sm); } }
 .stats-table th, .stats-table td { padding: var(--s-1) var(--s-2); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--divider); }
 .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
 /* 手机上宽表格改成一行一张卡片：表头藏起来，每格前面写上它是哪一列 */

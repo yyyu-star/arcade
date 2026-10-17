@@ -17,10 +17,12 @@
 .rank .btn { flex: none; white-space: nowrap; }
 /*
  * 列表行是三列网格（名次、名字、分数），"晒名次"是第四个：不写位置会被挤到下一行的第一列（40px），一字一行还把行撑高（0.22.1）。
- * 固定放在同一行的第四列；特别窄的屏幕放到分数下面，靠右、横着
+ * 固定放在同一行的第四列；特别窄的屏幕放到分数下面，靠右、横着。
+ * 手机上（0.24.0）自己那行收窄列间距和按钮的左右留白：SE 375 宽时名字原来只剩两个字
  */
 .ranks .rank > .btn { grid-column: 4; grid-row: 1; }
 @media (max-width: 360px) { .ranks .rank > .btn { grid-column: 2 / 4; grid-row: 2; justify-self: end; } }
+@media (max-width: 480px) { .ranks .rank--me { column-gap: var(--s-2); } .ranks .rank--me > .btn { padding-inline: var(--s-2); } }
 /*
  * 榜单分组（0.23.0）：手机上一组一排、组名在前面小小地写；电脑上（≥960）左边一列竖排，右边是榜，"我"那一行贴在上面
  */
@@ -54,5 +56,7 @@
   .board-nav .tabs { flex-direction: column; flex-wrap: nowrap; gap: var(--s-1); }
   .board-nav .tabs a { justify-content: flex-start; width: 100%; }
   /* 往下翻时贴在上面，还没翻到时贴在下面：自己在第几名一直看得到 */
+  /* 电脑上自己那行贴着边一直看得到，上面那句"我：第几名"只在名单外时才写 */
+  .rank__mine--in { display: none; }
   .ranks .rank--me { position: sticky; top: var(--s-2); bottom: var(--s-2); z-index: 1; box-shadow: var(--sh-sm); }
 }

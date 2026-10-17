@@ -77,8 +77,16 @@ function RankList({ rows, me, empty, share }: { rows: Row[]; me: Row | null; emp
   const rest = rows.slice(top.length);
   // 领奖台的站位：第二在左、第一在中、第三在右
   const stand = top.length === 3 ? [top[1]!, top[0]!, top[2]!] : top.length === 2 ? [top[1]!, top[0]!] : top;
+  // 自己的名次写在最上面（0.24.0）：手机第一屏只放得下领奖台，第 4 名往后的自己要往下翻才看得到；站上领奖台了就不用写
+  const inList = rows.some((r) => r.isMe);
+  const mine = me && !top.some((r) => r.isMe) ? me : null;
   return (
     <div data-testid="ranks">
+      {mine && (
+        <p className={`rank__mine${inList ? ' rank__mine--in' : ''}`} data-testid="my-rank">
+          我：{mine.rank === null ? '50 名以后' : `第 ${mine.rank} 名`} · {mine.text}
+        </p>
+      )}
       {stand.length > 0 && (
         <ol className={`podium podium--${stand.length}`}>
           {stand.map((r) => (
@@ -112,11 +120,6 @@ function RankList({ rows, me, empty, share }: { rows: Row[]; me: Row | null; emp
             </li>
           ))}
         </ol>
-      )}
-      {me && !rows.some((r) => r.isMe) && (
-        <p className="rank__mine" data-testid="my-rank">
-          我：{me.rank === null ? '50 名以后' : `第 ${me.rank} 名`} · {me.text}
-        </p>
       )}
     </div>
   );

@@ -123,6 +123,8 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   margin: 0 auto;
   padding: var(--s-8) max(var(--s-5), env(safe-area-inset-right, 0px)) var(--s-12) max(var(--s-5), env(safe-area-inset-left, 0px));
   padding-bottom: max(var(--s-12), env(safe-area-inset-bottom, 0px));
+  /* 加到主屏幕上全屏打开时（viewport-fit=cover）顶上是状态栏和刘海 */
+  padding-top: max(var(--s-8), env(safe-area-inset-top, 0px));
 }
 .narrow { max-width: var(--narrow); margin: 0 auto; display: flex; flex-direction: column; gap: var(--s-5); }
 /* 管理页的控制台占满内容宽度 */
@@ -145,6 +147,10 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   .top { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: var(--s-5); row-gap: var(--s-2); text-align: left; }
   .top__home, .top__sub { grid-column: 1; justify-self: start; }
   .topbar { grid-column: 2; grid-row: 1 / span 2; }
+}
+/* 横着拿的手机（0.24.0）：只有 390 高，标题折成两行要占掉五分之一屏；缩一号、不折行，和顶栏按钮并排放得下 */
+@media (min-width: 561px) and (max-height: 500px) {
+  .top__logo { font-size: var(--fs-2xl); white-space: nowrap; }
 }
 
 /* ---------- 顶栏的小按钮（排行、好友、筹码、头像） ---------- */
@@ -259,6 +265,11 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .feed--compact .feed__item { padding: 2px 0; border: 0; }
 .feed-strip { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-2); }
 .feed-strip .feed { flex: 1 1 260px; }
+/* 手机上好友动态放到游戏卡下面（0.24.0）：上面压着桌上的筹码、补给两条提醒，再加三条动态，SE 的第一屏就看不到游戏了 */
+@media (max-width: 599px) {
+  .lobby { display: flex; flex-direction: column; }
+  .lobby > .feed-strip { order: 1; margin: var(--s-5) 0 0; }
+}
 .dot--inline { position: relative; display: inline-block; top: -6px; width: 10px; height: 10px; margin-left: 2px; border: 2px solid var(--white); border-radius: 50%; background: #e0412f; }
 .account .dot { position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; border: 2px solid var(--white); border-radius: 50%; background: #e0412f; }
 .nudges { margin: 0 0 var(--s-5); display: grid; gap: var(--s-2); }
@@ -371,7 +382,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- 弹窗 ---------- */
-.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--s-4); background: rgb(40 25 30 / 45%); }
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--s-4); padding: max(var(--s-4), env(safe-area-inset-top, 0px)) max(var(--s-4), env(safe-area-inset-right, 0px)) max(var(--s-4), env(safe-area-inset-bottom, 0px)) max(var(--s-4), env(safe-area-inset-left, 0px)); background: rgb(40 25 30 / 45%); }
 .modal__box { width: min(520px, 100%); max-height: calc(100vh - 2 * var(--s-4)); max-height: calc(100dvh - 2 * var(--s-4)); overflow: auto; padding: var(--s-5); border: var(--bw) solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--sh-lg); }
 .modal__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
 .modal__head h2 { margin: 0; }
@@ -451,7 +462,7 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .rank__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 700; text-decoration: none; }
 .rank__me { margin-left: 6px; vertical-align: 1px; font-size: var(--fs-xs); line-height: 18px; padding: 0 6px; border-radius: 6px; background: var(--accent); color: var(--white); }
 .rank__value { font-weight: 800; }
-.rank__mine { margin: var(--s-3) 0 0; font-weight: 700; }
+.rank__mine { margin: 0 0 var(--s-3); font-weight: 700; }
 .ranks + .note, .rank__mine + .note, [data-testid='ranks'] + .note { margin-top: var(--s-3); }
 
 
@@ -478,3 +489,15 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .week-bars__bar--up { left: 50%; background: var(--good); }
 .week-bars__bar--down { right: 50%; background: var(--bad); }
 .week-bars__value { justify-self: end; font-weight: 800; font-variant-numeric: tabular-nums; }
+/*
+ * 手机和平板（触屏，0.24.0 手机界面专项）：能点的东西至少 44×44、表格里的数字至少 14px。
+ * 触屏上、或者窗口窄到 960 以下时放大（宽度兜底：无头浏览器模拟手机时启动参数写死 primaryPointerType=4，报的是 fine，只看 coarse 冒烟量不出来）；宽的电脑窗口里小圆片、小按钮照旧紧凑。名字链接用"加内边距、再用负外边距抵掉"的办法放大点击区，行高不变
+ */
+@media (pointer: coarse), (max-width: 959px) {
+  .top__home { display: inline-flex; align-items: center; min-height: var(--tap); }
+  .seg button, .chips button, .btn--small { min-height: var(--tap); }
+  .btn--small, .inline-link { min-width: var(--tap); justify-content: center; }
+  .rank__name, .people__link { min-width: var(--tap); padding-block: 10px; margin-block: -10px; }
+  .people__link { display: inline-block; }
+  .stats-table { font-size: var(--fs-sm); }
+}
