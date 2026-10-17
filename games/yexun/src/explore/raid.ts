@@ -2,7 +2,7 @@
  * 一局夜探的状态和每拍的规则（DESIGN.md 2.3）：宝箱读条、撤离门开关、站门圈撤出、天亮迷失、背包、守卫排队出场。
  * 核心每拍调一次 `tick`（接法见 host.ts 末尾的清单）。和核心一样原地修改、不分配热路径对象；同种子同输入逐位相同。
  */
-import { BEAST, CHEST, CHEST_OPEN, CHEST_TIERS, DAWN_RED, DAWN_WARN, GATE, GATE_WINDOWS, GATE_WINDOWS_EARLY, GUARD, RAID_DAWN, RAID_LATE, RAID_TEMPLATES, type RaidEnemyKind, type RaidTemplate } from '../content/explore.ts';
+import { BEAST, CHEST, CHEST_OPEN, RAID_EARLY, CHEST_TIERS, DAWN_RED, DAWN_WARN, GATE, GATE_WINDOWS, GATE_WINDOWS_EARLY, GUARD, RAID_DAWN, RAID_LATE, RAID_TEMPLATES, type RaidEnemyKind, type RaidTemplate } from '../content/explore.ts';
 import { TIERS, TREASURES } from '../content/treasures.ts';
 import type { EnemyKind } from '../content/enemies.ts';
 import { dist } from '../core/fmath.ts';
@@ -46,6 +46,8 @@ export class Raid {
 
   /** 背包：宝物编号，按捡到的先后 */
   readonly bag: number[] = [];
+  /** 早搜奖励（content/explore.ts 的 RAID_EARLY）：结算时加到带出价值上的额外价值，取整 */
+  earlyBonus = 0;
   outcome: RaidOutcome = 'none';
   /** 结束在第几拍（撤出、死亡、迷失） */
   endTick = 0;
@@ -287,8 +289,10 @@ export class Raid {
     this.searchTicks = 0;
     const c = chests[best]!;
     h.ev.push(RaidEv.ChestOpen, c.x, c.y, best, CHEST_TIERS.indexOf(c.tier), c.items.length);
+    const early = !this.teach && c.tier !== 'gold' && h.tick < RAID_EARLY.until && dist(c.x - this.map.spawn.x, c.y - this.map.spawn.y) <= RAID_EARLY.near;
     for (const it of c.items) {
       this.bag.push(it);
+      if (early) this.earlyBonus += Math.floor(TREASURES[it]!.value * (RAID_EARLY.mul - 1));
       h.ev.push(RaidEv.Loot, c.x, c.y, it, TIERS.indexOf(TREASURES[it]!.tier));
     }
     if (CHEST[c.tier].upgrade) this.upgrades++;
@@ -522,7 +526,7 @@ export function raidFingerprint(r: Raid): number {
     h ^= v | 0;
     h = Math.imul(h, 0x01000193) >>> 0;
   };
-  for (const v of [r.gateMask, r.searchChest, r.searchTicks, r.exitGate, r.exitTicks, r.upgrades, r.dawnStage, r.endTick, r.gUsed, ['none', 'escaped', 'dead', 'lost'].indexOf(r.outcome)]) mix(v);
+  for (const v of [r.gateMask, r.searchChest, r.searchTicks, r.exitGate, r.exitTicks, r.upgrades, r.dawnStage, r.endTick, r.gUsed, r.earlyBonus, ['none', 'escaped', 'dead', 'lost'].indexOf(r.outcome)]) mix(v);
   for (const v of r.chestOpen) mix(v);
   mix(r.bag.length);
   for (const v of r.bag) mix(v);

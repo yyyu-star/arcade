@@ -748,7 +748,7 @@ export class Tips {
 /** 夜探实盘的说明：危险档、多少价值算一份、上限 */
 function raidLiveNote(tier: RaidLiveTier, tpl: RaidLiveTemplate): string {
   const base = RAID_LIVE.base[tier][tpl];
-  return `危险 ${RAID_LIVE.danger[tier]} · 固定小道士，不带加成<br>撤出来至少拿回 ${RAID_LIVE.floor} 份，带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物算 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
+  return `危险 ${RAID_LIVE.danger[tier]} · 固定小道士，不带加成<br>撤出来至少拿回 1 份，待满 ${RAID_LIVE.floorRamp / 1800} 分钟再撤保底 ${RAID_LIVE.floor} 份；带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物算 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
 }
 
 function liveNote(tier: LiveTier): string {
