@@ -35,7 +35,7 @@ import type { ChallengeFail, ChallengeView } from '../../platform/challenge.ts';
 import { boardScoreText } from '../labels.ts';
 import { hideHomeTip, showHomeTip } from '../../platform/viewportFit.ts';
 import { Room } from '../trade/room.ts';
-import { coverOf, phoneLayout, viewOf } from '../viewport.ts';
+import { bleedOf, coverOf, phoneLayout, viewOf } from '../viewport.ts';
 import { BaseScene } from './BaseScene.ts';
 
 /**
@@ -240,17 +240,25 @@ export class TitleScene extends BaseScene {
     });
   }
 
-  /** 群聊气泡：左右各三个，进场时依次弹出，之后轻轻浮动 */
+  /**
+   * 群聊气泡：左右各三个，进场时依次弹出，之后轻轻浮动。
+   * 宽屏时贴着看得见的左右边往外挪（最多 160），给中间的卡片让出地方。
+   */
   private bubbles(layer: Phaser.GameObjects.Container): void {
     const ys = [168, 248, 328];
+    const B = bleedOf(this);
+    const out = Phaser.Math.Clamp(-B.x, 0, 160);
     TITLE_BUBBLES.forEach((b, i) => {
-      const x = b.right ? 1256 - b.w / 2 : 24 + b.w / 2;
+      const x = b.right ? 1256 + out - b.w / 2 : 24 - out + b.w / 2;
       const y = ys[i % 3]! + b.h / 2;
       const img = addImage(this, x, y, b.key, b.w, b.h);
       layer.add(img);
       if (!this.lively) return;
+      // 显示尺寸是按缩放设的（纹理按渲染倍数光栅化）：先记下来再从 0 弹到这里
+      const sx = img.scaleX;
+      const sy = img.scaleY;
       img.setScale(0);
-      this.tweens.add({ targets: img, scaleX: img.scaleX || 1, scaleY: img.scaleY || 1, delay: 300 + i * 220, duration: 320, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: img, scaleX: sx, scaleY: sy, delay: 300 + i * 220, duration: 320, ease: 'Back.easeOut' });
       this.tweens.add({ targets: img, y: y - 4, delay: 1200 + i * 300, duration: 2200 + i * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     });
   }

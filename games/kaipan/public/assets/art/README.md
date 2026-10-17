@@ -154,9 +154,11 @@ node tools/art/bake.ts                  # 生成完再烘焙图集（WebP；像�
 
 层序（下 → 上）：`sky_<bull|flat|bear>` → `city` → `haze_bear`（熊，压暗城市灯光）→ `rain`（熊）→
 `lightning` / `lightning_2` / `lightning_3`（熊，3 个位置变体，每次随机闪一个）→ `wall` →
-`desk` → `steam` → `cat` → `cat_tail` → `cat_zzz` → `ambient_<bull|flat|bear>` → `lamp_light` → `monitor_glow`。
+`desk` → `room_left` / `room_right` / `room_top` / `room_bottom` → `steam` → `cat` → `cat_tail` → `cat_zzz` → `ambient_bull` → 阴天和雷雨的压暗、时段色调（游戏里画的纯色矩形）→ `lamp_light` → `monitor_glow`。
 
-- 牛 / 平 / 熊 = 晴 / 阴 / 雷雨；切换时 `sky_*` 与 `ambient_*` 交叉淡入淡出。
+- 牛 / 平 / 熊 = 晴 / 阴 / 雷雨；切换时 `sky_*` 与室内光交叉淡入淡出。阴天、雷雨的室内压暗原来是 `ambient_flat` / `ambient_bear` 两张纯色图，0.15.0 起游戏里直接画矩形（连延伸出来的那圈一起盖住），这两张图删了。
+- 铺满（0.15.0）：`room_left`、`room_right`（各 320×936）、`room_top`、`room_bottom`（各 1280×108）是安全区外接着画的墙、护墙板、桌子和几件摆设（相框、存钱罐、落地绿植、软木板、废纸篓），按房间坐标画，接缝处花纹对得上；宽屏、16:10 时露出来，进对局时才加载。
+- 时段（0.15.0）：盘前清晨、开盘白天、收盘傍晚、月底算账夜里，各一层整屏色调（游戏里画），台灯跟着亮暗。
 - 窗洞：x 420–860，y 56–336（`wall` 在这里镂空）。天色、城市、雨都画满全画布，方便做视差平移。
 - `rain` 竖直方向无缝平铺（周期 720px），向下平移循环即可。
 - 小火箭摆在显示器顶上、多肉摆在书桌上（都在 `desk` 层），窗台上不放东西（会被窗帘和显示器挡住）。
