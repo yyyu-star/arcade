@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, detectPlatform, onPlatformMode, platformMode, setPlatformMode, standalone } from '../src/platform/mode.ts';
+import { classify, detectPlatform, myName, onPlatformMode, platformInfo, platformMode, setPlatformMode, standalone } from '../src/platform/mode.ts';
 
 /** 0.8.0 有没有平台：问同域 /api/me 的回话怎么下结论（和共用包 detectPlatform 的说法一致）。 */
 
@@ -42,6 +42,23 @@ describe('启动时问一次，结论变了通知一次', () => {
     expect(standalone()).toBe(true);
     expect(seen).toEqual(['standalone']);
     off();
+    setPlatformMode('unknown');
+  });
+});
+
+describe('0.12.0 交给共用包的结论和昵称', () => {
+  it('有平台时带上 /api/me 的 user（社交部件不用再问）、昵称取 displayName；没问出有平台时为 undefined、null', async () => {
+    setPlatformMode('unknown');
+    expect(platformInfo()).toBeUndefined();
+    const user = { id: 'u1', username: 'zy', displayName: '老周' };
+    await detectPlatform((async () => json({ user, service: 'ok' })) as unknown as typeof fetch);
+    expect(platformInfo()).toEqual({ platform: true, user });
+    expect(myName()).toBe('老周');
+    await detectPlatform((async () => json({ user: null, service: 'ok' })) as unknown as typeof fetch);
+    expect(platformInfo()).toEqual({ platform: true, user: null });
+    expect(myName()).toBeNull();
+    await detectPlatform((async () => new Response('', { status: 404 })) as unknown as typeof fetch);
+    expect(platformInfo()).toBeUndefined();
     setPlatformMode('unknown');
   });
 });

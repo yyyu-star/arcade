@@ -77,10 +77,14 @@ async function fakePlatform(ctx: BrowserContext, userId: string): Promise<void> 
   let data: unknown = null;
   // 回大厅跳到的平台首页
   await ctx.route((u) => u.pathname === '/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>大厅</title>大厅' }));
-  // 报位置、收邀请（kit 的 social，docs/social.md 1.2、1.3）：位置收下，邀请一条都没有
-  await ctx.route(/\/api\/(presence|invites)/, (route) => {
-    if (new URL(route.request().url()).pathname.startsWith('/games/')) return route.continue();
-    return route.request().method() === 'GET' ? route.fulfill({ json: { invites: [] } }) : route.fulfill({ status: 204 });
+  // 报位置、收邀请、叫人（kit 的 social，docs/social.md 1.2、1.3）：位置收下，邀请一条都没有，好友一个、叫他就成
+  await ctx.route(/\/api\/(presence|invites|friends)/, (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (path.startsWith('/games/')) return route.continue();
+    if (path === '/api/friends') return route.fulfill({ json: { friends: [{ userId: 'u-pal', displayName: '老王', online: true }] } });
+    if (req.method() === 'GET') return route.fulfill({ json: { invites: [] } });
+    return path === '/api/invites' ? route.fulfill({ json: { id: 'inv-1' } }) : route.fulfill({ status: 204 });
   });
   await ctx.route(/\/api\/(me|saves)/, async (route) => {
     const req = route.request();
@@ -602,6 +606,15 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   const code = ((await hp.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
   if (!/^\d{6}$/.test(code)) throw new Error(`bad room code ${code}`);
   log('room', code);
+  // 叫朋友来（kit 的面板）：好友列出来、叫一下变"已叫"，关掉
+  await hp.locator('.rw-invite').click();
+  const call = hp.locator('[data-key="invite:call:u-pal"]');
+  await call.waitFor();
+  await call.click();
+  await hp.waitForFunction(() => (document.querySelector('[data-key="invite:call:u-pal"]') as HTMLButtonElement | null)?.disabled === true);
+  await shot(hp, 'room-invite');
+  await hp.locator('[data-key="invite:close"]').click();
+  await hp.locator('#arcade-invite-panel').waitFor({ state: 'detached' });
 
   // 一个点邀请链接进来，一个（手机）在大厅输码
   await ap.goto(`${base}/games/texas/?room=${code}`);

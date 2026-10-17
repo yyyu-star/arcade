@@ -143,6 +143,14 @@ for (const [name, viewport] of [
   await soloFun(page, name);
   if (!(await play(page, name))) errors.push('一场里没出现过胡牌亮牌');
   await page.screenshot({ path: `${root}shots/smoke-${name}.png` });
+  // 结算页的"分享"（docs/social.md 1.1）：无头浏览器没有带文件的系统分享，出 kit 的预览层（存图、复制链接、关闭）
+  await page.click('.share-card');
+  await page.waitForSelector('[data-key="share:close"]');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${root}shots/smoke-${name}-share.png` });
+  await page.click('[data-key="share:close"]');
+  const shared = await page.evaluate(() => (window as unknown as { __shareLog?: string[] }).__shareLog ?? []);
+  if (!shared.includes('分享 预览')) errors.push(`分享没出预览：${shared.join(' | ')}`);
   // 回选桌，再看一眼规则表
   await page.click('text=回选桌');
   await page.click('text=规则和番型表');

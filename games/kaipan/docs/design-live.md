@@ -235,7 +235,7 @@ client 模式每天每个游戏的净赢有上限（钱包管，份数是平台�
   多带出 `user.id` 给钱包用。没登录回 401（`login`），平台不可用、`user` 没有 id 回 503（`unavailable`）。
   - **为什么不用 `arcade-kit/auth` 的 `whoIs`**（设计时写的是它，写代码时改了）：`whoIs` 只在 fetch 上挂了 `AbortSignal.timeout`，
     平台不理会中止信号、或者响应头回来了响应体迟迟不来时会一直挂住；`checkLogin` 对"等响应"和"读响应体"两段都按时放弃，开盘的闸门测试锁着这两种情况
-    （`tests/worker-gate.test.ts`），换成 `whoIs` 这两条会挂。换的话还要加 `file:` 依赖、补 `Fetcher` 的类型、把共用包加进开盘部署流程的触发路径。
+    （`tests/worker-gate.test.ts`），换成 `whoIs` 这两条会挂。换的话还要补 `Fetcher` 的类型（0.12.0 起开盘已经按 npm 别名依赖共用包，页面用它的分享卡和社交部件）。
     等共用包补上这两段超时，再一起换过去。
 - **三个动作**：参数都是一个对象，`game: 'kaipan'`、`mode: 'client'`。业务上的拒绝走返回值 `{ ok: false, error, wallet? }`，不抛异常。
 

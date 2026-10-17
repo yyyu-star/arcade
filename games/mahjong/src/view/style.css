@@ -452,6 +452,25 @@ button {
   z-index: 5;
   max-width: 90%;
 }
+/* 旁观中：金色小牌子，一眼看出自己不在桌上 */
+.room-note .watch-tag {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--gold);
+  color: #2b1d14;
+  white-space: nowrap;
+}
+/* 旁观条按钮多、比别的提示宽：放在对家手牌和中控盘之间的空处，不压顶上两家的名牌 */
+.room-note.watch {
+  top: 24%;
+}
+.room-note.watch .act {
+  min-height: 0;
+  padding: var(--sp-1) var(--sp-3);
+}
+.room-hint.watch {
+  color: var(--gold);
+}
 .toast {
   position: absolute;
   left: 50%;

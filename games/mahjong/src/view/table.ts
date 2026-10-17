@@ -375,7 +375,12 @@ export class TableUi<V extends TableView, A> {
     const box = this.myHand;
     clear(box);
     const me = v.me;
-    if (!me) return;
+    if (!me) {
+      // 旁观（没入座）：底下这家和别家一样，暗着的画牌背、亮牌时画牌面（视图里本来就只有公开的），点不了
+      const s = v.seats[0]!;
+      for (const t of s.hand ?? Array<Tile>(s.count).fill(-1)) this.tile(t, 'lg', box).classList.add('off');
+      return;
+    }
     const multi = this.ui.multi(v);
     const discard = v.prompt?.discard;
     let tiles = me.hand.slice();

@@ -92,6 +92,14 @@ export interface LeaderboardResponse {
 }
 
 /** GET /api/boards/<game>/<board>（15.5）；rank 为 null 是"太靠后，没数" */
+/** 好友这周的最好成绩超过了我的（0.15.0，读的时候比） */
+export interface Overtake {
+  gameId: string;
+  by: { userId: string; displayName: string };
+  score: number;
+  mine: number;
+}
+
 export interface ScoreBoard {
   entries: (BoardRow & { score: number })[];
   me: { rank: number | null; score: number } | null;
@@ -313,6 +321,10 @@ export const api = {
   leaderboard: (scope: 'all' | 'friends') => request<LeaderboardResponse>('GET', `/api/leaderboard?scope=${scope}`),
   board: (game: string, board: string, scope: 'all' | 'friends') =>
     request<ScoreBoard>('GET', `/api/boards/${encodeURIComponent(game)}/${encodeURIComponent(board)}?scope=${scope}`),
+  /** 我和好友这周在每日挑战上的最好成绩（0.15.0）；week 是这周一的日期 */
+  friendsWeek: (game: string) => request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}`),
+  /** 这周哪个好友超过了我（0.15.0）：每个游戏最多一条 */
+  overtakes: () => request<{ overtakes: Overtake[] }>('GET', '/api/friends/overtakes'),
   register: (username: string, password: string, displayName: string) =>
     request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName }),
   login: (username: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { username, password }),

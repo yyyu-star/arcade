@@ -38,18 +38,20 @@ function canWin(p: XzPlayer, hand: readonly Tile[]): boolean {
 }
 
 /**
- * me 这个座位看不见的东西重洗一遍。暗杠整组换成另一种（4 张都在没看见的牌里、不是那家的缺门），保持"4 张同种"；
+ * me 这个座位看不见的东西重洗一遍（me 是 null：没入座的旁观，所有人的暗牌都看不见）。暗杠整组换成另一种（4 张都在没看见的牌里、不是那家的缺门），保持"4 张同种"；
  * 声明窗口里别家能做什么也是暗的，按新手牌重算；定缺阶段别家选了什么也是暗的，换一个。
  * 返回新状态和"看不见的牌到底变没变"（洗了却没变的平行世界不算数）
  */
-function perturb(s0: XzState, me: number, r: RandomStream): { s: XzState; changed: boolean } {
+function perturb(s0: XzState, me: number | null, r: RandomStream): { s: XzState; changed: boolean } {
   const s = structuredClone(s0);
   const P = s.players;
   const known = new Set<Tile>();
   const add = (t: Tile): void => void known.add(t);
-  P[me]!.hand.forEach(add);
-  P[me]!.swapOut?.forEach(add);
-  P[me]!.swapIn?.forEach(add);
+  if (me !== null) {
+    P[me]!.hand.forEach(add);
+    P[me]!.swapOut?.forEach(add);
+    P[me]!.swapIn?.forEach(add);
+  }
   const hiddenKans: { seat: number; tiles: Tile[] }[] = [];
   P.forEach((p, i) => {
     p.river.forEach((x) => add(x.tile));
@@ -175,6 +177,8 @@ const tally = {
   timeoutDiff: 0,
   roomDiff: 0,
   leakyViewDiff: 0,
+  /** 旁观（没入座，房间按座位 null 给的视图）：查了几步、几个平行世界、视图变了几次、漏牌的阳性对照抓到几次 */
+  watch: { points: 0, worlds: 0, diff: 0, leak: 0 },
   cheat: { hands: 0, wall: 0, leaky: 0 } as Record<keyof typeof CHEATS, number>,
   by: new Map<string, number>(),
 };
@@ -202,6 +206,31 @@ function check(s: XzState, seat: number, rs: RoomState | null, r: RandomStream):
     if (rs && J(mahjongRoom.ai({ ...rs, g: s1 }, seat)) !== room0) tally.roomDiff++;
     for (const [k, f] of Object.entries(CHEATS)) if (J(f(s1, seat)) !== cheat0[k]) tally.cheat[k as keyof typeof CHEATS]++;
     if (J(leakyView(s1, seat)) !== leaky0) tally.leakyViewDiff++;
+  }
+}
+
+/**
+ * 旁观（docs/social.md 1.4）：kit 给没入座的连接发 mahjongRoom.view(状态, null)。所有人的暗牌、牌墙、密钥怎么洗，这份视图一个字节都不变；
+ * 阳性对照：把还没胡的第一家的真手牌塞进视图（"漏了一家手牌"），平行世界里它得跟着变
+ */
+function checkWatch(rs: RoomState, r: RandomStream): void {
+  const g = rs.g as XzState;
+  const v0 = J(mahjongRoom.view(rs, null));
+  const k = g.players.findIndex((p) => !p.won);
+  const leak = (st: RoomState): string => {
+    const v = mahjongRoom.view(st, null);
+    const gv = v.g as XzView;
+    return J({ ...v, g: { ...gv, seats: gv.seats.map((x, i) => (i === k ? { ...x, hand: (st.g as XzState).players[i]!.hand } : x)) } });
+  };
+  const leak0 = leak(rs);
+  tally.watch.points++;
+  for (let w = 0; w < WORLDS; w++) {
+    const { s: s1, changed } = perturb(g, null, r);
+    if (!changed) continue;
+    tally.watch.worlds++;
+    const rs1 = { ...rs, g: s1 };
+    if (J(mahjongRoom.view(rs1, null)) !== v0) tally.watch.diff++;
+    if (k >= 0 && leak(rs1) !== leak0) tally.watch.leak++;
   }
 }
 
@@ -246,6 +275,7 @@ function runRoom(stakes: StakesId, humans: number, n: number): void {
       continue;
     }
     const g = rs.g as XzState;
+    checkWatch(rs, r);
     let seat = seats.find((i) => rs.kinds[i] === 'ai');
     let a;
     if (seat !== undefined) {
@@ -291,6 +321,12 @@ describe('电脑不看牌（反事实）', () => {
   test('看不见的牌、密钥、别家的状态怎么换，视图和决定都 0 不一致（单机、超时代出、好友房三条路）', () => {
     expect(tally.points).toBeGreaterThan(1_000);
     expect({ view: tally.viewDiff, solo: tally.soloDiff, timeout: tally.timeoutDiff, room: tally.roomDiff }).toEqual({ view: 0, solo: 0, timeout: 0, room: 0 });
+  });
+
+  test('旁观（座位 null）的视图里没有任何人的暗牌：所有暗牌、牌墙、密钥重洗，好友房每一步的旁观视图都 0 不一致；漏一家手牌的对照被抓出来', () => {
+    expect(tally.watch.points).toBeGreaterThan(500);
+    expect(tally.watch.diff).toBe(0);
+    expect(tally.watch.leak).toBeGreaterThan(tally.watch.worlds / 10);
   });
 
   test('阳性对照：故意偷看的电脑在同样的点上都被抓出来', () => {

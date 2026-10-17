@@ -7,6 +7,7 @@
  * 内容：
  * 1. 娱乐房：A 开房（局数 4）、B 凭 ?room= 进等人页坐下、A 开打，两边自动打满 N 局（换三张、定缺、能胡就胡、不然过、打最右边那张），
  *    B 离开并确认，A 继续打、牌桌还在动；
+ *    中途 C 凭链接进来旁观（看得到桌面、没有手牌、不能扔东西），点"坐下"接管电脑座位，离开再进来是"回到我的座位"；
  * 2. 实盘小档房：A 一个人时"开打"灰着、有"至少要两个人"的提示；A、B 进房开打，检查假钱包各扣 2,000、stakes 里各有 mahjong 的 server 模式一份；
  *    B 一局打到一半离开：这一局由电脑替他打完、那一份先还在；A 打完这一局，只剩 A 一个人在下注：这一场结束，两个人的那一份都结回、余额加回结回的数，A 的结算上写着提前结束。
  * 两边控制台零报错。端口由系统分配（不占 5176 / 4176）。截图放在 shots/（--shots 可改）。
@@ -196,6 +197,9 @@ try {
   let botEmotes = 0;
   pa.on('websocket', (ws) => ws.on('framereceived', (f) => typeof f.payload === 'string' && f.payload.includes('"bot":true') && botEmotes++));
   pages.push(pa, pb);
+  // 好友部件报的位置（docs/social.md 1.2）：进房以后要有一次 place: room、带房间号和人数
+  const presence: string[] = [];
+  pa.on('request', (r) => r.url().endsWith('/api/presence') && presence.push(r.postData() ?? ''));
   watch(pa, 'A');
   watch(pb, 'B');
   const A: Player = { page: pa, tag: 'A', round: 0, discards: 0 };
@@ -205,6 +209,16 @@ try {
   let t = Date.now();
   let code = await openRoom(pa, base, '娱乐');
   log('A 开娱乐房', code);
+  // 叫朋友来（docs/social.md 1.3，kit 的面板）：好友列表里有老王，点"叫他来"发出邀请（按钮变灰），关掉
+  const invites: string[] = [];
+  pa.on('request', (r) => r.url().endsWith('/api/invites') && r.method() === 'POST' && invites.push(r.postData() ?? ''));
+  await pa.click('button.big.share');
+  await pa.click('[data-key="invite:call:friend-wang"]');
+  await pa.waitForFunction(() => (document.querySelector('[data-key="invite:call:friend-wang"]') as HTMLButtonElement | null)?.disabled === true, null, { timeout: 5_000 });
+  await pa.screenshot({ path: join(SHOTS, 'room-invite-a.png') });
+  await pa.click('[data-key="invite:close"]');
+  const sent = JSON.parse(invites[0] ?? '{}') as { to?: string; game?: string; room?: string };
+  check(sent.to === 'friend-wang' && sent.game === 'mahjong' && sent.room === code, `A 在等人页点"叫朋友来"，叫了老王（${invites[0]}）`);
   // 等人页"离开房间"先离座（自审 C4）：B 坐下再离开，A 这边那个座位要空出来（只断开的话 kit 只记掉线、座位还占着）
   await pb.goto(`${base}/games/mahjong/?room=${code}`);
   await pb.waitForSelector('.room-code');
@@ -216,6 +230,8 @@ try {
   check(freed, 'B 在等人页点"离开房间"，A 这边他的座位空出来');
   await joinAndStart(pa, pb, base, code);
   check(true, `娱乐房开打，两边进牌桌（${Math.round((Date.now() - t) / 1000)} 秒）`);
+  const here = presence.map((x) => JSON.parse(x || '{}') as { place?: string; room?: string; seats?: string }).find((x) => x.place === 'room');
+  check(here?.room === code && /^[1-4]\/4$/.test(here.seats ?? ''), `A 进房后报了位置：在房间里（${JSON.stringify(here)}）`);
   // 开局换三张时操作条最宽：截一张看"互动"按钮、自己的头像牌有没有压住它
   await pa.screenshot({ path: join(SHOTS, 'room-start-a.png') });
   await pb.screenshot({ path: join(SHOTS, 'room-start-b.png') });
@@ -259,6 +275,38 @@ try {
     await hot(pa, 2 + (i % 2));
     await key(pa, 'fun:prop0');
   }
+  // 旁观（docs/social.md 1.4）：C 在开打后凭链接进来，座位都有人（A、B 和两个电脑），进"旁观中"：看得到牌桌、没有自己的手牌、不能扔东西，
+  // 两个没绑人的电脑座位各有一个"坐下"；坐下接管一个，离开后再进来是"回到我的座位"（kit 的座位绑人规则）
+  const ctxC = await newContext(browser, base, 'smokeC0003', { width: 390, height: 844 });
+  const pc = await ctxC.newPage();
+  pages.push(pc);
+  watch(pc, 'C');
+  await pc.goto(`${base}/games/mahjong/?room=${code}`);
+  await pc.waitForSelector('.room-note.watch .watch-tag:has-text("旁观中")', { timeout: 10_000 });
+  const backs = await pc.$$eval('.my-hand .tile:not([title])', (xs) => xs.length);
+  const faces = await pc.$$eval('.my-hand .tile[title]', (xs) => xs.length);
+  const sits = await pc.$$eval('.room-note.watch button', (xs) => xs.map((x) => x.textContent ?? ''));
+  check(backs >= 13 && faces === 0 && sits.length === 2 && sits.every((x) => x.startsWith('坐下')), `C 开打后进来是旁观：底下那家是 ${backs} 张牌背、没有牌面，两个"坐下"（${sits.join(' / ')}）`);
+  check(!(await pc.$('.atf-btn')), 'C 旁观时没有"互动"按钮（不能扔表情道具）');
+  await pc.screenshot({ path: join(SHOTS, 'room-watch-c.png') });
+  await pc.setViewportSize({ width: 1280, height: 720 });
+  await sleep(500);
+  await pc.screenshot({ path: join(SHOTS, 'room-watch-c-land.png') });
+  await pc.setViewportSize({ width: 390, height: 844 });
+  await sleep(500);
+  await pc.click('.room-note.watch button >> nth=0');
+  await pc.waitForSelector('.room-note.watch', { state: 'detached', timeout: 10_000 });
+  // 牌面带 title（牌名），牌背没有；换三张、定缺时手牌是 off，所以不按能不能点数
+  const mine = await pc.$$eval('.my-hand .tile[title]', (xs) => xs.length);
+  check(mine >= 13 && !!(await pc.$('.atf-btn')), `C 点"坐下"接管了一个电脑座位：手牌亮出来（${mine} 张），有"互动"按钮了`);
+  await leaveRoom(pc, 'C');
+  await pc.goto(`${base}/games/mahjong/?room=${code}`);
+  await pc.waitForSelector('.room-note.watch button:has-text("回到我的座位")', { timeout: 10_000 });
+  check(true, 'C 离开后再进来：旁观中，有"回到我的座位"');
+  await pc.close();
+  pages.splice(pages.indexOf(pc), 1);
+  await ctxC.close();
+
   await playUntil([A, B], () => A.round > ROUNDS && B.round > ROUNDS, 6 * 60_000, '娱乐房打局');
   check(true, `娱乐房打满 ${ROUNDS} 局（A 打出 ${A.discards} 张，B 打出 ${B.discards} 张，${Math.round((Date.now() - t) / 1000)} 秒）`);
   check(botEmotes > 0, `电脑在好友房里由房间发表情（A 收到 ${botEmotes} 条）`);

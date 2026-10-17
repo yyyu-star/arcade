@@ -4,7 +4,7 @@ import { CoinIcon, EmptyArt, LogoMark, PeopleIcon, ShieldIcon, SpeakerIcon, Trop
 import { setSoundOn, soundOn, subscribeSound } from './sound.ts';
 import { onlineUrl, playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
-import { api } from './api.ts';
+import { api, type Overtake } from './api.ts';
 import { useSession } from './session.tsx';
 import { InviteBar, useHasInvites, useInvitePolling } from './invites.tsx';
 import { useLobbyPresence } from './presence.ts';
@@ -176,6 +176,7 @@ function Home({ deleted }: { deleted: boolean }) {
     <>
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
+      {user && <OvertakeNudge />}
       {user && announcement && (
         <p className="banner banner--notice" data-testid="notice">
           <strong className="banner__tag">公告</strong>
@@ -256,6 +257,33 @@ function LobbyNudge() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 好友超过了我这周的每日挑战纪录（0.15.0，docs/social.md 1.5）：打开大厅时问一次，读的时候比、不存；有好几个游戏只提第一个。
+ * 问失败就不提，不打扰。
+ */
+function OvertakeNudge() {
+  const [o, setO] = useState<Overtake | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.overtakes().then((r) => alive && setO(r.overtakes[0] ?? null), () => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const g = o && GAMES.find((x) => x.id === o.gameId);
+  if (!o || !g) return null;
+  return (
+    <p className="banner nudge" data-testid="nudge-overtake">
+      <span>
+        <strong>{o.by.displayName}</strong>超过了你这周的{g.name}每日挑战纪录
+      </span>
+      <a className="inline-link" href={playUrl(g)}>
+        去挑战
+      </a>
+    </p>
   );
 }
 

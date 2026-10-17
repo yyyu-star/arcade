@@ -1,6 +1,6 @@
 /**
  * 好友房的等人页和牌桌上的小条（DESIGN.md 6、7）：房间号、规则、四个座位（点空位坐下）、叫朋友来、房主开打；
- * 开打后牌桌顶上一条：等筹码到账、带入被拒（再带一次）、电脑先替你打。
+ * 开打后牌桌顶上一条：等筹码到账、带入被拒（再带一次）、电脑先替你打；没入座的是"旁观中"（docs/social.md 1.4）。
  */
 import type { RoomInfo, You } from 'arcade-kit/protocol';
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
@@ -55,7 +55,9 @@ export function renderWaiting(box: HTMLElement, p: WaitingProps): void {
       if (s.away) el('div', 'tag', card, '掉线了');
     }
   });
-  el('p', 'room-hint', box, '空着的座位开打时由电脑补上；开打以后朋友也能进来接管电脑的座位。');
+  const watchingFull = (p.you?.seat === null || p.you?.seat === undefined) && !p.room.seats.some((s) => s.kind === 'empty');
+  if (watchingFull) el('p', 'room-hint watch', box, '旁观中：座位满了，开打后你能看桌面和出牌，看不到手牌；有人离开就能坐下。');
+  else el('p', 'room-hint', box, '空着的座位开打时由电脑补上；开打以后朋友也能进来接管电脑的座位。');
   const wallet = !!stakesOf(p.opts?.stakes)?.wallet;
   // 实盘至少两个真人：好友房是来和朋友打的，电脑座位的钱归庄家（房间那边也拦，这里先说清楚）
   const few = wallet && p.room.seats.filter((s) => s.kind === 'human').length < MIN_HUMANS;
@@ -67,10 +69,19 @@ export function renderWaiting(box: HTMLElement, p: WaitingProps): void {
   else el('span', 'room-wait', row, few ? '等朋友坐下' : '等房主开打');
 }
 
-/** 开打以后牌桌顶上的一条（没有要说的返回 null） */
-export function roomNotice(v: RoomView, seat: number | null, onRebuy: () => void): HTMLElement | null {
+/** 没入座时能坐哪：自己坐过的座位（离座了也还是他的），或者没绑人的电脑座位（kit 的座位绑人规则） */
+export interface Watching {
+  back: number | null;
+  free: { seat: number; name: string }[];
+  /** 实盘房间只看：旁观的人不带入（docs/social.md 1.4） */
+  wallet: boolean;
+  onSit(seat: number): void;
+}
+
+/** 开打以后牌桌顶上的一条（没有要说的返回 null）；watch 只在没入座时给 */
+export function roomNotice(v: RoomView, seat: number | null, onRebuy: () => void, watch: Watching | null = null): HTMLElement | null {
+  if (seat === null) return watch ? watching(watch) : null;
   if (v.unrated && !v.done) return note('实盘只有一个人，这一场不计输赢、不动钱包');
-  if (seat === null) return note('你在旁观，点空出来的电脑座位可以接手');
   if (v.opening) return note('等大家的筹码到账……');
   if (v.own[seat]) return null;
   if (v.buying[seat]) return note('筹码正在到账，这个座位先由电脑替你打');
@@ -82,30 +93,27 @@ export function roomNotice(v: RoomView, seat: number | null, onRebuy: () => void
   return null;
 }
 
+/** 旁观：看得到桌面、出牌、分数和互动，看不到手牌，不能扔东西；有能坐的座位就给"坐下" */
+function watching(w: Watching): HTMLElement {
+  const n = document.createElement('div');
+  n.className = 'room-note watch';
+  el('b', 'watch-tag', n, '旁观中');
+  if (w.back !== null) {
+    button('act go', n, '回到我的座位', () => w.onSit(w.back!));
+    return n;
+  }
+  if (w.wallet) {
+    el('span', '', n, '实盘房间只能看');
+    return n;
+  }
+  for (const f of w.free.slice(0, 2)) button('act go', n, w.free.length > 1 ? `坐下（替${f.name}）` : '坐下', () => w.onSit(f.seat));
+  if (!w.free.length) el('span', '', n, '看不到手牌，也不能扔东西');
+  return n;
+}
+
 function note(text: string): HTMLElement {
   const n = document.createElement('div');
   n.className = 'room-note';
   el('span', '', n, text);
   return n;
-}
-
-/** 叫朋友来：手机上走系统分享，没有就复制链接。链接带房间号，朋友点开登录后直接进房 */
-export async function shareRoom(code: string, title: string): Promise<'shared' | 'copied' | 'failed'> {
-  const url = new URL(`?room=${code}`, location.href).toString();
-  const text = `来${title}打一把，房间号 ${code}`;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title, text, url });
-      return 'shared';
-    } catch (e) {
-      // 用户取消了就不再复制
-      if ((e as { name?: string }).name === 'AbortError') return 'shared';
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(`${text} ${url}`);
-    return 'copied';
-  } catch {
-    return 'failed';
-  }
 }

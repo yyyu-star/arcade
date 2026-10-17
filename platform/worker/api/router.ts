@@ -20,6 +20,7 @@ import {
 } from './admin';
 import { getMe, login, logout, patchMe, recover, register } from './auth';
 import { dismissInvite, inviteParams, listInvites, sendInvite } from './invites';
+import { friendsWeek, overtakes, weekParams } from './friends-week';
 import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
 import {
@@ -87,6 +88,8 @@ const ROUTES: Route[] = [
   { method: 'POST', path: '/api/account/delete', cat: 'acct', auth: 'user', acct: 'always', handler: deleteAccount },
   { method: 'POST', path: '/api/me/friend-code', cat: 'social', auth: 'user', handler: changeFriendCode },
   { method: 'GET', path: '/api/friends', cat: 'social', auth: 'user', handler: listFriends },
+  { method: 'GET', path: '/api/friends/overtakes', cat: 'board', auth: 'user', handler: overtakes },
+  { method: 'GET', path: /^\/api\/friends\/week\/([^/]+)$/, params: weekParams, cat: 'board', auth: 'user', handler: friendsWeek },
   // 好友在线（0.13.0，15.13）：每人每 2 分钟最多写 1 行；写不了就静默 204
   { method: 'POST', path: '/api/presence', cat: 'live', auth: 'user', quiet: true, handler: postPresence },
   { method: 'POST', path: '/api/invites', cat: 'live', auth: 'user', handler: sendInvite },

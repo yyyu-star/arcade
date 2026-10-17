@@ -2,7 +2,8 @@
  * 页面入口：选桌页、好友房的等人页、牌桌，接钱包、单机、好友房、声音和看得见的区域。
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
-import { createRoom, detectPlatform, withNickname } from 'arcade-kit/client';
+import { createRoom, detectPlatform, withNickname, type PlatformInfo } from 'arcade-kit/client';
+import { inviteUrl, mountSocial, openInvite, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { DEFAULT_OPTS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
@@ -12,15 +13,16 @@ import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/bant
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
-import { busy, button, el } from './view/dom.ts';
+import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
-import { renderWaiting, roomNotice, shareRoom } from './view/room.ts';
+import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, VARIANT_NAME, walletError } from './view/text.ts';
+import { cardOf, prepareCard } from './view/share.ts';
+import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, STAKES_NAME, VARIANT_NAME, walletError } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
 import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
@@ -128,7 +130,7 @@ document.addEventListener('pointerdown', (e) => {
   if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
 button('icon', top, '规则', () => showRules(stage));
-const shareBtn = button('pill share', top, '叫朋友', () => void busy(shareBtn, share));
+const shareBtn = button('pill share', top, '叫朋友', () => share());
 const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
 
@@ -205,8 +207,12 @@ function setNick(name: string): void {
   myName = name || '我';
 }
 
+/** detectPlatform 的结果：social 部件直接用，省一次 /api/me */
+let platformInfo: PlatformInfo | undefined;
+
 async function loadMe(): Promise<void> {
   const p = await detectPlatform();
+  platformInfo = p;
   if (p.platform === false) {
     standalone = true;
     myName = nick() || '我';
@@ -240,6 +246,11 @@ let solo: Solo | null = null;
 let table: TableUi<XzView, XzAction> | null = null;
 
 function lobby(friends = false): void {
+  // 从房间回来：马上告诉好友我不在房里了
+  if (reported !== null) {
+    reported = null;
+    social?.presenceNow(true);
+  }
   stopFollow();
   arrive = null;
   solo?.stop();
@@ -409,6 +420,11 @@ const onlineUi = {
   draw(s: OnlineState, fresh: boolean): void {
     paintTop();
     if (!s.room) return;
+    // 进了房间（房间信息到了才知道几个人）：马上报一次位置
+    if (reported !== s.code) {
+      reported = s.code;
+      social?.presenceNow(true);
+    }
     if (s.room.status === 'waiting' && arrive?.sit && s.you && s.you.seat === null) {
       // 跟过来的娱乐房：坐回和上一场一样的相对位置（被人占了就不坐，留在等人页自己挑）
       if (s.room.seats[arrive.seat]?.kind === 'empty') online?.sit(arrive.seat);
@@ -445,7 +461,7 @@ function drawWaiting(s: OnlineState): void {
     suggest: s.you?.seat === null && arrive ? arrive.seat : null,
     onSit: (seat) => online?.sit(seat),
     onStart: () => online?.start(),
-    onShare: () => void share(),
+    onShare: () => share(),
     // 等人页离开：先离座再断开（只断开的话 kit 只记掉线、座位还占着，房主开打会照样从他钱包带一份，自审 C4）
     onLeave: () => {
       if (s.you?.seat !== null && s.you?.seat !== undefined) online?.leaveSeat();
@@ -504,12 +520,23 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   if (mine !== ownShown) void refreshWallet();
   ownShown = mine;
   table.root.querySelector('.room-note')?.remove();
-  const n = roomNotice(rv, seat, () => online?.rebuy());
+  const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
   if (!replay) publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
   alertTurn(v);
   roomRoundEnd(s, rv, g, replay);
+}
+
+/** 没入座：回自己坐过的座位，或者能接管的电脑座位（没绑人的；实盘房间旁观只看，不给坐） */
+function watching(s: OnlineState, g: XzView): Watching {
+  const metas = seatMetas(s, g);
+  return {
+    back: s.you?.bound ?? null,
+    free: s.room!.seats.flatMap((x, i) => (x.kind === 'ai' && !x.reserved ? [{ seat: i, name: metas[i]!.name }] : [])),
+    wallet: !!stakesOf(s.view?.stakes)?.wallet,
+    onSit: (seat) => online?.sit(seat),
+  };
 }
 
 /** 一局打完：房间停 8 秒自动发下一局，结算摆着不用点；一场打完给总结算 */
@@ -532,13 +559,15 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           closeDialog();
           lobby();
         });
+        // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页
+        shareButton(row, g, `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`, wallet, new URL(`?room=${s.code}`, location.href).toString());
         // 再来一场：我开个同样规则的新房间，这一桌跟过来。房间等 3 分钟，过了再点就自己先去新房间、再叫朋友
         if (me !== null && s.room?.seats[me]?.kind === 'human' && !rv.next) {
           const b = button('act go rematch', row, '再来一场', () => void rematch(b));
           if (stakesOf(rv.stakes)?.wallet) el('p', 'room-hint', box, '新房间里各人自己坐下，开打时才从钱包带一份');
         }
       }, false);
-      play((g.result?.seats[g.me?.seat ?? 0]?.net ?? 0) >= 0 ? 'win' : 'lose');
+      if (g.me) play((g.result?.seats[g.me.seat]?.net ?? 0) >= 0 ? 'win' : 'lose');
       void refreshWallet();
     }
     // 别人开了新房间：结算上写一句，几秒后跟过去（娱乐坐回原来的相对位置，实盘只亮座位、自己点了才坐）
@@ -568,6 +597,15 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
   if (document.querySelector('.mask.end')) closeDialog();
 }
 
+/** 结算页的"分享"（docs/social.md 1.1）：只有坐着打完的人有（旁观的没有自己的战绩） */
+function shareButton(row: HTMLElement, v: XzView, title: string, wallet: boolean, url: string): void {
+  const card = cardOf(v, { title, unit: wallet ? '筹码' : '分', name: myName, fame });
+  if (!card) return;
+  // 结算页出来就画好，点的那一下直接调系统分享（iOS 要求，见 view/share.ts）
+  const p = prepareCard(card, url);
+  button('act soft share-card', row, '分享', () => void p.share());
+}
+
 async function rematch(b: HTMLButtonElement): Promise<void> {
   const opts = online?.state.opts;
   if (!online || !opts) return;
@@ -582,11 +620,17 @@ async function rematch(b: HTMLButtonElement): Promise<void> {
   enterRoom(r.code, true);
 }
 
-async function share(): Promise<void> {
+/**
+ * 叫朋友来（docs/social.md 1.3，kit 的"叫朋友来"面板）：登录了列好友、每人一个"叫他来"，底下复制邀请链接；
+ * 单独部署、没登录（social 没挂上）只有复制邀请链接（能系统分享就分享）。链接带房间号，朋友点开登录后直接进房
+ */
+function share(): void {
   if (!online) return;
-  const r = await shareRoom(online.state.code, GAME_NAME);
-  if (r === 'copied') toast('链接已复制，发给朋友');
-  else if (r === 'failed') toast(`房间号 ${online.state.code}，告诉朋友在选桌页输入`);
+  const code = online.state.code;
+  const log = import.meta.env.DEV ? (l: string) => ((window as { __socialLog?: string[] }).__socialLog ??= []).push(l) : undefined;
+  const o = { game: GAME_ID, room: code, url: new URL(`?room=${code}`, location.href).toString(), text: `来${GAME_NAME}打一把，房间号 ${code}`, ...(log ? { log } : {}) };
+  if (social) social.openInvite(o);
+  else openInvite({ ...o, friends: false });
 }
 
 // ---------- 牌桌（单机） ----------
@@ -618,6 +662,9 @@ const soloUi = {
             closeDialog();
             lobby();
           });
+          const st = stakesOf(mine.stakes)!;
+          const kind = st.wallet ? `实盘${STAKES_NAME[st.id]}档` : `娱乐·${LEVEL_NAME[mine.save.level ?? 'easy']}`;
+          shareButton(row, v, `${kind} · ${v.opts.rounds} 局`, !!st.wallet, `${location.origin}${location.pathname}`);
           button('act go', row, '再来一场', () => {
             closeDialog();
             void startSolo(prefs.stakes, prefs.opts);
@@ -810,12 +857,50 @@ home.addEventListener('click', (e) => {
   });
 });
 
+// ---------- 好友：报位置、收邀请（docs/social.md 1.2、1.3，kit 的 arcade-kit/social；没平台、没登录时不挂） ----------
+
+/** 模块 id（平台登记、邀请链接 /games/<id>/ 用的就是它） */
+const GAME_ID = 'mahjong';
+let social: SocialHandle | null = null;
+/** 上次报的是哪个房间（null：不在房间） */
+let reported: string | null = null;
+
+/** 我在哪：好友房里报房间号和几个真人，别的时候是"在玩雀馆" */
+function whereAmI(): Presence {
+  const s = online?.state;
+  if (!s?.room) return { place: 'game', game: GAME_ID };
+  const humans = s.room.seats.filter((x) => x.kind === 'human').length;
+  return { place: 'room', game: GAME_ID, room: s.code, seats: `${humans}/${s.room.seats.length}` };
+}
+
+/** 点邀请的"去"：打到一半先照常确认离开（实盘的结回照旧），取消了就留下 */
+async function goInvite(inv: Invite): Promise<void> {
+  if (online) await leaveRoom();
+  else if (solo && solo.save.state.phase !== 'over') await leave();
+  if (online || (solo && solo.save.state.phase !== 'over')) return;
+  if (inv.game === GAME_ID) enterRoom(inv.room, false);
+  else location.assign(inviteUrl(inv));
+}
+
+async function startSocial(): Promise<void> {
+  const log = import.meta.env.DEV ? (l: string) => ((window as { __socialLog?: string[] }).__socialLog ??= []).push(l) : undefined;
+  social = await mountSocial({
+    ...(platformInfo ? { platform: platformInfo } : {}),
+    where: whereAmI,
+    // kit 不认识任何游戏；别的游戏叫什么只有平台知道，横条上就说"一起玩"
+    gameName: (id) => (id === GAME_ID ? GAME_NAME : undefined),
+    onGo: (inv) => void goInvite(inv),
+    ...(log ? { log } : {}),
+  });
+}
+
 // ---------- 开始 ----------
 
 void (async () => {
   paintTop();
   // 先看有没有平台：单独部署时不去问钱包
   await loadMe();
+  if (!standalone) void startSocial();
   await refreshWallet();
   // 朋友发来的房间链接（登录后平台按 next 原样带回来）、刷新：直接进房。
   // 平台大厅的"好友房"按钮带 ?online=1：直接摆出开房、进房（用完就从地址栏去掉，刷新不再亮）

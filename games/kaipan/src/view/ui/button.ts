@@ -214,7 +214,7 @@ export class Button extends Phaser.GameObjects.Container implements Focusable {
   }
 
   /**
-   * 加载中：等回话（画海报、看钱包）时转圈，不能点，外观不变灰；文字可以顺便换掉（比如「画海报」）。
+   * 加载中：等回话（画分享卡、看钱包）时转圈，不能点，外观不变灰；文字可以顺便换掉（比如「画卡片」）。
    * 关掉时文字恢复成 label（不给就保持现在的）。
    */
   setLoading(on: boolean, label?: string): this {
