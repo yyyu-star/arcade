@@ -51,7 +51,13 @@ tests/         vitest
 
 ## 6. 浏览器存储 key（全部 `yexun.` 前缀）
 
-在用：`yexun.settings`（音效、音乐、震屏、固定摇杆开关；0.0.3 起）、`yexun.save`（局数、最好成绩、引导进度；0.0.4 起，`src/platform/save.ts`）。计划（DESIGN.md 5.5）：`yexun.save`、`yexun.settings`、`yexun.replays`、`yexun.live`、`yexun.cloud`。新增 key 必须带前缀并补进这张表。
+在用：
+- `yexun.settings`（音效、音乐、震屏、固定摇杆开关；0.0.3 起）；
+- `yexun.save`（局数、最好成绩、引导进度，第 5 步起加铜钱流水、加成、解锁、危险档、角色、咒印；`src/platform/save.ts`）；
+- `yexun.records`（成就和图鉴的累计统计，`src/meta/records.ts`）；
+- `yexun.cloud`（云存档元数据）、`yexun.profile.pre-sync`（合并前的本机备份）、`yexun.profile.pre-switch.<userId>`（换账号时另存的旧账号存档，并回去以后改名 `.restored`）（`src/platform/cloud.ts`）。
+
+计划（DESIGN.md 5.5）：`yexun.replays`、`yexun.live`。新增 key 必须带前缀并补进这张表。
 
 ## 7. 发布
 
