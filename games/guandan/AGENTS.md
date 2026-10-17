@@ -176,6 +176,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   页面 `NetSession.matchLog` 取、`TableScene.roomAwards` 评、`addAwards` 画，分享卡经 `shareCardOf` 的 `awards` 写进去。只用公开信息、话从模板拼；改评法同步改 design.md 4.1 和 `tests/awards.test.ts`。
 - 好友动态的名场面（0.15.0，`src/view/feed.ts`、`public/moments.json`，设计 `docs/design.md` 4.2）：一副打完 `TableScene.feedDeal` 从 `highlights.ts` 的名场面里挑和我有关的一条，经 `social.ts` 的 `postFeed`（kit 的 `postMoment`）报给平台；
   一局最多 `FEED_MAX`（2）条、同一种一次，只报娱乐、不是旁观。加编号同时加模板（只用 `{name}`、`{n}`，≤ 40 字），`tests/feed.test.ts` 核对。冒烟的假平台都回 204。
+- 搭子战绩（0.16.0，`src/net/together.ts`，设计 `docs/design.md` 4.3）：`worker/room.ts` 的 `onStep` 用 `matchEnd` 认"这一步刚打完一场"，调 kit 的 `reportMatch`（交给 waitUntil、不重试、不写状态）。
+  win 的定义改了同步改 design.md 4.3 和 `tests/together.test.ts`；房间测试的假钱包（`tests/room/wallet.ts`）记下每次 `together`，`bots.spec`、`stake.spec` 核对报了几次、报了谁。
 - 界面的刻度和按钮（0.9.0 界面改版①）：间距、圆角、投影、按钮配色只从 `theme.ts` 取（`SPACE`、`RADIUS`、`SHADOW`、`BUTTON`），DOM 用 `THEME_CSS` 的 `--gd-` 变量和 `.gd-btn`（`tests/ui-theme.test.ts` 查 DOM 按钮）。
   画布里能点的一律用 `ui/kit.ts` 的 `Button`、`iconButton`、`segmented`（自带悬停、按下、禁用、加载中，登记进 `ui/focus.ts` 的键盘焦点；弹窗用 `modal()`，自带焦点层和 Esc）。
   点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距，不许互相压着。

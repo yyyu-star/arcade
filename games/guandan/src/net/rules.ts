@@ -446,9 +446,11 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
     const humans = s.humans?.map((h, i) => (i === seat ? kind === 'human' : h));
     const t = s.stake ? stakeSeated(s.stake, seat, kind, s.g.phase) : undefined;
     if (!humans && t === s.stake) return s;
-    return { ...s, ...(humans ? { humans } : {}), ...(t ? { stake: t } : {}) };
+    // ev 清空：这一步不是出牌，上一步的事件留着会让 onStep（名场面、搭子战绩）再看到一遍
+    return { ...s, ev: [], ...(humans ? { humans } : {}), ...(t ? { stake: t } : {}) };
   },
   effects: (s) => s.stake?.pending ?? [],
-  settled: (s, id, result) => (s.stake ? { ...s, stake: stakeSettled(s.stake, id, result) } : s),
-  closing: (s) => (s.stake && !s.stake.over ? { ...s, stake: stakeFinish(s.stake) } : s),
+  // 钱包办完、关房收场都不是出牌：ev 清空，同 seated
+  settled: (s, id, result) => (s.stake ? { ...s, ev: [], stake: stakeSettled(s.stake, id, result) } : s),
+  closing: (s) => (s.stake && !s.stake.over ? { ...s, ev: [], stake: stakeFinish(s.stake) } : s),
 };

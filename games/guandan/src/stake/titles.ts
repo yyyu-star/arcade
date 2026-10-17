@@ -4,6 +4,7 @@
  * 只用公开信息（谁出了什么、名次），不看任何人的手牌；只说打法，不说人。
  */
 import { isBomb, teamOf, type DealResult, type PlayRecord } from '../core/index.ts';
+import { dealPoints } from './index.ts';
 
 /** 称号 id → 名字和怎么拿到的（public/titles.json 是同一份，tests/stats.test.ts 核对两边一致；id 只能往后加、不改） */
 export const TITLE_INFO = {
@@ -70,9 +71,11 @@ export interface MatchLog {
   wins: number[];
   /** 每个座位按名次攒的分：头游 3、二游 2、三游 1、末游 0（0.14.0，结束颁奖的 MVP 用）；之前开的好友房没有 */
   places?: number[];
+  /** 每队这一场的分（每副按实盘的算法 dealPoints 加起来，不封顶；0.16.0，搭子战绩里实盘谁赢用）；之前开的房间没有 */
+  score?: number[];
 }
 
-export const emptyMatchLog = (): MatchLog => ({ deals: 0, firsts: [0, 0, 0, 0], lasts: [0, 0, 0, 0], bombs: [0, 0, 0, 0], wins: [0, 0], places: [0, 0, 0, 0] });
+export const emptyMatchLog = (): MatchLog => ({ deals: 0, firsts: [0, 0, 0, 0], lasts: [0, 0, 0, 0], bombs: [0, 0, 0, 0], wins: [0, 0], places: [0, 0, 0, 0], score: [0, 0] });
 
 export function logDeal(m: MatchLog, r: DealResult, history: readonly PlayRecord[]): MatchLog {
   const bombs = bombsBy(history);
@@ -83,6 +86,7 @@ export function logDeal(m: MatchLog, r: DealResult, history: readonly PlayRecord
     bombs: m.bombs.map((v, i) => v + bombs[i]!),
     wins: m.wins.map((v, t) => v + (r.winnerTeam === t ? 1 : 0)),
     places: (m.places ?? [0, 0, 0, 0]).map((v, i) => v + 3 - r.order.indexOf(i)),
+    score: (m.score ?? [0, 0]).map((v, t) => v + dealPoints(r, t)),
   };
 }
 

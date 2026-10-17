@@ -128,6 +128,7 @@ export function rotateNetView(nv: NetView, me: number): NetView {
     const m = nv.log;
     out.log = { deals: m.deals, firsts: r.bySeat(m.firsts), lasts: r.bySeat(m.lasts), bombs: r.bySeat(m.bombs), wins: r.byTeam(m.wins as [number, number]) };
     if (m.places) out.log.places = r.bySeat(m.places);
+    if (m.score) out.log.score = r.byTeam(m.score as [number, number]);
   }
   return out;
 }
