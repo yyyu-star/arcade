@@ -50,7 +50,7 @@ export function runRaid(seed: number, danger: Danger, who: string, build: Build,
   let guard = 0;
   while (w.phase !== 'over' && guard++ < 200_000) {
     if (w.phase !== 'choose') {
-      const d = guide.dir(w.x, w.y, w.tick);
+      const d = guide.dir(w.x, w.y, w.tick, w.coins);
       bot.goal = d === 0 ? -1 : d;
       bot.detour = !(w.raid!.gateMask !== 0 && w.tick >= leave);
     }

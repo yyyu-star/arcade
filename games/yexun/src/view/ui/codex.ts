@@ -32,6 +32,7 @@ export const MONSTER_INFO: Record<EnemyKind, { name: string; tag: string; blurb:
   lord: { name: '纸扎老爷', tag: 'Boss', blurb: '撒纸钱，召纸轿；约 8 分钟现身' },
   patrol: { name: '巡夜将', tag: '精英', blurb: '夜探里守着铜箱和院子，看见就追；6 分钟、11 分钟还有游荡的' },
   beast: { name: '镇门石兽', tag: 'Boss', blurb: '夜探里守着金箱，会扑、会甩尾；血少一半连扑两下' },
+  goblin: { name: '宝妖', tag: '精英', blurb: '夜探 5、10 分钟各出一只，背着宝袋见人就跑；追上打倒掉两件好宝物' },
   boss: { name: '尸王', tag: 'Boss', blurb: '跳砸、召唤、尸气，血越少越凶；14 分钟现身' },
 };
 

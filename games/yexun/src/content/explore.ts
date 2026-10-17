@@ -231,10 +231,28 @@ export const RAID_MINUTES: readonly Minute[] = [
  * 巡夜将：守金箱、会追人，比主角慢一点（追得上停下来的人，追不上一直跑的）；黑甲，刀剑砍着费劲。
  * 镇门石兽：守最值钱的院子，青石身子，刀剑、土都不太吃；怕水（冲刷）和镇（镇物压得住）。
  */
-export type RaidEnemyKind = 'patrol' | 'beast';
+export type RaidEnemyKind = 'patrol' | 'beast' | 'goblin';
 export const RAID_ENEMIES: Record<RaidEnemyKind, Omit<EnemyDef, 'kind' | 'code'>> = {
   patrol: { hp: 900, speed: 2.5, dmg: 14, r: 26, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.25 } },
   beast: { hp: 9000, speed: 1.4, dmg: 20, r: 46, xp: 80, steady: 0.97, boss: true, vs: { 剑: 0.6, 土: 0.7, 水: 1.4, 镇: 1.3 } },
+  // 宝妖：背着宝袋的小妖，见人就跑（比主角慢一点，追得上），不打人；打倒掉两件好宝物
+  goblin: { hp: 420, speed: 2.6, dmg: 0, r: 20, xp: 20, steady: 0.95, elite: true },
+};
+
+/**
+ * 夜探后半段（DESIGN.md 2.3，主线 2026-10-17 批的 B）：所有者试玩觉得 6 分钟以后没东西可搜、只剩躲怪等门。
+ * 都按夜探自己的随机流（raid-late）抽，录像和每日挑战能复现；不加"越晚撤越多倍"的倍数，多出来的价值全来自这些。
+ * - restock：6:00 起每 90 秒，把 n 个已经开过的箱子重新封上、换一批东西（每一波深度 +deepStep，越晚越值钱）；
+ * - goblin：5:00、10:00 各出一只宝妖，离主角 900–1,600 的路口；life 拍后钻地跑掉；打倒直接进背包 items 件（深度 1 抽）；
+ * - market：7:00–8:00 镇中心附近的鬼市，三个摊子各摆一件，站在摊前 hold 拍、身上铜钱够就按价值 × rate 买下；
+ * - vault：最深的金箱从开局就贴着封条，8:00 以后、身上有钥匙才能搜，开出 items 件（深度 1）；
+ *   钥匙：keyFrom 以后打倒的第一只精英或守卫掉（宝妖不算），一局一把。
+ */
+export const RAID_LATE = {
+  restock: { from: 6 * M, every: 90 * 30, n: 3, deepStep: 0.15 },
+  goblin: { at: [5 * M, 10 * M], life: 45 * 30, minD: 900, maxD: 1600, items: 2, flee: 520 },
+  market: { from: 7 * M, to: 8 * M, stalls: 3, rate: 0.7, r: 56, hold: 30, gap: 110, depth: 0.8 },
+  vault: { at: 8 * M, items: 5, keyFrom: 5 * M },
 };
 
 /**

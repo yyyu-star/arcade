@@ -553,6 +553,13 @@ function moveEnemies(w: World): void {
     let own = true;
     if (gi >= 0) {
       guardFx.w = w;
+      if (w.raid!.goblinGone(gi, w.tick)) {
+        // 宝妖到点钻地跑了：不算击杀、不掉东西
+        w.ev.push(Ev.Goblin, w.eX[i]!, w.eY[i]!, 1);
+        w.eAlive[i] = 0;
+        w.eCount--;
+        continue;
+      }
       const gs = guardStep(w.raid!, gi, w, i, guardFx);
       if (!GUARD_MOVE.own) {
         own = false;
@@ -1024,6 +1031,11 @@ function killEnemy(w: World, i: number): void {
     }
   }
   if (w.bossSlot === i) w.bossSlot = otherBoss(w);
+  // 夜探：宝妖掉宝物（不掉升级宝箱）、钥匙（explore/raid.ts）
+  if (w.raid && w.raid.onKill(i, w.eGen[i]!, !!def.elite || !!def.boss, x, y, w)) {
+    for (let k = 0; k < 4; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 50, y + (w.rDrop.next() - 0.5) * 36, def.xp / 4);
+    return;
+  }
   if (def.kind === 'boss') {
     // 危险 5 两只尸王：两只都倒了才算
     for (let j = 0; j < MAX_ENEMIES; j++) if (w.eAlive[j] && ENEMIES[w.eKind[j]!]!.kind === 'boss') return;
