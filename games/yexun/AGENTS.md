@@ -48,10 +48,10 @@ tests/         vitest
 | `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward,wood,fire` | 机器人模拟，出胜率和节奏表（`--map yizhuang` 跑义庄）；`tests/pace.test.ts` 是 13.3 的节奏验收 |
 | `node tools/sim.ts ... --from 500 --json 片.json`、`node tools/sim-merge.ts <目录> [--json 合并.json]` | 一格拆成几片（`--from` 错开种子）分到 GitHub runner 上跑，下载后按格拼表（第 7 步全量确认用；片不连续会报错） |
 | `npm run bench -- <种子> <难度>` | 核心每拍耗时 |
-| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--query "auto&give=mirror:8,crane:8e&merge"` 开局换成这几件法器（带 e 直接进化，&merge 当场合成），`&map=yizhuang` 换义庄，`--tag` 加文件名前缀；`--pause` 停在暂停面板上；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 分享预览 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时；`--cpu 4` 按 4 倍 CPU 降速、`--view phone` 只跑一种视口 |
+| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--query "auto&give=mirror:8,crane:8e&merge"` 开局换成这几件法器（带 e 直接进化，&merge 当场合成），`&map=yizhuang` 换义庄，`--tag` 加文件名前缀；`--pause` 停在暂停面板上；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 分享预览 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时；`--cpu 4` 按 4 倍 CPU 降速、`--view phone` 只跑一种视口（逗号分隔可点几个；手机竖屏 `phonep`、1920 大屏 `wide` 只在点名时跑） |
 | 页面加 `?fps` | 左下角显示每秒帧数、最长一帧、场上怪数（真机验收用，不写存储） |
 | `node tools/feel.ts` | 手感测量：固定帧间隔（60 / 120Hz，和机器负载无关）走一段"走—停—转向"，逐帧记主角屏幕坐标和镜头，报匀速段抖动、起停突变、回跳 |
-| `npm run smoke` | 仓库硬规范的冒烟（临时端口）：主流程零报错、`?lowmem`、双指放大布局不变、WebGL 上下文丢失 / 恢复提示、对局中点回大厅先确认；任一失败退出码 1 |
+| `npm run smoke` | 仓库硬规范的冒烟（临时端口）：主流程零报错、`?lowmem`、双指放大布局不变、WebGL 上下文丢失 / 恢复提示、对局中点回大厅先确认、手机竖屏菜单点回大厅；任一失败退出码 1；`-- --only 5,6` 只跑其中几段 |
 
 ## 6. 浏览器存储 key（全部 `yexun.` 前缀）
 

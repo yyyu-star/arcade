@@ -2,7 +2,7 @@
  * 无头浏览器冒烟：node tools/smoke.ts
  *
  * 仓库硬规范要求每个游戏都有的一份：主流程控制台零报错，加上手机平板（尤其 iOS）的四个坑——
- * 省内存设备（?lowmem）、双指放大、WebGL 上下文丢失 / 恢复、对局中点"回大厅"先确认。
+ * 省内存设备（?lowmem）、双指放大、WebGL 上下文丢失 / 恢复、对局中点"回大厅"先确认、手机竖屏菜单点"回大厅"。
  * 自己起 vite（临时端口，不占 5178/4178），浏览器启动参数同 shot.ts；任一项失败就打印原因并退出码 1。
  * 机器上有别的模拟在占 CPU 时慢一点没关系，等待都放得比较宽。
  */
@@ -22,12 +22,18 @@ const addr = server.httpServer?.address();
 if (!addr || typeof addr === 'string') throw new Error('vite 没有监听端口');
 const ORIGIN = `http://127.0.0.1:${addr.port}`;
 
+/** --only 5,6：只跑这几段（本机验一个 PR 时用，整套交给 CI） */
+const ONLY_ARG = process.argv.indexOf('--only');
+const ONLY = ONLY_ARG >= 0 ? (process.argv[ONLY_ARG + 1] ?? '').split(',').map(Number) : null;
+const want = (n: number): boolean => !ONLY || ONLY.includes(n);
+
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
 
 /** 开一个页面（手机横屏，触屏），控制台报错和未捕获异常记进 errs */
-async function open(query: string, errs: string[]): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+async function open(query: string, errs: string[], viewport = { width: 844, height: 390 }, init?: () => void): Promise<Page> {
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
+  if (init) await page.addInitScript(init);
   page.setDefaultTimeout(30_000);
   page.on('console', (m) => {
     // SwiftShader 截图时的 GPU 驱动提示不是页面的问题
@@ -58,7 +64,7 @@ const canvasBox = (page: Page) =>
 
 try {
   // 1) 主流程：菜单 → 开打（机器人代打）→ 跑几秒
-  {
+  if (want(1)) {
     const errs: string[] = [];
     const page = await open('', errs);
     await startRun(page);
@@ -67,7 +73,7 @@ try {
     await page.context().close();
   }
   // 2) 省内存设备
-  {
+  if (want(2)) {
     const errs: string[] = [];
     const page = await open('lowmem&auto', errs);
     const low = await page.evaluate(() => (window as unknown as { __yx: { lowmem: boolean } }).__yx.lowmem);
@@ -78,7 +84,7 @@ try {
     await page.context().close();
   }
   // 3) 双指放大：布局不动，缩回后正常
-  {
+  if (want(3)) {
     const errs: string[] = [];
     const page = await open('auto', errs);
     await startRun(page);
@@ -105,7 +111,7 @@ try {
     await page.context().close();
   }
   // 4) WebGL 上下文丢失 / 恢复
-  {
+  if (want(4)) {
     const errs: string[] = [];
     const page = await open('auto', errs);
     await startRun(page);
@@ -138,7 +144,7 @@ try {
     await page.context().close();
   }
   // 5) 对局中点回大厅：先确认，确认后去 /
-  {
+  if (want(5)) {
     const errs: string[] = [];
     const page = await open('', errs);
     const homeUrl = (u: URL): boolean => u.pathname === '/' && u.search === '';
@@ -154,6 +160,18 @@ try {
     await Promise.all([page.waitForURL(`${ORIGIN}/`, { timeout: 20_000 }).catch(() => fail('确认后没有导航到 /')), page.locator('.yx-confirm [data-a="yes"]').click()]);
     if (page.url() === `${ORIGIN}/`) ok('对局中点回大厅：先确认，确认后去了 /');
     report('回大厅', errs);
+    await page.context().close();
+  }
+  // 6) 手机竖屏的完整菜单（玩过一局）点回大厅：模式卡曾经叠在按钮上把点击截走
+  if (want(6)) {
+    const errs: string[] = [];
+    const page = await open('', errs, { width: 390, height: 844 }, () => localStorage.setItem('yexun.save', JSON.stringify({ v: 1, runs: 1 })));
+    await page.route((u: URL) => u.pathname === '/' && u.search === '', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>大厅</title>' }));
+    await page.locator('.yx-modes').waitFor({ state: 'visible' }).catch(() => fail('竖屏没有出现完整菜单'));
+    // 不用 force：按钮被别的元素盖住时 playwright 会超时，正好就是要抓的问题
+    await Promise.all([page.waitForURL(`${ORIGIN}/`, { timeout: 20_000 }).catch(() => fail('竖屏菜单点回大厅没有去 /')), page.locator('.yx-menu .yx-home').click({ timeout: 10_000 }).catch(() => fail('竖屏菜单的回大厅点不到（被盖住）'))]);
+    if (page.url() === `${ORIGIN}/`) ok('竖屏菜单点回大厅：去了 /');
+    report('竖屏菜单回大厅', errs);
     await page.context().close();
   }
 } finally {

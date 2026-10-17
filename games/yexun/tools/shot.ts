@@ -31,8 +31,8 @@ const FLOW = argv.includes('--flow');
 const PAUSE = argv.includes('--pause');
 /** CPU 降速倍数（CDP Emulation.setCPUThrottlingRate），模拟低端手机 */
 const CPU = Number(opt('--cpu') ?? 1);
-/** 只跑某个视口（desktop | phone | phonep 手机竖屏） */
-const ONLY = opt('--view');
+/** 只跑这几个视口，逗号分隔（desktop | phone | phonep 手机竖屏 | wide 1920 大屏）；不给就跑 desktop、phone */
+const ONLY = opt('--view')?.split(',') ?? null;
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -40,7 +40,11 @@ const VIEWS = [
   { name: 'phone', viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
   // 手机竖屏（角色页、菜单要放得下）：只在 --view phonep 时跑
   { name: 'phonep', viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  // 电脑大屏 1920×1080：卡片和字号要跟着放大，不能缩在中间一小块
+  { name: 'wide', viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
 ];
+/** 不点名时只跑这两个（竖屏、大屏按需 --view 点名） */
+const DEFAULT_VIEWS = ['desktop', 'phone'];
 
 /** 页面里检查：可点的东西 ≥ 44×44、文字没有溢出自己的框 */
 async function layoutProblems(page: Page): Promise<string[]> {
@@ -69,7 +73,7 @@ const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '-
 const problems: string[] = [];
 try {
   for (const v of VIEWS) {
-    if (ONLY ? v.name !== ONLY : v.name === 'phonep') continue;
+    if (!(ONLY ?? DEFAULT_VIEWS).includes(v.name)) continue;
     const ctx = await browser.newContext({ ...v, ...(VIDEO ? { recordVideo: { dir: OUT, size: v.viewport } } : {}) });
     const page = await ctx.newPage();
     if (CPU > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: CPU });

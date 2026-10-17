@@ -55,6 +55,14 @@
 
 /* ── 开始菜单：程序画的主视觉（canvas，静底图 + 月晕 / 灯笼 / 飘雪），内容叠在上面 ── */
 .yx-menu { z-index: 50; background: #1c2440; overflow: hidden; }
+/* 矮屏放不下时从顶上排、能上下滑，不把标题和"开始"按钮挤出屏外（居中溢出时两头都被裁） */
+@media (max-height: 760px) {
+  .yx-menu { justify-content: safe center; overflow-y: auto; }
+}
+/* 手机横屏：完整菜单放不下标题，省出来给"开始"按钮；第一次进来只有一个大按钮，标题照留 */
+@media (max-height: 420px) {
+  .yx-menu:has(.yx-modes) .yx-title { display: none; }
+}
 .yx-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .yx-menu-ui { display: contents; }
 .yx-menu > .yx-menu-ui > * { position: relative; z-index: 1; }
@@ -69,6 +77,8 @@
   .yx-menu .yx-more { right: auto; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 56px); flex-direction: column; }
 }
 .yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
+/* 顶上的按钮压在模式卡上面：卡片和它们同层时，排在后面的卡（场景图）会截走"回大厅"的点击（手机竖屏踩过） */
+.yx-menu > .yx-menu-ui > :is(.yx-home, .yx-gear, .yx-more) { z-index: 3; }
 .yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
 .yx-settings {
   /* 固定在齿轮下面、盖在标题之上；矮屏（手机横屏）开关多了放不下就自己滚 */
@@ -106,22 +116,25 @@
   flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
 }
-.yx-chip small { font-size: 11px; color: #b8892a; letter-spacing: 1px; }
+.yx-chip small { font-size: 12px; color: #b8892a; letter-spacing: 1px; }
 .yx-chip.on { background: var(--ink); color: #fbf5e4; }
-.yx-chip.yx-map small { letter-spacing: 0; font-size: 10px; padding: 0 4px; text-align: center; }
+.yx-chip.yx-map small { letter-spacing: 0; font-size: 12px; padding: 0 4px; text-align: center; }
 .yx-chip.locked { opacity: 0.5; cursor: default; }
-/* 地图卡：横向滑动，每张 94 宽（一屏三张多一点，露出第四张的边提示能滑） */
-.yx-maprow { display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 6px; margin: 0 -2px; -webkit-overflow-scrolling: touch; }
+/* 地图卡：两列网格，缩略图在左、名字和一句话在右；五张全摆出来，不用横滑（横滑时河滩、冰湖藏在右边没人看见） */
+.yx-maprow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .yx-mapcard {
-  flex: 0 0 94px; min-height: 44px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 4px 6px; scroll-snap-align: start;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; align-items: center; align-content: center;
+  min-height: 52px; padding: 4px 6px; text-align: left;
   border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
 }
-.yx-mapcard .yx-thumb { width: 80px; height: 80px; border-radius: 6px; display: block; }
+/* 单数张时最后一张占满一行，不留半格空 */
+.yx-mapcard:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.yx-mapcard .yx-thumb { grid-row: 1 / span 2; width: 44px; height: 44px; border-radius: 6px; display: block; }
 .yx-mapcard b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 18px; line-height: 1.1; letter-spacing: 2px; }
-.yx-mapcard small { font-size: 10px; line-height: 1.25; color: #5a4a3a; text-align: center; }
-.yx-mapcard em { font-style: normal; font-size: 10px; line-height: 1.25; color: #b8322a; text-align: center; }
+.yx-mapcard small { font-size: 12px; line-height: 1.25; color: #5a4a3a; }
+.yx-mapcard em { font-style: normal; font-size: 12px; line-height: 1.25; color: #b8322a; }
 .yx-mapcard { position: relative; }
-.yx-mapcard .yx-hard { position: absolute; top: 3px; right: 3px; font-style: normal; font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
+.yx-mapcard .yx-hard { position: absolute; top: 3px; right: 3px; font-style: normal; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
 .yx-mapcard.on { background: var(--ink); color: #fbf5e4; }
 .yx-mapcard.on small { color: #e6dcc0; }
 .yx-mapcard.locked { cursor: default; }
@@ -306,10 +319,20 @@
   .yx-mode { width: 310px; padding: 0 10px 10px; gap: 6px; }
   .yx-scene { height: 34px; width: calc(100% + 20px); margin: 0 -10px; }
   .yx-mode-head b { font-size: 26px; }
-  .yx-mode-head em { font-size: 11px; width: auto; }
+  .yx-mode-head em { font-size: 12px; width: auto; }
   .yx-chip { min-height: 46px; }
-  .yx-tplnote { min-height: 0; font-size: 11px; line-height: 1.35; }
-  .yx-raidnote { font-size: 11px; line-height: 1.35; }
+  .yx-tplnote { min-height: 0; font-size: 12px; line-height: 1.35; }
+  .yx-raidnote { font-size: 12px; line-height: 1.35; }
+  /* 矮屏放不下三行字：地图卡只留名字和解锁条件 */
+  .yx-maprow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .yx-mapcard { grid-template-columns: 30px minmax(0, 1fr); min-height: 44px; padding: 2px 4px; column-gap: 4px; }
+  .yx-mapcard:last-child:nth-child(odd) { grid-column: auto; }
+  .yx-mapcard .yx-thumb { grid-row: auto; width: 30px; height: 30px; }
+  .yx-mapcard b { font-size: 16px; letter-spacing: 0; }
+  /* 一句话放不下；锁着的只留锁的图标，解锁条件放在按钮的提示文字里（竖屏、电脑上照常写出来） */
+  .yx-mapcard small { display: none; }
+  .yx-mapcard em { position: absolute; top: 3px; right: 3px; font-size: 0; }
+  .yx-mapcard em .yx-lock { width: 12px; height: 12px; }
   .yx-raidnote b { font-size: 14px; }
   .yx-tpls .yx-chip { min-height: 44px; }
   .yx-raidbtns .yx-big, .yx-vaultbtn { min-height: 44px; }
@@ -362,3 +385,29 @@
 
 .yx-prepchar { position: relative; }
 .yx-prepchar img { position: absolute; top: -14px; right: -4px; width: 30px; height: auto; pointer-events: none; }
+
+/* 手机竖屏：模式卡上下排成一列、整页能上下滑；顶上的四个按钮和回大厅、齿轮排成一行（单列让左边的立绘位也不用留） */
+@media (orientation: portrait) and (max-width: 700px) {
+  .yx-menu {
+    justify-content: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-top: calc(max(10px, env(safe-area-inset-top, 0px)) + 58px);
+  }
+  .yx-menu .yx-more { flex-direction: row; gap: 4px; top: max(10px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 88px); right: auto; }
+  .yx-menu .yx-more .yx-btn { padding: 0 6px; font-size: 14px; }
+  .yx-title b { font-size: 64px; letter-spacing: 8px; -webkit-text-stroke-width: 6px; }
+  .yx-title span { font-size: 13px; letter-spacing: 2px; }
+  .yx-modes { flex-direction: column; width: 100%; max-width: 440px; gap: 16px; }
+  .yx-mode { width: auto; flex: none; }
+  /* 第一次只有一个大按钮，竖屏时放在中间偏上 */
+  .yx-go { flex: none; }
+}
+/* 电脑大屏：整块菜单放大，不缩在中间一小块 */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .yx-modes, .yx-title, .yx-go, .yx-hint { zoom: 1.3; }
+}
+/* 电脑 720 高：标题和场景图收一点，两张卡连"开始"一屏放下（放在文件末尾，压过前面的默认尺寸） */
+@media (min-height: 501px) and (max-height: 760px) {
+  .yx-screen.yx-menu { gap: 8px; }
+  .yx-title b { font-size: 88px; letter-spacing: 12px; -webkit-text-stroke-width: 8px; }
+  .yx-scene { height: 64px; }
+}
