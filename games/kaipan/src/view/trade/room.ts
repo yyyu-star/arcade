@@ -3,7 +3,7 @@ import type { Mood } from '../../core/index.ts';
 import { artRef, glyphKey } from '../assets.ts';
 import type { Animator } from '../fx/anim.ts';
 import { sound } from '../sound.ts';
-import { COLOR, GAME_HEIGHT, GAME_WIDTH, PHONE, RENDER_SCALE } from '../theme.ts';
+import { COLOR, GAME_HEIGHT, GAME_WIDTH, LOW_MEMORY, PHONE, RENDER_SCALE } from '../theme.ts';
 
 /** 猫整体左移，让它从手机后面露出来，睡在开盘按钮右边的桌面上 */
 const CAT_DX = -112;
@@ -19,7 +19,23 @@ interface RoomOpts {
 
 const MOODS: readonly Mood[] = ['bull', 'flat', 'bear'];
 
+/** 0.15.0 小屋的一天：盘前清晨、开盘白天、收盘傍晚、月底算账夜里（art-v3 第 5 节） */
+export type RoomTime = 'morning' | 'day' | 'dusk' | 'night';
+const TIMES: readonly RoomTime[] = ['morning', 'day', 'dusk', 'night'];
+/** 每个时段一层整屏色调（盖在房间上、台灯和显示器光下面），台灯亮几分 */
+const TIME_LIGHT: Record<RoomTime, { color: number; alpha: number; lamp: number }> = {
+  morning: { color: 0xfff2d6, alpha: 0.14, lamp: 0.3 },
+  day: { color: 0xffffff, alpha: 0, lamp: 0.3 },
+  dusk: { color: 0xff7a2e, alpha: 0.24, lamp: 0.8 },
+  night: { color: 0x161b4a, alpha: 0.42, lamp: 1 },
+};
+/** 安全区外延伸出来的那圈（tools/art/scene.ts 的 BLEED）：宽屏、16:10 时看得见 */
+const BLEED_X = 320;
+const BLEED_Y = 108;
+/** 整屏色调、天气压暗盖住的范围：房间连同延伸出来的那圈 */
 type Box = readonly [number, number, number, number];
+const ROOM_BOX: Box = [-BLEED_X, -BLEED_Y, GAME_WIDTH + BLEED_X * 2, GAME_HEIGHT + BLEED_Y * 2];
+
 /** 窗洞（README：x 420–860，y 56–336），天色、城市、雨只在这里看得见 */
 const WINDOW: Box = [416, 52, 448, 288];
 /**
@@ -53,7 +69,10 @@ const CROP: Record<string, Box> = {
 export class Room {
   private readonly scene: Phaser.Scene;
   private readonly sky: Record<Mood, Phaser.GameObjects.Image | null>;
-  private readonly ambient: Record<Mood, Phaser.GameObjects.Image | null>;
+  private readonly ambient: Record<Mood, Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle | null>;
+  private readonly tint: Record<RoomTime, Phaser.GameObjects.Rectangle>;
+  private readonly lamp: Phaser.GameObjects.Image | null;
+  private time: RoomTime = 'day';
   private readonly haze: Phaser.GameObjects.Image | null;
   private readonly rain: Phaser.GameObjects.TileSprite | null;
   private readonly lightning: Phaser.GameObjects.Image[] = [];
@@ -110,6 +129,15 @@ export class Room {
     }
     layer('wall');
     layer('desk');
+    // 0.15.0 铺满：安全区外的墙和桌（没加载到就露底色，和以前一样）
+    const strip = (name: string, x: number, y: number, w: number, h: number): void => {
+      const ref = artRef(scene.textures, `scene:${name}`);
+      if (ref) scene.add.image(x, y, ref.tex, ref.frame).setOrigin(0, 0).setDisplaySize(w, h);
+    };
+    strip('room_left', -BLEED_X, -BLEED_Y, BLEED_X, GAME_HEIGHT + BLEED_Y * 2);
+    strip('room_right', GAME_WIDTH, -BLEED_Y, BLEED_X, GAME_HEIGHT + BLEED_Y * 2);
+    strip('room_top', 0, -BLEED_Y, GAME_WIDTH, BLEED_Y);
+    strip('room_bottom', 0, GAME_HEIGHT, GAME_WIDTH, BLEED_Y);
     const steam = layer('steam');
     // 猫（整体平移；尾巴绕 (1066, 556) 摆动，身体绕 (985, 584) 呼吸）
     const cat = layer('cat');
@@ -125,12 +153,19 @@ export class Room {
     pivot(cat, 'cat', 985, 584);
     pivot(tail, 'cat_tail', 1066, 556);
     zzz?.setX(zzz.x + CAT_DX);
-    this.ambient = { bull: layer('ambient_bull'), flat: layer('ambient_flat'), bear: layer('ambient_bear') };
+    // 阴天、雨天的室内压暗是纯色：直接画矩形，连延伸出来的那圈一起盖住
+    const [bx, by, bw, bh] = ROOM_BOX;
+    const wash = (color: number, alpha: number): Phaser.GameObjects.Rectangle => scene.add.rectangle(bx, by, bw, bh, color, alpha).setOrigin(0, 0);
+    this.ambient = { bull: layer('ambient_bull'), flat: wash(0x6a7690, 0.12), bear: wash(0x1c1f45, 0.34) };
+    const tintOf = (t: RoomTime): Phaser.GameObjects.Rectangle => wash(TIME_LIGHT[t].color, TIME_LIGHT[t].alpha).setAlpha(t === this.time ? 1 : 0);
+    this.tint = { morning: tintOf('morning'), day: tintOf('day'), dusk: tintOf('dusk'), night: tintOf('night') };
     const lamp = layer('lamp_light');
+    this.lamp = lamp;
     const glow = layer('monitor_glow');
     lamp?.setBlendMode(Phaser.BlendModes.SCREEN);
     glow?.setBlendMode(Phaser.BlendModes.ADD);
     this.applyMood(mood);
+    if (!LOW_MEMORY) lamp?.setAlpha(TIME_LIGHT[this.time].lamp);
     // 手机横屏：房间是装饰（没有字），整张 1280×720 的画缩到 0.75 铺满 960×444，窗户留在画面里
     if (PHONE) {
       const made = scene.children.list.slice(first);
@@ -258,6 +293,23 @@ export class Room {
     }
     this.tintClouds(mood);
     if (mood === 'bear' && this.opts.ambient) this.scene.time.delayedCall(450, () => this.bolt());
+  }
+
+  /**
+   * 换时段：整屏色调交叉淡化 0.5 秒、台灯跟着亮暗。减少动态效果、关了动画时直接换；
+   * 省内存设备只换色调，台灯不动（art-v3：省内存不加光层）。
+   */
+  setTime(time: RoomTime, anim: Animator | null): void {
+    if (time === this.time) return;
+    this.time = time;
+    const fade = !!anim && !anim.instant && this.opts.ambient;
+    const to = (img: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle, alpha: number): void => {
+      this.scene.tweens.killTweensOf(img);
+      if (fade && anim) anim.fx({ targets: img, alpha, duration: 500 }, () => img.setAlpha(alpha));
+      else img.setAlpha(alpha);
+    };
+    for (const t of TIMES) to(this.tint[t], t === time ? 1 : 0);
+    if (this.lamp && !LOW_MEMORY) to(this.lamp, TIME_LIGHT[time].lamp);
   }
 
   private tintClouds(mood: Mood): void {

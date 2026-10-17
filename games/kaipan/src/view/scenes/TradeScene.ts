@@ -178,6 +178,8 @@ export class TradeScene extends BaseScene {
     this.busy = false;
     this.children.removeAll(true);
     this.room = new Room(this, s.mood, { ambient: this.lively });
+    // 盘前是清晨；停在月底账单后的奖励、事件上时接着是夜里、傍晚
+    this.room.setTime(s.phase === 'premarket' ? 'morning' : s.phase === 'event' ? 'dusk' : 'night', null);
     this.chat = new ChatView3(this, s, this.lively, (i) => this.onBuy(i));
     this.chat.onShort = (i) => this.onBuy(i, true);
     this.board = new ThemeBoardView(this, s, !this.lively);
@@ -924,6 +926,8 @@ export class TradeScene extends BaseScene {
     sound.cue({ type: 'marketOpen' });
     pop(a, this.openBtn, 0.92);
     this.setMonitorLine(fast ? '快进中…' : '开盘！');
+    // 快进时一天一两秒，色调来回换会闪：停在清晨，只有月底算账才入夜
+    if (!fast) this.room.setTime('day', a);
     this.screen.setSub(isTouch() ? '点屏幕跳过' : '空格跳过');
     // 节拍按同一个起点累计（waitUntil），低帧率时不会每段都晚一帧、越拖越长
     const t0 = a.now();
@@ -1082,6 +1086,7 @@ export class TradeScene extends BaseScene {
     if (report) {
       this.setMonitorMoney(report.account.after - report.account.before, report.account.ret);
       this.screen.setSub('收盘');
+      if (!fast) this.room.setTime('dusk', a);
       // 0.5.1：房间跟着今天的结果——赚了掉金币、亏了飘乌云，大盘大涨挂彩虹
       this.room.celebrate(a, report.account.ret);
       this.room.setRainbow(report.market.ret >= 1.5);
@@ -1143,6 +1148,7 @@ export class TradeScene extends BaseScene {
         ? { month: paid.month, name: prev.bill.name, amount: paid.amount, before: paid.before, after: paid.after, paid: true, credit: paid.credit, extras, interest: pick(events, 'interestPaid').reduce((n, e) => n + e.amount, 0) }
         : { month: broke?.month ?? prev.month, name: prev.bill.name, amount: broke?.amount ?? 0, before: broke?.account ?? 0, after: broke?.account ?? 0, paid: false, credit: false, extras };
       a.relax();
+      this.room.setTime('night', a);
       const bill = await playBill(this, a, info);
       if (paid) this.top.setAccount(paid.after);
       if (billBank) await this.playBank(events);
@@ -1167,6 +1173,7 @@ export class TradeScene extends BaseScene {
     if (report && this.recapCard?.showing === 'recap') this.recapCard.showRecap(recapOf(report, '昨天'), loadViewPrefs().recap === 'brief', null, '昨天');
     if (next.phase === 'premarket') {
       a.relax();
+      this.room.setTime('morning', a);
       if (first(events, 'monthStarted')) await this.playMonthIntro(events);
       await this.chat.intro(a, T.chatGap * (fast && !first(events, 'monthStarted') ? 0.5 : 1));
       // 新的一天：教程和猫的提示按新局面重新说
@@ -1253,6 +1260,7 @@ export class TradeScene extends BaseScene {
       floatText(this, this.anim, PHONE.x + PHONE.w / 2, PHONE.y + 140, '新群友进群了！', COLOR.accentDark, { size: 18, pop: true, hold: 600 });
     }
     if (next.phase === 'premarket') {
+      this.room.setTime('morning', this.anim);
       this.setBusy(true);
       await this.playMonthIntro(events);
       this.setBusy(false);
@@ -1271,6 +1279,7 @@ export class TradeScene extends BaseScene {
       sound.cue({ type: 'eventResult', delta: r.delta });
       if (Math.abs(r.delta) >= 0.5) void this.top.rollAccount(this.anim, prev.account, next.account, 500);
       this.render(next);
+      this.room.setTime('morning', this.anim);
       this.setBusy(true);
       await this.playMonthIntro(events, [`${name} · 后来呢：${r.text}${Math.abs(r.delta) >= 0.5 ? `（${formatMoney(r.delta, { sign: true })}）` : ''}`]);
       this.setBusy(false);
@@ -1289,6 +1298,7 @@ export class TradeScene extends BaseScene {
     }
     this.render(next);
     if (next.phase === 'premarket') {
+      this.room.setTime('morning', this.anim);
       this.setBusy(true);
       await this.playMonthIntro(events);
       this.setBusy(false);

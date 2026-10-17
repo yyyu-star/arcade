@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHEST, GATE_WINDOWS, GATE_WINDOWS_EARLY, RAID_DAWN, RAID_ENEMIES, RAID_LIVE, RAID_MINUTES, RAID_TEMPLATES } from '../src/content/explore.ts';
+import { CHEST, GATE_WINDOWS, GATE_WINDOWS_EARLY, RAID_DAWN, RAID_ENEMIES, RAID_LIVE, RAID_LIVE_TIERS, RAID_MINUTES, RAID_TEMPLATES } from '../src/content/explore.ts';
 import { ENEMY_BY_KIND } from '../src/content/enemies.ts';
 import { TIERS, TREASURES, TREASURES_BY_TIER } from '../src/content/treasures.ts';
 import { expectedChestValue, tierWeights } from '../src/explore/loot.ts';
@@ -72,8 +72,11 @@ describe('夜探内容表', () => {
 
   it('夜探实盘（4.2、balance.md 4.4）：档位放低一档（小 0、中 1、大 2），基准按档位 × 镇子，保底 < 封顶，0.1.0 只开小档', () => {
     expect(RAID_LIVE.danger).toEqual({ small: 0, medium: 1, large: 2 });
-    expect(RAID_LIVE.floor).toBeGreaterThan(1);
-    expect(RAID_LIVE.floor).toBeLessThan(RAID_LIVE.cap);
+    for (const t of RAID_LIVE_TIERS) {
+      expect(RAID_LIVE.floor[t]).toBeGreaterThan(1);
+      expect(RAID_LIVE.floor[t]).toBeLessThan(RAID_LIVE.cap);
+      expect(RAID_LIVE.floorRamp[t]).toBeGreaterThan(0);
+    }
     for (const t of Object.values(RAID_LIVE.base)) for (const v of Object.values(t)) expect(v).toBeGreaterThan(0);
     expect(RAID_LIVE.open).toContain('small');
   });

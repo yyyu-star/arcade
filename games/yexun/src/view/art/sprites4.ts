@@ -305,11 +305,23 @@ function iCraneEvo(c: Ctx): void {
 
 // ---------------------------------------------------------------- 合成图标
 
-/** 紫金圆牌：合成图标的底，比进化图标多一层框 */
-function plate(c: Ctx): void {
-  dab(c, circle(16, 16, 15.8), '#c89bff', 0.4);
-  blob(c, circle(16, 16, 14.6), '#6a3cb0', '#46218a', 2.1, 2.6);
-  dab(c, circle(16, 16, 11.8), '#8a5ad0', 0.55);
+interface PlateTone {
+  glow: string;
+  base: string;
+  dark: string;
+  mid: string;
+}
+const PURPLE: PlateTone = { glow: '#c89bff', base: '#6a3cb0', dark: '#46218a', mid: '#8a5ad0' };
+/** 双修各有自己的底色（和 MERGES 里的 color 对应：朱红、橙金、桃粉） */
+const CRIMSON: PlateTone = { glow: '#ffb0a0', base: '#b8281e', dark: '#7e1410', mid: '#e04a38' };
+const AMBER: PlateTone = { glow: '#ffd890', base: '#c26a12', dark: '#85400a', mid: '#f0942a' };
+const ROSE: PlateTone = { glow: '#ffc0dc', base: '#c2477e', dark: '#8a2456', mid: '#ee79ae' };
+
+/** 圆牌：合成图标的底，比进化图标多一层框（三个老合成紫金，双修各一种颜色） */
+function plate(c: Ctx, tone: PlateTone = PURPLE): void {
+  dab(c, circle(16, 16, 15.8), tone.glow, 0.4);
+  blob(c, circle(16, 16, 14.6), tone.base, tone.dark, 2.1, 2.6);
+  dab(c, circle(16, 16, 11.8), tone.mid, 0.55);
   stroke(c, (k) => k.arc(16, 16, 13, 0, Math.PI * 2), 1.5, GOLD);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
@@ -403,6 +415,67 @@ function mMirror(c: Ctx): void {
   c.restore();
   sparkle(c, 26, 5, 2.2, '#ffffff');
   sparkle(c, 5, 26, 1.7);
+}
+
+
+/** 符剑合璧：飞剑斜插，剑身贴着一张黄符，周围火星 */
+function mFujian(c: Ctx): void {
+  plate(c, CRIMSON);
+  rays(c, 16, 16, 5, 12, 10, '#ffd2c0', 0.5, Math.PI / 10);
+  c.save();
+  c.translate(16, 16.5);
+  c.rotate(0.7);
+  blob(c, poly(-2.4, 8, -2.4, -9, 0, -15, 2.4, -9, 2.4, 8), '#f0f6ff', '#9db8dc', 1.6, 1.1);
+  stroke(c, (k) => { k.moveTo(0, -10); k.lineTo(0, 6); }, 0.7, '#8aa6cc');
+  blob(c, rrect(-5.4, 7.6, 10.8, 2.8, 1.2), GOLD, GOLD_SH, 1.4, 0.7);
+  blob(c, rrect(-1.4, 10.2, 2.8, 4, 0.8), '#c8402f', null, 1.1);
+  // 剑身上贴的符
+  blob(c, rrect(-4.2, -6, 8.4, 11, 0.8), '#f6cf48', '#d09a22', 1.4, 1);
+  stroke(c, (k) => { k.moveTo(0, -4.4); k.lineTo(0, -2.6); k.moveTo(-2.2, -2.8); k.lineTo(2.2, -2.8); k.moveTo(-1.8, 0); k.lineTo(1.8, 1.6); k.lineTo(-1.8, 3.2); }, 0.9, '#c0392b');
+  c.restore();
+  blob(c, tongue(24.5, 12, 5, 7, 1), '#ff7a21', '#e5481f', 1, 0.6);
+  sparkle(c, 6, 8, 2, '#ffffff');
+  sparkle(c, 26.5, 25, 1.6);
+}
+
+/** 焚天金钟：金色大钟，裙边一圈火 */
+function mFenzhong(c: Ctx): void {
+  plate(c, AMBER);
+  // 钟身
+  blob(c, (k) => { k.moveTo(8, 21); k.bezierCurveTo(8, 8, 11, 5.5, 16, 5.5); k.bezierCurveTo(21, 5.5, 24, 8, 24, 21); k.closePath(); }, '#f6cf48', '#c8981e', 1.9, 1.6);
+  blob(c, circle(16, 5.2, 1.8), '#c8981e', null, 1.2);
+  dab(c, rrect(11, 9, 2.4, 9, 1), '#fff6c0', 0.7);
+  stroke(c, (k) => { k.moveTo(9.4, 16); k.lineTo(22.6, 16); }, 1, '#c8981e');
+  // 钟下一圈火
+  blob(c, tongue(8, 28, 6, 11, -1), '#ff7a21', '#e5481f', 1.2, 0.7);
+  blob(c, tongue(24, 28, 6, 11, 1), '#ff7a21', '#e5481f', 1.2, 0.7);
+  blob(c, tongue(16, 28.5, 8, 9, 0), '#ff8a2a', '#e5481f', 1.2, 0.8);
+  dab(c, tongue(16, 28, 4.4, 6, 0), '#ffe14a');
+  sparkle(c, 26, 6, 2, '#fff6c0');
+}
+
+/** 铃落桃花：铃居中，桃花瓣围着飘落 */
+function mLinghua(c: Ctx): void {
+  plate(c, ROSE);
+  c.save();
+  c.translate(16, 15.5);
+  c.scale(0.6, 0.6);
+  c.translate(-16, -16);
+  iBellBody(c);
+  c.restore();
+  const petal = (x: number, y: number, r: number, s: number): void => {
+    c.save();
+    c.translate(x, y);
+    c.rotate(r);
+    blob(c, ellipse(0, 0, 3.2 * s, 2 * s), '#ffd0e4', '#ee79ae', 1.1, 0.6);
+    c.restore();
+  };
+  petal(6.5, 8, -0.6, 1);
+  petal(26, 9, 0.8, 1);
+  petal(8, 24, 0.5, 0.9);
+  petal(25.5, 24.5, -0.4, 1.1);
+  petal(16, 4.4, 0.2, 0.8);
+  sparkle(c, 27, 16, 1.6, '#ffffff');
 }
 
 // ---------------------------------------------------------------- 被动图标
@@ -540,6 +613,9 @@ export const SPRITES4: SpriteDef[] = [
   icon('m_sword', mSword),
   icon('m_talisman', mTalisman),
   icon('m_mirror', mMirror),
+  icon('m_fujian', mFujian),
+  icon('m_fenzhong', mFenzhong),
+  icon('m_linghua', mLinghua),
   icon('p_huangli', pHuangli),
   icon('p_lingzhi', pLingzhi),
   icon('p_modou', pModou),

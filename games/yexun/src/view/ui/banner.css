@@ -34,6 +34,9 @@
   border-radius: 50%; mask: radial-gradient(circle, #000 20%, transparent 70%); -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
   animation: yx-spin 6s linear infinite;
 }
+.yx-reveal.tinted { background: radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--tint) 40%, transparent), rgba(20, 24, 40, 0.55) 60%); }
+.yx-reveal.tinted.evolve .t { color: var(--tint); }
+.yx-reveal.tinted .rays { background: repeating-conic-gradient(color-mix(in srgb, var(--tint) 32%, transparent) 0 10deg, transparent 10deg 20deg); }
 .yx-reveal.out { animation: yx-ban-out 0.2s ease-in both; }
 @keyframes yx-pop-up { 0% { transform: scale(0.2) translateY(60px); } 70% { transform: scale(1.2); } 100% { transform: none; } }
 @keyframes yx-spin { to { transform: rotate(360deg); } }

@@ -6,7 +6,7 @@
  * 两台设备各玩各花，合并时按 id 取并集再加总，不会因为"取较大的那个总数"白送或者扣成负数（5.5）。
  */
 import { DANGER_IDS, type Danger, type Difficulty } from '../content/waves.ts';
-import type { MapId } from '../content/maps.ts';
+import { MAP_UNLOCK, type MapId } from '../content/maps.ts';
 import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, RUN_BONUS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 import { isLiveTier, type LiveTier } from '../content/live.ts';
@@ -54,6 +54,8 @@ export interface Save {
   /** 单局最长撑了几秒、最多打死几只（解锁角色用） */
   maxSeconds: number;
   maxKills: number;
+  /** 夜探撤出过几次（解锁采药女；老存档没有这项，按 0 起算，已解锁的靠 charOpen 的老条件保住） */
+  extracts: number;
   /** 藏宝阁：带出过的宝物（各几件）和见过的（夜探） */
   vault: VaultSave;
   /** 打过教学镇了（之后夜探才能选模板和危险档） */
@@ -91,6 +93,7 @@ export const fresh = (): Save => ({
   coinBase: 0,
   maxSeconds: 0,
   maxKills: 0,
+  extracts: 0,
   vault: emptyVault(),
   raidDone: false,
   streak: 0,
@@ -121,7 +124,7 @@ export function reviveSave(o: unknown): Save | null {
   s.tips = strs(r.tips, 20);
   s.tipsOff = r.tipsOff === true;
   if (r.difficulty === 'easy' || r.difficulty === 'normal' || r.difficulty === 'hard') s.difficulty = r.difficulty;
-  if (r.map === 'snow' || r.map === 'yizhuang') s.map = r.map;
+  if (typeof r.map === 'string' && r.map in MAP_UNLOCK) s.map = r.map as MapId;
   if (r.best && typeof r.best === 'object') {
     for (const d of ['easy', 'normal', 'hard'] as const) {
       const b = best((r.best as Record<string, unknown>)[d]);
@@ -159,6 +162,7 @@ export function reviveSave(o: unknown): Save | null {
   s.coinBase = num(r.coinBase, -1e9, 1e12) ?? 0;
   s.maxSeconds = num(r.maxSeconds) ?? 0;
   s.maxKills = num(r.maxKills) ?? 0;
+  s.extracts = num(r.extracts, 0, 1e6) ?? 0;
   s.vault = normalizeVault(r.vault);
   s.raidDone = r.raidDone === true;
   s.streak = num(r.streak, 0, 1000) ?? 0;
@@ -317,31 +321,54 @@ export function dangerOpen(s: Save): Danger {
   return (s.runs === 0 ? 0 : Math.min(5, s.cleared + 1)) as Danger;
 }
 
-/** 义庄：雪原危险 1 撑到天亮（DESIGN.md 3.6）；老存档里普通、高手档赢过的也算 */
-export function yizhuangOpen(s: Save): boolean {
-  return s.cleared >= 1 || !!(s.best.normal?.won || s.best.hard?.won);
+/** 这张图开了没有（雪原、义庄一开始就开；别的按守夜最长撑过的时间，MAP_UNLOCK） */
+export function mapOpen(s: Save, id: MapId): boolean {
+  const u = MAP_UNLOCK[id];
+  return !u || s.maxSeconds >= u.seconds;
 }
 
-/** 角色解锁（3.7） */
+/** 更夫：守夜一局撑过这么久（秒） */
+export const GENGFU_SECONDS = 8 * 60;
+/** 胖师叔的价钱 */
+export const PANG_PRICE = 300;
+
+/**
+ * 角色解锁（3.7）：小道士、符师、剑侠一开始就有；胖师叔花铜钱；更夫守夜撑过 8 分钟；采药女夜探撤出 1 次。
+ * 老条件（危险 2 通关、藏宝阁 20 件）照认：老存档已经解锁的不会被收回。
+ */
 export function charOpen(s: Save, c: CharacterId): boolean {
   switch (c) {
     case 'xiaodao':
-      return true;
     case 'fushi':
-      return s.maxSeconds >= 600;
     case 'jianxia':
-      return s.maxKills >= 1500;
+      return true;
     case 'pang':
       return s.bought.includes('pang');
     case 'gengfu':
-      return s.cleared >= 2;
+      return s.maxSeconds >= GENGFU_SECONDS || s.cleared >= 2;
     case 'caiyao':
-      return herbalistUnlocked(s.vault);
+      return s.extracts >= 1 || herbalistUnlocked(s.vault);
   }
 }
 
 /** 花铜钱买的角色和价格 */
-export const CHAR_PRICE: Partial<Record<CharacterId, number>> = { pang: 600 };
+export const CHAR_PRICE: Partial<Record<CharacterId, number>> = { pang: PANG_PRICE };
+
+const mmss = (sec: number): string => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+
+/** 没解锁的角色，角色页上显示的进度（一句话） */
+export function charProgress(s: Save, c: CharacterId): string {
+  switch (c) {
+    case 'pang':
+      return `攒够 ${PANG_PRICE} 铜钱就能请他`;
+    case 'gengfu':
+      return `守夜撑过 8 分钟（最好 ${mmss(s.maxSeconds)}）`;
+    case 'caiyao':
+      return `夜探成功撤出 1 次（已 ${s.extracts} 次）`;
+    default:
+      return '';
+  }
+}
 
 // ───────────────────────── 铜钱 ─────────────────────────
 
@@ -441,6 +468,7 @@ export function mergeSave(local: Save, cloud: Save): Save {
   m.coinBase = Math.max(local.coinBase, cloud.coinBase);
   m.maxSeconds = Math.max(local.maxSeconds, cloud.maxSeconds);
   m.maxKills = Math.max(local.maxKills, cloud.maxKills);
+  m.extracts = Math.max(local.extracts, cloud.extracts);
   // 藏宝阁：每件取两边多的那个数，见过的取并集（两台设备各打各的都不丢）
   const got: Record<string, number> = { ...cloud.vault.got };
   for (const [id, n] of Object.entries(local.vault.got)) got[id] = Math.max(n, got[id] ?? 0);

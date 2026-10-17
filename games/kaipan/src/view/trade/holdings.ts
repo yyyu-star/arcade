@@ -16,7 +16,7 @@ import { COLOR, PHONE, THEME_COLOR, TYPE, signColor, textOn } from '../theme.ts'
 import { addImage, addPill, addSlice } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
-import { addText, setColor } from '../ui/text.ts';
+import { addText, setColor, fitWidth } from '../ui/text.ts';
 import { pctArrow } from '../labels.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { ROLE_TERM, ROLE_WORD, term, termTip } from '../glossary.ts';
@@ -508,8 +508,8 @@ export class HoldingsView {
   }
 
   /**
-   * 现金块：邀请位以外的空格合并成一块（相邻的连成一片），画钱袋、现金数、空几格、还能买几只，
-   * 地方够时再放其余推荐的小人（半透明，点了直接买）。
+   * 0.16.0 空格是桌上的「位子」（art-v3：纸垫）：每个空格一块纸垫、里面一圈虚线座位；第一块左上角是缩小的钱袋和现金数，
+   * 今天还能买时纸垫外圈发金光（代替以前的「还能买 N 只」大字）；有别的推荐时一块纸垫上放一只半透明小人，点了直接买。
    */
   private drawPurse(s: GameState, hc: readonly (HoldingCard | null)[], rects: readonly Rect[], invite: RecView | null): void {
     this.purse?.destroy();
@@ -519,95 +519,56 @@ export class HoldingsView {
     this.purseHits = [];
     const cashIdx = this.cards.map((c, i) => (c && !c.stockId && !c.isInvite ? i : -1)).filter((i) => i >= 0);
     if (cashIdx.length === 0) return;
-    // 连续的空格连成一段
-    const runs: number[][] = [];
-    for (const i of cashIdx) {
-      const last = runs[runs.length - 1];
-      if (last && last[last.length - 1] === i - 1) last.push(i);
-      else runs.push([i]);
-    }
     const weights = hc.reduce((n, c) => n + (c ? c.weight : 0), 0);
     const cash = Math.max(0, s.account * (1 - weights));
-    const empty = hc.filter((c) => !c).length;
     const pre = s.phase === 'premarket';
+    const buys = pre ? buysText(s.today.buysLeft, s.ext ? freeUnits(s) : null) : null;
+    const glow = !!buys?.can && !isBusy(s);
     const others = pre ? chatView(s).recs.filter((r) => r.stock.id !== invite?.stock.id && recAction(s, r).action === 'buy') : [];
-    let shownOthers = 0;
-    runs.forEach((run, k) => {
-      const a = rects[run[0] as number] as Rect;
-      const b = rects[run[run.length - 1] as number] as Rect;
-      const x = a.x;
-      const y = a.y;
-      const w = b.x + b.w - a.x;
-      const h = a.h;
-      const frame = addSlice(sc, x, y, w, h, 'card_holding').setAlpha(0.96);
-      root.add(frame);
-      // 先算右边放几个候选小人，再把"钱袋 + 候选"整组在块里居中（以前钱袋贴左、右边空一截）
-      const fit = Math.max(0, Math.floor((w - 150) / 92));
-      const n = Math.min(others.length - shownOthers, fit);
-      const bigNums = n <= 0 && w - 150 >= 110;
-      const px = bigNums ? x + Math.min(w / 2, 80) : x + (w - (140 + n * 92)) / 2 + 70;
-      // 钱袋 + 金币堆（金币轻轻上下浮）
-      const bag = addGlyph(sc, px, y + 62, 'moneybag', 66);
-      const coins = [-34, 30, -22, 22].map((dx, i) => addImage(sc, px + dx, y + 92 - (i % 2) * 8, 'fx:coin', 26));
-      root.add([...coins, bag]);
-      if (this.idle) coins.forEach((c, i) => sc.tweens.add({ targets: c, y: c.y - 5, duration: 900 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' }));
-      const lbl = addText(sc, px, y + 118, k === 0 ? '现金' : '现金（同上）', { size: 12, bold: true, color: COLOR.muted, originX: 0.5 });
-      const amt = addText(sc, px, y + 134, formatMoney(cash), { size: w >= 300 ? 22 : 18, bold: true, num: true, color: COLOR.accentDark, originX: 0.5 });
-      root.add([lbl, amt]);
-      if (k === 0 && this.cashRect === null) this.cashRect = { x, y, w, h: 24 };
-      // 候选：其余推荐的小人（地方够才放）
-      const room = x + w - (px + 70);
-      for (let j = 0; j < n; j++) {
-        const r = others[shownOthers++] as RecView;
-        const gx = px + 70 + 46 + j * 92;
-        const ghost = new StockGuy(sc, gx, y + 130, r.stock.id, r.stock.face, 70, { idle: this.idle }).setAlpha(0.55);
-        const nm = addText(sc, gx, y + 134, r.stock.name, { size: 12, bold: true, color: COLOR.ink, originX: 0.5 });
-        const tag = addText(sc, gx, y + 152, r.stock.themeName, { size: 10, bold: true, color: THEME_COLOR[r.stock.theme], originX: 0.5 });
-        const buy = addPill(sc, gx - 30, y + 170, 60, 22, COLOR.accent);
-        const bt = addText(sc, gx, y + 181, '买它', { size: 12, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
-        const hit = sc.add.rectangle(gx - 44, y + 40, 88, 156, 0xffffff, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    cashIdx.forEach((i, k) => {
+      const { x, y, w, h } = rects[i] as Rect;
+      const pad = sc.add.graphics();
+      pad.fillStyle(0x6b4a3a, 0.12).fillRoundedRect(x + 2, y + 6, w - 4, h - 6, 16);
+      pad.fillStyle(0xfff6e6, 0.94).fillRoundedRect(x + 2, y + 2, w - 4, h - 6, 16);
+      pad.lineStyle(2, 0xd8c3a8, 1).strokeRoundedRect(x + 2, y + 2, w - 4, h - 6, 16);
+      root.add(pad);
+      if (glow) {
+        const ring = sc.add.graphics();
+        ring.lineStyle(4, COLOR.gold, 0.9).strokeRoundedRect(x - 1, y - 1, w + 2, h, 18);
+        root.add(ring);
+        if (this.idle) sc.tweens.add({ targets: ring, alpha: { from: 1, to: 0.35 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      }
+      root.add(dashedBox(sc, x + 14, y + 52, w - 28, h - 70, 0xd8c3a8));
+      if (k === 0) {
+        // 缩小的钱袋 + 现金数（左上角）
+        const bag = addGlyph(sc, x + 28, y + 28, 'moneybag', 34);
+        const lbl = addText(sc, x + 50, y + 12, '现金', { size: 11, bold: true, color: COLOR.muted });
+        const amt = addText(sc, x + 50, y + 26, formatMoney(cash), { size: 16, bold: true, num: true, color: COLOR.accentDark });
+        fitWidth(amt, w - 58);
+        root.add([bag, lbl, amt]);
+        if (this.cashRect === null) this.cashRect = { x, y, w, h: 44 };
+      }
+      const r = others[k];
+      const cx = x + w / 2;
+      if (r) {
+        const ghost = new StockGuy(sc, cx, y + 140, r.stock.id, r.stock.face, 70, { idle: this.idle }).setAlpha(0.55);
+        const nm = addText(sc, cx, y + 144, r.stock.name, { size: 12, bold: true, color: COLOR.ink, originX: 0.5 });
+        fitWidth(nm, w - 24);
+        const tag = addText(sc, cx, y + 162, r.stock.themeName, { size: 10, bold: true, color: THEME_COLOR[r.stock.theme], originX: 0.5 });
+        const buy = addPill(sc, cx - 30, y + 180, 60, 22, COLOR.accent);
+        const bt = addText(sc, cx, y + 191, '买它', { size: 12, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
+        const hr = { x: x + 8, y: y + 56, w: w - 16, h: h - 64 };
+        const hit = sc.add.rectangle(hr.x, hr.y, hr.w, hr.h, 0xffffff, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: true });
         hit.on(Phaser.Input.Events.POINTER_UP, () => this.onBuyRec?.(r.index));
-        this.purseHits.push({ x: gx - 44, y: y + 40, w: 88, h: 156 });
-        bindTooltip(hit, () => ({ x: gx - 44, y: y + 40, w: 88, h: 156 }), () => ({ title: `买「${r.stock.name}」？`, body: `${r.stock.themeName} · ${ROLE_WORD[r.stock.role]}。${r.friend ? `${r.friend.name}推荐：` : ''}${r.text}` }));
+        this.purseHits.push(hr);
+        bindTooltip(hit, () => hr, () => ({ title: `买「${r.stock.name}」？`, body: `${r.stock.themeName} · ${ROLE_WORD[r.stock.role]}。${r.friend ? `${r.friend.name}推荐：` : ''}${r.text}` }));
         root.add([ghost, nm, tag, buy, bt, hit]);
-        if (this.idle) this.scene.tweens.add({ targets: ghost, y: ghost.y - 4, duration: 1100 + j * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      }
-      // 没有候选可放、右边还空着：两个大数字（空几格、今天还能买几只）+ 一排小格子示意
-      if (bigNums) {
-        const sx = px + 70 + room / 2;
-        const big = (yy: number, v: string, label: string, color: number): void => {
-          const t = addText(sc, sx, yy, v, { size: 30, bold: true, num: true, color, originX: 0.5 });
-          const l = addText(sc, sx, yy + 36, label, { size: 12, bold: true, color: COLOR.muted, originX: 0.5 });
-          root.add([t, l]);
-        };
-        big(y + 26, `${empty}`, '空格', COLOR.ink);
-        const total = hc.length;
-        const cw = Math.min(18, (room - 20) / total - 4);
-        for (let q = 0; q < total; q++) {
-          const filled = !!hc[q];
-          const bx2 = sx - (total * (cw + 4) - 4) / 2 + q * (cw + 4);
-          root.add(sc.add.rectangle(bx2, y + 84, cw, cw * 1.3, filled ? COLOR.accent : 0xffffff, filled ? 0.9 : 0.6).setOrigin(0, 0).setRounded(3).setStrokeStyle(1.5, COLOR.ink, 0.6));
-        }
-        if (pre) {
-          const b = buysText(s.today.buysLeft, s.ext ? freeUnits(s) : null);
-          big(y + 118, b.can ? `${s.today.buysLeft}` : '0', b.can ? '今天还能买' : b.text, b.can ? COLOR.accentDark : COLOR.muted);
-        }
-      }
-      // 空几格 · 还能买几只（右边没放大数字时）
-      if (!bigNums) {
-      const chips: [string, number][] = [[`空${empty}格`, 0xece3ea]];
-      if (pre) {
-        const b = buysText(s.today.buysLeft, s.ext ? freeUnits(s) : null);
-        chips.push([b.text.replace(/ /g, ''), b.can ? 0xffe2cc : 0xece3ea]);
-      }
-      let cy = y + 166;
-      for (const [t, fill] of chips) {
-        const tt = addText(sc, px, cy + 10, t, { size: 11, bold: true, color: COLOR.ink, originX: 0.5, originY: 0.5 });
-        const pw = tt.width + 14;
-        const pill = addPill(sc, px - pw / 2, cy, pw, 20, fill, false);
-        root.add([pill, tt]);
-        cy += 24;
-      }
+        if (this.idle) sc.tweens.add({ targets: ghost, y: ghost.y - 4, duration: 1100 + k * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      } else {
+        const t = addText(sc, cx, y + 112, '空位', { size: TYPE.title, bold: true, color: COLOR.muted, originX: 0.5, originY: 0.5 });
+        root.add(t);
+        // 今天买不了了：写原因（买够了、在加班……），能买时纸垫在发光就够了
+        if (buys && !glow) root.add(addText(sc, cx, y + 140, buys.text.replace(/ /g, ''), { size: 11, bold: true, color: COLOR.muted, originX: 0.5, originY: 0.5 }));
       }
     });
     // 选格子模式时现金块退到后面，格子上的选择按钮照样露出来

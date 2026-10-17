@@ -2,7 +2,9 @@
  * 炒股小屋：1280×720 分层背景。
  *
  * 层序（下→上）：sky_<bull|flat|bear> → city → haze_bear（仅熊）→ rain（仅熊）→ lightning / lightning_2 / lightning_3（仅熊，随机闪一个）→ wall → desk → steam →
- *              cat → cat_tail → cat_zzz → ambient_<bull|flat|bear> → lamp_light → monitor_glow
+ *              cat → cat_tail → cat_zzz → ambient_bull → lamp_light → monitor_glow
+ * 阴天、雷雨天的室内压暗（原 ambient_flat / ambient_bear）是纯色，0.15.0 起游戏里直接画矩形，连延伸出来的那圈一起盖住。
+ * 铺满（0.15.0）：room_left / room_right（320×936）、room_top / room_bottom（1280×108）画安全区外的墙和桌，宽屏、16:10 时露出来。
  * 窗洞：x 420–860，y 56–336。天色、城市、雨只在窗洞里可见，但都画满全画布，方便做视差平移。
  */
 import {
@@ -429,17 +431,121 @@ function catZzz(): Frag {
   return frag(z(880, 482, 12) + z(864, 454, 16) + z(842, 418, 22));
 }
 
+// ---------------------------------------------------------------- 铺满：安全区外的墙和桌
+
+/** 0.15.0 宽屏、16:10 时安全区外露出来的那圈：左右各 320、上下各 108（art-v3 第 6 节）。 */
+export const BLEED = { x: 320, y: 108 } as const;
+type Box4 = [number, number, number, number];
+
+/** 和 wall() 同一套墙纸、护墙板（按房间坐标画，接缝处花纹对得上）；y < 0 是天花板和顶角线。 */
+function wallBase(box: Box4): Frag {
+  const [x0, y0, w, h] = box;
+  const x1 = x0 + w;
+  const y1 = y0 + h;
+  const sx = Math.floor(x0 / 48) * 48;
+  let stripes = '';
+  for (let x = sx; x < x1; x += 48) stripes += `<rect x="${x}" y="${y0}" width="20" height="${h}" fill="#f0cfa3" fill-opacity="0.55"/>`;
+  let dots = '';
+  for (let x = sx + 34; x < x1; x += 48) for (let y = Math.floor(y0 / 60) * 60 + 30; y < y1; y += 60) dots += `<circle cx="${x}" cy="${y + ((x / 48) % 2) * 30}" r="2.6" fill="#ecc38f"/>`;
+  let panels = '';
+  for (let x = Math.floor((x0 - 10) / 50) * 50 + 10; x < x1; x += 50) panels += `<path d="M${x} 480V${y1}" stroke="#d9a678" stroke-width="3"/>`;
+  const ceiling = y0 < 0 ? `<rect x="${x0}" y="${y0}" width="${w}" height="${-y0 - 22}" fill="#fff4e4"/><rect x="${x0}" y="-24" width="${w}" height="18" fill="#e9b98a"/><path d="M${x0} -24H${x1}M${x0} -6H${x1}" stroke="#c98f5f" stroke-width="5"/>` : '';
+  return grained(
+    frag(
+      `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="#f8deb6"/>${stripes}${dots}` +
+        `<rect x="${x0}" y="470" width="${w}" height="${y1 - 470}" fill="#e9b98a"/><path d="M${x0} 470H${x1}" stroke="#c98f5f" stroke-width="8"/>${panels}${ceiling}`,
+    ),
+    0.05,
+    box,
+  );
+}
+
+/** 桌子接着画到 [a, b]（房间 x），end 给出桌子在哪头收尾；桌身一直到画面底下。 */
+function deskBase(a: number, b: number, y1: number, end?: 'left' | 'right'): Frag {
+  const top = end === 'left' ? `M${a + 14} 560H${b}V610H${a}V574Q${a} 560 ${a + 14} 560Z` : end === 'right' ? `M${a} 560H${b - 14}Q${b} 560 ${b} 574V610H${a}Z` : `M${a} 560H${b}V610H${a}Z`;
+  return grained(
+    merge(
+      shape(top, { fill: '#d99a62', shade: '#c4844e', shadeOffset: [0, -8] }),
+      shape(`M${a + (end === 'left' ? 8 : 0)} 610H${b - (end === 'right' ? 8 : 0)}V${y1 + 20}H${a + (end === 'left' ? 8 : 0)}Z`, { fill: '#b8773a', shade: '#a2682f', shadeOffset: [0, -10] }),
+    ),
+    0.06,
+    [a, 540, b - a, y1 - 540],
+  );
+}
+
+/** 串灯（和 wall() 的一样，挂在 y 14） */
+function lightsWire(x0: number, x1: number, sag: number, seed: number): Frag {
+  let s = line(`M${x0} 14Q${(x0 + x1) / 2} ${14 + sag} ${x1} 14`, '#6b4a3a', 3);
+  for (let t = 0.08; t < 1; t += 0.12) {
+    const bx = x0 + (x1 - x0) * t;
+    const by = 14 + sag * 2 * t * (1 - t);
+    const col = ['#ffd36b', '#ff8fa3', '#9fd8ff', '#b6f08a'][(Math.round(t * 10) + seed) % 4]!;
+    s += `<circle cx="${bx.toFixed(1)}" cy="${(by + 10).toFixed(1)}" r="15" fill="${col}" fill-opacity="0.22"/><path d="M${bx.toFixed(1)} ${by.toFixed(1)}v5" stroke="#6b4a3a" stroke-width="3"/><ellipse cx="${bx.toFixed(1)}" cy="${(by + 12).toFixed(1)}" rx="5.5" ry="7.5" fill="${col}" stroke="${INK}" stroke-width="2.5"/>`;
+  }
+  return frag(s);
+}
+
+/** 左边：串灯接着挂、相框（一路涨的线）、桌头的落地大绿植 */
+function roomLeft(): Frag {
+  const box: Box4 = [-BLEED.x, -BLEED.y, BLEED.x, 720 + BLEED.y * 2];
+  const parts: Frag[] = [wallBase(box), deskBase(-70, 0, 720 + BLEED.y, 'left')];
+  parts.push(lightsWire(-330, -10, 60, 1));
+  // 相框
+  parts.push(frag(`<g transform="rotate(-4 -110 190)">`));
+  parts.push(shape(rrectD(-170, 120, 120, 140, 6), { fill: '#c98a54', shadeOffset: [-5, -5] }));
+  parts.push(frag(`<rect x="-158" y="132" width="96" height="116" rx="3" fill="#fffaf0" stroke="${INK}" stroke-width="3"/>` + line('M-148 232L-128 210L-112 218L-92 182L-74 160', '#ff5d5d', 5) + `<path d="M-80 154l12 0-4 12z" fill="#ff5d5d" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>`));
+  parts.push(frag(`</g>`));
+  // 小搁板 + 存钱罐
+  parts.push(shape(rrectD(-200, 330, 150, 14, 4), { fill: '#c98a54', shadeOffset: [0, -5] }));
+  parts.push(shape('M-160 330Q-176 330 -176 312Q-176 290 -146 290Q-116 290 -116 312Q-116 330 -132 330Z', { fill: '#ff9db0', shade: '#f07890' }));
+  parts.push(frag(`<rect x="-152" y="292" width="14" height="4" rx="2" fill="${INK}"/><circle cx="-128" cy="306" r="3" fill="${INK}"/>`));
+  // 落地绿植（桌头外面，站在地上）
+  parts.push(frag(`<path d="M-250 760H-70V${720 + BLEED.y}H-250Z" fill="#c98a54"/><path d="M-250 760H-70" stroke="#a2682f" stroke-width="4"/>`));
+  parts.push(frag(
+    `<path d="M-150 690Q-210 600 -232 520Q-180 560 -156 640Q-170 560 -136 480Q-120 570 -140 660Q-110 590 -80 560Q-92 640 -134 700Z" fill="#7ccf6a" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>` +
+      line('M-152 690Q-190 610 -214 540M-140 676Q-140 580 -136 500M-136 690Q-110 620 -90 580', '#5aa84c', 3),
+  ));
+  parts.push(shape('M-190 700H-104L-114 790H-180Z', { fill: '#e9875a' }));
+  return merge(...parts);
+}
+
+/** 右边：串灯、软木板贴满便利贴、桌头外面的废纸篓 */
+function roomRight(): Frag {
+  const box: Box4 = [1280, -BLEED.y, BLEED.x, 720 + BLEED.y * 2];
+  const parts: Frag[] = [wallBase(box), deskBase(1280, 1350, 720 + BLEED.y, 'right')];
+  parts.push(lightsWire(1290, 1610, 60, 2));
+  parts.push(frag(`<g transform="rotate(3 1380 200)">`));
+  parts.push(shape(rrectD(1306, 110, 150, 170, 8), { fill: '#d9a066', shade: '#c4844e' }));
+  const notes: [number, number, string, number][] = [[1320, 124, '#ffe680', -6], [1380, 128, '#9fd8ff', 5], [1326, 194, '#ff8fa3', 4], [1388, 196, '#b6f08a', -5]];
+  for (const [nx, ny, col, rot] of notes) {
+    parts.push(frag(`<g transform="rotate(${rot} ${nx + 26} ${ny + 26})"><rect x="${nx}" y="${ny}" width="52" height="52" rx="3" fill="${col}" stroke="${INK}" stroke-width="3"/><path d="M${nx + 8} ${ny + 18}h34M${nx + 8} ${ny + 30}h22" stroke="${INK}" stroke-opacity="0.35" stroke-width="3" stroke-linecap="round"/><circle cx="${nx + 26}" cy="${ny + 6}" r="4" fill="#ff5d5d" stroke="${INK}" stroke-width="2"/></g>`));
+  }
+  parts.push(frag(`</g>`));
+  // 地板和废纸篓
+  parts.push(frag(`<path d="M1350 760H1600V${720 + BLEED.y}H1350Z" fill="#c98a54"/><path d="M1350 760H1600" stroke="#a2682f" stroke-width="4"/>`));
+  parts.push(shape('M1384 700H1470L1460 800H1394Z', { fill: '#9fa8c8', shade: '#7f88a8' }));
+  parts.push(frag(line('M1404 712L1410 790M1427 712V790M1450 712L1444 790', '#7f88a8', 3)));
+  for (const [cx, cy] of [[1408, 694], [1436, 688], [1458, 698]] as const) parts.push(shape(ellipseD(cx, cy, 15, 13), { fill: '#fffaf0', shade: '#e3d8c4' }));
+  return merge(...parts);
+}
+
+/** 上边：墙接着往上，到顶角线和天花板（左右两条已经画到这个高度） */
+function roomTop(): Frag {
+  return wallBase([0, -BLEED.y, 1280, BLEED.y]);
+}
+
+/** 下边：桌身接着往下 */
+function roomBottom(): Frag {
+  return deskBase(-20, 1300, 720 + BLEED.y);
+}
+
 // ---------------------------------------------------------------- 光照与氛围
 
-function ambient(state: 'bull' | 'flat' | 'bear'): Frag {
-  if (state === 'bull') {
-    const f = frag();
-    f.defs.set('beam', `<linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="640" y1="200" x2="560" y2="620"><stop offset="0" stop-color="#fff3c0" stop-opacity="0.3"/><stop offset="1" stop-color="#fff3c0" stop-opacity="0"/></linearGradient>`);
-    f.content = `<path d="M440 330L860 330L1000 720L340 720Z" fill="url(#beam)"/>`;
-    return f;
-  }
-  if (state === 'flat') return frag(`<rect width="${W}" height="${H}" fill="#6a7690" fill-opacity="0.12"/>`);
-  return frag(`<rect width="${W}" height="${H}" fill="#1c1f45" fill-opacity="0.34"/>`);
+function ambientBull(): Frag {
+  const f = frag();
+  f.defs.set('beam', `<linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="640" y1="200" x2="560" y2="620"><stop offset="0" stop-color="#fff3c0" stop-opacity="0.3"/><stop offset="1" stop-color="#fff3c0" stop-opacity="0"/></linearGradient>`);
+  f.content = `<path d="M440 330L860 330L1000 720L340 720Z" fill="url(#beam)"/>`;
+  return f;
 }
 
 function lampLight(): Frag {
@@ -473,12 +579,18 @@ export function build(write: (rel: string, data: string) => void): number {
     ['cat', catBody()],
     ['cat_tail', catTail()],
     ['cat_zzz', catZzz()],
-    ['ambient_bull', ambient('bull')],
-    ['ambient_flat', ambient('flat')],
-    ['ambient_bear', ambient('bear')],
+    ['ambient_bull', ambientBull()],
     ['lamp_light', lampLight()],
     ['monitor_glow', monitorGlow()],
   ];
   for (const [name, f] of files) write(`scene/${name}.svg`, doc(f));
-  return files.length;
+  // 铺满用的四条：按房间坐标画，挪到各自的画布里
+  const strips: [string, Frag, Box4][] = [
+    ['room_left', roomLeft(), [-BLEED.x, -BLEED.y, BLEED.x, H + BLEED.y * 2]],
+    ['room_right', roomRight(), [W, -BLEED.y, BLEED.x, H + BLEED.y * 2]],
+    ['room_top', roomTop(), [0, -BLEED.y, W, BLEED.y]],
+    ['room_bottom', roomBottom(), [0, H, W, BLEED.y]],
+  ];
+  for (const [name, f, [x, y, w, h]] of strips) write(`scene/${name}.svg`, svgDoc(w, h, { defs: f.defs, content: `<g transform="translate(${-x} ${-y})">${f.content}</g>` }));
+  return files.length + strips.length;
 }

@@ -1,7 +1,7 @@
 /**
  * 法器、被动、进化（DESIGN.md 3.1–3.3）。改数值只改这里，改完跑模拟器（DESIGN.md 第 8 节）。
  * 单位：时间按拍（每秒 30 拍），距离按世界单位（主角宽约 40），速度按每拍多少单位。
- * 12 件法器、12 个被动、12 个进化、3 个合成（3b 起齐了）。
+ * 12 件法器、12 个被动、12 个进化、3 个合成 + 3 个双修。
  */
 
 // 顺序决定法器编号（事件、宝箱里用），只往后加
@@ -417,20 +417,40 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   yinhun: { id: 'yinhun', name: '引魂灯', icon: 'p_yinhun', text: '怪多 10%、快 5%，经验和铜钱 +12%', max: 5 },
 };
 
-/** 合成（DESIGN.md 3.3）：两件都进化了，宝箱里合成一件，空出一个法器格；a 留在原来的格子里，b 也照常出手 */
+/**
+ * 合成（DESIGN.md 3.3、3.3b）：两件都进化了，宝箱里合成一件，空出一个法器格；a 留在原来的格子里，b 也照常出手。
+ * dual = 双修：两件不同流派（类型或五行）的法器合成，效果把两边的打法接在一起。
+ * color：这个合成自己的颜色（图标底牌、合成演出、图鉴边）。
+ */
 export interface MergeDef {
-  id: 'zhuxie' | 'leihuo' | 'yinyang';
+  id: 'zhuxie' | 'leihuo' | 'yinyang' | 'fujian' | 'fenzhong' | 'linghua';
   name: string;
   icon: string;
   desc: string;
   a: WeaponId;
   b: WeaponId;
+  color: string;
+  dual?: boolean;
 }
 
 export const MERGES: readonly MergeDef[] = [
-  { id: 'zhuxie', name: '诛邪剑阵', icon: 'm_sword', desc: '每次挥剑，待命的飞剑一起射出去', a: 'sword', b: 'flysword' },
-  { id: 'leihuo', name: '雷火符箓', icon: 'm_talisman', desc: '每张符爆开时落一道雷', a: 'talisman', b: 'thunder' },
-  { id: 'yinyang', name: '阴阳镇魂', icon: 'm_mirror', desc: '光环里的怪减速一半，光波从光环边上再放一圈', a: 'mirror', b: 'bell' },
+  { id: 'zhuxie', name: '诛邪剑阵', icon: 'm_sword', desc: '每次挥剑，待命的飞剑一起射出去', a: 'sword', b: 'flysword', color: '#b58cff' },
+  { id: 'leihuo', name: '雷火符箓', icon: 'm_talisman', desc: '每张符爆开时落一道雷', a: 'talisman', b: 'thunder', color: '#b58cff' },
+  { id: 'yinyang', name: '阴阳镇魂', icon: 'm_mirror', desc: '光环里的怪减速一半，光波从光环边上再放一圈', a: 'mirror', b: 'bell', color: '#b58cff' },
+  // 双修（剑 + 符、镇 + 火、木 + 铃）
+  { id: 'fujian', name: '符剑合璧', icon: 'm_fujian', desc: '飞剑打中的怪被贴一张符，一秒多后炸开', a: 'flysword', b: 'talisman', color: '#ff5a4a', dual: true },
+  { id: 'fenzhong', name: '焚天金钟', icon: 'm_fenzhong', desc: '护盾在身，外圈一圈火持续烧；盾碎时地上留下一圈火', a: 'shield', b: 'gourd', color: '#ff9a2e', dual: true },
+  { id: 'linghua', name: '铃落桃花', icon: 'm_linghua', desc: '铃声一响，空中的花瓣追着怪落下，落点也更大', a: 'petals', b: 'bell', color: '#ff7eb6', dual: true },
 ];
+
+/** 双修的数值（拍、单位）。强度参照现有合成：只给一点额外输出，不翻倍 */
+export const DUAL_FX = {
+  /** 符剑合璧：贴符后几拍炸、炸多大、伤害是符咒伤害的几成 */
+  seal: { delay: 36, area: 84, mul: 0.7 },
+  /** 焚天金钟：外圈半径（再乘范围加成）、内沿占比、几拍烧一下、伤害是葫芦伤害的几成；盾碎时留几摊火、火摊伤害占比 */
+  ring: { radius: 120, inner: 0.55, every: 15, mul: 0.3, pools: 5, poolMul: 0.5, poolLife: 90, poolR: 40 },
+  /** 铃落桃花：花瓣每拍朝最近的怪挪多远、多远内才追、落点多大 */
+  petal: { speed: 6, reach: 240, bonusR: 8 },
+} as const;
 
 export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];

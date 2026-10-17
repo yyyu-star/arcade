@@ -87,6 +87,35 @@ export function addPaper(scene: Phaser.Scene, x: number, y: number, w: number, h
   return c;
 }
 
+/**
+ * 0.16.0 木条（art-v3 的「木」材质：不会变的框架，比如对局顶栏）：深一点的木框 + 浅枫木面板 + 几道木纹，
+ * 程序画，不占素材。面板色对 ink、muted 文字的对比度都 ≥ 4.5:1（muted 约 4.6:1），原来纸面上的字直接放上来。
+ */
+export function addWood(scene: Phaser.Scene, x: number, y: number, w: number, h: number): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics({ x, y });
+  const rim = 5;
+  g.fillStyle(0xc98f5f, 1).fillRoundedRect(0, 0, w, h, 14);
+  g.fillStyle(0xb47a4a, 1).fillRoundedRect(0, h - 6, w, 6, { tl: 0, tr: 0, bl: 14, br: 14 });
+  g.fillStyle(0xf6dcb4, 1).fillRoundedRect(rim, rim, w - rim * 2, h - rim * 2 - 2, 10);
+  g.fillStyle(0xffffff, 0.22).fillRoundedRect(rim, rim, w - rim * 2, Math.round((h - rim * 2) * 0.38), { tl: 10, tr: 10, bl: 0, br: 0 });
+  // 木纹：几道很淡的波浪线，位置按宽度算（同一尺寸每次画得一样）
+  g.lineStyle(1.5, 0xe6c290, 0.9);
+  const rows = Math.max(2, Math.floor((h - rim * 2) / 14));
+  for (let r = 0; r < rows; r++) {
+    const yy = rim + 8 + r * ((h - rim * 2 - 14) / Math.max(1, rows - 1));
+    const phase = r * 1.7;
+    g.beginPath();
+    for (let xx = rim + 12; xx <= w - rim - 12; xx += 16) {
+      const dy = Math.sin(xx / 90 + phase) * 1.6;
+      if (xx === rim + 12) g.moveTo(xx, yy + dy);
+      else g.lineTo(xx, yy + dy);
+    }
+    g.strokePath();
+  }
+  g.lineStyle(3, COLOR.ink, 1).strokeRoundedRect(0, 0, w, h, 14);
+  return g;
+}
+
 /** 胶囊标签：底色 fill，文字由调用方叠加。返回胶囊本身（左上角原点）。 */
 export function addPill(scene: Phaser.Scene, x: number, y: number, w: number, h: number, fill: number, stroke = true): Phaser.GameObjects.Rectangle {
   const r = scene.add.rectangle(x, y, w, h, fill).setOrigin(0, 0).setRounded(h / 2);

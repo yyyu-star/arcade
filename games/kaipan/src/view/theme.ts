@@ -75,8 +75,11 @@ export const ITEM_KIND_COLOR: Record<string, number> = {
 
 export const FONT =
   '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Droid Sans Fallback", "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-/** 数字用等宽感更强的字体（滚动时不抖），回退到中文字体。 */
-export const FONT_NUM = '"Consolas", "Menlo", "DejaVu Sans Mono", "Microsoft YaHei", "Droid Sans Fallback", monospace';
+/**
+ * 数字用等宽数字（滚动时不抖），回退到中文字体。0.16.0 起排第一的是自带的圆体数字 Kaipan Num（只有数字和几个符号，
+ * 万、亿、箭头这些逐字回退到后面的字体），见 numFont.ts。
+ */
+export const FONT_NUM = '"Kaipan Num", "Consolas", "Menlo", "DejaVu Sans Mono", "Microsoft YaHei", "Droid Sans Fallback", monospace';
 
 /** 切换涨跌配色：cn 红涨绿跌，intl 绿涨红跌。 */
 export function applyColorScheme(next: ColorScheme): void {

@@ -176,7 +176,7 @@ function Home({ deleted }: { deleted: boolean }) {
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }, [deleted]);
   return (
-    <>
+    <div className="lobby">
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
       {user && <OvertakeNudge />}
@@ -199,7 +199,7 @@ function Home({ deleted }: { deleted: boolean }) {
           </div>
         </article>
       </main>
-    </>
+    </div>
   );
 }
 
@@ -232,13 +232,16 @@ function LobbyNudge() {
   return (
     <div className="nudges" data-testid="nudges">
       {stakes.length > 0 && (
-        <p className="banner nudge" data-testid="nudge-stake">
-          <span>
-            {g
-              ? `${g.name}${where}桌上还有 ${num(onTable)}${parts}`
-              : games.size > 1
-                ? `${games.size} 个游戏的桌上还有 ${num(onTable)}`
-                : `桌上还有 ${num(onTable)}${parts}`}
+        // 手机上这一条变成底部固定条（0.24.1，样式见 .nudge--stake）：字太长时中间那段先省略，游戏名和数字留着
+        <p className="banner nudge nudge--stake" data-testid="nudge-stake">
+          <span className="nudge__what">
+            <span className="nudge__keep">{g ? g.name : games.size > 1 ? `${games.size} 个游戏` : ''}</span>
+            <span className="nudge__mid">{g ? `${where}桌上还有` : games.size > 1 ? '的桌上还有' : '桌上还有'}</span>
+            <span className="nudge__keep">
+              {' '}
+              {num(onTable)}
+              {parts}
+            </span>
           </span>
           {g ? (
             <a className="inline-link" href={playUrl(g)}>

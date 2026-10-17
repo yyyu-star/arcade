@@ -87,6 +87,13 @@ export class Hud {
   private comboNum: HTMLSpanElement;
   private comboTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private faceImg: HTMLImageElement | null = null;
+
+  /** 换头像（开局按出战的角色换） */
+  setFace(src: string): void {
+    if (this.faceImg) this.faceImg.src = src;
+  }
+
   constructor(parent: HTMLElement, icons: (key: string) => string, face: string) {
     this.icons = icons;
     const root = el('div', 'yx-hud', parent);
@@ -102,6 +109,7 @@ export class Hud {
     const card = el('div', 'yx-card', tl);
     const av = el('div', 'yx-avatar', card);
     const img = el('img', '', av);
+    this.faceImg = img;
     img.src = face;
     img.alt = '';
     this.lv = el('span', 'yx-lv', av, '1');

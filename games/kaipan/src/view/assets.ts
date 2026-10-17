@@ -37,8 +37,10 @@ const ATLAS_GROUPS: readonly AtlasGroup[] = ['game', 'meta'];
 
 const SCENE_LAYERS = [
   'sky_bull', 'sky_flat', 'sky_bear', 'city', 'haze_bear', 'rain', 'lightning', 'lightning_2', 'lightning_3',
-  'wall', 'desk', 'steam', 'cat', 'cat_tail', 'cat_zzz', 'ambient_bull', 'ambient_flat', 'ambient_bear', 'lamp_light', 'monitor_glow',
+  'wall', 'desk', 'steam', 'cat', 'cat_tail', 'cat_zzz', 'ambient_bull', 'lamp_light', 'monitor_glow',
 ] as const;
+/** 0.15.0 铺满：安全区外的墙和桌（左右各 320、上下各 108），只有对局和结束页用，进对局时再加载 */
+const ROOM_STRIPS: readonly [string, number, number][] = [['room_left', 320, 936], ['room_right', 320, 936], ['room_top', 1280, 108], ['room_bottom', 1280, 108]];
 
 const FRIEND_IDS = ['xiaoli', 'laowang', 'zhangjie', 'qunzhu', 'laozhao', 'dav', 'neimu', 'zhuchang', 'kongjun'] as const;
 export type AvatarFace = 'normal' | 'smug' | 'awkward';
@@ -78,7 +80,7 @@ export const SLICES = {
 export type SliceKey = keyof typeof SLICES;
 
 /** 只有大盘阴雨（bear）时才看得见的图层：开始菜单用不到，进交易场景时再加载，省下启动请求 */
-const BEAR_ONLY = new Set<string>(['sky_bear', 'haze_bear', 'rain', 'lightning', 'lightning_2', 'lightning_3', 'ambient_bear']);
+const BEAR_ONLY = new Set<string>(['sky_bear', 'haze_bear', 'rain', 'lightning', 'lightning_2', 'lightning_3']);
 
 const asset = (key: string, path: string, w: number, h: number, extra: Partial<AssetDef> = {}): AssetDef => ({ key, path: `${V3}${path}`, w, h, ...extra });
 const plain = { plain: true };
@@ -86,6 +88,7 @@ const plain = { plain: true };
 /** 启动时必载的固定素材（股票、道具、标题主视觉另算）。 */
 const ASSETS: readonly AssetDef[] = [
   ...SCENE_LAYERS.map((n) => asset(`scene:${n}`, `scene/${n}.svg`, 1280, 720, { plain: n === 'rain', lazy: BEAR_ONLY.has(n) })),
+  ...ROOM_STRIPS.map(([n, w, h]) => asset(`scene:${n}`, `scene/${n}.svg`, w, h, { lazy: true })),
   asset('chat:phone_frame', 'chat/phone_frame.svg', 360, 720, plain),
   asset('chat:phone_notch', 'chat/phone_notch.svg', 120, 28),
   asset('chat:chat_header', 'chat/chat_header.svg', 128, 64, plain),

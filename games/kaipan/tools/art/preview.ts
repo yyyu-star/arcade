@@ -126,7 +126,7 @@ function scene(): string {
     <div class="L s-bear"><img class="L" src="${S}haze_bear.svg" alt=""><div class="rainfall"><img src="${S}rain.svg" alt=""><img src="${S}rain.svg" alt=""></div><img class="bolt" src="${S}lightning.svg" alt=""><img class="bolt" src="${S}lightning_2.svg" alt="" style="animation-delay:-2.1s"><img class="bolt" src="${S}lightning_3.svg" alt="" style="animation-delay:-4.2s"><div class="flash"></div><div class="flash" style="animation-delay:-2.1s"></div><div class="flash" style="animation-delay:-4.2s"></div></div>
     ${img('wall', 'L')}${img('desk', 'L')}${img('steam', 'L steam')}
     ${img('cat', 'L cat')}${img('cat_tail', 'L tail')}${img('cat_zzz', 'L zzz')}
-    ${img('ambient_bull', 'L s-bull')}${img('ambient_flat', 'L s-flat')}${img('ambient_bear', 'L s-bear')}
+    ${img('ambient_bull', 'L s-bull')}<div class="L s-flat" style="background:rgba(106,118,144,.12)"></div><div class="L s-bear" style="background:rgba(28,31,69,.34)"></div>
     ${img('lamp_light', 'L lamp')}${img('monitor_glow', 'L glow')}
   </div>
 </div>`;

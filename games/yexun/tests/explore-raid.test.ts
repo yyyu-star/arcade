@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHEST_OPEN, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN, RAID_ENEMIES, RAID_EXCHANGE, RAID_LATE, RAID_LIVE, type RaidTemplateId } from '../src/content/explore.ts';
+import { CHEST_OPEN, RAID_EARLY, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN, RAID_ENEMIES, RAID_EXCHANGE, RAID_LATE, RAID_LIVE, type RaidTemplateId } from '../src/content/explore.ts';
 import { ENEMY_BY_KIND, type EnemyKind } from '../src/content/enemies.ts';
 import { TREASURES } from '../src/content/treasures.ts';
 import { inputCos, inputSin } from '../src/core/fmath.ts';
@@ -10,7 +10,7 @@ import { NAV_CELL, NAV_INF } from '../src/explore/nav.ts';
 import { RaidEv, type GuardHost } from '../src/explore/host.ts';
 import { bagValue } from '../src/explore/loot.ts';
 import { Raid, raidFingerprint, Role } from '../src/explore/raid.ts';
-import { liveBp, livePayout, settleRaid } from '../src/explore/settle.ts';
+import { liveBp, liveFloor, livePayout, settleRaid } from '../src/explore/settle.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../src/explore/spawn.ts';
 import { emptyVault, herbalistUnlocked, normalizeVault, recordRaid, vaultProgress } from '../src/explore/vault.ts';
 
@@ -182,6 +182,34 @@ describe('夜探：撤离门', () => {
 });
 
 describe('夜探：宝箱和背包', () => {
+  it('早搜奖励：前 5 分钟开出生点附近的非金箱，结算时价值 ×1.3；5 分钟以后、远处、教学镇都没有', () => {
+    const near = (raid: Raid): number => raid.map.chests.findIndex((c) => c.tier !== 'gold' && Math.abs(c.x - raid.map.spawn.x) + Math.abs(c.y - raid.map.spawn.y) < RAID_EARLY.near);
+    let raid: Raid | null = null;
+    let ci = -1;
+    for (let seed = 1; seed < 40 && ci < 0; seed++) {
+      raid = new Raid({ seed, template: 'guzhen', danger: 0 });
+      ci = near(raid);
+    }
+    expect(ci).toBeGreaterThanOrEqual(0);
+    const c = raid!.map.chests[ci]!;
+    const h = fakeHost(c.x, c.y);
+    runTo(raid!, h, CHEST_OPEN.hold);
+    expect(raid!.chestOpen[ci]).toBe(1);
+    const want = c.items.reduce((s, it) => s + Math.floor(TREASURES[it]!.value * (RAID_EARLY.mul - 1)), 0);
+    expect(want).toBeGreaterThan(0);
+    expect(raid!.earlyBonus).toBe(want);
+    expect(settleRaid(Object.assign(raid!, { outcome: 'escaped' }), 0).value).toBe(bagValue(raid!.bag) + want);
+    // 死了包丢了，奖励也没了
+    expect(settleRaid(Object.assign(raid!, { outcome: 'dead' }), 0).value).toBe(0);
+    // 5 分钟以后开同一类箱子不加
+    const late = new Raid({ seed: raid!.setup.seed, template: 'guzhen', danger: 0 });
+    const h2 = fakeHost(c.x, c.y);
+    h2.tick = RAID_EARLY.until;
+    runTo(late, h2, RAID_EARLY.until + CHEST_OPEN.hold);
+    expect(late.chestOpen[ci]).toBe(1);
+    expect(late.earlyBonus).toBe(0);
+  });
+
   it('站在箱子旁边 1.5 秒打开，宝物进背包；走开从头来；铜箱、金箱另给一次升级', () => {
     const raid = new Raid({ seed: 8, template: 'guzhen', danger: 2 });
     const h = fakeHost(0, 0);
@@ -255,10 +283,17 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
 
   it('实盘：撤出时倍数 = 价值 ÷ 基准，至少保底、最多封顶，万分之一向下取整；结回向下取整（4.2）', () => {
     const base = RAID_LIVE.base.small.guzhen;
-    expect(liveBp(0, 'small')).toBe(RAID_LIVE.floor * 10000);
+    expect(liveBp(0, 'small')).toBe(Math.floor(RAID_LIVE.floor.small * 10000));
     expect(liveBp(base * 2, 'small')).toBe(20000);
     expect(liveBp(base * 100, 'small')).toBe(RAID_LIVE.cap * 10000);
-    expect(liveBp(Math.ceil(base * 1.5), 'small', 'guzhen')).toBe(Math.floor((Math.ceil(base * 1.5) / base) * 10000));
+    expect(liveBp(Math.ceil(base * 1.8), 'small', 'guzhen')).toBe(Math.floor((Math.ceil(base * 1.8) / base) * 10000));
+    // 保底随撤出时刻从 1 涨到满额：开门就走只拿 1 份出头，5 分钟以后给满
+    expect(liveFloor(0, 'small')).toBe(1);
+    expect(liveFloor(RAID_LIVE.floorRamp.small / 2, 'small')).toBeCloseTo(1 + (RAID_LIVE.floor.small - 1) / 2, 9);
+    expect(liveFloor(RAID_LIVE.floorRamp.small * 3, 'small')).toBe(RAID_LIVE.floor.small);
+    expect(liveBp(0, 'small', 'guzhen', 0)).toBe(10000);
+    expect(liveBp(0, 'small', 'guzhen', RAID_LIVE.floorRamp.small / 2)).toBe(Math.floor(liveFloor(RAID_LIVE.floorRamp.small / 2, 'small') * 10000));
+    expect(liveBp(base * 2, 'small', 'guzhen', 0)).toBe(20000);
     expect(liveBp(base * 2, 'small', 'dukou')).toBe(Math.floor(((base * 2) / RAID_LIVE.base.small.dukou) * 10000));
     let prev = -1;
     for (let v = 0; v < base * 4; v += 7) {
@@ -268,8 +303,11 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
     }
     expect(livePayout(2000, 13001)).toBe(2600);
     expect(livePayout(2000, 0)).toBe(0);
-    const r = settleRaid(withBag('guzhen', 'escaped', 'small'), 5);
-    expect(r.bp).toBe(liveBp(r.value, 'small'));
+    const wb = withBag('guzhen', 'escaped', 'small');
+    const r = settleRaid(wb, 5);
+    expect(r.bp).toBe(liveBp(r.value, 'small', 'guzhen', wb.endTick));
+    wb.endTick = RAID_LIVE.floorRamp.small;
+    expect(settleRaid(wb, 5).bp).toBe(liveBp(r.value, 'small'));
     expect(r.coins).toBe(5);
   });
 

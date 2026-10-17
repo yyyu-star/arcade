@@ -33,6 +33,17 @@ export const MONSTER_INFO: Record<EnemyKind, { name: string; tag: string; blurb:
   patrol: { name: '巡夜将', tag: '精英', blurb: '夜探里守着铜箱和院子，看见就追；6 分钟、11 分钟还有游荡的' },
   beast: { name: '镇门石兽', tag: 'Boss', blurb: '夜探里守着金箱，会扑、会甩尾；血少一半连扑两下' },
   goblin: { name: '宝妖', tag: '精英', blurb: '夜探 5、10 分钟各出一只，背着宝袋见人就跑；追上打倒掉两件好宝物' },
+  bamsprout: { name: '竹精', tag: '竹林', blurb: '脚边先冒一圈绿影，过一会儿破土而出狠拍一下；怕火' },
+  snakespirit: { name: '蛇精', tag: '竹林', blurb: '藏在竹影里慢慢游，近了猛地窜出来；怕火' },
+  bambooking: { name: '竹王', tag: '精英', blurb: '竹林的主人，隔一阵在你四周种出一圈竹精；怕火' },
+  drown: { name: '溺鬼', tag: '河滩', blurb: '从水边冒出来，抓住你往回拖，脚步变沉；怕土' },
+  crab: { name: '河蟹', tag: '河滩', blurb: '横着走，壳很硬，刀剑符咒都吃力；怕火' },
+  hebo: { name: '河伯', tag: '精英', blurb: '涨潮放出一圈水弹，还会放出溺鬼；怕土' },
+  icegolem: { name: '冰傀', tag: '冰湖', blurb: '一身冰块，打碎了裂成两个小的；怕火怕铃' },
+  icicle: { name: '冰凌', tag: '冰湖', blurb: '远远盯着你脚下，先画圈再落冰刺，别站着不动；怕火' },
+  frostsoul: { name: '冰魄', tag: '精英', blurb: '蓄力后震出一圈寒霜，冻住脚步，还会放出冰傀；怕火' },
+  nightwatch: { name: '更夫鬼', tag: '古镇', blurb: '夜探古镇里敲梆子，每敲一下招来小鬼火；怕火怕铃' },
+  stonemonk: { name: '石僧', tag: '山寺', blurb: '夜探山寺里又慢又硬，走近了合掌拍地；刀剑砍不动，怕水怕铃' },
   boss: { name: '尸王', tag: 'Boss', blurb: '跳砸、召唤、尸气，血越少越凶；14 分钟现身' },
 };
 
@@ -123,12 +134,16 @@ export class Codex {
         );
       })
       .join('');
+    // 合成页：配方一直写明（让玩家知道凑什么），没做成过的压暗；双修用自己的颜色描边
     const merges = MERGES.map((m) => {
       const done = rec.merges.includes(m.id);
-      const ic = WEAPONS[m.a].icon;
-      return done
-        ? `<div class="yx-ccard done"><img alt="" src="${this.icons(ic)}"><b>${esc(m.name)}</b><span>合成</span><p>${esc(m.desc)}</p><em>合成过</em></div>`
-        : `<div class="yx-ccard lock"><img class="sil" alt="" src="${this.icons(ic)}"><b>？？？</b><span>合成</span><em>两件进化后的法器在宝箱里合成</em></div>`;
+      const recipe = `${esc(WEAPONS[m.a].evolve!.name)} + ${esc(WEAPONS[m.b].evolve!.name)}`;
+      const tags = m.dual ? `${esc(WEAPONS[m.a].el)}·${esc(WEAPONS[m.a].type)} × ${esc(WEAPONS[m.b].el)}·${esc(WEAPONS[m.b].type)}` : '合成';
+      return (
+        `<div class="yx-ccard ${done ? 'done' : 'lock'}${m.dual ? ' dual' : ''}" style="--mc:${m.color}">` +
+        `<img${done ? '' : ' class="sil"'} alt="" src="${this.icons(done ? m.icon : WEAPONS[m.a].icon)}"><b>${m.dual ? '双修 · ' : ''}${esc(m.name)}</b><span>${tags}</span>` +
+        `<p class="evo">${recipe}</p><p>${esc(m.desc)}</p>${done ? '<em>合成过</em>' : '<em>两件进化后在宝箱里合成</em>'}</div>`
+      );
     }).join('');
     const usedN = rec.weaponsUsed.length;
     return `<div class="yx-csub">用过 ${usedN}/${ids.length} · 满级 ${rec.weaponsMaxed.length} · 进化 ${rec.weaponsEvolved.length} · 合成 ${rec.merges.length}/${MERGES.length}</div><div class="yx-cgrid">${cards}${merges}</div>`;

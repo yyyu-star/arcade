@@ -33,6 +33,12 @@ export function fingerprint(w: World): number {
   for (const [k, v] of Object.entries(w.passives).sort()) h = num(h ^ k.charCodeAt(0), v ?? 0);
   for (const r of [w.rSpawn, w.rDrop, w.rUp, w.rChest, w.rAi, w.rHit, w.rWeapon, w.rProp]) for (const v of r.snapshot()) h = mix(h, v >>> 0);
   if (w.raid) h = num(h, raidFingerprint(w.raid));
-  for (const a of [w.eAlive, w.eKind, w.eX, w.eY, w.eKX, w.eKY, w.eHp, w.eT, w.eS, w.ePhase, w.eHitAt, w.sAlive, w.sKind, w.sX, w.sY, w.sVX, w.sVY, w.sLife, w.sState, w.dAlive, w.dKind, w.dX, w.dY, w.dVal, w.dPull, w.pAlive, w.pX, w.pY]) h = arr(h, a);
+  // 地形状态：只在有这类地形的图上进指纹（别的图的金标准指纹不变）
+  if (w.blockHp.length) h = arr(h, w.blockHp);
+  if (w.ice.length) {
+    h = num(num(h, w.pvx), w.pvy);
+    h = arr(arr(h, w.eVX), w.eVY);
+  }
+  for (const a of [w.eAlive, w.eKind, w.eX, w.eY, w.eKX, w.eKY, w.eHp, w.eT, w.eS, w.ePhase, w.eHitAt, w.eMark, w.sAlive, w.sKind, w.sX, w.sY, w.sVX, w.sVY, w.sLife, w.sState, w.dAlive, w.dKind, w.dX, w.dY, w.dVal, w.dPull, w.pAlive, w.pX, w.pY]) h = arr(h, a);
   return h >>> 0;
 }

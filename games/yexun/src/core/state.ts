@@ -5,16 +5,16 @@
 import { ENEMIES } from '../content/enemies.ts';
 import type { Danger, WaveEvent } from '../content/waves.ts';
 import { CHARACTERS, CURSE_IDS, MAX_CURSES, PERK_FX, PERKS, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
-import { MAPS, type Block, type MapId } from '../content/maps.ts';
+import { MAPS, type Block, type MapId, type Rect } from '../content/maps.ts';
 import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
-import type { RaidBlock } from '../explore/blocks.ts';
+import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 13;
+export const RULES_VERSION = 16;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -221,7 +221,22 @@ export class World {
   bellArea = 0;
   /** 挡路的东西（地图上的墙、棺材） */
   /** 挡路的块：守夜是地图的，夜探是镇子生成的（推挤走 raid.map.index，分桶） */
-  readonly blocks: readonly (Block | RaidBlock)[];
+  blocks: readonly (Block | RaidBlock)[];
+  /** 地图的全部块（竹子倒了 blocks 里就没有它，这里还在）和每块的血（不会倒的是 Infinity）、上次受伤的拍；没有竹子时 blockHp 为空 */
+  readonly allBlocks: readonly Block[];
+  readonly blockHp: Float64Array;
+  readonly blockAt: Int32Array;
+  /** 地形：水区、冰区（夜探没有） */
+  /** 块多的守夜图（竹林）也走分桶的索引，竹子倒了重建 */
+  index: BlockIndex | null = null;
+  readonly water: readonly Rect[];
+  readonly ice: readonly Rect[];
+  /** 主角在冰上的速度（冰上才用；离开冰面就按输入直接走） */
+  pvx = 0;
+  pvy = 0;
+  /** 怪在冰上的速度 */
+  readonly eVX = new Float64Array(MAX_ENEMIES);
+  readonly eVY = new Float64Array(MAX_ENEMIES);
   /** 冰锥、水鬼：到这一拍之前主角走路变慢 */
   slowUntil = 0;
   /** 收获期：到这一拍之前少刷怪、多掉东西 */
@@ -264,6 +279,9 @@ export class World {
   readonly eLastBy = new Int8Array(MAX_ENEMIES);
   /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
   readonly eBind = new Int32Array(MAX_ENEMIES);
+  /** 符剑合璧：身上的符几拍炸（0 = 没贴）；marks 是现在贴着几张，没有时不用扫 */
+  readonly eMark = new Int32Array(MAX_ENEMIES);
+  marks = 0;
   /** Boss 打到第几段（0 起） */
   readonly ePhase = new Uint8Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
@@ -344,7 +362,16 @@ export class World {
     this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger }) : null;
     this.arenaW = this.raid ? this.raid.map.size : ARENA.w;
     this.arenaH = this.raid ? this.raid.map.size : ARENA.h;
-    this.blocks = this.raid ? this.raid.map.blocks : MAPS[setup.map ?? 'snow'].blocks;
+    const def = MAPS[setup.map ?? 'snow'];
+    this.blocks = this.raid ? this.raid.map.blocks : def.blocks;
+    this.allBlocks = this.raid ? [] : def.blocks;
+    const dyn = !this.raid && def.blocks.some((b) => b.hp !== undefined);
+    this.blockHp = new Float64Array(dyn ? def.blocks.length : 0);
+    this.blockAt = new Int32Array(dyn ? def.blocks.length : 0);
+    if (dyn) def.blocks.forEach((b, k) => (this.blockHp[k] = b.hp ?? Infinity));
+    if (!this.raid && def.blocks.length > 40) this.index = new BlockIndex(def.blocks as readonly RaidBlock[], ARENA.w);
+    this.water = this.raid ? [] : def.water ?? [];
+    this.ice = this.raid ? [] : def.ice ?? [];
     if (this.raid) {
       this.x = this.px = this.raid.map.spawn.x;
       this.y = this.py = this.raid.map.spawn.y;
