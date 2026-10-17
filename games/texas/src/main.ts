@@ -23,7 +23,7 @@ import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow, type SoloSummary } from './view/summary.ts';
 import { roomCard, soloCard } from './view/share.ts';
 import { shareCard, type ShareCard } from 'arcade-kit/share';
-import { mountSocial, type Presence, type SocialHandle } from 'arcade-kit/social';
+import { mountSocial, openInvite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
@@ -145,7 +145,7 @@ hud.prepend(funSlot);
 // 开打以后也能叫人（0.3.0）：朋友点开链接看着，点亮着的电脑座位就能接管
 const inviteBtn = el('button', 'pill invite-btn hidden', hud, '叫朋友来');
 inviteBtn.type = 'button';
-inviteBtn.addEventListener('click', () => void invite());
+inviteBtn.addEventListener('click', () => invite());
 const funHints = el('div', 'fun-hints hidden', hud);
 // 两手之间（0.1.1）：单机一手打完停着，点"下一手"才发（开着"自动下一手"时倒数几秒自己发）；好友房是房间定的停顿，大家看同一个倒计时
 const RING = '<svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" pathLength="100"/></svg>';
@@ -173,7 +173,7 @@ const lobby = new Lobby(stage, { start, resume, relief, openRoom, joinRoom, back
 const roomPanel = new RoomPanel(stage, {
   sit: (i) => online?.sit(i),
   start: () => online?.start(),
-  invite: () => void invite(),
+  invite: () => invite(),
   leave: () => void leaveRoom(false),
   retry: () => online?.retry(),
 });
@@ -1517,32 +1517,19 @@ async function roomRebuy(): Promise<void> {
 }
 
 /**
- * 叫朋友来（0.3.0）：链接只带房间码（档位、人数进房后房间会告诉他）。手机上弹系统分享（微信、短信……），
- * 没有就复制；都不行把链接摆出来让人自己复制。朋友没登录的，登录完平台跳回原链接（登录页的 next），照样进房
+ * 叫朋友来（0.14.0 起用 kit 的面板）：有平台、已登录的列好友、一人一个"叫他来"，底下复制链接（手机上弹系统分享）；
+ * 没挂上 social（单独部署、没登录）只有复制链接。链接按这一页自己的路径拼、只带房间码（档位、人数进房后房间会告诉他）；
+ * 朋友没登录的，登录完平台跳回原链接（登录页的 next），照样进房
  */
-async function invite(): Promise<void> {
+function invite(): void {
   const s = online?.state;
   if (!s) return;
   const u = new URL(location.pathname, location.origin);
   u.searchParams.set('room', s.code);
-  const url = u.toString();
-  if (typeof navigator.share === 'function') {
-    try {
-      await navigator.share({ title: '来打德州', text: `好友房 ${s.code}，点开就进`, url });
-      return;
-    } catch (e) {
-      // 自己点了取消：什么都不做；别的错退回复制
-      if (e instanceof DOMException && e.name === 'AbortError') return;
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(url);
-    toast('链接复制好了，发给朋友，点开就进');
-  } catch {
-    await dialog(stage, '叫朋友来', url, [{ label: '好', value: 'ok', primary: true }]);
-  }
+  const o = { game: 'texas', room: s.code, url: u.toString(), text: `来打德州，好友房 ${s.code}，点开就进` };
+  if (social) social.openInvite(o);
+  else openInvite({ ...o, friends: false });
 }
-
 
 let toastTimer = 0;
 function toast(text: string): void {
