@@ -459,7 +459,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
   - 电脑和托管的座位由 kit 立刻用 `ai()` 代答（普通操作），答完离开名单。它们不管有没有选择都是马上答，离开名单不透露什么；
   - 有选择的人都答完了，窗口马上结束（名单整个换掉）；期限到了 kit 对还在名单里的真人调 `timeout`，第一下就把整个窗口按"能胡就胡、否则过"收掉；
   - 一个人都没有选择时不开窗口、直接轮到下一家。从外面只能看出"有人在想"、看不出是谁；想了多久本身会透露一点，真人打牌也一样，接受。
-- **叫朋友来**：开房后大按钮分享 `/games/mahjong/?room=123456`（`navigator.share`，不支持就复制）。没登录的人：Worker 的登录闸门 302 到
+- **叫朋友来**（0.12.0 起用 kit 0.12.2 的"叫朋友来"面板 `openInvite`，`docs/social.md` 1.3）：等人页的大按钮和顶栏"叫朋友"打开它。登录了列好友（在线的在前、写在哪），每人一个"叫他来"（平台记一条邀请，好友那边顶上弹横条），底下"复制邀请链接"；单独部署、没登录只有复制链接（能系统分享就分享）。链接是 `/games/mahjong/?room=123456`。没登录的人：Worker 的登录闸门 302 到
   `/login?next=<encodeURIComponent(路径 + 查询)>`，页面里发现没登录也一样拼（平台 0.10.1，`platform-backend.md` 5.7）；登录完整页跳回原链接，房间码在查询参数里原样带回，本模块不自己存房间码。
 - **分享卡**（0.11.0，`docs/social.md` 1.1，kit 的 `arcade-kit/share`，接线在 `src/view/share.ts`）：单机、好友房一场打完的结算上有"分享"（坐着打完的人才有），
   生成一张战绩图：标题"娱乐·新手 · 8 局""实盘小档 · 8 局""好友房 · 娱乐 · 8 局"，大数字是自己这一场的净输赢（娱乐"分"、实盘"筹码"），
@@ -572,7 +572,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - Worker 和房间（workerd）：每步写入 ≤ 2、视图里没有别人的手牌和牌墙、钱包带入结回（假钱包）、stats 原样转发、开房请求体解析不了回 400。
 - 冒烟（无头浏览器，控制台零报错）：
   - `npm run smoke`：`?online=1` 入口；横屏、竖屏各打一场单机（加速），回大厅确认、听牌提示、往上拖出牌、胡牌亮牌、结算页"分享"出预览、规则表；
-  - `npm run build:cf && npm run smoke:room`：本地 wrangler dev + 假平台，两个浏览器开娱乐房（报位置、互动、第三个人中途旁观和坐下、离座）、实盘小档房（带入、离座结回）、打完一整场"再来一场"跟进新房间；
+  - `npm run build:cf && npm run smoke:room`：本地 wrangler dev + 假平台，两个浏览器开娱乐房（叫朋友来面板、报位置、互动、第三个人中途旁观和坐下、离座）、实盘小档房（带入、离座结回）、打完一整场"再来一场"跟进新房间；
   - `npm run build:cf && npm run smoke:standalone`：模块的 `wrangler.jsonc` 原样起（没有平台），两个游客：选桌页只有娱乐、单机一局、好友房开打和扔道具；
   - 画面自查：`node scripts/capture.ts land|port|se-land|se-port` 截图并报互相压住的元素（iPhone SE 尺寸，0.3.5）。
   - 还没进冒烟：双指放大、省内存设备（DOM 牌桌没有画布，后者影响小）——见收尾审计 C。
@@ -626,4 +626,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.10.3 | kit 0.11.2（窄屏面板和菜单由 kit 收进屏幕），去掉本游戏收窄面板的样式 |
 | 0.10.4 | 审计修复：单机钱包操作 id 加 `solo-` 前缀（高危）；好友房实盘一局中途离座这一局照算（中危） |
 | 0.11.0 | 分享卡（结算页"分享"）、好友报位置和收邀请（kit 0.12.1） |
-| 0.12.0 | 旁观（`docs/social.md` 1.4）：旁观中、坐下、回到我的座位，实盘只看；旁观视图不含暗牌的反事实测试 |
+| 0.12.0 | 旁观（`docs/social.md` 1.4）：旁观中、坐下、回到我的座位，实盘只看；旁观视图不含暗牌的反事实测试。"叫朋友来"换成 kit 0.12.2 的面板（好友列表 + 叫他来） |

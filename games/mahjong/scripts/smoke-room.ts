@@ -209,6 +209,16 @@ try {
   let t = Date.now();
   let code = await openRoom(pa, base, '娱乐');
   log('A 开娱乐房', code);
+  // 叫朋友来（docs/social.md 1.3，kit 的面板）：好友列表里有老王，点"叫他来"发出邀请（按钮变灰），关掉
+  const invites: string[] = [];
+  pa.on('request', (r) => r.url().endsWith('/api/invites') && r.method() === 'POST' && invites.push(r.postData() ?? ''));
+  await pa.click('button.big.share');
+  await pa.click('[data-key="invite:call:friend-wang"]');
+  await pa.waitForFunction(() => (document.querySelector('[data-key="invite:call:friend-wang"]') as HTMLButtonElement | null)?.disabled === true, null, { timeout: 5_000 });
+  await pa.screenshot({ path: join(SHOTS, 'room-invite-a.png') });
+  await pa.click('[data-key="invite:close"]');
+  const sent = JSON.parse(invites[0] ?? '{}') as { to?: string; game?: string; room?: string };
+  check(sent.to === 'friend-wang' && sent.game === 'mahjong' && sent.room === code, `A 在等人页点"叫朋友来"，叫了老王（${invites[0]}）`);
   // 等人页"离开房间"先离座（自审 C4）：B 坐下再离开，A 这边那个座位要空出来（只断开的话 kit 只记掉线、座位还占着）
   await pb.goto(`${base}/games/mahjong/?room=${code}`);
   await pb.waitForSelector('.room-code');

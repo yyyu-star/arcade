@@ -117,24 +117,3 @@ function note(text: string): HTMLElement {
   el('span', '', n, text);
   return n;
 }
-
-/** 叫朋友来：手机上走系统分享，没有就复制链接。链接带房间号，朋友点开登录后直接进房 */
-export async function shareRoom(code: string, title: string): Promise<'shared' | 'copied' | 'failed'> {
-  const url = new URL(`?room=${code}`, location.href).toString();
-  const text = `来${title}打一把，房间号 ${code}`;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title, text, url });
-      return 'shared';
-    } catch (e) {
-      // 用户取消了就不再复制
-      if ((e as { name?: string }).name === 'AbortError') return 'shared';
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(`${text} ${url}`);
-    return 'copied';
-  } catch {
-    return 'failed';
-  }
-}

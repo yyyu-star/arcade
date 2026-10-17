@@ -3,7 +3,7 @@
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
 import { createRoom, detectPlatform, withNickname, type PlatformInfo } from 'arcade-kit/client';
-import { inviteUrl, mountSocial, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
+import { inviteUrl, mountSocial, openInvite, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { DEFAULT_OPTS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
@@ -13,12 +13,12 @@ import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/bant
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
-import { busy, button, el } from './view/dom.ts';
+import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
-import { renderWaiting, roomNotice, shareRoom, type Watching } from './view/room.ts';
+import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { cardOf, shareResult } from './view/share.ts';
@@ -130,7 +130,7 @@ document.addEventListener('pointerdown', (e) => {
   if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
 button('icon', top, '规则', () => showRules(stage));
-const shareBtn = button('pill share', top, '叫朋友', () => void busy(shareBtn, share));
+const shareBtn = button('pill share', top, '叫朋友', () => share());
 const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
 
@@ -461,7 +461,7 @@ function drawWaiting(s: OnlineState): void {
     suggest: s.you?.seat === null && arrive ? arrive.seat : null,
     onSit: (seat) => online?.sit(seat),
     onStart: () => online?.start(),
-    onShare: () => void share(),
+    onShare: () => share(),
     // 等人页离开：先离座再断开（只断开的话 kit 只记掉线、座位还占着，房主开打会照样从他钱包带一份，自审 C4）
     onLeave: () => {
       if (s.you?.seat !== null && s.you?.seat !== undefined) online?.leaveSeat();
@@ -617,11 +617,17 @@ async function rematch(b: HTMLButtonElement): Promise<void> {
   enterRoom(r.code, true);
 }
 
-async function share(): Promise<void> {
+/**
+ * 叫朋友来（docs/social.md 1.3，kit 的"叫朋友来"面板）：登录了列好友、每人一个"叫他来"，底下复制邀请链接；
+ * 单独部署、没登录（social 没挂上）只有复制邀请链接（能系统分享就分享）。链接带房间号，朋友点开登录后直接进房
+ */
+function share(): void {
   if (!online) return;
-  const r = await shareRoom(online.state.code, GAME_NAME);
-  if (r === 'copied') toast('链接已复制，发给朋友');
-  else if (r === 'failed') toast(`房间号 ${online.state.code}，告诉朋友在选桌页输入`);
+  const code = online.state.code;
+  const log = import.meta.env.DEV ? (l: string) => ((window as { __socialLog?: string[] }).__socialLog ??= []).push(l) : undefined;
+  const o = { game: GAME_ID, room: code, url: new URL(`?room=${code}`, location.href).toString(), text: `来${GAME_NAME}打一把，房间号 ${code}`, ...(log ? { log } : {}) };
+  if (social) social.openInvite(o);
+  else openInvite({ ...o, friends: false });
 }
 
 // ---------- 牌桌（单机） ----------
