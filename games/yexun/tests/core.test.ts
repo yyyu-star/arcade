@@ -7,7 +7,7 @@ import { COS, SIN } from '../src/core/dirs.ts';
 
 /** 测试用的输入：带种子的伪随机摇杆（一阵一阵换方向，像人） */
 function play(seed: number, ticks: number, onTick?: (w: World, t: number) => void): World {
-  const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+  const w = createWorld({ seed, mode: 'vigil', danger: 2 });
   let s = seed >>> 0;
   let dir = 1;
   for (let t = 0; t < ticks && w.phase !== 'over'; t++) {
@@ -62,7 +62,7 @@ describe('数学', () => {
 
 describe('一局', () => {
   it('选卡时时间不走，选完接着走', () => {
-    const w = createWorld({ seed: 5, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 5, mode: 'vigil', danger: 0 });
     const bot = new Bot('normal', 'sword', 5);
     for (let n = 0; n < 5000 && w.phase === 'play'; n++) step(w, bot.act(w).dir);
     expect(w.phase).toBe('choose');
@@ -79,7 +79,7 @@ describe('一局', () => {
     let three = 0;
     const n = 20;
     for (let seed = 1; seed <= n; seed++) {
-      const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+      const w = createWorld({ seed, mode: 'vigil', danger: 2 });
       const bot = new Bot('normal', 'sword', seed);
       let f = -1;
       while (w.phase !== 'over' && w.tick < 30 * 180) {
@@ -98,7 +98,7 @@ describe('一局', () => {
 describe('魂珠', () => {
   it('地上的魂珠不超过上限，多出来的经验并进大珠，不丢', () => {
     // 小白只顾躲，不专门去捡珠子，地上会越积越多
-    const w = createWorld({ seed: 11, mode: 'vigil', difficulty: 'normal' });
+    const w = createWorld({ seed: 11, mode: 'vigil', danger: 2 });
     const bot = new Bot('novice', 'ward', 11);
     let maxVal = 0;
     while (w.tick < 30 * 240 && w.phase !== 'over') {

@@ -6,7 +6,7 @@ import { createWorld, Ev, grantWeapon, openChestNow, step } from '../src/core/in
 describe('法器', () => {
   for (const id of WEAPON_IDS) {
     it(`${WEAPONS[id].name}：单独拿着能打能杀`, () => {
-      const w = createWorld({ seed: 3, mode: 'vigil', difficulty: 'easy' });
+      const w = createWorld({ seed: 3, mode: 'vigil', danger: 0 });
       w.weapons.length = 0;
       w.wstats.length = 0;
       grantWeapon(w, id, 8);
@@ -24,7 +24,7 @@ describe('法器', () => {
   }
 
   it('金钟罩挡下一次伤害、碎的时候震开', () => {
-    const w = createWorld({ seed: 4, mode: 'vigil', difficulty: 'normal' });
+    const w = createWorld({ seed: 4, mode: 'vigil', danger: 2 });
     grantWeapon(w, 'shield', 1);
     let up = 0;
     let broke = 0;
@@ -44,7 +44,7 @@ describe('法器', () => {
 
   it('缚妖索捆住的怪基本不动（只剩挤开和击退的余量）', () => {
     // 1 级的绳子伤害低，跳尸这类血厚的捆住不会马上死，看得出动没动
-    const w = createWorld({ seed: 5, mode: 'vigil', difficulty: 'normal' });
+    const w = createWorld({ seed: 5, mode: 'vigil', danger: 2 });
     w.weapons.length = 0;
     w.wstats.length = 0;
     grantWeapon(w, 'rope', 1);
@@ -74,7 +74,7 @@ describe('法器', () => {
 
 describe('进化和合成', () => {
   const run = (id: (typeof WEAPON_IDS)[number], evolved: boolean): number => {
-    const w = createWorld({ seed: 3, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 3, mode: 'vigil', danger: 0 });
     w.weapons.length = 0;
     w.wstats.length = 0;
     grantWeapon(w, id, 8, evolved);
@@ -89,7 +89,7 @@ describe('进化和合成', () => {
 
   it('两件都进化了，宝箱合成，空出一个法器格', () => {
     for (const m of MERGES) {
-      const w = createWorld({ seed: 1, mode: 'vigil', difficulty: 'easy' });
+      const w = createWorld({ seed: 1, mode: 'vigil', danger: 0 });
       w.weapons.length = 0;
       w.wstats.length = 0;
       grantWeapon(w, m.a, 8, true);
@@ -104,7 +104,7 @@ describe('进化和合成', () => {
   });
 
   it('合成以后照样能凑满 7 件法器', () => {
-    const w = createWorld({ seed: 2, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 2, mode: 'vigil', danger: 0 });
     w.weapons.length = 0;
     w.wstats.length = 0;
     grantWeapon(w, 'sword', 8, true);

@@ -190,13 +190,16 @@ async function boot(): Promise<void> {
     banners.clear();
     const seconds = Math.min(w.tick, DAWN_TICK) / 30;
     // 认输的局算一局，但不算纪录
-    const record = recordRun(save, w.setup.difficulty, { ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, won: w.won }, !quit);
+    const record = recordRun(save, runDiff, { ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, won: w.won }, !quit);
     showPlay(false);
-    result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: w.coins, difficulty: w.setup.difficulty, record, build: buildRows(w) });
+    result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: w.coins, difficulty: runDiff, record, build: buildRows(w) });
   };
 
+  // 菜单上的三档对应危险 0 / 2 / 4（选危险 0–5 的界面在第 5 步接上以前）
+  let runDiff: Difficulty = save.difficulty;
   const startRun = async (difficulty: Difficulty, map: MapId = save.map): Promise<void> => {
     save.difficulty = difficulty;
+    runDiff = difficulty;
     save.map = map;
     writeSave(save);
     menu.hide();
@@ -207,7 +210,8 @@ async function boot(): Promise<void> {
     input.reset();
     const seed = q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0;
     // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）
-    const w = createWorld({ seed, mode: 'vigil', difficulty, map, firstRun: save.runs === 0 });
+    // 第一局锁危险 0（13.2）
+    const w = createWorld({ seed, mode: 'vigil', danger: save.runs === 0 ? 0 : DIFFICULTIES[difficulty].danger, map, firstRun: save.runs === 0 });
     world = w;
     autopilot = undefined;
     if (import.meta.env.DEV && q.has('give')) {
@@ -278,7 +282,7 @@ async function boot(): Promise<void> {
   };
 
   menu.onStart = (d, m) => void startRun(d, m);
-  result.onAgain = () => void startRun(world?.setup.difficulty ?? save.difficulty, world?.setup.map ?? save.map);
+  result.onAgain = () => void startRun(world ? runDiff : save.difficulty, world?.setup.map ?? save.map);
   result.onMenu = () => {
     result.hide();
     menu.show({ firstTime: false, difficulty: save.difficulty, best: save.best, map: save.map, yizhuang: yizhuangOpen(save) });

@@ -31,7 +31,7 @@ describe('义庄', () => {
   });
 
   it('主角走不进院墙；怪也推不进棺材', () => {
-    const w = createWorld({ seed: 2, mode: 'vigil', difficulty: 'easy', map: 'yizhuang' });
+    const w = createWorld({ seed: 2, mode: 'vigil', danger: 0, map: 'yizhuang' });
     w.nextEvent = 1 << 30;
     // 一直往上走（方向 25 = 正上），会撞上正堂
     for (let t = 0; t < 400 && w.phase !== 'over'; t++) {
@@ -48,7 +48,7 @@ describe('义庄', () => {
 
   it('义庄跳尸多；雪原没有挡路的东西', () => {
     const count = (map: 'snow' | 'yizhuang'): number => {
-      const w = createWorld({ seed: 4, mode: 'vigil', difficulty: 'easy', map });
+      const w = createWorld({ seed: 4, mode: 'vigil', danger: 0, map });
       w.weapons.length = 0;
       w.wstats.length = 0;
       let n = 0;
@@ -63,7 +63,7 @@ describe('义庄', () => {
       return n / w.eCount;
     };
     expect(count('yizhuang')).toBeGreaterThan(count('snow'));
-    expect(createWorld({ seed: 1, mode: 'vigil', difficulty: 'easy' }).blocks.length).toBe(0);
+    expect(createWorld({ seed: 1, mode: 'vigil', danger: 0 }).blocks.length).toBe(0);
   });
 
   it('普通档以上撑到过天亮才开', () => {

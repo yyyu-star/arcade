@@ -20,7 +20,7 @@ interface Pace {
 }
 
 function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
-  const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+  const w = createWorld({ seed, mode: 'vigil', danger: 2 });
   const bot = new Bot('normal', build, seed);
   const count: number[] = [];
   const eliteKills: number[] = [];
@@ -98,7 +98,7 @@ describe('时间线（13.3）', () => {
 describe('受伤补偿不能被利用（DESIGN.md 2.4）', () => {
   /** "站着挨打"：不躲怪，只往最近的肉包（没有就魂珠）走，选卡照普通玩家 */
   function tank(seed: number): { won: boolean; seconds: number } {
-    const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+    const w = createWorld({ seed, mode: 'vigil', danger: 2 });
     const bot = new Bot('normal', 'sword', seed);
     while (w.phase !== 'over') {
       if (w.phase === 'choose') {
@@ -122,7 +122,7 @@ describe('受伤补偿不能被利用（DESIGN.md 2.4）', () => {
     return { won: w.won, seconds: w.tick / S };
   }
   function dodge(seed: number): { won: boolean; seconds: number } {
-    const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+    const w = createWorld({ seed, mode: 'vigil', danger: 2 });
     const bot = new Bot('normal', 'sword', seed);
     while (w.phase !== 'over') {
       const a = bot.act(w);

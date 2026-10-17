@@ -53,6 +53,10 @@ export const Ev = {
   Steal: 24,
   /** 铜钱挡下一颗敌方的弹 */
   Block: 25,
+  /** 更夫敲锣，全屏的怪往后退：x, y, b = 半径 */
+  Gong: 26,
+  /** 复活：x, y, a = 还剩几次, b = 震开的半径 */
+  Revive: 27,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

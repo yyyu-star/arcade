@@ -5,7 +5,7 @@ import { Bot } from '../tools/bots.ts';
 /** 跑到第一次弹三选一 */
 function toChoice(seed: number): World {
   // 原地不动会在第一次升级前被围死，让机器人走位
-  const w = createWorld({ seed, mode: 'vigil', difficulty: 'easy' });
+  const w = createWorld({ seed, mode: 'vigil', danger: 0 });
   const bot = new Bot('normal', 'sword', seed);
   while (w.phase === 'play' && w.tick < 30 * 120) step(w, bot.act(w).dir, -1);
   if (w.phase !== 'choose') throw new Error(`种子 ${seed} 两分钟内没升级（${w.phase}）`);
@@ -14,7 +14,7 @@ function toChoice(seed: number): World {
 
 describe('套装', () => {
   it('剑 2 件加暴击，剑 3 件加暴击伤害', () => {
-    const w = createWorld({ seed: 1, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 1, mode: 'vigil', danger: 0 });
     expect(w.stats.critAdd).toBe(0);
     grantWeapon(w, 'flysword');
     expect(w.sets).toContain('剑2');
@@ -25,7 +25,7 @@ describe('套装', () => {
     expect(w.stats.critDmg).toBeGreaterThan(0);
   });
   it('符 3 件：符类多发一张；同五行 2 件加伤害', () => {
-    const w = createWorld({ seed: 1, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 1, mode: 'vigil', danger: 0 });
     w.weapons.length = 0;
     grantWeapon(w, 'talisman');
     grantWeapon(w, 'thunder');

@@ -8,7 +8,7 @@
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { createWorld, step, Ev } from '../src/core/index.ts';
-import type { Difficulty } from '../src/content/waves.ts';
+import { DIFFICULTIES, type Difficulty } from '../src/content/waves.ts';
 import type { MapId } from '../src/content/maps.ts';
 import { Bot, type Build, type Skill } from './bots.ts';
 
@@ -27,7 +27,7 @@ export interface RunResult {
 }
 
 export function runOne(seed: number, diff: Difficulty, skill: Skill, build: Build, map: MapId = 'snow'): RunResult {
-  const w = createWorld({ seed, mode: 'vigil', difficulty: diff, map });
+  const w = createWorld({ seed, mode: 'vigil', danger: DIFFICULTIES[diff].danger, map });
   const bot = new Bot(skill, build, seed);
   let firstLevel = -1;
   let levels3 = 0;

@@ -27,7 +27,8 @@ import {
 } from '../content/enemies.ts';
 import { ARENA, DROPS, MERCY, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
 import { MAPS, pushOut } from '../content/maps.ts';
-import { CALM, DAWN_TICK, DIFFICULTIES, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE } from '../content/waves.ts';
+import { CALM, DANGERS, DAWN_TICK, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
+import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
@@ -74,8 +75,30 @@ const scratch2 = new Int32Array(MAX_ENEMIES);
 
 export function createWorld(setup: Setup): World {
   const w = new World(setup);
-  addWeapon(w, PLAYER.start);
+  w.schedule = schedule(w);
+  addWeapon(w, CHARACTERS[w.setup.character ?? 'xiaodao'].start);
+  w.hp = w.stats.hpMax;
   return w;
+}
+
+/** 这一档、这几条咒印下的定点事件：精英按危险档晚到、多来几只，危险 5 两只尸王；按时间重排 */
+function schedule(w: World): WaveEvent[] {
+  const d = DANGERS[w.setup.danger];
+  const extra = d.eliteExtra + (w.setup.curses?.includes('elites') ? 1 : 0);
+  const out = EVENTS.map((e): WaveEvent => {
+    if (e.kind === 'elite') return { ...e, at: e.at + d.eliteLate, count: e.count + extra };
+    return e;
+  });
+  // 稳定排序：同一拍的事件保持原来的先后
+  return out.map((e, k) => ({ e, k })).sort((a, b) => a.e.at - b.e.at || a.k - b.k).map((x) => x.e);
+}
+
+function has(w: World, c: 'fast' | 'noheal' | 'more'): boolean {
+  return w.setup.curses?.includes(c) ?? false;
+}
+
+function perk(w: World, id: PerkId): number {
+  return w.setup.perks?.[id] ?? 0;
 }
 
 // ───────────────────────── 一拍 ─────────────────────────
@@ -128,12 +151,44 @@ export function step(w: World, dir: number, choice = -1): void {
   fireWeapons(w, g);
   moveShots(w, g);
   touchPlayer(w, g);
+  if (w.quake) quake(w, g, w.x, w.y, CHAR_FX.pangArea, CHAR_FX.pangKnock);
+  if (w.setup.character === 'gengfu' && w.tick % (60 * 30) === 0) {
+    // 更夫的锣：整分钟全屏的怪往后退（Boss 也退，只是退得少：steady）
+    quake(w, g, w.x, w.y, CHAR_FX.gongArea, CHAR_FX.gongKnock);
+    w.ev.push(Ev.Gong, w.x, w.y, 0, CHAR_FX.gongArea);
+  }
   movePickups(w);
   regen(w);
   if (w.phase !== 'play') return;
+  if (w.hp <= 0 && w.revives > 0) revive(w, g);
   if (w.hp <= 0) return end(w, false);
-  if (w.tick >= DAWN_TICK) return end(w, true);
+  if (!w.setup.endless && w.tick >= DAWN_TICK) return end(w, true);
   if (w.pendingLevels > 0) openChoices(w);
+}
+
+/** 把 (x, y) 半径 r 里的怪往外推（不伤血） */
+function quake(w: World, g: Grid, x: number, y: number, r: number, knock: number): void {
+  w.quake = false;
+  const n = g.query(w, x, y, r);
+  for (let q = 0; q < n; q++) {
+    const i = g.out[q]!;
+    const dx = w.eX[i]! - x;
+    const dy = w.eY[i]! - y;
+    const d = fsqrt(dx * dx + dy * dy);
+    if (d <= 0) continue;
+    const k = (knock * (1 - ENEMIES[w.eKind[i]!]!.steady)) / d / 3;
+    w.eKX[i]! += dx * k;
+    w.eKY[i]! += dy * k;
+  }
+}
+
+/** 永久加成"复活"：原地站起来，半血，短暂无敌，震开身边 */
+function revive(w: World, g: Grid): void {
+  w.revives--;
+  w.hp = Math.max(1, Math.round(w.stats.hpMax * REVIVE.hp));
+  w.invuln = REVIVE.invuln;
+  quake(w, g, w.x, w.y, REVIVE.area, REVIVE.knock);
+  w.ev.push(Ev.Revive, w.x, w.y, w.revives, REVIVE.area);
 }
 
 function end(w: World, won: boolean): void {
@@ -158,7 +213,7 @@ function movePlayer(w: World, dir: number): void {
 
 function regen(w: World): void {
   if (w.stats.regen <= 0 || w.hp >= w.stats.hpMax) return;
-  w.regenAcc += w.stats.regen / 30;
+  w.regenAcc += (w.stats.regen * (has(w, 'noheal') ? CURSE_FX.noheal : 1)) / 30;
   if (w.regenAcc >= 1) {
     w.hp = Math.min(w.stats.hpMax, w.hp + 1);
     w.regenAcc -= 1;
@@ -178,9 +233,11 @@ function hurt(w: World, dmg: number): void {
     w.invuln = PLAYER.invuln;
     return;
   }
-  const diff = DIFFICULTIES[w.setup.difficulty];
-  const d = Math.max(1, Math.round(dmg * diff.dmgMul * (w.tick < EARLY_TICKS ? diff.earlyDmg : 1) - w.stats.armor));
+  const diff = DANGERS[w.setup.danger];
+  const d = Math.max(1, Math.round(dmg * diff.dmgMul * (w.tick < EARLY_TICKS ? diff.earlyDmg : 1) * (w.setup.assist ? ASSIST.dmg : 1) - w.stats.armor));
   w.hp -= d;
+  // 胖师叔：挨打时震开身边（下一拍有格子时结算）
+  if (w.setup.character === 'pang') w.quake = true;
   // 第一局 3 分钟前不会死：血最少留 1
   if (w.setup.firstRun && w.tick < FIRST_RUN_GUARD && w.hp < 1) w.hp = 1;
   w.invuln = PLAYER.invuln;
@@ -220,11 +277,12 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   const i = freeEnemySlot(w);
   if (i < 0) return -1;
   const def = ENEMY_BY_KIND[kind];
-  const diff = DIFFICULTIES[w.setup.difficulty];
+  const diff = DANGERS[w.setup.danger];
   const min = minuteOf(w);
   const big = def.elite || def.boss;
   const size = big ? 1 : 0.88 + w.rSpawn.next() * 0.24;
-  const hp = def.boss ? def.hp * diff.hpMul : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
+  const twin = kind === 'boss' && diff.twinBoss ? TWIN_BOSS_HP : 1;
+  const hp = def.boss ? def.hp * diff.hpMul * twin : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
   w.eAlive[i] = 1;
   w.eGen[i]!++;
   w.eKind[i] = def.code;
@@ -237,7 +295,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eHp[i] = hp;
   w.eHpMax[i] = hp;
   // 引魂灯：每级怪快 5%
-  w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2) * (1 + 0.05 * w.stats.curse);
+  w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2) * (1 + 0.05 * w.stats.curse) * (has(w, 'fast') ? CURSE_FX.fastSpeed : 1);
   w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min);
   w.eR[i] = def.r * size;
   w.eSize[i] = size;
@@ -289,11 +347,14 @@ function pickKind(w: World, mix: Partial<Record<EnemyKind, number>>): EnemyKind 
 
 function spawnWaves(w: World): void {
   // 定点事件
-  while (w.nextEvent < EVENTS.length && w.tick >= EVENTS[w.nextEvent]!.at) {
-    const e = EVENTS[w.nextEvent++]!;
+  while (w.nextEvent < w.schedule.length && w.tick >= w.schedule[w.nextEvent]!.at) {
+    const e = w.schedule[w.nextEvent++]!;
     if (e.kind === 'boss') {
-      const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.8);
-      spawnEnemy(w, e.enemy, x, y);
+      const n = e.enemy === 'boss' && DANGERS[w.setup.danger].twinBoss ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.8);
+        spawnEnemy(w, e.enemy, x, y);
+      }
     } else if (e.kind === 'front') {
       for (let k = 0; k < e.count; k++) {
         const a = w.face + w.rSpawn.int(44) - 22;
@@ -326,17 +387,20 @@ function spawnWaves(w: World): void {
     }
   }
   // 按分钟补怪
-  const m = MINUTES[Math.min(MINUTES.length - 1, Math.floor(minuteOf(w)))]!;
-  const diff = DIFFICULTIES[w.setup.difficulty];
-  // 引魂灯：每级怪多 10%
-  const curse = 1 + 0.1 * w.stats.curse;
+  const mi = Math.min(MINUTES.length - 1, Math.floor(minuteOf(w)));
+  const m = MINUTES[mi]!;
+  const diff = DANGERS[w.setup.danger];
+  // 危险 0：怪种比例晚一分钟（更难的常规怪晚出）
+  const mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
+  // 引魂灯：每级怪多 10%；咒印"众"：多 25%
+  const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
   const calm = w.tick < w.calmUntil ? CALM.keepMul : 1;
   const keep = m.keep * diff.countMul * curse * calm;
   if (w.eCount >= keep) return;
   w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * calm) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
-    const kind = pickKind(w, m.mix);
+    const kind = pickKind(w, mix);
     if (kind === 'water') {
       // 水鬼从主角附近的地里冒出来
       const a = w.rSpawn.int(DIR_N);
@@ -405,7 +469,7 @@ function moveEnemies(w: World): void {
       continue;
     }
     const slow = w.eSlow[i];
-    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * (w.tick < OPEN_TICKS ? DIFFICULTIES[w.setup.difficulty].openSlow : 1);
+    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * (w.tick < OPEN_TICKS ? DANGERS[w.setup.danger].openSlow : 1);
     let vx = dx;
     let vy = dy;
     switch (kind) {
@@ -753,7 +817,7 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
     if (w.eHitAt[k]! > w.tick) return false;
     w.eHitAt[k] = w.tick + rehit;
   }
-  const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck) + w.stats.critAdd;
+  const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck) + w.stats.critAdd + (w.moving && w.setup.character === 'jianxia' ? CHAR_FX.jianxiaCrit : 0);
   // 捆仙绳：捆住的挨打加倍
   const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
   // 镇 3 件：被减速（近身、镇魂铃光环）的怪挨打 +25%
@@ -812,6 +876,11 @@ function spawnMiniCrane(w: World, k: number, x: number, y: number): void {
 /** 小纸鹤的编号从这里起（和常驻的纸鹤分开：不算数量、到时候就散） */
 const MINI_CRANE = 1000;
 
+function otherBoss(w: World): number {
+  for (let j = 0; j < MAX_ENEMIES; j++) if (w.eAlive[j] && ENEMIES[w.eKind[j]!]!.boss) return j;
+  return -1;
+}
+
 function killEnemy(w: World, i: number): void {
   const def = ENEMIES[w.eKind[i]!]!;
   w.eAlive[i] = 0;
@@ -829,8 +898,10 @@ function killEnemy(w: World, i: number): void {
       w.bellHealAt = w.tick + 6;
     }
   }
-  if (w.bossSlot === i) w.bossSlot = -1;
+  if (w.bossSlot === i) w.bossSlot = otherBoss(w);
   if (def.kind === 'boss') {
+    // 危险 5 两只尸王：两只都倒了才算
+    for (let j = 0; j < MAX_ENEMIES; j++) if (w.eAlive[j] && ENEMIES[w.eKind[j]!]!.kind === 'boss') return;
     w.bossKilled = true;
     if (w.phase === 'play') end(w, true);
     return;
@@ -1209,7 +1280,9 @@ function fireTalismans(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: n
   for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
   let taken = 0;
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.talisman);
-  for (let j = 0; j < e.amount; j++) {
+  // 符师：15% 多发一张
+  const amount = e.amount + (w.setup.character === 'fushi' && w.rWeapon.next() < CHAR_FX.fushiExtra ? 1 : 0);
+  for (let j = 0; j < amount; j++) {
     let best = -1;
     let bd = Infinity;
     for (let q = taken; q < n; q++) {
@@ -1792,7 +1865,7 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
 
 function movePickups(w: World): void {
   // 磁吸半径随等级涨（每级 +1.5%，40 级封顶 +60%）：后期怪多、走位忙，不用一颗颗去碰
-  const m = w.stats.magnet * DIFFICULTIES[w.setup.difficulty].magnetMul * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
+  const m = w.stats.magnet * DANGERS[w.setup.danger].magnetMul * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
   const m2 = m * m;
   for (let i = 0; i < MAX_DROPS; i++) {
     if (!w.dAlive[i]) continue;
@@ -1833,7 +1906,7 @@ function collect(w: World, i: number): void {
       w.coins += val + (w.stats.coinBonus > 0 && w.rDrop.next() < w.stats.coinBonus ? 1 : 0);
       break;
     case Drop.Bun:
-      heal(w, val);
+      heal(w, val * (has(w, 'noheal') ? CURSE_FX.noheal : 1) * (w.setup.character === 'caiyao' ? CHAR_FX.caiyaoBun : 1));
       break;
     case Drop.Scroll:
       for (let s = 0; s < MAX_DROPS; s++) if (w.dAlive[s] && w.dKind[s] === Drop.Soul) w.dPull[s] = PICKUP.pull;
@@ -1853,6 +1926,7 @@ function gainXp(w: World, v: number): void {
     w.level++;
     w.pendingLevels++;
     w.ev.push(Ev.LevelUp, w.x, w.y, w.level);
+    if (w.setup.character === 'xiaodao' && w.level % CHAR_FX.xiaodaoEvery === 0) recompute(w);
   }
 }
 
@@ -1877,6 +1951,24 @@ function recompute(w: World): void {
   s.durMul = 1 + 0.1 * p('modou');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
+  // 永久加成（实盘为空）
+  s.might *= 1 + PERK_FX.liliang * perk(w, 'liliang');
+  s.armor += PERK_FX.huti * perk(w, 'huti');
+  s.hpMax += PERK_FX.tipo * perk(w, 'tipo');
+  s.speed *= 1 + PERK_FX.shenxing * perk(w, 'shenxing');
+  s.cdMul *= 1 - PERK_FX.lingqi * perk(w, 'lingqi');
+  s.xpMul += PERK_FX.wuxing * perk(w, 'wuxing');
+  s.luck += PERK_FX.fuyuan * perk(w, 'fuyuan');
+  s.coinBonus += PERK_FX.fuyuan * perk(w, 'fuyuan');
+  // 角色被动
+  const ch = w.setup.character;
+  if (ch === 'xiaodao') {
+    const up = 1 + CHAR_FX.xiaodaoStep * Math.floor(w.level / CHAR_FX.xiaodaoEvery);
+    s.might *= up;
+    s.areaMul *= up;
+    s.durMul *= up;
+    s.speed *= up;
+  } else if (ch === 'caiyao') s.xpMul += CHAR_FX.caiyaoXp;
   // 套装：按类型和五行数件数
   const types: Partial<Record<WeaponType, number>> = {};
   const els: Partial<Record<Element, number>> = {};
@@ -1910,6 +2002,7 @@ function recompute(w: World): void {
     const d = WEAPONS[o.id];
     ws.dmg *= (elMul[d.el] ?? 1) * (d.type === '灵' && t('灵') >= 3 ? 1.25 : 1);
     if (d.type === '符' && t('符') >= 3) ws.amount += 1;
+    if (d.type === '符' && ch === 'fushi') ws.cd *= CHAR_FX.fushiCd;
     return ws;
   });
 }
@@ -1977,8 +2070,8 @@ function openChoices(w: World): void {
   const pool = choicePool(w);
   const picks: Choice[] = [];
   // 新手档前几次升级：先从法器里抽两张，保证有能打的（主线 #144）
-  const arms = w.level <= DIFFICULTIES[w.setup.difficulty].armsFirst + 1 ? 2 : 0;
-  while (picks.length < 3 && pool.length > 0) {
+  const arms = w.level <= DANGERS[w.setup.danger].armsFirst + 1 ? 2 : 0;
+  while (picks.length < w.cardCount && pool.length > 0) {
     const only = picks.length < arms && pool.some((p) => p.c.kind === 'weapon');
     let total = 0;
     for (const p of pool) if (!only || p.c.kind === 'weapon') total += p.weight;

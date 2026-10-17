@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { BONE, ENEMY_BY_KIND, LORD, PALANQUIN, WATER, WEASEL } from '../src/content/enemies.ts';
-import { CALM, DIFFICULTIES, EVENTS, OPEN_TICKS } from '../src/content/waves.ts';
+import { CALM, DANGERS, EVENTS, OPEN_TICKS } from '../src/content/waves.ts';
 import { createWorld, Drop, Ev, grantWeapon, spawnNow, step, type World } from '../src/core/index.ts';
 
 /** 一个干净的场：没有法器（不会误伤），开场事件已经过了，不再按分钟补怪 */
 function quiet(seed = 5): World {
-  const w = createWorld({ seed, mode: 'vigil', difficulty: 'normal' });
+  const w = createWorld({ seed, mode: 'vigil', danger: 2 });
   w.weapons.length = 0;
   w.wstats.length = 0;
   w.nextEvent = 1 << 30;
@@ -142,14 +142,14 @@ describe('新怪', () => {
 describe('新手保护', () => {
   it('新手档开场怪走得慢：原地不动也撑得过第一次升级', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
-      const w = createWorld({ seed, mode: 'vigil', difficulty: 'easy' });
+      const w = createWorld({ seed, mode: 'vigil', danger: 0 });
       while (w.level < 2 && w.phase === 'play' && w.tick < OPEN_TICKS * 2) step(w, 0, -1);
       expect(w.level).toBeGreaterThanOrEqual(2);
     }
   });
 
   it('第一局 3 分钟前不会死（原地不动、一直选第一张）', () => {
-    const w = createWorld({ seed: 9, mode: 'vigil', difficulty: 'easy', firstRun: true });
+    const w = createWorld({ seed: 9, mode: 'vigil', danger: 0, firstRun: true });
     let lowest = 100;
     while (w.tick < 30 * 180 && w.phase !== 'over') {
       step(w, 0, 0);
@@ -160,9 +160,9 @@ describe('新手保护', () => {
   });
 
   it('新手档前几次升级至少两张是法器', () => {
-    const w = createWorld({ seed: 4, mode: 'vigil', difficulty: 'easy' });
+    const w = createWorld({ seed: 4, mode: 'vigil', danger: 0 });
     let seen = 0;
-    while (seen < DIFFICULTIES.easy.armsFirst && w.tick < 30 * 300 && w.phase !== 'over') {
+    while (seen < DANGERS[0]!.armsFirst && w.tick < 30 * 300 && w.phase !== 'over') {
       step(w, 0, -1);
       if (w.phase === 'choose') {
         expect(w.choices.filter((c) => c.kind === 'weapon').length).toBeGreaterThanOrEqual(2);
@@ -170,7 +170,7 @@ describe('新手保护', () => {
         step(w, 0, 0);
       }
     }
-    expect(seen).toBe(DIFFICULTIES.easy.armsFirst);
+    expect(seen).toBe(DANGERS[0]!.armsFirst);
   });
 });
 

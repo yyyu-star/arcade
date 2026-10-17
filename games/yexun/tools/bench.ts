@@ -3,11 +3,11 @@
  * 用一个会绕圈走、升级选第一个的简单输入跑完整一局，报每拍耗时（平均、最慢）、场上怪和子弹的峰值、结局（DESIGN.md 第 6 节的预算：电脑 ≤ 0.5 ms）。
  */
 import { createWorld, step } from '../src/core/index.ts';
-import type { Difficulty } from '../src/content/waves.ts';
+import { DIFFICULTIES, type Difficulty } from '../src/content/waves.ts';
 
 const seed = Number(process.argv[2] ?? 1);
 const diff = (process.argv[3] ?? 'normal') as Difficulty;
-const w = createWorld({ seed, mode: 'vigil', difficulty: diff });
+const w = createWorld({ seed, mode: 'vigil', danger: DIFFICULTIES[diff].danger });
 let worst = 0;
 let total = 0;
 let peakE = 0;

@@ -3,14 +3,15 @@
  * `step` 原地修改这里的东西（主线批准的例外，见模块 AGENTS.md 第 3 节）。
  */
 import { ENEMIES } from '../content/enemies.ts';
-import type { Difficulty } from '../content/waves.ts';
+import type { Danger, WaveEvent } from '../content/waves.ts';
+import { CHARACTERS, CURSE_IDS, MAX_CURSES, PERK_FX, PERKS, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { MAPS, type Block, type MapId } from '../content/maps.ts';
 import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 7;
+export const RULES_VERSION = 8;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -109,11 +110,36 @@ export interface Choice {
 export interface Setup {
   seed: number;
   mode: 'vigil';
-  difficulty: Difficulty;
+  /** 危险档 0–5（DESIGN.md 13.2） */
+  danger: Danger;
   /** 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2） */
   firstRun?: boolean;
   /** 地图（缺省雪原） */
   map?: MapId;
+  /** 角色（缺省小道士；实盘固定小道士） */
+  character?: CharacterId;
+  /** 咒印，最多 MAX_CURSES 条（实盘为空） */
+  curses?: readonly CurseId[];
+  /** 永久加成的等级（实盘为空） */
+  perks?: Partial<Record<PerkId, number>>;
+  /** 连死以后开的"降低伤害"（成绩不进总榜） */
+  assist?: boolean;
+  /** 无尽：天亮不收工，一直打到倒下 */
+  endless?: boolean;
+}
+
+/** 整理开局设置：咒印去重、截到上限，加成等级截到表里的最高级（录像和存档里来的数据不一定干净） */
+export function normalizeSetup(s: Setup): Setup {
+  const curses = CURSE_IDS.filter((c) => s.curses?.includes(c)).slice(0, MAX_CURSES);
+  const perks: Partial<Record<PerkId, number>> = {};
+  for (const [id, lv] of Object.entries(s.perks ?? {}) as [PerkId, number][]) {
+    if (!(id in PERKS)) continue;
+    const n = Math.max(0, Math.min(PERKS[id].cost.length, Math.floor(lv)));
+    if (n > 0) perks[id] = n;
+  }
+  const character = s.character && s.character in CHARACTERS ? s.character : 'xiaodao';
+  const danger = (Math.max(0, Math.min(5, Math.floor(s.danger))) || 0) as Danger;
+  return { ...s, danger, character, curses, perks };
 }
 
 export class World {
@@ -260,13 +286,27 @@ export class World {
 
   // 刷怪
   spawnAcc = 0;
+  /** 这一局的定点事件（按危险档、咒印排好；createWorld 填） */
+  schedule: WaveEvent[] = [];
   nextEvent = 0;
   bossSlot = -1;
 
   readonly ev = new Events();
 
-  constructor(setup: Setup) {
+  /** 复活还剩几次（永久加成"复活"） */
+  revives = 0;
+  /** 升级时给几张卡（永久加成"多一张"：4） */
+  cardCount = 3;
+  /** 胖师叔：这一拍挨了打，下一拍震开身边 */
+  quake = false;
+
+  constructor(raw: Setup) {
+    const setup = normalizeSetup(raw);
     this.setup = setup;
+    const perk = (id: PerkId): number => setup.perks?.[id] ?? 0;
+    this.rerolls = setup.curses?.includes('noreroll') ? 0 : 2 + perk('shuaxin') * PERK_FX.shuaxin;
+    this.revives = perk('fuhuo') * PERK_FX.fuhuo;
+    this.cardCount = 3 + perk('kapian') * PERK_FX.kapian;
     this.blocks = MAPS[setup.map ?? 'snow'].blocks;
     const s = setup.seed;
     this.rSpawn = new Rng(s, 'spawn');

@@ -73,10 +73,12 @@ export const DAWN_TICK = 15 * 60 * S;
 /** 怪随时间变硬：血量 × (1 + 每分钟 hpPerMin)，伤害 × (1 + 每分钟 dmgPerMin) */
 export const SCALE = { hpPerMin: 0.29, dmgPerMin: 0.09 };
 
-export type Difficulty = 'easy' | 'normal' | 'hard';
+/** 危险档 0–5（DESIGN.md 13.2）。危险 2 是配平的基准（4c 按它调到普通玩家 55–65%），别的档相对它偏移 */
+export type Danger = 0 | 1 | 2 | 3 | 4 | 5;
+export const DANGER_IDS: readonly Danger[] = [0, 1, 2, 3, 4, 5];
 
-export interface DifficultyDef {
-  id: Difficulty;
+export interface DangerDef {
+  id: Danger;
   name: string;
   /** 选档卡上的星（电脑多强，balance.md 第 5 节） */
   stars: number;
@@ -84,14 +86,22 @@ export interface DifficultyDef {
   dmgMul: number;
   /** 刷怪量 */
   countMul: number;
-  /** 开场 OPEN_TICKS 拍里怪走路的速度倍数（新手档：怪只会慢慢靠近，原地不动也撑得过第一次升级） */
+  /** 开场 OPEN_TICKS 拍里怪走路的速度倍数（危险 0：怪只会慢慢靠近，原地不动也撑得过第一次升级） */
   openSlow: number;
-  /** 吸魂珠的范围倍数（新手档：剑砍死的怪掉的珠子站着也吸得到） */
+  /** 吸魂珠的范围倍数（危险 0：剑砍死的怪掉的珠子站着也吸得到） */
   magnetMul: number;
   /** 前 EARLY_TICKS 拍挨打的伤害倍数（受伤补偿：开局手忙脚乱时少掉点血） */
   earlyDmg: number;
-  /** 前几次升级保证至少两张是法器（新手档：先给能打的） */
+  /** 前几次升级保证至少两张是法器（危险 0：先给能打的） */
   armsFirst: number;
+  /** 每分钟的怪种比例往后挪几分钟（−1：更难的常规怪晚一分钟出；13.2"D1 加新怪"就是从 −1 回到 0） */
+  mixShift: number;
+  /** 精英晚到多少拍（13.2"D2 精英波提前"：危险 0、1 晚 30 秒，危险 2 起按时间线） */
+  eliteLate: number;
+  /** 每次精英多来几只（13.2"D4 精英窗口加宽"） */
+  eliteExtra: number;
+  /** 两只尸王，各 75% 血（危险 5） */
+  twinBoss: boolean;
   /** 一句话 */
   blurb: string;
 }
@@ -103,8 +113,25 @@ export const OPEN_TICKS = 30 * S;
 /** 第一局：3 分钟前血最少留 1（DESIGN.md 13.2 新手保护） */
 export const FIRST_RUN_GUARD = 180 * S;
 
-export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
-  easy: { id: 'easy', name: '新手', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, blurb: '第一次玩选这个' },
-  normal: { id: 'normal', name: '普通', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, blurb: '会躲会选就能撑到天亮' },
-  hard: { id: 'hard', name: '高手', stars: 3, hpMul: 1.4, dmgMul: 1.35, countMul: 1.15, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, blurb: '怪更多更硬' },
+/**
+ * 逐档继承（13.2）：D0 新手照顾 → D1 怪种按时出 → D2 精英按时出（配平基准）→ D3 血和伤害 +12% → D4 +26%、精英多一只 → D5 +40%、两只尸王。
+ * 实盘四档固定用危险 0 / 2 / 3 / 4（DESIGN.md 4.1）。
+ */
+export const DANGERS: Record<Danger, DangerDef> = {
+  0: { id: 0, name: '危险 0', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, mixShift: -1, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '第一次玩选这个' },
+  1: { id: 1, name: '危险 1', stars: 1, hpMul: 0.86, dmgMul: 0.8, countMul: 0.92, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '怪种按时出' },
+  2: { id: 2, name: '危险 2', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '会躲会选就能撑到天亮' },
+  3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.12, dmgMul: 1.12, countMul: 1.05, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '怪更硬、下手更重' },
+  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.26, dmgMul: 1.26, countMul: 1.1, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
+  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.4, dmgMul: 1.4, countMul: 1.15, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
+};
+/** 两只尸王时每只的血 */
+export const TWIN_BOSS_HP = 0.75;
+
+/** 菜单上的三档（第 5 步选档界面做完以前沿用）：新手 / 普通 / 高手 = 危险 0 / 2 / 4，balance.md 第 3 节按这三档量 */
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export const DIFFICULTIES: Record<Difficulty, { id: Difficulty; name: string; stars: number; danger: Danger; blurb: string }> = {
+  easy: { id: 'easy', name: '新手', stars: 1, danger: 0, blurb: '第一次玩选这个' },
+  normal: { id: 'normal', name: '普通', stars: 2, danger: 2, blurb: '会躲会选就能撑到天亮' },
+  hard: { id: 'hard', name: '高手', stars: 3, danger: 4, blurb: '怪更多更硬' },
 };
