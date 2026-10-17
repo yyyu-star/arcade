@@ -11,6 +11,7 @@ import {
   inviteText,
   inviteUrl,
   mountSocial,
+  parseFriend,
   parseInvites,
   pickInvite,
   postPresence,
@@ -131,7 +132,25 @@ describe('接口：读', () => {
     expect(await fetchInvites({ fetchImpl: f })).toEqual({ status: 0, invites: [] });
   });
 
-  it('好友列表：online 只认 true，where 原样', async () => {
+  it('好友列表：平台的真实形状 { userId, displayName, avatar }（platform-backend 15.4）统一成 id、name，原样字段留着', async () => {
+    const { f } = fake(
+      json({
+        friends: [
+          { userId: 'u1', displayName: '老王', avatar: 3, online: true, where: { place: 'room', game: 'cards', room: 'ABC123', seats: '3/4' } },
+          { userId: 'u2', displayName: '小李', avatar: null, online: false },
+          { displayName: '没有 id' },
+        ],
+      }),
+    );
+    expect(await fetchFriends({ fetchImpl: f })).toEqual([
+      { id: 'u1', userId: 'u1', name: '老王', displayName: '老王', avatar: 3, online: true, where: { place: 'room', game: 'cards', room: 'ABC123', seats: '3/4' } },
+      { id: 'u2', userId: 'u2', name: '小李', displayName: '小李', avatar: null, online: false },
+    ]);
+    expect(parseFriend(null)).toBeNull();
+    expect(parseFriend({ userId: 7 })).toBeNull();
+  });
+
+  it('好友列表：online 只认 true，where 原样（也认 id、name）', async () => {
     const { f, calls } = fake(
       json({ friends: [{ id: 'u1', name: '老王', online: true, where: { place: 'lobby' } }, { id: 'u2', name: '小李', online: 'yes' }, { name: 'x' }] }),
       json({}, 500),

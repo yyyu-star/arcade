@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.12.1
+
+- **social 的好友列表一直是空的**：`fetchFriends` 只认每项的 `id`、`name`，平台 `GET /api/friends` 每项一直是公开资料 `{ userId, displayName, avatar }`（`docs/platform-backend.md` 15.4），
+  所以全被当成形状不对丢掉了，游戏里"叫他来"出不来。改成认 `userId` / `displayName`（也兼容 `id` / `name`），统一成 `Friend.id`、`Friend.name`，平台原样的字段（`avatar` 等）留着。新导出 `parseFriend`。
+- 测试：按平台的真实形状加一条（`test/social.test.ts`）。邀请（`from: { id, name }`、`until` 毫秒）平台照这个形状做，不用改。
+
 ## 0.12.0
 
 社交第一期的两个部件（仓库根 `docs/social.md` 1.1–1.3；接口形状主线定、平台实现）。都只在调用时碰 DOM，import 时不碰；已有入口没改。

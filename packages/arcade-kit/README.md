@@ -395,7 +395,7 @@ social?.presenceNow(true);                          // 进房、换房时马上�
 - 横条在页面顶上（让出刘海），一次一条，先到期的先弹；过期的、已经在那个房间里的不弹。"去"先 `dismiss`（keepalive）再跳 `/games/<id>/?room=<码>`，
   "不了"`dismiss` 后弹下一条，到期自己收起。按钮 `data-key` 是 `invite:go`、`invite:no`；`log` 给 `位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期`。
 - 发邀请 `sendInvite({ to, game, room })` → `{ ok: true, id }` 或 `{ ok: false, error: 'limit' | 'blocked' | 'login' | 'failed', retryAfter? }`（429 是每天 50 条、同一好友 1 分钟 1 条超了）。
-  `fetchFriends()` 带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
+  `fetchFriends()` 把平台每项的公开资料 `{ userId, displayName, avatar }` 统一成 `id`、`name`（原样字段留着），带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
 - 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
 
 ## 房间怎么守规矩
