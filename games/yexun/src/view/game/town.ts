@@ -11,7 +11,7 @@ import type { Raid } from '../../explore/raid.ts';
 import type { RaidBlock } from '../../explore/blocks.ts';
 import type { Yard } from '../../explore/mapgen.ts';
 import { artRng } from '../art/draw.ts';
-import type { Style } from '../art/sprites10.ts';
+import { HOUSE_Z, WALL_H_PERIOD, WALL_OV, WALL_RIDGE, WALL_V_PERIOD, WALL_Z, gatehouse, houseH, houseHLights, houseV, houseVLights, wallHBody, wallHEnd, wallKnot, wallVBody, wallVNorth, wallVSouth, type Piece, type Style } from '../art/sprites10.ts';
 
 /** 分块（只放软的东西：积雪、影子、院里的石纹和碎砖）：世界单位边长、贴图每单位几个像素。硬边的石板、方砖、水纹走平铺贴图，手机放大也清楚 */
 const CHUNK = 1200;
@@ -72,6 +72,11 @@ export class Town {
   private readonly darkImg: Phaser.GameObjects.Image;
   private readonly dctx: CanvasRenderingContext2D;
   private readonly view = new Phaser.Geom.Rectangle();
+  /** 建筑的图：清晰度、画过的贴图名（局终删）、要按镜头裁掉的、主角绕到后面时要变淡的正房 */
+  private readonly bres: number;
+  private readonly made: string[] = [];
+  private readonly culls: { o: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite; x: number; y: number; w: number; h: number }[] = [];
+  private readonly houses: { o: Phaser.GameObjects.Image; x0: number; x1: number; y0: number; y1: number }[] = [];
   private readonly dw = 256;
   private readonly dh = 128;
 
@@ -89,6 +94,7 @@ export class Town {
       this.bands.push({ x: s * cell + pad, y: 0, w: cell - 2 * pad, h: this.size });
     }
     this.tileRes = Math.max(1, Math.min(2, scene.cameras.main.zoom));
+    this.bres = d.lowMem ? Math.min(this.tileRes, 1.25) : this.tileRes;
     this.findSteps();
     this.dress();
     this.buildFlats();
@@ -102,84 +108,143 @@ export class Town {
 
   // ───────────────────────── 建筑 ─────────────────────────
 
-  /** 样式：山寺全是红墙黄瓦；其余地方庙和石兽院是红墙黄瓦，渡口的屋子是木板茅草，古镇白墙青瓦 */
-  private styleOf(b: RaidBlock): Style {
-    const tpl = this.raid.setup.template;
-    if (tpl === 'shansi') return 'temple';
-    if (b.look === 'hall') return 'temple';
-    if (b.look === 'house') return tpl === 'dukou' ? 'hut' : 'town';
-    const cx = b.x + b.w / 2;
-    const cy = b.y + b.h / 2;
-    const red = this.raid.map.yards.some((y) => (y.kind === 'temple' || y.kind === 'vault') && cx >= y.x - 2 && cx <= y.x + y.w + 2 && cy >= y.y - 2 && cy <= y.y + y.h + 2);
-    return red ? 'temple' : 'town';
+  /** 建筑贴图：按需画一次（同一局里同样式、同尺寸的共用），局终删掉。横竖两个方向的缩放各自取整到整像素，平铺的周期不漂 */
+  private tex(key: string, pc: Piece): { key: string; sx: number; sy: number } {
+    const res = this.bres;
+    const pw = Math.max(1, Math.round(pc.w * res));
+    const ph = Math.max(1, Math.round(pc.h * res));
+    const sx = pw / pc.w;
+    const sy = ph / pc.h;
+    if (!this.scene.textures.exists(key)) {
+      const t = this.scene.textures.createCanvas(key, pw, ph)!;
+      const c = t.getContext();
+      c.setTransform(sx, 0, 0, sy, pc.ax * sx, pc.ay * sy);
+      pc.draw(c);
+      t.refresh();
+      this.made.push(key);
+    }
+    return { key, sx, sy };
   }
 
-  /** 把规则层挡路的矩形画成俯视角的中式建筑：墙头瓦、正房瓦顶（门窗灯笼、脊头、檐角）、墙角翘檐、院里的棚；深度按脚底 */
+  /** 摆一张建筑图：参考点放在 (rx, ry)；flip 时以参考点为轴水平翻转 */
+  private place(key: string, pc: Piece, rx: number, ry: number, depth: number, flip = false): Phaser.GameObjects.Image {
+    const t = this.tex(key, pc);
+    const x = flip ? rx - (pc.w - pc.ax) : rx - pc.ax;
+    const im = this.scene.add.image(x, ry - pc.ay, t.key).setOrigin(0, 0).setScale(1 / t.sx, 1 / t.sy).setDepth(depth).setFlipX(flip);
+    this.cull(im, x, ry - pc.ay, pc.w, pc.h);
+    return im;
+  }
+
+  private cull(o: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite, x: number, y: number, w: number, h: number): void {
+    this.culls.push({ o, x, y, w, h });
+  }
+
+  /** 样式：山寺全是红墙黄瓦；其余地方庙和石兽院是红墙黄瓦，渡口是木板墙（屋子茅草顶），古镇、教学镇白墙青瓦 */
+  private styleOf(b: { x: number; y: number; w: number; h: number }): Style {
+    const tpl = this.raid.setup.template;
+    if (tpl === 'shansi') return 'temple';
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const yard = this.raid.map.yards.find((y) => cx >= y.x - 2 && cx <= y.x + y.w + 2 && cy >= y.y - 2 && cy <= y.y + y.h + 2);
+    if (yard && (yard.kind === 'temple' || yard.kind === 'vault')) return 'temple';
+    return tpl === 'dukou' ? 'hut' : 'town';
+  }
+
+  /**
+   * 把规则层挡路的矩形画成俯视 3/4 的中式建筑（画法见 sprites10.ts）：
+   * 横墙 = 平铺的墙头 + 墙面，两头端头；竖墙 = 平铺的墙头，断口处收头、露墙面，和横墙交在墙角压一个脊头；
+   * 横门洞上一座门楼；正房一座一张图。深度：横的按脚底；竖墙、竖屋按北头（人走在旁边时压在上面，绕到北边才被挡住）。
+   */
   drawBlocks(): void {
-    const d = this.d;
     const T = RAID_WALL.thick;
-    for (const b of this.raid.map.blocks) {
+    const blocks = this.raid.map.blocks;
+    const hs = blocks.filter((b) => b.look === 'wall_h');
+    for (const b of blocks) {
       const foot = b.y + b.h;
       if (b.look === 'wall_h') {
-        const key = `qh_${this.styleOf(b)}`;
-        const n = Math.max(1, Math.round(b.w / 80));
-        const step = b.w / n;
-        const r = d.res(key);
-        for (let k = 0; k < n; k++) d.img(key, b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
+        const st = this.styleOf(b);
+        const pc = wallHBody(st, b.h);
+        const t = this.tex(`bq-h-${st}-${b.h}`, pc);
+        const ts = this.scene.add.tileSprite(b.x, b.y - pc.ay, b.w, pc.h, t.key).setOrigin(0, 0).setDepth(foot);
+        ts.setTileScale(1 / t.sx, 1 / t.sy);
+        ts.setTilePosition(((((b.x * 0.37) | 0) % WALL_H_PERIOD) + WALL_H_PERIOD) % WALL_H_PERIOD * t.sx, 0);
+        this.cull(ts, b.x, b.y - pc.ay, b.w, pc.h);
+        const ec = wallHEnd(st, b.h);
+        this.place(`bq-e-${st}-${b.h}`, ec, b.x, b.y, foot + 0.01);
+        this.place(`bq-e-${st}-${b.h}`, ec, b.x + b.w, b.y, foot + 0.01, true);
       } else if (b.look === 'wall_v') {
-        const key = `qv_${this.styleOf(b)}`;
-        const n = Math.max(1, Math.round(b.h / 80));
-        const step = b.h / n;
-        const r = d.res(key);
-        for (let k = 0; k < n; k++) d.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / r, step / 80 / r).setDepth(b.y + step * (k + 1));
+        const st = this.styleOf(b);
+        const cover = (yy: number): boolean => hs.some((h) => Math.abs(h.y - yy) < 0.5 && h.x <= b.x + 0.5 && h.x + h.w >= b.x + b.w - 0.5);
+        const nj = hs.some((h) => Math.abs(h.y + h.h - b.y) < 0.5 && h.x <= b.x + 0.5 && h.x + h.w >= b.x + b.w - 0.5);
+        const sj = cover(b.y + b.h);
+        const top = nj ? b.y - T / 2 - WALL_RIDGE : b.y - WALL_OV - WALL_Z + 1;
+        const bot = sj ? b.y + b.h + T / 2 - WALL_RIDGE + 2 : b.y + b.h + WALL_OV - WALL_RIDGE + 1;
+        const depth = b.y + 1;
+        const pc = wallVBody(st, b.w);
+        const t = this.tex(`bq-v-${st}-${b.w}`, pc);
+        const ts = this.scene.add.tileSprite(b.x - pc.ax, top, pc.w, bot - top, t.key).setOrigin(0, 0).setDepth(depth);
+        ts.setTileScale(1 / t.sx, 1 / t.sy);
+        ts.setTilePosition(0, ((((top * 0.61) | 0) % WALL_V_PERIOD) + WALL_V_PERIOD) % WALL_V_PERIOD * t.sy);
+        this.cull(ts, b.x - pc.ax, top, pc.w, bot - top);
+        if (!nj) this.place(`bq-vn-${st}-${b.w}`, wallVNorth(st, b.w), b.x, b.y, depth + 0.01);
+        if (!sj) this.place(`bq-vs-${st}-${b.w}`, wallVSouth(st, b.w), b.x, b.y + b.h, depth + 0.01);
       } else if (b.look === 'house' || b.look === 'hall') this.drawHouse(b);
-      else if (b.look === 'stall') d.img('stall', b.x + b.w / 2, foot + 4).setDepth(foot);
+      else if (b.look === 'stall') this.d.img('stall', b.x + b.w / 2, foot + 4).setDepth(foot);
       else if (b.look === 'terrace') {
         const n = Math.max(1, Math.round(b.w / 80));
         const step = b.w / n;
-        const r = d.res('terrace_h');
-        for (let k = 0; k < n; k++) d.img('terrace_h', b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
+        const r = this.d.res('terrace_h');
+        for (let k = 0; k < n; k++) this.d.img('terrace_h', b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
       }
     }
-    // 墙角翘檐：院子四角各一个压在墙头上
     for (const y of this.raid.map.yards) {
-      const key = `qc_${this.styleOf({ x: y.x + 2, y: y.y + 2, w: 1, h: 1, look: 'wall_h' })}`;
-      const x0 = y.x + T / 2;
-      const x1 = y.x + y.w - T / 2;
-      d.img(key, x0, y.y + T).setDepth(y.y + T + 0.4);
-      d.img(key, x1, y.y + T).setDepth(y.y + T + 0.4);
-      d.img(key, x0, y.y + y.h).setDepth(y.y + y.h + 0.4);
-      d.img(key, x1, y.y + y.h).setDepth(y.y + y.h + 0.4);
+      if (y.kind === 'plaza') continue;
+      const st = this.styleOf({ x: y.x + 2, y: y.y + 2, w: 1, h: 1 });
+      // 墙角：两道墙头的脊交在一起，压一个脊头
+      const knot = wallKnot(st);
+      for (const [x, yy, dep] of [[y.x, y.y, y.y + T + 2], [y.x + y.w - T, y.y, y.y + T + 2], [y.x, y.y + y.h - T, y.y + y.h + 0.5], [y.x + y.w - T, y.y + y.h - T, y.y + y.h + 0.5]] as const) {
+        this.place(`bq-k-${st}`, knot, x + T / 2, yy + T / 2 - WALL_RIDGE - 4, dep);
+      }
+      // 横墙上的门洞：搭一座门楼（破院不搭）
+      if (y.kind === 'ruin') continue;
+      for (const line of [y.y, y.y + y.h - T]) {
+        const segs = hs.filter((h) => h.y === line && h.x >= y.x - 1 && h.x < y.x + y.w).sort((a, b) => a.x - b.x);
+        for (let i = 0; i + 1 < segs.length; i++) {
+          const g0 = segs[i]!.x + segs[i]!.w;
+          const g = segs[i + 1]!.x - g0;
+          if (g < 60 || g > 300) continue;
+          this.place(`bq-g-${st}-${Math.round(g)}`, gatehouse(st, g, T, 3), g0, line, line + T + 0.02);
+          for (const lx of [g0 + 6, g0 + g - 6]) this.light(lx, line + T - 60, 170, 0.85, 0.3);
+        }
+      }
     }
   }
 
-  /** 正房：横向的一段段拼（中间一段是门，其余是窗），两头立脊头和檐角；竖向的是俯视的瓦顶，上下两头各一个脊头 */
+  /** 正房：横的一座一张图（靠北墙的正面朝南、有门；靠南墙的朝南是背面），竖的一张图（院子那边屋檐下挂灯笼） */
   private drawHouse(b: RaidBlock): void {
-    const d = this.d;
     const st = this.styleOf(b);
     const foot = b.y + b.h;
+    const yard = this.raid.map.yards.find((y) => b.x >= y.x && b.x + b.w <= y.x + y.w && b.y >= y.y && b.y + b.h <= y.y + y.h);
+    const T = RAID_WALL.thick;
+    const seed = (b.x * 13 + b.y * 7) | 0;
     if (b.w >= b.h) {
-      const n = Math.max(1, Math.round(b.w / 80));
-      const step = b.w / n;
-      const door = n >= 2 || b.look === 'hall' ? Math.floor(n / 2) : -1;
-      for (let k = 0; k < n; k++) {
-        const key = `bh_${st}_${k === door ? 'door' : 'win'}`;
-        const r = d.res(key);
-        d.img(key, b.x + step * (k + 0.5), foot).setScale(step / 80 / r, 1 / r).setDepth(foot);
-        if (k === door) this.light(b.x + step * (k + 0.5), foot - 34, 190, 0.9, 0.3);
+      const front = !yard || b.y <= yard.y + T + 1;
+      const pc = houseH(st, b.w, b.h, front, seed);
+      const im = this.place(`bh-${st}-${front ? 'f' : 'b'}-${Math.round(b.w)}-${Math.round(b.h)}-${seed & 3}`, pc, b.x, b.y, foot);
+      this.houses.push({ o: im, x0: b.x - 20, x1: b.x + b.w + 20, y0: b.y - pc.ay + 50, y1: foot });
+      for (const l of houseHLights(b.w, front)) {
+        if (front) this.light(b.x + l.x, foot - 30, l.door ? 200 : 150, l.door ? 0.9 : 0.8, l.door ? 0.32 : 0.22);
+        else this.light(b.x + l.x, b.y + b.h - HOUSE_Z + 10, 110, 0.55, 0.15);
       }
-      const ek = `bhe_${st}`;
-      d.img(ek, b.x, foot).setDepth(foot + 0.3);
-      d.img(ek, b.x + b.w, foot).setFlipX(true).setDepth(foot + 0.3);
+      if (front) this.light(b.x + b.w / 2, foot + 40, 220, 0.7, 0.25);
+      else this.light(b.x + b.w / 2, b.y - 30, 230, 0.75, 0.28);
     } else {
-      const key = `bv_${st}`;
-      const n = Math.max(1, Math.round(b.h / 80));
-      const step = b.h / n;
-      const r = d.res(key);
-      for (let k = 0; k < n; k++) d.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(b.w / 110 / r, step / 80 / r).setDepth(b.y + step * (k + 1));
-      const ek = `bve_${st}`;
-      d.img(ek, b.x + b.w / 2, b.y).setDepth(b.y + 40);
-      d.img(ek, b.x + b.w / 2, foot).setFlipY(true).setDepth(foot + 0.3);
+      const side: 1 | -1 = yard && b.x <= yard.x + T + 1 ? 1 : -1;
+      const pc = houseV(st, b.w, b.h, side, seed);
+      const im = this.place(`bv-${st}-${side}-${Math.round(b.w)}-${Math.round(b.h)}-${seed & 3}`, pc, b.x, b.y, b.y + 1);
+      this.houses.push({ o: im, x0: b.x - 20, x1: b.x + b.w + 20, y0: b.y - pc.ay + 50, y1: b.y + 1 });
+      for (const l of houseVLights(b.w, b.h, side)) this.light(b.x + l.x, b.y + l.y, 150, 0.85, 0.3);
+      this.light(b.x + (side > 0 ? b.w + 60 : -60), b.y + b.h / 2, 240, 0.7, 0.25);
     }
   }
 
@@ -259,13 +324,7 @@ export class Town {
     const rnd = artRng(this.seed ^ 0x7077);
     const { streets: S, cell } = raid.tpl;
 
-    // 亮窗、金铜箱、门的光
-    for (const b of m.blocks) {
-      if ((b.look !== 'house' && b.look !== 'hall') || b.w < b.h) continue;
-      const n = Math.max(1, Math.round(b.w / 80));
-      const step = b.w / n;
-      for (let k = 0; k < n; k++) this.light(b.x + step * (k + 0.5), b.y + b.h - 30, 150, 0.8, 0.2);
-    }
+    // 金铜箱的光（房子的窗、门、灯笼在 drawHouse 里）
     for (const c of m.chests) if (c.tier !== 'wood') this.light(c.x, c.y - 6, c.tier === 'gold' ? 190 : 120, 0.55, 0.14);
 
     if (tpl === 'dukou') this.dressRiver(rnd);
@@ -501,6 +560,28 @@ export class Town {
 
     // 院子地面
     for (const y of this.raid.map.yards) if (hit(y.x, y.y, y.w, y.h)) this.paintYard(c, y);
+
+    // 建筑投在地上的影（月光从西北来）：墙根、屋檐往南一道，竖墙、竖屋往东一道；有了这道影，竖墙才看得出是立着的
+    for (const b of this.raid.map.blocks) {
+      if (b.look !== 'wall_h' && b.look !== 'wall_v' && b.look !== 'house' && b.look !== 'hall') continue;
+      if (!hit(b.x - 10, b.y - 10, b.w + 70, b.h + 70)) continue;
+      const big = b.look === 'house' || b.look === 'hall';
+      const foot = b.y + b.h;
+      const sd = big ? 30 : 18;
+      const gs = c.createLinearGradient(0, foot, 0, foot + sd);
+      gs.addColorStop(0, `rgba(16,22,52,${big ? 0.5 : 0.42})`);
+      gs.addColorStop(1, 'rgba(16,22,52,0)');
+      c.fillStyle = gs;
+      c.fillRect(b.x + 6, foot, b.w + (big ? 18 : 8), sd);
+      if (b.look === 'wall_h') continue;
+      const x0 = b.x + b.w + (big ? 8 : 4);
+      const ed = big ? 36 : 24;
+      const ge = c.createLinearGradient(x0, 0, x0 + ed, 0);
+      ge.addColorStop(0, `rgba(16,22,52,${big ? 0.48 : 0.46})`);
+      ge.addColorStop(1, 'rgba(16,22,52,0)');
+      c.fillStyle = ge;
+      c.fillRect(x0, b.y + 10, ed, b.h + (big ? 10 : 0));
+    }
 
   }
 
@@ -782,6 +863,13 @@ export class Town {
     const v = this.view.setTo(cam.midPoint.x - vw / 2, cam.midPoint.y - vh / 2, vw, vh);
     this.streamChunks(v);
     for (const f of this.flats) f.o.setVisible(f.x < v.right + 40 && f.x + f.w > v.x - 40 && f.y < v.bottom + 40 && f.y + f.h > v.y - 40);
+    for (const f of this.culls) f.o.setVisible(f.x < v.right + 40 && f.x + f.w > v.x - 40 && f.y < v.bottom + 40 && f.y + f.h > v.y - 40);
+    // 主角绕到正房后面（被屋顶挡住）时，屋顶变淡
+    for (const h of this.houses) {
+      const behind = hx > h.x0 && hx < h.x1 && hy > h.y0 && hy < h.y1;
+      const a = behind ? 0.5 : 1;
+      if (h.o.alpha !== a) h.o.setAlpha(a);
+    }
     const c = this.dctx;
     const sx = this.dw / v.width;
     const sy = this.dh / v.height;
@@ -849,6 +937,7 @@ export class Town {
 
   destroy(): void {
     for (const k of [...this.chunks.keys()]) this.dropChunk(k);
+    for (const k of this.made) if (this.scene.textures.exists(k)) this.scene.textures.remove(k);
     this.darkImg.destroy();
     this.scene.textures.remove('town-dark');
   }
