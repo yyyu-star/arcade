@@ -3,7 +3,7 @@
  * 动账号安全的操作都要再输一次当前密码（docs/platform-backend.md 5.2），这些只放在平台页。
  */
 import { useEffect, useState } from 'react';
-import { api, ApiFail, type SaveSlot } from '../api.ts';
+import { api, ApiFail, errorText, type SaveSlot } from '../api.ts';
 import { fullDateText, timeText } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { confirmLeave, Link, navigate } from '../router.tsx';
@@ -58,6 +58,9 @@ export function MePage() {
         <Rename />
         <LogoutButton />
       </Panel>
+      <Panel icon="people" title="好友能看到什么">
+        <ShowWhere />
+      </Panel>
       <Saves />
       <Panel icon="lock" title="账号安全">
         <ChangePassword />
@@ -89,6 +92,39 @@ function Rename() {
         <SubmitButton busy={busy}>保存</SubmitButton>
       </form>
     </details>
+  );
+}
+
+/** "让好友看到我在哪"（0.13.0，docs/social.md 1.2）：关了好友那边只看到"几天前来过"；点了马上存，和改昵称共用每天 10 次 */
+function ShowWhere() {
+  const { user, setUser } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  // 先按点的显示，存不上再退回：等回话再变，勾选框看着像没点上
+  const [shown, setShown] = useState<boolean | null>(null);
+  const on = shown ?? user!.showWhere !== false;
+  const flip = async (next: boolean) => {
+    setShown(next);
+    setBusy(true);
+    setError('');
+    try {
+      setUser((await api.setShowWhere(next)).user);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setShown(null);
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <label className="check">
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void flip(e.target.checked)} data-testid="show-where" />
+        让好友看到我在线、在玩哪个游戏、在哪个房间
+      </label>
+      <p className="note">{on ? '好友在好友页能看到你在不在线、在哪，能一键加入你的房间。' : '好友只看到你几天前来过，看不到你在不在线、在哪。'}</p>
+      <FormError text={error} />
+    </>
   );
 }
 

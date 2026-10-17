@@ -12,7 +12,7 @@ describe('D1 写入行数（7.2 的依据）', () => {
   beforeEach(() => resetAll());
 
   it('WITHOUT ROWID：表本身 1 行，每个受影响的索引再 1 行', async () => {
-    expect((await run("INSERT INTO users VALUES ('u1','alice','甲','FC1',NULL,NULL,1,1,'user')")).meta.rows_written).toBe(3);
+    expect((await run("INSERT INTO users (id, username, display_name, friend_code, avatar_json, catchphrase_id, created_at, last_seen_at, role) VALUES ('u1','alice','甲','FC1',NULL,NULL,1,1,'user')")).meta.rows_written).toBe(3);
     expect((await run("INSERT INTO sessions VALUES ('h1','u1',1,1,9)")).meta.rows_written).toBe(2);
     expect((await run("INSERT INTO credentials VALUES ('u1','password','x',1)")).meta.rows_written).toBe(1);
     expect((await run("INSERT INTO friendships VALUES ('a','b','pending','a',1)")).meta.rows_written).toBe(2);
@@ -22,7 +22,7 @@ describe('D1 写入行数（7.2 的依据）', () => {
   it('0002 加的 role 列（带默认值和 CHECK，没建索引）不改变插入行数：users 仍是 3 行', async () => {
     expect((await run("INSERT INTO users (id, username, display_name, friend_code, created_at, last_seen_at) VALUES ('u2','bob','乙','FC9',1,1)")).meta.rows_written).toBe(3);
     expect((await env.DB.prepare("SELECT role FROM users WHERE id = 'u2'").first<{ role: string }>())?.role).toBe('user');
-    await expect(run("INSERT INTO users VALUES ('u3','carol','丙','FC8',NULL,NULL,1,1,'root')")).rejects.toThrow(/CHECK/);
+    await expect(run("INSERT INTO users (id, username, display_name, friend_code, avatar_json, catchphrase_id, created_at, last_seen_at, role) VALUES ('u3','carol','丙','FC8',NULL,NULL,1,1,'root')")).rejects.toThrow(/CHECK/);
   });
 
   it('0005 钱包：插入、带 rev 条件的更新都是 1 行；rev 对不上 0 行；删一行 1 行', async () => {
@@ -42,7 +42,7 @@ describe('D1 写入行数（7.2 的依据）', () => {
   });
 
   it('更新：不碰索引列 1 行，改了唯一索引列 2 行；没改到 0 行', async () => {
-    await run("INSERT INTO users VALUES ('u1','alice','甲','FC1',NULL,NULL,1,1,'user')");
+    await run("INSERT INTO users (id, username, display_name, friend_code, avatar_json, catchphrase_id, created_at, last_seen_at, role) VALUES ('u1','alice','甲','FC1',NULL,NULL,1,1,'user')");
     expect((await run("UPDATE users SET last_seen_at = 2 WHERE id = 'u1'")).meta.rows_written).toBe(1);
     expect((await run("UPDATE users SET friend_code = 'FC2' WHERE id = 'u1'")).meta.rows_written).toBe(2);
     await run("INSERT INTO friendships VALUES ('a','b','pending','a',1)");

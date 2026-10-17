@@ -115,7 +115,7 @@ describe('发请求、接受、拒绝、撤回、删好友', () => {
     expect(rowsWritten()).toBe(1);
     for (const [me, other] of [[a, b], [b, a]] as const) {
       const l = await lists(me);
-      expect(l.friends).toEqual([{ userId: other.user.id, displayName: expect.any(String), avatar: null, lastSeenDaysAgo: 0 }]);
+      expect(l.friends).toEqual([{ userId: other.user.id, displayName: expect.any(String), avatar: null, lastSeenDaysAgo: 0, online: false }]);
       expect(l.incoming).toEqual([]);
       expect(l.outgoing).toEqual([]);
     }

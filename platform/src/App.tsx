@@ -6,6 +6,7 @@ import { onlineUrl, playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api } from './api.ts';
 import { useSession } from './session.tsx';
+import { useLobbyPresence } from './presence.ts';
 import { FormError, useSubmit, useWritable } from './ui.tsx';
 import { useWallet } from './wallet.tsx';
 import { num, signed } from './format.ts';
@@ -326,7 +327,8 @@ function SoundToggle() {
 
 export function App() {
   const loc = useLocation();
-  const { service, refresh, loading, slow } = useSession();
+  const { service, refresh, loading, slow, user } = useSession();
+  useLobbyPresence(!!user);
   const Page = pageFor(loc.pathname);
   return (
     <div className={!Page ? 'page' : loc.pathname === '/admin' ? 'page page--wide' : 'page page--narrow'}>

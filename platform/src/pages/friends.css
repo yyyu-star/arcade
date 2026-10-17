@@ -1,0 +1,4 @@
+/* 好友页（按需加载）：在线的绿点挂在头像右下角（0.13.0） */
+.people__face { position: relative; display: inline-flex; flex: none; }
+.people__online { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border: 2px solid var(--surface); border-radius: 50%; background: #3fae5f; }
+.people__sub--online { color: #2f8a4b; font-weight: 700; }

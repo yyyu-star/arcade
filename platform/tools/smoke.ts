@@ -154,6 +154,8 @@ async function mockSession(
 ): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill(json({ user, service: 'ok', saves: 'ok', registration: 'closed', ...me })));
   await page.route('**/api/wallet', (r) => r.fulfill(json(typeof wallet === 'function' ? wallet() : wallet)));
+  // 登录后的大厅会报在线（0.13.0）；模拟的人在真接口那边不认识，回 401
+  await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
   await fakeLoginHint(page);
 }
 
@@ -572,17 +574,30 @@ async function friendsFlow(a: Page, b: Page): Promise<void> {
   await a.getByText('已发送，等对方接受').waitFor();
   await shot(a, 'friend-link-sent');
 
-  console.log('朋友接受：两边都在好友列表里，"今天来过"');
+  console.log('朋友接受：两边都在好友列表里，都开着大厅，显示绿点和"在大厅"（社交 1.2）');
   await b.reload();
   const req = b.getByTestId('person-冒烟阿国');
   await req.getByText('想加你为好友').waitFor();
   await shot(b, 'friends-incoming');
   await req.getByRole('button', { name: '接受' }).click();
   await b.getByRole('heading', { name: '好友（1）' }).waitFor();
-  await b.getByTestId('person-冒烟阿国').getByText('今天来过').waitFor();
+  await b.getByTestId('person-冒烟阿国').getByText('在大厅').waitFor();
   await a.getByRole('link', { name: '好友', exact: true }).click();
-  await a.getByTestId('person-冒烟小王').getByText('今天来过').waitFor();
+  await a.getByTestId('person-冒烟小王').getByText('在大厅').waitFor();
+  check((await a.getByTestId('person-冒烟小王').locator('.people__online').count()) === 1, '在线的好友该有绿点');
   await shot(a, 'friends-list');
+
+  console.log('朋友在"我的"关掉"让好友看到我在哪"：管理员那边只剩"今天来过"，再打开恢复');
+  await b.goto(`${BASE}/me`);
+  await b.getByTestId('show-where').uncheck();
+  await b.getByText('好友只看到你几天前来过').waitFor();
+  await shot(b, 'me-show-where-off');
+  await a.reload();
+  await a.getByTestId('person-冒烟小王').getByText('今天来过').waitFor();
+  check((await a.getByTestId('person-冒烟小王').locator('.people__online').count()) === 0, '关了开关不该有绿点');
+  await b.getByTestId('show-where').check();
+  await b.getByText('好友在好友页能看到你').waitFor();
+  await b.goto(`${BASE}/friends`);
 
   console.log('朋友屏蔽管理员：要先勾确认；好友没了，屏蔽的人里有');
   const row = b.getByTestId('person-冒烟阿国');

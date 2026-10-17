@@ -3,10 +3,21 @@
  * 不按昵称搜人，只能靠好友码或链接加；对别人只显示昵称，不显示用户名。
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation } from '../api.ts';
+import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation, type Where } from '../api.ts';
+import { gameName } from '../format.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Empty, Field, FormError, Panel, useWritable } from '../ui.tsx';
+
+import './friends.css';
+
+/** 在线的好友在哪（0.13.0）："在掼蛋房里 · 3/4 人"、"在玩开盘"、"在大厅"；对方没报过位置就只说"在线" */
+function whereText(w: Where | undefined): string {
+  if (!w) return '在线';
+  if (w.place === 'lobby' || !w.game) return '在大厅';
+  if (w.place === 'game') return `在玩${gameName(w.game)}`;
+  return `在${gameName(w.game)}房里${w.seats ? ` · ${w.seats} 人` : ''}`;
+}
 
 /** "今天来过 / 昨天来过 / N 天前来过"（服务端按北京时间算天，不给精确时间）。 */
 function lastSeenText(days: number): string {
@@ -242,11 +253,14 @@ function AddByCode() {
 }
 
 /** 一行人：头像、昵称、说明，右边是按钮；confirm 展开时在下面要求确认。 */
-function Person({ p, sub, children, confirm, stats }: { p: Profile; sub?: string; children: ReactNode; confirm?: ReactNode; stats?: boolean }) {
+function Person({ p, sub, children, confirm, stats, online }: { p: Profile; sub?: string; children: ReactNode; confirm?: ReactNode; stats?: boolean; online?: boolean }) {
   return (
     <li className="people__item" data-testid={`person-${p.displayName}`}>
       <div className="people__row">
-        <Avatar name={p.displayName} />
+        <span className="people__face">
+          <Avatar name={p.displayName} />
+          {online && <span className="people__online" role="img" aria-label="在线" />}
+        </span>
         <span className="people__text">
           {stats ? (
             // 0.10.5：点好友的名字看对方的战绩
@@ -256,7 +270,7 @@ function Person({ p, sub, children, confirm, stats }: { p: Profile; sub?: string
           ) : (
             <span className="people__name">{p.displayName}</span>
           )}
-          {sub && <span className="people__sub">{sub}</span>}
+          {sub && <span className={`people__sub${online ? ' people__sub--online' : ''}`}>{sub}</span>}
         </span>
       </div>
       <div className="row">{children}</div>
@@ -301,7 +315,8 @@ function Friend({ p, onChanged }: { p: FriendLists['friends'][number]; onChanged
     <Person
       p={p}
       stats
-      sub={lastSeenText(p.lastSeenDaysAgo)}
+      online={p.online}
+      sub={p.online ? whereText(p.where) : lastSeenText(p.lastSeenDaysAgo)}
       confirm={
         open === 'remove' ? (
           <Confirm label={`确定不再和「${p.displayName}」做好友`} button="删好友" action={() => api.removeFriend(p.userId)} onDone={onChanged} />
