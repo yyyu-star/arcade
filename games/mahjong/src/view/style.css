@@ -787,25 +787,39 @@ button {
   font-weight: 400;
   text-shadow: none;
 }
+/* 碰杠胡过按紧急程度分级（0.17.3，docs/art-v3.md 第 5 节）：胡 = 灯笼红底金字、最大；杠、碰 = 暖金（杠深一点）；过 = 半透明、最小。
+ * 定缺三个按钮是茶馆木色，和碰杠胡一眼分开 */
 .act.ron {
-  border-color: #ffc2b8;
-  background: linear-gradient(#ff7a6b, #d63a2f);
+  border-color: var(--gold);
+  background: linear-gradient(#e8503f, #a8231a);
+  color: #ffe9a8;
+  text-shadow: 0 2px 0 #5a0a06;
   font-size: var(--fs-2xl);
 }
 .act.kan {
-  border-color: #ffd9a8;
-  background: linear-gradient(#ffb357, #e07b1a);
+  border-color: #ffe2a0;
+  background: linear-gradient(#f2b54a, #c47a12);
+  color: var(--on-gold);
+  text-shadow: 0 1px 0 #ffffff59;
 }
 .act.pon {
-  border-color: #bfe6ff;
-  background: linear-gradient(#6fc7ff, #2f86d6);
+  border-color: #fff0c4;
+  background: linear-gradient(var(--gold-hi), var(--gold-lo));
+  color: var(--on-gold);
+  text-shadow: 0 1px 0 #ffffff59;
 }
 .act.pass {
-  background: linear-gradient(#ffffff2e, #ffffff14);
+  background: linear-gradient(#ffffff26, #ffffff0f);
+  border-color: #ffffff33;
+  box-shadow: none;
 }
 .act.que {
   flex-direction: column;
   gap: 0;
+  border-color: #f3c86b4d;
+  background:
+    linear-gradient(#ffffff14, transparent 45%),
+    linear-gradient(#5a2d18, #3a1a0c);
 }
 .act.que small {
   font-size: var(--fs-xs);
@@ -1360,10 +1374,14 @@ button {
   gap: var(--sp-3);
   justify-content: flex-end;
 }
+/* "再点一下打出"这类提示：一个小签贴在操作条上，不是一行飘在桌面上的灰字（0.17.3） */
 .bar .hint {
-  font-size: var(--fs-md);
-  opacity: 0.85;
+  font-size: var(--fs-sm);
   white-space: nowrap;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill);
+  background: #0000005c;
+  border: 1px solid #ffffff1a;
 }
 .bar .claim-tile {
   display: flex;
@@ -1401,8 +1419,14 @@ html .atf-btn svg {
   box-shadow: 0 4px 0 #0006, 0 8px 18px #000a;
 }
 .bar .act.ron {
-  min-width: 96px;
+  min-width: 104px;
+  min-height: 68px;
   font-size: var(--fs-3xl);
+}
+.bar .act.pass {
+  min-width: 64px;
+  min-height: 48px;
+  font-size: var(--fs-lg);
 }
 /* 听牌提示：打了能听的牌头上一个小"听"，操作条上摆听哪些、各剩几张 */
 .my-hand .tile.ting::before {
@@ -1483,11 +1507,9 @@ html .atf-btn svg {
   color: #ffd1a1;
 }
 .banner.pon {
-  color: #bfe6ff;
-  -webkit-text-stroke-color: #0b3b66;
-  text-shadow: 0 4px 0 #0b3b66, 0 0 20px #6fc7ff;
+  color: #fff0c4;
 }
-.banner.center {
+.banner.swap {
   font-size: 40px;
 }
 @keyframes pop {
@@ -1735,8 +1757,8 @@ html .atf-btn svg {
 [data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
 [data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
 [data-orient='land'] .banner.r3 { left: 20%; top: 46%; }
-/* 换三张的方向写在中控盘和我的手牌之间，不压在盘上（0.17.1） */
-[data-orient='land'] .banner.center { left: 50%; top: 66%; }
+/* 换三张的方向写在中控盘上方，不压盘，也不压底下的定缺按钮（0.17.3） */
+[data-orient='land'] .banner.swap { left: 50%; top: 30%; }
 
 /* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
  * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
@@ -1777,7 +1799,7 @@ html .atf-btn svg {
 [data-orient='port'] .banner.r1 { left: 78%; top: 40%; }
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
 [data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
-[data-orient='port'] .banner.center { left: 50%; top: 64%; }
+[data-orient='port'] .banner.swap { left: 50%; top: 34%; }
 
 /* ---------- 弹窗 ---------- */
 .mask {
