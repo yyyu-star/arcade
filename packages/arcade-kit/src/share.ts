@@ -184,11 +184,25 @@ export function isWeChat(ua: string): boolean {
   return /MicroMessenger/i.test(ua);
 }
 
-/** 预览层怎么出（0.15.0）：微信里用 data: URL、提示长按、不给"保存图片"；别的浏览器照旧 */
-export function previewMode(ua: string): { dataUrl: boolean; tip: string; save: boolean } {
-  return isWeChat(ua)
-    ? { dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false }
-    : { dataUrl: false, tip: '手机上也可以长按图片保存', save: true };
+/**
+ * 调不调系统分享（0.15.1）：只给手机、平板。桌面（Windows、Mac、Linux，含触屏笔记本）的系统共享面板发不出图：
+ * Windows Chrome 的 canShare 对文件回 true，弹出系统共享，选微信后微信 PC 版是空白窗口、再报"共享失败"。桌面一律直接出预览，复制图片去粘贴。
+ * iPadOS 的 Safari 默认报桌面版 UA（Macintosh），靠多点触控认出来；微信里照旧不调（isWeChat）
+ */
+export function useSystemShare(ua: string, maxTouchPoints: number): boolean {
+  if (isWeChat(ua)) return false;
+  if (/Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(ua)) return true;
+  return /Macintosh/.test(ua) && maxTouchPoints > 1;
+}
+
+/**
+ * 预览层怎么出（0.15.0）：微信里用 data: URL、提示长按、不给"保存图片"；
+ * 桌面（0.15.1）多一个"复制图片"（浏览器支持才真的摆出来），提示去微信里粘贴；手机照旧
+ */
+export function previewMode(ua: string, maxTouchPoints = 0): { dataUrl: boolean; tip: string; save: boolean; copyImage: boolean } {
+  if (isWeChat(ua)) return { dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false, copyImage: false };
+  if (!useSystemShare(ua, maxTouchPoints)) return { dataUrl: false, tip: '复制图片，到微信或 QQ 的聊天框里粘贴就能发', save: true, copyImage: true };
+  return { dataUrl: false, tip: '手机上也可以长按图片保存', save: true, copyImage: false };
 }
 
 /** 二维码在卡上的框：白底留白 ≥ 4 格（扫码的规范要求），每格整数像素、对齐像素，截图后也清楚 */
@@ -458,8 +472,8 @@ export function prepareShare(card: ShareCard, opts: ShareOptions): PreparedShare
   );
   const attempt = (b: Blob): Promise<ShareResult> => {
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    // 微信里不试系统分享（没有，或者有也发不出图），直接出长按的预览
-    if (!isWeChat(nav.userAgent) && typeof File === 'function' && typeof nav.share === 'function') {
+    // 只有手机、平板试系统分享；桌面和微信直接出预览（useSystemShare）
+    if (useSystemShare(nav.userAgent, nav.maxTouchPoints ?? 0) && typeof File === 'function' && typeof nav.share === 'function') {
       const data: ShareData = { files: [new File([b], name, { type: 'image/png' })], title: card.game, text, url: link };
       if (nav.canShare?.(data)) {
         // 同步调（这一行之前没有 await）：点击的激活还在
@@ -505,7 +519,7 @@ export async function shareCard(card: ShareCard, opts: ShareOptions): Promise<Sh
 /** 不支持系统分享时：预览图 + "保存图片""复制链接"；点空白处或"关闭"收起。微信里见 previewMode */
 function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
   document.getElementById(PREVIEW_ID)?.remove();
-  const mode = previewMode(navigator.userAgent);
+  const mode = previewMode(navigator.userAgent, navigator.maxTouchPoints ?? 0);
   // 微信里不用 blob:（长按存不下来），也就不建对象 URL
   const url = mode.dataUrl ? '' : URL.createObjectURL(blob);
   const root = document.createElement('div');
@@ -547,6 +561,9 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     });
     return b;
   };
+  // 不支持 ClipboardItem 的浏览器不摆"复制图片"，"保存图片"当主按钮
+  const canCopyImage = mode.copyImage && typeof ClipboardItem === 'function' && typeof navigator.clipboard?.write === 'function';
+  if (mode.copyImage && !canCopyImage) tip.textContent = '保存图片后，到微信或 QQ 的聊天框里发';
   const save = btn('保存图片', 'share:save', () => {
     const a = document.createElement('a');
     a.href = url;
@@ -555,6 +572,15 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     a.click();
     a.remove();
     opts.log?.('分享 保存');
+  }, !canCopyImage);
+  // 复制图片（0.15.1，桌面）：在点击里直接写剪贴板（用户激活还在），图已经画好了
+  const copyImg = btn('复制图片', 'share:copy-image', () => {
+    const done = (ok: boolean): void => {
+      copyImg.textContent = ok ? '已复制' : '复制不了';
+      tip.textContent = ok ? '已复制，去微信里粘贴' : '复制不了图片，点"保存图片"存下来再发';
+      opts.log?.(ok ? '分享 复制图片' : '分享 复制图片失败');
+    };
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => done(true), () => done(false));
   }, true);
   const copy = btn('复制链接', 'share:copy', () => {
     const done = (ok: boolean): void => {
@@ -566,6 +592,7 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     else done(false);
   });
   const shut = btn('关闭', 'share:close', close);
+  if (canCopyImage) row.appendChild(copyImg);
   if (mode.save) row.appendChild(save);
   row.appendChild(copy);
   row.appendChild(shut);
