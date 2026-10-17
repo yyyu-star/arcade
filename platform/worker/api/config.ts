@@ -40,6 +40,8 @@ export const DEFAULT_LIMITS = {
   loginAllHour: 300,
   recoverPerIpHour: 10,
   recoverAllHour: 100,
+  /** 注册时试邀请码（0.20.0，15.20）：每 IP 每小时，成败都算；不设全站上限（理由见 auth.ts 的 register） */
+  invitePerIpHour: 10,
   /** 连续失败几次后开始等待，第一次等多久、最长等多久，失败计数多久清零。 */
   failFree: 5,
   failBaseMs: 30_000,

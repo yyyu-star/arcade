@@ -351,7 +351,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
 
 ### 分享卡
 
-游戏只交数据，画法统一（主题色渐变底、图标、游戏名、一个大数字、最多 3 条小数据、一句名场面、昵称和称号、北京时间日期）：
+游戏只交数据，画法统一（主题色渐变底、图标、游戏名、一个大数字、最多 3 条小数据、一句名场面、昵称和称号、北京时间日期、右下角扫码来玩的二维码）：
 
 ```ts
 import { shareCard } from 'arcade-kit/share';
@@ -365,7 +365,7 @@ const r = await shareCard(
     art: { image: atlasImg, crop: { x: 128, y: 0, w: 128, h: 128 }, fit: 'contain' },
     player: { name: '小明', badge: '炸弹狂人' },
   },
-  { url: location.href /* 好友房结算带房间码 */, log: (l) => smokeLog.push(l) },
+  { url: './?room=123456' /* 只取路径，域名用运行时的 origin；好友房结算带房间码 */, log: (l) => smokeLog.push(l) },
 );   // 'shared' | 'preview' | 'cancelled'
 ```
 
@@ -375,7 +375,14 @@ const r = await shareCard(
   预览层 z-index 默认 11000（0.12.4 起），按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
 - **结算页一出现就先画好**（0.12.3，iOS 必须）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。结算页出来时 `const p = prepareShare(card, opts)`，
   "分享"按钮的点击里直接 `void p.share()`（前面别 await）：画好了就同步调 `navigator.share`，没画好等画完再试、调不起来出预览。`shareCard` 是"点了才画"的简写。
-- 只要图不分享：`drawShareCard(card, canvas?)` 返回画好的 canvas，`shareCardBlob(card)` 返回 PNG。
+- **二维码**（0.15.0）：朋友圈里的图不能点，扫码是唯一入口。码的内容是 `shareLink(opts.url, location.origin)`：运行时的 origin 加上 `url` 的路径、查询和 `#` 后面，
+  游戏给相对路径还是绝对地址都行，kit 和游戏都不写域名（单独部署的游戏扫出来就是它自己的 `workers.dev`）。系统分享、"复制链接"也用这个链接，系统分享的 `text` 末尾自动带上它（有的 App 只取 text）。
+  码画在右下角的纯白框里（`#111` 的格、每格整数像素、四周留白 ≥ 4 格、下面写"扫码来玩"），名场面和日期往左让；JPEG 压缩、缩到三分之一宽的截图实测照样解得出。
+  编码器是 `src/qr.ts`，自己写的最小子集（字节模式、纠错 M、版本 1–10，最长 213 字节，约 9 KB 源码），不引运行时依赖：kit 一个运行时依赖都没有，引一个就进每个游戏的 lockfile 和审阅范围。
+  链接太长编不了码就不画码，卡照常出。测试用 jsQR（Apache-2.0，只是 devDependency，不进包）把码解回原文，再对格式信息、版本信息做规范表的已知向量核对。
+- **微信内置浏览器**（0.15.0，UA 带 `MicroMessenger`）：没有 `navigator.share`，下载链接也常常不生效。检测到微信就不试系统分享，直接出预览：图用 `data:` URL（`blob:` 的图在微信里长按经常存不下来），
+  提示"长按图片 → 发送给朋友，或保存后发朋友圈"，不给"保存图片"按钮（"复制链接""关闭"照旧）。判断在 `isWeChat`、`previewMode`（纯函数）。
+- 只要图不分享：`drawShareCard(card, canvas?, link?)` 返回画好的 canvas（给了 `link` 才画码），`shareCardBlob(card, link?)` 返回 PNG。
 - **图上只有游戏给的数据**：别人没摊的牌、手牌这类隐藏信息游戏自己别放进来。
 
 ### 报位置、收邀请
@@ -604,6 +611,7 @@ packages/arcade-kit/
 │  ├─ fun-logic.ts   牌桌互动的规则：冷却、护盾、连击、回敬、电脑反应、菜单位置（纯函数）
 │  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示）
 │  ├─ share.ts       分享卡（Canvas 画战绩图、系统分享或预览）
+│  ├─ qr.ts          二维码编码器（字节模式、纠错 M、版本 1–10，纯函数，分享卡用）
 │  ├─ social.ts      报位置、收邀请的横条、好友和邀请的接口小函数
 │  ├─ testing.ts     假平台钱包（只给测试和本地开发）
 │  └─ internal.ts    内部地址、身份头（不在 exports 里）

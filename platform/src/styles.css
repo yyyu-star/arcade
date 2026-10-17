@@ -427,3 +427,9 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   /* 加载中的小圈不转，换成虚线圈，照样看得出在忙 */
   .btn[aria-busy='true']::before { border-style: dotted; }
 }
+/* 邀请码（0.20.0）：登录页顶上"朋友邀请你来"一句；"我的"里的码列表 */
+.invited { margin: 0 0 var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--highlight-warm); font-weight: 700; }
+.invite-codes { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-2); }
+.invite-code { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-2) 0; border-top: 1px dashed var(--line, #ddd); }
+.invite-code--used, .invite-code--expired, .invite-code--revoked { opacity: 0.65; }
+.code-mid { font-size: 18px; font-weight: 700; letter-spacing: 2px; user-select: all; }

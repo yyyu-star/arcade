@@ -12,8 +12,11 @@ import {
   getRegistration,
   getWalletRules,
   listUsers,
+  adminRevokeCode,
   resetPassword,
   sessionAdmin,
+  setInviteRules,
+  setUserInviteQuota,
   setNotice,
   setRegistration,
   setWalletRules,
@@ -25,6 +28,7 @@ import { friendsWeek, overtakes, weekParams } from './friends-week';
 import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
 import { challengeParams, createChallenge, getChallenge, submitChallenge } from './challenges';
+import { adminCodes, codeIdParams, createCode, getInviteRules, listMyCodes, revokeCode } from './invite-codes';
 import {
   acceptRequest,
   block,
@@ -112,6 +116,23 @@ const ROUTES: Route[] = [
   { method: 'GET', path: '/api/blocks', cat: 'social', auth: 'user', handler: listBlocks },
   { method: 'POST', path: '/api/blocks', cat: 'social', auth: 'user', handler: block },
   { method: 'DELETE', path: /^\/api\/blocks\/([^/]+)$/, params: userParams, cat: 'social', auth: 'user', handler: unblock },
+  // 邀请码（0.20.0，15.20）：生成记在"好友与资料"类；新码会让库变大，停增长档停生成
+  { method: 'GET', path: '/api/invite-codes', cat: 'social', auth: 'user', handler: listMyCodes },
+  { method: 'POST', path: '/api/invite-codes', cat: 'social', auth: 'user', growth: true, handler: createCode },
+  { method: 'POST', path: /^\/api\/invite-codes\/([^/]+)\/revoke$/, params: codeIdParams, cat: 'social', auth: 'user', handler: revokeCode },
+  { method: 'GET', path: '/api/admin/settings/invites', cat: 'acct', auth: 'admin', handler: getInviteRules },
+  { method: 'POST', path: '/api/admin/settings/invites', cat: 'acct', auth: 'admin', acct: 'capped', handler: setInviteRules },
+  { method: 'GET', path: '/api/admin/invite-codes', cat: 'acct', auth: 'admin', handler: adminCodes },
+  { method: 'POST', path: /^\/api\/admin\/invite-codes\/([^/]+)\/revoke$/, params: codeIdParams, cat: 'acct', auth: 'admin', acct: 'capped', handler: adminRevokeCode },
+  {
+    method: 'POST',
+    path: /^\/api\/admin\/users\/([^/]+)\/invite-quota$/,
+    params: userParams,
+    cat: 'acct',
+    auth: 'admin',
+    acct: 'capped',
+    handler: setUserInviteQuota,
+  },
   { method: 'GET', path: '/api/admin/users', cat: 'acct', auth: 'admin', handler: listUsers },
   { method: 'GET', path: '/api/admin/settings/registration', cat: 'acct', auth: 'admin', handler: getRegistration },
   { method: 'POST', path: '/api/admin/settings/registration', cat: 'acct', auth: 'admin', acct: 'capped', handler: setRegistration },

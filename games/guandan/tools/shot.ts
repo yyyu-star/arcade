@@ -10,7 +10,7 @@
  *
  * 特定局面（我要进贡 / 我要还贡）先在 node 里用核心推演找到种子，再用 URL 参数 jump=tribute 交给画面。
  */
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContextOptions, type Page, type Route } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
 import { createGame, dispatch, viewFor } from '../src/core/index.ts';
@@ -476,6 +476,20 @@ async function smokeGameOver(browser: Browser): Promise<void> {
   await ctx.page.evaluate(() => window.__game!.setInstant(false));
   await ctx.page.waitForTimeout(1200);
   await shot(ctx, '16-gameover');
+  // 分享（kit 0.15.0 起卡的右下角带二维码）：无头浏览器没有系统分享，出预览层；预览里的那张卡原样存下来看码
+  await click(ctx, 'share');
+  const card = await ctx.page.waitForFunction(async () => {
+    const img = document.querySelector<HTMLImageElement>('#arcade-share-preview img');
+    if (!img?.complete || !img.naturalWidth) return null;
+    const bytes = new Uint8Array(await (await fetch(img.src)).arrayBuffer());
+    return { w: img.naturalWidth, h: img.naturalHeight, bytes: Array.from(bytes), tip: document.querySelector('#arcade-share-preview div')?.textContent ?? '' };
+  }, undefined, { timeout: WAIT_MS });
+  const got = (await card.jsonValue())!;
+  assert(got.w === 1080 && got.h === 1350, `分享卡 1080×1350，实际 ${got.w}×${got.h}`);
+  writeFileSync(`${OUT}/16b-share-card.png`, Uint8Array.from(got.bytes));
+  shots.push(`${OUT}/16b-share-card.png`);
+  await shot(ctx, '16c-share-preview');
+  await ctx.page.locator('[data-key="share:close"]').click();
   const deals = await ctx.page.evaluate(() => window.__game!.state()!.dealNo);
   notes.push(`打 A 到整局结束用了 ${deals} 副`);
   await ctx.page.context().close();

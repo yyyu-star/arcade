@@ -52,6 +52,22 @@ export function normalizeRecoveryCode(input: string): string | null {
   return s.length === 20 && [...s].every((c) => CROCKFORD.includes(c)) ? s : null;
 }
 
+/** 邀请码（0.20.0）：12 位 Crockford base32 = 60 bit，显示成 ABCD-EFGH-JKMN。 */
+export function newInviteCode(): string {
+  return randomCrockford(12);
+}
+
+/** 归一化邀请码：规则同恢复码。格式不对返回 null。 */
+export function normalizeInviteCode(input: string): string | null {
+  const s = input.toUpperCase().replace(/[\s-]/g, '').replace(/[IL]/g, '1').replace(/O/g, '0');
+  return s.length === 12 && [...s].every((c) => CROCKFORD.includes(c)) ? s : null;
+}
+
+/** 显示用：每 4 位一个横线 */
+export function formatInviteCode(code: string): string {
+  return code.replace(/(.{4})(?=.)/g, '$1-');
+}
+
 export function newFriendCode(): string {
   return randomCrockford(8);
 }

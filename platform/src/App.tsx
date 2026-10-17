@@ -57,6 +57,7 @@ function PageLoadFailed() {
   );
 }
 const LoginPage = page(() => import('./pages/Login.tsx'), 'LoginPage');
+const InviteLinkPage = page(() => import('./pages/Login.tsx'), 'InviteLinkPage');
 const ForgotPage = page(() => import('./pages/Forgot.tsx'), 'ForgotPage');
 const MePage = page(() => import('./pages/Me.tsx'), 'MePage');
 const PrivacyPage = page(() => import('./pages/Privacy.tsx'), 'PrivacyPage');
@@ -80,9 +81,10 @@ const ACCOUNT_PAGES: Record<string, ComponentType> = {
   '/boards': BoardsPage,
 };
 
-/** 带参数的页面：/f/<好友码>、/u/<用户 id>（别人的战绩）。 */
+/** 带参数的页面：/f/<好友码>、/i/<邀请码>（0.20.0）、/u/<用户 id>（别人的战绩）。 */
 function pageFor(pathname: string): ComponentType | undefined {
   if (/^\/f\/[^/]+$/.test(pathname)) return FriendCodePage;
+  if (/^\/i\/[0-9A-Za-z-]{1,20}$/.test(pathname)) return InviteLinkPage;
   if (/^\/u\/[A-Za-z0-9_-]{22}$/.test(pathname)) return StatsPage;
   return ACCOUNT_PAGES[pathname];
 }
