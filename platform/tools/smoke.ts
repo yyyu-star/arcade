@@ -1786,6 +1786,41 @@ async function deskLayout(page: Page, name: string): Promise<void> {
   await page.setViewportSize(before);
 }
 
+/** 电脑版排版（0.23.0）：大厅、好友、我的、我的战绩在 1280、1920 宽各一张（不是窄长列、不横着滑），手机竖屏各一张 */
+async function deskPages(browser: Browser): Promise<void> {
+  const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
+  const games = {
+    kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000, titles: [{ id: 'first_year', at: Date.UTC(2026, 9, 13, 3) }] }),
+    guandan: career({ n: 6, wnet: -800, rounds: 40, wins: 22, best: 3_200 }),
+    texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }),
+    mahjong: career({ n: 3, rounds: 25, wins: 6, best: 1_200 }),
+  };
+  const pages = [
+    ['home', '/', async (page: Page) => void (await page.locator('.card').first().waitFor())],
+    ['friends', '/friends', async (page: Page) => void (await page.getByText('名字有十二个字那么长的人').first().waitFor())],
+    ['me', '/me', async (page: Page) => void (await page.getByTestId('saves-kaipan').getByText('还没有存档').waitFor())],
+    ['stats', '/me/stats', async (page: Page) => void (await page.getByTestId('career-texas').waitFor())],
+  ] as const;
+  for (const screen of ['desktop', 'portrait'] as const) {
+    console.log(`电脑版排版（${screen}）：大厅、好友、我的、战绩`);
+    const { ctx, page } = await newPage(browser, `电脑排版 ${screen}`, screen);
+    await mockSession(page, { feed: FAKE_FEED });
+    await fakeFeedFiles(page);
+    await page.route('**/api/friends', (r) => r.fulfill(json(FAKE_FRIENDS)));
+    await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [] })));
+    await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+    await page.route('**/api/stats/me', (r) => r.fulfill(json({ user: { userId: FAKE_USER.id, displayName: FAKE_USER.displayName, avatar: null }, relation: 'self', week: '2026-10-12', games })));
+    await page.route('**/games/*/titles.json', (r) => r.fulfill(json({ first_year: { name: '熬过一年', desc: '实盘打满 12 个月' } })));
+    for (const [name, path, ready] of pages) {
+      await page.goto(`${BASE}${path}`);
+      await ready(page);
+      if (screen === 'desktop') await deskLayout(page, name);
+      else await shot(page, `${name}-phone`);
+    }
+    await ctx.close();
+  }
+}
+
 /** 0.9.8：发版后旧分块没了（404）：整页重载一次拿新版；还是 404 就停下来提示刷新，不来回重载、不白屏。 */
 async function staleChunk(browser: Browser): Promise<void> {
   console.log('发版后点进钱包页，分块 404：重载一次，还不行就提示刷新；好了以后点"刷新"能进');
@@ -2056,6 +2091,7 @@ try {
     chunk: staleChunk, // 发版后分块 404
     next: loginNext, // 登录页的 next
     stats: statsPage, // 战绩页
+    desk: deskPages, // 电脑版排版：大厅、好友、我的、战绩
     boards: boardsPage, // 排行榜
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则
@@ -2076,6 +2112,7 @@ try {
     await staleChunk(browser);
     await loginNext(browser);
     await statsPage(browser);
+    await deskPages(browser);
     await boardsPage(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);

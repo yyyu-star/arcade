@@ -155,7 +155,7 @@ const PANEL_ICONS = { key: KeyIcon, user: UserIcon, lock: LockIcon, people: Peop
 
 /** 页面外框：标题（前面一个小图标，按这一块讲的是什么选）+ 卡片。 */
 /** action：放在标题行右边的按钮（管理页概览的"管理筹码"） */
-export function Panel({ title, icon, action, children }: { title: string; icon?: keyof typeof PANEL_ICONS; action?: ReactNode; children: ReactNode }) {
+export function Panel({ title, icon, action, className, children }: { title: string; icon?: keyof typeof PANEL_ICONS; action?: ReactNode; className?: string; children: ReactNode }) {
   const Icon = icon && PANEL_ICONS[icon];
   const heading = (
     <h2 className="panel__title">
@@ -168,7 +168,7 @@ export function Panel({ title, icon, action, children }: { title: string; icon?:
     </h2>
   );
   return (
-    <section className="panel">
+    <section className={className ? `panel ${className}` : 'panel'}>
       {action ? (
         <div className="panel__head">
           {heading}

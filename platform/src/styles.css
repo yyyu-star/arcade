@@ -92,12 +92,24 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
  * 里面用 .desk 分两栏：左边一列放概况和操作，右边放长的列表。960 以下照旧一窄列（手机、竖着的平板）
  */
 @media (min-width: 1100px) { :root { --content: 1280px; } }
+/* 好友页（0.23.0）：960 以下两列拆开，动态排最上、等对方接受和屏蔽的人排最下（和以前手机上的顺序一样） */
+@media (max-width: 959px) {
+  .desk--friends > .desk__col { display: contents; }
+  .desk--friends .friends-feed { order: -1; }
+  .desk--friends .friends-late { order: 1; }
+}
 .desk { display: flex; flex-direction: column; gap: var(--s-5); }
 .desk__col { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
 @media (min-width: 960px) {
   .narrow.narrow--desk { max-width: none; }
   .desk { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); align-items: start; }
   .desk > .banner { grid-column: 1 / -1; }
+}
+@media (min-width: 1100px) {
+  /* 大厅：内容区放宽后一排 4 张卡（.grid 的定义在下面，这里多一层 .page 才压得住） */
+  .page .grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+  /* 战绩页右栏宽：各游戏两张一排 */
+  .desk .careers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* 读取中的占位条：一条条灰底慢慢闪；不想看动画的不闪 */
 .skeleton { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-1) 0; }
