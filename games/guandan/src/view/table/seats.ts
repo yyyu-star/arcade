@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { PERSONAS, type Mood } from '../art/index.ts';
 import { dur, tweenP } from '../anim.ts';
 import { audio } from '../audio.ts';
-import { PLACE_NAMES, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, isWatching, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { bubble, text, type BubbleTone } from '../ui/kit.ts';
 import type { SeatAnchor } from './layout.ts';
@@ -11,6 +11,8 @@ import type { SeatAnchor } from './layout.ts';
 export class SeatView {
   private scene: Phaser.Scene;
   readonly seat: number;
+  /** 这个座位是我自己（不画名牌和剩余张数） */
+  readonly self: boolean;
   readonly a: SeatAnchor;
   private root: Phaser.GameObjects.Container;
   private avatar: Phaser.GameObjects.Image;
@@ -38,6 +40,8 @@ export class SeatView {
     this.seat = seat;
     this.a = a;
     this.root = scene.add.container(a.ax, a.ay).setDepth(50);
+    // 下面那个座位是我自己（旁观时是别人：要名牌、剩余张数，0.13.0）
+    this.self = seat === 0 && !isWatching();
     const r = a.size / 2;
     this.ring = scene.add.graphics();
     this.ring.lineStyle(6, 0xffd25a, 1).strokeCircle(0, 0, r + 6);
@@ -52,7 +56,7 @@ export class SeatView {
     this.nameText = text(scene, 0, ny, '', { size: TYPE.label, color: 0xfffaf0, bold: true });
     this.plate = scene.add.graphics();
     this.root.add([this.plate, this.nameText]);
-    if (seat === 0) {
+    if (this.self) {
       this.plate.setVisible(false);
       this.nameText.setVisible(false);
     }
@@ -62,14 +66,14 @@ export class SeatView {
     bg.lineStyle(2, 0x9fe0ff, 1).strokeRoundedRect(-15, -13, 30, 26, 7);
     this.badge.add([bg, scene.add.image(0, 0, 'icon:robot').setDisplaySize(20, 20).setTint(0x9fe0ff)]);
     this.root.add(this.badge);
-    this.netTag = text(scene, 0, seat === 0 ? -r - 18 : ny + 30, '', { size: 16, color: 0xffe3a0, bold: true, stroke: 0x2b1d14, strokeWidth: 4 });
+    this.netTag = text(scene, 0, this.self ? -r - 18 : ny + 30, '', { size: 16, color: 0xffe3a0, bold: true, stroke: 0x2b1d14, strokeWidth: 4 });
     // 对家头像紧贴顶栏，读秒放头上会压住比分：放到左边（右边是剩余张数）
     const [kx, ky] = seat === 2 ? [-r - 30, 0] : [0, -r - 20];
     this.clock = text(scene, kx, ky, '', { size: TYPE.body, color: 0xffffff, bold: true, font: 'num', stroke: 0x7d121a, strokeWidth: 5 });
     this.root.add([this.netTag, this.clock]);
     this.refreshIdentity();
 
-    if (seat !== 0) {
+    if (!this.self) {
       // 剩余张数：小牌背 + 数字；≤10 张变红并跳动
       const cx = seat === 1 ? -r - 26 : seat === 3 ? r + 26 : r + 30;
       const cy = seat === 2 ? 4 : 6;
@@ -106,7 +110,7 @@ export class SeatView {
     this.badge.setVisible(!!who && (!who.human || who.auto || !!who.afk));
     this.avatar.setAlpha(who?.away && !who.auto ? 0.45 : 1);
     // 我自己走开了不写"托管中"：我的画面上有"我回来了"，这里的字会和倒计时挤在一起
-    this.netTag.setText(who?.auto ? '电脑代打' : who?.away ? '重连中…' : who?.afk && this.seat !== 0 ? '托管中' : '');
+    this.netTag.setText(who?.auto ? '电脑代打' : who?.away ? '重连中…' : who?.afk && !this.self ? '托管中' : '');
   }
 
   /** 这一手还剩几秒（联机）；null 不显示 */

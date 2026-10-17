@@ -6,6 +6,8 @@ export interface User {
   displayName: string;
   friendCode: string;
   createdAt: number;
+  /** 让好友看到我在不在线、在哪（0.13.0）；旧的回话里没有，按开着算 */
+  showWhere?: boolean;
   /** 只有管理员有，值总是 true。 */
   isAdmin?: true;
 }
@@ -32,8 +34,26 @@ export interface Profile {
   avatar: unknown;
 }
 
+/** 在哪（0.13.0，15.13）：大厅、在玩某个游戏、在某个游戏的房间里（带房间码和人数） */
+/** 给我的邀请（0.14.0，docs/social.md 1.3）：until 是过期时间（毫秒） */
+export interface Invite {
+  id: string;
+  from: { id: string; name: string };
+  game: string;
+  room: string;
+  until: number;
+}
+
+export interface Where {
+  place: 'lobby' | 'game' | 'room';
+  game?: string;
+  room?: string;
+  seats?: string;
+}
+
 export interface FriendLists {
-  friends: (Profile & { lastSeenDaysAgo: number })[];
+  /** online、where（0.13.0）：对方关了"让好友看到我在哪"时 online 是 false、没有 where */
+  friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where })[];
   incoming: Profile[];
   outgoing: Profile[];
 }
@@ -300,6 +320,12 @@ export const api = {
   recover: (username: string, recoveryCode: string, newPassword: string) =>
     request<{ user: User; recoveryCode: string }>('POST', '/api/auth/recover', { username, recoveryCode, newPassword }),
   rename: (displayName: string) => request<{ user: User }>('PATCH', '/api/me', { displayName }),
+  setShowWhere: (showWhere: boolean) => request<{ user: User }>('PATCH', '/api/me', { showWhere }),
+  /** 报位置（0.13.0）：平台每 2 分钟最多记一次，写不了时也回 204 */
+  presence: (where: Where) => request<void>('POST', '/api/presence', where),
+  /** 邀请（0.14.0）：收是只读；"不了"只改自己收到的那条 */
+  invites: () => request<{ invites: Invite[] }>('GET', '/api/invites'),
+  dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),
   newRecoveryCode: (currentPassword: string) =>

@@ -77,6 +77,11 @@ async function fakePlatform(ctx: BrowserContext, userId: string): Promise<void> 
   let data: unknown = null;
   // 回大厅跳到的平台首页
   await ctx.route((u) => u.pathname === '/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>大厅</title>大厅' }));
+  // 报位置、收邀请（kit 的 social，docs/social.md 1.2、1.3）：位置收下，邀请一条都没有
+  await ctx.route(/\/api\/(presence|invites)/, (route) => {
+    if (new URL(route.request().url()).pathname.startsWith('/games/')) return route.continue();
+    return route.request().method() === 'GET' ? route.fulfill({ json: { invites: [] } }) : route.fulfill({ status: 204 });
+  });
   await ctx.route(/\/api\/(me|saves)/, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -409,6 +414,14 @@ async function summary(page: Page, name: string): Promise<number> {
   if (buttons.join() !== '回标题') throw new Error(`summary buttons: ${buttons.join()}`);
   const net = ((await page.locator('.sum-v').nth(2).textContent()) ?? '').replace(/,/g, '');
   await shot(page, name);
+  // 分享卡（docs/social.md 1.1，kit 的 share）：无头浏览器不能带文件分享，出预览层；看一眼再关，结算页还在
+  if (await page.locator('.sum-share').isVisible()) {
+    await page.locator('.sum-share').click();
+    await page.locator('[data-key="share:close"]').waitFor({ timeout: 10_000 });
+    await shot(page, `${name}-share`);
+    await page.locator('[data-key="share:close"]').click();
+    await page.locator('.summary').waitFor();
+  }
   await page.locator('.d-btn.primary').click();
   return net.startsWith('±') ? 0 : Number(net.replace('−', '-'));
 }

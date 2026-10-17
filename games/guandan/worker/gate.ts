@@ -17,7 +17,7 @@
  */
 
 import type { GuestOptions } from 'arcade-kit/guest';
-import { acceptCreate, acceptJoin, json, loginGate, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
@@ -78,8 +78,9 @@ export function routeRoom(request: Request, env: Env): Promise<Response> | Respo
   const join = JOIN_RE.exec(path);
   if (path !== CREATE_PATH && !join) return path.startsWith(`${ROOM_PATH}/`) || path === ROOM_PATH ? new Response('not found', { status: 404 }) : null;
   const on = env.ONLINE === 'on' && env.ROOM !== undefined;
-  // 闸门的 Fetcher 只声明了 fetch；运行时的服务绑定就是 kit 要的 Fetcher
-  const kitEnv = { ROOM: env.ROOM, ARCADE: env.ARCADE } as KitEnv;
+  // 整个 env 交给 kit：它要看 GATE 决定是不是独立模式（只挑 ROOM、ARCADE 时丢了 GATE，本站部署 ARCADE 掉了会退成游客放行，0.12.4 审计）。
+  // 闸门的 Fetcher 只声明了 fetch；运行时的服务绑定就是 kit 要的 Fetcher；ROOM 上面 on 已经查过
+  const kitEnv = env as unknown as KitEnv;
   const opts: GateOptions = env.SITE_ORIGIN ? { siteOrigin: env.SITE_ORIGIN, guest: GUEST } : { guest: GUEST };
   if (path === CREATE_PATH) return on ? createWithOptions(request, env, kitEnv, opts) : new Response('not found', { status: 404 });
   if (!on) {
@@ -100,7 +101,8 @@ export function routeRoom(request: Request, env: Env): Promise<Response> | Respo
 async function createWithOptions(request: Request, env: Env, kitEnv: KitEnv, opts: GateOptions): Promise<Response> {
   let stake: unknown;
   if (request.headers.get('content-type')?.includes('application/json')) {
-    const body: unknown = await request.clone().json().catch(() => null);
+    // 认人之前读请求体：kit 的 readJson 只读带 content-length 且不超过 512 字节的（{ stake } 只有几十字节）。kit 开房不读请求体
+    const body = await readJson(request, 512);
     if (body && typeof body === 'object') stake = (body as { stake?: unknown }).stake;
   }
   if (stake === undefined || stake === null) return acceptCreate(request, kitEnv, opts);

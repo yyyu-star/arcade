@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>arcade-kit/share 演示</title>
+    <style>
+      body { margin: 0; padding: 12px; background: #222; color: #fff; font: 14px system-ui, sans-serif; }
+      .bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+      button { font: inherit; padding: 6px 10px; }
+      canvas { width: 360px; height: 450px; margin: 0 8px 8px 0; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <!-- 分享卡的演示：几种卡（有图标、图集切片、坏图、长字、没小数据）画出来；"分享"按钮走系统分享或预览。npx vite 后打开 /demo/share.html -->
+    <div class="bar"><button id="share">分享第一张</button></div>
+    <div id="cards"></div>
+    <script type="module" src="./share.ts"></script>
+  </body>
+</html>

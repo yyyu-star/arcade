@@ -10,7 +10,7 @@ import { RNG } from '../src/core/table.ts';
 import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunEvent } from 'arcade-kit/fun-logic';
 import { momentOf, temperOf } from '../src/fun/moments.ts';
 import { TAUNTS } from '../src/fun/taunts.ts';
-import { AI_DELAY_MS, texasRoom, TURN_MS, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
+import { AI_DELAY_MS, roomOp, texasRoom, TURN_MS, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import type { Env } from './main.ts';
 import { GAME } from './platform.ts';
 
@@ -75,7 +75,7 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
     if (!userId) return { ok: false, error: 'no_user' };
     // 单独部署没有钱包：好友房的筹码白送、不记账（游客模式，DESIGN.md 10.1）。本站丢了绑定不能这样，一律拒绝
     if (!this.env.WALLET) return isStandalone(this.env) ? { ok: true } : { ok: false, error: 'unavailable' };
-    const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: `${e.ref}-${e.id}` };
+    const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: roomOp(e) };
     const r =
       e.kind === 'debit'
         ? await this.env.WALLET.buyin({ ...base, tier: e.stakes, amount: e.amount, until: Date.now() + HOLD_MS })

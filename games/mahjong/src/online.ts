@@ -90,7 +90,7 @@ export class Online {
   emote(id: number, to?: number): void {
     this.client.emote(id, to);
   }
-  /** 离座：手上的筹码马上结回钱包，电脑接着替这个座位打 */
+  /** 离座：电脑接着替这个座位打；实盘手上的筹码在这一局打完时结回钱包 */
   leaveSeat(): void {
     this.client.leave();
   }

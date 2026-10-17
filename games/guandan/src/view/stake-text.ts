@@ -90,8 +90,11 @@ export function settleNowText(points: number, chips: number, back: number): stri
   return `现在结算：按 ${signed(points)} 分（${signed(chips)}）结回 ${fmtChips(back)} 筹码`;
 }
 
-/** 好友房实盘离开（0.6.0 起立即结算）：把数字写出来 */
-export function roomLeaveText(points: number, chips: number, back: number): string {
+/**
+ * 好友房实盘离开：把数字写出来。两副之间（结算页）当场结回（0.6.0）；一副打到一半走的，这一副电脑替他打完、输赢照算，打完按那时的分结回（0.12.4）
+ */
+export function roomLeaveText(points: number, chips: number, back: number, midDeal = false): string {
+  if (midDeal) return `离开房间？这一副电脑替你打完、输赢照算，打完按那时的分结回（现在 ${signed(points)} 分，${signed(chips)}）；之后输赢不再算你的，回来会重新带入一份`;
   return `离开房间？按现在的 ${signed(points)} 分（${signed(chips)}）马上结回 ${fmtChips(back)} 筹码，之后电脑接着打，输赢不再算你的；回来会重新带入一份`;
 }
 

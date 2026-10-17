@@ -198,5 +198,10 @@ describe('中途结算的话写明数字（0.11.2）', () => {
   });
   it('好友房离开：同样写出分、筹码和结回额', () => {
     expect(roomLeaveText(2, 2 * pointValue('mid'), payout('mid', 2))).toMatch(/^离开房间？按现在的 \+2 分（\+\S+）马上结回 \S+ 筹码/);
+    // 一副打到一半（0.12.4）：这副打完才结回，不写结回额（还不知道）
+    const mid = roomLeaveText(-2, -2 * pointValue('mid'), payout('mid', -2), true);
+    expect(mid).toContain('这一副电脑替你打完、输赢照算');
+    expect(mid).toContain('现在 −2 分');
+    expect(mid).not.toContain('马上');
   });
 });

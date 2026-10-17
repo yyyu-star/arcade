@@ -10,7 +10,7 @@
   `src/` 里相互引用写 `.js` 扩展名（`./auth.js`），游戏的 tsconfig 不用特别配置。发布（`npm publish`）由维护者做。
 - 两种部署方式（0.10.0，`src/guest.ts`）：有 `ARCADE` 绑定是平台模式，行为和以前一样、游客 cookie 一律不认；没有 `ARCADE`、`GATE` 也不是 `"login"` 是独立模式（游客）。
   `GATE: "login"` 没绑 `ARCADE` 必须 fail-closed。改认人的代码时 `test/guest.test.ts` 的"平台模式不认游客"几条必须守住。
-- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
+- `client.ts`、`protocol.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts`、`share.ts`、`social.ts` 会进浏览器包或普通 Node 测试：不能引用 `room.ts`、`worker.ts`（依赖 `cloudflare:workers`）。
   `fun.ts`（0.7.0）只在调用时碰 DOM，import 时不碰；只动 transform、opacity，不读布局；素材只用 `fun-art.ts` 里手写的 SVG，不用 emoji 字体、不引外部资源，新素材也照这个来。`auth.ts`、`internal.ts` 不依赖运行时以外的东西。
 - 牌桌互动（0.11.0，规范是仓库根 `docs/table-fun.md`）：`fun-logic.ts` 是纯函数（不碰 DOM、时间和随机数由调用方给，房间也 import），数字的默认值就是规范，改了同步改测试和 README；
   `table-fun.ts` 和 `fun.ts` 同样的规矩：import 时不碰 DOM，动画只动 transform、opacity，量位置只在开菜单和 `controls()` 时。kit 里不出现任何游戏的名字、短语和人物，这些都由游戏传进来。
@@ -32,3 +32,5 @@
 - 电脑短语（0.10.0）：`onStep` 是同步钩子（广播之后、不 await、不写存储、抛错只记日志），`botEmote` 只给电脑座位（`ai`、托管 `auto`），和真人共用座位令牌桶。
   真人的短语不交给规则、`onStep`，也不要加这样的入口（公平：电脑不读真人互动）。
   唯一的例外是 `onEmote`（0.10.1）：真人短语广播后调，不给牌局状态，只许用来调 `botEmote` 让电脑回一句；`botEmote` 不触发它。改的时候这几条测试（`test/emote.test.ts` 的 ChattyRoom）要守住。
+- 分享卡和邀请（0.12.0，规范是仓库根 `docs/social.md`）：`share.ts`、`social.ts` 和 `table-fun.ts` 同样的规矩（import 时不碰 DOM、动画只动 transform、opacity）。
+  `social.ts` 只在 `detectPlatform` 说有平台且已登录时挂，前台才发请求；接口形状以 `docs/platform-backend.md` 为准，改了同步改 `test/social.test.ts`。分享卡只画游戏给的数据，kit 不认识任何游戏（游戏名、图标、主题色都由游戏给）。

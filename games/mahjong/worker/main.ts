@@ -17,6 +17,7 @@ import type { GuestOptions } from 'arcade-kit/guest';
 import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
 import { PERSONAS } from '../src/ai/personas.ts';
 import type { SettleStats } from '../src/core/match/index.ts';
+import { soloOp } from '../src/game/ops.ts';
 import { stakesOf, type TierId } from '../src/game/stakes.ts';
 import { GAME } from './game.ts';
 import type { MahjongRoom } from './room.ts';
@@ -132,12 +133,13 @@ async function stake(request: Request, env: Env, site: string, sub: string): Pro
   const b = (await readJson(request, MAX_BODY)) as { op?: unknown; session?: unknown; stakes?: unknown; amount?: unknown; stats?: unknown } | null;
   const id = (x: unknown): x is string => typeof x === 'string' && WALLET_ID.test(x);
   const amount = b?.amount;
-  if (!b || !id(b.op) || !id(b.session) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return json({ error: 'bad_request' }, 400);
+  if (!b || !id(b.op) || !id(soloOp(b.op)) || !id(b.session) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return json({ error: 'bad_request' }, 400);
   const tier = stakesOf(b.stakes);
   if (sub === 'buyin' && (!tier || !tier.wallet)) return json({ error: 'bad_request' }, 400);
   const who = await whoIs(request, env.ARCADE);
   if (!('user' in who)) return denied(who);
-  const base = { userId: who.user.userId, game: GAME, ref: b.session, mode: 'client' as const, op: b.op };
+  // 单机的操作 id 加 solo- 前缀，和好友房的永远分开（src/game/ops.ts）
+  const base = { userId: who.user.userId, game: GAME, ref: b.session, mode: 'client' as const, op: soloOp(b.op) };
   let r: WalletRpcReply;
   try {
     r =

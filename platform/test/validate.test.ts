@@ -66,7 +66,14 @@ describe('昵称', () => {
     expect(checkDisplayName('小美丽')).toBe('ok');
   });
 
-  it('德州扑克的 6 个电脑名字（德州还没上线，先拦）：原样、加数字、加空格符号都不许；只是包含它们的长名字照常可用', () => {
+  it('电脑人物名繁简、大小写归一，去掉空白、符号、数字、拉丁字母后整名相等才拦（0.13.0）', () => {
+    for (const n of ['老张a', '老张A', '老張', '老 张', '老张1', '老張B2', 'a老张', '阿強', 'x熊貓哥', '刹車王', '電腦', '管理員']) {
+      expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
+    }
+    for (const n of ['小美丽', '张三', '老李', '小王子', '我是老趙', 'Alice']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('ok');
+  });
+
+  it('德州扑克的 6 个电脑名字：原样、加数字、加空格符号都不许；只是包含它们的长名字照常可用', () => {
     for (const n of ['稳哥', '阿飙', '老好', '慢慢', '算盘', '江湖', '稳哥2', '阿 飙', '江湖！', '算盘007']) {
       expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
     }

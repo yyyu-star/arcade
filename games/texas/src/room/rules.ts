@@ -380,6 +380,16 @@ function buy(s: RoomState, seat: number, want?: number): RoomState {
 
 const shareRef = (s: RoomState, seat: number, n: number): string => `${s.ref}s${seat}n${n}`;
 
+/** 一份最多结回多少：带上桌的（补码合计）加 SETTLE_EXTRA 份（平台钱包的上限，platform-backend.md 钱包 settle） */
+export const SETTLE_EXTRA = 20;
+export const settleCap = (brought: number, max: number): number => brought + SETTLE_EXTRA * max;
+
+/**
+ * 好友房这一笔钱包操作的 op（worker/room.ts 交给平台）：房间号（r 开头）+ 座位和第几份 + 这一笔的序号。
+ * 单机的 op 一律由 Worker 加 solo- 前缀（worker/platform.ts 的 soloOp），两边永远撞不上：平台按 op 去重，撞上了就能借好友房那一笔白拿（审计高危，0.13.2）
+ */
+export const roomOp = (e: Pick<Pending, 'ref' | 'id'>): string => `${e.ref}-${e.id}`;
+
 /**
  * 攒要结回的，能结的合成一笔：牌桌结出来的筹码、走了的人没上桌的买入记进 owed；
  * 完全离桌（不是真人了、牌桌上也不是他了或者已经弃牌只等这一手打完，或者房间要关）、没有在路上的带入的座位，这一份结回、封上。
@@ -408,10 +418,13 @@ function collect(s0: RoomState): RoomState {
     held[i] = 0;
     if (sealed[i] || debiting(s0, i)) continue;
     if (s0.funded[i] || owed[i]! > 0) {
+      // 平台一份最多结回"带上桌的 + 20 份"（platform-backend.md 钱包 settle），多了整笔拒（bad_amount），房间当办完，这一份就全没了：
+      // 封到上限再结，超出的不结回（DESIGN.md 5.6：要别人在一份上前后补码二十多次才到得了）
+      const amount = Math.min(owed[i]!, settleCap(fame.inn[i]!, stakesOf(t.stakes).max));
       // 这一份的小结（0.3.0）：打了几手、赢了几手、最大一把、称号；报完清零，下一份从头记
-      const stats = settleStats(fame.per[i]!, owed[i]! - fame.inn[i]!, stakesOf(t.stakes).max);
-      fx.push({ id: `c${nextId++}`, seat: i, kind: 'credit', amount: owed[i]!, ref: shareRef(s0, i, s0.share[i]!), stats });
-      outs[i]! += owed[i]!;
+      const stats = settleStats(fame.per[i]!, amount - fame.inn[i]!, stakesOf(t.stakes).max);
+      fx.push({ id: `c${nextId++}`, seat: i, kind: 'credit', amount, ref: shareRef(s0, i, s0.share[i]!), stats });
+      outs[i]! += amount;
     }
     fame.per[i] = NO_FAME;
     fame.inn[i] = 0;

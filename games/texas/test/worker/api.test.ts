@@ -110,6 +110,24 @@ describe('单机的带入、结回（经服务绑定调平台钱包，client 模
     expect(await usage(u)).toEqual({ calls: 4, writes: 2 });
   });
 
+  it('单机的 op 由 Worker 加 solo- 前缀再交平台（0.13.2 审计高危）：和好友房的 op 撞不上；旧页面不带前缀、新页面带前缀的同一个 op 认作同一笔；加了前缀超长的不收', async () => {
+    const u = user();
+    const s = session();
+    const raw = op();
+    // 旧页面发的（不带前缀）和带了前缀的是同一笔：平台只扣一次、只写一次
+    expect(await body(await post('solo/buyin', u, { op: raw, session: s, stakes: 'small', amount: 2_000 }))).toMatchObject({ ok: true, wallet: { balance: 8_000 } });
+    expect(await body(await post('solo/buyin', u, { op: `solo-${raw}`, session: s, stakes: 'small', amount: 2_000 }))).toMatchObject({ wallet: { balance: 8_000 } });
+    expect(await usage(u)).toEqual({ calls: 2, writes: 1 });
+    // 长得和好友房一样的 op（<房间号>s<座位>n<第几份>-b<序号>）：交给平台的是 solo- 开头的，和房间那一笔是两回事，按新的一笔办（这里是补码，平台照常加）
+    const roomish = 'r0123456789abcdefs0n1-b0';
+    expect(await body(await post('solo/buyin', u, { op: roomish, session: s, stakes: 'small', amount: 1 }))).toMatchObject({ ok: true, wallet: { balance: 7_999 } });
+    expect(await usage(u)).toEqual({ calls: 3, writes: 2 });
+    // 加上前缀超过 64 位的不收，不调平台
+    const long = 'x'.repeat(60);
+    expect((await post('solo/buyin', u, { op: long, session: s, stakes: 'small', amount: 1 })).status).toBe(400);
+    expect(await usage(u)).toEqual({ calls: 3, writes: 2 });
+  });
+
   it('今天德州的进账到顶了：多赢的不进钱包，回话里 capped 是没进的数', async () => {
     const u = user();
     const s = session();
