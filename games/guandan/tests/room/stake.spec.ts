@@ -114,7 +114,7 @@ describe('好友房实盘', () => {
     expect(b.balances[t.user(0)]).toBe(START - 2_000);
   });
 
-  it('接管开局时就是电脑的座位：给他带入一份；主人离座先结回，再回来用新的 ref 带入一份（0.6.0）', async () => {
+  it('接管开局时就是电脑的座位：给他带入一份；主人一副打到一半离座，这副打完结回，再回来用新的 ref 带入一份（0.6.0、0.12.4）', async () => {
     const t = new Table({ humans: 2, tag: 'stk-take', stake: 'small' });
     await t.open();
     await waitStake(t.code, (s) => paid(s).join() === 'yes,yes,no,no', '开局到账');
@@ -125,7 +125,15 @@ describe('好友房实盘', () => {
     // 等每一步的钱包往来办完再走下一步（原来各等 50 毫秒，CI 机器慢时结回、再带入还没办完就去查，偶发失败）
     const c0 = t.seats.get(0)!;
     c0.send({ t: 'leave' });
-    await waitStake(t.code, (s) => s.book.seats[0]!.paid === 'left' && s.pending.length === 0, '离座结回办完');
+    // 一副打到一半走的：等这副打完再按那时的分结回（0.12.4 审计）
+    await waitStake(t.code, (s) => s.leaving?.[0] === true && s.pending.length === 0, '离座先记下');
+    for (let i = 0; i < 2000; i++) {
+      if ((await truth(t.code)).row!.game!.stake!.book.deals >= 1) break;
+      expect(await t.step()).toBe(true);
+    }
+    const left = await waitStake(t.code, (s) => s.book.seats[0]!.paid === 'left' && s.pending.length === 0, '这副打完，离座结回办完');
+    expect((await snapshot()).done[`${st.ref}-s0-out`]).toBe(1);
+    expect(left.book.seats[0]!.points).not.toBe(0);
     c0.send({ t: 'sit', seat: 0 });
     await waitStake(t.code, (s) => s.book.seats[0]!.paid === 'yes' && s.pending.length === 0, '回来新带入的一份到账');
     const done = (await snapshot()).done;

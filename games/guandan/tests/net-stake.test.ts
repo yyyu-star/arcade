@@ -151,6 +151,66 @@ describe('中途离开（0.6.0）', () => {
   });
 });
 
+describe('一副打到一半离开（0.12.4 审计）', () => {
+  const LOSE = [1, 3, 0, 2]; // 0、2 那一队被双下：-3
+
+  it('这一副电脑替他打完、输赢照算，打完按那时的分结回；躲不掉这副的输', () => {
+    let t = settleAll(stakeBegin(KEY, 'mid', HHAA));
+    t = stakeSeated(t, 0, 'ai', 'play');
+    expect(t.book.seats[0]!.paid).toBe('yes');
+    expect(t.pending).toEqual([]);
+    expect(t.leaving).toEqual([true, false, false, false]);
+    // 离开的标记不重复记
+    expect(stakeSeated(t, 0, 'ai', 'play')).toBe(t);
+    t = stakeDeal(t, deal(1, LOSE), 'dealEnd');
+    expect(t.pending.map((e) => [e.id.replace(t.ref, ''), e.amount])).toEqual([['-s0-out', 10_000 - 3 * 500]]);
+    expect(t.book.seats[0]!.paid).toBe('left');
+    expect(t.leaving).toEqual([false, false, false, false]);
+    // 之后的副归庄家
+    const pts = t.book.seats[0]!.points;
+    t = stakeDeal(settleAll(t), deal(2, LOSE), 'dealEnd');
+    expect(t.book.seats[0]!.points).toBe(pts);
+  });
+
+  it('进贡、还贡也算打到一半；两副之间（结算页）离开当场结回', () => {
+    for (const ph of ['tribute', 'return'] as const) expect(stakeSeated(settleAll(stakeBegin(KEY, 'mid', HHAA)), 0, 'ai', ph).pending).toEqual([]);
+    const t = stakeSeated(settleAll(stakeBegin(KEY, 'mid', HHAA)), 0, 'ai', 'dealEnd');
+    expect(t.pending.map((e) => e.kind)).toEqual(['out']);
+  });
+
+  it('这一副没打完又坐回来：还是原来那一份，不结回也不再带入', () => {
+    let t = settleAll(stakeBegin(KEY, 'mid', HHAA));
+    t = stakeSeated(stakeSeated(t, 0, 'ai', 'play'), 0, 'human', 'play');
+    expect(t.leaving).toEqual([false, false, false, false]);
+    expect(t.pending).toEqual([]);
+    t = stakeDeal(t, deal(1, LOSE), 'dealEnd');
+    expect(t.book.seats[0]).toEqual({ paid: 'yes', points: -3 });
+    expect(t.pending).toEqual([]);
+  });
+
+  it('这一副正好打完一场、或者关房：只结回一笔', () => {
+    const a = stakeDeal(stakeSeated(settleAll(stakeBegin(KEY, 'mid', HHAA)), 0, 'ai', 'play'), deal(1, LOSE), 'gameOver');
+    expect(a.over).toBe(true);
+    expect(a.pending.filter((e) => e.seat === 0).map((e) => e.amount)).toEqual([10_000 - 3 * 500]);
+    const b = stakeFinish(stakeSeated(settleAll(stakeBegin(KEY, 'mid', HHAA)), 0, 'ai', 'play'));
+    expect(b.pending.filter((e) => e.seat === 0).map((e) => e.amount)).toEqual([10_000]);
+    expect(b.leaving).toEqual([false, false, false, false]);
+  });
+
+  it('真人都在一副中间走了：等电脑打完这副再算完（不然关房时按开这副前的分结回）', () => {
+    let s = R.begin(KEY, 2, { opts: { stake: 'mid' }, seats: [...HHAA] });
+    s = { ...s, stake: settleAll(s.stake!) };
+    expect(['tribute', 'return', 'play']).toContain(s.g.phase);
+    s = R.seated!(R.seated!(s, 0, 'ai'), 1, 'ai');
+    expect(s.stake!.leaving).toEqual([true, true, false, false]);
+    expect(R.over(s)).toBe(false);
+    // 这副打完：两人都结回，房间算完
+    const done = { ...s, stake: stakeDeal(s.stake!, deal(1, LOSE), 'dealEnd') };
+    expect(done.stake.pending.map((e) => e.seat).sort()).toEqual([0, 1]);
+    expect(R.over(done)).toBe(true);
+  });
+});
+
 describe('一场结束', () => {
   const US = [0, 2, 1, 3]; // 0、2 那一队双下：+3
 
@@ -227,7 +287,10 @@ describe('接进联机规则', () => {
     expect(R.settled!(fun, 'x', {})).toBe(fun);
     expect(R.closing!(fun)).toBe(fun);
     const s = stakeState();
-    expect(R.effects!(R.seated!(s, 0, 'ai')).map((e) => e.id)).toEqual([`${s.stake!.ref}-s0-out`]);
+    // 一副打到一半离开：等这副打完再结回（0.12.4），这时还没有要办的
+    const left = R.seated!(s, 0, 'ai');
+    expect(R.effects!(left)).toEqual([]);
+    expect(left.stake!.leaving).toEqual([true, false, false, false]);
     expect(R.effects!(R.seated!(s, 3, 'human')).map((e) => e.id)).toEqual([`${s.stake!.ref}-s3-in`]);
     const closed = R.closing!(s);
     expect(closed.stake!.over).toBe(true);

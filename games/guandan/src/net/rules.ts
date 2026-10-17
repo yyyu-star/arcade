@@ -423,17 +423,17 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
   },
   // 实盘房间：一场（5 副、过 A、到账的都封顶）打完就结束，结回由 effects 接着办。
   // 真人都点了"离开"（0.6.0 起没真人就结束）：也算打完，kit 马上还开房名额；带入还在路上的等它办完再算（到账了要原样结回）。
-  // 只是掉线的人座位还是真人的，不算没人（房间按 noHumanMs 另算）
+  // 只是掉线的人座位还是真人的，不算没人（房间按 noHumanMs 另算）。一副打到一半走的要等电脑把这副打完、按打完的分结回（0.12.4），也先不算完
   // 娱乐房间打完一整场先不算完（0.6.2）：停 AGAIN_MS 等人点"再来一场"，点了或者停够了才算
   over: (s) =>
-    (s.g.phase === 'gameOver' && !waitingAgain(s)) || s.stake?.over === true || (s.humans !== undefined && !s.humans.some(Boolean) && !s.stake?.pending.some((e) => e.kind === 'in')),
+    (s.g.phase === 'gameOver' && !waitingAgain(s)) || s.stake?.over === true || (s.humans !== undefined && !s.humans.some(Boolean) && !s.stake?.pending.some((e) => e.kind === 'in') && !s.stake?.leaving?.some(Boolean)),
   // 等"再来一场"时谁也不用出手：由房间停着计时（kit 0.5.0），电脑、托管的座位不会被代出
   pause: (s) => (waitingAgain(s) ? AGAIN_MS : null),
   resume: (s) => ({ ...s, ev: [], again: null }),
   // 座位换人（kit 0.3.0）：记下谁是真人；实盘的带入、离开结回在 stakeSeated
   seated: (s, seat, kind) => {
     const humans = s.humans?.map((h, i) => (i === seat ? kind === 'human' : h));
-    const t = s.stake ? stakeSeated(s.stake, seat, kind) : undefined;
+    const t = s.stake ? stakeSeated(s.stake, seat, kind, s.g.phase) : undefined;
     if (!humans && t === s.stake) return s;
     return { ...s, ...(humans ? { humans } : {}), ...(t ? { stake: t } : {}) };
   },
