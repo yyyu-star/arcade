@@ -5,10 +5,11 @@
 import type { Danger } from './waves.ts';
 
 /**
- * 实盘开没开。第 7 步按 balance.md 把倍数曲线配平以前关着：4c 的模拟器预估期望倍数−1 有 0.6–1.9，远高于 balance.md，开着就是白送筹码。
- * 关着时菜单不显示实盘，Worker 拒绝带入（直接调接口也带不进去）；结回、退回照常，免得万一有挂着的一份结不掉。
+ * 实盘开没开（守夜）。第 7 步按模拟器每格 2,000 局把四档的天亮倍数配进 balance.md 的区间后打开（2026-10-17）。
+ * 关掉时菜单不显示实盘，Worker 拒绝带入（直接调接口也带不进去）；结回、退回照常，免得万一有挂着的一份结不掉。
+ * 夜探实盘另做（基准价值要先模拟），菜单上先写"很快开放"。
  */
-export const LIVE_OPEN = false;
+export const LIVE_OPEN = true;
 
 export type LiveTier = 'small' | 'medium' | 'large' | 'luxe';
 export const LIVE_TIER_IDS: readonly LiveTier[] = ['small', 'medium', 'large', 'luxe'];
@@ -26,9 +27,9 @@ export interface LiveTierDef {
 
 export const LIVE_TIERS: Record<LiveTier, LiveTierDef> = {
   small: { id: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 11_000 },
-  medium: { id: 'medium', name: '中', stake: 10_000, danger: 2, dawnBp: 11_000 },
-  large: { id: 'large', name: '大', stake: 50_000, danger: 3, dawnBp: 11_000 },
-  luxe: { id: 'luxe', name: '豪华', stake: 200_000, danger: 4, dawnBp: 11_000 },
+  medium: { id: 'medium', name: '中', stake: 10_000, danger: 2, dawnBp: 15_200 },
+  large: { id: 'large', name: '大', stake: 50_000, danger: 3, dawnBp: 15_200 },
+  luxe: { id: 'luxe', name: '豪华', stake: 200_000, danger: 4, dawnBp: 17_400 },
 };
 
 export function isLiveTier(v: unknown): v is LiveTier {
@@ -41,12 +42,14 @@ export const LIVE_MAX_BP = 30_000;
 /**
  * 守夜的结回倍数（4.2）：中途倒下按撑到的秒数逐拍插值，点是 [秒, 占天亮倍数的万分比]；3:00 以前为 0。
  * 曲线从 3:00 起平滑上升，没有"4 分 01 秒才有钱"的断崖。四档形状相同，只按 dawnBp 缩放：配平时每档只调一个数。
+ * 第 12 轮全量（每格 2,000 局）拟合：中途回得少、天亮给得多，小白（早死）和普通（多半撑到天亮）才拉得开，
+ * 原来的形状（10 分钟回 55%）下四档小白都压不进 balance.md 的区间。
  */
 export const VIGIL_SHAPE: readonly (readonly [number, number])[] = [
   [180, 0],
-  [300, 1_400],
-  [600, 5_500],
-  [840, 7_200],
+  [300, 560],
+  [600, 2_200],
+  [840, 2_880],
   [900, 10_000],
 ];
 /** 打倒尸王比撑到天亮多结回多少（万分比），总数不超过 LIVE_MAX_BP */

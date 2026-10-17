@@ -7,6 +7,11 @@ const res = (status: number, body: unknown): Response => new Response(JSON.strin
 const OK = { ok: true, wallet: { balance: 1 }, credited: 0, capped: 0, user: 'u1' };
 
 describe('守夜结回倍数', () => {
+  it('天亮倍数随档位不降：越大的档不会更难还给得更少（主线 #211）', () => {
+    for (let i = 1; i < LIVE_TIER_IDS.length; i++) {
+      expect(LIVE_TIERS[LIVE_TIER_IDS[i]!].dawnBp).toBeGreaterThanOrEqual(LIVE_TIERS[LIVE_TIER_IDS[i - 1]!].dawnBp);
+    }
+  });
   it('每档：3:00 前为 0、随撑的时间不减、天亮 = dawnBp、尸王再加且封顶', () => {
     for (const t of LIVE_TIER_IDS) {
       const dawn = LIVE_TIERS[t].dawnBp;

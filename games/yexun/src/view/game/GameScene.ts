@@ -157,6 +157,8 @@ export class GameScene extends Phaser.Scene {
   private gd = newGuide();
   private gdAt = -99;
   private gdMask = -1;
+  private trailG: Phaser.GameObjects.Graphics | null = null;
+  private trailHinted = false;
   /** 守卫头上的"!"：跟着那只怪走 */
   private alerts: { slot: number; gen: number; life: number; img: Phaser.GameObjects.Image }[] = [];
   /** 捡到宝物的飘字（图标 + 名字） */
@@ -234,7 +236,11 @@ export class GameScene extends Phaser.Scene {
         this.town?.destroy();
       });
       // 第一次夜探（教学镇）：开局一句话说清要干什么，几秒后自己收起
-      if (this.raid.teach) setTimeout(() => this.d.banners.say('搜宝箱 · 躲巡夜将 · 天亮前走门撤离', 'gold', 8000, '没撤出去背包全丢（教学镇例外：不丢）'), 700);
+      if (this.raid.teach) {
+        // 先说清这是练手的小镇子（所有者试玩时觉得夜探太小），再说玩法
+        setTimeout(() => this.d.banners.say('教学镇', 'gold', 3000, '小镇子练手，下一局是 6,400 见方的大镇子'), 500);
+        setTimeout(() => this.d.banners.say('搜宝箱 · 躲巡夜将 · 天亮前走门撤离', 'gold', 7000, '没撤出去背包全丢（教学镇例外：不丢）'), 3900);
+      }
     }
     this.scatterDecor();
     this.drawBlocks();
@@ -819,6 +825,75 @@ export class GameScene extends Phaser.Scene {
 
   // ───────────────────────── 夜探的事件 ─────────────────────────
 
+  /** 撤离指引：主角前方一段小箭头沿路线往门流动。画在地面层（depth −200，在屋顶、墙顶之下），点往离墙远的一侧推开 44px（墙的画面比碰撞脚印宽） */
+  private drawTrail(raid: Raid, gd: ReturnType<typeof newGuide>): void {
+    const g = (this.trailG ??= this.add.graphics().setDepth(-200));
+    g.clear();
+    const lit = this.town?.trail;
+    if (lit) lit.length = 0;
+    if (gd.gate < 0 || gd.trailN < 2) return;
+    if (!this.trailHinted) {
+      this.trailHinted = true;
+      this.d.banners.say(`跟着箭头去${raid.map.gates[gd.gate]!.name}撤离`, 'gold', 3200);
+    }
+    const tr = gd.trail;
+    const near = Math.max(0.85, Math.min(1, 1.3 - gd.dist / 1600));
+    // 脚印点隔得远（约 3 格），沿折线每 STEP 单位摆一个箭头；相位按 dt 累加的时间走，朝门流动
+    const STEP = LOW_MEMORY ? 110 : 80;
+    const span = LOW_MEMORY ? 480 : 760;
+    const phase = ((this.now * 0.05) % STEP) / STEP;
+    const blocks = raid.map.blocks;
+    // 折线从主角脚下开始，接上第一个脚印点
+    let px0 = this.renderX, py0 = this.renderY;
+    let walked = 0;
+    let next = phase * STEP;
+    for (let i = 0; i < gd.trailN && walked < span; i++) {
+      const x1 = tr[i * 2]!, y1 = tr[i * 2 + 1]!;
+      const dx = x1 - px0, dy = y1 - py0;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      const ux = dx / len, uy = dy / len;
+      for (; next < len && walked + next < span; next += STEP) {
+        let x = px0 + ux * next, y = py0 + uy * next;
+        const dist = walked + next;
+        for (const b of blocks) {
+          if (x < b.x - 50 || x > b.x + b.w + 50 || y < b.y - 50 || y > b.y + b.h + 50) continue;
+          const cx = Math.max(b.x, Math.min(x, b.x + b.w)), cy = Math.max(b.y, Math.min(y, b.y + b.h));
+          let ox = x - cx, oy = y - cy;
+          const d = Math.hypot(ox, oy);
+          if (d >= 44) continue;
+          if (d < 0.5) { ox = x - (b.x + b.w / 2); oy = y - (b.y + b.h / 2); }
+          const m = Math.hypot(ox, oy) || 1;
+          const base = d < 0.5 ? 0 : d;
+          x += (ox / m) * (44 - base);
+          y += (oy / m) * (44 - base);
+        }
+        // 头尾淡入淡出，越靠近门越亮越大
+        const fade = Math.min(1, dist / 60, (span - dist) / 160);
+        // 填色不打折（打折后压在石板上发灰，和门牌的亮黄对不上），只在头尾淡出；越近门越大
+        const a = Math.max(0, fade);
+        const sz = (LOW_MEMORY ? 16 : 14 + 6 * (1 - dist / span)) * near;
+        const px = -uy, py = ux;
+        lit?.push(x, y, a);
+        for (const [col, grow, al] of [[0x17131c, 3, 0.9], [0xffd23a, 0, 1]] as const) {
+          const s2 = sz + grow;
+          g.fillStyle(col, al * a);
+          // 飞镖形：尖、左后角、尾凹、右后角
+          const tx = x + ux * s2, ty = y + uy * s2;
+          const lx = x - ux * s2 * 0.8 + px * s2 * 0.85, ly = y - uy * s2 * 0.8 + py * s2 * 0.85;
+          const rx = x - ux * s2 * 0.8 - px * s2 * 0.85, ry = y - uy * s2 * 0.8 - py * s2 * 0.85;
+          const nx = x - ux * s2 * 0.2, ny = y - uy * s2 * 0.2;
+          g.fillTriangle(tx, ty, lx, ly, nx, ny);
+          g.fillTriangle(tx, ty, nx, ny, rx, ry);
+        }
+      }
+      next -= len;
+      walked += len;
+      px0 = x1;
+      py0 = y1;
+    }
+  }
+
   private onGateOpen(x: number, y: number, k: number): void {
     sfx.play('gateOpen');
     this.d.banners.say(`${this.raid!.map.gates[k]!.name}开了`, 'gold', 2600, '站进门圈里 3 秒就能撤出去');
@@ -1350,13 +1425,7 @@ export class GameScene extends Phaser.Scene {
         guide(raid, w.x, w.y, this.gd);
       }
       const gd = this.gd;
-      for (let i = 0; i < gd.trailN; i++) {
-        const t = 1 - i / (gd.trailN + 2);
-        g.fillStyle(0x17131c, 0.55 * t);
-        g.fillCircle(gd.trail[i * 2]!, gd.trail[i * 2 + 1]!, 8);
-        g.fillStyle(0xffd23a, 0.95 * t);
-        g.fillCircle(gd.trail[i * 2]!, gd.trail[i * 2 + 1]!, 5);
-      }
+      this.drawTrail(raid, gd);
       const cam = this.cameras.main;
       const cssW = this.scale.displaySize.width;
       const cssH = this.scale.displaySize.height;
@@ -1531,7 +1600,7 @@ export class GameScene extends Phaser.Scene {
       shield: w.shield,
       shieldMax: w.shieldMax,
       level: w.level,
-      xp: w.xp / xpNeed(w.level),
+      xp: w.xp / xpNeed(w.level, !!w.raid),
       left: ((raid ? RAID_DAWN : DAWN_TICK) - w.tick) / 30,
       raid: raid ? { label: w.tick >= DAWN_WARN ? '天亮' : '离天亮', level: w.tick >= DAWN_RED ? 2 : w.tick >= DAWN_WARN ? 1 : 0, bag: raid.bag.length, value: raid.bag.reduce((a, id) => a + TREASURES[id]!.value, 0) } : undefined,
       kills: w.kills,

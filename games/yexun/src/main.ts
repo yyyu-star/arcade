@@ -702,6 +702,7 @@ async function boot(): Promise<void> {
     wantEndless = !!world?.setup.endless;
     void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
   };
+  result.onBigTown = () => menu.onRaid('guzhen', save.danger);
   result.onMenu = () => {
     result.hide();
     menu.show(menuState());

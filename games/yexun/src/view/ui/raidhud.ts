@@ -186,7 +186,8 @@ export class RaidHud {
       l1 = '门都关了';
       tone = 'wait';
     }
-    const l2 = s.level === 0 ? '' : s.teach ? '教学镇：没撤出去也不丢背包' : s.level === 2 ? '天亮还没撤出，背包全丢' : '天亮前撤出，不然背包全丢';
+    // 教学镇一直挂着名字：玩家要知道这是练手的小镇子，不是正式的
+    const l2 = s.teach ? '教学镇 · 没撤出去也不丢背包' : s.level === 0 ? '' : s.level === 2 ? '天亮还没撤出，背包全丢' : '天亮前撤出，不然背包全丢';
     // 石兽的血条在同一个位置：它在的时候目标条往下让一格
     const lower = this.boss !== null && this.boss.style.display !== 'none';
     const cls = `yx-rs ${tone}${lower ? ' lower' : ''}${s.level === 2 ? ' red' : s.level === 1 ? ' warn' : ''}`;

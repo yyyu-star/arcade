@@ -68,6 +68,8 @@ export class Town {
   private readonly steps: { x0: number; x1: number; y: number }[] = [];
   /** 不随时间变的光：灯笼、亮窗、金铜箱 */
   private readonly lights: Light[] = [];
+  /** 撤离箭头的位置（x, y, 亮度 三个一组，GameScene 每帧填）：暗幕上给它们挖小亮圈，不然门牌色的箭头被压成灰的 */
+  readonly trail: number[] = [];
   private readonly dark: Phaser.Textures.CanvasTexture;
   private readonly darkImg: Phaser.GameObjects.Image;
   private readonly dctx: CanvasRenderingContext2D;
@@ -908,6 +910,8 @@ export class Town {
       const g = gates[k]!;
       hole(g.x, g.y - 50, this.raid.gateOpen[k] === 1 ? 420 : 200, this.raid.gateOpen[k] === 1 ? 0.95 : 0.5);
     }
+    const tr = this.trail;
+    for (let i = 0; i + 2 < tr.length; i += 3) hole(tr[i]!, tr[i + 1]!, 48, 0.85 * tr[i + 2]!);
     // 暖色罩：灯笼、亮窗、开着的门，叠在挖出来的亮处
     c.globalCompositeOperation = 'source-over';
     const warm = (x: number, y: number, r: number, a: number): void => {
