@@ -86,6 +86,8 @@ export interface Fx {
   overlay(node: HTMLElement, ms: number, delay?: number): void;
   /** 胡、自摸、杠的大字加粒子（view/fx.ts），在这个座位前面放 */
   celebrate(seat: number, text: string, kind: CelebrateKind): void;
+  /** 开局发牌的过场：牌从中控盘 4-4-4-1 发到各家，不到 1 秒，点一下桌面就跳过 */
+  deal(): void;
 }
 
 /** 通用的动作（胡、碰、杠、过、自摸、打牌）由牌桌直接发，交给控制器包成玩法的动作 */
@@ -101,6 +103,8 @@ const DRAG_START = 8;
  * 打出的牌飞进河里多久（0.16.2，所有者嫌手感慢）：自己的 120 毫秒（以前 300），别人的 200（以前 340），牌在 72% 处落桌。
  * 落桌声按它们算（玩法的 ui.ts），只是画面，不改计时和规则
  */
+/** 开局发牌过场的总长（4 批 × 200 毫秒错开 + 每张 300 毫秒），所有者要求不超过 1 秒 */
+const DEAL_MS = 900;
 export const FLY_MS = { me: 120, other: 200 } as const;
 /** 落到桌上的那一刻（飞行动画 72% 处）：玩法在这时补一声落桌 */
 export const landAt = (mine: boolean): number => Math.round((mine ? FLY_MS.me : FLY_MS.other) * 0.72);
@@ -212,6 +216,11 @@ export class TableUi<V extends TableView, A> {
   }
 
   /** 这个座位上是谁（互动：名字、是不是电脑、空位） */
+  /** 现在画着的视图（互动的首次提示要看现在是什么阶段） */
+  view(): V | null {
+    return this.frame?.v ?? null;
+  }
+
   seatMeta(seat: number): SeatMeta | null {
     return this.frame?.seats[seat] ?? null;
   }
@@ -250,11 +259,13 @@ export class TableUi<V extends TableView, A> {
     this.drawCenter();
     this.drawHand();
     this.drawBar();
+    this.dealAnimate();
     this.ui.effects(v, this.fx, frame.seats.map((x) => x.name));
     this.startTimer();
   }
 
   readonly fx: Fx = {
+    deal: () => this.dealIn(),
     banner: (seat, text, cls = '') => {
       const b = el('div', `banner r${this.rel(seat)} ${cls}`, this.fxLayer, text);
       window.setTimeout(() => b.remove(), 1_500);
@@ -369,6 +380,50 @@ export class TableUi<V extends TableView, A> {
   }
 
   /** 打出的牌飞进河里：自己的从手里那张的位置，别人的从他的手牌那边 */
+  /**
+   * 开局发牌（docs/art-v3.md 第 5 节，0.17.4）：我的手牌从中控盘飞到手里，四张一批、四批（4-4-4-1），别家的牌背跟着一批批亮出来；
+   * 一共 0.9 秒，点一下桌面全部放完。只是画面：牌早就在 DOM 里、能点，不挡换三张；减少动态效果时不放。
+   * 牌桌每来一个视图整桌重画（换三张时电脑几毫秒就选好，紧接着就是下一帧），所以记下开始的时刻，
+   * 这 0.9 秒里每次重画都给新画的牌接着放（负的延迟 = 从中间接上）
+   */
+  private dealAt = 0;
+  private dealIn(): void {
+    if (calm()) return;
+    this.dealAt = performance.now();
+    const skip = (): void => {
+      this.dealAt = 0;
+      for (const e of this.root.querySelectorAll<HTMLElement>('.my-hand .tile, .opp-hand > *')) for (const a of e.getAnimations()) if (a.id === 'deal') a.finish();
+    };
+    this.root.addEventListener('pointerdown', skip, { once: true, capture: true });
+    window.setTimeout(() => this.root.removeEventListener('pointerdown', skip, { capture: true }), DEAL_MS);
+    this.dealAnimate();
+  }
+
+  private dealAnimate(): void {
+    const t = performance.now() - this.dealAt;
+    if (!this.dealAt || t >= DEAL_MS) return;
+    const c = this.center.getBoundingClientRect();
+    // 舞台整体缩放过：屏幕上的距离除以缩放倍数才是牌在舞台里要挪的距离
+    const k = this.root.getBoundingClientRect().width / (this.root.offsetWidth || 1) || 1;
+    const batch = (i: number): number => Math.min(3, Math.floor(i / 4)) * 200 - t;
+    [...this.myHand.querySelectorAll<HTMLElement>('.tile')].forEach((e, i) => {
+      const r = e.getBoundingClientRect();
+      const dx = (c.left + c.width / 2 - (r.left + r.width / 2)) / k;
+      const dy = (c.top + c.height / 2 - (r.top + r.height / 2)) / k;
+      e.animate([{ transform: `translate(${dx}px, ${dy}px) scale(.5)`, opacity: 0 }, { transform: 'none', opacity: 1 }], {
+        id: 'deal',
+        duration: 300,
+        delay: batch(i),
+        easing: 'cubic-bezier(.2,.8,.3,1)',
+        fill: 'backwards',
+      });
+    });
+    for (let r = 1; r < 4; r++)
+      [...this.hands[r]!.children].forEach((e, i) =>
+        (e as HTMLElement).animate([{ opacity: 0 }, { opacity: 1 }], { id: 'deal', duration: 200, delay: batch(i) + 100, fill: 'backwards' }),
+      );
+  }
+
   private fly(e: HTMLElement, r: number, t: Tile): boolean {
     if (calm()) return false;
     const from = r === 0 ? (this.flyFrom?.tile === t ? this.flyFrom.rect : null) : this.hands[r]!.getBoundingClientRect();

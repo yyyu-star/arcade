@@ -46,6 +46,18 @@
   /* 点按区域最小边长：屏幕上 44 像素折成设计像素，viewport.ts 按缩放写 */
   --tap: 44px;
   --app-h: 100vh;
+  /* kit 的面板（分享预览、叫朋友、互动菜单）跟着茶馆的样子走（kit 0.16.0 的 --ak-*，靠继承，不用每个组件传 theme） */
+  --ak-bg: #2a160c;
+  --ak-fg: #f6efdc;
+  --ak-accent: #f3c86b;
+  --ak-accent-fg: #3a2300;
+  --ak-border: #f3c86b40;
+  --ak-radius: 16px;
+  --ak-radius-btn: 12px;
+  --ak-font: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --ak-overlay: #0c1220b3;
+  --ak-soft: #ffffff14;
+  --ak-title: #f3c86b;
   font-family: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;

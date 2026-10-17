@@ -23,7 +23,7 @@ import { renderLobby } from './view/lobby.ts';
 import { settleFx } from './view/fx.ts';
 import { renderHome, type HomeMode } from './view/home.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
-import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
+import { play, setAmbience, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { awardsCard, cardOf, prepareCard } from './view/share.ts';
 import { cheerLine, easierLevel, GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, nextStreak, num, STAKES_NAME, VARIANT_NAME, walletError, type Streak } from './view/text.ts';
@@ -44,6 +44,8 @@ interface Prefs {
   /** 总音量 0–1（静音另算：sound 关着时一点声音都不出） */
   volume: number;
   fast: boolean;
+  /** 茶馆底噪（0.17.4）：默认开、很轻，跟着静音和音量走，声音面板里能单独关 */
+  ambience: boolean;
   stakes: StakesId;
   /** 单机娱乐的难度：第一次玩默认新手 */
   level: Level;
@@ -55,9 +57,9 @@ function loadPrefs(): Prefs {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
     const vol = typeof p.volume === 'number' && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8;
     const level = LEVELS.includes(p.level as Level) ? (p.level as Level) : 'easy';
-    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
+    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, ambience: p.ambience !== false, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
   } catch {
-    return { sound: true, volume: 0.8, fast: false, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
+    return { sound: true, volume: 0.8, fast: false, ambience: true, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
   }
 }
 const prefs = loadPrefs();
@@ -70,6 +72,7 @@ function savePrefs(): void {
 }
 setSound(prefs.sound);
 setVolume(prefs.volume);
+setAmbience(prefs.ambience);
 // 牌桌、选桌页的画（art.css 用的 --art-* 变量）
 installArt();
 // 牌墙的立体牌背：只生成一次，写成变量给 style.css 的 .opp-hand .back 用
@@ -124,6 +127,12 @@ const muteBtn = button('act soft', volBox, '', () => {
   savePrefs();
   paintTop();
 });
+const ambBtn = button('act soft', volBox, '', () => {
+  prefs.ambience = !prefs.ambience;
+  setAmbience(prefs.ambience);
+  savePrefs();
+  paintTop();
+});
 // 互动的总开关也放这儿（docs/table-fun.md 第 5 节）：关了别人的一律不播，单机电脑也不反应
 const funBtn = button('act soft', volBox, '', () => {
   setFunOff(!funOff());
@@ -146,6 +155,7 @@ function paintTop(): void {
   soundBtn.textContent = prefs.sound && prefs.volume > 0 ? '声' : '静';
   muteBtn.textContent = prefs.sound ? '静音' : '开声';
   funBtn.textContent = funOff() ? '互动：不看' : '互动：开';
+  ambBtn.textContent = prefs.ambience ? '茶馆声：开' : '茶馆声：关';
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -904,6 +914,19 @@ function newFun(t: TableUi<XzView, XzAction>, me: () => number | null, temper: (
     canSend: () => me() !== null,
     scope: () => scope,
     localBots,
+    // 首次提示冒在对家头像上（离手牌和操作条最远），对家空着就上家（左上）；右下那家贴着碰杠胡过的按钮，不挑。
+    // 换三张、定缺、轮到我打、碰杠胡过的按钮在（v.prompt）时先不冒——以前 kit 挑第一个电脑，常是右下那家，
+    // 气泡压住"缺条""过"和那家的名字（docs/art-v3.md 审计、#249 截图）
+    hintSeat: () => {
+      const v = t.view();
+      const m = me();
+      if (!v || m === null || v.phase !== 'turn' || v.turn === m || v.prompt) return null;
+      for (const s of [(m + 2) % 4, (m + 3) % 4]) {
+        const meta = t.seatMeta(s);
+        if (meta && !meta.empty) return s;
+      }
+      return null;
+    },
   });
   dialogHooks({ open: () => f.hide(), close: () => f.show() });
   // 冒烟按 kit 的 controls() 点（开发服务器上才挂）

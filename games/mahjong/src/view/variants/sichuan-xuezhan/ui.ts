@@ -75,6 +75,7 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
     for (const e of v.events) {
       switch (e.e) {
         case 'deal':
+          fx.deal();
           play('deal');
           break;
         case 'swapped':
