@@ -290,14 +290,22 @@ export const ROAM_SPEED = 0.6;
  * 实盘结回（DESIGN.md 4.2）：倍数 = clamp(带出的宝物价值 ÷ 基准价值, 0, 封顶)，死亡或迷失为 0；结回 = 带入 × 倍数 向下取整，按万分之一传。
  * 基准价值目前按下面的"估算节奏"定（10 分钟撤约 1.3 倍）；第 7 步用机器人模拟的真实数换掉。
  * 封顶先和守夜打倒尸王一样是 3（4.1：夜探要不要放宽到 5 份，等模拟数出来报主线定）。
- * 档位 → 危险：小 0、中 2、大 3、豪华 4（4.1；夜探豪华档先不开）。
+ * 档位 → 危险：小 0、中 2、大 3（4.1；夜探豪华档先不开）。档位名和守夜共用（钱包、Worker 不分模式，只认档位和倍数）。
+ * 基准价值按"档位 × 镇子"各一个：三个镇子同一档的平均带出价值差两成（模拟器第 1 轮），只按一个数会有"挑镇子赚钱"的空子。
  */
 export const RAID_LIVE = {
   cap: 3,
-  base: { small: 221, mid: 221, large: 221 } as Record<RaidLiveTier, number>,
-  danger: { small: 0, mid: 2, large: 3 } as Record<RaidLiveTier, number>,
+  base: {
+    small: { guzhen: 221, dukou: 221, shansi: 221 },
+    medium: { guzhen: 221, dukou: 221, shansi: 221 },
+    large: { guzhen: 221, dukou: 221, shansi: 221 },
+  } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
+  danger: { small: 0, medium: 2, large: 3 } as Record<RaidLiveTier, number>,
 };
-export type RaidLiveTier = 'small' | 'mid' | 'large';
+export type RaidLiveTier = 'small' | 'medium' | 'large';
+/** 能开实盘的镇子（教学镇不能） */
+export type RaidLiveTemplate = Exclude<RaidTemplateId, 'teach'>;
+export const RAID_LIVE_TIERS: readonly RaidLiveTier[] = ['small', 'medium', 'large'];
 
 /**
  * 估算节奏（模拟器出数前用来定基准价值）：普通玩家撤出时大约开了几个箱子，箱子在什么深度。

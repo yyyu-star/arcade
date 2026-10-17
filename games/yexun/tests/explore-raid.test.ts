@@ -254,7 +254,7 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
   });
 
   it('实盘：倍数 = 价值 ÷ 基准，封顶，万分之一向下取整；结回向下取整（4.2）', () => {
-    const base = RAID_LIVE.base.small;
+    const base = RAID_LIVE.base.small.guzhen;
     expect(liveBp(0, 'small')).toBe(0);
     expect(liveBp(base, 'small')).toBe(10000);
     expect(liveBp(base * 100, 'small')).toBe(RAID_LIVE.cap * 10000);

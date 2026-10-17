@@ -75,12 +75,12 @@ describe('夜探内容表', () => {
     for (const p of RAID_PACE_MODEL) {
       let v = 0;
       for (const [k, n] of Object.entries(p.chests)) v += expectedChestValue(k as 'wood', p.depth) * n;
-      const m = v / RAID_LIVE.base.small;
+      const m = v / RAID_LIVE.base.small.guzhen;
       expect(Math.abs(m - p.target)).toBeLessThan(0.1);
       expect(m).toBeGreaterThan(prev);
       expect(m).toBeLessThanOrEqual(RAID_LIVE.cap);
       prev = m;
     }
-    expect(RAID_LIVE.danger).toEqual({ small: 0, mid: 2, large: 3 });
+    expect(RAID_LIVE.danger).toEqual({ small: 0, medium: 2, large: 3 });
   });
 });
