@@ -1,0 +1,49 @@
+# 夜巡第 7 步跑表：把 tools/sim.ts 的格子拆到 GitHub 的公共 runner 上并行跑（公开仓库不计分钟）。
+# 只在推到 sim/yexun-* 分支时触发；这个文件只放在一次性的跑表分支上，不合进 main，用完删分支。
+# 不碰任何凭证：permissions 只读，不进 production 环境。
+name: Sim yexun raid
+on:
+  push:
+    branches: ['sim/yexun-*']
+permissions:
+  contents: read
+concurrency:
+  group: sim-yexun-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # 每格 2,000 局拆成 4 片，每片 500 局（种子 from+1..from+500），公共 runner 最多 20 个同时跑，拆细了排得更满
+  N: '200'
+defaults:
+  run:
+    working-directory: games/yexun
+jobs:
+  cell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        danger: [0, 2, 3]
+        who: [novice, normal, greedy]
+        tpl: [guzhen, dukou, shansi]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: games/yexun/.nvmrc
+          cache: npm
+          cache-dependency-path: games/yexun/package-lock.json
+      - run: npm ci
+      - name: 跑一格
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          f="raid-${{ matrix.tpl }}-d${{ matrix.danger }}-${{ matrix.who }}"
+          node tools/sim.ts --mode raid --n "$N" --danger ${{ matrix.danger }} --map ${{ matrix.tpl }} --skill ${{ matrix.who }} \
+            --build sword,talisman,ward,wood,fire --threads "$(nproc)" --json "$RUNNER_TEMP/out/$f.json" | tee "$RUNNER_TEMP/out/$f.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: raid-${{ matrix.tpl }}-d${{ matrix.danger }}-${{ matrix.who }}
+          path: ${{ runner.temp }}/out/
+          retention-days: 3
