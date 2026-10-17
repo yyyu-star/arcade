@@ -44,7 +44,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 | `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
-| `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere` 等接口小函数；只在有平台且已登录时挂 |
+| `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment`（0.12.5）等接口小函数；只在有平台且已登录时挂 |
 
 **发布和仓库内引用是两种形态**（0.10.0）：
 - npm 上的包是编译好的 `dist/`（JS + `.d.ts`），`exports` 每个入口给 `types` 和 `default`；
@@ -398,6 +398,9 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   "不了"`dismiss` 后弹下一条，到期自己收起。按钮 `data-key` 是 `invite:go`、`invite:no`；`log` 给 `位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期`。
 - 发邀请 `sendInvite({ to, game, room })` → `{ ok: true, id }` 或 `{ ok: false, error: 'limit' | 'blocked' | 'login' | 'failed', retryAfter? }`（429 是每天 50 条、同一好友 1 分钟 1 条超了）。
   `fetchFriends()` 把平台每项的公开资料 `{ userId, displayName, avatar }` 统一成 `id`、`name`（原样字段留着），带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
+- 报名场面（0.12.5，好友动态）`postMoment(game, moment, n?, n2?, n3?)` → `POST /api/feed`：只报编号和最多 3 个整数，文字由游戏的 `public/moments.json` 给模板
+  （`{"double_down": {"text": "{name}和搭档双下了对面"}}`，只认 `{name}`、`{n}`、`{n2}`、`{n3}`，≤ 40 字）。返回 HTTP 状态，平台超了每天 10 条也回 204，游戏不用管；
+  编号要字母开头、1–24 位 `[a-z0-9_]`，不合格的本地就不发（回 400）。只在真有看头的时候报（一局一两条），平台每人每天 10 条是所有游戏合计。
 - **"叫朋友来"面板**（0.12.2）：`social.openInvite({ game, room })`（`social` 是 `mountSocial` 的返回值；没挂上时用导出的 `openInvite({ game, room, friends: false })`，只有"复制邀请链接"）。
   列好友（在线的在前，写在哪），每人一个"叫他来"，发出后 1 分钟内是灰的"已叫"，叫不了的写成大白话；底下"复制邀请链接"（能系统分享就分享）。
   样式和 table-fun 一样，z-index 默认 10600（0.12.4 起；游戏自己的弹窗更高时传 `zIndex`）；好友"在哪"先用平台给的 `where.gameName`，没有再用 `gameName` 回调，都没有说"在玩游戏"；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。

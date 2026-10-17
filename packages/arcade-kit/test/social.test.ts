@@ -15,6 +15,7 @@ import {
   parseFriend,
   parseInvites,
   pickInvite,
+  postMoment,
   postPresence,
   sendInvite,
   setShowWhere,
@@ -80,6 +81,37 @@ describe('接口：写的请求带 x-arcade、同源 cookie', () => {
     expect(calls[0]!.url).toBe('/api/me');
     expect(calls[0]!.init.method).toBe('PATCH');
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ showWhere: false });
+  });
+
+  it('报名场面 POST /api/feed {game, moment, n}：只带给了的数字，204 原样回', async () => {
+    const { f, calls } = fake(new Response(null, { status: 204 }), new Response(null, { status: 204 }), new Error('offline'));
+    expect(await postMoment('cards', 'four_bombs', 4, 1200, undefined, { fetchImpl: f })).toBe(204);
+    expect(calls[0]!.url).toBe('/api/feed');
+    expect(calls[0]!.init.method).toBe('POST');
+    expect(hdr(calls[0]!, 'x-arcade')).toBe('1');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ game: 'cards', moment: 'four_bombs', n: [4, 1200] });
+    // 没有数字就不带 n
+    expect(await postMoment('cards', 'double_down', undefined, undefined, undefined, { fetchImpl: f })).toBe(204);
+    expect(JSON.parse(String(calls[1]!.init.body))).toEqual({ game: 'cards', moment: 'double_down' });
+    // 没连上是 0
+    expect(await postMoment('cards', 'x', 1, undefined, undefined, { fetchImpl: f })).toBe(0);
+  });
+
+  it('报名场面：编号、数字不合格的本地就拦下（400，不发请求）', async () => {
+    const { f, calls } = fake();
+    for (const [game, moment, n, n2] of [
+      ['cards', '1abc', 1, undefined],
+      ['cards', 'Bad', 1, undefined],
+      ['cards', 'a'.repeat(25), 1, undefined],
+      ['cards', 'ok', 1.5, undefined],
+      ['cards', 'ok', Number.MAX_SAFE_INTEGER + 1, undefined],
+      ['cards', 'ok', undefined, 2],
+      ['Cards!', 'ok', 1, undefined],
+    ] as const) {
+      expect(await postMoment(game, moment, n, n2, undefined, { fetchImpl: f })).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+    expect(await postMoment('cards', 'a'.repeat(24), -3, 0, 7, { fetchImpl: fake(new Response(null, { status: 204 })).f })).toBe(204);
   });
 
   it('发邀请：成功拿 id，429 是超限（带 retry-after），403 是被屏蔽，401 没登录', async () => {
