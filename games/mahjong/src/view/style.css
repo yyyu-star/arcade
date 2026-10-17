@@ -1884,6 +1884,30 @@ html .atf-btn svg {
 .end .dialog > .summary + .summary {
   margin-top: var(--sp-4);
 }
+/* 结算的按钮行贴在弹窗底：内容再长（一场打完的总结算、名场面），"下一局""再来一场"也不用滚到下面去找（0.16.3，1920 宽时被切掉一半） */
+.end .dialog > .end-acts {
+  position: sticky;
+  bottom: calc(-1 * var(--sp-5));
+  margin: var(--sp-3) calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5));
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  background: linear-gradient(#0f2c2200, #0f2c22 var(--sp-4));
+  z-index: 1;
+}
+/* 横屏高度只有 560：每家的牌并进名字那一行（名字、牌、胡了什么、分），一局的结算一屏放得下 */
+[data-orient='land'] .end .dialog {
+  max-width: min(960px, 96%);
+}
+[data-orient='land'] .summary .row .hand-line {
+  order: 1;
+  width: auto;
+}
+[data-orient='land'] .summary .row:has(> .hand-line) .what {
+  order: 2;
+  min-width: 0;
+}
+[data-orient='land'] .summary .row:has(> .hand-line) .net {
+  order: 3;
+}
 
 /* 从平台大厅的"好友房"进来：开房、进房亮两下 */
 .spot {

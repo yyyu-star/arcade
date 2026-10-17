@@ -683,7 +683,7 @@ const soloUi = {
           if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
           cheer(box, mine, v.result?.seats[v.me!.seat]?.net ?? 0);
-          const row = el('div', 'row', box);
+          const row = el('div', 'row end-acts', box);
           button('act soft', row, '回选桌', () => {
             closeDialog();
             lobby();
@@ -701,7 +701,7 @@ const soloUi = {
       }
       dialog(stage, 'end', (box) => {
         box.appendChild(roundSummary(v, names, unit));
-        button('act go', box, '下一局', () => {
+        button('act go', el('div', 'row end-acts', box), '下一局', () => {
           closeDialog();
           solo?.next();
         });
