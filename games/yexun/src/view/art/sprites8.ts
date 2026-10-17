@@ -829,7 +829,92 @@ export function treasureIconKey(icon: string): string {
   return `t_${icon}`;
 }
 
+// ───────────────────────── 宝妖、鬼市摊子、封条 ─────────────────────────
+
+/** 宝妖：背着鼓鼓宝袋的小妖，金帽金腰带，雪地上一团暖金色最显眼（半径 20，画 72 × 80） */
+function goblin(c: Ctx): void {
+  const gold = '#f2b930';
+  const goldD = '#b57d12';
+  // 宝袋（背后，比身子还大）：袋口扎绳，上面一个铜钱印，漏出几枚钱
+  blob(c, ellipse(22, 46, 19, 21, -0.2), '#a9692e', '#6f4119', 2.6, 3);
+  blob(c, poly(14, 29, 30, 28, 33, 35, 12, 36), '#8a5222', '#5e3512', 2.2, 1.6);
+  blob(c, ellipse(22, 31, 4.5, 3.4), gold, goldD, 1.8, 1.2);
+  blob(c, circle(21, 50, 8.5), gold, goldD, 2, 1.6);
+  blob(c, rrect(18.4, 47.4, 5.2, 5.2, 0.8), '#6f4119', null, 1);
+  blob(c, circle(9, 66, 3.2), gold, goldD, 1.6, 1);
+  blob(c, circle(14, 70, 2.8), gold, goldD, 1.6, 1);
+  // 脚
+  blob(c, ellipse(34, 76, 8, 3.6), '#15131a', null, 2);
+  blob(c, ellipse(52, 76, 8, 3.6), '#15131a', null, 2);
+  // 身子：金黄短褂 + 腰带
+  blob(c, poly(30, 46, 58, 46, 62, 74, 26, 74), '#f4c542', goldD, 2.8, 2.6);
+  blob(c, rrect(27, 59, 34, 6, 2), '#c0392b', '#8c2a20', 2, 1.2);
+  blob(c, circle(44, 62, 3.6), gold, goldD, 1.6, 1);
+  // 手：抓着肩上的袋绳 / 抓着一枚大铜钱
+  blob(c, rrect(24, 44, 14, 7, 3), '#4fb06c', '#2f7d4a', 2.2, 1.4);
+  blob(c, rrect(55, 50, 12, 7, 3), '#4fb06c', '#2f7d4a', 2.2, 1.4);
+  blob(c, circle(69, 53, 7), gold, goldD, 2.2, 1.8);
+  blob(c, rrect(66.4, 50.4, 5.2, 5.2, 0.8), '#6f4119', null, 1);
+  dab(c, circle(66.5, 50, 1.6), '#fff4b8', 0.9);
+  // 头：绿皮大脑袋，尖耳朵，金色小帽
+  blob(c, poly(28, 28, 12, 20, 29, 36), '#4fb06c', '#2f7d4a', 2.2, 1.2);
+  blob(c, poly(60, 28, 76, 20, 59, 36), '#4fb06c', '#2f7d4a', 2.2, 1.2);
+  blob(c, ellipse(44, 31, 17, 16), '#5cc67a', '#2f7d4a', 2.8, 3);
+  blob(c, poly(28, 21, 44, 4, 60, 21), gold, goldD, 2.6, 2);
+  blob(c, rrect(27, 19, 34, 5, 2), '#c0392b', null, 1.8);
+  blob(c, circle(44, 5, 3), '#fff4b8', goldD, 1.6, 1);
+  // 脸：金色眼睛，大嘴笑，露一颗牙
+  blob(c, ellipse(37, 30, 4.4, 4.6), '#fff4b8', null, 1.8);
+  blob(c, ellipse(51, 30, 4.4, 4.6), '#fff4b8', null, 1.8);
+  blob(c, circle(38, 31, 2), INK, null, 1);
+  blob(c, circle(52, 31, 2), INK, null, 1);
+  stroke(c, (k) => { k.moveTo(34, 38); k.quadraticCurveTo(44, 47, 54, 38); }, 2.2);
+  blob(c, poly(41, 40, 44, 45, 47, 40), '#ffffff', null, 1.2);
+  // 金光点缀
+  dab(c, circle(30, 50, 1.6), '#fff4b8', 0.9);
+  dab(c, circle(56, 70, 1.4), '#fff4b8', 0.9);
+}
+
+/** 鬼市的摊子：紫黑布棚、挂两盏红灯笼、台面上留出放货的位置（画 96 × 92，锚点在脚） */
+function marketStall(c: Ctx): void {
+  for (const x of [14, 78]) blob(c, rrect(x, 26, 4, 60, 1.4), '#4a3a30', '#2e231c', 2, 1);
+  // 台面
+  blob(c, rrect(8, 62, 80, 22, 2), '#6b4a8a', '#3f2a58', 2.4, 2);
+  blob(c, rrect(6, 58, 84, 8, 2), '#8a64ae', '#53387a', 2.2, 1.4);
+  // 布棚：紫底金边波浪
+  blob(c, poly(2, 30, 14, 8, 82, 8, 94, 30), '#5b3a86', '#3b2460', 2.6, 2.4);
+  for (let x = 4; x < 92; x += 11) blob(c, (k) => { k.moveTo(x, 30); k.quadraticCurveTo(x + 5.5, 38, x + 11, 30); }, x % 22 < 11 ? '#f2b930' : '#5b3a86', null, 1.6);
+  stroke(c, (k) => { k.moveTo(14, 8); k.lineTo(82, 8); }, 2.4, '#f2b930');
+  // 灯笼
+  for (const x of [18, 78]) {
+    const g = c.createRadialGradient(x, 44, 2, x, 44, 20);
+    g.addColorStop(0, 'rgba(255,170,90,0.6)');
+    g.addColorStop(1, 'rgba(255,170,90,0)');
+    c.fillStyle = g;
+    c.fillRect(x - 20, 24, 40, 40);
+    stroke(c, (k) => { k.moveTo(x, 30); k.lineTo(x, 35); }, 1.4);
+    blob(c, ellipse(x, 44, 6.5, 8), '#e2452f', '#b8301f', 2, 1.6);
+    dab(c, ellipse(x, 44, 2.6, 5), '#ffd57a', 0.7);
+  }
+}
+
+/** 宝库封条：两张交叉的黄符纸，压在金箱上（画 60 × 56，中心在箱子） */
+function seal(c: Ctx): void {
+  for (const dir of [-1, 1]) {
+    c.save();
+    c.translate(30, 28);
+    c.rotate(dir * 0.62);
+    blob(c, rrect(-6.5, -30, 13, 60, 1.5), '#ffd23a', '#d6a216', 2.4, 1.6);
+    stroke(c, (k) => { k.moveTo(-3, -22); k.lineTo(3, -22); k.moveTo(0, -22); k.lineTo(0, -4); k.moveTo(-3, 2); k.lineTo(3, 6); k.moveTo(3, 2); k.lineTo(-3, 6); }, 1.8, '#c0392b');
+    c.restore();
+  }
+  blob(c, circle(30, 28, 4.6), '#c0392b', '#8c2a20', 2, 1.4);
+}
+
 export const SPRITES8: SpriteDef[] = [
+  { key: 'goblin', w: 80, h: 82, ox: 0.5, oy: 0.93, draw: goblin },
+  { key: 'mstall', w: 96, h: 92, ox: 0.5, oy: 0.93, draw: marketStall },
+  { key: 'seal', w: 60, h: 56, ox: 0.5, oy: 0.5, draw: seal },
   { key: 'patrol', w: 72, h: 92, ox: 0.5, oy: 0.95, draw: patrol },
   { key: 'beast', w: 130, h: 118, ox: 0.5, oy: 0.95, draw: beast },
   { key: 'chest_wood', w: 48, h: 44, ox: 0.5, oy: 0.93, draw: (c) => chest(c, 'wood', false) },
