@@ -34,6 +34,28 @@ describe('登录闸门', () => {
     expect(res.headers.getSetCookie()).toEqual(['__Host-sid=renew; Max-Age=34560000; Path=/; Secure; HttpOnly']);
   });
 
+  it('游戏页带内容安全策略（0.17.1，DESIGN.md 10.3）：脚本只许同源、WebSocket 只许本站的 wss、不许别的站点嵌；不是页面的不带', async () => {
+    const res = await get('/', 'renew');
+    expect(res.status).toBe(200);
+    const csp = res.headers.get('content-security-policy')!;
+    const rules = Object.fromEntries(csp.split('; ').map((x) => [x.split(' ')[0], x.split(' ').slice(1).join(' ')]));
+    expect(rules).toEqual({
+      'default-src': "'self'",
+      'script-src': "'self' https://static.cloudflareinsights.com",
+      'style-src': "'self' 'unsafe-inline'",
+      'img-src': "'self' data: blob:",
+      'connect-src': `'self' wss://${new URL(SITE).host} https://cloudflareinsights.com`,
+      'object-src': "'none'",
+      'base-uri': "'self'",
+      'form-action': "'self'",
+      'frame-ancestors': "'self'",
+    });
+    // 加头不能丢了闸门原来的头（不缓存、平台续期的 Set-Cookie）
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(res.headers.getSetCookie()).toEqual(['__Host-sid=renew; Max-Age=34560000; Path=/; Secure; HttpOnly']);
+    expect((await get('/titles.json', 'renew')).headers.get('content-security-policy')).toBeNull();
+  });
+
   it('没登录 302 到登录页；会话失效时平台清 cookie 的 Set-Cookie 也带回去', async () => {
     for (const sid of [null, 'anon']) {
       const res = await get('/', sid);

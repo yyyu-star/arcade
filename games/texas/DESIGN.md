@@ -1111,7 +1111,7 @@ P0 时钱包放在德州自己的 `Wallet` DO 里（单机和好友房共用、�
 - 随时离桌（kit 的 `leave`）：这一手当场弃牌，桌上剩下的筹码和没上桌的买入**马上**结回钱包（0.2.4 试玩反馈："立即结算"；规则 `cashOut`），
   投进池子的留在池子里、这一手由别人打完，电脑再坐进来。这一手全下着的等这一手打完再结。马上又回来的买新的一份，下一手坐上。
 - 桌上一个真人都没有了、也没有买入在路上：`over` 为真（0.2.4），kit 马上还开房名额、办完结回再关房，不再让电脑自己打到"10 分钟没人"。
-  每人开房额度在 `wrangler.jsonc` 的 `KIT_QUOTA` 里放宽到同时 5 个、每天 100 个（`roomsPerUser`、`dailyRoomsPerUser`；kit 默认 1 和 6），全站上限和写入预算不变。
+  每人开房额度在 `wrangler.jsonc` 的 `KIT_QUOTA` 里放宽到同时 5 个、每天 30 个（`roomsPerUser`、`dailyRoomsPerUser`；kit 默认 1 和 6；每天的原来是 100，0.17.1 安全审计调低：正常玩家一天开不了 30 个房间，主要防脚本刷），全站上限和写入预算不变。
   **最后一个真人离桌**时，规则替电脑把这一手打完（kit 不在没有真人的房间里驱动电脑），他的筹码马上结回去，不用等房间关。
 - 房间关掉（10 分钟没人、到寿命、当天额度满）时：**这一手作废、各人这一手投的退回**，所有人桌上的筹码一起结回去，还在路上的买入到账后原样退回。
   作废而不是打完：剩下的街要等真人出手，关的时候等不了。额度满时 kit 等到收场点（一手和一手之间，或者新的一手只交了盲注）再关，退回的只有盲注。
@@ -1246,7 +1246,7 @@ kit 0.1.1 的房间是"开局时定好座位、全局只有一个 32 位种子�
 
 ### 6.7 分享卡、报位置和收邀请（0.14.0，社交第一期 1.1–1.3）
 
-画法和请求都在 kit（`arcade-kit/share`、`arcade-kit/social`，0.13.0），德州只交数据、接线。分享卡在结算页出来时就先画好（`prepareShare`），点击里不先 await 直接分享：iOS 只许在点击那一下里调系统分享。单独部署时都不出现。
+画法和请求都在 kit（`arcade-kit/share`、`arcade-kit/social`，0.13.1），德州只交数据、接线。分享卡在结算页出来时就先画好（`prepareShare`），点击里不先 await 直接分享：iOS 只许在点击那一下里调系统分享。单独部署时都不出现。
 
 - **分享卡**（`src/view/share.ts`）：单机离桌、好友房离开或房间关了的结算页里有"分享这一场"，点了不关结算页，手机上走系统分享，别的出 kit 的预览（保存图片、复制链接）。
   卡上只有公开的数：这一场输赢（筹码）、打了几手和赢了几手（单机）或这一场的奖（好友房，6.8；没颁奖时同桌几人和名次）、最大一手的牌型（只在摊牌赢时有，那手牌大家都看到了；别人都弃牌赢的写"最大一池 · 弃牌赢"）、我的称号。
@@ -1476,6 +1476,23 @@ games/texas/
 4. Cloudflare 路由和网关限速规则加上 `/games/texas/api/*`、`/games/texas/rooms*`（5.5）；
 5. 平台"昵称不许用电脑名字"的名单加上 10 个电脑名字（4.5 第 3 条的顺序：稳哥、阿飙、老好、慢慢、算盘、江湖、虎子、老鹰、叨叨、小白）；
 6. 6.2 的 kit 需求排期，第 7 节的写入份额定下来。
+
+### 10.3 游戏页的安全响应头（0.17.1，安全审计低危）
+
+游戏页（首页三个路径，都过登录闸门）的响应由 Worker 加 `Content-Security-Policy`（`worker/main.ts` 的 `secure`），别的静态资源不是文档，不带。
+没有放在静态资源的 `_headers` 里，是因为 WebSocket 那一条要写明本站的 `wss://<host>`：Safari 的 `'self'` 不认 ws/wss，仓库公开又不写正式域名，只能按请求的 host 拼（单独部署也对）。
+
+| 指令 | 值 | 为什么 |
+|---|---|---|
+| `default-src` | `'self'` | 字体等没单列的都只许同源 |
+| `script-src` | `'self' https://static.cloudflareinsights.com` | 只有打包出来的同源脚本，没有内联脚本、没有 eval；外加 Cloudflare Web Analytics 的统计脚本（线上边缘自动插进页面，本地冒烟看不到） |
+| `style-src` | `'self' 'unsafe-inline'` | kit 的互动、叫人面板往页面里插 style 元素 |
+| `img-src` | `'self' data: blob:` | CSS 里的小图标是 data: 的 SVG；分享卡预览是 blob: |
+| `connect-src` | `'self' wss://<host> https://cloudflareinsights.com` | 接口都同源；好友房的 WebSocket 同源（本地 http 是 ws:）；统计脚本往 Cloudflare 上报 |
+| `object-src` / `base-uri` / `form-action` | `'none'` / `'self'` / `'self'` | 用不到，收紧 |
+| `frame-ancestors` | `'self'` | 不许别的站点用 iframe 嵌，只许同源 |
+
+先以 Report-Only 跑全套冒烟（桌面、手机、好友房、单独部署），冒烟里每个页面监听 `securitypolicyviolation` 记成控制台错误，零违规后改成正式的。`test/worker/api.test.ts` 查首页带着这条头。
 
 ## 11. 分阶段
 

@@ -105,6 +105,7 @@ async function fakePlatform(ctx: BrowserContext, userId: string): Promise<void> 
 
 async function newContext(browser: Browser, base: string, userId: string, device: Parameters<Browser['newContext']>[0] = {}): Promise<BrowserContext> {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, ...device });
+  await cspWatch(ctx);
   // 平台的两个 cookie（__Host- 的不能带 Domain；CDP 这里要写 domain，浏览器照样当 host-only，localhost 算安全来源）
   const host = new URL(base).hostname;
   await ctx.addCookies([
@@ -113,6 +114,13 @@ async function newContext(browser: Browser, base: string, userId: string, device
   ]);
   await fakePlatform(ctx, userId);
   return ctx;
+}
+
+/** 页面的 CSP（0.17.1）：违规（拦了的、只报不拦的）都在控制台记一条错误，冒烟按零报错查 */
+async function cspWatch(ctx: BrowserContext): Promise<void> {
+  await ctx.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error(`csp ${e.disposition}: ${e.effectiveDirective} ${e.blockedURI}`)),
+  );
 }
 
 function watch(page: Page, tag: string, allow409 = false): void {
@@ -747,6 +755,7 @@ async function withWorker(config: string[], run: (base: string) => Promise<void>
 /** 单独部署：见文件头 */
 async function standalone(browser: Browser, base: string): Promise<void> {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await cspWatch(ctx);
   await ctx.addInitScript(() => {
     if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true, nick: '小明' }));
   });
@@ -781,6 +790,7 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await page.locator('.rw-seat.me').waitFor({ timeout: 20_000 });
   const code = ((await page.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
   const phone = await browser.newContext(PHONE);
+  await cspWatch(phone);
   const pp = await phone.newPage();
   watch(pp, 'alone-phone');
   await pp.goto(`${base}/games/texas/?room=${code}`);
@@ -815,6 +825,10 @@ async function main(): Promise<void> {
         if (!only || only === 'room') await room(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
+  } catch (e) {
+    // 半路失败时也把攒下的控制台错误打出来：卡住的原因常在这里（比如 CSP 拦了什么）
+    if (errors.length) console.error(errors.join('\n'));
+    throw e;
   } finally {
     await browser.close();
   }
