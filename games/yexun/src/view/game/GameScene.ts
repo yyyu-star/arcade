@@ -23,7 +23,7 @@ import { COS, SIN } from '../../core/dirs.ts';
 import { HERO_TEX, MOB_TEX, RAID_TEX, makeIcons, peekHeroAtlas, type Atlas, type Frame } from '../art/atlas.ts';
 import { faceKey, heroKey } from '../art/heroes.ts';
 import { artRng } from '../art/draw.ts';
-import { bambooCanvas, bambooKey, GROUND_TINT, paintTerrain, stumpCanvas } from '../art/terrain.ts';
+import { BAMBOO_VARIANTS, BAMBOO_WIDTHS, bambooCanvas, bambooKey, GROUND_TINT, paintTerrain, stumpCanvas } from '../art/terrain.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
 import { MOB_COLOR } from '../art/sprites.ts';
 import { music } from '../audio/music.ts';
@@ -420,15 +420,41 @@ export class GameScene extends Phaser.Scene {
     const all = this.w.allBlocks;
     if (!all.some((b) => b.look === 'bamboo')) return;
     const res = LOW_MEMORY ? 1 : 2;
-    const ensure = (key: string, make: () => HTMLCanvasElement): void => {
-      if (!this.textures.exists(key)) this.textures.addCanvas(key, make());
-    };
-    ensure('bamboo_stump', () => stumpCanvas(res));
+    // 6 张竹丛贴图拼成一张纹理（每张是一个帧）：和竹桩一起只占一次纹理切换，同屏几十丛竹子不再每丛打断一次批处理
+    if (!this.textures.exists('bamboo_sheet')) {
+      // 每个变体一行（一行三种宽度），竹桩接在第一行末尾：整张宽高都在 2,048 以内
+      const parts: { key: string; cv: HTMLCanvasElement; x: number; y: number }[] = [];
+      let y = 0;
+      let width = 0;
+      for (let v = 0; v < BAMBOO_VARIANTS; v++) {
+        let x = 0;
+        let rowH = 0;
+        for (const wd of BAMBOO_WIDTHS) {
+          const cv = bambooCanvas(wd, v, res);
+          parts.push({ key: `bamboo_${wd}_${v}`, cv, x, y });
+          x += cv.width;
+          rowH = Math.max(rowH, cv.height);
+        }
+        if (v === 0) {
+          const stump = stumpCanvas(res);
+          parts.push({ key: 'bamboo_stump', cv: stump, x, y });
+          x += stump.width;
+        }
+        width = Math.max(width, x);
+        y += rowH;
+      }
+      const sheet = document.createElement('canvas');
+      sheet.width = width;
+      sheet.height = y;
+      const sc = sheet.getContext('2d')!;
+      for (const q of parts) sc.drawImage(q.cv, q.x, q.y);
+      const tex = this.textures.addCanvas('bamboo_sheet', sheet)!;
+      for (const q of parts) tex.add(q.key, 0, q.x, q.y, q.cv.width, q.cv.height);
+    }
     all.forEach((b, k) => {
       if (b.look !== 'bamboo') return;
       const { key, wd } = bambooKey(b, k);
-      ensure(key, () => bambooCanvas(wd, k % 2, res));
-      const img = this.add.image(b.x + b.w / 2, b.y + b.h + 4, key).setOrigin(0.5, 1 - 12 / 250).setDepth(b.y + b.h);
+      const img = this.add.image(b.x + b.w / 2, b.y + b.h + 4, 'bamboo_sheet', key).setOrigin(0.5, 1 - 12 / 250).setDepth(b.y + b.h);
       img.setScale((b.w / wd) / res, 1 / res);
       this.bamboo.set(k, img);
     });
@@ -436,6 +462,24 @@ export class GameScene extends Phaser.Scene {
     this.w.allBlocks.forEach((b, k) => {
       if (b.look === 'bamboo' && this.w.blockHp[k]! <= 0) this.fellBamboo(k, false);
     });
+  }
+
+  /** 主角走到竹丛后面（脚比竹丛脚底靠上，身子和头落在竹丛图里）时，把那丛竹子淡到 0.35，离开恢复；每帧只过一遍竹丛，不新建对象 */
+  private fadeBambooOverHero(hx: number, hy: number, dt: number): void {
+    if (this.bamboo.size === 0) return;
+    const step = Math.min(1, dt / 120);
+    for (const [k, img] of this.bamboo) {
+      const b = this.w.allBlocks[k]!;
+      // 竹丛图的包围盒（原点在底边中心偏上 12/250）；两侧各让出 20%，只在竹子真挡在身前时才淡
+      const hw = img.displayWidth * 0.3;
+      const bottom = img.y + img.displayHeight * (12 / 250);
+      const top = bottom - img.displayHeight;
+      const behind = hy < b.y + b.h && hx > img.x - hw && hx < img.x + hw && hy > top && hy - 80 < bottom;
+      const want = behind ? 0.35 : 1;
+      if (img.alpha === want) continue;
+      const a = img.alpha + (want - img.alpha) * step;
+      img.setAlpha(Math.abs(a - want) < 0.02 ? want : a);
+    }
   }
 
   /** 竹丛挨了一下：抖一抖，掉几片叶子；血过半发黄 */
@@ -454,7 +498,7 @@ export class GameScene extends Phaser.Scene {
     const b = this.w.allBlocks[k]!;
     const img = this.bamboo.get(k);
     this.bamboo.delete(k);
-    const stump = this.add.image(b.x + b.w / 2, b.y + b.h + 2, 'bamboo_stump').setScale(1 / (LOW_MEMORY ? 1 : 2)).setDepth(-800);
+    const stump = this.add.image(b.x + b.w / 2, b.y + b.h + 2, 'bamboo_sheet', 'bamboo_stump').setScale(1 / (LOW_MEMORY ? 1 : 2)).setDepth(-800);
     if (!img) return;
     if (!animate) {
       img.destroy();
@@ -1451,6 +1495,7 @@ export class GameScene extends Phaser.Scene {
     this.gfx.clear();
     this.waves.length = 0;
     this.petalMarks.length = 0;
+    this.fadeBambooOverHero(hx, hy, dt);
     this.drawMobs(inter, dt);
     this.drawShots(inter);
     this.drawDrops(inter);

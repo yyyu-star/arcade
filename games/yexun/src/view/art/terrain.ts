@@ -411,17 +411,20 @@ export function stumpCanvas(scale: number): HTMLCanvasElement {
 
 // ───────────────────────── 地图卡缩略图 ─────────────────────────
 
-/** 缩略图的块颜色（按 look） */
+/** 缩略图的块颜色（按 look）：比对局里更深更饱和，60 像素的小图上也分得出 */
 const BLOCK_FILL: Record<Block['look'], string> = {
-  wall_h: '#8a6a4a',
-  wall_v: '#8a6a4a',
-  coffin: '#5a3a28',
-  hall: '#a8553a',
-  bamboo: '#3f9a4a',
-  rock: '#7c8493',
+  wall_h: '#6b4a30',
+  wall_v: '#6b4a30',
+  coffin: '#3e2418',
+  hall: '#b0402a',
+  bamboo: '#1f7a3a',
+  rock: '#5d6678',
 };
 
-/** 把地图的示意画在 cv 上（cv 的宽高自己定，画成正方形铺满）：雪地底、水、冰、桥、块，一眼看出这张图什么样 */
+/** 每张图自己的底色（缩略图专用，要一眼看出是哪张图） */
+const THUMB_BASE: Record<NonNullable<MapDef['tone']>, string> = { snow: '#c6d6f0', yard: '#b9b3c4', bamboo: '#9fd08a', river: '#e2d2a0', ice: '#cfe4f4' };
+
+/** 把地图的示意画在 cv 上（cv 的宽高自己定，画成正方形铺满）：底色、水、冰、桥、块，一眼看出这张图什么样 */
 export function drawMapThumb(cv: HTMLCanvasElement, def: MapDef): void {
   const c = cv.getContext('2d')!;
   const S = cv.width;
@@ -429,37 +432,74 @@ export function drawMapThumb(cv: HTMLCanvasElement, def: MapDef): void {
   c.clearRect(0, 0, S, S);
   c.save();
   c.scale(k, k);
-  const base: Record<NonNullable<MapDef['tone']>, string> = { snow: '#e8eef8', yard: '#e4e6ee', bamboo: '#d3e6cf', river: '#e1ebea', ice: '#e8f0fa' };
-  c.fillStyle = base[def.tone ?? 'snow'];
+  const tone = def.tone ?? 'snow';
+  c.fillStyle = THUMB_BASE[tone];
   c.fillRect(0, 0, ARENA.w, ARENA.h);
-  if (def.tone === 'river') {
-    c.fillStyle = '#d9cc9e';
-    for (const w of def.water ?? []) c.fillRect(w.x - 60, w.y - 60, w.w + 120, w.h + 120);
+  if (tone === 'bamboo') {
+    // 竹林：深浅两色的斜纹，像一片竹影
+    c.fillStyle = 'rgba(40,120,60,0.22)';
+    for (let x = -ARENA.h; x < ARENA.w; x += 260) {
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.lineTo(x + 130, 0);
+      c.lineTo(x + 130 + ARENA.h, ARENA.h);
+      c.lineTo(x + ARENA.h, ARENA.h);
+      c.fill();
+    }
   }
-  c.fillStyle = '#3a82ad';
+  if (tone === 'snow' || tone === 'yard') {
+    // 雪原：几堆白雪，免得一片空白
+    c.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const [x, y, r] of [[600, 700, 220], [2400, 600, 180], [900, 2400, 260], [2500, 2300, 200], [1700, 2800, 150], [400, 1700, 140]] as const) {
+      c.beginPath();
+      c.ellipse(x, y, r * 1.4, r * 0.7, 0, 0, 7);
+      c.fill();
+    }
+  }
+  for (const w of def.water ?? []) {
+    // 河滩：水带外面一圈沙岸
+    c.fillStyle = '#c9b57a';
+    c.fillRect(w.x - 90, w.y - 90, w.w + 180, w.h + 180);
+  }
+  c.fillStyle = '#1f6fd0';
   for (const w of def.water ?? []) c.fillRect(w.x, w.y, w.w, w.h);
   c.fillStyle = '#8d6038';
   for (const b of def.bridges ?? []) c.fillRect(b.x, b.y, b.w, b.h);
-  c.fillStyle = '#8ccbe6';
-  c.strokeStyle = '#3f7ea6';
-  c.lineWidth = 36;
+  c.fillStyle = '#9ee0ff';
+  c.strokeStyle = '#2f8fd0';
+  c.lineWidth = 80;
   for (const i of def.ice ?? []) {
     c.fillRect(i.x, i.y, i.w, i.h);
     c.strokeRect(i.x, i.y, i.w, i.h);
+    // 冰面上两道白光
+    c.fillStyle = 'rgba(255,255,255,0.75)';
+    c.fillRect(i.x + i.w * 0.12, i.y + i.h * 0.18, i.w * 0.4, 70);
+    c.fillRect(i.x + i.w * 0.3, i.y + i.h * 0.3, i.w * 0.25, 70);
+    c.fillStyle = '#9ee0ff';
   }
-  // 小块放大到至少 3 像素，免得缩略图上看不见
-  const min = 3 / k;
+  // 小块放大到至少 5 像素，免得缩略图上看不见；竹丛再加一圈深边
+  const min = 5 / k;
   for (const b of def.blocks) {
     c.fillStyle = BLOCK_FILL[b.look];
     const w = Math.max(b.w, min);
     const h = Math.max(b.h, min);
-    c.fillRect(b.x - (w - b.w) / 2, b.y - (h - b.h) / 2, w, h);
+    const x = b.x - (w - b.w) / 2;
+    const y = b.y - (h - b.h) / 2;
+    c.fillRect(x, y, w, h);
+    if (b.look === 'bamboo') {
+      c.strokeStyle = '#0e3b1c';
+      c.lineWidth = 14;
+      c.strokeRect(x, y, w, h);
+    }
   }
   // 出生点：小红点
   c.fillStyle = '#d0362e';
+  c.strokeStyle = '#fff';
+  c.lineWidth = 2 / k;
   c.beginPath();
   c.arc(ARENA.w / 2, ARENA.h / 2, 5 / k, 0, 7);
   c.fill();
+  c.stroke();
   c.restore();
   c.strokeStyle = 'rgba(23,19,28,0.55)';
   c.lineWidth = 2;
