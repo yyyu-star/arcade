@@ -45,8 +45,8 @@ await page.addInitScript(() => {
   };
 });
 await page.goto(`http://127.0.0.1:${port}/games/mahjong/`);
-await page.waitForSelector('.lobby-head');
-await page.click('text=单机开打');
+await page.waitForSelector('.home-main');
+await page.click('text=快速开始');
 
 const lift: number[] = [];
 const move: number[] = [];

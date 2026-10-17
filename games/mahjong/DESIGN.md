@@ -537,6 +537,10 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - 头像（`avatar.ts`）：六个电脑性格各一张手绘 SVG，按名字前缀认（好友房实盘带编号的也认），真人按名字算底色写首字；牌桌、选桌页的画在 `art.ts`（SVG 小纹理平铺，启动时写成 `--art-*` 变量）和 `art.css`。
   主题是成都茶馆：墨绿呢子、木框、红漆中控盘（四边座位色，轮到谁亮）、竹帘、灯笼、盖碗。不用 filter，全部程序生成。
   常驻小动画只有灯笼轻摆、盖碗冒热气（只动 transform/opacity，各自一个合成层）；省内存设备（触屏、`deviceMemory` ≤ 4）和系统"减少动态效果"时不加（`data-lite`）。
+- **游戏主页**（0.17.0，`home.ts`，方案见 `docs/art-v3.md`）：进来先是主页——左（竖屏是上）一张茶馆夜场的主视觉（`art.ts` 的 `homeScene()`，木格窗外的夜色和远处灯火、两盏灯笼、
+  一手牌和站在牌上的小麻雀、盖碗茶；灯笼摆、窗灯明暗、热气、麻雀隔一阵跳两下，`data-lite` 时不动），右（下）是店名、一句玩法、"快速开始"（按上次的档位和规则开，第一次是娱乐·新手；
+  有没打完的单机换成"继续上局"）、三张模式卡（娱乐 / 实盘 / 好友房，点了进选桌页）、本地战绩卡（`mahjong.record` 加 `mahjong.streak`）。选桌页左上角"‹ 主页"回来；
+  平台大厅的"好友房"（`?online=1`）和房间链接照旧直达选桌页、房间。店名、主按钮和模式卡用标题字（Noto Serif SC Black 子集，约 9KB，`ASSETS.md`）。
 - 音效（`sound.ts`）：WebAudio 现合成，每种动作一个声音；总音量 `setVolume`（存在 `mahjong.prefs`），静音时 `play` 和给共用包的 `audioOut` 都不出声；同一种短时间连发会丢，最多同时 8 个。
 - **主题和按钮**（0.7.0，`src/view/style.css` 开头）：颜色、间距（4 的倍数）、字号、圆角、阴影、动效时长都是 CSS 变量，组件只用这些刻度；
   牌桌上各块的绝对位置按牌桌几何定，是例外。所有能点的（`.act`、`.pill`、`.chip`、`.stake`、`.link`）共用一套状态（互动的菜单和面板是 kit 的，样式跟 kit 走）：
@@ -591,6 +595,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | `mahjong.guide` | 新手引导看过没有 |
 | `mahjong.hint.rotate` | 竖屏"横过来玩更舒服"的提示出过没有 |
 | `mahjong.hint.fun` | "点头像扔道具"的提示出过没有 |
+| `mahjong.record` | 单机打完了几场、赢了几场、最后记的是哪一场（同一场只记一次），主页的战绩卡用（0.17.0） |
 | `mahjong.streak` | 单机连输几场、最后记的是哪一场（同一场只记一次），结算页按它说一句、给降档 |
 | `mahjong.fun.blocked`（sessionStorage，kit 写） | 按人屏蔽、全部屏蔽，按房间分开 |
 

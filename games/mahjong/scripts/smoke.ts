@@ -133,6 +133,9 @@ for (const [name, viewport] of [
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.addInitScript(() => localStorage.setItem('mahjong.guide', '1'));
   await page.goto(`http://127.0.0.1:${port}/games/mahjong/?turbo`);
+  // 主页（0.17.0）→ 娱乐卡 → 选桌页 → 单机开打
+  await page.waitForSelector('.home-main');
+  await page.click('.mode.fun');
   await page.waitForSelector('.lobby-head');
   await page.click('text=单机开打');
   await page.waitForSelector('.my-hand .tile');
@@ -162,8 +165,10 @@ for (const [name, viewport] of [
   await page.click('[data-key="share:close"]');
   const shared = await page.evaluate(() => (window as unknown as { __shareLog?: string[] }).__shareLog ?? []);
   if (!shared.includes('分享 预览')) errors.push(`分享没出预览：${shared.join(' | ')}`);
-  // 回选桌，再看一眼规则表
+  // 回选桌、再回主页，看一眼规则表
   await page.click('text=回选桌');
+  await page.click('.pill.back');
+  await page.waitForSelector('.home-main');
   await page.click('text=规则和番型表');
   await page.waitForSelector('.rules table');
   const ok = errors.length === 0;

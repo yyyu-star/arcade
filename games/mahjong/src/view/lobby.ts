@@ -30,6 +30,8 @@ export interface LobbyProps {
   friends?: boolean;
   /** 单独部署：没有钱包和实盘；好友房里别人看到的昵称自己填 */
   standalone?: { nick: string; onNick(name: string): void };
+  /** 回游戏主页（0.17.0 起选桌页是主页点模式卡进来的第二层） */
+  onBack?(): void;
 }
 
 export function renderLobby(box: HTMLElement, p: LobbyProps): void {
@@ -37,6 +39,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   let stakes = p.stakes;
   let level = p.level;
   const opts: XzOpts = { ...p.opts };
+  if (p.onBack) button('pill back', box, '‹ 主页', p.onBack);
   const head = el('div', 'lobby-head', box);
   el('h1', '', head, GAME_NAME);
   el('div', 'variant', head, VARIANT_NAME['sichuan-xuezhan']);
