@@ -1,5 +1,6 @@
 /** 牌桌互动组件的演示：单机接法（send 直接回给 receive，电脑由组件按性格反应）。冒烟由脚本调 window.fun。 */
 import { playFunSound } from '../src/fun.ts';
+import { demoTheme } from './theme.ts';
 import { TableFun, type FunSeat, type FunTemper } from '../src/table-fun.ts';
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -15,6 +16,7 @@ const log: string[] = [];
 
 const fun = new TableFun({
   storageKey: 'demo',
+  theme: demoTheme,
   phrases: PHRASES,
   named: [3, 4, 2],
   seats: (): FunSeat[] => who.map(([name, bot, temper], i) => ({ rect: $(`s${i}`).getBoundingClientRect(), name, me: i === 0, bot, temper })),

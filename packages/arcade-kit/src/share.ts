@@ -10,6 +10,7 @@
  * - 微信内置浏览器（0.15.0）：没有 navigator.share，下载链接也常常不生效，预览图改用 data: URL（blob: 的图长按经常存不下来），提示改成长按。
  */
 import { qrEncode } from './qr.js';
+import { applyTheme, type KitTheme } from './theme.js';
 
 /** 卡的尺寸：竖版 4:5，社交软件里不被裁 */
 export const CARD_W = 1080;
@@ -431,6 +432,8 @@ export interface ShareOptions {
   fileName?: string;
   /** 预览层的 z-index，默认 11000（0.12.4 起；要比游戏的弹窗和 social 的横条、面板都高） */
   zIndex?: number;
+  /** 主题（0.16.0）：写到预览层根节点上的 `--ak-*` 变量；不传就用页面 CSS 里的变量或默认外观。画出来的分享卡（canvas）不受它影响，颜色由游戏给的 card 决定 */
+  theme?: KitTheme;
   /** 冒烟、调试看的流水：`分享 系统`、`分享 预览`、`分享 保存`、`分享 复制` */
   log?(line: string): void;
 }
@@ -525,7 +528,8 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
   const root = document.createElement('div');
   root.id = PREVIEW_ID;
   root.setAttribute('role', 'dialog');
-  root.style.cssText = `position:fixed;inset:0;z-index:${opts.zIndex ?? 11000};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;box-sizing:border-box;background:rgba(0,0,0,.72);font:600 16px ${FONT};color:#fff`;
+  root.style.cssText = `position:fixed;inset:0;z-index:${opts.zIndex ?? 11000};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;box-sizing:border-box;background:var(--ak-overlay,rgba(0,0,0,.72));font:600 16px var(--ak-font,${FONT});color:var(--ak-fg,#fff)`;
+  applyTheme(root, opts.theme);
   const close = (): void => {
     root.remove();
     if (url) URL.revokeObjectURL(url);
@@ -543,7 +547,7 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     reader.readAsDataURL(blob);
   }
   img.alt = '战绩图';
-  img.style.cssText = 'max-width:min(92vw,540px);max-height:calc(100% - 140px);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.5)';
+  img.style.cssText = 'max-width:min(92vw,540px);max-height:calc(100% - 140px);border-radius:var(--ak-radius,16px);box-shadow:0 8px 32px rgba(0,0,0,.5)';
   const tip = document.createElement('div');
   tip.textContent = mode.tip;
   tip.style.cssText = 'font-size:13px;opacity:.75';
@@ -554,7 +558,7 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     b.type = 'button';
     b.textContent = label;
     b.dataset['key'] = key;
-    b.style.cssText = `min-width:120px;min-height:48px;padding:0 20px;border-radius:24px;border:2px solid #fff;font:inherit;cursor:pointer;${primary ? 'background:#fff;color:#222' : 'background:transparent;color:#fff'}`;
+    b.style.cssText = `min-width:120px;min-height:48px;padding:0 20px;border-radius:var(--ak-radius-btn,24px);border:2px solid var(--ak-border,#fff);font:inherit;cursor:pointer;${primary ? 'background:var(--ak-accent,#fff);color:var(--ak-accent-fg,#222)' : 'background:transparent;color:var(--ak-fg,#fff)'}`;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       fn();
