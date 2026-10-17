@@ -520,6 +520,10 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   const racing = friend.page.locator('.card', { hasText: '飞驰' });
   check((await racing.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/racing/', '飞驰"进入游戏"应该指向 /games/racing/');
   check((await racing.getByRole('link', { name: '好友房' }).getAttribute('href')) === '/games/racing/?online=1', '飞驰"好友房"应该指向 /games/racing/?online=1');
+  // 《夜巡》（0.22.0）：单机，只有"进入游戏"，没有好友房
+  const yexun = friend.page.locator('.card', { hasText: '夜巡' });
+  check((await yexun.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/yexun/', '夜巡"进入游戏"应该指向 /games/yexun/');
+  check((await yexun.getByRole('link', { name: '好友房' }).count()) === 0, '夜巡不该有"好友房"');
   for (const img of await friend.page.locator('.card__cover').all()) {
     await img.scrollIntoViewIfNeeded();
     await img.evaluate((el: HTMLImageElement) => el.decode());
@@ -1557,10 +1561,12 @@ async function boardsPage(browser: Browser): Promise<void> {
   const board = (entries: ReturnType<typeof row>[], me: { rank: number; value: number } | null = null) => ({ entries, me });
   const all = {
     week: '2026-10-12',
-    daily: { kaipan: 'daily-2026-10-15-v2' },
+    // 夜巡（0.22.0）一天两个每日榜（子榜，0.16.0）：今天守夜有人交了分，夜探还没人交
+    daily: { kaipan: 'daily-2026-10-15-v2', 'yexun:vigil': 'daily-2026-10-15-vigil', 'yexun:raid': null },
     boards: {
       total: board([row(0, '老王的徒弟', 48_000), row(1, '小明', 12_500), row(2, '某人', 12_500, 2, true), row(3, '输光了', -6_000, 4)], { rank: 2, value: 12_500 }),
-      kaipan: board([row(1, '小明', 12_000)]),
+      // 我在列表里（第 4 名，不在领奖台上）：所有者截图里"晒名次"在这种行里被挤成一字一行（0.22.1）
+      kaipan: board([row(1, '小明', 12_000), row(0, '老王的徒弟', 9_000), row(3, '输光了', 5_000, 3), row(2, '某人', -3_212, 4, true)], { rank: 4, value: -3_212 }),
       guandan: board([]),
       texas: board([row(0, '老王的徒弟', 48_000), row(2, '某人', 500, 2, true)], { rank: 2, value: 500 }),
       titles: board([row(1, '小明', 9), row(0, '老王的徒弟', 4)], { rank: 73, value: 1 }),
@@ -1582,6 +1588,24 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.route('**/games/kaipan/daily.json', (r) =>
       r.fulfill(json({ note: '每天一样的行情，比谁打得好。', score: [{ from: 1e11, text: '通关 · {n} 元' }, { text: '撑了 {n} 个月' }] })),
     );
+    // 照夜巡 public/daily.json 的写法（平台只读，不引用游戏的文件）：撑到天亮的分数加了 100 万
+    await page.route('**/api/boards/yexun/daily-2026-10-15-vigil?scope=*', (r) =>
+      r.fulfill(json({ entries: [{ rank: 1, userId: u(1), displayName: '小明', avatar: null, score: 1_000_000 + 1_320, isMe: false }, { rank: 2, userId: u(2), displayName: '某人', avatar: null, score: 600, isMe: true }], me: { rank: 2, score: 600 } })),
+    );
+    await page.route('**/games/yexun/daily.json', (r) =>
+      r.fulfill(json({ note: '今天所有人玩同一局。', score: [{ text: '{n}' }], boards: { vigil: { note: '撑到天亮的比拼击杀，没撑到的比谁撑得久。', score: [{ from: 1_000_000, text: '天亮 · 斩 {n}' }, { text: '撑了 {n} 秒' }] }, raid: { note: '比谁撤出时带出的宝物更值钱。', score: [{ text: '带出 {n} 铜钱' }] } } })),
+    );
+    // 各游戏总榜（0.23.0）：夜巡守夜，分数按夜巡 boards.json 的 fields 拆开写
+    await page.route('**/api/boards/yexun/vigil?scope=*', (r) =>
+      r.fulfill(json({ entries: [
+        { rank: 1, userId: u(1), displayName: '小明', avatar: null, score: 3 * 1e10 + 900 * 1e4 + 2_050, isMe: false },
+        { rank: 2, userId: u(0), displayName: '老王的徒弟', avatar: null, score: 2 * 1e10 + 754 * 1e4 + 1_234, isMe: false },
+        { rank: 3, userId: u(2), displayName: '某人', avatar: null, score: 1 * 1e10 + 61 * 1e4 + 88, isMe: true },
+      ], me: { rank: 3, score: 1 * 1e10 + 61 * 1e4 + 88 } })),
+    );
+    await page.route('**/games/yexun/boards.json', (r) =>
+      r.fulfill(json({ boards: { vigil: { note: '危险档高的排前面，同档比撑多久、斩多少。', score: [{ fields: { d: [1e10, null], s: [1e4, 1e6], k: [1, 1e4] }, fmt: { s: 'mmss' }, text: '危险{d} · {s} · 斩 {k}' }] } } })),
+    );
     await page.goto(`${BASE}/`);
     await page.locator('.topbar').getByRole('link', { name: '排行' }).click();
     await page.getByTestId('ranks').getByText('+48,000').waitFor();
@@ -1593,7 +1617,30 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.locator('.rank').nth(1).waitFor({ state: 'detached' });
     await page.locator('.rank--me').getByText('+12,500').waitFor();
     await page.getByRole('button', { name: '全部' }).click();
-    await page.getByRole('button', { name: '掼蛋' }).click();
+    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '开盘' }).click();
+    const listShare = page.locator('.ranks .rank--me').getByTestId('share-rank');
+    await listShare.waitFor();
+    // 按钮一行字、不高于 48px，和分数在同一行，行不被撑高
+    const fit = await listShare.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+      const row = el.closest('.rank')!.getBoundingClientRect();
+      const value = el.closest('.rank')!.querySelector('.rank__value')!.getBoundingClientRect();
+      return { h: el.getBoundingClientRect().height, lines, rowH: row.height, sameLine: Math.abs(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 - (value.top + value.height / 2)) < 8 };
+    });
+    check(fit.h <= 48 && fit.lines === 1, `"晒名次"该是一行字、不高于 48px：${JSON.stringify(fit)}`);
+    check(fit.sameLine && fit.rowH <= 64, `"晒名次"该和分数在同一行、行不被撑高：${JSON.stringify(fit)}`);
+    await shot(page, `boards-me-in-list-${screen}`);
+    await page.getByRole('link', { name: '夜巡守夜' }).click();
+    await page.getByText('危险2 · 12:34 · 斩 1,234').waitFor();
+    await page.locator('.rank--me').getByText('危险1 · 1:01 · 斩 88').waitFor();
+    await page.getByText('夜巡守夜：危险档高的排前面').waitFor();
+    check((await page.getByRole('link', { name: '夜巡夜探' }).count()) === 1 && (await page.getByRole('link', { name: '夜巡无尽' }).count()) === 1, '夜巡另两个总榜该有标签');
+    await shot(page, `boards-yexun-fixed-${screen}`);
+    if (screen === 'desktop') await deskLayout(page, 'boards');
+    await page.getByRole('link', { name: '本周净赢' }).click();
+    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '掼蛋' }).click();
     await page.getByTestId('board-empty').waitFor();
     // 不用钱包的游戏（飞驰，0.10.25）不开"本周净赢"的标签：只会是空的
     check((await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '飞驰' }).count()) === 0, '本周净赢不该有飞驰的标签');
@@ -1607,6 +1654,13 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.locator('.rank--me').getByText('撑了 9 个月').waitFor();
     if (screen === 'desktop') await shot(page, 'boards-friends-week');
     await page.getByRole('button', { name: '全部' }).click();
+    // 夜巡的两个子榜各一个标签，分数按子榜的写法
+    await page.getByRole('link', { name: '夜巡每日·守夜' }).click();
+    await page.getByText('天亮 · 斩 1,320').waitFor();
+    await page.locator('.rank--me').getByText('撑了 600 秒').waitFor();
+    await page.getByText('撑到天亮的比拼击杀').waitFor();
+    check((await page.getByRole('link', { name: '夜巡每日·夜探' }).count()) === 1, '夜巡应该还有"夜探"的每日标签');
+    if (screen === 'desktop') await shot(page, 'boards-yexun-daily');
     await page.getByRole('link', { name: '称号收集' }).click();
     await page.getByTestId('my-rank').getByText('第 73 名').waitFor();
     if (screen === 'portrait') await shot(page, 'boards-titles-portrait');
@@ -1711,6 +1765,27 @@ async function loginNext(browser: Browser): Promise<void> {
   await ctx.close();
 }
 
+/**
+ * 电脑版排版（0.23.0）：在 1280、1920 宽各看一次——主区不能还是中间一窄列（至少占内容区的 85%），整页不能横着滑；各截一张。
+ * 看完把窗口恢复成原来的大小
+ */
+async function deskLayout(page: Page, name: string): Promise<void> {
+  const before = page.viewportSize()!;
+  for (const width of [1280, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const m = await page.evaluate(() => {
+      const shell = document.querySelector('.page')!;
+      const cs = getComputedStyle(shell);
+      const inner = shell.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return { main: document.querySelector('main')!.getBoundingClientRect().width, inner, scroll: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    check(m.main >= m.inner * 0.85, `${name}（${width} 宽）主区还是窄列：${Math.round(m.main)} / ${Math.round(m.inner)}`);
+    check(m.scroll <= 0, `${name}（${width} 宽）整页能横着滑：多出 ${m.scroll}px`);
+    await shot(page, `${name}-desk-${width}`);
+  }
+  await page.setViewportSize(before);
+}
+
 /** 0.9.8：发版后旧分块没了（404）：整页重载一次拿新版；还是 404 就停下来提示刷新，不来回重载、不白屏。 */
 async function staleChunk(browser: Browser): Promise<void> {
   console.log('发版后点进钱包页，分块 404：重载一次，还不行就提示刷新；好了以后点"刷新"能进');
@@ -1813,7 +1888,18 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     // 0.10.10 最近进出
     await page.getByTestId('ledger').locator('.ledger__row', { hasText: '开盘' }).getByText('到顶没进 1,200').waitFor();
     await page.getByTestId('ledger').getByText('+12,000').waitFor();
+    // 0.23.0 这周的输赢：合计 + 每个游戏一根条
+    await page.getByTestId('week-summary').getByText('+8,200').waitFor();
+    check((await page.locator('.week-bars__row').count()) === 2, '这周的输赢该有开盘、德州两根条');
     await shot(page, `wallet-${screen}`);
+    if (screen === 'desktop') {
+      // 最近进出按游戏筛
+      await page.getByRole('group', { name: '看哪个游戏' }).getByRole('button', { name: '开盘' }).click();
+      const games = await page.locator('.ledger__what').evaluateAll((els) => [...new Set(els.map((e) => e.firstChild?.textContent ?? ''))]);
+      check(games.join() === '开盘', `只看开盘时不该有别的：${games.join()}`);
+      await page.getByRole('group', { name: '看哪个游戏' }).getByRole('button', { name: '全部' }).click();
+      await deskLayout(page, 'wallet');
+    }
     await ctx.close();
   }
   for (const screen of ['desktop', 'portrait'] as const) {

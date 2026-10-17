@@ -41,7 +41,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   el('h1', '', head, GAME_NAME);
   el('div', 'variant', head, VARIANT_NAME['sichuan-xuezhan']);
   el('div', 'ver', box, `v${__MAHJONG_VERSION__}`);
-  if (p.canResume) button('act go big', box, '接着打上一场', p.onResume);
+  if (p.canResume) button('act go big resume', box, '接着打上一场', p.onResume);
 
   // 每档一张卡（docs/balance.md 第 5 节，四个游戏一样）：电脑多强（星）、一场约多久、一场最多赢 / 最多输。娱乐三个难度一排，实盘四档一排
   const pick = el('div', 'stakes-box', box);

@@ -370,6 +370,9 @@ function SoundToggle() {
   );
 }
 
+/** 做好了电脑版排版的页面（0.23.0）：电脑上主区放开成两栏（styles.css 的 .desk），手机上照旧是中间一窄列 */
+const DESK_PAGES = new Set(['/wallet', '/boards']);
+
 export function App() {
   const loc = useLocation();
   const { service, refresh, loading, slow, user } = useSession();
@@ -401,7 +404,7 @@ export function App() {
       )}
       {Page ? (
         // 管理页是控制台布局，要整页宽；其余账号页面都是中间一栏
-        <main className={loc.pathname === '/admin' ? 'wide' : 'narrow'}>
+        <main className={loc.pathname === '/admin' ? 'wide' : DESK_PAGES.has(loc.pathname) ? 'narrow narrow--desk' : 'narrow'}>
           <Suspense fallback={<p className="note page-loading">正在打开…</p>}>
             <Page />
           </Suspense>

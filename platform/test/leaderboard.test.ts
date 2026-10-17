@@ -1,7 +1,7 @@
 /** 排行榜页接口（0.10.4，docs/platform-backend.md 15.12）：本周净赢、称号收集从 career 汇总，读走缓存，写 0 行。 */
 import { exports } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { GAMES } from '../src/games';
+import { dailyTabs } from '../src/games';
 import type { WalletReply } from '../worker/api/wallet-store';
 import { advance, call, env, registerUser, resetAll, rowsWritten } from './helpers';
 
@@ -70,7 +70,8 @@ describe('GET /api/leaderboard', () => {
 
   it('告诉页面登记了每日榜的游戏今天的榜 id（规则版本最大的那个）；没人交过是 null；没登记的游戏不给；scope 不对 400', async () => {
     const a = await registerUser();
-    const daily = Object.fromEntries(GAMES.filter((g) => g.daily).map((g) => [g.id, null]));
+    // 有子榜的游戏（夜巡）按"游戏 id:子榜 id"给
+    const daily = Object.fromEntries(dailyTabs().map((t) => [t.key, null]));
     expect(daily).toHaveProperty('kaipan');
     expect((await read(a.cookie)).daily).toEqual(daily);
     const rows: [string, string][] = [
