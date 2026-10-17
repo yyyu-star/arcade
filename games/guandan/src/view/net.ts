@@ -16,7 +16,7 @@ import { rotateNetView, rotation, toReal } from '../net/rotate.ts';
 import { CLIENT_VERSION, ROOM_PATH } from '../net/version.ts';
 import { parseRoomOpts } from '../net/stake.ts';
 import type { TierId } from '../stake/index.ts';
-import { seatIdentity, setSeatIdentities, type SeatIdentity } from './labels.ts';
+import { seatIdentity, setSeatIdentities, setWatching, type SeatIdentity } from './labels.ts';
 import type { BotStyle, TableSession } from './session.ts';
 import { QUOTA_TEXT } from './quota-text.ts';
 import { KEYS, rawStore } from './store.ts';
@@ -85,7 +85,7 @@ export async function currentUserId(fetcher: typeof fetch = fetch): Promise<stri
 /** 本机记着的、属于现在这个账号的房间（标题页"回到房间"、大厅"回到刚才的房间"、邀请链接带房主标记之前都要过这一关） */
 /**
  * 进房后自动坐哪儿（0.6.0：点开链接就能打，不用再找按钮）：回自己绑着的座位；等人时坐第一个空位；
- * 开打了接管第一个没绑人的电脑座位。实盘房间坐下就要从钱包带入，不替人拿主意（回自己的座位除外）。null：不自动坐
+ * 开打了先旁观（0.13.0 起不再自动接管电脑座位）。实盘房间坐下就要从钱包带入，不替人拿主意（回自己的座位除外）。null：不自动坐
  */
 export function autoSeat(room: RoomInfo, you: { seat: number | null; bound?: number | null }, prefer: number | null = null): number | null {
   if (you.seat !== null) return null;
@@ -93,8 +93,8 @@ export function autoSeat(room: RoomInfo, you: { seat: number | null; bound?: num
   if (parseRoomOpts(room.opts)?.stake) return null;
   // 再来一场跟过来的（0.6.2）：先坐和上一场一样的相对位置（开房的人在 0 号），队友还是那个人
   if (prefer !== null && room.status === 'waiting' && room.seats[prefer]?.kind === 'empty') return prefer;
-  const i =
-    room.status === 'waiting' ? room.seats.findIndex((s) => s.kind === 'empty') : room.status === 'playing' ? room.seats.findIndex((s) => s.kind === 'ai' && !s.reserved) : -1;
+  // 已经开打的不替人接管电脑座位：先旁观，想打自己点"坐下"（0.13.0，docs/social.md 1.4）
+  const i = room.status === 'waiting' ? room.seats.findIndex((s) => s.kind === 'empty') : -1;
   return i >= 0 ? i : null;
 }
 
@@ -423,6 +423,7 @@ export class NetSession implements TableSession {
     const room = this.room;
     if (!room) return;
     const me = this.mySeat ?? 0;
+    setWatching(this.watching);
     // 走开了的（0.6.3）：看收到的最新一帧（已经按我的座位转过，下标是画面座位）
     const afk = (this.queue[this.queue.length - 1]?.nv ?? this.shown)?.afk;
     const list: (SeatIdentity | null)[] = [];
@@ -442,9 +443,30 @@ export class NetSession implements TableSession {
     return this.room?.status === 'playing' || this.room?.status === 'over';
   }
 
-  /** 能进牌桌了：开打了、我坐下了、手上有局面（已经显示过的，或者开局时排着还没播的第一帧） */
+  /**
+   * 能进牌桌了：开打了、手上有局面（已经显示过的，或者开局时排着还没播的第一帧）。没坐下的人也进，是旁观（0.13.0）：
+   * 房间给没入座的只下发公开视图（座位 -1，没有任何人的手牌）
+   */
   get canEnterTable(): boolean {
-    return this.playing && this.mySeat !== null && (this.shown !== null || this.queue.length > 0);
+    return this.playing && (this.shown !== null || this.queue.length > 0);
+  }
+
+  /** 旁观：开打了、我没坐下 */
+  get watching(): boolean {
+    return this.playing && this.mySeat === null;
+  }
+
+  /**
+   * 旁观时能坐哪儿（真实座位）：回我自己绑着的座位；娱乐房间接管第一个没绑人的电脑座位（照 kit 的座位绑人规则）。
+   * 实盘房间只看、不带入（docs/social.md 1.4），自己的座位除外。null：没地方坐
+   */
+  freeSeat(): number | null {
+    const room = this.room;
+    if (!room || room.status !== 'playing' || this.mySeat !== null) return null;
+    if (this.bound !== null) return this.bound;
+    if (parseRoomOpts(room.opts)?.stake) return null;
+    const i = room.seats.findIndex((s) => s.kind === 'ai' && !s.reserved);
+    return i >= 0 ? i : null;
   }
 
   sit(realSeat: number): void {
@@ -471,6 +493,7 @@ export class NetSession implements TableSession {
   close(): void {
     this.client.close();
     setSeatIdentities([null, null, null, null]);
+    setWatching(false);
   }
 
   retry(): void {

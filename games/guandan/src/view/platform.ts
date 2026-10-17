@@ -6,18 +6,25 @@
  * - 不知道（5xx、429、断网、超时）：按有平台处理——平台多半只是抖了一下，实盘接口自己会报"钱包连不上"。
  * main.ts 启动时问一次，开场景和进房之前等它；之后各处同步读 standalone()。
  */
-import { detectPlatform, withNickname } from 'arcade-kit/client';
+import { detectPlatform, withNickname, type PlatformInfo } from 'arcade-kit/client';
 import { getNick } from './store.ts';
 
 let mode: boolean | 'unknown' = 'unknown';
+let info: PlatformInfo = { platform: 'unknown' };
 let asked: Promise<void> | null = null;
 
 /** 启动时问一次（重复调用拿到同一个结果） */
 export function detectOnce(): Promise<void> {
   asked ??= detectPlatform().then((p) => {
     mode = p.platform;
+    info = p;
   });
   return asked;
+}
+
+/** 启动时那一次的原样结果（社交部件要看登没登录，不用再问一次 /api/me） */
+export function platformInfo(): PlatformInfo {
+  return info;
 }
 
 export function standalone(): boolean {
