@@ -142,11 +142,13 @@ export class EndScene extends BaseScene {
     const setup = `${sum.personaName} · ${levelLabel(lv.level, sum.difficultyName)}`;
     const L = x + G.pad;
     const hy = y + G.headY;
-    addPortrait(this, L + 22, hy, { id: sum.persona, name: sum.personaName }, false, G.portrait);
-    addBadge(this, L + 22 + G.badge + 8, hy, lv.level, G.badge);
-    const who = this.add.rectangle(L, hy - 28, 90, 56, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(who, () => ({ x: L, y: hy - 28, w: 90, h: 56 }), () => ({ title: '这一局', body: setup }));
-    const pillX = L + (ph ? 84 : 96);
+    // 0.16.0 手机上「大厅」回到左上角（和别的画面一样），头像那一行往右让出它的位置
+    const hx = ph ? 104 : 0;
+    addPortrait(this, L + hx + 22, hy, { id: sum.persona, name: sum.personaName }, false, G.portrait);
+    addBadge(this, L + hx + 22 + G.badge + 8, hy, lv.level, G.badge);
+    const who = this.add.rectangle(L + hx, hy - 28, 90, 56, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(who, () => ({ x: L + hx, y: hy - 28, w: 90, h: 56 }), () => ({ title: '这一局', body: setup }));
+    const pillX = L + hx + (ph ? 84 : 96);
     this.tag(pillX, hy - 10, sum.won ? '通关' : '出局', sum.won ? COLOR.accent : COLOR.danger, 64);
     if (sum.daily) this.tag(pillX + 74, hy - 10, dailyTag(sum.daily), COLOR.info, 120);
     if (lv0) this.tag(pillX + 74, hy - 10, `实盘 · ${chips(lv0.stake)}`, COLOR.accentDark, 120);
@@ -325,8 +327,8 @@ export class EndScene extends BaseScene {
     if (retry) tipOnButton(retry, () => ({ x: mx, y: by, w: bw[0]!, h: G.btnH }), () => ({ title: sum.daily ? '再挑战一次' : '同一局再来', body: `这一局的编号：${s.seed}\n输入同一个编号能重玩同一局` }));
     addText(this, x + G.pad, y + H - (ph ? 17 : 26), `#${s.seed}`, { size: 12, color: COLOR.dim, originY: 0.5 });
     // 回大厅（0.5.8）：和开始菜单一样在左上角；这局已经结束、记进档案了，点了直接走。
-    // 手机横屏纸卡几乎铺满，挪到左栏标题行的右端（每日挑战的标签到 x≈312）
-    const lobbyAt = ph ? { x: L + G.leftW - 96, y: y + 8 } : { x: 14, y: 10 };
+    // 手机横屏纸卡几乎铺满：放在纸卡的左上角（0.16.0 以前插在左栏标题行中间）
+    const lobbyAt = ph ? { x: x + 10, y: y + 12 } : { x: 14, y: 10 };
     this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: ph ? 96 : 104, height: 42, label: lobbyLabel(), icon: 'house', fontSize: 16, onClick: () => goLobby() });
     // 分享（0.6.5 起的海报位置，0.12.0 换成共用包的分享卡）：电脑上放在右上角（和「大厅」对称），手机上放在按钮那一排的最右边
     const shareAt = ph ? { x: mx + (lv0 ? 192 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: ph && lv0 ? 140 : 102, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };

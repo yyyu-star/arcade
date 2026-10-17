@@ -227,3 +227,4 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 ## 许可证
 
 MIT，见本目录的 `LICENSE`（和仓库根目录的一样，拆成单独仓库时随模块带走）。
+例外：数字字体 `public/assets/fonts/kaipan-num.woff2` 由 Fredoka 改出，按 SIL OFL 1.1 授权（`public/assets/fonts/OFL.txt`，来源和改法见同目录 README）。

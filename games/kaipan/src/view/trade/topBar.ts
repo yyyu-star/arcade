@@ -9,7 +9,7 @@ import type { Rect } from '../rect.ts';
 import { sound } from '../sound.ts';
 import { COLOR, ITEM_KIND_COLOR, PHONE, TYPE, signColor, textOn } from '../theme.ts';
 import { hasArt, itemKey } from '../assets.ts';
-import { addGlyph, addImage, addPaper, addPill } from '../ui/art.ts';
+import { addGlyph, addImage, addPill, addWood } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { addText, fitWidth, setColor } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
@@ -24,6 +24,7 @@ import { lobbyLabel } from '../lobby.ts';
 
 /**
  * 顶栏各块的位置。电脑是 1264×56 的一条；手机横屏（0.5.5）是 952×46，各块收窄、两行字往上提，字号不低于 13。
+ * 0.16.0 木条：每一组都是「图标 + 大数字」一行、下面一行小字（账户的人设、Lv 也挪到数字下面），小字的中线对齐（电脑 48、手机 38）。
  * 0.9.0 账户上面那行小字离顶边留出 4 以上（以前贴着边）。
  * 0.9.2 最左边是常驻的「大厅」（小房子在上、字在下，和银行按钮一个样子），日期那一块整体右移让出位置。
  * goalX：有月度目标时「目标 + 要还的钱」那一块的左边（账户那一列收窄到 accW）；billLeft：没有目标时那一块的左边。
@@ -31,22 +32,22 @@ import { lobbyLabel } from '../lobby.ts';
 const TB = PHONE
   ? {
       lobby: { x: 4, y: 6, w: 40, h: 40, iconDy: 13, iconS: 18 },
-      calIcon: { x: 66, y: 18, s: 22 }, day: { x: 82, y: 5, size: 16 }, calPill: { x: 54, y: 29, h: 18 }, calTextX: 62, row2Y: 38,
+      calIcon: { x: 66, y: 18, s: 22 }, day: { x: 82, y: 6, size: 16 }, calPill: { x: 54, y: 29, h: 18 }, calTextX: 62, row2Y: 38,
       calHit: { x: 50, y: 4, w: 136, h: 44 }, flagsRight: 182, flagY: 29,
-      accLabel: { x: 216, y: 8 }, wallet: { x: 200, y: 32, s: 24 }, account: { x: 216, y: 22, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
-      goalX: 392, billLeft: 416, billRight: 640, billBox: { y: 6, h: 40 }, hourglass: { x: 604, y: 16, s: 18 }, daysLeft: { x: 616, y: 16 },
-      billY: 5, billNoteY: 27, goalIconY: 17, goalWordY: 38, goalBarY: 35, goalBarW: 90, houseY: 38, houseNoGoalY: 28, billTitleSize: 17,
+      accLabel: { x: 216, y: 38 }, wallet: { x: 200, y: 18, s: 24 }, account: { x: 216, y: 3, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
+      goalX: 392, billLeft: 416, billRight: 640, billBox: { y: 6, h: 40 }, hourglass: { x: 604, y: 18, s: 18 }, daysLeft: { x: 616, y: 18 },
+      billY: 6, billNoteY: 38, goalIconY: 18, goalWordY: 38, goalBarY: 34, goalBarW: 90, houseY: 38, houseNoGoalY: 18, billTitleSize: 17,
       itemsX: 646, itemsY: 4, itemsW: 214, itemsWExt: 146, rowIconY: 23, rowChipY: 23, row2Y0: 11, row2H: 23, row2Icon: 21,
       bank: { x: 798, y: 6, w: 60, h: 40 }, bankIconDy: 14, bankIconS: 20,
       help: { x: 864, y: 7, w: 42, h: 38 }, settings: { x: 912, y: 7, w: 40, h: 38 }, gear: { x: 932, y: 26, r: 10 }, rollY: 48,
     }
   : {
       lobby: { x: 16, y: 10, w: 52, h: 46, iconDy: 15, iconS: 22 },
-      calIcon: { x: 94, y: 24, s: 26 }, day: { x: 112, y: 12, size: TYPE.title }, calPill: { x: 84, y: 37, h: 20 }, calTextX: 92, row2Y: 47,
-      calHit: { x: 78, y: 8, w: 212, h: 52 }, flagsRight: 290, flagY: 37,
-      accLabel: { x: 330, y: 13 }, wallet: { x: 312, y: 35, s: 28 }, account: { x: 330, y: 26, size: TYPE.big }, accHit: { x: 296, y: 8, w: 232, h: 52 }, accWideW: 280,
-      goalX: 534, billLeft: 584, billRight: 884, billBox: { y: 10, h: 48 }, hourglass: { x: 842, y: 22, s: 20 }, daysLeft: { x: 856, y: 22 },
-      billY: 13, billNoteY: 37, goalIconY: 24, goalWordY: 46, goalBarY: 41, goalBarW: 110, houseY: 44, houseNoGoalY: 34, billTitleSize: TYPE.title,
+      calIcon: { x: 94, y: 26, s: 26 }, day: { x: 112, y: 14, size: TYPE.title }, calPill: { x: 84, y: 39, h: 18 }, calTextX: 92, row2Y: 48,
+      calHit: { x: 78, y: 8, w: 212, h: 52 }, flagsRight: 290, flagY: 39,
+      accLabel: { x: 330, y: 48 }, wallet: { x: 312, y: 26, s: 28 }, account: { x: 330, y: 7, size: 26 }, accHit: { x: 296, y: 8, w: 232, h: 52 }, accWideW: 280,
+      goalX: 534, billLeft: 584, billRight: 884, billBox: { y: 10, h: 48 }, hourglass: { x: 842, y: 26, s: 20 }, daysLeft: { x: 856, y: 26 },
+      billY: 14, billNoteY: 48, goalIconY: 24, goalWordY: 48, goalBarY: 44, goalBarW: 110, houseY: 48, houseNoGoalY: 26, billTitleSize: TYPE.title,
       itemsX: 896, itemsY: 10, itemsW: 258, itemsWExt: 168, rowIconY: 18, rowChipY: 24, row2Y0: 12, row2H: 26, row2Icon: 24,
       bank: { x: 1080, y: 10, w: 74, h: 46 }, bankIconDy: 17, bankIconS: 24,
       help: { x: 1172, y: 14, w: 44, h: 40 }, settings: { x: 1222, y: 14, w: 40, h: 40 }, gear: { x: 1242, y: 34, r: 11 }, rollY: 56,
@@ -153,7 +154,7 @@ export class TopBarView {
   constructor(scene: Phaser.Scene, s: GameState, onSettings: () => void, onHelp?: () => void, onBank?: () => void, onLobby?: () => void) {
     this.scene = scene;
     this.state = s;
-    addPaper(scene, TOP.x, TOP.y, TOP.w, TOP.h, false).setDepth(20);
+    addWood(scene, TOP.x, TOP.y, TOP.w, TOP.h).setDepth(20);
     const d = 21;
     const L = TB.lobby;
     this.lobby = new Button(scene, L.x, L.y, { width: L.w, height: L.h, label: '', subLabel: lobbyLabel(), fontSize: 15, onClick: onLobby });
@@ -169,7 +170,7 @@ export class TopBarView {
     const calHit = scene.add.rectangle(ch.x, ch.y, ch.w, ch.h, 0xffffff, 0.001).setOrigin(0, 0).setDepth(d);
     bindTooltip(calHit, () => ({ ...ch }), () => this.calendarTip());
 
-    this.accLabel = addText(scene, TB.accLabel.x, TB.accLabel.y, '账户', { size: 11, color: COLOR.muted }).setDepth(d);
+    this.accLabel = addText(scene, TB.accLabel.x, TB.accLabel.y, '账户', { size: 11, color: COLOR.muted, originY: 0.5 }).setDepth(d);
     addGlyph(scene, TB.wallet.x, TB.wallet.y, 'wallet', TB.wallet.s).setDepth(d);
     // 本月市场传闻（股灾预告）、今天加班：天气右边的小标签，悬停看说明
     this.flags = scene.add.container(0, 0).setDepth(d);
@@ -207,7 +208,7 @@ export class TopBarView {
     this.daysLeft = addText(scene, TB.daysLeft.x, TB.daysLeft.y, '', { size: 15, bold: true, num: true, originY: 0.5 }).setDepth(d).setVisible(false);
     this.houseIcon = addGlyph(scene, 0, 0, 'house', 22).setDepth(d).setVisible(false);
     this.bill = addText(scene, bx + 12, TB.billY, '', { size: this.tempo ? 14 : 15, bold: true }).setDepth(d);
-    this.billNote = addText(scene, bx + 12, TB.billNoteY, '', { size: 12, color: COLOR.muted }).setDepth(d);
+    this.billNote = addText(scene, bx + 12, TB.billNoteY, '', { size: 12, color: COLOR.muted, originY: 0.5 }).setDepth(d);
     const billHit = scene.add.rectangle(bx, ah.y, bw, ah.h, 0xffffff, 0.001).setOrigin(0, 0).setDepth(d);
     bindTooltip(billHit, () => ({ x: bx, y: ah.y, w: bw, h: ah.h }), () => {
       const mt = monthThemeView(this.state);
@@ -423,11 +424,16 @@ export class TopBarView {
       if (f > 0) this.goalBar.fillStyle(mt.goal.done ? COLOR.up : mt.goal.boss ? 0x6a3a8a : COLOR.accent, 1).fillRoundedRect(gx, TB.goalBarY, Math.max(8, bw * f), 8, 4);
       // 右半：房子图标 + 这个月要还多少（不够时变红写「差 ¥x」）
       this.houseIcon.setPosition(gx + bw + 22, TB.houseY).setVisible(true);
-      this.billNote.setPosition(gx + bw + 38, TB.billNoteY - 1).setFontSize(13);
+      this.billNote.setPosition(gx + bw + 38, TB.billNoteY).setFontSize(13);
       // 0.5.1：名目和后果找回来——「房租 ¥6,800」「差¥x · 会出局」「差¥x · 信用卡垫」
+      // 手机上这一格只有七八十宽：只写金额（名目、后果在悬停里），以前「孩子补习班 ¥6,800」被道具图标盖住
+      const gap = formatMoney(b.amount - b.account);
       this.billNote.setText(
-        st.status === 'short' ? `差${formatMoney(b.amount - b.account)} · 会出局` : st.status === 'credit' ? `差${formatMoney(b.amount - b.account)} · 信用卡垫` : `${b.name} ${formatMoney(b.amount)}`,
+        PHONE
+          ? st.status === 'short' || st.status === 'credit' ? `差${gap}` : formatMoney(b.amount)
+          : st.status === 'short' ? `差${gap} · 会出局` : st.status === 'credit' ? `差${gap} · 信用卡垫` : `${b.name} ${formatMoney(b.amount)}`,
       );
+      fitWidth(this.billNote, TB.billRight - this.billNote.x - 4);
       setColor(this.billNote, alarm ? COLOR.danger : st.status === 'tight' ? COLOR.accentDark : COLOR.ink);
     } else {
       // 没有月度主题的局：房子 + 要还的钱（大字）、沙漏 + 天数，名目放小字
@@ -438,7 +444,7 @@ export class TopBarView {
       this.hourglass.setVisible(true);
       this.daysLeft.setText(`${b.daysLeft}`).setVisible(true);
       const name = b.name;
-      this.billNote.setPosition(this.billBox.x + 40, TB.billNoteY + 1);
+      this.billNote.setPosition(this.billBox.x + 40, TB.billNoteY);
       this.billNote.setText(
         st.status === 'short' ? `差${formatMoney(b.amount - b.account)} · 还不上会出局` : st.status === 'credit' ? `差${formatMoney(b.amount - b.account)} · 信用卡垫` : st.status === 'tight' ? `还完剩${formatMoney(b.account - b.amount)}` : name,
       );

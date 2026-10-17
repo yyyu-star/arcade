@@ -3,7 +3,7 @@ import { dailySetup, difficultyDef, difficultyView, formatMoney, personaById, pe
 import { isPersonaUnlocked, type Profile } from '../../platform/profile.ts';
 import { dailyDate, dailyText, levelLabel } from '../labels.ts';
 import { COLOR, TYPE } from '../theme.ts';
-import { addGlyph } from '../ui/art.ts';
+import { addGlyph, addPill } from '../ui/art.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { wanShort } from './bits.ts';
 import { Button } from '../ui/button.ts';
@@ -33,28 +33,35 @@ export class DailyPanel extends Dialog {
     const p = personaView(d.setup.persona);
     const lv = difficultyView(d.setup.difficulty);
     this.inner.add(addPortrait(scene, 120, 196, p, false, 160));
-    // 右：人设（名字 + 本钱 · 短话）、难度（徽章 + 名字 + 短话）、今日最好；长说明都在悬停
+    // 右：三块整宽的小卡（0.16.0，以前三行字挤在左边、右半空着）：人设、难度、今日最好；长说明都在悬停
     const R = 230;
-    this.inner.add(addText(scene, R, 96, p.name, { size: TYPE.title + 4, bold: true }));
-    this.inner.add(addText(scene, R, 132, `${wanShort(p.account)} · ${personaById(p.id).short ?? p.title}`, { size: TYPE.label + 2, color: COLOR.ink }));
-    if (!isPersonaUnlocked(profile, p.id)) this.inner.add(addText(scene, R, 160, '试玩', { size: TYPE.label, bold: true, color: COLOR.accentDark }));
-    const pHit = scene.add.rectangle(40, 70, W - 80, 110, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(pHit, () => ({ x: this.inner.x + 40, y: this.inner.y + 70, w: W - 80, h: 110 }), () => ({
-      title: `${p.name}（${p.title}）`,
-      body: `${p.desc}${isPersonaUnlocked(profile, p.id) ? '' : '\n还没解锁的人设，今天可以先试玩'}`,
-    }));
-    this.inner.add(addBadge(scene, R + 24, 222, lv.level, 48));
-    this.inner.add(addText(scene, R + 58, 210, lv.name, { size: TYPE.title, bold: true }));
-    this.inner.add(addText(scene, R + 58, 236, difficultyDef(lv.level).short ?? lv.desc, { size: TYPE.label, color: COLOR.muted }));
-    const dHit = scene.add.rectangle(R, 192, W - R - 40, 60, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(dHit, () => ({ x: this.inner.x + R, y: this.inner.y + 192, w: W - R - 40, h: 60 }), () => ({ title: levelLabel(lv.level, lv.name), body: lv.detail ? `${lv.desc}\n${lv.detail}` : lv.desc }));
-    // 今日最好：奖杯 + 数字
+    const RW = W - 32 - R;
+    const row = (y: number, h: number): Phaser.GameObjects.Rectangle =>
+      scene.add.rectangle(R, y, RW, h, COLOR.paperHi, 0.9).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.edge, 1);
+    const tip = (y: number, h: number, content: () => { title: string; body: string }): Phaser.GameObjects.Rectangle => {
+      const hit = scene.add.rectangle(R, y, RW, h, 0xffffff, 0.001).setOrigin(0, 0);
+      bindTooltip(hit, () => ({ x: this.inner.x + R, y: this.inner.y + y, w: RW, h }), content);
+      return hit;
+    };
+    this.inner.add(row(72, 80));
+    this.inner.add(addText(scene, R + 16, 84, p.name, { size: TYPE.title + 4, bold: true }));
+    this.inner.add(addText(scene, R + 16, 118, `${wanShort(p.account)} · ${personaById(p.id).short ?? p.title}`, { size: TYPE.label + 2, color: COLOR.ink }));
+    if (!isPersonaUnlocked(profile, p.id)) this.inner.add([addPill(scene, R + RW - 64, 84, 48, 22, COLOR.accent), addText(scene, R + RW - 40, 95, '试玩', { size: TYPE.label, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 })]);
+    const pHit = tip(72, 80, () => ({ title: `${p.name}（${p.title}）`, body: `${p.desc}${isPersonaUnlocked(profile, p.id) ? '' : '\n还没解锁的人设，今天可以先试玩'}` }));
+    this.inner.add(row(168, 72));
+    this.inner.add(addBadge(scene, R + 36, 204, lv.level, 48));
+    this.inner.add(addText(scene, R + 72, 184, lv.name, { size: TYPE.title, bold: true }));
+    this.inner.add(addText(scene, R + 72, 210, difficultyDef(lv.level).short ?? lv.desc, { size: TYPE.label, color: COLOR.muted }));
+    const dHit = tip(168, 72, () => ({ title: levelLabel(lv.level, lv.name), body: lv.detail ? `${lv.desc}\n${lv.detail}` : lv.desc }));
+    // 今日最好：奖杯 + 数字；没打过写一句，不只是一道横线
     const rec = profile.daily[date];
-    this.inner.add(addGlyph(scene, R + 20, 292, 'trophy', 36));
-    const best = !rec || rec.attempts === 0 ? '—' : rec.won ? formatMoney(rec.bestAccount) : `${rec.bestMonths}/12`;
-    this.inner.add(addText(scene, R + 46, 292, best, { size: TYPE.title + 2, bold: true, num: true, originY: 0.5 }));
-    const rHit = scene.add.rectangle(R, 268, 240, 48, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(rHit, () => ({ x: this.inner.x + R, y: this.inner.y + 268, w: 240, h: 48 }), () => ({
+    this.inner.add(row(256, 64));
+    this.inner.add(addGlyph(scene, R + 36, 288, 'trophy', 36));
+    const played = !!rec && rec.attempts > 0;
+    this.inner.add(addText(scene, R + 72, 270, '今日最好', { size: TYPE.label - 2, bold: true, color: COLOR.muted }));
+    const best = !rec || !played ? '今天还没打' : rec.won ? formatMoney(rec.bestAccount) : `撑到 ${rec.bestMonths}/12 月`;
+    this.inner.add(addText(scene, R + 72, 286, best, { size: played ? TYPE.title + 2 : TYPE.title, bold: true, num: played, color: played ? COLOR.ink : COLOR.muted }));
+    const rHit = tip(256, 64, () => ({
       title: '今日挑战',
       body: `${dailyText(rec)}\n今天所有人玩的都是同一局：同样的开局、人设和市场环境。\n每日挑战只记今天的成绩、成就和图鉴，不会解锁新难度。\n这一局的编号：${d.seed}`,
     }));

@@ -5,6 +5,9 @@
 # 美术素材和图集不带哈希，缓存一小时后重新验证，避免更新后拿到旧图
 /assets/art/*
   Cache-Control: public, max-age=3600, must-revalidate
+# 数字字体（0.16.0）同样不带哈希
+/assets/fonts/*
+  Cache-Control: public, max-age=3600, must-revalidate
 /
   Cache-Control: no-cache
 /index.html
