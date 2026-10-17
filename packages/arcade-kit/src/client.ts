@@ -16,7 +16,7 @@
  *
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
-import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type UpMsg } from './protocol.js';
+import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
 
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
 
@@ -73,6 +73,13 @@ const HEARTBEAT_MS = 25_000;
 export const PONG_WAIT_MS = 8_000;
 /** 建连最多等多久（0.11.1）：卡在 CONNECTING 的按一次失败算，重连 */
 export const CONNECT_MS = 10_000;
+/**
+ * 看门狗（0.13.1）：房间说的出手时限（或停顿的结束时间）过了 STALL_GRACE_MS 再加最多 STALL_JITTER_MS 的随机抖动，还没有新状态，
+ * 就当房间的闹钟没设上（存储出错、没人发消息时房间不会自己醒），重连一次把房间叫醒：进房是房间的一个入口，它会按 getAlarm() 重排闹钟、
+ * 把过期的那一手照常处理。同一个 seq 只踢一次；抖动让一桌人里先到的那个去踢，别人收到新状态就不踢了
+ */
+export const STALL_GRACE_MS = 20_000;
+export const STALL_JITTER_MS = 10_000;
 /** 快捷短语太快时最多排几个（多的丢最早的） */
 const EMOTE_QUEUE = 2;
 
@@ -97,6 +104,9 @@ export class RoomClient<A = unknown, V = unknown> {
   private probing = false;
   private probeTimer: unknown = null;
   private connectTimer: unknown = null;
+  /** 看门狗（0.13.1）：到点还停在 watchSeq 就重连一次；kickedSeq 是踢过的，不再踢 */
+  private watchTimer: unknown = null;
+  private kickedSeq = -1;
   /** 没收到 ack 的操作：重连后按原 moveId 重发 */
   private pending = new Map<string, UpMsg<A>>();
   private moveCounter = 0;
@@ -254,11 +264,13 @@ export class RoomClient<A = unknown, V = unknown> {
         this.welcomed = true;
         this.attempt = 0;
         this.failures = 0;
+        this.watch(ws, msg);
       } else if (msg.t === 'state') {
         const mine = msg.ack !== undefined && this.pending.delete(msg.ack);
         // 旧的、重复的丢掉（ack 已经处理过了）。例外：别人看不出来的一步（0.7.1，quiet），房间只回给我、seq 不加，第一次收到要交给页面
         if (msg.seq < this.lastSeq || (msg.seq === this.lastSeq && !(mine && msg.quiet === true))) return;
         this.lastSeq = msg.seq;
+        this.watch(ws, msg);
       } else if (msg.t === 'error' && msg.moveId) {
         // 被拒的操作不再重发
         this.pending.delete(msg.moveId);
@@ -316,6 +328,25 @@ export class RoomClient<A = unknown, V = unknown> {
     }, PONG_WAIT_MS);
   }
 
+  /**
+   * 看门狗：按房间给的时间（now）算出手时限还剩多久，过了宽限还停在这个 seq，就扔掉连接重连一次（见 STALL_GRACE_MS）。
+   * 没在打、没有时限、旧房间不带 now 的不看；同一个 seq 踢过一次就不再踢（房间还是不动，就等真人出手或下一次进出）
+   */
+  private watch(ws: WebSocketLike, msg: { seq: number; room: RoomInfo; now?: number }): void {
+    if (this.watchTimer !== null) this.opts.clearTimer(this.watchTimer);
+    this.watchTimer = null;
+    const until = msg.room.turn?.deadline ?? msg.room.pause?.until;
+    if (msg.room.status !== 'playing' || until == null || typeof msg.now !== 'number' || msg.seq === this.kickedSeq) return;
+    const seq = msg.seq;
+    const wait = Math.max(0, until - msg.now) + STALL_GRACE_MS + Math.round(this.opts.random() * STALL_JITTER_MS);
+    this.watchTimer = this.opts.setTimer(() => {
+      this.watchTimer = null;
+      if (this.ws !== ws || this.lastSeq !== seq || ws.readyState !== OPEN) return;
+      this.kickedSeq = seq;
+      this.abandon(ws);
+    }, wait);
+  }
+
   /** 带上这次的关闭码：游戏据此区分"网络断了"（1006）和"平台有点忙"（1013）。 */
   private scheduleRetry(code: number): void {
     this.setStatus('reconnecting', code);
@@ -365,8 +396,8 @@ export class RoomClient<A = unknown, V = unknown> {
   }
 
   private clearTimers(): void {
-    for (const t of [this.retryTimer, this.emoteTimer, this.beatTimer, this.probeTimer, this.connectTimer]) if (t !== null) this.opts.clearTimer(t);
-    this.retryTimer = this.emoteTimer = this.beatTimer = this.probeTimer = this.connectTimer = null;
+    for (const t of [this.retryTimer, this.emoteTimer, this.beatTimer, this.probeTimer, this.connectTimer, this.watchTimer]) if (t !== null) this.opts.clearTimer(t);
+    this.retryTimer = this.emoteTimer = this.beatTimer = this.probeTimer = this.connectTimer = this.watchTimer = null;
     this.probing = false;
   }
 

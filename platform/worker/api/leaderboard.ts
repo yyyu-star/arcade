@@ -6,14 +6,14 @@
 import type { Ctx } from './context';
 import type { Db } from './db';
 import { GAME_IDS, GAMES } from '../../src/games';
+import { daily as dailyConfig } from './daily';
+import { parseDaily } from './boards';
 import { ApiError, json } from './http';
 import { beijingDate, beijingWeek } from './time';
 import { avatarOf } from './session';
 
 const TTL_MS = 5 * 60 * 1000;
 const TOP_N = 50;
-/** 有每日榜的游戏（games.ts 登记） */
-const DAILY_GAMES = GAMES.filter((g) => g.daily).map((g) => g.id);
 
 interface Player {
   userId: string;
@@ -29,7 +29,7 @@ interface Snapshot {
   day: string;
   at: number;
   players: Player[];
-  /** 有每日榜的游戏今天的榜 id（规则版本 -v<n> 最大的那个）；还没人交分时是 null */
+  /** 每个每日挑战标签（游戏 id，或"游戏 id:子榜 id"）今天的榜 id（规则版本 -v<n> 最大的那个）；还没人交分时是 null */
   daily: Record<string, string | null>;
 }
 
@@ -53,14 +53,14 @@ async function snapshot(db: Db, now: number): Promise<Snapshot> {
         week,
       ),
     ),
-    // 每日榜 id 是 daily-YYYY-MM-DD 或 daily-YYYY-MM-DD-v<n>：每个游戏按前缀范围找，走 boards_rank 索引
+    // 每日榜 id 是 daily-YYYY-MM-DD[-<子榜>][-v<n>]：每个游戏按前缀范围找，走 boards_rank 索引
     db.all<{ game_id: string; board_id: string }>(
       db.stmt(
         `SELECT DISTINCT game_id, board_id FROM boards
          WHERE game_id IN (SELECT value FROM json_each(?3)) AND board_id >= ?1 AND board_id < ?2`,
         `daily-${day}`,
         `daily-${day}~`,
-        JSON.stringify(DAILY_GAMES),
+        JSON.stringify(dailyConfig().games),
       ),
     ),
   ]);
@@ -74,11 +74,16 @@ async function snapshot(db: Db, now: number): Promise<Snapshot> {
     if (r.wnet !== null) p.week[r.game] = r.wnet;
     p.titles += r.titles;
   }
-  const version = (id: string) => Number(/-v(\d+)$/.exec(id)?.[1] ?? 0);
-  const today: Record<string, string | null> = Object.fromEntries(DAILY_GAMES.map((g) => [g, null]));
+  // 每日挑战的标签：key 是游戏 id，有子榜的是"游戏 id:子榜 id"（0.16.0）
+  const today: Record<string, string | null> = Object.fromEntries(dailyConfig().tabs.map((t) => [t.key, null]));
   for (const { game_id, board_id } of daily) {
-    const cur = today[game_id];
-    if (!cur || version(board_id) > version(cur)) today[game_id] = board_id;
+    const d = parseDaily(board_id);
+    if (!d) continue;
+    const key = d.sub === null ? game_id : `${game_id}:${d.sub}`;
+    // 登记里没有的（比如游戏改成子榜之前交的不带子榜的榜）不给标签
+    if (!(key in today)) continue;
+    const cur = today[key];
+    if (!cur || d.v > parseDaily(cur)!.v) today[key] = board_id;
   }
   cache = { week, day, at: now, players: [...byUser.values()], daily: today };
   return cache;

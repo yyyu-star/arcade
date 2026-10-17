@@ -1,6 +1,6 @@
 /** 浏览器连接器（4.5）：退避加抖动、哪些关闭码不重连、切回前台马上连、seq 去重、没确认的操作重发。用假的 WebSocket 和计时器。 */
 import { describe, expect, it, vi } from 'vitest';
-import { backoffMs, CONNECT_MS, PONG_WAIT_MS, RoomClient, type WebSocketLike } from '../src/client.ts';
+import { backoffMs, CONNECT_MS, PONG_WAIT_MS, RoomClient, STALL_GRACE_MS, STALL_JITTER_MS, type WebSocketLike } from '../src/client.ts';
 import type { DownMsg } from '../src/protocol.ts';
 
 class FakeWs implements WebSocketLike {
@@ -288,6 +288,67 @@ describe('重连', () => {
     t.ws().drop(1006);
     expect(FakeWs.all).toHaveLength(1);
     expect(t.statuses.at(-1)).toBe('closed');
+  });
+});
+
+describe('看门狗（0.13.1）：房间的闹钟没设上时重连一次把它叫醒', () => {
+  const NOW = 1_000_000;
+  /** 在打、0 号出手、30 秒后到点；now 是房间发消息时的时间 */
+  const turnState = (seq: number, extra: Record<string, unknown> = {}): DownMsg =>
+    ({ t: 'state', seq, you: { seat: 0 }, room: { code: '123456', status: 'playing', seats: [], turn: { seat: 0, deadline: NOW + 30_000 } }, frames: [], now: NOW, ...extra }) as DownMsg;
+  // random 固定 0.5：抖动是一半
+  const WAIT = 30_000 + STALL_GRACE_MS + STALL_JITTER_MS / 2;
+
+  it('时限按房间的 now 算（不看浏览器的钟），过了宽限还停在这一步：扔掉连接重连；同一步只踢一次', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(1));
+    t.ws().push(turnState(2));
+    const first = t.ws();
+    t.fire(WAIT);
+    expect(first.readyState).toBe(3);
+    expect(t.statuses.at(-1)).toBe('reconnecting:1006');
+    t.fire(375);
+    expect(FakeWs.all).toHaveLength(2);
+    // 重连后房间还停在同一步（比如闹钟还是设不上）：不再踢，等真人出手或下一次进出
+    t.ws().open();
+    t.ws().push({ ...(turnState(2) as object), t: 'welcome', v: 1, minClientVersion: 0, view: null } as DownMsg);
+    expect(t.timers.some((x) => x.ms === WAIT)).toBe(false);
+    // 房间动了（新的一步）：照常看
+    t.ws().push(turnState(3));
+    expect(t.timers.some((x) => x.ms === WAIT)).toBe(true);
+  });
+
+  it('到点前来了新的一步：重新计时，不踢', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(1));
+    t.ws().push(turnState(2));
+    t.ws().push(turnState(3, { now: NOW + 20_000 }));
+    // 只剩一个看门狗计时器，按新的一步算（离时限还剩 10 秒）
+    expect(t.timers.filter((x) => x.ms === WAIT)).toHaveLength(0);
+    expect(t.timers.filter((x) => x.ms === WAIT - 20_000)).toHaveLength(1);
+    t.fire(WAIT - 20_000);
+    expect(t.statuses.at(-1)).toBe('reconnecting:1006');
+  });
+
+  it('不在打、没有时限、旧房间不带 now：不看', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(1));
+    const before = t.timers.length;
+    t.ws().push(turnState(2, { now: undefined }));
+    t.ws().push(turnState(3, { room: { code: '123456', status: 'playing', seats: [], turn: null } }));
+    t.ws().push(turnState(4, { room: { code: '123456', status: 'over', seats: [], turn: { seat: 0, deadline: NOW + 1 } } }));
+    expect(t.timers.length).toBe(before);
+  });
+
+  it('停一会儿（pause.until）也算时限', () => {
+    const t = setup();
+    t.ws().open();
+    t.ws().push(welcome(1));
+    t.ws().push(turnState(2, { room: { code: '123456', status: 'playing', seats: [], turn: null, pause: { until: NOW + 5_000 } } }));
+    expect(t.timers.some((x) => x.ms === 5_000 + STALL_GRACE_MS + STALL_JITTER_MS / 2)).toBe(true);
   });
 });
 

@@ -7,6 +7,9 @@
 # 称号的名字（平台的称号墙读，docs/platform-backend.md 5.10）：加了新称号一小时内看得到
 /titles.json
   Cache-Control: public, max-age=3600, must-revalidate
+# 好友动态的名场面模板（平台按编号读，docs/platform-backend.md 15.17）：同上
+/moments.json
+  Cache-Control: public, max-age=3600, must-revalidate
 /
   Cache-Control: no-cache
 /index.html

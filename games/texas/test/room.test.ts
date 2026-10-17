@@ -6,7 +6,7 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, it } from 'vitest';
 import { ROOM_LEVEL, STAKES, stakesOf } from '../src/core/stakes.ts';
 import { isFail } from '../src/core/table.ts';
-import { HAND_PAUSE_MS, OPENING_MS, roomOp, SEATS, SETTLE_EXTRA, settleCap, TURN_MS, texasRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
+import { cutMatches, HAND_PAUSE_MS, OPENING_MS, roomOp, SEATS, SETTLE_EXTRA, settleCap, TURN_MS, texasRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { SOLO_OP, soloOp } from '../worker/platform.ts';
 import { conserve, SEED } from './helpers.ts';
 
@@ -756,6 +756,57 @@ describe('钱包 op 和结回上限（0.13.2 审计）', () => {
     // 没超的照原样结
     const fine = credits(G.closing!(s)).find((e) => e.seat === 0)!;
     expect(fine.amount).toBeLessThan(settleCap(max, max));
+  });
+});
+
+describe('搭子战绩：切场（0.17.0，平台 15.19；DESIGN.md 6.10）', () => {
+  const pair = (m: { players: { seat: number }[] }) => m.players.map((p) => p.seat).sort().join('-');
+  it('四个真人陆续走、最后散桌：每一对同桌的只算一场，在先走的那一刻算；赢没赢按各自这一份的净输赢', () => {
+    let s = seatedAll(['human', 'human', 'human', 'human']);
+    const seen: string[] = [];
+    // 第一个走的：和还坐着的三个人各一场（一对一对的，不把还坐着的人之间算进去）
+    const a = G.turn(s)!;
+    const stackA = s.t.seats[a]!.stack;
+    s = G.seated!(s, a, 'ai');
+    expect(s.mates!.n).toBe(3);
+    expect(s.mates!.last.map((m) => m.match)).toEqual([0, 1, 2]);
+    for (const m of s.mates!.last) {
+      expect(m.players).toHaveLength(2);
+      expect(m.players[0]).toEqual({ seat: a, win: stackA > MAX });
+    }
+    seen.push(...s.mates!.last.map(pair));
+    s = drive(settleAll(s));
+    // 第二个走的：和剩下两个各一场，场次接着数
+    const b = [0, 1, 2, 3].find((i) => i !== a && s.t.seats[i]!.owner === 'player' && !s.t.seats[i]!.leaving)!;
+    s = G.seated!(s, b, 'ai');
+    expect(s.mates!.last.map((m) => m.match)).toEqual([3, 4]);
+    seen.push(...s.mates!.last.map(pair));
+    // 房间关了：剩下的两个人一起走，两人一场
+    s = G.closing!(settleAll(s));
+    expect(s.mates!.n).toBe(6);
+    expect(s.mates!.last).toHaveLength(1);
+    seen.push(...s.mates!.last.map(pair));
+    // 四个人六对，每对正好一场
+    expect(seen.sort()).toEqual(['0-1', '0-2', '0-3', '1-2', '1-3', '2-3']);
+  });
+
+  it('还没打完一手就走的不算；一个人走、桌上没别的真人不切；场次只在切出场的时候变', () => {
+    // 第一手还在打：谁都没打完过一手
+    let s = settleAll(begin(['human', 'human', 'human', 'ai']));
+    s = G.seated!(s, G.turn(s)!, 'ai');
+    expect(s.mates).toBeUndefined();
+    expect(cutMatches(undefined, [{ seat: 0, win: true }], [])).toEqual({ n: 0, last: [] });
+    const prev = { n: 4, last: [{ match: 3, players: [{ seat: 0, win: true }, { seat: 1, win: false }] }] };
+    expect(cutMatches(prev, [{ seat: 2, win: true }], [])).toBe(prev);
+    // 两个人一起走、还有一个坐着：两人一场，再各和坐着的一场
+    expect(cutMatches(prev, [{ seat: 0, win: true }, { seat: 1, win: false }], [{ seat: 2, win: true }])).toEqual({
+      n: 7,
+      last: [
+        { match: 4, players: [{ seat: 0, win: true }, { seat: 1, win: false }] },
+        { match: 5, players: [{ seat: 0, win: true }, { seat: 2, win: true }] },
+        { match: 6, players: [{ seat: 1, win: false }, { seat: 2, win: true }] },
+      ],
+    });
   });
 });
 
