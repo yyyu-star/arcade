@@ -43,6 +43,8 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台和网络恢复时马上连、认得出静默死掉的连接（0.11.1）、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
 | `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
+| `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
+| `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere` 等接口小函数；只在有平台且已登录时挂 |
 
 **发布和仓库内引用是两种形态**（0.10.0）：
 - npm 上的包是编译好的 `dist/`（JS + `.d.ts`），`exports` 每个入口给 `types` 和 `default`；
@@ -343,6 +345,59 @@ protected override onEmote(from: number, id: number, to?: number): void {
 - 电脑的反应只是画面，**出牌决策绝不读它**；真人的短语、道具不记进牌局状态（见上面 `onEmote` 的规矩）。
 - 其他纯函数：`stickerMood`（表情对应的情绪）、`FunCooldown`（冷却）、`FunTally`（护盾、连击、回敬）、`placeMenu`（菜单放哪，避开禁区；窄屏按 `fitMenuWidth` 收窄到屏幕宽减 16px，0.11.2）、`funItem`/`stickerId`/`propId`（编号换算），测试在 `test/fun-logic.test.ts`。
 
+## 分享卡和邀请（share、social，0.12.0）
+
+规范是仓库根 `docs/social.md` 1.1–1.3。两个入口都只在调用时碰 DOM，import 时不碰；纯的部分测试在 `test/share.test.ts`、`test/social.test.ts`。
+
+### 分享卡
+
+游戏只交数据，画法统一（主题色渐变底、图标、游戏名、一个大数字、最多 3 条小数据、一句名场面、昵称和称号、北京时间日期）：
+
+```ts
+import { shareCard } from 'arcade-kit/share';
+
+const r = await shareCard(
+  {
+    game: '游戏名', title: '实盘小档 · 8 副', accent: '#b03a2e',
+    big: { value: '+3.5', label: '份筹码' },
+    stats: [{ label: '头游', value: '4 次' }, { label: '炸弹', value: '6 个' }],   // 最多 3 条，多的不画
+    line: '最后一手四个 A 炸穿全场',                                               // 模板拼的，不收玩家自由文字
+    art: { image: atlasImg, crop: { x: 128, y: 0, w: 128, h: 128 }, fit: 'contain' },
+    player: { name: '小明', badge: '炸弹狂人' },
+  },
+  { url: location.href /* 好友房结算带房间码 */, log: (l) => smokeLog.push(l) },
+);   // 'shared' | 'preview' | 'cancelled'
+```
+
+- `art` 可以直接给一个 `CanvasImageSource`（img、canvas、ImageBitmap），或者 `{ image, crop?, fit? }` 从图集里切一块（`crop` 是源图像素，`fit` 默认 `contain`，`cover` 铺满裁中间）。
+  是 img 时先 `await img.decode()`，没加载完、坏图、跨域画不上都**不画 art、照常出卡**。
+- 系统分享要 `navigator.canShare({ files })` 为真（手机浏览器）；不支持、或出错（用户取消除外）就出预览层：图 + "保存图片"（下载 `share.png`）+ "复制链接" + "关闭"。
+  预览层 z-index 默认 2000，按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
+- 只要图不分享：`drawShareCard(card, canvas?)` 返回画好的 canvas，`shareCardBlob(card)` 返回 PNG。
+- **图上只有游戏给的数据**：别人没摊的牌、手牌这类隐藏信息游戏自己别放进来。
+
+### 报位置、收邀请
+
+```ts
+import { mountSocial, sendInvite } from 'arcade-kit/social';
+
+const social = await mountSocial({
+  platform,                                         // 启动时 detectPlatform 的结果，不给就自己问一次 /api/me
+  where: () => (room ? { place: 'room', game: 'mygame', room: room.code, seats: `${room.humans}/4` } : { place: 'game', game: 'mygame' }),
+  gameName: (id) => GAME_NAMES[id],                 // 横条上"老王叫你来<名字>"；kit 不认识任何游戏，不给就说"一起玩"
+  onGo: (inv) => confirmLeave(() => location.assign(`/games/${inv.game}/?room=${inv.room}`)),   // 可选：打到一半先确认
+});
+// 没平台、没登录：social 是 null，一个请求都不发
+social?.presenceNow(true);                          // 进房、换房时马上报一次
+```
+
+- 页面在前台时每 2 分钟 `POST /api/presence`（`where()` 现问，返回 null 这次不报），每 30 秒 `GET /api/invites`；切后台就停，回到前台到点马上补。平台回 401 就自己停。
+- 横条在页面顶上（让出刘海），一次一条，先到期的先弹；过期的、已经在那个房间里的不弹。"去"先 `dismiss`（keepalive）再跳 `/games/<id>/?room=<码>`，
+  "不了"`dismiss` 后弹下一条，到期自己收起。按钮 `data-key` 是 `invite:go`、`invite:no`；`log` 给 `位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期`。
+- 发邀请 `sendInvite({ to, game, room })` → `{ ok: true, id }` 或 `{ ok: false, error: 'limit' | 'blocked' | 'login' | 'failed', retryAfter? }`（429 是每天 50 条、同一好友 1 分钟 1 条超了）。
+  `fetchFriends()` 带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
+- 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
+
 ## 房间怎么守规矩
 
 - **只用 `ctx.acceptWebSocket`、一个闹钟**：所有到期时间（房间寿命 3 小时、没人 10 分钟、这一手 30 秒、掉线宽限 60 秒、电脑没算完、停够了（0.5.0））取最早的；
@@ -510,6 +565,8 @@ packages/arcade-kit/
 │  ├─ fun.ts、fun-art.ts  快捷短语、表情、道具的画面层
 │  ├─ fun-logic.ts   牌桌互动的规则：冷却、护盾、连击、回敬、电脑反应、菜单位置（纯函数）
 │  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示）
+│  ├─ share.ts       分享卡（Canvas 画战绩图、系统分享或预览）
+│  ├─ social.ts      报位置、收邀请的横条、好友和邀请的接口小函数
 │  ├─ testing.ts     假平台钱包（只给测试和本地开发）
 │  └─ internal.ts    内部地址、身份头（不在 exports 里）
 ├─ scripts/manifest.mjs  打包时把 exports 换成 dist 版、换回来、检查 dist
