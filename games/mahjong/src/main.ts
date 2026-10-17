@@ -137,7 +137,9 @@ const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
 
 function paintTop(): void {
-  speedBtn.textContent = prefs.fast ? '快' : '慢';
+  // 写的是现在的速度（以前常速时写"慢"，像是在说电脑慢）
+  speedBtn.textContent = prefs.fast ? '快速' : '常速';
+  speedBtn.title = '电脑出牌的速度：点一下切换';
   speedBtn.title = prefs.fast ? '电脑出牌快' : '电脑出牌慢';
   soundBtn.textContent = prefs.sound && prefs.volume > 0 ? '声' : '静';
   muteBtn.textContent = prefs.sound ? '静音' : '开声';

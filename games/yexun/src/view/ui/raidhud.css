@@ -49,3 +49,7 @@
   border-radius: 10px; opacity: 0.74; pointer-events: none;
   box-shadow: 0 0 0 2.5px var(--ink);
 }
+
+/* 宝库钥匙：目标条第一行末尾的小钥匙 */
+.yx-rs-key { display: inline-flex; align-items: center; gap: 3px; margin-left: 10px; padding: 0 6px 0 2px; border-radius: 8px; background: #5a3a00; color: #ffe08a; font-size: 0.85em; }
+.yx-rs-key svg { width: 1.7em; height: 1em; display: block; }

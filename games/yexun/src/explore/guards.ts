@@ -8,7 +8,7 @@
  * 读写的是核心的怪数组（GuardHost）；石兽的技能状态借用 eS（0 没放技能 1 扑击预警 2 扑在空中 3 甩尾预警）、eT（倒数）、
  * eAX / eAY（扑的方向）、eV（扑的速度）、ePhase（第几段）。随机用 raid.rAi。
  */
-import { BEAST, ROAM_SPEED } from '../content/explore.ts';
+import { BEAST, RAID_LATE, ROAM_SPEED } from '../content/explore.ts';
 import { dist, fsqrt } from '../core/fmath.ts';
 import { RaidEv, type GuardFx, type GuardHost } from './host.ts';
 import { guardCfg, Role, type Raid } from './raid.ts';
@@ -29,6 +29,14 @@ export function guardStep(raid: Raid, g: number, h: GuardHost, i: number, fx: Gu
   const role = raid.gRole[g]!;
   if (role === Role.beast && h.eS[i] !== 0) return beastSkill(raid, g, h, i, fx);
   if (role === Role.roamer) return roam(raid, g, h, i);
+  if (role === Role.goblin) {
+    // 宝妖：主角 flee 以内就背着人跑（比主角慢一点，被墙角堵住就跑不掉），远了原地蹲着
+    const ex = h.eX[i]!;
+    const ey = h.eY[i]!;
+    if (dist(h.x - ex, h.y - ey) > RAID_LATE.goblin.flee) return 0;
+    head(ex, ey, 2 * ex - h.x, 2 * ey - h.y);
+    return h.eSpeed[i]!;
+  }
 
   const cfg = guardCfg(role);
   const ex = h.eX[i]!;

@@ -14,6 +14,8 @@ interface Part {
   skill: string;
   build: string;
   map: string;
+  /** sim.ts 的 --mode：raid 时每局是 [撤没撤出, 带出价值, 待了几拍] */
+  mode?: string;
   from?: number;
   runs: [number, number, number][];
 }
@@ -54,22 +56,23 @@ for (const k of order) {
   }
   const runs = parts.flatMap((p) => p.runs);
   const [map, diff, skill, build] = k.split('|');
-  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, from: parts[0]!.from ?? 0, runs });
+  const mode = parts[0]!.mode;
+  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, mode, from: parts[0]!.from ?? 0, runs });
   const n = runs.length;
   const win = mean(runs.map((r) => r[0]));
-  const tier = tierOfDanger(Number(diff));
+  const tier = mode === 'raid' ? undefined : tierOfDanger(Number(diff));
   const xs = tier ? runs.map((r) => vigilBp(tier, r[2], r[0] === 1, r[1] === 1) / 10_000 - 1) : [];
   const m = mean(xs);
   const sd = Math.sqrt(mean(xs.map((x) => (x - m) * (x - m))));
   lines.push(
     [
-      map === 'snow' ? '雪原' : '义庄',
+      mode === 'raid' ? map : map === 'snow' ? '雪原' : '义庄',
       diff,
       skill,
       build,
       n,
       `${(win * 100).toFixed(0)}% ±${(200 * Math.sqrt((win * (1 - win)) / n)).toFixed(0)}`,
-      `${(mean(runs.map((r) => r[1])) * 100).toFixed(0)}%`,
+      mode === 'raid' ? `带出 ${mean(runs.filter((r) => r[0] === 1).map((r) => r[1])).toFixed(0)}` : `${(mean(runs.map((r) => r[1])) * 100).toFixed(0)}%`,
       `${(mean(runs.map((r) => r[2])) / 1800).toFixed(1)} 分`,
       tier ? `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(n)).toFixed(2)}` : '-',
     ].join(' | '),

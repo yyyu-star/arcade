@@ -26,6 +26,14 @@ export interface RaidHudState {
   chestOpen: Uint8Array;
   gateOpen: Uint8Array;
   guards: number[];
+  /** 宝妖的位置（不在场是 null），小地图上画金点 */
+  goblin: [number, number] | null;
+  /** 鬼市的位置（开市期间），小地图上标出来 */
+  market: [number, number] | null;
+  /** 还封着的宝库（宝箱下标，没有是 −1），小地图上在金箱上加锁 */
+  vault: number;
+  /** 身上有宝库钥匙 */
+  hasKey: boolean;
 }
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
@@ -42,6 +50,8 @@ export class RaidHud {
   private readonly strip: HTMLDivElement;
   private readonly line1: HTMLDivElement;
   private readonly line2: HTMLDivElement;
+  private readonly txt1: HTMLSpanElement;
+  private readonly key: HTMLSpanElement;
   private readonly panel: HTMLDivElement;
   private readonly mm: HTMLCanvasElement;
   private readonly mmCtx: CanvasRenderingContext2D;
@@ -62,6 +72,10 @@ export class RaidHud {
     this.strip = el('div', 'yx-rs', root);
     this.line1 = el('div', 'yx-rs-1', this.strip);
     this.line2 = el('div', 'yx-rs-2', this.strip);
+    this.txt1 = el('span', '', this.line1);
+    this.key = el('span', 'yx-rs-key', this.line1);
+    this.key.innerHTML = '<svg viewBox="0 0 40 24" aria-hidden="true"><circle cx="9" cy="12" r="6" fill="#ffd23a" stroke="#17131c" stroke-width="2.5"/><circle cx="9" cy="12" r="2" fill="#17131c"/><path d="M15 12h20M28 12v7M34 12v5" fill="none" stroke="#17131c" stroke-width="6" stroke-linecap="round"/><path d="M15 12h20M28 12v7M34 12v5" fill="none" stroke="#ffd23a" stroke-width="2.6" stroke-linecap="round"/></svg>钥匙';
+    this.key.style.display = 'none';
     this.panel = el('div', 'yx-bagpanel', root);
     this.panel.style.display = 'none';
     // 小地图：画布按 2 倍画（手机高清屏不糊），CSS 大小在样式里
@@ -150,7 +164,40 @@ export class RaidHud {
       if (s.chestOpen[i] === 1) return;
       dot(ch.x, ch.y, ch.tier === 'gold' ? 5 : 4, ch.tier === 'gold' ? '#ffd23a' : ch.tier === 'copper' ? '#ff9a3a' : '#e8dcc0');
     });
+    if (s.vault >= 0) {
+      const v = this.map.chests[s.vault]!;
+      const x = v.x * k, y = v.y * k;
+      c.fillStyle = '#c0392b';
+      c.strokeStyle = '#17131c';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y - 6, 4, Math.PI, 0);
+      c.stroke();
+      c.fillRect(x - 5.5, y - 6, 11, 9);
+      c.strokeRect(x - 5.5, y - 6, 11, 9);
+    }
+    if (s.market) {
+      const x = s.market[0] * k, y = s.market[1] * k;
+      c.fillStyle = '#b07aff';
+      c.strokeStyle = '#17131c';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(x - 8, y + 5);
+      c.lineTo(x, y - 7);
+      c.lineTo(x + 8, y + 5);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
     for (let i = 0; i + 1 < s.guards.length; i += 2) dot(s.guards[i]!, s.guards[i + 1]!, 4.2, '#e0322e');
+    if (s.goblin) {
+      dot(s.goblin[0], s.goblin[1], 5.4, '#ffc83a');
+      c.beginPath();
+      c.arc(s.goblin[0] * k, s.goblin[1] * k, 8.5, 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(255,200,58,0.85)';
+      c.lineWidth = 1.8;
+      c.stroke();
+    }
     this.map.gates.forEach((g, i) => {
       const open = s.gateOpen[i] === 1;
       c.save();
@@ -197,8 +244,9 @@ export class RaidHud {
     }
     if (l1 !== this.last.l1) {
       this.last.l1 = l1;
-      this.line1.textContent = l1;
+      this.txt1.textContent = l1;
     }
+    this.key.style.display = s.hasKey ? '' : 'none';
     if (l2 !== this.last.l2) {
       this.last.l2 = l2;
       this.line2.textContent = l2;

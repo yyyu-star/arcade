@@ -890,11 +890,12 @@ body::before {
 .stage.tight .ver { margin-top: var(--s-2); }
 .stage.tight .panel { width: 560px; max-height: 100%; overflow-y: auto; padding: var(--s-3) var(--s-4); }
 .stage.tight :is(.modes, .stakes, .sizes, .buyin, .go-row, .friends) { margin-top: var(--s-2); }
-.stage.tight .friends { padding-top: var(--s-2); }
 
 /* ---------- 好友房 ---------- */
-.friends { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid rgba(255, 255, 255, .08); }
+/* 0.17.4：好友房和娱乐、实盘并排；输码进房紧跟在选项下面，开房间在"坐下开打"的位置（一样大、金色） */
+.friends { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
 .friends .pill { height: 40px; flex: none; }
+.friends.open .pill { flex: 1; height: 52px; border-radius: var(--r-4); font-size: var(--fs-5); font-weight: 900; letter-spacing: 2px; }
 /* 从大厅的"好友房"进来：这一行亮两下，告诉他开房、进房在这里 */
 .friends.spot { animation: spot 1.2s ease-out 2; border-radius: var(--r-3); }
 @keyframes spot {
