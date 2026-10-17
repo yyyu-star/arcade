@@ -171,7 +171,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     浏览器每次连上（welcome：打开页面、断线重连）看到自己还 afk 就自动发一次 `back`（0.6.4）：连得上说明人回来了；一直连着只是走开的照旧要自己点。
 - 分享卡（0.13.0，`src/view/share-card.ts`，仓库根 `docs/social.md` 1.1）：整局结束页、单机实盘结算、好友房实盘结算（到账的人）右上角一个"分享"图标，用 kit 的分享卡画 1080×1350 的战绩图。
   结算页一出来就 `prepareResult` 先画好（kit 0.12.3 的 `prepareShare`），按钮的点击里同步调 `share()`、前面不许 await：iOS 只许在点击的那一下里调系统分享（0.13.1）。
-  卡上只有公开的：胜负或这一场的筹码、打了几副、我的头游和炸弹次数、我的称号（模板拼的话）；图标是 `favicon.svg`。链接是游戏地址，好友房带房间码。冒烟的控件名 `share`。
+  卡上只有公开的：胜负或这一场的筹码、打了几副、我的头游和炸弹次数、我的称号（模板拼的话）；图标是 `favicon.svg`。链接是游戏地址（`location.origin + location.pathname`，好友房带 `?room=`），kit 0.15.0 起按它在卡的右下角画二维码。冒烟的控件名 `share`，`gameover` 一段点一次、把预览卡存成 `16b-share-card.png`。
 - 结束颁奖（0.14.0，`src/net/awards.ts`，设计 `docs/design.md` 4.1）：好友房一场打完评本场 MVP、最惨的人、炸弹王（2–3 个），数据是房间攒的 `NetState.log`（公开的名次、炸弹，随视图下发、`rotate.ts` 转座位），
   页面 `NetSession.matchLog` 取、`TableScene.roomAwards` 评、`addAwards` 画，分享卡经 `shareCardOf` 的 `awards` 写进去。只用公开信息、话从模板拼；改评法同步改 design.md 4.1 和 `tests/awards.test.ts`。
 - 好友动态的名场面（0.15.0，`src/view/feed.ts`、`public/moments.json`，设计 `docs/design.md` 4.2）：一副打完 `TableScene.feedDeal` 从 `highlights.ts` 的名场面里挑和我有关的一条，经 `social.ts` 的 `postFeed`（kit 的 `postMoment`）报给平台；
