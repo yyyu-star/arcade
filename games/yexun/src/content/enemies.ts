@@ -43,7 +43,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'lantern', code: 3, hp: 14, speed: 1.2, dmg: 6, r: 15, xp: 2, steady: 0.1, vs: { 剑: 0.6, 水: 1.5, 镇: 1.3 } },
   { kind: 'fox', code: 4, hp: 12, speed: 1.9, dmg: 8, r: 14, xp: 2, steady: 0.1, vs: { 木: 0.9, 镇: 1.15 } },
   { kind: 'shishi', code: 5, hp: 270, speed: 1.15, dmg: 15, r: 30, xp: 20, steady: 0.9, elite: true, vs: { 剑: 0.5, 符: 1.2 } },
-  { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 剑: 0.6, 火: 1.25, 镇: 1.3 } },
+  { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 剑: 0.6, 火: 1.1, 镇: 1.3, 符: 1.2 } },
   { kind: 'boss', code: 7, hp: 20000, speed: 1.55, dmg: 19, r: 44, xp: 0, steady: 0.97, boss: true, vs: { 剑: 0.8, 火: 1.45, 镇: 1.5, 木: 0.85 } },
   // 第 4 步：编号接着往后排（存档、录像里存的是编号，已有的不挪）
   { kind: 'horse', code: 8, hp: 10, speed: 4, dmg: 7, r: 16, xp: 2, steady: 0.2, vs: { 火: 1.5, 镇: 1.15, 木: 0.8 } },
@@ -54,8 +54,8 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
   { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2, vs: { 剑: 0.5, 火: 1.5, 镇: 1.3 } },
   { kind: 'whitefox', code: 15, hp: 400, speed: 1.7, dmg: 9, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.15, 符: 1.4 } },
-  { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.5 } },
-  { kind: 'lord', code: 17, hp: 6000, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true, vs: { 火: 1.5 } },
+  { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.25, 符: 1.2 } },
+  { kind: 'lord', code: 17, hp: 6000, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true, vs: { 火: 1.3 } },
   // 夜探的守卫（数值在 content/explore.ts，移动由 src/explore/guards.ts 算）
   { kind: 'patrol', code: 18, ...RAID_ENEMIES.patrol },
   { kind: 'beast', code: 19, ...RAID_ENEMIES.beast },
