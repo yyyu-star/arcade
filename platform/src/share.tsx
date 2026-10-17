@@ -45,7 +45,12 @@ export function statsCard(name: string, games: Record<string, CareerView>, badge
   const top = [...list]
     .sort(([a, x], [b, y]) => y.rounds - x.rounds || GAMES.findIndex((g) => g.id === a) - GAMES.findIndex((g) => g.id === b))
     .slice(0, 3)
-    .map(([g, c]) => ({ label: c.rounds > 0 ? `${gameName(g)}胜率` : gameName(g), value: c.rounds > 0 ? `${rate(c)}%` : `上桌 ${num(c.n)} 次` }));
+    .map(([g, c]) => {
+      if (c.rounds <= 0) return { label: gameName(g), value: `上桌 ${num(c.n)} 次` };
+      // kit 把值截到 10 个字：放得下就带上局数（"62% · 48局"），放不下只写胜率
+      const both = `${rate(c)}% · ${num(c.rounds)}局`;
+      return { label: `${gameName(g)}胜率`, value: Array.from(both).length <= 10 ? both : `${rate(c)}%` };
+    });
   const line = [best && `最大一把 ${gameName(best[0])} ${num(best[1])}`, titles > 0 && `称号 ${titles} 个`].filter(Boolean).join(' · ');
   return {
     game: '街机厅战绩',
