@@ -21,7 +21,7 @@ import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { cardOf, shareResult } from './view/share.ts';
+import { cardOf, prepareCard } from './view/share.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, STAKES_NAME, VARIANT_NAME, walletError } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
 import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
@@ -600,7 +600,10 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
 /** 结算页的"分享"（docs/social.md 1.1）：只有坐着打完的人有（旁观的没有自己的战绩） */
 function shareButton(row: HTMLElement, v: XzView, title: string, wallet: boolean, url: string): void {
   const card = cardOf(v, { title, unit: wallet ? '筹码' : '分', name: myName, fame });
-  if (card) button('act soft share-card', row, '分享', () => void shareResult(card, url));
+  if (!card) return;
+  // 结算页出来就画好，点的那一下直接调系统分享（iOS 要求，见 view/share.ts）
+  const p = prepareCard(card, url);
+  button('act soft share-card', row, '分享', () => void p.share());
 }
 
 async function rematch(b: HTMLButtonElement): Promise<void> {

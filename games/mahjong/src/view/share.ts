@@ -3,7 +3,7 @@
  * 图上只有公开的、自己的东西：自己这一场的净输赢、胡了几局、最大几番、杠了几个，自己的名场面和称号；别人的手牌、牌墙一律不进图。
  * 不上传、不写库。
  */
-import { shareCard, type ShareCard } from 'arcade-kit/share';
+import { prepareShare, type PreparedShare, type ShareCard } from 'arcade-kit/share';
 import type { XzView } from '../core/variants/sichuan-xuezhan/index.ts';
 import type { Highlight } from '../game/banter.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, signed, TITLE_NAME } from './text.ts';
@@ -58,8 +58,11 @@ function art(): HTMLImageElement {
   return img;
 }
 
-/** 点"分享"：url 是游戏地址（好友房带房间码） */
-export async function shareResult(card: ShareCard, url: string): Promise<void> {
+/**
+ * 结算页一出来就先把卡画好（kit 0.12.3）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。
+ * "分享"的点击里直接 `void p.share()`，前面别 await。url 是游戏地址（好友房带房间码）
+ */
+export function prepareCard(card: ShareCard, url: string): PreparedShare {
   const log = import.meta.env.DEV ? (l: string) => ((window as { __shareLog?: string[] }).__shareLog ??= []).push(l) : undefined;
-  await shareCard({ ...card, art: art() }, { url, ...(log ? { log } : {}) });
+  return prepareShare({ ...card, art: art() }, { url, ...(log ? { log } : {}) });
 }
