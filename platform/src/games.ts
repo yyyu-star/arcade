@@ -30,9 +30,11 @@ export interface GameEntry {
   boards?: readonly string[];
   /**
    * 有每日挑战榜（daily-YYYY-MM-DD，规则改版时加 -v<n>，15.5）：排行榜页给它一个"<名字>每日"标签页，显示今天版本最大的那个榜。
-   * 分数怎么显示由游戏自己的 /games/<id>/daily.json 给（src/daily.ts），平台不知道各游戏的分数怎么编码
+   * 分数怎么显示由游戏自己的 /games/<id>/daily.json 给（src/daily.ts），平台不知道各游戏的分数怎么编码。
+   * 一天有几个每日榜的（平台 0.16.0，比如夜巡的守夜、夜探）写子榜列表：榜名是 daily-YYYY-MM-DD-<子榜 id>[-v<n>]，
+   * 每个子榜一个"<名字>每日·<子榜名>"标签，daily.json 里按子榜给显示方式（boards.<子榜 id>）。写了子榜的游戏不再收不带子榜的每日榜。
    */
-  daily?: boolean;
+  daily?: true | readonly DailySub[];
   /**
    * 好友房入口：大厅卡片上"进入游戏"旁边多一个按钮，链到游戏地址加上 query（游戏自己认这个参数，掼蛋把 online=1 当作直接打开好友房面板）。
    * 平台不做开关：游戏关掉联机时这个链接照样打开游戏首页。登录后才露（好友房要登录）
@@ -44,6 +46,13 @@ export interface GameEntry {
    */
   wallet?: false;
 }
+
+/** 每日挑战的子榜：id 只用小写字母和数字、字母开头、不像版本号（v2），name 是标签上的中文名 */
+export interface DailySub {
+  id: string;
+  name: string;
+}
+export const DAILY_SUB_RE = /^(?!v\d)[a-z][a-z0-9]{0,15}$/;
 
 export const GAMES: readonly GameEntry[] = [
   {
@@ -116,3 +125,22 @@ export const GAME_IDS: ReadonlySet<string> = new Set(GAMES.map((g) => g.id));
 
 /** 用平台钱包的游戏（界面上按游戏列筹码的地方用） */
 export const WALLET_GAMES: readonly GameEntry[] = GAMES.filter((g) => g.wallet !== false);
+
+/** 排行榜上的一个每日挑战标签：没有子榜的游戏一个（key 是游戏 id），有子榜的每个子榜一个（key 是"游戏 id:子榜 id"） */
+export interface DailyTab {
+  key: string;
+  game: GameEntry;
+  sub: DailySub | null;
+  label: string;
+}
+
+export function dailyTabs(games: readonly GameEntry[] = GAMES): DailyTab[] {
+  return games.flatMap((g): DailyTab[] =>
+    !g.daily
+      ? []
+      : g.daily === true
+        ? [{ key: g.id, game: g, sub: null, label: `${g.name}每日` }]
+        : g.daily.map((sub) => ({ key: `${g.id}:${sub.id}`, game: g, sub, label: `${g.name}每日·${sub.name}` })),
+  );
+}
+

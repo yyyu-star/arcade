@@ -32,6 +32,10 @@ import { hasLoginHint } from '../../platform/cloud.ts';
 import { standalone } from '../../platform/mode.ts';
 import { showBanner } from '../segments.ts';
 import { ChoiceDialog } from '../ui/noticeDialog.ts';
+import { acceptInvite, onChallengeChange, takeInvite, versionDiffers } from '../challenge.ts';
+import { ChallengePanel } from '../meta/challengePanel.ts';
+import type { ChallengeFail, ChallengeView } from '../../platform/challenge.ts';
+import { boardScoreText } from '../labels.ts';
 import { hideHomeTip, showHomeTip } from '../../platform/viewportFit.ts';
 import { Room } from '../trade/room.ts';
 import { phoneLayout, viewOf } from '../viewport.ts';
@@ -115,6 +119,10 @@ export class TitleScene extends BaseScene {
     const off = onLiveChange(() => this.time.delayedCall(1, () => this.liveNotice()));
     this.events.once('shutdown', off);
     this.time.addEvent({ delay: 400, loop: true, callback: () => this.liveNotice() });
+    // 0.13.0 打开好友挑战的链接：读到了弹一张卡（同样等前面的提示说完、空出来再弹）
+    const offC = onChallengeChange(() => this.time.delayedCall(1, () => this.challengeNotice()));
+    this.events.once('shutdown', offC);
+    this.time.addEvent({ delay: 400, loop: true, callback: () => this.challengeNotice() });
     // 「快速开始」的组合、档案说明都收进悬停
     const quickBtn = this.buttons.quick;
     if (quickBtn) {
@@ -519,6 +527,44 @@ export class TitleScene extends BaseScene {
     this.openNotice(liveNoticeTitle(r), `${t.head}\n${t.body}`);
   }
 
+  /**
+   * 好友挑战的卡（打开链接时）：还没打过就问接不接，交过了直接看成绩，打不开说一句。
+   * 接受后用发起人那一局的种子、设置和那一段行情开局；段下载失败不退回模拟行情（那就不是同一局了）。
+   */
+  private challengeNotice(): void {
+    if (this.dialogOpen || this.busy || !this.sys.isActive()) return;
+    const inv = takeInvite();
+    if (!inv) return;
+    if ('fail' in inv) {
+      const t = CHALLENGE_FAIL[inv.fail];
+      this.openNotice(t.title, t.body);
+      return;
+    }
+    const v = inv.view;
+    if (v.me) {
+      this.trackDialog(new ChallengePanel(this, v));
+      return;
+    }
+    const p = v.payload.setup;
+    const len = p.short ? `短局 ${p.short.months} 个月` : '完整一年';
+    const lines = [`${v.owner} 挑战你：${personaView(p.persona).name} · ${difficultyView(p.difficulty).name} · ${len}`];
+    if (v.ownerScore !== null) lines.push(`他的成绩：${boardScoreText(v.ownerScore)}`);
+    lines.push(versionDiffers(v.payload.v) ? '发起时的版本和你的不同，结果可能对不上。每人只算第一次。' : '同一个开局、同一段行情，每人只算第一次。');
+    this.trackDialog(
+      new ChoiceDialog(this, '好友挑战', lines.join('\n'), { label: '接受挑战', name: 'challenge:accept', onClick: () => this.acceptChallenge(v) }, { label: '先不了', name: 'challenge:no', onClick: () => undefined }),
+    );
+  }
+
+  private acceptChallenge(v: ChallengeView): void {
+    this.guardNew(() => {
+      const c = acceptInvite(v);
+      this.session.newRun(c.seed, c.setup, {
+        segment: c.segment,
+        onFail: () => this.openNotice('行情没下载下来', '这个挑战要用发起人那一段行情，现在没下载下来。过一会儿再点一次链接试试。'),
+      });
+    });
+  }
+
   /** 离开前等后台预取的雷雨天图层（最多 1.5 秒），交易场景就不用再显示载入。 */
   override async leave(): Promise<void> {
     await settleLazy(1500);
@@ -543,3 +589,14 @@ export class TitleScene extends BaseScene {
     return out;
   }
 }
+
+/** 好友挑战打不开时说什么（过期和不存在平台回同一个 404，开盘也说同一句） */
+const CHALLENGE_FAIL: Record<ChallengeFail, { title: string; body: string }> = {
+  gone: { title: '这个挑战打不开了', body: '挑战 30 天内有效，可能已经过期了，或者链接不完整。' },
+  out: { title: '登录后才能接挑战', body: '先登录，再点一次链接。' },
+  full: { title: '这个挑战已经满了', body: '每个挑战最多 100 个人交成绩，这个已经满了。' },
+  limit: { title: '这个挑战暂时打不开', body: '服务器今天有点忙，过一会儿再点一次链接试试。' },
+  busy: { title: '这个挑战暂时打不开', body: '服务器今天有点忙，过一会儿再点一次链接试试。' },
+  offline: { title: '没连上', body: '挑战没读到，联网后再点一次链接试试。' },
+  bug: { title: '这个挑战打不开了', body: '链接看不懂，可能不完整。' },
+};

@@ -156,6 +156,15 @@ export async function verifyPassword(
   return { ok, rehash: ok && (iter !== iterations || pepper.kid !== cur.kid) };
 }
 
+/** 用户名不存在时白算一次（0.19.2，第三轮审计）：步骤和 verifyPassword 一样（取 pepper、PBKDF2、HMAC），
+ *  不然存在的用户名多算一次 PBKDF2，看响应快慢就知道用户名存不存在。盐是固定的，结果扔掉。 */
+const BURN_SALT = new Uint8Array(16);
+export async function burnPasswordHash(env: Env, password: string, iterations: number): Promise<void> {
+  const pepper = await currentPepper(env, 'PEPPER_PW');
+  safeEqual(b64url(await hmac(pepper.key, await pbkdf2(password, BURN_SALT, iterations))), '');
+  await currentPepper(env, 'PEPPER_PW');
+}
+
 // ---------- 恢复码 ----------
 
 /** 存成 <kid>$<HMAC(用户 id:归一化的码)>。code 须已归一化。 */
@@ -208,3 +217,13 @@ export async function hashIp(env: Env, ip: string): Promise<string> {
   const pepper = await currentPepper(env, 'PEPPER_IP');
   return b64url((await hmac(pepper.key, ipPrefix(ip))).slice(0, 16));
 }
+
+/**
+ * 带时间前缀的 id：毫秒时间的 36 进制（补到 9 位）+ 64 位随机，共 20 位。按 id 的字典序就是按创建时间，Cron 能按主键范围删旧的。
+ * 好友动态（0.17.0）和异步挑战（0.18.0）共用。
+ */
+export function newTimeId(now: number): string {
+  return timeIdPrefix(now) + b64url(randomBytes(8));
+}
+export const timeIdPrefix = (ms: number): string => Math.max(0, Math.floor(ms)).toString(36).padStart(9, '0');
+

@@ -39,6 +39,24 @@ describe('Cron 清理', () => {
     expect(await count('SELECT COUNT(*) AS n FROM meter_hourly')).toBeGreaterThanOrEqual(1);
   });
 
+  it('中间一段出错（0.19.2）：只跳过这一段，后面的照清', async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO rate_counters VALUES ('login:ip:x', ?1, 3, 0)").bind(now - 3 * DAY),
+      env.DB.prepare("INSERT INTO meter_hourly (hour, updated_at) VALUES (?1, 0)").bind(new Date(now - 8 * DAY).toISOString().slice(0, 13)),
+    ]);
+    // 让第二段（过期会话）的 DELETE 抛错：表不在了
+    await env.DB.prepare('ALTER TABLE sessions RENAME TO sessions_gone').run();
+    try {
+      await runCleanup(env, now);
+    } finally {
+      await env.DB.prepare('ALTER TABLE sessions_gone RENAME TO sessions').run();
+    }
+    // 原来抛错就整个跳出，这两样都还在
+    expect(await count("SELECT COUNT(*) AS n FROM rate_counters WHERE key = 'login:ip:x'")).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM meter_hourly WHERE hour < ?1', new Date(now - 7 * DAY).toISOString().slice(0, 13))).toBe(0);
+  });
+
   it('每次最多删 cleanupMaxRows 行，剩下的留到第二天', async () => {
     await resetAll({ cleanupMaxRows: 4 });
     const stmts = Array.from({ length: 10 }, (_, i) => env.DB.prepare('INSERT INTO sessions VALUES (?1, ?2, 1, 1, 2)').bind(`s${i}`, 'u'));

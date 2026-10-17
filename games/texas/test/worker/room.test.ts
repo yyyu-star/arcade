@@ -9,9 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stakesOf } from '../../src/core/stakes.ts';
 import { propId } from 'arcade-kit/fun-logic';
 import { EMOTE_COUNT, SEATS, TAUNT_COUNT, type RoomState, type RoomView } from '../../src/room/rules.ts';
+import { togetherOp } from 'arcade-kit/room';
 import { NEW_BALANCE } from 'arcade-kit/testing';
 import { ROOM_LIMITS, type TexasRoom } from '../../worker/room.ts';
-import { advance, BASE, freezeClock, SITE, statsOf, usage, walletOf } from './helpers.ts';
+import { advance, BASE, freezeClock, SITE, statsOf, togetherOf, usage, walletOf } from './helpers.ts';
 
 type Msg = DownMsg<RoomView>;
 const MAX = stakesOf('small').max;
@@ -516,6 +517,50 @@ describe('离开马上结（0.2.4）', () => {
     // 测试配置每人同时只能开 1 个：名额还了才开得出来
     const again = await openRoom(ids[0]!, { stakes: 'small', size: 3 });
     expect(again).not.toBe(code);
+  });
+});
+
+describe('搭子战绩（0.17.0，平台 15.19）', () => {
+  it('三个真人：先走的和还坐着的各报一场，后两个散桌时再报一场；每对一场，op 是房间码-开房时刻-场次；同一场重报不加', async () => {
+    const { code, ids, conns } = await table(3, { stakes: 'small', size: 4 });
+    for (const c of conns) await c.see((x) => x.handNo >= 1);
+    await playUntil(conns, (v) => v.handNo >= 3);
+    conns[2]!.send({ t: 'leave' });
+    await waitFor(async () => (await togetherOf(ids[2]!)).length === 2);
+    const created = (await inspect(code)).persist!.createdAt;
+    const first = await togetherOf(ids[2]!);
+    expect(first.map((x) => x.op)).toEqual([togetherOp(code, created, 0), togetherOp(code, created, 1)]);
+    for (const x of first) {
+      expect(x.game).toBe('texas');
+      expect(x.players).toHaveLength(2);
+      expect(x.players[0]!.userId).toBe(ids[2]);
+      expect(x.players.every((p) => typeof p.win === 'boolean' && p.team === undefined)).toBe(true);
+    }
+    expect(first.map((x) => x.players[1]!.userId).sort()).toEqual([ids[0], ids[1]].sort());
+    // 走的人这一份的净输赢：钱包里一份带入一份结回，余额比开始多就是赢了
+    expect(first[0]!.players[0]!.win).toBe((await walletOf(ids[2]!)).balance > NEW_BALANCE);
+    // 0、1 号之间这时还不算
+    expect((await togetherOf(ids[0]!)).filter((x) => x.players.some((p) => p.userId === ids[1]))).toEqual([]);
+    // 被驱逐后醒来：最近切的那几场再报一次，平台按 op 去重、不加
+    await runInDurableObject(stub(code), (room: TexasRoom) => {
+      const r = room as unknown as { matches: number; onStep(s: RoomState): void; st: { game: RoomState } };
+      r.matches = -1;
+      r.onStep(r.st.game);
+    });
+    await sleep(50);
+    expect(await togetherOf(ids[2]!)).toHaveLength(2);
+    // 剩下的两个人：1 号走时和 0 号一场，0 号最后一个走不再报
+    await playUntil(conns.slice(0, 2), (v) => v.handNo >= 5);
+    conns[1]!.send({ t: 'leave' });
+    await waitFor(async () => (await togetherOf(ids[1]!)).length === 2);
+    conns[0]!.send({ t: 'leave' });
+    await waitFor(async () => (await inspect(code)).persist?.status === 'over');
+    await sleep(50);
+    const all = [...(await togetherOf(ids[0]!)), ...(await togetherOf(ids[1]!)), ...(await togetherOf(ids[2]!))];
+    // 三对，每对一场（每场记在两个人头上）
+    expect(new Set(all.map((x) => x.op)).size).toBe(3);
+    expect(all).toHaveLength(6);
+    await writesOk(code);
   });
 });
 

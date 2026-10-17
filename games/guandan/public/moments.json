@@ -1,0 +1,8 @@
+{
+  "joker_bomb": { "text": "{name}扔出了天王炸" },
+  "bomb_on_bomb": { "text": "{name}炸上炸，压住了对面的炸弹" },
+  "bombs": { "text": "{name}一副牌炸了 {n} 次" },
+  "quick": { "text": "{name}只出了 {n} 手就打完一副" },
+  "comeback": { "text": "{name}这边落后 {n} 级，打出了双下" },
+  "double_down": { "text": "{name}和搭档双下了对面" }
+}

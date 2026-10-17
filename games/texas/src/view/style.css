@@ -1086,6 +1086,17 @@ body::before {
 .sum-titles { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-2); margin-top: var(--s-3); }
 .sum-title { display: flex; gap: var(--s-2); align-items: baseline; padding: var(--s-1) var(--s-3); border-radius: var(--r-3); background: rgba(243, 200, 107, .12); font-size: var(--fs-2); }
 .sum-title b { color: var(--gold); }
+/* 颁奖（0.15.0）：好友房一场结束，最上面一排大字；窄屏一个奖一行 */
+.sum-awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-2); margin-bottom: var(--s-4); }
+.sum-award { display: flex; flex-direction: column; gap: 2px; padding: var(--s-2) var(--s-3); border-radius: var(--r-3); background: rgba(243, 200, 107, .12); border: 1px solid rgba(243, 200, 107, .35); text-align: center; animation: sum-award-in .4s ease-out backwards; }
+.sum-award:nth-child(2) { animation-delay: .15s; }
+.sum-award:nth-child(3) { animation-delay: .3s; }
+.sum-award.worst { background: rgba(255, 155, 143, .1); border-color: rgba(255, 155, 143, .3); }
+.sum-award-t { font-size: var(--fs-3); font-weight: 700; color: var(--gold); }
+.sum-award.worst .sum-award-t { color: #ff9b8f; }
+.sum-award-n { font-size: var(--fs-8); font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum-award-l { font-size: var(--fs-2); line-height: 1.4; color: #d9d2bd; }
+@keyframes sum-award-in { from { opacity: 0; transform: scale(.85); } }
 .sum-grid { display: grid; grid-template-columns: auto 1fr; gap: var(--s-2) var(--s-4); align-items: baseline; }
 .sum-k { font-size: var(--fs-3); color: var(--muted); white-space: nowrap; }
 .sum-v { font-size: var(--fs-5); font-weight: 800; text-align: right; }

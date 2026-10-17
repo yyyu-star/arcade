@@ -25,7 +25,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter"] }],
   "vars": {
     // 每天的 DO 写入预算（DESIGN.md 第 9 节，一房约 800 行）：到 busy 不开新房，到 stop 收场。
-    // 每人开房同时 5 个、每天 100 个（和德州一样不卡人）；全站上限照 kit 默认
-    "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 }
+    // 每人开房同时 5 个、每天 30 个：正常一场 40 分钟起，一天开不了这么多，卡的是脚本刷房（安全审计低危）；全站上限照 kit 默认
+    "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 30 }
   }
 }

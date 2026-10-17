@@ -6,6 +6,7 @@
 import type { ShareCard } from 'arcade-kit/share';
 import { chips, handName } from './text.ts';
 import type { RoomSummaryRow, SoloSummary, Title } from './summary.ts';
+import type { Award } from './titles.ts';
 
 const GAME = '德州扑克';
 /** 毡面的绿 */
@@ -35,22 +36,27 @@ export function soloCard(s: SoloSummary, where: string, name: string): ShareCard
   };
 }
 
-/** 好友房：我这一场的输赢、桌上几个人、我排第几 */
-export function roomCard(rows: readonly RoomSummaryRow[], titles: readonly Title[], where: string, name: string): ShareCard | null {
+/**
+ * 好友房：我这一场的输赢，下面三格是这一场的奖（谁拿了什么）；我拿了奖的话那一句做名场面、奖名做徽章。
+ * 这一场没评出奖时退回同桌几个人、我排第几
+ */
+export function roomCard(rows: readonly RoomSummaryRow[], awards: readonly Award[], where: string, name: string): ShareCard | null {
   const me = rows.find((r) => r.me);
   if (!me) return null;
   const rank = [...rows].sort((a, b) => b.net - a.net).indexOf(me) + 1;
-  const t = mine(titles, name);
+  const a = awards.find((x) => x.name === me.name);
   return {
     game: GAME,
     title: `好友房 · ${where}`,
     accent: ACCENT,
     big: { value: signed(me.net), label: '筹码' },
-    stats: [
-      { label: '同桌', value: `${rows.length} 人` },
-      { label: '名次', value: `第 ${rank}` },
-    ],
-    ...(t ? { line: `${t.title}：${t.why}` } : {}),
-    player: { name, ...(t ? { badge: t.title } : {}) },
+    stats: awards.length
+      ? awards.slice(0, 3).map((x) => ({ label: x.title, value: x.name }))
+      : [
+          { label: '同桌', value: `${rows.length} 人` },
+          { label: '名次', value: `第 ${rank}` },
+        ],
+    ...(a ? { line: a.line } : awards[0] ? { line: awards[0].line } : {}),
+    player: { name, ...(a ? { badge: a.title } : {}) },
   };
 }

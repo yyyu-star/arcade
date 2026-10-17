@@ -5,8 +5,9 @@
  */
 import { prepareShare, type PreparedShare, type ShareCard } from 'arcade-kit/share';
 import type { XzView } from '../core/variants/sichuan-xuezhan/index.ts';
+import type { Award } from '../game/awards.ts';
 import type { Highlight } from '../game/banter.ts';
-import { GAME_NAME, HIGHLIGHT_NAME, signed, TITLE_NAME } from './text.ts';
+import { AWARD_NAME, awardLine, GAME_NAME, HIGHLIGHT_NAME, signed, TITLE_NAME } from './text.ts';
 import { tileSvg } from './tiles.ts';
 
 /** 卡的主题色：牌桌的墨绿呢子 */
@@ -44,6 +45,25 @@ export function cardOf(v: XzView, o: CardInput): ShareCard | null {
     ],
     ...(line ? { line } : {}),
     player: { name: o.name, ...(badge ? { badge } : {}) },
+  };
+}
+
+/**
+ * 好友房颁奖的分享卡：大字是头一个奖（多半是 MVP）和得奖的人，小数据是其余的奖，一句话是头一个奖的那句。
+ * 只有名字和结算里公开的数；name 是分享的这个人（旁观的也能分享）
+ */
+export function awardsCard(list: readonly Award[], names: readonly string[], unit: string, title: string, name: string): ShareCard | null {
+  const top = list[0];
+  if (!top) return null;
+  const who = (a: Award): string => names[a.seat] ?? '';
+  return {
+    game: GAME_NAME,
+    title,
+    accent: ACCENT,
+    big: { value: who(top), label: AWARD_NAME[top.id] },
+    stats: list.slice(1).map((a) => ({ label: AWARD_NAME[a.id], value: who(a) })),
+    line: awardLine(top, who(top), unit),
+    player: { name },
   };
 }
 

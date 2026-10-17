@@ -49,8 +49,20 @@ export interface FunSeat {
   temper?: FunTemper;
 }
 
+/**
+ * storageKey 的检查（0.13.1）：它就是游戏 id，kit 拿它拼 `<id>.hint.fun`、`<id>.fun.blocked`。同站的几个游戏和平台只靠 `<id>.` 前缀分开存储，
+ * 所以只认游戏 id 的写法（小写字母、数字、连字符，字母或数字开头，最多 32 位）；带点（"guandan." 会拼出 "guandan..fun"）、大写、空串、
+ * 平台自己的前缀 arcade 都不行。不合格直接抛错：同一个字符串每次都一样，开发时第一次打开牌桌就看得到，不会带到线上
+ */
+export function checkStorageKey(key: unknown): string {
+  if (typeof key !== 'string' || !/^[a-z0-9][a-z0-9-]{0,31}$/.test(key) || key === 'arcade') {
+    throw new Error(`arcade-kit/table-fun: storageKey 要写游戏 id（比如 "mygame"，存成 "mygame.hint.fun"），收到 ${JSON.stringify(key)}`);
+  }
+  return key;
+}
+
 export interface TableFunOptions {
-  /** 游戏 id：首次提示、屏蔽名单的存储 key 前缀（`<id>.hint.fun`、`<id>.fun.blocked`） */
+  /** 游戏 id：首次提示、屏蔽名单的存储 key 前缀（`<id>.hint.fun`、`<id>.fun.blocked`）；不是游戏 id 的写法构造时就抛错（checkStorageKey） */
   storageKey: string;
   /** 本游戏的短语表（编号 0..P-1，见 fun-logic 的 funItem） */
   phrases: readonly string[];
@@ -165,6 +177,8 @@ export class TableFun {
   private readonly onResize = (): void => this.refresh();
 
   constructor(opts: TableFunOptions) {
+    // 先查 key 再碰 DOM：不合格的不留下半个界面
+    checkStorageKey(opts.storageKey);
     this.o = opts;
     this.P = opts.phrases.length;
     this.doc = document;

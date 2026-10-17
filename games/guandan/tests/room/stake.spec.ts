@@ -28,6 +28,7 @@ interface Snapshot {
   stakes: Record<string, unknown>;
   done: Record<string, number>;
   log: string[];
+  togethers: { op: string; players: unknown[] }[];
 }
 
 /** 假钱包的账（DO 的 RPC 返回类型推不出来，这里写明） */
@@ -64,6 +65,7 @@ describe('好友房实盘', () => {
     const stats = await t.playToEnd();
     expect(stats.problems).toEqual([]);
     const end = await waitStake(t.code, (s) => s.over && s.out[0]! && s.out[1]!, '结回办完');
+    const score = (await truth(t.code)).row!.game!.log!.score!;
     expect(end.book.deals).toBeLessThanOrEqual(5);
     b = await waitBank((s) => s.done[`${st.ref}-s1-out`] === 1, '结回');
     expect(users.map((u) => b.balances[u])).toEqual([0, 1].map((seat) => START + end.book.seats[seat]!.points * 100));
@@ -72,6 +74,14 @@ describe('好友房实盘', () => {
     // 0、1 号是对手：一个赢多少另一个输多少；庄家（电脑那边）+ 到账座位合计为 0
     expect(end.book.seats[0]!.points + end.book.seats[1]!.points).toBe(0);
     expect(end.book.house + end.book.seats.reduce((a, s) => a + s.points, 0)).toBe(0);
+    // 搭子战绩（0.16.0）：这一场报一次，只有两个真人（电脑座位不报），按这一场分多的那队算赢
+    const mine = b.togethers.filter((x) => x.op.startsWith(`${t.code}-`));
+    expect(mine).toHaveLength(1);
+    const win0 = score[0]! > score[1]!;
+    expect(mine[0]!.players).toEqual([
+      { userId: users[0], team: 0, win: win0 },
+      { userId: users[1], team: 1, win: score[1]! > score[0]! },
+    ]);
     // 每个人看到自己的分（视图按自己的座位转过：自己总在 0 号）
     expect(t.seats.get(1)!.latestView()!.stake!.seats[1]!.points).toBe(end.book.seats[1]!.points);
   }, 120_000);

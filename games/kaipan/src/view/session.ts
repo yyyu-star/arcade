@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { createRun, dailySegmentId, dispatch, isDailyRun, liveMultipleBp, runSummary, type Action, type GameEvent, type GameState, type Phase, type RunSetup, type Segment } from '../core/index.ts';
 import { segmentFor, showBanner } from './segments.ts';
+import { challengeRecordFor, submitChallengeEnd } from './challenge.ts';
 import { learnKnowledge, loadProfile, recordRun, saveProfile, type RecordResult } from '../platform/profile.ts';
 import { clearSave, writeSave } from '../platform/storage.ts';
 import { hasLoginHint } from '../platform/cloud.ts';
@@ -123,13 +124,16 @@ export class Session {
       const profile = loadProfile().profile;
       if (!this.persist || this.debugSession || isUnscored(this.state)) result = unscoredResult(profile);
       else {
-        result = recordRun(profile, sum, dailyDate());
+        // 0.13.0 好友挑战的局照每日挑战的规矩记（人设、难度可以没解锁，不解锁、不记最好成绩）
+        result = recordRun(profile, sum, dailyDate(), { challenge: challengeRecordFor(sum.seed) !== null });
         if (!result.ignored && !saveProfile(result.profile)) console.warn('档案写入失败（存储已满或不可用）');
       }
     }
     this.recorded = { runId: sum.runId, result };
     // 每日挑战交一次分（不能上榜的局只记个原因给结束页）
     submitRun(sum.runId, this.state, sum, result, dailyDate());
+    // 好友挑战的局交成绩（计入了档案的才交：调试会话里开的不算）
+    if (!result.ignored) submitChallengeEnd(this.state, sum);
     return result;
   }
 
@@ -373,8 +377,9 @@ export class Session {
   /**
    * 开新局：先校验设置（不对就同步返回错误），再异步按种子抽一段真实行情（"正在挑选行情……"），
    * 抽到了用真实行情开局，下载失败就退回 0.3 的合成行情并提示一句。market 为 'synthetic' 时直接用合成行情。
+   * 0.13.0 好友挑战：opts.segment 指定那一段（null 为合成行情），下载失败不退回合成行情（那就不是同一局了），调 onFail、不开局。
    */
-  newRun(seed: string, setup: RunSetup | null = null): { error: string | null } {
+  newRun(seed: string, setup: RunSetup | null = null, opts: { segment?: string | null; onFail?: () => void } = {}): { error: string | null } {
     try {
       createRun(seed, setup, { ext: true });
     } catch (err) {
@@ -383,6 +388,7 @@ export class Session {
     if (this.running > 0) this.current?.abort();
     this.loadingMarket = true;
     this.enqueue(async () => {
+      if (opts.segment !== undefined) return this.startFixed(seed, setup, opts.segment, opts.onFail);
       let seg: Segment | null = null;
       if (this.market !== 'synthetic') {
         const close = showBanner('正在挑选行情……');
@@ -409,6 +415,29 @@ export class Session {
       this.load(run.state, run.events);
     });
     return { error: null };
+  }
+
+  /** 用指定的那一段开局（好友挑战）：下载失败或开不了局都不退回，交给 onFail */
+  private async startFixed(seed: string, setup: RunSetup | null, segment: string | null, onFail?: () => void): Promise<void> {
+    let seg: Segment | null = null;
+    if (segment !== null) {
+      const close = showBanner('正在挑选行情……');
+      try {
+        seg = await segmentFor(seed, segment);
+      } finally {
+        close();
+      }
+    }
+    let run: ReturnType<typeof createRun> | null = null;
+    try {
+      if (segment === null || seg) run = createRun(seed, setup, seg ? { segment: seg, ext: true } : { ext: true });
+    } catch (err) {
+      console.warn('挑战开局失败：', err);
+    }
+    this.loadingMarket = false;
+    if (!run) return onFail?.();
+    markUnscored(this.debugSession ? run.state : null);
+    this.load(run.state, run.events);
   }
 
   /** 行情来源：'real' 按种子抽真实行情段（缺省）；'synthetic' 0.3 的合成行情；其余为指定的段 id（调试） */

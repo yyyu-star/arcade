@@ -3,13 +3,15 @@
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
 import { createRoom, detectPlatform, withNickname, type PlatformInfo } from 'arcade-kit/client';
-import { inviteUrl, mountSocial, openInvite, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
+import { inviteUrl, mountSocial, openInvite, postMoment, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { DEFAULT_OPTS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
 import { createError, Online, roomUrl, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
+import { awardsOf, type Award } from './game/awards.ts';
 import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/banter.ts';
+import { feedMomentsOf, toReport, type FeedMomentId } from './game/feed.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
@@ -21,10 +23,10 @@ import { renderLobby } from './view/lobby.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
-import { cardOf, prepareCard } from './view/share.ts';
+import { awardsCard, cardOf, prepareCard } from './view/share.ts';
 import { GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, num, STAKES_NAME, VARIANT_NAME, walletError } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
-import { fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
+import { awardsSummary, fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
@@ -294,13 +296,12 @@ async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.le
     if (!old!.done) return showError(`上一场还没结上：${walletError(r && !r.ok ? r.error : 'network').text}`);
   }
   const st = stakesOf(stakes)!;
-  let chips = st.share;
+  const chips = st.share;
   if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level), soloUi));
   await refreshWallet();
   if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-  chips = Math.min(st.share, wallet.balance);
-  if (chips <= 0) return showError(walletError('no_funds').text, 'less');
-  if (chips < st.share && !(await confirmBox(stage, `钱包只有 ${num(chips)}，不够一份（${num(st.share)}）。带 ${num(chips)} 上桌？`, '带上桌', '不了'))) return;
+  // 实盘只带整份（0.15.1）：底分和"最多赢 3 份"按整份算，少带等于输得少、赢得一样多
+  if (wallet.balance < chips) return showError(walletError('no_funds').text, 'less');
   // 带入前先存"带入中"（ref、操作号），回包丢了下次用同一个号重发（自审 C3）
   const save = newSolo(stakes, opts, myName, randomId(), chips);
   save.buying = { op: randomId(), amount: chips };
@@ -328,6 +329,9 @@ async function resumeSolo(): Promise<void> {
     const r = await s.buyin();
     if (!r.ok) {
       lobby();
+      // 0.15.1 以前少带开的、带入一直没确认的存档：现在只收整份，重发被拒，这一场已经作废（buyin 里标了 done）。
+      // 当时要是扣了，那一份到期（24 小时）平台原样退回
+      if (r.error === 'bad_amount') return showError('上一场是按旧规矩少带筹码开的，现在实盘只能带整份，那一场作废了。当时要是扣了筹码，24 小时内会原样退回钱包。重新开一局吧。');
       return buyinFailed(r);
     }
   }
@@ -388,7 +392,7 @@ async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
   if (st.wallet) {
     await refreshWallet();
     if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-    if (wallet.balance <= 0) return showError(walletError('no_funds').text, 'less');
+    if (wallet.balance < st.share) return showError(walletError('no_funds').text, 'less');
   }
   const r = await createRoom(withNick('rooms'), { variant: 'sichuan-xuezhan', stakes, rules: opts });
   if ('error' in r) return showError(createError(r.error), r.error === 'login' ? 'refresh' : undefined);
@@ -523,7 +527,10 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
-  if (!replay) publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
+  if (!replay) {
+    publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
+    if (seat !== null && !(stakesOf(rv.stakes)?.wallet && !rv.unrated)) feed(s.code, v, seat);
+  }
   alertTurn(v);
   roomRoundEnd(s, rv, g, replay);
 }
@@ -547,7 +554,11 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
   if (g.phase === 'over' || rv.done) {
     const me = s.you?.seat ?? null;
     if (!(replay && document.querySelector('.mask.end'))) {
+      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面
+      const prizes = g.result ? awardsOf(g.result.seats.map((x) => x.net), g.seats.map((x) => x.stats)) : [];
+      const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
+        if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
         box.appendChild(roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
         if (fame.length) box.appendChild(fameSummary(fame, names));
@@ -560,7 +571,10 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           lobby();
         });
         // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页
-        shareButton(row, g, `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`, wallet, new URL(`?room=${s.code}`, location.href).toString());
+        const title = `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`;
+        const url = new URL(`?room=${s.code}`, location.href).toString();
+        awardsButton(row, prizes, names, prizeUnit, `${title} · 颁奖`, url);
+        shareButton(row, g, title, wallet, url);
         // 再来一场：我开个同样规则的新房间，这一桌跟过来。房间等 3 分钟，过了再点就自己先去新房间、再叫朋友
         if (me !== null && s.room?.seats[me]?.kind === 'human' && !rv.next) {
           const b = button('act go rematch', row, '再来一场', () => void rematch(b));
@@ -606,6 +620,14 @@ function shareButton(row: HTMLElement, v: XzView, title: string, wallet: boolean
   button('act soft share-card', row, '分享', () => void p.share());
 }
 
+/** 颁奖的分享卡（旁观的也能分享：奖和名字都是公开的） */
+function awardsButton(row: HTMLElement, prizes: readonly Award[], names: string[], unit: string, title: string, url: string): void {
+  const card = awardsCard(prizes, names, unit, title, myName);
+  if (!card) return;
+  const p = prepareCard(card, url);
+  button('act soft share-awards', row, '分享颁奖', () => void p.share());
+}
+
 async function rematch(b: HTMLButtonElement): Promise<void> {
   const opts = online?.state.opts;
   if (!online || !opts) return;
@@ -643,6 +665,7 @@ const soloUi = {
     table.render({ v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
     fun?.refresh();
     publicMoments(v, names, true);
+    if (solo && !stakesOf(solo.stakes)?.wallet) feed(solo, v, 0);
     alertTurn(v);
   },
   roundEnd(v: XzView, names: string[]): void {
@@ -805,6 +828,23 @@ function publicMoments(v: XzView, names: string[], local: boolean): void {
   }
   if (!local || !fun) return;
   for (const ev of funMoments(momentsOf(v.events), v.seats.map((x) => !x.won), v.round)) fun.moment(ev);
+}
+
+/** 这一场（单机按局面对象、好友房按房间号认；再来一场是新房间）已经报过的名场面 */
+let feedFor: object | string | null = null;
+let feedSent: FeedMomentId[] = [];
+
+/**
+ * 娱乐局里自己胡出名场面：报一条好友动态（docs/platform-backend.md 15.17 第 2 条）。实盘的由平台结回时自己生成，不报；
+ * 没平台、没登录（social 没挂上）不报；失败不提示，丢一条动态不影响打牌
+ */
+function feed(match: object | string, v: XzView, me: number): void {
+  if (!social) return;
+  if (feedFor !== match) [feedFor, feedSent] = [match, []];
+  for (const m of toReport(feedMomentsOf(v.events, me), feedSent)) {
+    feedSent.push(m.moment);
+    void postMoment(GAME_ID, m.moment, m.n);
+  }
 }
 
 /** 好友房里离开：开打了先确认（实盘这一局由电脑替他打完再结回），座位交给电脑 */

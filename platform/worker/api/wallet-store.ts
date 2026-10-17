@@ -15,6 +15,7 @@ import {
   freshState,
   type LedgerEntry,
   normalize,
+  type SettleFeed,
   type StatsError,
   viewOf,
   type WalletError,
@@ -68,7 +69,13 @@ export type WalletReply =
  * 读出、算、写回一条操作。opts.create：没有钱包时能不能建（停增长档不建）。
  * 被拒、重复写 0 行；成功写 1 行（冲突重试时失败的那几次 0 行）。
  */
-export async function runOp(db: Db, userId: string, cmd: Cmd, now: number, opts: { create: boolean; rules?: WalletRules }): Promise<WalletReply> {
+export async function runOp(
+  db: Db,
+  userId: string,
+  cmd: Cmd,
+  now: number,
+  opts: { create: boolean; rules?: WalletRules; onFeed?: (feed: SettleFeed) => Promise<unknown> },
+): Promise<WalletReply> {
   const rules = opts.rules ?? (await walletRules(db, now));
   for (let i = 0; i < MAX_TRIES; i++) {
     const row = await readRow(db, userId);
@@ -82,7 +89,11 @@ export async function runOp(db: Db, userId: string, cmd: Cmd, now: number, opts:
     if ('dup' in out) return { ok: true, wallet: viewOf(normalize(s0, now).s, !row, rules), ...out.dup, dup: true };
     if ('error' in out) return { ok: false, error: out.error, wallet: viewOf(normalize(s0, now).s, !row, rules) };
     if (!row && !opts.create) return { ok: false, error: 'busy' };
-    if (await writeRow(db, userId, row, out.state, now, 'op' in cmd)) return { ok: true, wallet: viewOf(out.state, false, rules), ...out.result };
+    if (await writeRow(db, userId, row, out.state, now, 'op' in cmd)) {
+      // 钱已经结完了才发动态：动态写不进去（预算、出错）不影响结回，由 onFeed 自己兜
+      if (out.feed && opts.onFeed) await opts.onFeed(out.feed);
+      return { ok: true, wallet: viewOf(out.state, false, rules), ...out.result };
+    }
   }
   console.error('wallet write conflict');
   return { ok: false, error: 'busy' };

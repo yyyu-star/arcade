@@ -5,7 +5,11 @@
  * - 游戏只交数据（`ShareCard`），画法统一在这里，几个游戏风格一致；kit 不认识任何游戏，名字、图标、主题色都由游戏给。
  * - 这个文件只在调用时碰 DOM，import 时不碰（房间、测试里 import 没事）；排版的算法是纯函数，测试在 test/share.test.ts。
  * - 图上只有游戏给的数据：别人的隐藏信息（没摊的底牌、手牌）游戏自己别放进来。
+ * - 右下角的二维码（0.15.0）：朋友圈里的图不能点，扫码是唯一入口。内容是运行时的 location.origin 加上 opts.url 的路径，
+ *   kit 和游戏都不写域名；编码器是 qr.ts（自己写的最小子集，不引依赖）。
+ * - 微信内置浏览器（0.15.0）：没有 navigator.share，下载链接也常常不生效，预览图改用 data: URL（blob: 的图长按经常存不下来），提示改成长按。
  */
+import { qrEncode } from './qr.js';
 
 /** 卡的尺寸：竖版 4:5，社交软件里不被裁 */
 export const CARD_W = 1080;
@@ -161,6 +165,39 @@ export function artRect(
   return [sx, sy, sw, sh, box.x + (box.w - dw) / 2, box.y + (box.h - dh) / 2, dw, dh];
 }
 
+/**
+ * 码里和分享出去的链接（0.15.0）：只认运行时的 origin，游戏给的 url 只取路径、查询和 # 后面的部分。
+ * 这样 kit 和游戏里都不写域名，单独部署的游戏（workers.dev）扫出来也是它自己
+ */
+export function shareLink(url: string, origin: string): string {
+  const u = new URL(url, `${origin}/`);
+  return `${origin}${u.pathname}${u.search}${u.hash}`;
+}
+
+/** 系统分享的文字末尾带上链接（0.15.0）：有的 App 只取 text、不取 url */
+export function shareText(text: string, link: string): string {
+  return text.includes(link) ? text : `${text} ${link}`;
+}
+
+/** 微信内置浏览器（UA 带 MicroMessenger，含企业微信） */
+export function isWeChat(ua: string): boolean {
+  return /MicroMessenger/i.test(ua);
+}
+
+/** 预览层怎么出（0.15.0）：微信里用 data: URL、提示长按、不给"保存图片"；别的浏览器照旧 */
+export function previewMode(ua: string): { dataUrl: boolean; tip: string; save: boolean } {
+  return isWeChat(ua)
+    ? { dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false }
+    : { dataUrl: false, tip: '手机上也可以长按图片保存', save: true };
+}
+
+/** 二维码在卡上的框：白底留白 ≥ 4 格（扫码的规范要求），每格整数像素、对齐像素，截图后也清楚 */
+export const QR_BOX = 248;
+export function qrLayout(size: number, box = QR_BOX): { cell: number; pad: number } {
+  const cell = Math.max(1, Math.floor(box / (size + 8)));
+  return { cell, pad: Math.floor((box - cell * size) / 2) };
+}
+
 // ───────────── 画（只在调用时碰 DOM） ─────────────
 
 const FONT = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC",system-ui,sans-serif';
@@ -211,9 +248,16 @@ function fitFont(ctx: CanvasRenderingContext2D, text: string, weight: string, si
   return s;
 }
 
-/** 画一张卡。canvas 不给就新建一个 1080×1350 的 */
-export async function drawShareCard(input: ShareCard, canvas?: HTMLCanvasElement): Promise<HTMLCanvasElement> {
+/**
+ * 画一张卡。canvas 不给就新建一个 1080×1350 的。link 给了（0.15.0，prepareShare 用 shareLink 算好的）就在右下角画二维码，
+ * 太长编不了码就不画
+ */
+export async function drawShareCard(input: ShareCard, canvas?: HTMLCanvasElement, link?: string): Promise<HTMLCanvasElement> {
   const c = normalizeCard(input);
+  const qr = link ? qrEncode(link) : null;
+  // 二维码的白框：右下角，压在底栏上；名场面和日期往左让
+  const qx = CARD_W - 72 - QR_BOX;
+  const qy = CARD_H - 40 - QR_BOX - 44;
   const cv = canvas ?? document.createElement('canvas');
   cv.width = CARD_W;
   cv.height = CARD_H;
@@ -302,24 +346,28 @@ export async function drawShareCard(input: ShareCard, canvas?: HTMLCanvasElement
   if (c.line) {
     ctx.fillStyle = '#ffffff';
     ctx.font = `700 50px ${FONT}`;
-    const lines = wrapLines(`“${c.line}”`, W - 2 * M - 40, (s) => ctx.measureText(s).width, 2);
-    lines.forEach((l, i) => ctx.fillText(l, W / 2, 1065 + i * 66));
+    const lw = qr ? qx - 32 - M : W - 2 * M - 40;
+    const lines = wrapLines(`“${c.line}”`, lw, (s) => ctx.measureText(s).width, 2);
+    lines.forEach((l, i) => ctx.fillText(l, qr ? M + lw / 2 : W / 2, 1065 + i * 66));
   }
 
   // 底：昵称、称号、日期
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.fillRect(0, CARD_H - 150, W, 150);
+  ctx.font = `600 38px ${FONT}`;
+  const dateRight = qr ? qx - 28 : W - M;
+  const dateLeft = dateRight - ctx.measureText(cardDate(c.date)).width;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
   if (c.player) {
-    fitFont(ctx, c.player.name, '800', 50, W * 0.5, 32);
+    fitFont(ctx, c.player.name, '800', 50, Math.min(W * 0.5, dateLeft - 24 - M), 32);
     ctx.fillText(c.player.name, M, CARD_H - 62);
     if (c.player.badge) {
       const nw = ctx.measureText(c.player.name).width;
       ctx.font = `700 34px ${FONT}`;
       const bw = ctx.measureText(c.player.badge).width + 36;
       const bx = M + nw + 24;
-      if (bx + bw < W * 0.72) {
+      if (bx + bw < Math.min(W * 0.72, dateLeft - 16)) {
         round(ctx, bx, CARD_H - 104, bw, 54, 27);
         ctx.fillStyle = shade(c.accent, 0.75);
         ctx.fill();
@@ -331,20 +379,39 @@ export async function drawShareCard(input: ShareCard, canvas?: HTMLCanvasElement
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.font = `600 38px ${FONT}`;
-  ctx.fillText(cardDate(c.date), W - M, CARD_H - 62);
+  ctx.fillText(cardDate(c.date), dateRight, CARD_H - 62);
+
+  if (qr) {
+    // 纯白底、近黑的格，不叠阴影和渐变：对比度够，手机截图压缩后照样扫得出
+    ctx.fillStyle = '#ffffff';
+    round(ctx, qx, qy, QR_BOX, QR_BOX + 44, 24);
+    ctx.fill();
+    const { cell, pad } = qrLayout(qr.size);
+    ctx.fillStyle = '#111111';
+    for (let y = 0; y < qr.size; y++) {
+      for (let x = 0; x < qr.size; x++) if (qr.dark[y]![x]) ctx.fillRect(qx + pad + x * cell, qy + pad + y * cell, cell, cell);
+    }
+    ctx.fillStyle = '#444444';
+    ctx.textAlign = 'center';
+    ctx.font = `700 28px ${FONT}`;
+    ctx.fillText('扫码来玩', qx + QR_BOX / 2, qy + QR_BOX + 22);
+  }
   return cv;
 }
 
-/** 画成 PNG */
-export async function shareCardBlob(card: ShareCard): Promise<Blob> {
-  const cv = await drawShareCard(card);
+/** 画成 PNG；link 见 drawShareCard */
+export async function shareCardBlob(card: ShareCard, link?: string): Promise<Blob> {
+  const cv = await drawShareCard(card, undefined, link);
   return new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png'));
 }
 
 export interface ShareOptions {
-  /** 分享出去的链接：游戏地址，好友房结算带房间码 */
+  /**
+   * 分享出去的链接：游戏地址，好友房结算带房间码。只用它的路径、查询和 # 后面的部分，前面一律换成运行时的 location.origin（0.15.0），
+   * 写相对路径（`./?room=123456`）或绝对地址都行；卡上的二维码、系统分享、"复制链接"用的都是换过的这一个
+   */
   url: string;
-  /** 系统分享里的一句话，默认用卡的游戏名和大数字拼 */
+  /** 系统分享里的一句话，默认用卡的游戏名和大数字拼；末尾自动带上链接（0.15.0） */
   text?: string;
   /** 存图的文件名，默认 share.png */
   fileName?: string;
@@ -375,10 +442,13 @@ export interface PreparedShare {
  */
 export function prepareShare(card: ShareCard, opts: ShareOptions): PreparedShare {
   const name = opts.fileName ?? 'share.png';
-  const text = opts.text ?? `${card.game} · ${card.big.label} ${card.big.value}`;
+  // 没有 DOM（房间、测试里）时 location 也没有：链接照原样，画卡那一步本来就会失败
+  const link = typeof location === 'undefined' ? opts.url : shareLink(opts.url, location.origin);
+  const text = shareText(opts.text ?? `${card.game} · ${card.big.label} ${card.big.value}`, link);
+  const o: ShareOptions = { ...opts, url: link };
   let blob: Blob | null = null;
   let failed: unknown = null;
-  const ready = shareCardBlob(card).then(
+  const ready = shareCardBlob(card, link).then(
     (b) => {
       blob = b;
     },
@@ -388,8 +458,9 @@ export function prepareShare(card: ShareCard, opts: ShareOptions): PreparedShare
   );
   const attempt = (b: Blob): Promise<ShareResult> => {
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    if (typeof File === 'function' && typeof nav.share === 'function') {
-      const data: ShareData = { files: [new File([b], name, { type: 'image/png' })], title: card.game, text, url: opts.url };
+    // 微信里不试系统分享（没有，或者有也发不出图），直接出长按的预览
+    if (!isWeChat(nav.userAgent) && typeof File === 'function' && typeof nav.share === 'function') {
+      const data: ShareData = { files: [new File([b], name, { type: 'image/png' })], title: card.game, text, url: link };
       if (nav.canShare?.(data)) {
         // 同步调（这一行之前没有 await）：点击的激活还在
         return nav.share(data).then(
@@ -400,13 +471,13 @@ export function prepareShare(card: ShareCard, opts: ShareOptions): PreparedShare
           (e: { name?: string }) => {
             if (e?.name === 'AbortError') return 'cancelled' as const;
             // 别的错（激活过期、权限、不支持的类型）：退回预览
-            showPreview(b, name, opts);
+            showPreview(b, name, o);
             return 'preview' as const;
           },
         );
       }
     }
-    showPreview(b, name, opts);
+    showPreview(b, name, o);
     return Promise.resolve('preview');
   };
   return {
@@ -431,27 +502,36 @@ export async function shareCard(card: ShareCard, opts: ShareOptions): Promise<Sh
   return p.share();
 }
 
-/** 不支持系统分享时：预览图 + "保存图片""复制链接"；点空白处或"关闭"收起 */
+/** 不支持系统分享时：预览图 + "保存图片""复制链接"；点空白处或"关闭"收起。微信里见 previewMode */
 function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
   document.getElementById(PREVIEW_ID)?.remove();
-  const url = URL.createObjectURL(blob);
+  const mode = previewMode(navigator.userAgent);
+  // 微信里不用 blob:（长按存不下来），也就不建对象 URL
+  const url = mode.dataUrl ? '' : URL.createObjectURL(blob);
   const root = document.createElement('div');
   root.id = PREVIEW_ID;
   root.setAttribute('role', 'dialog');
   root.style.cssText = `position:fixed;inset:0;z-index:${opts.zIndex ?? 11000};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;box-sizing:border-box;background:rgba(0,0,0,.72);font:600 16px ${FONT};color:#fff`;
   const close = (): void => {
     root.remove();
-    URL.revokeObjectURL(url);
+    if (url) URL.revokeObjectURL(url);
   };
   root.addEventListener('click', (e) => {
     if (e.target === root) close();
   });
   const img = document.createElement('img');
-  img.src = url;
+  if (url) img.src = url;
+  else {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') img.src = reader.result;
+    };
+    reader.readAsDataURL(blob);
+  }
   img.alt = '战绩图';
   img.style.cssText = 'max-width:min(92vw,540px);max-height:calc(100% - 140px);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.5)';
   const tip = document.createElement('div');
-  tip.textContent = '手机上也可以长按图片保存';
+  tip.textContent = mode.tip;
   tip.style.cssText = 'font-size:13px;opacity:.75';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:12px;flex-wrap:wrap;justify-content:center';
@@ -486,7 +566,7 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
     else done(false);
   });
   const shut = btn('关闭', 'share:close', close);
-  row.appendChild(save);
+  if (mode.save) row.appendChild(save);
   row.appendChild(copy);
   row.appendChild(shut);
   root.appendChild(img);

@@ -123,6 +123,17 @@ export interface RoomState {
    * （接管电脑的人，电脑替他打完的那一手不算他的），noted 是记过的最后一手；inn 是这一份带入办成的。0.2.x 的房间没有，从现在起记
    */
   fame?: { dealt: number; noted: number; players: number[]; per: Fame[]; inn: number[] };
+  /**
+   * 搭子战绩（0.17.0，平台 15.19；DESIGN.md 6.10）：n 是这个房间切出过几场，last 是最近一步切出来的那几场（房间在 onStep 里报给平台）。
+   * 0.16.x 的房间没有，从现在起记
+   */
+  mates?: { n: number; last: Match[] };
+}
+
+/** 一场：同桌的真人座位和各自赢没赢（从坐下到这时净赢为正）；match 是房间里的场次，报平台时拼进 op 去重 */
+export interface Match {
+  match: number;
+  players: { seat: number; win: boolean }[];
 }
 
 export interface LastAct {
@@ -410,6 +421,9 @@ function collect(s0: RoomState): RoomState {
   const fm = fameOf(s0);
   const fame = { ...fm, per: [...fm.per], inn: [...fm.inn] };
   let nextId = s0.nextId;
+  // 搭子战绩：这一份开着、打过一手的真人；这一步离桌的记下他这一份的净输赢
+  const sat = s0.sealed.flatMap((x, i) => (!x && fm.per[i]!.hands > 0 ? [i] : []));
+  const left: { seat: number; win: boolean }[] = [];
   for (let i = 0; i < s0.kinds.length; i++) {
     const c = t.seats[i];
     const gone = s0.closed || (s0.kinds[i] !== 'human' && (c?.owner !== 'player' || (c.leaving && c.status === 'folded' && c.stack === 0)));
@@ -425,13 +439,37 @@ function collect(s0: RoomState): RoomState {
       const stats = settleStats(fame.per[i]!, amount - fame.inn[i]!, stakesOf(t.stakes).max);
       fx.push({ id: `c${nextId++}`, seat: i, kind: 'credit', amount, ref: shareRef(s0, i, s0.share[i]!), stats });
       outs[i]! += amount;
+      if (sat.includes(i)) left.push({ seat: i, win: amount > fame.inn[i]! });
     }
     fame.per[i] = NO_FAME;
     fame.inn[i] = 0;
     owed[i] = 0;
     sealed[i] = true;
   }
-  return { ...s0, t, owed, held, sealed, fx, nextId, outs, fame };
+  const out = { ...s0, t, owed, held, sealed, fx, nextId, outs, fame };
+  if (!left.length) return out;
+  // 还坐着的：到这时为止这一份的净输赢（桌上的、这一手投进池子的、还没上桌和要结回的，减去带入的）
+  const stay = sat.flatMap((j) => {
+    if (sealed[j]) return [];
+    const c = t.seats[j]!;
+    const now = (c.owner === 'player' ? c.stack + c.total : 0) + held[j]! + owed[j]!;
+    return [{ seat: j, win: now > fame.inn[j]! }];
+  });
+  return { ...out, mates: cutMatches(s0.mates, left, stay) };
+}
+
+/**
+ * 切场（DESIGN.md 6.10）：一桌人陆续来去，每一对同桌的真人一段只算一场，在两人里先走的那一刻算。
+ * 这一步走的人两两一场（散桌、最后几个人一起走就是整桌一场），走的每个人再和还坐着的每个人各一场（一对一对报，不然还坐着的人之间会被多算）。
+ * win 按各自这一份从坐下到这时的净输赢（主线定：正的算赢）
+ */
+export function cutMatches(prev: RoomState['mates'], left: Match['players'], stay: Match['players']): NonNullable<RoomState['mates']> {
+  const n = prev?.n ?? 0;
+  const groups: Match['players'][] = [];
+  if (left.length >= 2) groups.push(left);
+  for (const x of left) for (const y of stay) groups.push([x, y]);
+  if (!groups.length) return prev ?? { n: 0, last: [] };
+  return { n: n + groups.length, last: groups.map((players, k) => ({ match: n + k, players })) };
 }
 
 /** 牌桌上的调用这里只会因为写错了才失败：抛出去，房间记日志、这一步不算 */

@@ -30,4 +30,28 @@ describe('分享卡', () => {
     expect(roomCard(rows, [], '小桌 · 6 人桌', '小明')).toMatchObject({ title: '好友房 · 小桌 · 6 人桌', big: { value: '−400' }, stats: [{ value: '3 人' }, { value: '第 2' }] });
     expect(roomCard(rows.map((r) => ({ ...r, me: false })), [], 'x', '小明')).toBeNull();
   });
+  it('好友房颁奖（0.15.0）：三格是谁拿了什么奖；我拿了奖，那句话做名场面、奖名做徽章；没拿就用 MVP 那句', () => {
+    const rows = [
+      { name: '老王', net: 3_000, me: false },
+      { name: '小明', net: -400, me: true },
+      { name: '阿花', net: -2_600, me: false },
+    ];
+    const awards = [
+      { kind: 'mvp', title: '本场 MVP', name: '老王', line: '老王 这一场赢了 3,000，全桌最多' },
+      { kind: 'worst', title: '最惨的人', name: '阿花', line: '阿花 这一场输了 2,600，下一场翻本' },
+      { kind: 'bluff', title: '最会诈', name: '小明', line: '小明 摊牌亮出 2 次诈唬，演技在线' },
+    ] as const;
+    expect(roomCard(rows, [...awards], 'x', '小明')).toMatchObject({
+      stats: [
+        { label: '本场 MVP', value: '老王' },
+        { label: '最惨的人', value: '阿花' },
+        { label: '最会诈', value: '小明' },
+      ],
+      line: '小明 摊牌亮出 2 次诈唬，演技在线',
+      player: { name: '小明', badge: '最会诈' },
+    });
+    const c = roomCard(rows, awards.slice(0, 2), 'x', '小明')!;
+    expect(c.line).toBe('老王 这一场赢了 3,000，全桌最多');
+    expect(c.player).toEqual({ name: '小明' });
+  });
 });
