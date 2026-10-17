@@ -1,0 +1,38 @@
+/* 开局准备：角色、咒印、加成（prep.ts）。风格跟着 screens.css 的面板走 */
+.yx-prep-layer { display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 36, 0.55); z-index: 30; }
+.yx-prep { width: min(760px, 92vw); max-height: calc(var(--app-h, 100vh) - 40px); display: flex; flex-direction: column; gap: 10px; }
+.yx-prep-head { display: flex; align-items: center; gap: 10px; }
+.yx-ptabs { display: flex; gap: 6px; flex: 1; }
+.yx-ptab { min-width: 72px; min-height: 44px; border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
+.yx-ptab.on { background: var(--ink); color: #fbf5e4; }
+.yx-pcoins { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; }
+.yx-pclose { width: 44px; height: 44px; font-size: 18px; }
+.yx-prep-body { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.yx-pnote { font-size: 13px; color: #5a4a3a; }
+.yx-pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.yx-pcard {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; min-height: 44px;
+  border: 2.5px solid var(--ink); border-radius: 12px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer; text-align: center;
+}
+.yx-pcard img { width: 40px; height: 40px; }
+.yx-pcard b { font-size: 16px; }
+.yx-pcard small { font-size: 11px; color: #8a6a3a; }
+.yx-pcard p { margin: 2px 0; font-size: 12px; line-height: 1.35; color: #3a3028; }
+.yx-pcard em { font-style: normal; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px; color: #b8322a; }
+.yx-pcard.on { background: #f2e2b0; box-shadow: inset 0 0 0 2px #b8892a; }
+.yx-pcard.locked em { color: #5a4a3a; font-weight: 400; font-size: 11px; }
+.yx-pcard[aria-disabled='true'] { opacity: 0.55; cursor: default; }
+.yx-pcurse b { font-size: 26px; color: #6a2a6a; }
+.yx-pcurse.on { background: #3a2440; color: #fbf5e4; }
+.yx-pcurse.on p, .yx-pcurse.on b { color: #fbf5e4; }
+.yx-pperks { grid-template-columns: repeat(5, 1fr); }
+.yx-pips { display: flex; gap: 3px; }
+.yx-pips i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); background: #fbf5e4; }
+.yx-pips i.on { background: #e2702a; }
+.yx-prefund { align-self: flex-end; min-height: 44px; }
+@media (max-height: 500px) {
+  .yx-pgrid { grid-template-columns: repeat(6, 1fr); }
+  .yx-pperks { grid-template-columns: repeat(5, 1fr); }
+  .yx-pcard img { width: 30px; height: 30px; }
+  .yx-pcard p { font-size: 11px; }
+}

@@ -4,7 +4,8 @@
  * 所有按钮 ≥ 44×44（tools/shot.ts 检查）；左上角常驻"大厅"，任何界面两步内回到大厅。
  */
 import { MAPS, type MapId } from '../../content/maps.ts';
-import { DIFFICULTIES, type Difficulty } from '../../content/waves.ts';
+import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
+import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
 import type { Best } from '../../platform/save.ts';
 import { drawFlakes, drawModeScene, drawTitleLive, drawTitleStill, makeFlakes, type Flake } from '../art/sprites7.ts';
 import './screens.css';
@@ -63,9 +64,17 @@ function bindToggles(root: HTMLElement, list: Toggle[]): Record<string, (el: HTM
 
 export interface MenuState {
   firstTime: boolean;
-  difficulty: Difficulty;
-  best: Partial<Record<Difficulty, Best>>;
+  danger: Danger;
+  /** 能选的最高危险档 */
+  dangerOpen: Danger;
+  best: Partial<Record<Danger, Best>>;
   map: MapId;
+  /** 铜钱、角色、咒印（开局准备里改，这里只显示） */
+  coins: number;
+  character: CharacterId;
+  curses: CurseId[];
+  /** 咒印开了没有（撑到过一次天亮） */
+  cursesOpen: boolean;
   /** 义庄开了没有（普通档以上撑到过天亮） */
   yizhuang: boolean;
 }
@@ -98,10 +107,12 @@ export class Menu {
   private info: ReturnType<typeof drawTitleStill> | null = null;
   private flakes: Flake[] = [];
   private last = 0;
-  private diff: Difficulty = 'easy';
+  private diff: Danger = 0;
   private map: MapId = 'snow';
   private readonly toggles: Toggle[];
-  onStart: (d: Difficulty, map: MapId) => void = () => undefined;
+  onStart: (d: Danger, map: MapId) => void = () => undefined;
+  /** 打开开局准备（角色、咒印、加成） */
+  onPrep: (tab: 'char' | 'curse' | 'perk') => void = () => undefined;
   onClick: () => void = () => undefined;
 
   constructor(parent: HTMLElement, toggles: Toggle[]) {
@@ -121,9 +132,11 @@ export class Menu {
         this.map = el.dataset.m as MapId;
         for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="map"]')) b.classList.toggle('on', b.dataset.m === this.map);
       },
+      prep: (el) => this.onPrep(el.dataset.t as 'char' | 'curse' | 'perk'),
       diff: (el) => {
-        this.diff = el.dataset.d as Difficulty;
-        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="diff"]')) b.classList.toggle('on', b.dataset.d === this.diff);
+        if (el.classList.contains('locked')) return;
+        this.diff = Number(el.dataset.d) as Danger;
+        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="diff"]')) b.classList.toggle('on', Number(b.dataset.d) === this.diff);
         this.renderBest();
       },
       settings: () => this.root.classList.toggle('show-settings'),
@@ -140,11 +153,11 @@ export class Menu {
     const el = this.ui.querySelector('.yx-best');
     if (!el) return;
     const b = this.best[this.diff];
-    el.textContent = !b ? '还没玩过这个难度' : b.won ? `最好：天亮了 · 斩 ${b.kills.toLocaleString('zh-CN')}` : `最好：撑了 ${mmss(b.ticks / 30)} · 斩 ${b.kills.toLocaleString('zh-CN')}`;
+    el.textContent = !b ? `${DANGERS[this.diff].blurb} · 还没玩过` : b.won ? `最好：天亮了 · 斩 ${b.kills.toLocaleString('zh-CN')}` : `最好：撑了 ${mmss(b.ticks / 30)} · 斩 ${b.kills.toLocaleString('zh-CN')}`;
   }
 
   show(s: MenuState): void {
-    this.diff = s.difficulty;
+    this.diff = Math.min(s.danger, s.dangerOpen) as Danger;
     this.map = s.yizhuang ? s.map : 'snow';
     this.best = s.best;
     const top =
@@ -159,20 +172,26 @@ export class Menu {
         '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button>' +
         '<div class="yx-hint">只管走位，法器自己出手</div>';
     } else {
-      const chips = (['easy', 'normal', 'hard'] as const)
-        .map((d) => `<button type="button" class="yx-chip${d === this.diff ? ' on' : ''}" data-a="diff" data-d="${d}"><b>${DIFFICULTIES[d].name}</b><small>${'★'.repeat(DIFFICULTIES[d].stars)}</small></button>`)
-        .join('');
+      const chips = DANGER_IDS.map((d) => {
+        const locked = d > s.dangerOpen;
+        return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? '🔒' : '★'.repeat(DANGERS[d].stars)}</small></button>`;
+      }).join('');
+      const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
+      const prep =
+        `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="char"><b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
+        (s.cursesOpen ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
+        `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
       const maps = (['snow', 'yizhuang'] as const)
         .map((m) => {
           const locked = m === 'yizhuang' && !s.yizhuang;
-          return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '普通档撑到天亮开' : MAPS[m].blurb}</small></button>`;
+          return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '危险 1 撑到天亮开' : MAPS[m].blurb}</small></button>`;
         })
         .join('');
       this.ui.innerHTML =
         top +
         title +
         '<div class="yx-modes">' +
-        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
+        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-chips">${prep}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
         `<div class="yx-mode off"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>` +
         '</div>';
       this.renderBest();
@@ -358,7 +377,8 @@ export interface ResultView {
   kills: number;
   level: number;
   coins: number;
-  difficulty: Difficulty;
+  /** 档位那一行写什么（比如"危险 2"） */
+  label: string;
   record: boolean;
   build: BuildRow[];
   /** 可选：结算后铜钱总数（本局的 coins 已加进去）。有就画"飞进总数"的动画，没有就只显示本局收获 */
@@ -411,7 +431,7 @@ export class Result {
         : '';
     this.root.innerHTML =
       `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}">` +
-      `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${DIFFICULTIES[r.difficulty].name}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}</div></div>` +
+      `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${esc(r.label)}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}</div></div>` +
       '<div class="yx-rmain">' +
       '<div class="yx-rleft">' +
       `<div class="yx-rtime"><span>撑了</span><b>${mmss(r.seconds)}</b><small>${sub}</small></div>` +

@@ -100,6 +100,12 @@
 .yx-chip.on { background: var(--ink); color: #fbf5e4; }
 .yx-chip.yx-map small { letter-spacing: 0; font-size: 10px; padding: 0 4px; text-align: center; }
 .yx-chip.locked { opacity: 0.5; cursor: default; }
+.yx-dangers .yx-chip { min-width: 44px; min-height: 46px; }
+.yx-dangers .yx-chip b { font-size: 18px; line-height: 1; }
+.yx-chip.yx-prep { min-height: 46px; }
+.yx-chip.yx-prep b { display: flex; align-items: center; gap: 4px; font-size: 14px; }
+.yx-chip.yx-prep.hot { border-color: #b8322a; color: #b8322a; }
+.yx-coin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); background: radial-gradient(circle, transparent 2.5px, #f2c94c 3px); flex: none; }
 .yx-best { font-size: 13px; color: #5a4a3a; min-height: 1.3em; }
 .yx-soon { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #5a4a3a; min-height: 100px; }
 

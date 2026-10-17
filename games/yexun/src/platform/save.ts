@@ -223,6 +223,8 @@ export interface RunReward {
  */
 export function finishRun(s: Save, r: RunEnd): RunReward {
   const first = s.ledger.every(([id]) => !id.startsWith('run:')) && s.coinBase === 0;
+  s.runs++;
+  if (r.won) s.wins++;
   let coins = Math.floor(r.coins * (1 + CURSE_COIN_BONUS * r.curses));
   if (first) coins = Math.max(coins, FIRST_RUN_COINS);
   if (coins > 0) earn(s, `run:${r.id}`, coins);
