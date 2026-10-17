@@ -19,10 +19,12 @@ import {
   setWalletRules,
 } from './admin';
 import { getMe, login, logout, patchMe, recover, register } from './auth';
+import { feedParams, listFeed, postMoment, react } from './feed';
 import { dismissInvite, inviteParams, listInvites, sendInvite } from './invites';
 import { friendsWeek, overtakes, weekParams } from './friends-week';
 import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
+import { challengeParams, createChallenge, getChallenge, submitChallenge } from './challenges';
 import {
   acceptRequest,
   block,
@@ -93,6 +95,9 @@ const ROUTES: Route[] = [
   // 好友在线（0.13.0，15.13）：每人每 2 分钟最多写 1 行；写不了就静默 204
   { method: 'POST', path: '/api/presence', cat: 'live', auth: 'user', quiet: true, handler: postPresence },
   { method: 'POST', path: '/api/invites', cat: 'live', auth: 'user', handler: sendInvite },
+  { method: 'GET', path: '/api/feed', cat: 'live', auth: 'user', handler: listFeed },
+  { method: 'POST', path: '/api/feed', cat: 'live', auth: 'user', quiet: true, handler: postMoment },
+  { method: 'POST', path: /^\/api\/feed\/([^/]+)\/react$/, params: feedParams, cat: 'live', auth: 'user', handler: react },
   { method: 'GET', path: '/api/invites', cat: 'live', auth: 'user', handler: listInvites },
   { method: 'POST', path: /^\/api\/invites\/([^/]+)\/dismiss$/, params: inviteParams, cat: 'live', auth: 'user', handler: dismissInvite },
   // 战绩（0.10.3，5.10）：对登录的人公开，只读
@@ -128,6 +133,9 @@ const ROUTES: Route[] = [
   { method: 'POST', path: /^\/api\/admin\/users\/([^/]+)\/delete$/, params: userParams, cat: 'acct', auth: 'admin', acct: 'capped', handler: deleteUser },
   // 新上榜会让库变大：停增长档停交分（和新建存档槽一样）
   { method: 'POST', path: '/api/scores', cat: 'board', auth: 'user', growth: true, handler: submitScore },
+  { method: 'POST', path: '/api/challenges', cat: 'board', auth: 'user', growth: true, handler: createChallenge },
+  { method: 'GET', path: /^\/api\/challenges\/([^/]+)$/, params: challengeParams, cat: 'board', auth: 'user', handler: getChallenge },
+  { method: 'POST', path: /^\/api\/challenges\/([^/]+)\/results$/, params: challengeParams, cat: 'board', auth: 'user', growth: true, handler: submitChallenge },
   { method: 'GET', path: /^\/api\/boards\/([^/]+)\/([^/]+)$/, params: boardParams, cat: 'board', auth: 'user', handler: getBoard },
   { method: 'GET', path: /^\/api\/saves\/([^/]+)$/, params: saveParams, cat: 'save', auth: 'user', handler: getSaves },
   // 钱包（5.9）：浏览器只能看和领补给；带入、结回、放弃只有游戏的服务端经 RPC 能调（worker/wallet-service.ts），这里没有这几条路

@@ -186,6 +186,11 @@ export interface WelcomeMsg<V = unknown> {
   room: RoomInfo;
   view: V | null;
   /**
+   * 房间发这条消息时的时间（毫秒，0.13.1）：RoomClient 拿它和 room.turn.deadline 算"还剩多久"，不用浏览器自己的钟（可能差几分钟）。
+   * 用来发现房间的闹钟没设上、到点了却没人推进（见 RoomClient 的看门狗）。旧房间不带
+   */
+  now?: number;
+  /**
    * 快捷短语的节奏（0.7.0，游戏有短语时才带）：每 ms 毫秒补 1 个令牌、最多攒 burst 个。RoomClient 按它在本地排队发，
    * 用户感觉不到限速；运维在 KIT_QUOTA 里改，不用发版
    */
@@ -201,6 +206,8 @@ export interface StateMsg<V = unknown> {
   /** 至少一帧；最后一帧就是当前状态 */
   frames: Frame<V>[];
   ack?: string;
+  /** 同 WelcomeMsg.now（0.13.1） */
+  now?: number;
   /**
    * 别人看不出来的一步（0.7.1）：不轮流的操作没改任何别人能看到的东西（比如声明窗口里真人答"碰"），房间只回给出手的人、seq 不加（和上一条一样）。
    * 只和 ack 一起出现；RoomClient 0.7.1 起认它（seq 一样也交给页面），旧的 RoomClient 当重复丢掉

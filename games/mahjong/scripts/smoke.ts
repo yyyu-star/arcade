@@ -3,7 +3,7 @@
  * 横屏、竖屏各一遍；检查控制台零报错（开发时平台接口没起，/api 的 502 不算）、结算出来、对局中点"大厅"先确认。
  * 用法：npm run smoke。截图在 shots/smoke-*.png。
  */
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium, type Page } from 'playwright-core';
 import { createServer } from 'vite';
 
@@ -148,6 +148,17 @@ for (const [name, viewport] of [
   await page.waitForSelector('[data-key="share:close"]');
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${root}shots/smoke-${name}-share.png` });
+  // 卡片原图另存一份（kit 0.15.0 起右下角有二维码，人工看一眼）
+  const card = await page.evaluate(async () => {
+    const img = document.querySelector<HTMLImageElement>('img[alt="战绩图"]');
+    if (!img) return null;
+    const b = new Uint8Array(await (await fetch(img.src)).arrayBuffer());
+    let s = '';
+    for (const x of b) s += String.fromCharCode(x);
+    return btoa(s);
+  });
+  if (card) writeFileSync(`${root}shots/smoke-${name}-card.png`, Buffer.from(card, 'base64'));
+  else errors.push('分享预览里没有卡片图');
   await page.click('[data-key="share:close"]');
   const shared = await page.evaluate(() => (window as unknown as { __shareLog?: string[] }).__shareLog ?? []);
   if (!shared.includes('分享 预览')) errors.push(`分享没出预览：${shared.join(' | ')}`);

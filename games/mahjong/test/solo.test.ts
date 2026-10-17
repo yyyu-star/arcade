@@ -68,6 +68,16 @@ describe('带入（C3）', () => {
   });
 });
 
+test('0.15.1 以前少带开的、带入一直没确认的存档：重发被 bad_amount 拒，这一场作废，不再算"接着打上一场"', async () => {
+  const s = wallet();
+  s.buying = { op: s.buying!.op, amount: 500 };
+  replies = [{ status: 400, body: { error: 'bad_amount' } }];
+  const r = await new Solo(s, ui).buyin();
+  expect(r).toMatchObject({ ok: false, error: 'bad_amount' });
+  expect(sent[0]!.body.amount).toBe(500);
+  expect(loadSolo()).toBeNull();
+});
+
 describe('结回（C2）', () => {
   test('离开时结回没成：存着结回的数和号；回来只结回、不接着打，用同一个号', async () => {
     const s = wallet();

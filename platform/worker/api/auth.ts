@@ -1,6 +1,7 @@
 /** 注册、登录、退出、找回、本人资料（docs/platform-backend.md 5.1、15.2）。 */
 import { type Ctx, DAY, HOUR } from './context';
 import {
+  burnPasswordHash,
   hashPassword,
   hashRecoveryCode,
   newFriendCode,
@@ -13,7 +14,7 @@ import {
 } from './crypto';
 import { ApiError, clearCookies, json, noContent, rateLimited, withCookies } from './http';
 import { meter } from './meter';
-import { checkCached, checkFailLock, clearStatement, hit, recordFailure, takeAnonToken } from './ratelimit';
+import { checkCached, checkFailLock, clearStatement, hit, reserveAttempt, takeAnonToken } from './ratelimit';
 import { newSession, touchSession, USER_COLUMNS, type UserRow, userJson } from './session';
 import { noticeCached, registrationOpenCached, registrationOpenFresh } from './settings';
 import {
@@ -60,21 +61,28 @@ async function touch(c: Ctx): Promise<string[]> {
   return touchSession(c.db.as('social'), c.session, c.sidCookie, c.limits, c.now);
 }
 
-/** PATCH /api/me：改昵称、开关"让好友看到我在哪"（0.13.0），和改昵称共用每人每天 profilePerDay 次。 */
+/** PATCH /api/me：改昵称和几个隐私开关，共用每人每天 profilePerDay 次。 */
 export async function patchMe(c: Ctx): Promise<Response> {
   const user = c.session!.user;
-  // 改昵称、"让好友看到我在哪"开关（0.13.0）：至少带一样，两样一起带就一起改（一次计数、一行）
+  // 改昵称、"让好友看到我在哪"（0.13.0）、"好友动态"（0.17.0）、"搭子战绩"（0.19.0）三个开关：至少带一样，几样一起带就一起改（一次计数、一行）
   const hasName = c.body.displayName !== undefined;
-  const showWhere = c.body.showWhere;
-  if (!hasName && showWhere === undefined) throw new ApiError(400, 'bad_request');
-  if (showWhere !== undefined && typeof showWhere !== 'boolean') throw new ApiError(400, 'bad_request');
+  const { showWhere, showFeed, showMates } = c.body;
+  if (!hasName && showWhere === undefined && showFeed === undefined && showMates === undefined) throw new ApiError(400, 'bad_request');
+  for (const v of [showWhere, showFeed, showMates]) if (v !== undefined && typeof v !== 'boolean') throw new ApiError(400, 'bad_request');
   const displayName = hasName ? normalizeDisplayName(str(c.body.displayName)) : user.display_name;
   if (hasName) check(checkDisplayName(displayName));
-  const flag = showWhere === undefined ? user.show_where : showWhere ? 1 : 0;
+  const flagOf = (v: unknown, old: number) => (v === undefined ? old : v ? 1 : 0);
+  const flag = flagOf(showWhere, user.show_where);
+  const feed = flagOf(showFeed, user.show_feed);
+  const mates = flagOf(showMates, user.show_mates);
   await hit(c.db, `profile:${user.id}`, c.limits.profilePerDay, DAY, c.now);
-  await c.db.run(c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2 WHERE id = ?3', displayName, flag, user.id));
+  await c.db.run(
+    c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2, show_feed = ?3, show_mates = ?4 WHERE id = ?5', displayName, flag, feed, mates, user.id),
+  );
   user.display_name = displayName;
   user.show_where = flag;
+  user.show_feed = feed;
+  user.show_mates = mates;
   const cookies = await touch(c);
   return withCookies(json(200, { user: userJson(user) }), cookies);
 }
@@ -156,7 +164,7 @@ export async function insertUser(
       ]);
       const user: UserRow = {
         id: u.userId, username: u.username, display_name: u.displayName, friend_code: friendCode, avatar_json: null,
-        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1,
+        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1, show_feed: 1, show_mates: 1,
       };
       return { user, recoveryCode };
     } catch (e) {
@@ -167,7 +175,14 @@ export async function insertUser(
   }
 }
 
-/** 先查用户名有没有被暂时锁住、再算 PBKDF2，被锁时不花 CPU。用户名不存在时不记失败计数（5.4）。 */
+/**
+ * 先查用户名有没有被暂时锁住、再算 PBKDF2，被锁时不花 CPU。用户名不存在时不记失败计数（5.4）。
+ * 第三轮审计（0.19.2）：
+ * - 全站每小时的名额只算"用户名存在"的尝试：原来查用户名之前就计，拿不存在的用户名换几个 IP 段就能把全站一小时的登录耗光。
+ *   撞库要猜的是真账号，这部分照旧全算；乱填的用户名伤不到任何账号，由每个 IP 的上限和令牌桶管；
+ * - 算 PBKDF2 之前先占一次尝试（reserveAttempt），对了再清零，堵住锁到期那一刻的并发；
+ * - 用户名不存在也白算一次哈希，两种情况响应时间一样。
+ */
 export async function login(c: Ctx): Promise<Response> {
   const { db, env, limits, now } = c;
   const username = normalizeUsername(str(c.body.username));
@@ -178,9 +193,8 @@ export async function login(c: Ctx): Promise<Response> {
   takeAnonToken(ip, limits, now);
   checkHourly(c, 'login', limits.loginAllHour);
   const failKey = `login:fail:${username}`;
-  const hadFailures = (await checkFailLock(db, failKey, now)) !== null;
+  await checkFailLock(db, failKey, now);
   await hit(db, `login:ip:${ip}`, limits.loginPerIpHour, HOUR, now);
-  meter.countAnon('login');
 
   const row = await db.first<UserRow & { secret: string }>(
     db.stmt(
@@ -189,16 +203,18 @@ export async function login(c: Ctx): Promise<Response> {
       username,
     ),
   );
-  if (!row) throw badCredentials();
-  const v = await verifyPassword(env, password, row.secret, limits.pbkdf2Iterations);
-  if (!v.ok) {
-    await recordFailure(db, failKey, limits, now);
+  if (!row) {
+    await burnPasswordHash(env, password, limits.pbkdf2Iterations);
     throw badCredentials();
   }
+  await reserveAttempt(db, failKey, limits, now);
+  meter.countAnon('login');
+  const v = await verifyPassword(env, password, row.secret, limits.pbkdf2Iterations);
+  // 失败在占位时已经记过
+  if (!v.ok) throw badCredentials();
 
   const session = await newSession(env, db, row.id, limits, now);
-  const stmts = [session.stmt, db.stmt('UPDATE users SET last_seen_at = ?1 WHERE id = ?2', now, row.id)];
-  if (hadFailures) stmts.push(clearStatement(db, failKey));
+  const stmts = [session.stmt, db.stmt('UPDATE users SET last_seen_at = ?1 WHERE id = ?2', now, row.id), clearStatement(db, failKey)];
   if (v.rehash) {
     const h = await hashPassword(env, password, limits.pbkdf2Iterations);
     stmts.push(db.stmt("UPDATE credentials SET secret = ?1 WHERE user_id = ?2 AND type = 'password'", h, row.id));
@@ -235,7 +251,6 @@ export async function recover(c: Ctx): Promise<Response> {
   takeAnonToken(ip, limits, now);
   checkHourly(c, 'recover', limits.recoverAllHour);
   await hit(db, `rec:ip:${ip}`, limits.recoverPerIpHour, HOUR, now);
-  meter.countAnon('recover');
 
   const row = await db.first<UserRow & { secret: string }>(
     db.stmt(
@@ -245,6 +260,8 @@ export async function recover(c: Ctx): Promise<Response> {
     ),
   );
   if (!row) throw badCredentials();
+  // 全站名额只算用户名存在的（0.19.2，同登录）；恢复码是 HMAC，不存在时不用白算
+  meter.countAnon('recover');
   if (!(await verifyRecoveryCode(env, row.id, code, row.secret))) throw badCredentials();
 
   const nextCode = newRecoveryCode();

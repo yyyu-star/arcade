@@ -1,0 +1,8 @@
+{
+  "tiandi": { "text": "{name}开局就胡了，天胡地胡，{n} 番" },
+  "longqidui": { "text": "{name}胡了一把龙七对，{n} 番" },
+  "qing": { "text": "{name}胡了一把清一色，{n} 番" },
+  "gangkai": { "text": "{name}杠上开花，{n} 番" },
+  "haidi": { "text": "{name}摸最后一张牌自摸，海底捞月，{n} 番" },
+  "qidui": { "text": "{name}胡了七对，{n} 番" }
+}

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, errorText, type CareerView, type Relation, type StatsResponse } from '../api.ts';
 import { dateText, gameName, num, signed, tone } from '../format.ts';
 import { GAMES } from '../games.ts';
+import { togetherText } from '../mates.ts';
 import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
@@ -195,6 +196,20 @@ export function StatsPage() {
           </div>
         )}
       </Panel>
+      {data.together && (
+        // 搭子战绩（0.19.0）：只有好友、两边都开着、一起打过才有
+        <Panel icon="people" title="和我一起">
+          <ul className="careers" data-testid="together">
+            {Object.entries(data.together)
+              .sort(([a], [b]) => order(a) - order(b))
+              .map(([g, t]) => (
+                <li key={g}>
+                  <strong>{gameName(g)}</strong> {togetherText(t)}
+                </li>
+              ))}
+          </ul>
+        </Panel>
+      )}
       {games.length > 0 && (
         <Panel icon="trophy" title="称号墙">
           {games.map(([g, c]) => (

@@ -31,6 +31,12 @@ export interface QuotaLimits {
   busyWrites: number;
   /** 当天写入到这么多行：在打的房间这一段打完收场 */
   stopWrites: number;
+  /**
+   * 进房猜码（0.14.0，第三轮审计）：每个人每小时最多几次"房间码不存在"、每个 IP 每小时最多几次。超了这一小时里进任何房间都回 1013，
+   * 存在的房间也一样（不然 1013 和 welcome 的差别照样说出房间在不在）。房间码只有 6 位，不限就能一个个试出谁开着房
+   */
+  joinMissesPerUser: number;
+  joinMissesPerIp: number;
 }
 
 export const DEFAULT_QUOTA: QuotaLimits = {
@@ -39,6 +45,9 @@ export const DEFAULT_QUOTA: QuotaLimits = {
   dailyRooms: 300,
   busyWrites: 60_000,
   stopWrites: 85_000,
+  // 正常人输错码一小时也就几次；一个 IP 后面可能是一家人、一个宿舍，放宽一些
+  joinMissesPerUser: 20,
+  joinMissesPerIp: 60,
 };
 
 /** KIT_QUOTA 里由房间读的字段（0.7.0）：emoteMs 每多少毫秒补一个短语令牌（0 不限速），emoteBurst 最多攒几个 */
@@ -128,6 +137,30 @@ export class RoomMeter extends DurableObject<MeterEnv> {
   /** 只读：现在的门槛（房间放新人进来之前问，不写库）。 */
   async kitLevel(): Promise<MeterLevel> {
     return levelOf(this.day(Date.now()).writes, this.limits());
+  }
+
+  /**
+   * 进房猜码（0.14.0）：这两个方法用在 missStub 按人、按 IP 取的小实例上（不是全站那一个），不碰 SQL 表，只存一个 { 第几个小时, 几次 }。
+   * kitMissBlocked 只读，进房前问（门槛在这里按 KIT_QUOTA 算，worker.ts 不用在运行时引用本文件：它要能在普通 Node 里加载）；
+   * kitMiss 记一次（1 行），只有真的进了一个不存在的房间才调，超了门槛的人进不到这一步，所以一小时最多写门槛那么多行
+   */
+  async kitMissBlocked(kind: 'user' | 'ip'): Promise<boolean> {
+    const lim = this.limits();
+    return (await this.kitMisses()) >= (kind === 'user' ? lim.joinMissesPerUser : lim.joinMissesPerIp);
+  }
+
+  /** 只读：这一小时记了几次（给测试看） */
+  async kitMisses(): Promise<number> {
+    const r = await this.ctx.storage.get<{ h: number; n: number }>('miss');
+    return r && r.h === hourOf(Date.now()) ? r.n : 0;
+  }
+
+  async kitMiss(): Promise<number> {
+    const h = hourOf(Date.now());
+    const r = await this.ctx.storage.get<{ h: number; n: number }>('miss');
+    const n = (r && r.h === h ? r.n : 0) + 1;
+    await this.ctx.storage.put('miss', { h, n });
+    return n;
   }
 
   /** 只读：当天的数，给运维和测试看。 */
@@ -243,6 +276,10 @@ export function levelOf(writes: number, lim: QuotaLimits): MeterLevel {
   if (writes >= lim.stopWrites) return 'stop';
   if (writes >= lim.busyWrites) return 'busy';
   return 'ok';
+}
+
+function hourOf(now: number): number {
+  return Math.floor(now / 3_600_000);
 }
 
 function utcDay(now: number): string {

@@ -91,7 +91,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '黄符飞向最近的怪，命中爆开',
     el: '火',
     type: '符',
-    base: { dmg: 14, cd: 30, area: 34, amount: 1, speed: 13, duration: 70, knock: 6, rehit: 10 },
+    base: { dmg: 18, cd: 30, area: 34, amount: 1, speed: 13, duration: 70, knock: 6, rehit: 10 },
     ups: [
       { text: '多发一张', delta: { amount: 1 } },
       { text: '伤害 +7', delta: { dmg: 7 } },
@@ -106,7 +106,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '天师符雨',
       icon: 'i_talisman_evo',
       desc: '符咒几乎不停地飞出去',
-      stats: { dmg: 30, cd: 9, area: 56, amount: 3, speed: 16, duration: 80, knock: 8, rehit: 8 },
+      stats: { dmg: 36, cd: 9, area: 56, amount: 3, speed: 16, duration: 80, knock: 8, rehit: 8 },
     },
   },
   coins: {
@@ -191,7 +191,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '身边一圈光环，里面的怪持续挨打、走得慢',
     el: '金',
     type: '镇',
-    base: { dmg: 10, cd: 15, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+    base: { dmg: 12, cd: 15, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
     ups: [
       { text: '光环变大', delta: { area: 12 } },
       { text: '伤害 +5', delta: { dmg: 5 } },
@@ -243,7 +243,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '火',
     type: '灵',
     // area：火舌多长；duration：一次喷几拍；amount：扇面宽（每多 1 宽 6°，基础 ±22°）
-    base: { dmg: 12, cd: 84, area: 130, amount: 1, speed: 0, duration: 36, knock: 2, rehit: 6 },
+    base: { dmg: 22, cd: 84, area: 190, amount: 1, speed: 0, duration: 36, knock: 2, rehit: 6 },
     ups: [
       { text: '伤害 +5', delta: { dmg: 5 } },
       { text: '火舌更长', delta: { area: 20 } },
@@ -258,7 +258,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '三昧真火',
       icon: 'i_gourd_evo',
       desc: '喷过的地方留一摊火，烧一阵',
-      stats: { dmg: 36, cd: 60, area: 170, amount: 3, speed: 0, duration: 54, knock: 2, rehit: 6 },
+      stats: { dmg: 36, cd: 60, area: 245, amount: 3, speed: 0, duration: 54, knock: 2, rehit: 6 },
     },
   },
   rope: {
@@ -270,7 +270,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     type: '镇',
     // amount：一次捆几只；area：从第一只往外找下一只的距离；duration：捆几拍
     // 主要是控场：伤害低，捆住的怪不会马上死，拖住才有用
-    base: { dmg: 6, cd: 120, area: 140, amount: 3, speed: 0, duration: 75, knock: 0, rehit: 1 },
+    base: { dmg: 10, cd: 120, area: 140, amount: 3, speed: 0, duration: 75, knock: 0, rehit: 1 },
     ups: [
       { text: '多捆两只', delta: { amount: 2 } },
       { text: '捆得更久', delta: { duration: 15 } },
@@ -322,7 +322,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '土',
     type: '镇',
     // amount：最多挡几下；cd：回一层要几拍；area、dmg：碎的时候震多大、打多少
-    base: { dmg: 36, cd: 360, area: 110, amount: 1, speed: 0, duration: 0, knock: 30, rehit: 1 },
+    base: { dmg: 50, cd: 360, area: 110, amount: 1, speed: 0, duration: 0, knock: 30, rehit: 1 },
     ups: [
       { text: '回得更快', delta: { cd: -60 } },
       { text: '震得更疼', delta: { dmg: 20 } },

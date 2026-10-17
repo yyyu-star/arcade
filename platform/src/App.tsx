@@ -6,6 +6,7 @@ import { onlineUrl, playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api, type Overtake } from './api.ts';
 import { useSession } from './session.tsx';
+import { FeedStrip } from './feed.tsx';
 import { InviteBar, useHasInvites, useInvitePolling } from './invites.tsx';
 import { useLobbyPresence } from './presence.ts';
 import { FormError, useSubmit, useWritable } from './ui.tsx';
@@ -177,6 +178,7 @@ function Home({ deleted }: { deleted: boolean }) {
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
       {user && <OvertakeNudge />}
+      {user && <FeedStrip me={user.id} />}
       {user && announcement && (
         <p className="banner banner--notice" data-testid="notice">
           <strong className="banner__tag">公告</strong>
@@ -275,10 +277,13 @@ function OvertakeNudge() {
   }, []);
   const g = o && GAMES.find((x) => x.id === o.gameId);
   if (!o || !g) return null;
+  // 一天几个每日榜的游戏（0.16.0）说是哪个子榜："夜巡·守夜"
+  const sub = Array.isArray(g.daily) ? g.daily.find((x) => x.id === o.board) : undefined;
   return (
     <p className="banner nudge" data-testid="nudge-overtake">
       <span>
-        <strong>{o.by.displayName}</strong>超过了你这周的{g.name}每日挑战纪录
+        <strong>{o.by.displayName}</strong>超过了你这周的{g.name}
+        {sub ? `·${sub.name}` : ''}每日挑战纪录
       </span>
       <a className="inline-link" href={playUrl(g)}>
         去挑战

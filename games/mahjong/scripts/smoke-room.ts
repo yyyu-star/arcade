@@ -80,6 +80,10 @@ async function newContext(browser: Browser, base: string, sid: string, viewport:
     { name: '__Host-arcade_li', value: '1', domain: host, path: '/', secure: true },
   ]);
   await ctx.addInitScript(() => localStorage.setItem('mahjong.guide', '1'));
+  // CSP 违规（cf/_headers）打成控制台报错，和别的报错一起算进"零报错"
+  await ctx.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error(`csp ${e.disposition}: ${e.effectiveDirective} ${e.blockedURI || '(inline)'} ${e.sourceFile}:${e.lineNumber}`)),
+  );
   return ctx;
 }
 
@@ -142,7 +146,10 @@ async function playUntil(players: Player[], done: () => boolean, ms: number, wha
 
 /** 选桌页开房，返回房间号 */
 async function openRoom(page: Page, base: string, stake: '娱乐' | '小档'): Promise<string> {
-  await page.goto(`${base}/games/mahjong/`);
+  const res = await page.goto(`${base}/games/mahjong/`);
+  const csp = res?.headers()['content-security-policy'] ?? '';
+  const script = /script-src ([^;]*)/.exec(csp)?.[1] ?? '';
+  check(/frame-ancestors 'self'/.test(csp) && script.startsWith("'self'") && !/unsafe/.test(script), `首页带安全响应头（script-src ${script}）`);
   await page.waitForSelector('.lobby-head');
   // 娱乐分三个难度（0.10.0），好友房用哪个都一样（房间按自己的场地表挑电脑），点"新手"那张
   await page.click(`.stakes .stake:has-text("${stake === '娱乐' ? '新手' : stake}")`);
@@ -387,6 +394,17 @@ try {
     await sleep(300);
   }
   check(true, `一整场打完，两边结算上都有"再来一场"（${Math.round((Date.now() - t) / 1000)} 秒）`);
+  // 颁奖（docs/social.md 第 2 节）：两边看到的奖一样；"分享颁奖"出 kit 的分享预览，关掉
+  const prizes = (p: Page): Promise<string[]> => p.$$eval('.mask.end .award', (xs) => xs.map((x) => x.textContent ?? ''));
+  const [pa1, pb1] = [await prizes(pa), await prizes(pb)];
+  check(pa1.length >= 1 && pa1.length <= 3 && JSON.stringify(pa1) === JSON.stringify(pb1), `结算上有颁奖，两边一样（${pa1.join(' / ')}）`);
+  await pa.screenshot({ path: join(SHOTS, 'room-awards-a.png') });
+  await pb.screenshot({ path: join(SHOTS, 'room-awards-b.png') });
+  await pa.click('.mask.end .share-awards');
+  await pa.waitForSelector('[data-key="share:close"]', { timeout: 5_000 });
+  await pa.screenshot({ path: join(SHOTS, 'room-awards-share.png') });
+  await pa.click('[data-key="share:close"]');
+  check(true, '"分享颁奖"出了分享预览');
   await pa.click('.mask.end .rematch');
   await pa.waitForFunction((old) => /^\d{6}$/.test(document.querySelector('.room-code')?.textContent?.trim() ?? '') && document.querySelector('.room-code')?.textContent?.trim() !== old, code);
   const code2 = ((await pa.textContent('.room-code')) ?? '').trim();

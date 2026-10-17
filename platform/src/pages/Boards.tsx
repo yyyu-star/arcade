@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, errorText, type LeaderboardResponse, type ScoreBoard } from '../api.ts';
 import { type DailyFormat, loadDailyFormat } from '../daily.ts';
 import { signed, tone } from '../format.ts';
-import { GAMES, type GameEntry, WALLET_GAMES } from '../games.ts';
+import { type DailyTab, dailyTabs, GAMES, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Empty, Panel } from '../ui.tsx';
@@ -18,8 +18,9 @@ type Tab = string;
 
 const PLAYABLE = GAMES.filter((g) => g.status === 'playable');
 const WEEK_BOARDS = [{ id: 'total', name: '总榜' }, ...WALLET_GAMES.filter((g) => g.status === 'playable').map((g) => ({ id: g.id, name: g.name }))];
-const DAILY_GAMES = PLAYABLE.filter((g) => g.daily);
-const TABS: (readonly [Tab, string])[] = [['week', '本周净赢'], ...DAILY_GAMES.map((g) => [g.id, `${g.name}每日`] as const), ['titles', '称号收集']];
+/** 每日挑战：每个游戏一个标签，一天几个每日榜的每个子榜一个（0.16.0，"夜巡每日·守夜"） */
+const DAILY_TABS = dailyTabs(PLAYABLE);
+const TABS: (readonly [Tab, string])[] = [['week', '本周净赢'], ...DAILY_TABS.map((t) => [t.key, t.label] as const), ['titles', '称号收集']];
 
 interface Row {
   rank: number | null;
@@ -83,7 +84,10 @@ function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: str
   );
 }
 
-function DailyBoard({ game, board, scope }: { game: GameEntry; board: string | null; scope: Scope }) {
+function DailyBoard({ tab, board, scope }: { tab: DailyTab; board: string | null; scope: Scope }) {
+  const { game } = tab;
+  const sub = tab.sub?.id ?? null;
+  const title = tab.sub ? `${game.name}·${tab.sub.name}` : game.name;
   const [data, setData] = useState<{ board: ScoreBoard; format: DailyFormat } | null>(null);
   const [error, setError] = useState<unknown>(null);
   // 只看好友时比的是这周（北京时间周一 0 点起）每人最好的一天（0.15.0，docs/social.md 1.5），今天没人打也有榜
@@ -93,15 +97,15 @@ function DailyBoard({ game, board, scope }: { game: GameEntry; board: string | n
     let alive = true;
     setData(null);
     setError(null);
-    Promise.all([week ? api.friendsWeek(game.id) : api.board(game.id, board!, scope), loadDailyFormat(game.id)]).then(
+    Promise.all([week ? api.friendsWeek(game.id, sub) : api.board(game.id, board!, scope), loadDailyFormat(game.id, sub)]).then(
       ([b, format]) => alive && setData({ board: b, format }),
       (e: unknown) => alive && setError(e),
     );
     return () => {
       alive = false;
     };
-  }, [game.id, board, scope, week]);
-  const empty = week ? `这周你和好友都还没打${game.name}的每日挑战，去当第一个！` : `今天还没人打${game.name}的每日挑战，去当第一个！`;
+  }, [game.id, sub, board, scope, week]);
+  const empty = week ? `这周你和好友都还没打${title}的每日挑战，去当第一个！` : `今天还没人打${title}的每日挑战，去当第一个！`;
   if (!board && !week) return <Empty testId="board-empty">{empty}</Empty>;
   if (error) return <p className="note">{errorText(error)}</p>;
   if (!data) return <p className="note">正在读取…</p>;
@@ -112,7 +116,7 @@ function DailyBoard({ game, board, scope }: { game: GameEntry; board: string | n
     <>
       <RankList rows={rows} me={me} empty={empty} />
       {week && <p className="note">只看好友时比的是这周每人最好的一天，北京时间每周一 0 点清零。</p>}
-      {format.note && <p className="note">{game.name}的每日挑战：{format.note}</p>}
+      {format.note && <p className="note">{title}的每日挑战：{format.note}</p>}
     </>
   );
 }
@@ -177,11 +181,11 @@ export function BoardsPage() {
     </nav>
   );
 
-  const daily = DAILY_GAMES.find((g) => g.id === tab);
+  const daily = DAILY_TABS.find((t) => t.key === tab);
   let body;
   if (error) body = <p className="note">{errorText(error)}</p>;
   else if (!data) body = <p className="note">正在读取…</p>;
-  else if (daily) body = <DailyBoard game={daily} board={data.daily[daily.id] ?? null} scope={scope} />;
+  else if (daily) body = <DailyBoard tab={daily} board={data.daily[daily.key] ?? null} scope={scope} />;
   else {
     const b = data.boards[tab === 'week' ? weekBoard : 'titles'] ?? { entries: [], me: null };
     const fmt = (v: number) => (tab === 'week' ? { text: signed(v), tone: tone(v) } : { text: `${v} 个` });

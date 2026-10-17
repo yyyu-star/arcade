@@ -3,6 +3,7 @@
  * 账记在一个 Durable Object（WalletBank）里，测试直接读它看扣了多少、结回多少、每个 op 真办了几次。
  * 只做好友房要看的：按 op 去重（dup）、同一游戏只有一份（at_table）、要够一份（no_funds）、结回清掉那一份（再来 no_stake）。
  * userId 以 "poor" 开头的人余额是 0；down 不为 0 时接下来的几次调用回 busy（看房间按退避重试）。
+ * 搭子战绩（0.16.0，平台 15.19 的 together）：原样记下每次报的 { op, players }，测试核对报了几次、报了谁。
  */
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 
@@ -24,6 +25,15 @@ export class WalletBank extends DurableObject {
   /** 收到的调用（方法:op 或 view:userId），按顺序 */
   readonly log: string[] = [];
   down = 0;
+  /** 搭子战绩：报上来的每一场 */
+  readonly togethers: { op: string; players: unknown[] }[] = [];
+
+  together(req: { op: string; players: unknown[] }): { ok: true; pairs: number } {
+    this.log.push(`together:${req.op}`);
+    this.togethers.push(req);
+    const n = req.players.length;
+    return { ok: true, pairs: (n * (n - 1)) / 2 };
+  }
 
   private acct(userId: string): Acct {
     let a = this.accts.get(userId);
@@ -80,14 +90,14 @@ export class WalletBank extends DurableObject {
   }
 
   /** 测试读：余额、桌上那一份、每个 op 办了几次、调用记录 */
-  snapshot(): { balances: Record<string, number>; stakes: Record<string, unknown>; done: Record<string, number>; log: string[] } {
+  snapshot(): { balances: Record<string, number>; stakes: Record<string, unknown>; done: Record<string, number>; log: string[]; togethers: { op: string; players: unknown[] }[] } {
     const balances: Record<string, number> = {};
     const stakes: Record<string, unknown> = {};
     for (const [u, a] of this.accts) {
       balances[u] = a.balance;
       if (Object.keys(a.stakes).length) stakes[u] = a.stakes;
     }
-    return { balances, stakes, done: Object.fromEntries(this.done), log: [...this.log] };
+    return { balances, stakes, done: Object.fromEntries(this.done), log: [...this.log], togethers: [...this.togethers] };
   }
 }
 
@@ -113,5 +123,8 @@ export class FakeWallet extends WorkerEntrypoint<BankEnv> {
   }
   refund(req: Req): Promise<Reply> {
     return Promise.resolve(this.check(req.game) ?? bank(this.env).call('refund', req));
+  }
+  together(req: { op: string; players: unknown[] }): Promise<unknown> {
+    return Promise.resolve(this.check('guandan') ?? bank(this.env).together(req));
   }
 }

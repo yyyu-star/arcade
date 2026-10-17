@@ -13,8 +13,9 @@
 import { identify, sameOrigin } from './auth.js';
 import { type GuestOptions, isStandalone, type ModeEnv } from './guest.js';
 import { CLOSE, type CreateError, ROOM_CODE_RE } from './protocol.js';
-import { identityHeader, type Identity, KIT_HOST, newRoomCode, roomStub } from './internal.js';
-import type { MeterEnv } from './meter.js';
+import { identityHeader, type Identity, KIT_HOST, LIMITED_HEADER, meterStub, MISS_HEADER, missStub, newRoomCode, roomStub } from './internal.js';
+// 只引类型：meter.ts 依赖 cloudflare:workers，游戏会在普通 Node 的测试里加载本文件
+import type { MeterEnv, RoomMeter } from './meter.js';
 import type { CreateOutcome } from './room.js';
 
 /**
@@ -119,11 +120,48 @@ export async function acceptJoin(request: Request, env: KitEnv, code: string, op
   const w = await who(request, env, opts, false);
   if ('error' in w) return w.error === 'anonymous' ? refuse(CLOSE.unauthorized, 'login first') : refuse(CLOSE.tryLater, 'try later');
   const me = w.user;
+  // 进房猜码（0.14.0）：这一小时"码不存在"超了门槛的人（或 IP）带上 LIMITED_HEADER，房间只放自己人进，别人不管房间在不在都回 1013，
+  // 说不出房间在不在；在打的人照常重连。计量连不上时同样处理（和开房一样不放新人进来）
+  const guard = missGuard(env, me.userId, request.headers.get('cf-connecting-ip'));
+  let limited = false;
+  try {
+    limited = !!guard && !(await guard.ok());
+  } catch (e) {
+    console.error('join guard failed', e instanceof Error ? e.message : e);
+    limited = true;
+  }
   // 新建请求，只带认好的身份和客户端版本；浏览器带来的 x-kit-user 之类的头一律不转
   const cv = new URL(request.url).searchParams.get('cv') ?? '0';
-  return roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}`, {
-    headers: { upgrade: 'websocket', 'x-kit-user': identityHeader(me) },
+  const res = await roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}`, {
+    headers: { upgrade: 'websocket', 'x-kit-user': identityHeader(me), ...(limited ? { [LIMITED_HEADER]: '1' } : {}) },
   });
+  if (!res.headers.has(MISS_HEADER)) return res;
+  // 房间说"这个码没有房间"：记一次（按人、按 IP 各 1 行，再报进当天的写入），转给浏览器的回话不带这个内部头
+  if (guard) await guard.miss().catch((e: unknown) => console.error('join miss record failed', e instanceof Error ? e.message : e));
+  return new Response(null, { status: 101, webSocket: res.webSocket });
+}
+
+/**
+ * 按人、按 IP 数"码不存在"（0.14.0，第三轮审计：6 位房间码能一个个试）。没绑 METER（单独部署、测试里没配）就不管，和开房额度一样。
+ * 没有 IP 头（本地开发）只按人算
+ */
+function missGuard(env: KitEnv, userId: string, ip: string | null): { ok(): Promise<boolean>; miss(): Promise<void> } | null {
+  const ns = env.METER;
+  if (!ns) return null;
+  const keys: [string, 'user' | 'ip'][] = [[`u:${userId}`, 'user']];
+  if (ip) keys.push([`ip:${ip}`, 'ip']);
+  const stub = (k: string) => missStub(ns, k) as DurableObjectStub<RoomMeter>;
+  return {
+    async ok() {
+      const blocked = await Promise.all(keys.map(([k, kind]) => stub(k).kitMissBlocked(kind)));
+      return !blocked.includes(true);
+    },
+    async miss() {
+      await Promise.all(keys.map(([k]) => stub(k).kitMiss()));
+      // 这几行也记进当天的写入（计量自己的规矩），报一次计量再写 1 行
+      await (meterStub(ns) as DurableObjectStub<RoomMeter>).kitReport(keys.length);
+    },
+  };
 }
 
 function refuse(code: number, reason: string): Response {

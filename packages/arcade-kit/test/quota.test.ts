@@ -38,6 +38,15 @@ async function setDay(writes: number, rooms = 0, ns: DurableObjectNamespace = en
   });
 }
 
+/** FlakyRoom 存下的"没真人了"的时刻：房间还在、有人时是 null，房间关了（那一行删掉）是 undefined */
+async function noHumanSince(code: string): Promise<number | null | undefined> {
+  return runInDurableObject(flakyRoom(code), (_r: FlakyRoom, state) => {
+    const t = state.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'kit_room'").one().n;
+    const row = t ? state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').toArray()[0] : undefined;
+    return row ? (JSON.parse(row.v) as { noHumanSince: number | null }).noHumanSince : undefined;
+  });
+}
+
 /** 等到 fn 成立（房间还名额、报数是在广播之后 await 的，测试先收到消息）。 */
 async function eventually(fn: () => Promise<boolean>): Promise<void> {
   const deadline = performance.now() + 2_000;
@@ -186,13 +195,22 @@ describe('每日写入计量', () => {
     const { conn } = await join(code, 'host', FLAKY);
     await playOut(conn);
     conn.ws.close(1000, 'bye');
-    await eventually(async () => (await runInDurableObject(flakyRoom(code), (r: FlakyRoom) => r.lastStepWrites)) > 0);
+    // 等房间真的处理完这次断开、记下"没真人了"的时刻，再拨时间叫醒闹钟。
+    // 以前等的是 lastStepWrites > 0：打完那一步就已经 > 0，等于没等；机器一忙，断开晚于闹钟处理，
+    // 房间按"刚刚才没人"不关（或者拨时间之后才记下没人的时刻），少了关房那一次报数，最后的等式差几行（主线报过负载 15 时偶发）
+    await eventually(async () => (await noHumanSince(code)) !== null);
     advance(DEFAULT_LIMITS.noHumanMs);
-    await runDurableObjectAlarm(flakyRoom(code));
-    const room = await runInDurableObject(flakyRoom(code), (r: FlakyRoom) => r.totalWrites);
-    const reports = await runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.reports);
+    expect(await runDurableObjectAlarm(flakyRoom(code))).toBe(true);
+    expect(await noHumanSince(code)).toBeUndefined();
+    // 断开那一步攒够一批时也会报一次，报数在广播之后 await：等账对上，不按固定时间等
+    let room = 0;
+    let reports = 0;
     // 房间写的全报了；计量自己：开房 2 行（这个人、当天）+ 每报 1 行 + 打完还名额 2 行 + 关房再报 1 行（名额已经还过）
-    expect((await usage(env.FLAKY_METER)).writes).toBe(room + 2 + reports + 2 + 1);
+    await eventually(async () => {
+      room = await runInDurableObject(flakyRoom(code), (r: FlakyRoom) => r.totalWrites);
+      reports = await runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.reports);
+      return (await usage(env.FLAKY_METER)).writes === room + 2 + reports + 2 + 1;
+    });
     expect(reports).toBeGreaterThan(0);
     // 每报一次至少 5 行（最后一批除外，那一批跟着还名额走）
     expect(reports).toBeLessThanOrEqual(Math.floor(room / 5));
