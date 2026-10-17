@@ -6,6 +6,7 @@
     "guandan": { "platform": ["ARCADE", "WALLET"] },
     "texas": { "platform": ["ARCADE", "WALLET"] },
     "mahjong": { "platform": ["ARCADE", "WALLET"] },
-    "racing": { "platform": ["ARCADE"] }
+    "racing": { "platform": ["ARCADE"] },
+    "yexun": { "platform": ["ARCADE", "WALLET"] }
   }
 }
