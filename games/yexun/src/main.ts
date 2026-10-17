@@ -22,6 +22,10 @@ import { ReplayList } from './replay/view/list.ts';
 import { ReplayBar } from './replay/view/bar.ts';
 import type { ReplayRecord } from './replay/format.ts';
 import { BoardsPanel } from './online/view/boards.ts';
+import { buildShareCard } from './online/share.ts';
+import { createSocial } from './online/social.ts';
+import { prepareShare } from 'arcade-kit/share';
+import { mountSocial } from 'arcade-kit/social';
 import { createSubmitter, outcomeText } from './online/submit.ts';
 import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
@@ -125,6 +129,11 @@ async function boot(): Promise<void> {
   /** 菜单上开了"无尽"（再来一局沿用上一局的） */
   let wantEndless = false;
   const submitter = createSubmitter({ fetch: (u, i) => fetch(u, i) });
+  // 好友在线和邀请横条（kit 的 arcade-kit/social）：没平台、没登录就不挂。打到一半点"去"先确认
+  const social = createSocial({
+    mount: mountSocial,
+    confirmLeave: (go) => confirm.ask('这一局不会保存，确定离开吗？', '离开', '接着打', (ok) => ok && go()),
+  });
   /** 撑到了天亮：无尽局过了天亮再倒下也算（解锁、战绩按这个） */
   const dawned = (w: World): boolean => w.won || (!!w.setup.endless && w.tick >= DAWN_TICK);
   /** 一局的小结：交分、录像、分享卡都从它来 */
@@ -146,7 +155,7 @@ async function boot(): Promise<void> {
     build: w.weapons.map((o) => WEAPONS[o.id].name),
   });
   /** 结束时：存录像、交分（实盘、降低伤害、认输的不交总榜，规则在 online/score.ts） */
-  const archive = (w: World, quit: boolean): void => {
+  const archive = (w: World, quit: boolean): RunSummary => {
     const run = runSummary(w, quit);
     if (rec) {
       const today = beijingDate(Date.now());
@@ -156,6 +165,19 @@ async function boot(): Promise<void> {
     void submitter.submit(run).then((outs) => {
       if (outs.length) result.setNote(outs.map(outcomeText).join('；'));
     });
+    return run;
+  };
+  /**
+   * 分享卡（kit 的 arcade-kit/share）：结算页一出来就先画好，点"分享"时在点击里直接调系统分享（iOS 只认点击那一下）。
+   * 实盘局不给分享（onShare 置空）。卡上只有战绩和咒印，不放自由文字
+   */
+  const offerShare = (run: RunSummary | null): void => {
+    if (!run) {
+      result.onShare = null;
+      return;
+    }
+    const prepared = prepareShare(buildShareCard(run), { url: './', zIndex: 11000 });
+    result.onShare = () => void prepared.share();
   };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
   let lastLive: LiveTier | null = null;
@@ -387,7 +409,9 @@ async function boot(): Promise<void> {
     tips.hide();
     banners.clear();
     const seconds = (w.setup.endless ? w.tick : Math.min(w.tick, DAWN_TICK)) / 30;
-    archive(w, quit);
+    const run = archive(w, quit);
+    social.setWhere('menu');
+    offerShare(liveRun ? null : run);
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
@@ -448,6 +472,7 @@ async function boot(): Promise<void> {
     const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist, ...(wantEndless ? { endless: true } : {}) });
     world = w;
     autopilot = undefined;
+    social.setWhere(w.raid ? 'raid' : 'vigil');
     // 调试参数改过开局、快进过的局不录（录像要从第 0 拍逐拍记）
     rec = q.has('give') || q.has('warp') ? null : new Recorder(w.setup, Date.now());
     if (import.meta.env.DEV && q.has('give')) {
@@ -657,6 +682,8 @@ async function boot(): Promise<void> {
   game.events.once(Phaser.Core.Events.READY, () => {
     game.textures.addCanvas('ground', ground);
     document.getElementById('boot')?.remove();
+    // 冒烟、机器人代打不挂 social（它会去问平台）
+    if (hasLoginHint() && !q.has('auto')) void social.start();
     (window as unknown as { __yx: unknown }).__yx = { game, world: null, lowmem: LOW_MEMORY, res, zoom, r, music, save };
     // 调试参数直接开局（冒烟截图、机器人代打）；?diff 指定难度
     // ?danger=0–5（老的 ?diff=easy|normal|hard 照认：危险 0 / 2 / 4）

@@ -180,6 +180,7 @@
 .yx-rhead .yx-brush { font-size: 72px; line-height: 1; color: var(--ink); }
 .yx-result-panel.won .yx-rhead .yx-brush { color: var(--red); }
 .yx-rtags { display: flex; align-items: center; gap: 10px; }
+.yx-rshare { min-height: 44px; min-width: 44px; padding: 0 14px; font-size: 15px; }
 .yx-rtags em { font-style: normal; font-size: 14px; color: #5a4a3a; }
 .yx-record {
   position: relative; overflow: hidden; padding: 6px 14px; border: 2.5px solid var(--ink); border-radius: 10px;

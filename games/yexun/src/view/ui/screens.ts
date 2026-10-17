@@ -515,6 +515,8 @@ export class Result {
   private readonly icons: (k: string) => string;
   onAgain: () => void = () => undefined;
   onMenu: () => void = () => undefined;
+  /** 分享这一局：有才显示按钮（实盘局不给）；show 之前设好 */
+  onShare: (() => void) | null = null;
 
   constructor(parent: HTMLElement, icons: (k: string) => string) {
     this.root = layer(parent, 'yx-result');
@@ -522,6 +524,7 @@ export class Result {
     onAction(this.root, {
       again: () => this.onAgain(),
       menu: () => this.onMenu(),
+      share: () => this.onShare?.(),
       home: () => {
         location.href = '/';
       },
@@ -616,7 +619,7 @@ export class Result {
         : '';
     this.root.innerHTML =
       `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}${rr ? ' raid' : ''}">` +
-      `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${esc(r.label)}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}</div></div>` +
+      `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${esc(r.label)}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}${this.onShare ? '<button type="button" class="yx-btn yx-rshare" data-a="share">分享</button>' : ''}</div></div>` +
       '<div class="yx-rmain">' +
       '<div class="yx-rleft">' +
       `<div class="yx-rtime"><span>${rr ? '在镇里' : '撑了'}</span><b>${mmss(r.seconds)}</b><small>${sub}</small></div>` +
