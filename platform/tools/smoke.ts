@@ -1565,7 +1565,8 @@ async function boardsPage(browser: Browser): Promise<void> {
     daily: { kaipan: 'daily-2026-10-15-v2', 'yexun:vigil': 'daily-2026-10-15-vigil', 'yexun:raid': null },
     boards: {
       total: board([row(0, '老王的徒弟', 48_000), row(1, '小明', 12_500), row(2, '某人', 12_500, 2, true), row(3, '输光了', -6_000, 4)], { rank: 2, value: 12_500 }),
-      kaipan: board([row(1, '小明', 12_000)]),
+      // 我在列表里（第 4 名，不在领奖台上）：所有者截图里"晒名次"在这种行里被挤成一字一行（0.22.1）
+      kaipan: board([row(1, '小明', 12_000), row(0, '老王的徒弟', 9_000), row(3, '输光了', 5_000, 3), row(2, '某人', -3_212, 4, true)], { rank: 4, value: -3_212 }),
       guandan: board([]),
       texas: board([row(0, '老王的徒弟', 48_000), row(2, '某人', 500, 2, true)], { rank: 2, value: 500 }),
       titles: board([row(1, '小明', 9), row(0, '老王的徒弟', 4)], { rank: 73, value: 1 }),
@@ -1605,7 +1606,22 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.locator('.rank').nth(1).waitFor({ state: 'detached' });
     await page.locator('.rank--me').getByText('+12,500').waitFor();
     await page.getByRole('button', { name: '全部' }).click();
-    await page.getByRole('button', { name: '掼蛋' }).click();
+    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '开盘' }).click();
+    const listShare = page.locator('.ranks .rank--me').getByTestId('share-rank');
+    await listShare.waitFor();
+    // 按钮一行字、不高于 48px，和分数在同一行，行不被撑高
+    const fit = await listShare.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+      const row = el.closest('.rank')!.getBoundingClientRect();
+      const value = el.closest('.rank')!.querySelector('.rank__value')!.getBoundingClientRect();
+      return { h: el.getBoundingClientRect().height, lines, rowH: row.height, sameLine: Math.abs(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 - (value.top + value.height / 2)) < 8 };
+    });
+    check(fit.h <= 48 && fit.lines === 1, `"晒名次"该是一行字、不高于 48px：${JSON.stringify(fit)}`);
+    check(fit.sameLine && fit.rowH <= 64, `"晒名次"该和分数在同一行、行不被撑高：${JSON.stringify(fit)}`);
+    await shot(page, `boards-me-in-list-${screen}`);
+    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '掼蛋' }).click();
     await page.getByTestId('board-empty').waitFor();
     // 不用钱包的游戏（飞驰，0.10.25）不开"本周净赢"的标签：只会是空的
     check((await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '飞驰' }).count()) === 0, '本周净赢不该有飞驰的标签');
