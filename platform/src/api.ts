@@ -76,6 +76,52 @@ export interface Together {
   teamWins: number;
 }
 
+/** 我的邀请码（0.20.0，15.20）：quota 是额度，taken 是用掉的（已用 + 还有效的），todayLeft 是 24 小时内还能生成几个 */
+export interface InviteCodes {
+  quota: number;
+  taken: number;
+  left: number;
+  todayLeft: number;
+  ttlDays: number;
+  codes: {
+    id: string;
+    hint: string;
+    /** 只有没用的才有，ABCD-EFGH-JKMN */
+    code?: string;
+    createdAt: number;
+    expiresAt: number;
+    status: 'unused' | 'used' | 'expired' | 'revoked';
+    usedAt?: number;
+    /** null：用的人已经注销 */
+    usedBy?: Profile | null;
+  }[];
+}
+
+export interface InviteRules {
+  userQuota: number;
+  adminQuota: number;
+  ttlDays: number;
+  perDay: number;
+}
+
+export interface InviteRulesState {
+  rules: InviteRules;
+  defaults: InviteRules;
+  range: Record<keyof InviteRules, [number, number]>;
+  updatedAt: number | null;
+}
+
+export interface AdminInviteCode {
+  id: string;
+  hint: string;
+  status: 'unused' | 'used' | 'expired' | 'revoked';
+  owner: { username: string; displayName: string } | null;
+  createdAt: number;
+  expiresAt: number;
+  usedAt?: number;
+  usedBy?: { username: string; displayName: string } | null;
+}
+
 export interface FriendLists {
   /** online、where（0.13.0）：对方关了"让好友看到我在哪"时 online 是 false、没有 where */
   friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where; together?: Together })[];
@@ -355,8 +401,12 @@ export const api = {
     request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}${board ? `?board=${encodeURIComponent(board)}` : ''}`),
   /** 这周哪个好友超过了我（0.15.0）：每个游戏最多一条 */
   overtakes: () => request<{ overtakes: Overtake[] }>('GET', '/api/friends/overtakes'),
-  register: (username: string, password: string, displayName: string) =>
-    request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName }),
+  register: (username: string, password: string, displayName: string, inviteCode?: string) =>
+    request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName, ...(inviteCode ? { inviteCode } : {}) }),
+  /** 邀请码（0.20.0，15.20） */
+  inviteCodes: () => request<InviteCodes>('GET', '/api/invite-codes'),
+  createInviteCode: () => request<{ id: string; code: string; link: string; expiresAt: number; left: number }>('POST', '/api/invite-codes', {}),
+  revokeInviteCode: (id: string) => request<void>('POST', `/api/invite-codes/${id}/revoke`, {}),
   login: (username: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { username, password }),
   logout: () => request<void>('POST', '/api/auth/logout'),
   recover: (username: string, recoveryCode: string, newPassword: string) =>
@@ -426,6 +476,12 @@ export const api = {
     adjust: (username: string, amount: number, note: string) =>
       request<{ wallet: Wallet; credited: number }>('POST', '/api/admin/wallet/adjust', { username, amount, note }),
     recentAdjustments: () => request<{ recent: AdminAdjust[] }>('GET', '/api/admin/wallet-adjustments'),
+    inviteRules: () => request<InviteRulesState>('GET', '/api/admin/settings/invites'),
+    setInviteRules: (rules: Partial<InviteRules>) => request<InviteRulesState>('POST', '/api/admin/settings/invites', rules),
+    setInviteQuota: (userId: string, quota: number | null) =>
+      request<{ quota: number | null; custom: boolean }>('POST', `/api/admin/users/${userId}/invite-quota`, { quota }),
+    inviteCodes: (status: 'all' | 'unused' | 'used') => request<{ codes: AdminInviteCode[] }>('GET', `/api/admin/invite-codes?status=${status}`),
+    revokeInviteCode: (id: string) => request<void>('POST', `/api/admin/invite-codes/${id}/revoke`, {}),
   },
 };
 

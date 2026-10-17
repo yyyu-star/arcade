@@ -6,6 +6,7 @@
  *   令牌对不上按 IP 和全站每小时计数，超了 429（见 bearerAuth）。只有它能建管理员、能动管理员账号。
  * - 平台页 /admin：当前会话是管理员，写请求照常要 X-Arcade 和 Origin。只能动普通账号：
  *   偷到管理员 cookie 的人改不了管理员的密码，也删不掉管理员。
+ *   例外：邀请额度（0.20.0）两种调用方都能给管理员改，额度只是能邀请几个人，碰不到账号本身。
  *
  * 写入都记在"账号安全"类；每个管理员（令牌算一个）每天最多 adminPerDay 次写操作，只算成功的。
  */
@@ -13,6 +14,7 @@ import { check, checkUsernameFree, insertUser, str } from './auth';
 import { type Ctx, DAY, HOUR } from './context';
 import { hashPassword, hashRecoveryCode, newRecoveryCode, newUserId, normalizeRecoveryCode } from './crypto';
 import { ApiError, json, noContent, rateLimited } from './http';
+import { adminRevokeStatement, inviteRulesState, parseUserQuota, planInviteRulesChange, rememberInviteRules } from './invite-codes';
 import { meter } from './meter';
 import { checkCached, clearStatement, dailyCapStatement, hit, peek, remember, takeAnonToken } from './ratelimit';
 import { deleteUserStatements, type UserRow } from './session';
@@ -304,4 +306,38 @@ export async function setWalletRules(c: Ctx): Promise<Response> {
     rememberRules(plan.rules, c.now);
   }
   return json(200, await walletRulesState(c));
+}
+
+// ---------- 邀请码（0.20.0，15.20） ----------
+
+/** POST /api/admin/settings/invites：有变化时 2 行（settings 1 + 每日计数 1），没变化 0 行；改了即时生效（别的 isolate 最多晚 30 秒） */
+export async function setInviteRules(c: Ctx): Promise<Response> {
+  const plan = await planInviteRulesChange(c, c.session?.user.username ?? '令牌');
+  if (plan.stmt) {
+    const cap = await checkAdminCap(c);
+    await c.db.batch([plan.stmt, cap]);
+    rememberInviteRules(plan.rules, c.now);
+  }
+  return json(200, await inviteRulesState(c));
+}
+
+/**
+ * POST /api/admin/users/<用户 id>/invite-quota {quota: 整数 | null}：单独给某人改额度，null 恢复按角色的默认。2 行（users 1 + 每日计数 1）。
+ * 管理员的额度也能改（不像重设密码那样护着管理员：额度只是能邀请几个人）
+ */
+export async function setUserInviteQuota(c: Ctx): Promise<Response> {
+  const quota = parseUserQuota(c.body.quota);
+  if (!(await c.db.first(c.db.stmt('SELECT 1 FROM users WHERE id = ?1', c.params.userId)))) throw new ApiError(404, 'not_found');
+  const cap = await checkAdminCap(c);
+  await c.db.batch([c.db.stmt('UPDATE users SET invite_quota = ?1 WHERE id = ?2', quota, c.params.userId), cap]);
+  return json(200, { quota, custom: quota !== null });
+}
+
+/** POST /api/admin/invite-codes/<id>/revoke：撤回一个没用的码。2 行（码 1 + 每日计数 1）；已用、已撤回、不存在 404、0 行 */
+export async function adminRevokeCode(c: Ctx): Promise<Response> {
+  const row = await c.db.first(c.db.stmt('SELECT 1 FROM invite_codes WHERE id = ?1 AND used_at IS NULL AND revoked_at IS NULL', c.params.id));
+  if (!row) throw new ApiError(404, 'not_found');
+  const cap = await checkAdminCap(c);
+  await c.db.batch([adminRevokeStatement(c.db, c.params.id!, c.now), cap]);
+  return noContent();
 }
