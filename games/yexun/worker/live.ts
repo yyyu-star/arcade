@@ -100,7 +100,7 @@ export async function whoIs(req: Request, env: LiveEnv, timeoutMs = ME_TIMEOUT_M
   } catch {
     return down;
   } finally {
-    clearTimeout(timer ?? null);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -173,6 +173,6 @@ export async function handleLive(req: Request, env: LiveEnv, timeoutMs = WALLET_
   } catch {
     return fail(503, 'unavailable', cookies);
   } finally {
-    clearTimeout(timer ?? null);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
