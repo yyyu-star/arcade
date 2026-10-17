@@ -10,6 +10,7 @@ import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.t
 import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
+import { mergeHint } from '../src/view/ui/mergeHint.ts';
 
 export type Skill = 'novice' | 'normal';
 export type Build = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire';
@@ -277,7 +278,9 @@ export class Bot {
     let best = 0;
     let bs = -Infinity;
     cs.forEach((c, i) => {
-      const s = this.score(w, c, plan);
+      // 认得合成配方（和卡上的提示同一个纯函数）：正好凑成的先拿，差一步的往前排（1.1，双修以前机器人很少凑得齐）
+      const h = mergeHint(w, c);
+      const s = this.score(w, c, plan) + (h ? (h.ready ? 30 : 12) : 0);
       if (s > bs) {
         bs = s;
         best = i;
