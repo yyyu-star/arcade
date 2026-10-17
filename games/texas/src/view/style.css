@@ -660,7 +660,7 @@ body::before {
 }
 .raise-line { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
 .step { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line-2); background: rgba(255, 255, 255, .06); font-size: var(--fs-6); line-height: 1; padding: 0; }
-.raise-amt { display: block; text-align: center; margin-top: var(--s-2); font-size: var(--fs-5); font-weight: 800; color: var(--gold); }
+.raise-amt { flex: none; min-width: 96px; text-align: right; font-size: var(--fs-5); font-weight: 800; color: var(--gold); white-space: nowrap; }
 .slider {
   flex: 1;
   height: 44px;
@@ -706,6 +706,12 @@ body::before {
 /* 好友房嘲讽（0.3.0）：按钮、顺手提示在左下，面板从左下弹出；都不压我的底牌（正下方）和操作区（右下） */
 /* kit 画的"互动"按钮的位置（0.13.0）：hud 里占一个和原来按钮一样大的空位，矩形交给 TableFun */
 .fun-slot { width: calc(88px * var(--ui)); height: var(--hit); flex: none; }
+/*
+ * kit 的"互动"按钮画在舞台外面（按 .fun-slot 的屏幕矩形摆），字 13 px、图标 22 px 写死：大屏上舞台放大到 1.5–2 倍，框是大的、字还是小的（0.18.2）。
+ * 按舞台的放大倍数一起放大，手机上不缩小。kit 的主题变量（0.16.0）只管颜色和字体，没有大小，所以这里直接写它的类名
+ */
+.atf-ui .atf-btn { font-size: max(13px, calc(13px * var(--stage-scale, 1))); }
+.atf-ui .atf-btn svg { width: max(22px, calc(22px * var(--stage-scale, 1))); height: max(22px, calc(22px * var(--stage-scale, 1))); }
 /* 一手打完的顺手短语：在"歇一手、互动"那一行上面，不挨着我的头像和名牌 */
 .fun-hints { position: absolute; left: 0; bottom: calc(100% + var(--s-2)); display: flex; gap: var(--s-2); }
 /* 竖屏 hud 在顶上，下面是顶上的座位；放到我的名牌和赔率那一行之间的空地（舞台做了缩放，fixed 按舞台算） */

@@ -92,8 +92,12 @@ export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
   if (mine) return { x: f.cx, y: p.y - 100 };
   // 竖屏桌子窄、座位挤：顶上的放在名牌正下方，两边的放在名牌朝桌心那一侧、底牌下面，不碰动作签、底牌和名牌（0.10.0 审阅）
   if (g.tall) return isTop(p, g) ? { x: p.x, y: p.y + 104 } : { x: p.x + (p.x < f.cx ? 1 : -1) * 124, y: p.y + 44 };
-  const k = 0.42;
-  return { x: p.x + (f.cx - p.x) * k, y: p.y + (f.cy - p.y) * k + 6 };
+  // 往桌心走 42%，但离座位 90–130 之间（0.18.2）：只按比例时顶上的座位离桌心近，筹码贴着名牌，两边的离得远，筹码跑到桌子中间，看着不齐
+  const dx = f.cx - p.x;
+  const dy = f.cy - p.y;
+  const dist = Math.hypot(dx, dy);
+  const d = Math.min(130, Math.max(90, dist * 0.42));
+  return { x: p.x + (dx / dist) * d, y: p.y + (dy / dist) * d + 6 };
 }
 
 /** 庄家按钮：在下注的位置旁边偏一点 */
@@ -107,8 +111,8 @@ export function buttonPos(p: Pt, g: Geo, mine: boolean): Pt {
 export const boardPos = (g: Geo, i: number): Pt => ({ x: g.w / 2 + (i - 2) * (g.tall ? 62 : 66), y: felt(g).cy - 18 });
 /** 池子在公共牌下面（0.1.1：原来在上面，和顶上座位的下注、庄家按钮挤在一起） */
 export const potPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 54 });
-/** 一手的结果条：公共牌和池子下面（0.1.1：放在上面会盖住顶上座位的庄家按钮），按上边摆 */
-export const resultPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 76 });
+/** 一手的结果条：公共牌和池子下面（0.1.1：放在上面会盖住顶上座位的庄家按钮），按上边摆；0.18.2 往上挪 12，两行的结果不压我的底牌 */
+export const resultPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 64 });
 /** 牌堆：发牌从这里出，弃的牌、收的牌飞回这里。在桌子正中（公共牌的位置） */
 export const deckPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy - 18 });
 

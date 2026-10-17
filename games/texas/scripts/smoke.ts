@@ -277,6 +277,11 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
           await shot(page, `raise-stacks-${no}`);
           throw new Error(`moving seats out of the raise panel stacked ${stacked} pair(s) of seats`);
         }
+        // 0.18.2：面板矮了一行，电脑上 6 人桌右下角的座位不用再挤成只剩名牌
+        if ((page.viewportSize()?.width ?? 0) >= 1280 && (await page.locator('.seat:not(.empty)').count()) === 6 && (await page.locator('.seat.tucked').count())) {
+          await shot(page, `raise-tucked-${no}`);
+          throw new Error('raise panel still tucks a seat at a 6-seat desktop table');
+        }
         if (shotAt.has(-1)) {
           shotAt.delete(-1);
           await shot(page, 'raise-panel');
