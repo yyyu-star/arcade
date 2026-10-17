@@ -33,6 +33,16 @@ export const Ev = {
   End: 14,
   /** 符咒爆开：x, y, b = 半径 */
   Burst: 15,
+  /** 八卦镜放一道光波：x, y, a = 晚几拍放, b = 推到多远, c = 每拍扩多少 */
+  Wave: 16,
+  /** 火葫芦喷火：x, y, a = 方向表下标, b = 火舌长, c = 半宽（方向表格数） */
+  Flame: 17,
+  /** 缚妖索捆住一只：x, y, a = 这一串里第几只, c = 怪的槽位 */
+  Bind: 18,
+  /** 桃花落地：x, y, b = 半径 */
+  Petal: 19,
+  /** 金钟罩：x, y, a = 0 碎了震开 1 回了一层, b = 震的半径 */
+  Shield: 20,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

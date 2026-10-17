@@ -33,7 +33,10 @@ const MOB_FRAME = ['paper', 'wisp', 'jiangshi', 'lantern', 'fox', 'shishi', 'gen
 const MOB_FALLBACK: Record<string, string> = { fox: 'wisp', shishi: 'jiangshi_big', general: 'jiangshi_big', boss: 'jiangshi_big' };
 const MOB_TINT = [MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e];
 
-const FIRE_SFX: Record<string, SfxName> = { sword: 'sword', talisman: 'talisman', coins: 'coins', flysword: 'flysword', thunder: 'thunder', bell: 'bell' };
+/** 子弹种类 → 图集帧（光波画在 Graphics 上，这里给个占位） */
+const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane' };
+
+const FIRE_SFX: Partial<Record<string, SfxName>> = { sword: 'sword', talisman: 'talisman', coins: 'coins', flysword: 'flysword', thunder: 'thunder', bell: 'bell', mirror: 'mirror', gourd: 'fire', rope: 'rope', petals: 'petal', crane: 'crane' };
 
 export interface GameDeps {
   world: World;
@@ -86,6 +89,11 @@ export class GameScene extends Phaser.Scene {
   private nums!: DamageNumbers;
   private gfx!: Phaser.GameObjects.Graphics;
   private bolts: { pts: number[]; life: number }[] = [];
+  /** 这一帧要画的光波：x, y, 半径, 最大半径 */
+  private waves: number[] = [];
+  /** 缚妖索的绳子：一串点（从主角开始） */
+  private ropes: { pts: number[]; life: number }[] = [];
+  private shieldImg!: Phaser.GameObjects.Image;
   private telegraphs: { x: number; y: number; r: number; life: number; max: number }[] = [];
   private renderX = 0;
   private renderY = 0;
@@ -151,6 +159,8 @@ export class GameScene extends Phaser.Scene {
     // 主角外面再描一圈：同一张图涂成墨色、放大一点垫在后面，轮廓更粗、在怪堆里一眼找得到
     this.heroBack = this.img('hero').setTint(0x17131c).setTintMode(Phaser.TintModes.FILL);
     this.hero = this.img('hero');
+    // 金钟罩：有护盾时罩在主角身上（半透明，前面）
+    this.shieldImg = this.img('goldbell', 0, 0, 1).setVisible(false);
     this.mobs = new Array(MAX_ENEMIES).fill(null);
     this.shots = new Array(MAX_SHOTS).fill(null);
     this.drops = new Array(MAX_DROPS).fill(null);
@@ -293,9 +303,38 @@ export class GameScene extends Phaser.Scene {
         case Ev.Burst:
           this.burst(x, y, 0xf5b52e, ev.b[i]! / 34);
           break;
+        case Ev.Wave:
+          if (ev.a[i] === 0) this.ground.spawn({ frame: 'bagua', x, y, life: 600, s0: 0.6, s1: 1.5, a0: 0.9, a1: 0, rot: 0, spin: 2, ground: true });
+          break;
+        case Ev.Flame:
+          this.flame(x, y, ev.a[i]!, ev.b[i]!, ev.c[i]!);
+          break;
+        case Ev.Bind: {
+          const n = ev.a[i]!;
+          if (n === 0 || this.ropes.length === 0) this.ropes.push({ pts: [this.renderX, this.renderY - 24], life: 420 });
+          this.ropes[this.ropes.length - 1]!.pts.push(x, y - 16);
+          this.fx.spawn({ frame: 'ring', x, y: y - 10, life: 300, s0: 0.25, s1: 0.5, a0: 1, a1: 0, tint: 0xf2c94c });
+          break;
+        }
+        case Ev.Petal:
+          this.burst(x, y - 6, 0xff6fa8, 1.1);
+          if (!LOW_MEMORY) for (let k = 0; k < 3; k++) this.fx.spawn({ frame: 'petal', x, y: y - 6, vx: (Math.random() - 0.5) * 160, vy: -60 - Math.random() * 60, g: 300, life: 420, s0: 1.2, s1: 0.6, rot: Math.random() * 6, spin: 8 });
+          break;
+        case Ev.Shield:
+          if (ev.a[i] === 0) {
+            sfx.play('shieldBreak');
+            this.shake(160, 0.006);
+            this.fx.spawn({ frame: 'ring', x, y: y - 20, life: 450, s0: 0.4, s1: (ev.b[i]! * 2.2) / 128, a0: 1, a1: 0, tint: 0xf2c94c, depth: 60 });
+            this.fx.spawn({ frame: 'goldbell', x, y: y + 6, life: 300, s0: 1, s1: 1.5, a0: 0.8, a1: 0, depth: this.renderY + 2 });
+          } else {
+            sfx.play('shieldUp', { volume: 0.5 });
+            this.fx.spawn({ frame: 'ring', x, y: y - 20, life: 300, s0: 0.3, s1: 0.8, a0: 0.8, a1: 0, tint: 0xf2c94c });
+          }
+          break;
         case Ev.Fire: {
           const id = WEAPON_IDS[ev.a[i]!];
-          if (id) sfx.play(FIRE_SFX[id]!, { volume: 0.6 });
+          const name = id ? FIRE_SFX[id] : undefined;
+          if (name) sfx.play(name, { volume: 0.6 });
           break;
         }
         case Ev.Pickup:
@@ -500,6 +539,16 @@ export class GameScene extends Phaser.Scene {
     this.freeze = Math.max(this.freeze, 55);
   }
 
+  /** 火葫芦的一口火：沿扇面撒几团火苗往外飞 */
+  private flame(x: number, y: number, dirIdx: number, range: number, half: number): void {
+    const n = LOW_MEMORY ? 3 : 7;
+    for (let k = 0; k < n; k++) {
+      const a = Math.atan2(SIN[dirIdx]!, COS[dirIdx]!) + ((Math.random() * 2 - 1) * half * Math.PI * 2) / 256;
+      const v = range * (2.2 + Math.random() * 1.2);
+      this.fx.spawn({ frame: 'flame', x: x + Math.cos(a) * 14, y: y + Math.sin(a) * 14, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, life: 300 + Math.random() * 120, s0: 1, s1: 2.4, a0: 1, a1: 0, rot: Math.random() * 6, spin: (Math.random() - 0.5) * 6 });
+    }
+  }
+
   private burst(x: number, y: number, tint: number, size: number): void {
     this.fx.spawn({ frame: 'haze', x, y, life: 220, s0: 0.8 * size, s1: 1.6 * size, a0: 0.8, a1: 0, tint });
     if (LOW_MEMORY) return;
@@ -543,6 +592,15 @@ export class GameScene extends Phaser.Scene {
     this.hero.setPosition(hx, hy - bob * 3).setScale(sx, sy).setRotation(walking ? Math.sin(this.walk) * 0.05 : 0).setDepth(hy).setAlpha(blink ? 0.5 : 1);
     this.heroBack.setPosition(hx, hy - bob * 3 + 1).setScale(sx * 1.07, sy * 1.05).setRotation(this.hero.rotation).setDepth(hy - 0.1).setAlpha(this.hero.alpha);
     this.heroShadow.setPosition(hx, hy).setDepth(-400);
+    if (w.shield > 0) {
+      const sf = this.frame('goldbell');
+      this.shieldImg
+        .setVisible(true)
+        .setPosition(hx, hy + 8)
+        .setScale((0.95 + Math.sin(this.now * 0.004) * 0.03) / sf.res)
+        .setAlpha(0.28 + 0.08 * Math.min(3, w.shield))
+        .setDepth(hy + 1);
+    } else this.shieldImg.setVisible(false);
     this.aura.setPosition(hx, hy).setDepth(-450).setAlpha(0.75 + Math.sin(this.now * 0.004) * 0.15);
     // 脚印：走着的时候每隔一段在身后留一个
     if (walking && moving) {
@@ -561,6 +619,8 @@ export class GameScene extends Phaser.Scene {
     const lookY = hy - 20 + SIN[w.face]! * (walking ? 24 : 0);
     cam.centerOn(cam.midPoint.x + (lookX - cam.midPoint.x) * 0.15, cam.midPoint.y + (lookY - cam.midPoint.y) * 0.15);
 
+    this.gfx.clear();
+    this.waves.length = 0;
     this.drawMobs(inter, dt);
     this.drawShots(inter);
     this.drawDrops(inter);
@@ -596,11 +656,13 @@ export class GameScene extends Phaser.Scene {
       else if (def.kind === 'boss' && w.eS[i] === 1) lift = Math.sin((1 - w.eT[i]! / 30) * Math.PI) * 120;
       const size = w.eSize[i]!;
       const flip = this.renderX < x ? -1 : 1;
+      // 被捆住的发抖
+      const bound = w.eBind[i]! > w.tick;
       // 走路的小动作：纸人晃、落地压扁
       const wob = def.kind === 'paper' ? Math.sin(this.now * 0.012 + i * 1.7) * 0.06 : 0;
       const squash = lift === 0 && (def.kind === 'jiangshi' || def.kind === 'general') ? 0.94 : 1;
       m.img
-        .setPosition(x, y - lift)
+        .setPosition(x + (bound ? Math.sin(this.now * 0.09 + i) * 1.8 : 0), y - lift)
         .setScale((flip * size * (2 - squash)) / m.res, (size * squash) / m.res)
         .setRotation(wob)
         .setDepth(y);
@@ -652,18 +714,24 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const kind = w.sKind[i]!;
-      const key = kind === Shot.Talisman ? 'talisman' : kind === Shot.Coin ? 'coin' : kind === Shot.Fly ? 'flysword' : 'fireball';
+      const key = SHOT_FRAME[kind] ?? 'fireball';
       if (!s || s.gen !== w.sGen[i]) {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
         img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
-        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : 1.2;
+        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 2.2 : kind === Shot.Crane ? 1.3 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);
+        // 光波不用图，画在 Graphics 上（drawGfx）
+        img.setVisible(kind !== Shot.Wave);
         s = this.shots[i] = { gen: w.sGen[i]!, img, trail: 0 };
       }
       const x = inter(w.sPX[i]!, w.sX[i]!);
       const y = inter(w.sPY[i]!, w.sY[i]!);
+      if (kind === Shot.Wave) {
+        if (w.sR[i]! > 0) this.waves.push(x, y, w.sR[i]!, w.sDist[i]!);
+        continue;
+      }
       s.img.setPosition(x, y).setDepth(y + 40);
       if (kind === Shot.Talisman) {
         s.img.rotation += 0.35;
@@ -678,6 +746,16 @@ export class GameScene extends Phaser.Scene {
         // 剑尖朝飞的方向（图是剑尖朝上）；待命时微微晃
         s.img.setRotation(st === 0 ? Math.sin(this.now * 0.005 + i) * 0.2 : Math.atan2(vy, vx) + Math.PI / 2);
         if (st !== 0 && !LOW_MEMORY) this.fx.spawn({ frame: 'flysword', x, y, life: 140, s0: 1.1, s1: 1, a0: 0.35, a1: 0, rot: s.img.rotation, tint: 0x9fd8ff });
+      } else if (kind === Shot.Petal) {
+        // 从上面飘下来：还剩几拍就离地多高，边落边转
+        const left = w.sLife[i]!;
+        s.img.setPosition(x + Math.sin(left * 0.7 + i) * 6, y - left * 12).setRotation(left * 0.4 + i).setDepth(y + 40);
+      } else if (kind === Shot.Crane) {
+        const dx = w.sX[i]! - w.sPX[i]!;
+        if (Math.abs(dx) > 0.3) s.img.setFlipX(dx < 0);
+        const diving = w.sState[i] === 1;
+        s.img.setRotation(diving ? Math.atan2(w.sVY[i]!, Math.abs(w.sVX[i]!)) * (dx < 0 ? -1 : 1) * 0.6 : Math.sin(this.now * 0.006 + i) * 0.12).setDepth(y + 200);
+        if (diving && !LOW_MEMORY && ++s.trail % 2 === 0) this.fx.spawn({ frame: 'crane', x, y, life: 160, s0: 1.3, s1: 1.2, a0: 0.3, a1: 0, sx: s.img.flipX ? -1 : 1, tint: 0xbfd8ff });
       } else {
         s.img.setScale((1.2 + Math.sin(this.now * 0.02 + i) * 0.15) / this.frame('fireball').res);
       }
@@ -713,7 +791,28 @@ export class GameScene extends Phaser.Scene {
 
   private drawGfx(dt: number): void {
     const g = this.gfx;
-    g.clear();
+    // 八卦镜的光波：深靛外圈 + 亮青内圈，越往外越淡
+    const wv = this.waves;
+    for (let k = 0; k < wv.length; k += 4) {
+      const a = Math.max(0.15, 1 - wv[k + 2]! / wv[k + 3]!);
+      g.lineStyle(10, 0x1f3a78, a * 0.7);
+      g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
+      g.lineStyle(5, 0x7fe0ff, a);
+      g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
+    }
+    // 缚妖索：金绳加墨边，一串连起来
+    for (const r of this.ropes) {
+      r.life -= dt;
+      const a = Math.min(1, r.life / 200);
+      for (const [wd, c] of [[7, 0x17131c], [3.5, 0xf2c94c]] as const) {
+        g.lineStyle(wd, c, a);
+        g.beginPath();
+        g.moveTo(r.pts[0]!, r.pts[1]!);
+        for (let k = 2; k < r.pts.length; k += 2) g.lineTo(r.pts[k]!, r.pts[k + 1]!);
+        g.strokePath();
+      }
+    }
+    this.ropes = this.ropes.filter((r) => r.life > 0);
     // 闪电：外面深靛蓝、中间亮蓝、白芯（雪地上要有深色边才看得见）
     for (const b of this.bolts) {
       b.life -= dt;
@@ -750,8 +849,8 @@ export class GameScene extends Phaser.Scene {
     this.d.hud.update({
       hp: Math.max(0, w.hp),
       hpMax: w.stats.hpMax,
-      shield: 0,
-      shieldMax: 0,
+      shield: w.shield,
+      shieldMax: w.shieldMax,
       level: w.level,
       xp: w.xp / xpNeed(w.level),
       left: (DAWN_TICK - w.tick) / 30,

@@ -1,12 +1,12 @@
 /**
  * 入口：开始菜单 → 守夜一局 → 结算（再来一局 / 换难度 / 大厅）。第一次打开只有一个大按钮，第一局带最多 3 条引导。
  * 画布按 CSS 尺寸 × 渲染倍数开，再用 CSS 缩回去：手机上不糊，省内存设备倍数封顶 2（viewport.ts）。
- * 调试参数：?seed=123 固定种子，?diff=easy|normal|hard，?play 跳过菜单直接开局，?auto 让机器人代打、?warp=9000 先快进到第 9000 拍、&choose 停在选卡（这三个只在开发服务器里有，冒烟截图用），?sheet 看图集。
+ * 调试参数：?seed=123 固定种子，?diff=easy|normal|hard，?play 跳过菜单直接开局，?auto 让机器人代打、?warp=9000 先快进到第 9000 拍、&choose 停在选卡、?give=mirror:8,gourd:8 开局换法器（这几个只在开发服务器里有，冒烟截图用），?sheet 看图集。
  */
 import Phaser from 'phaser';
 import { DAWN_TICK, DIFFICULTIES, type Difficulty } from './content/waves.ts';
-import { PASSIVE_IDS, PASSIVES, WEAPONS } from './content/weapons.ts';
-import { createWorld, step, type World } from './core/index.ts';
+import { PASSIVE_IDS, PASSIVES, WEAPONS, type WeaponId } from './content/weapons.ts';
+import { createWorld, grantWeapon, step, type World } from './core/index.ts';
 import { loadSave, recordRun, settings, writeSave } from './platform/save.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
 import { music } from './view/audio/music.ts';
@@ -210,6 +210,15 @@ async function boot(): Promise<void> {
     const w = createWorld({ seed, mode: 'vigil', difficulty });
     world = w;
     autopilot = undefined;
+    if (import.meta.env.DEV && q.has('give')) {
+      // ?give=mirror:8,gourd:8：开局换成这几件法器（看新法器的画面用）
+      w.weapons.length = 0;
+      w.wstats.length = 0;
+      for (const part of q.get('give')!.split(',')) {
+        const [id, lv] = part.split(':');
+        if (id && id in WEAPONS) grantWeapon(w, id as WeaponId, Number(lv ?? 1));
+      }
+    }
     if (import.meta.env.DEV && (q.has('auto') || q.has('warp'))) {
       const { Bot } = await import('../tools/bots.ts');
       const bot = new Bot('normal', 'sword', seed);
@@ -281,7 +290,7 @@ async function boot(): Promise<void> {
     // 调试参数直接开局（冒烟截图、机器人代打）；?diff 指定难度
     const diffQ = q.get('diff');
     const qd = diffQ && diffQ in DIFFICULTIES ? (diffQ as Difficulty) : null;
-    if (q.has('auto') || q.has('warp') || q.has('play')) void startRun(qd ?? 'normal');
+    if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 'normal');
     else menu.show({ firstTime: save.runs === 0, difficulty: qd ?? save.difficulty, best: save.best });
   });
   fitViewport(() => {

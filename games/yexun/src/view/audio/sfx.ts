@@ -4,6 +4,7 @@
 
 export type SfxName =
   | 'sword' | 'talisman' | 'coins' | 'flysword' | 'mirror' | 'thunder' | 'bell' | 'fire'
+  | 'rope' | 'petal' | 'shieldUp' | 'shieldBreak' | 'crane'
   | 'hit' | 'crit' | 'kill' | 'pickup' | 'coin' | 'heal' | 'levelup' | 'choose' | 'evolve'
   | 'chest' | 'hurt' | 'heartbeat' | 'elite' | 'boss' | 'bossStomp' | 'bossSummon' | 'bossBreath'
   | 'gateOpen' | 'extract' | 'dawn' | 'death' | 'click';
@@ -233,6 +234,26 @@ const VOICES: Record<SfxName, Voice> = {
   fire: (t) => { // 喷火：低通噪声呼呼
     noise(t, 0.34, { type: 'lowpass', f0: 500, f1: 1300, q: 0.7, vol: 0.28, attack: 0.05 });
     noise(t + 0.05, 0.25, { type: 'bandpass', f0: 250, f1: 180, vol: 0.2, attack: 0.04 });
+  },
+  rope: (t) => { // 甩绳：短促的抽"咻"+ 绳子绷紧的低弦
+    noise(t, 0.12, { f0: 1800, f1: 600, q: 3, vol: 0.2, attack: 0.01 });
+    tone(196, t + 0.08, 0.22, { type: 'triangle', f1: 180, vol: 0.14 });
+  },
+  petal: (t) => { // 落花：很轻的两声高音，五声音阶
+    tone(pent(7), t, 0.18, { vol: 0.06, attack: 0.01 });
+    tone(pent(9), t + 0.06, 0.2, { vol: 0.05, attack: 0.01 });
+  },
+  shieldUp: (t) => { // 金钟罩回一层：短钟声
+    metal(392, t, 0.6, [1, 2.4, 4.1], 0.1);
+  },
+  shieldBreak: (t) => { // 金钟罩碎：重钟 + 碎裂噪声
+    metal(196, t, 1.1, [1, 2.4, 4.1, 6.3], 0.22);
+    noise(t, 0.25, { type: 'highpass', f0: 2500, f1: 6000, vol: 0.22 });
+  },
+  crane: (t) => { // 纸鹤俯冲：纸翅扑扇
+    noise(t, 0.05, { f0: 3500, q: 2, vol: 0.1 });
+    noise(t + 0.06, 0.05, { f0: 3000, q: 2, vol: 0.08 });
+    tone(900, t, 0.12, { type: 'triangle', f1: 1600, vol: 0.05 });
   },
   // 战斗反馈 ----
   hit: (t) => { // 短促有肉感

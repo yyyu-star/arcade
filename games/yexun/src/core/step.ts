@@ -21,7 +21,7 @@ import {
 } from '../content/weapons.ts';
 import { Ev } from './events.ts';
 import { DIR_N } from './dirs.ts';
-import { clamp, dcos, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
+import { clamp, dcos, dirIndex, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
 import { Grid } from './grid.ts';
 import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, World, type Choice, type Setup } from './state.ts';
 
@@ -120,6 +120,13 @@ function heal(w: World, n: number): void {
 
 function hurt(w: World, dmg: number): void {
   if (w.invuln > 0 || w.phase !== 'play') return;
+  if (w.shield > 0) {
+    // 金钟罩挡下这一下，碎的时候震开身边（下一拍出手时结算，那时有格子）
+    w.shield--;
+    w.shieldBurst = true;
+    w.invuln = PLAYER.invuln;
+    return;
+  }
   const d = Math.max(1, Math.round(dmg * DIFFICULTIES[w.setup.difficulty].dmgMul - w.stats.armor));
   w.hp -= d;
   w.invuln = PLAYER.invuln;
@@ -183,6 +190,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eAX[i] = 0;
   w.eAY[i] = 0;
   w.eSlow[i] = 0;
+  w.eBind[i] = 0;
   w.eHitAt.fill(0, i * MAX_WEAPONS, (i + 1) * MAX_WEAPONS);
   w.eCount++;
   if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
@@ -273,6 +281,14 @@ function moveEnemies(w: World): void {
   const boss = ENEMY_BY_KIND.boss.code;
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;
+    if (w.eBind[i]! > w.tick) {
+      // 被捆住：原地不动，只吃击退
+      w.eX[i] = clamp(w.eX[i]! + w.eKX[i]!, 10, ARENA.w - 10);
+      w.eY[i] = clamp(w.eY[i]! + w.eKY[i]!, 10, ARENA.h - 10);
+      w.eKX[i]! *= 0.72;
+      w.eKY[i]! *= 0.72;
+      continue;
+    }
     const kind = ENEMIES[w.eKind[i]!]!.kind;
     let dx = w.x - w.eX[i]!;
     let dy = w.y - w.eY[i]!;
@@ -420,7 +436,8 @@ function bossAct(w: World, i: number, sp: number): number {
 /** 怪与怪之间轻推挤：只和同格、邻格的比 */
 function separate(w: World, g: Grid): void {
   for (let i = 0; i < MAX_ENEMIES; i++) {
-    if (!w.eAlive[i]) continue;
+    // 被捆住的像钉在地上：别的怪挤它，它不让开（挤的那只自己绕开）
+    if (!w.eAlive[i] || w.eBind[i]! > w.tick) continue;
     const n = g.query(w, w.eX[i]!, w.eY[i]!, w.eR[i]!);
     for (let j = 0; j < n; j++) {
       const o = g.out[j]!;
@@ -568,8 +585,172 @@ function fireWeapons(w: World, g: Grid): void {
           }
         }
         break;
+      case 'mirror':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.mirror);
+          // 几道光波一起放出去，后面的晚 8 拍（起始半径是负的）
+          for (let j = 0; j < e.amount; j++) {
+            const i = addShot(w, Shot.Wave, w.x, w.y, 0, 0, 1 << 30, e.dmg, -j * 8 * s.speed, 0, k, j);
+            if (i >= 0) w.sDist[i] = e.area;
+            w.ev.push(Ev.Wave, w.x, w.y, j * 8, e.area, s.speed);
+          }
+        }
+        break;
+      case 'gourd':
+        gourdTick(w, g, k, wp, s, e);
+        break;
+      case 'rope':
+        if (--wp.timer <= 0) wp.timer = rope(w, g, k, s, e) ? e.cd : 10;
+        break;
+      case 'petals':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          // 这一阵最多回 2 点血（记在 phase 上，花瓣砸中时扣）
+          wp.phase = 2;
+          w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.petals);
+          for (let j = 0; j < e.amount; j++) {
+            const a = w.rWeapon.int(DIR_N);
+            const r = fsqrt(w.rWeapon.next()) * e.area;
+            addShot(w, Shot.Petal, w.x + dcos(a) * r, w.y + dsin(a) * r * 0.8, 0, 0, s.duration + j * 2, e.dmg, 34, 0, k, j);
+          }
+        }
+        break;
+      case 'shield':
+        shieldTick(w, g, k, wp, s, e);
+        break;
+      case 'crane':
+        craneTick(w, g, k, wp, s, e);
+        break;
     }
   }
+}
+
+/** 火葫芦：没在喷时找最近的怪定方向；喷的那几拍，扇面里的怪隔 rehit 拍挨一下 */
+function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number; angle: number }, s: WeaponStats, e: { dmg: number; cd: number; area: number; amount: number }): void {
+  if (wp.phase > 0) {
+    wp.phase--;
+    const ux = dcos(wp.angle);
+    const uy = dsin(wp.angle);
+    // 半宽：基础 ±22°，扇面每宽 1 级多 6°（换算成方向表格数）
+    const half = Math.round(((22 + 6 * (e.amount - 1)) * DIR_N) / 360);
+    const c = dcos(half);
+    const c2 = c * c;
+    if (wp.phase % 2 === 0) w.ev.push(Ev.Flame, w.x, w.y - 18, wp.angle, e.area, half);
+    const n = g.query(w, w.x, w.y, e.area);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) {
+      const i = scratch[q]!;
+      const dx = w.eX[i]! - w.x;
+      const dy = w.eY[i]! - w.y;
+      const dot = dx * ux + dy * uy;
+      if (dot <= 0 || dot * dot < c2 * (dx * dx + dy * dy)) continue;
+      hitEnemy(w, i, e.dmg, k, ux, uy, s.knock, s.rehit);
+    }
+    return;
+  }
+  if (--wp.timer > 0) return;
+  const t = nearest(w, g, w.x, w.y, e.area * 1.4);
+  if (t < 0) {
+    wp.timer = 6;
+    return;
+  }
+  wp.angle = dirIndex(w.eX[t]! - w.x, w.eY[t]! - w.y);
+  wp.phase = s.duration;
+  wp.timer = e.cd;
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.gourd);
+}
+
+/** 缚妖索：从最近的一只开始，一只接一只往外找最近的没捆的，捆住一串；尸王捆不住，精英只捆一半时间。没有怪返回 false */
+function rope(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): boolean {
+  const boss = ENEMY_BY_KIND.boss.code;
+  let cx = w.x;
+  let cy = w.y;
+  let reach = 320;
+  let got = 0;
+  for (let j = 0; j < e.amount; j++) {
+    const n = g.query(w, cx, cy, reach);
+    let best = -1;
+    let bd = Infinity;
+    for (let q = 0; q < n; q++) {
+      const i = g.out[q]!;
+      if (w.eKind[i] === boss || w.eBind[i]! > w.tick) continue;
+      const dx = w.eX[i]! - cx;
+      const dy = w.eY[i]! - cy;
+      const d = dx * dx + dy * dy;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    if (best < 0) break;
+    if (got === 0) w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.rope);
+    const elite = ENEMIES[w.eKind[best]!]!.elite;
+    w.eBind[best] = w.tick + (elite ? s.duration >> 1 : s.duration);
+    w.ev.push(Ev.Bind, w.eX[best]!, w.eY[best]!, got, 0, best);
+    hitEnemy(w, best, e.dmg, k, 0, 0, 0, s.rehit);
+    got++;
+    cx = w.eX[best]!;
+    cy = w.eY[best]!;
+    reach = e.area;
+  }
+  return got > 0;
+}
+
+/** 金钟罩：不满就按冷却回一层；碎了的下一拍震开身边 */
+function shieldTick(w: World, g: Grid, k: number, wp: { timer: number }, s: WeaponStats, e: { dmg: number; cd: number; area: number; amount: number }): void {
+  w.shieldMax = e.amount;
+  if (w.shield > w.shieldMax) w.shield = w.shieldMax;
+  if (w.shieldBurst) {
+    w.shieldBurst = false;
+    w.ev.push(Ev.Shield, w.x, w.y, 0, e.area);
+    const n = g.query(w, w.x, w.y, e.area);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) {
+      const i = scratch[q]!;
+      hitEnemy(w, i, e.dmg, k, w.eX[i]! - w.x, w.eY[i]! - w.y, s.knock, s.rehit);
+    }
+  }
+  if (w.shield >= w.shieldMax) {
+    wp.timer = e.cd;
+    return;
+  }
+  if (--wp.timer > 0) return;
+  wp.timer = e.cd;
+  w.shield++;
+  w.ev.push(Ev.Shield, w.x, w.y, 1, e.area);
+}
+
+/** 纸鹤：常驻盘旋，轮流俯冲到最近的怪那里啄一下（落点一小圈），再飞回来 */
+function craneTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number }, s: WeaponStats, e: { cd: number; amount: number; dmg: number; area: number }): void {
+  let have = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Crane && w.sSlot[i] === k) have++;
+  for (let j = have; j < e.amount; j++) addShot(w, Shot.Crane, w.x, w.y - 60, 0, 0, 0, e.dmg, 26, 0, k, j);
+  if (--wp.timer > 0) return;
+  const target = nearest(w, g, w.x, w.y, e.area);
+  if (target < 0) {
+    wp.timer = 6;
+    return;
+  }
+  for (let tries = 0; tries < e.amount; tries++) {
+    const idx = wp.phase % e.amount;
+    wp.phase++;
+    for (let i = 0; i < MAX_SHOTS; i++) {
+      if (!w.sAlive[i] || w.sKind[i] !== Shot.Crane || w.sSlot[i] !== k || w.sIdx[i] !== idx || w.sState[i] !== 0) continue;
+      const dx = w.eX[target]! - w.sX[i]!;
+      const dy = w.eY[target]! - w.sY[i]!;
+      const d = fsqrt(dx * dx + dy * dy) || 1;
+      w.sState[i] = 1;
+      w.sVX[i] = (dx / d) * s.speed;
+      w.sVY[i] = (dy / d) * s.speed;
+      w.sLife[i] = Math.max(1, Math.ceil(d / s.speed));
+      w.sDmg[i] = e.dmg;
+      w.ev.push(Ev.Fire, w.sX[i]!, w.sY[i]!, WEAPON_CODE.crane);
+      wp.timer = Math.max(3, Math.round(e.cd / e.amount));
+      return;
+    }
+  }
+  wp.timer = 4;
 }
 
 /**
@@ -817,6 +998,84 @@ function moveShots(w: World, g: Grid): void {
       }
       continue;
     }
+    if (kind === Shot.Wave) {
+      // 光波往外扩，扫过的环带（最外 24 单位）里的怪挨一下、往外推
+      w.sR[i]! += s.speed;
+      const r = w.sR[i]!;
+      if (r > 0) {
+        const cx = w.sX[i]!;
+        const cy = w.sY[i]!;
+        const n = g.query(w, cx, cy, r);
+        for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+        const inner = r > 24 ? (r - 24) * (r - 24) : 0;
+        for (let q = 0; q < n; q++) {
+          const en = scratch[q]!;
+          const dx = w.eX[en]! - cx;
+          const dy = w.eY[en]! - cy;
+          if (dx * dx + dy * dy < inner) continue;
+          hitEnemy(w, en, w.sDmg[i]!, k, dx, dy, s.knock, s.rehit);
+        }
+      }
+      if (r >= w.sDist[i]!) killShot(w, i);
+      continue;
+    }
+    if (kind === Shot.Petal) {
+      if (--w.sLife[i]! > 0) continue;
+      const cx = w.sX[i]!;
+      const cy = w.sY[i]!;
+      w.ev.push(Ev.Petal, cx, cy, 0, w.sR[i]!);
+      const n = g.query(w, cx, cy, w.sR[i]!);
+      for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+      let hit = false;
+      for (let q = 0; q < n; q++) if (hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.eX[scratch[q]!]! - cx, w.eY[scratch[q]!]! - cy, s.knock, s.rehit)) hit = true;
+      if (hit && wp.phase > 0) {
+        wp.phase--;
+        heal(w, 1);
+      }
+      killShot(w, i);
+      continue;
+    }
+    if (kind === Shot.Crane) {
+      const amount = eff(w, s).amount;
+      if (w.sIdx[i]! >= amount) {
+        killShot(w, i);
+        continue;
+      }
+      const cs = w.sState[i]!;
+      if (cs === 0) {
+        // 盘旋：比飞剑高、圈更大、转得慢
+        const a = w.tick * 2 + Math.floor((w.sIdx[i]! * DIR_N) / amount);
+        const tx = w.x + dcos(a) * 70;
+        const ty = w.y - 64 + dsin(a) * 26;
+        w.sX[i] = w.sX[i]! + (tx - w.sX[i]!) * 0.25;
+        w.sY[i] = w.sY[i]! + (ty - w.sY[i]!) * 0.25;
+        continue;
+      }
+      if (cs === 1) {
+        w.sX[i]! += w.sVX[i]!;
+        w.sY[i]! += w.sVY[i]!;
+        if (--w.sLife[i]! > 0) continue;
+        // 啄：落点一小圈
+        const n = g.query(w, w.sX[i]!, w.sY[i]!, w.sR[i]!);
+        for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+        for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+        w.sState[i] = 2;
+        continue;
+      }
+      const dx = w.x - w.sX[i]!;
+      const dy = w.y - 64 - w.sY[i]!;
+      const d = fsqrt(dx * dx + dy * dy) || 1;
+      const sp = s.speed * 0.8;
+      if (d <= sp + 30) {
+        w.sState[i] = 0;
+        continue;
+      }
+      w.sVX[i] = (dx / d) * sp;
+      w.sVY[i] = (dy / d) * sp;
+      w.sX[i]! += w.sVX[i]!;
+      w.sY[i]! += w.sVY[i]!;
+      continue;
+    }
     // 飞剑
     const st = w.sState[i]!;
     if (st === 0) {
@@ -1018,6 +1277,15 @@ function recompute(w: World): void {
   w.stats = s;
   if (grow > 0) w.hp += grow;
   w.wstats = w.weapons.map((o) => weaponStats(o.id, o.level, o.evolved));
+}
+
+/** 测试和调试用：开局直接给一件法器（到某一级）。规则照常，只是跳过选卡 */
+export function grantWeapon(w: World, id: WeaponId, level = 1): void {
+  const o = w.weapons.find((x) => x.id === id);
+  if (!o) addWeapon(w, id);
+  const owned = w.weapons.find((x) => x.id === id)!;
+  owned.level = Math.max(owned.level, Math.min(MAX_WEAPON_LEVEL, level));
+  recompute(w);
 }
 
 function addWeapon(w: World, id: WeaponId): void {

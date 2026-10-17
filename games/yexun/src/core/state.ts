@@ -9,7 +9,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -23,6 +23,12 @@ export const Shot = {
   Fly: 3,
   /** 敌人的：灯笼鬼的火球、尸王的尸气 */
   Fireball: 4,
+  /** 八卦镜的光波：sR 是当前半径（开始是负的 = 还没放出来），sDist 是推到多远 */
+  Wave: 5,
+  /** 桃花雨的一片花瓣：sLife 拍后落地 */
+  Petal: 6,
+  /** 纸鹤：sState 0 盘旋 1 俯冲（sLife 是还要飞几拍）2 飞回 */
+  Crane: 7,
 } as const;
 export type Shot = (typeof Shot)[keyof typeof Shot];
 
@@ -115,6 +121,10 @@ export class World {
   wstats: WeaponStats[] = [];
   passives: Partial<Record<PassiveId, number>> = {};
   stats: Stats;
+  /** 金钟罩：还能挡几下、最多几下；碎了的那一拍记一笔，下一拍出手时震开 */
+  shield = 0;
+  shieldMax = 0;
+  shieldBurst = false;
   /** 回血的零头（每拍加一点，满 1 才加到血上，免得血量出现很长的小数） */
   regenAcc = 0;
 
@@ -145,6 +155,8 @@ export class World {
   readonly eAY = new Float64Array(MAX_ENEMIES);
   /** 行为里的速度（尸王跳砸这一跳每拍走多远） */
   readonly eV = new Float64Array(MAX_ENEMIES);
+  /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
+  readonly eBind = new Int32Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
   readonly eSlow = new Uint8Array(MAX_ENEMIES);
   /** 同一件法器连着打同一只的冷却：[怪 × 法器槽] = 下次能打的拍数 */
