@@ -58,3 +58,10 @@
 .yx-bossbar div { width: min(52vw, 520px); height: 14px; border: 3px solid #17131c; border-radius: 7px; background: #2a2030; overflow: hidden; }
 .yx-bossbar b { display: block; height: 100%; background: linear-gradient(#e7c86a, #b8861e); transition: width 0.2s; }
 @media (max-height: 500px) { .yx-bossbar { top: 58px; } .yx-banners { padding-top: 14vh; } .yx-banner .t { font-size: 26px; } }
+
+/* WebGL 上下文丢了超过 3 秒的刷新提示：盖在最上层，整条可点（≥44 高） */
+.yx-glitch {
+  position: fixed; left: 50%; top: max(10px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 9999;
+  min-height: 44px; max-width: 92vw; padding: 0 16px; border: 2.5px solid #17131c; border-radius: 12px;
+  background: #f6efdc; color: #17131c; font: 700 15px system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; cursor: pointer;
+}

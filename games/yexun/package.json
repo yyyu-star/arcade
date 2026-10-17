@@ -1,7 +1,7 @@
 {
   "name": "yexun",
   "private": true,
-  "version": "0.0.17",
+  "version": "0.0.18",
   "type": "module",
   "license": "MIT",
   "description": "夜巡：道士夜巡雪夜古镇的幸存者类动作游戏，守夜和夜探两个模式；筹码无任何现金价值",
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker",
     "test": "npm run typecheck && vitest run",
     "shot": "node tools/shot.ts",
+    "smoke": "node tools/smoke.ts",
     "sim": "node tools/sim.ts",
     "bench": "node tools/bench.ts"
   },
