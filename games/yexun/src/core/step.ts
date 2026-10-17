@@ -128,7 +128,7 @@ export function step(w: World, dir: number, choice = -1): void {
       w.pendingLevels--;
       w.choices = [];
       w.phase = 'play';
-      gainXp(w, xpNeed(w.level) * 0.15);
+      gainXp(w, xpNeed(w.level, w.raid !== null) * 0.15);
       if (w.pendingLevels > 0) openChoices(w);
     }
     return;
@@ -2072,7 +2072,7 @@ function collect(w: World, i: number): void {
 function gainXp(w: World, v: number): void {
   w.xp += v * w.stats.xpMul;
   for (;;) {
-    const need = xpNeed(w.level);
+    const need = xpNeed(w.level, w.raid !== null);
     if (w.xp < need) break;
     w.xp -= need;
     w.level++;

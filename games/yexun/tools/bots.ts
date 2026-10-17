@@ -7,6 +7,7 @@
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
 import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
+import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
 
@@ -42,6 +43,11 @@ export class Bot {
     this.build = build;
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
   }
+
+  /** 夜探：要去的方向（RaidBot 给的 1–32），有就代替"捡掉落"的拉力；-1 = 站着搜箱子（不往哪拉）；0 = 守夜照旧。躲怪照旧 */
+  goal = 0;
+  /** 夜探：顺路捡附近的魂珠和掉落（要撤的时候关掉，不然捡个没完走不到门） */
+  detour = true;
 
   /** 复用同一个结果对象（每拍一个新对象会让模拟器多花几个百分点在垃圾回收上）：调用方当拍用完，不要留着 */
   private readonly res = { dir: 0, choice: -1 };
@@ -144,7 +150,16 @@ export class Bot {
     }
     let gx = 0;
     let gy = 0;
-    if (best >= 0) {
+    // 夜探：沿 RaidBot 的路走时墙由它绕；离开路去捡东西时照守夜的办法推开墙
+    let following = this.goal < 0;
+    if (this.goal < 0) {
+      // 站着搜箱子：不加拉力，只躲怪
+    } else if (this.goal > 0 && !(this.detour && best >= 0 && threat === 0 && bd < 220 * 220)) {
+      following = true;
+      const pull = threat > 0 ? 0.35 : 1;
+      gx = inputCos(this.goal) * pull;
+      gy = inputSin(this.goal) * pull;
+    } else if (best >= 0) {
       const dx = tx - w.x;
       const dy = ty - w.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -154,10 +169,12 @@ export class Bot {
     }
     // 墙：离边 300 以内往里推
     const wall = (p: number, size: number): number => (p < 300 ? (300 - p) / 300 : p > size - 300 ? -(p - (size - 300)) / 300 : 0);
-    let vx = fx + gx + wall(w.x, ARENA.w) * 1.5;
-    let vy = fy + gy + wall(w.y, ARENA.h) * 1.5;
+    const AW = w.raid ? w.arenaW : ARENA.w;
+    const AH = w.raid ? w.arenaH : ARENA.h;
+    let vx = fx + gx + wall(w.x, AW) * 1.5;
+    let vy = fy + gy + wall(w.y, AH) * 1.5;
     // 地图上的墙和棺材（义庄）：离得近就往外推，免得顶着墙走不动
-    for (const b of w.blocks) {
+    if (!following) for (const b of w.blocks) {
       const nx = Math.max(b.x, Math.min(w.x, b.x + b.w));
       const ny = Math.max(b.y, Math.min(w.y, b.y + b.h));
       const dx = w.x - nx;
@@ -168,9 +185,9 @@ export class Bot {
       vy += (dy / d) * (70 - d) / 35;
     }
     // 没什么事：绕着场地中心慢慢兜圈（站着不动会被围死）
-    if (Math.hypot(vx, vy) < 0.2) {
-      const cx = ARENA.w / 2 - w.x;
-      const cy = ARENA.h / 2 - w.y;
+    if (Math.hypot(vx, vy) < 0.2 && this.goal === 0) {
+      const cx = AW / 2 - w.x;
+      const cy = AH / 2 - w.y;
       vx += -cy * 0.002 + cx * 0.0005;
       vy += cx * 0.002 + cy * 0.0005;
     }
@@ -180,7 +197,7 @@ export class Bot {
       vx += (this.rng.next() - 0.5) * 0.8;
       vy += (this.rng.next() - 0.5) * 0.8;
     }
-    if (Math.hypot(vx, vy) < 1e-6) return 0;
+    if (Math.hypot(vx, vy) < (this.goal < 0 ? 0.2 : 1e-6)) return 0;
     // 量化成 32 向（工具里可以用 Math.atan2：机器人不在规则核心里，只要自己确定）
     const a = Math.atan2(vy, vx);
     return 1 + (((Math.round((a / (Math.PI * 2)) * 32) % 32) + 32) % 32);

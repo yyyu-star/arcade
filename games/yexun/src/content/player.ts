@@ -27,9 +27,15 @@ export const ARENA = { w: 3200, h: 3200 };
  */
 export const XP_CURVE = { first: 20, early: 15, midFrom: 20, mid: 50, lateFrom: 34, late: 110 };
 
-/** 从 level 升到 level + 1 要多少魂 */
-export function xpNeed(level: number): number {
-  const c = XP_CURVE;
+/**
+ * 夜探的升级曲线：沿用守夜放慢以前的（2026-10-17 守夜开局放慢以后没跟着改）。夜探的镇子大、怪按区域刷、远没有守夜密，
+ * 按守夜的新曲线 3 分钟只有 2–3 级，机器人十有八九倒在第一个院子里。
+ */
+export const RAID_XP_CURVE = { first: 5, early: 9, midFrom: 20, mid: 44, lateFrom: 40, late: 70 };
+
+/** 从 level 升到 level + 1 要多少魂（raid：夜探用自己的曲线） */
+export function xpNeed(level: number, raid = false): number {
+  const c = raid ? RAID_XP_CURVE : XP_CURVE;
   if (level < c.midFrom) return c.first + (level - 1) * c.early;
   const atMid = c.first + (c.midFrom - 1) * c.early;
   if (level < c.lateFrom) return atMid + (level - c.midFrom) * c.mid;
