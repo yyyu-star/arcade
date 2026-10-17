@@ -116,14 +116,14 @@
   flex: 0 0 94px; min-height: 44px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 4px 6px; scroll-snap-align: start;
   border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
 }
-.yx-mapcard .yx-thumb { width: 60px; height: 60px; border-radius: 6px; display: block; }
+.yx-mapcard .yx-thumb { width: 80px; height: 80px; border-radius: 6px; display: block; }
 .yx-mapcard b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 18px; line-height: 1.1; letter-spacing: 2px; }
 .yx-mapcard small { font-size: 10px; line-height: 1.25; color: #5a4a3a; text-align: center; }
 .yx-mapcard em { font-style: normal; font-size: 10px; line-height: 1.25; color: #b8322a; text-align: center; }
 .yx-mapcard.on { background: var(--ink); color: #fbf5e4; }
 .yx-mapcard.on small { color: #e6dcc0; }
 .yx-mapcard.locked { cursor: default; }
-.yx-mapcard.locked .yx-thumb { filter: grayscale(1) brightness(0.8); }
+.yx-mapcard.locked .yx-thumb { filter: saturate(0.6) brightness(0.85); }
 .yx-mapcard.locked b { opacity: 0.6; }
 .yx-dangers .yx-chip { min-width: 44px; min-height: 46px; }
 .yx-dangers { gap: 4px; }
