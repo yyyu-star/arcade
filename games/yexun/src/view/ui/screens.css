@@ -64,8 +64,9 @@
 .yx-menu .yx-more { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 56px); top: max(10px, env(safe-area-inset-top, 0px)); display: flex; gap: 6px; }
 .yx-menu .yx-more .yx-btn { min-height: 44px; min-width: 44px; padding: 0 12px; font-size: 16px; }
 /* 窄屏：四个按钮挪到回大厅的下面一排，不压标题 */
-@media (max-width: 520px) {
-  .yx-menu .yx-more { right: auto; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 52px); }
+@media (max-width: 520px), (max-height: 500px) {
+  /* 手机（竖屏窄、横屏矮）：标题右边放不下，竖着排在"大厅"下面的左边空处 */
+  .yx-menu .yx-more { right: auto; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 56px); flex-direction: column; }
 }
 .yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
 .yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
