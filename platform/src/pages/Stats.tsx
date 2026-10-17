@@ -12,6 +12,7 @@ import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
 import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
 import { friendLink, ShareButton, statsCard } from '../share.tsx';
+import { pickBadge } from '../share-pick.ts';
 
 /** 按大厅的顺序排，大厅里没有的放最后 */
 const order = (id: string) => {
@@ -101,25 +102,30 @@ function TitleShelf({ game, earned }: { game: string; earned: CareerView['titles
   );
 }
 
-/** 晒战绩卡上挂在昵称旁边的称号：最近拿到的那个（名字从游戏的 titles.json 读，读不到就不挂） */
-function useLatestTitle(data: StatsResponse | null): string | null {
-  const [name, setName] = useState<string | null>(null);
-  let latest: { game: string; id: string; at: number } | null = null;
-  for (const [game, c] of Object.entries(data?.relation === 'self' ? data.games : {})) {
-    for (const t of c.titles) if (!latest || t.at > latest.at) latest = { game, id: t.id, at: t.at };
-  }
-  const key = latest ? `${latest.game}:${latest.id}` : '';
+/**
+ * 晒战绩卡上挂在昵称旁边的称号（0.21.1）：拿过称号的几个游戏的 titles.json 都读一遍，交给 pickBadge 排除自嘲的、挑最近的。
+ * 读不到的游戏当没有名字（不挂）
+ */
+function useBadge(data: StatsResponse | null): string | null {
+  const [badge, setBadge] = useState<string | null>(null);
+  const games = data?.relation === 'self' ? data.games : null;
+  const key = games ? Object.entries(games).map(([g, c]) => `${g}:${c.titles.map((t) => t.id).join(',')}`).join(';') : '';
   useEffect(() => {
-    setName(null);
-    if (!key) return;
-    const [game, id] = key.split(':') as [string, string];
+    setBadge(null);
+    if (!games) return;
+    const ids = Object.keys(games).filter((g) => games[g]!.titles.length > 0);
     let alive = true;
-    void loadTitles(game).then((c) => alive && setName(c[id]?.name ?? null));
+    void Promise.all(ids.map((g) => loadTitles(g).then((c) => [g, c] as const))).then((pairs) => {
+      if (!alive) return;
+      const catalogs = Object.fromEntries(pairs);
+      setBadge(pickBadge(games, (g, id) => catalogs[g]?.[id]?.name));
+    });
     return () => {
       alive = false;
     };
+    // 只在称号变了时重读：games 每次渲染都是新对象
   }, [key]);
-  return name;
+  return badge;
 }
 
 /** 别人的战绩页上：加好友、接受请求，或者说明现在是什么关系（0.10.5） */
@@ -166,7 +172,7 @@ export function StatsPage() {
     };
   }, [user, who]);
 
-  const badge = useLatestTitle(data);
+  const badge = useBadge(data);
 
   if (loading) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
   if (!user) {

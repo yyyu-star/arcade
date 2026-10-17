@@ -1569,6 +1569,8 @@ async function statsPage(browser: Browser): Promise<void> {
   const games = {
     texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400, titles: [{ id: 'bluff_king', at: Date.UTC(2026, 9, 14, 12) }] }),
     kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000, titles: [{ id: 'first_year', at: Date.UTC(2026, 9, 13, 3) }, { id: 'diamond_hands', at: Date.UTC(2026, 9, 15, 3) }] }),
+    // 0.21.1 照真号那张卡：雀馆 25 局 4%、最近拿到的是"点炮王"——卡上都不该出现（小格是德州胜率、最大一把、称号数，昵称旁挂"钻石手"）
+    mahjong: career({ n: 3, rounds: 25, wins: 1, best: 12, titles: [{ id: 'xz_pao_king', at: Date.UTC(2026, 9, 16, 3) }] }),
   };
   const catalog = { first_year: { name: '熬过一年', desc: '实盘打满 12 个月' }, diamond_hands: { name: '钻石手', desc: '一只票拿满半年' }, all_in: { name: '满仓侠', desc: '满仓过一个月' } };
   for (const screen of ['desktop', 'portrait'] as const) {
@@ -1577,6 +1579,7 @@ async function statsPage(browser: Browser): Promise<void> {
     await mockSession(page);
     await page.route('**/api/stats/me', (r) => r.fulfill(json({ user: { userId: FAKE_USER.id, displayName: FAKE_USER.displayName, avatar: null }, relation: 'self', week: '2026-10-12', games })));
     await page.route('**/games/kaipan/titles.json', (r) => r.fulfill(json(catalog)));
+    await page.route('**/games/mahjong/titles.json', (r) => r.fulfill(json({ xz_pao_king: { name: '点炮王', desc: '一场点炮最多' } })));
     // 德州还没放称号文件：显示"神秘称号"，不报错
     await page.route('**/games/texas/titles.json', (r) => {
       expectHttp(404, '/games/texas/titles.json');
@@ -1589,7 +1592,7 @@ async function statsPage(browser: Browser): Promise<void> {
     await page.getByText('满仓侠').waitFor();
     await page.getByText('神秘称号').waitFor();
     const order = await page.locator('.career').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-    check(order.join() === 'career-kaipan,career-texas', `战绩应该按大厅顺序排：${order}`);
+    check(order.join() === 'career-kaipan,career-texas,career-mahjong', `战绩应该按大厅顺序排：${order}`);
     await shot(page, `stats-${screen}`);
     await clickShare(page, 'share-stats', `stats-share-${screen}`);
     await ctx.close();
