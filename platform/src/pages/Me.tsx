@@ -3,7 +3,7 @@
  * 动账号安全的操作都要再输一次当前密码（docs/platform-backend.md 5.2），这些只放在平台页。
  */
 import { useEffect, useState } from 'react';
-import { api, ApiFail, errorText, type SaveSlot } from '../api.ts';
+import { api, ApiFail, errorText, type SaveSlot, type User } from '../api.ts';
 import { fullDateText, timeText } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { confirmLeave, Link, navigate } from '../router.tsx';
@@ -59,7 +59,22 @@ export function MePage() {
         <LogoutButton />
       </Panel>
       <Panel icon="people" title="好友能看到什么">
-        <ShowWhere />
+        <PrivacySwitch
+          field="showWhere"
+          label="让好友看到我在线、在玩哪个游戏、在哪个房间"
+          onNote="好友在好友页能看到你在不在线、在哪，能一键加入你的房间。"
+          offNote="好友只看到你几天前来过，看不到你在不在线、在哪。"
+          save={api.setShowWhere}
+          testId="show-where"
+        />
+        <PrivacySwitch
+          field="showFeed"
+          label="让好友看到我的动态（实盘赢了、新称号、游戏里的名场面）"
+          onNote="好友在好友页能看到你最近 7 天的动态，能点赞、扔道具。"
+          offNote="不再生成你的动态，已有的好友也看不到。"
+          save={api.setShowFeed}
+          testId="show-feed"
+        />
       </Panel>
       <Saves />
       <Panel icon="lock" title="账号安全">
@@ -95,20 +110,31 @@ function Rename() {
   );
 }
 
-/** "让好友看到我在哪"（0.13.0，docs/social.md 1.2）：关了好友那边只看到"几天前来过"；点了马上存，和改昵称共用每天 10 次 */
-function ShowWhere() {
+/**
+ * "好友能看到什么"里的开关：点了马上存（和改昵称共用每天 10 次）。
+ * - 在哪（0.13.0，docs/social.md 1.2）：关了好友那边只看到"几天前来过"；
+ * - 好友动态（0.17.0，第 2 节）：关了不再生成，已有的好友也看不到。
+ */
+function PrivacySwitch({ field, label, onNote, offNote, save, testId }: {
+  field: 'showWhere' | 'showFeed';
+  label: string;
+  onNote: string;
+  offNote: string;
+  save: (on: boolean) => Promise<{ user: User }>;
+  testId: string;
+}) {
   const { user, setUser } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // 先按点的显示，存不上再退回：等回话再变，勾选框看着像没点上
   const [shown, setShown] = useState<boolean | null>(null);
-  const on = shown ?? user!.showWhere !== false;
+  const on = shown ?? user![field] !== false;
   const flip = async (next: boolean) => {
     setShown(next);
     setBusy(true);
     setError('');
     try {
-      setUser((await api.setShowWhere(next)).user);
+      setUser((await save(next)).user);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -119,10 +145,10 @@ function ShowWhere() {
   return (
     <>
       <label className="check">
-        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void flip(e.target.checked)} data-testid="show-where" />
-        让好友看到我在线、在玩哪个游戏、在哪个房间
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void flip(e.target.checked)} data-testid={testId} />
+        {label}
       </label>
-      <p className="note">{on ? '好友在好友页能看到你在不在线、在哪，能一键加入你的房间。' : '好友只看到你几天前来过，看不到你在不在线、在哪。'}</p>
+      <p className="note">{on ? onNote : offNote}</p>
       <FormError text={error} />
     </>
   );

@@ -63,18 +63,21 @@ async function touch(c: Ctx): Promise<string[]> {
 /** PATCH /api/me：改昵称、开关"让好友看到我在哪"（0.13.0），和改昵称共用每人每天 profilePerDay 次。 */
 export async function patchMe(c: Ctx): Promise<Response> {
   const user = c.session!.user;
-  // 改昵称、"让好友看到我在哪"开关（0.13.0）：至少带一样，两样一起带就一起改（一次计数、一行）
+  // 改昵称、"让好友看到我在哪"（0.13.0）、"好友动态"（0.17.0）两个开关：至少带一样，几样一起带就一起改（一次计数、一行）
   const hasName = c.body.displayName !== undefined;
-  const showWhere = c.body.showWhere;
-  if (!hasName && showWhere === undefined) throw new ApiError(400, 'bad_request');
+  const { showWhere, showFeed } = c.body;
+  if (!hasName && showWhere === undefined && showFeed === undefined) throw new ApiError(400, 'bad_request');
   if (showWhere !== undefined && typeof showWhere !== 'boolean') throw new ApiError(400, 'bad_request');
+  if (showFeed !== undefined && typeof showFeed !== 'boolean') throw new ApiError(400, 'bad_request');
   const displayName = hasName ? normalizeDisplayName(str(c.body.displayName)) : user.display_name;
   if (hasName) check(checkDisplayName(displayName));
   const flag = showWhere === undefined ? user.show_where : showWhere ? 1 : 0;
+  const feed = showFeed === undefined ? user.show_feed : showFeed ? 1 : 0;
   await hit(c.db, `profile:${user.id}`, c.limits.profilePerDay, DAY, c.now);
-  await c.db.run(c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2 WHERE id = ?3', displayName, flag, user.id));
+  await c.db.run(c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2, show_feed = ?3 WHERE id = ?4', displayName, flag, feed, user.id));
   user.display_name = displayName;
   user.show_where = flag;
+  user.show_feed = feed;
   const cookies = await touch(c);
   return withCookies(json(200, { user: userJson(user) }), cookies);
 }
@@ -156,7 +159,7 @@ export async function insertUser(
       ]);
       const user: UserRow = {
         id: u.userId, username: u.username, display_name: u.displayName, friend_code: friendCode, avatar_json: null,
-        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1,
+        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1, show_feed: 1,
       };
       return { user, recoveryCode };
     } catch (e) {

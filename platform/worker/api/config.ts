@@ -93,6 +93,10 @@ export const DEFAULT_LIMITS = {
   inviteTtlMs: 600_000,
   invitesPerDay: 50,
   inviteGapMs: 60_000,
+  /** 好友动态（0.17.0，15.17）：每人每天（北京时间）最多几条（结回生成的和游戏报的合计）、留几天、每人每天赞和扔道具最多几次 */
+  feedPerDay: 10,
+  feedKeepMs: 7 * 86_400_000,
+  feedReactPerDay: 100,
 
   // Cron 清理（7.3）
   cleanupMaxRows: 3_000,

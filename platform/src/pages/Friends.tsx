@@ -3,6 +3,7 @@
  * 不按昵称搜人，只能靠好友码或链接加；对别人只显示昵称，不显示用户名。
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { FeedPanel } from '../feed.tsx';
 import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation, type Where } from '../api.ts';
 import { gameName } from '../format.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
@@ -79,7 +80,7 @@ export function FriendsPage() {
 }
 
 function Friends() {
-  const { service } = useSession();
+  const { service, user } = useSession();
   const [data, setData] = useState<FriendLists | null>(null);
   const [blocks, setBlocks] = useState<Profile[] | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -105,6 +106,10 @@ function Friends() {
   return (
     <>
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
+      {/* 好友动态（0.17.0）：好友页最上面一栏 */}
+      <Panel icon="people" title="好友动态">
+        <FeedPanel me={user!.id} />
+      </Panel>
       <MyCode />
       <AddByCode />
       {loadError && <FormError text={loadError} />}

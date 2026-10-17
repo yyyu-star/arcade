@@ -773,13 +773,15 @@ describe('管理员调整筹码（0.9.4）', () => {
 describe('战绩（0.10.0，5.10）：结回带小结，累加进 career，不多写行', () => {
   const career = async (uid: string, game = 'kaipan') => (await state(uid)).career?.[game];
 
-  it('带小结：局数、赢的局数、最大一把、称号、自定义数累加；净赢、本周净赢按钱算；还是写 1 行', async () => {
+  it('带小结：局数、赢的局数、最大一把、称号、自定义数累加；净赢、本周净赢按钱算；钱包还是写 1 行', async () => {
     const uid = (await registerUser()).user.id;
     await buyin(uid, { ref: 'ref-000001' });
     const r = await settle(uid, { ref: 'ref-000001', amount: 3_000, stats: { rounds: 1, wins: 1, best: 1_000, titles: ['first_win'], max: { score: 120 }, sum: { bombs: 2 } } });
     expect(r).toMatchObject({ ok: true, credited: 3_000 });
     expect(r).not.toHaveProperty('statsIgnored');
-    expect(wrote()).toBe(1);
+    // 钱包 1 行；赢了半份、第一次拿到称号，另生成一条好友动态（0.17.0，在线类 2 行，feed.test.ts 细测）
+    expect(lastWalletStats.byCategory.wallet).toBe(1);
+    expect(lastWalletStats.byCategory.live).toBe(2);
     await buyin(uid, { ref: 'ref-000002' });
     await settle(uid, { ref: 'ref-000002', amount: 500, stats: { rounds: 2, wins: 0, best: 0, titles: ['first_win', 'broke'], max: { score: 80 }, sum: { bombs: 1 } } });
     expect(await career(uid)).toEqual({

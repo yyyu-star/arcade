@@ -1140,6 +1140,8 @@ PR ③ 起每个接口还都用 `meta.rows_written` 写断言，和下表对得�
 | 再验证失败 | 1 | `reauth:fail` | 账号安全 |
 | 改昵称 | 2 | users 1 + 限流 1 | 好友与资料 |
 | 改"让好友看到我在哪"（0.13.0，和改昵称同一个 `PATCH /api/me`） | 2 | users 1 + 限流 1（和改昵称共用每天 10 次） | 好友与资料 |
+| 好友动态 `POST /api/feed`、结回生成（0.17.0） | 2；满 10 条、关了开关、在线类预算用完 0 | feed 表 1 + `(user_id, created_at)` 索引 1；结回生成的另记在在线类，钱包那一行照旧 1 | 在线 |
+| 赞、扔道具 `POST /api/feed/<id>/react`（0.17.0） | 2；再点、不能赞的 0 | `react` 计数 1 + feed_reactions 1（主键之外没有索引） | 在线 |
 | 发邀请 `POST /api/invites`（0.14.0） | 3 | invites 表 1 + 两个索引 2；不是好友、超限、格式不对 0（次数直接数这张表，不另记限流计数） | 在线 |
 | 邀请"不了" `POST /api/invites/<id>/dismiss`（0.14.0） | 1；已经点过、不是给我的 0 | 只改 `dismissed`（没有索引） | 在线 |
 | 报位置 `POST /api/presence`（0.13.0） | 位置没变每人每 2 分钟 ≤ 1；位置变了马上 1，但每人每 10 秒 ≤ 1；节流内 0 | users 1（`presence_json`、`presence_at`、`last_seen_at` 同一行，都没有索引）；格式不对、只读档、"在线"预算用完都是 0 | 在线 |
@@ -1188,8 +1190,8 @@ PR ③ 起每个接口还都用 `meta.rows_written` 写断言，和下表对得�
 ### 7.3 注销与清理
 
 - **注销**：再验证后一次 `db.batch`（D1 里是一个事务），删掉这个人在 users、sessions、credentials、saves、boards（他的所有成绩，0.7.0）、friendships（两个方向）、
-  blocks（两个方向）、wallets（他的钱包，0.9.0）、invites（发出的、收到的，0.14.0）、rate_counters（键里带他的用户 id 或用户名的）里的所有行。计数键的清单在 `deleteUserStatements`（`worker/api/session.ts`）：
-  `login:fail`、`reauth:fail`、`profile`、`acct`、`save`、`freq`、`fcode`、`fcnew`、`block`（0.6.0）、`score`（0.7.0）、`admin`（0.5.0，管理员的每日写操作计数）。管理员删号、一年清理用同一套语句。`blocks` 按被屏蔽方删除没有索引，要扫全表；
+  blocks（两个方向）、wallets（他的钱包，0.9.0）、invites（发出的、收到的，0.14.0）、feed（本人发的，0.17.0）、feed_reactions（本人赞的；别人给本人动态的赞 7 天后跟着 Cron 删）、rate_counters（键里带他的用户 id 或用户名的）里的所有行。计数键的清单在 `deleteUserStatements`（`worker/api/session.ts`）：
+  `login:fail`、`reauth:fail`、`profile`、`acct`、`save`、`freq`、`fcode`、`fcnew`、`block`（0.6.0）、`score`（0.7.0）、`admin`（0.5.0，管理员的每日写操作计数）、`react`（0.17.0）。管理员删号、一年清理用同一套语句。`blocks` 按被屏蔽方删除没有索引，要扫全表；
   注销很少，接受，表大了再加索引。`boards` 的主键以 `user_id` 开头，按人删是前缀扫描，不扫全表。以后加的表（`match_players`、`reports`）和新的计数键也要加进这个 batch，并有"注销后删干净"的测试。
 - **1 年未登录**：每天的 Cron 找出 `last_seen_at` 早于 365 天前的用户（这一列没有索引，扫全表只花读行数，免费版每天 500 万行读，够用到很大规模），
   每次最多 200 个，按注销同样的语句删；只找 `role = 'user'` 的，**管理员不清**（平台 0.5.0，2026-10-14）。
@@ -1577,7 +1579,7 @@ guard（熔断）、Lobby、入场票、Meter DO 还没做，第一版的取舍�
 | `POST /api/auth/login` | 任何人 | `{"username", "password"}` | 200 `{"user"}`，设两个 cookie | 401 `bad_credentials`；429（含用户名被暂时锁住） | 成功 4（+1 清零失败计数，+1 重新哈希）；失败 1–2（用户名不存在时不记失败计数）；超限 0 |
 | `POST /api/auth/logout` | 任何人（没登录也 204，幂等） | `{}` | 204，清两个 cookie | — | 1（没有会话时 0） |
 | `POST /api/auth/recover` | 任何人 | `{"username", "recoveryCode", "newPassword"}` | 200 `{"user", "recoveryCode": 新码}`，其他会话全部失效，给当前设备设新 cookie | 401 `bad_credentials`；422 `weak_password`；429 | 6 + 原有会话数（+1：清零 `login:fail`） |
-| `PATCH /api/me` | 登录；平台页 | `{"displayName"}`（P1 加 `avatar`、`catchphraseId`） | 200 `{"user"}` | 422 `invalid_display_name` / `reserved_display_name`；429 | 2 |
+| `PATCH /api/me` | 登录；平台页 | `{"displayName"?, "showWhere"?, "showFeed"?}`，至少一样（开关 0.13.0、0.17.0；P1 加 `avatar`、`catchphraseId`） | 200 `{"user"}` | 422 `invalid_display_name` / `reserved_display_name`；429 | 2 |
 | `POST /api/account/password` | 登录；平台页 | `{"currentPassword", "newPassword"}` | 204；其他会话失效，当前设备换新令牌（重设 `__Host-sid`） | 401 `bad_credentials`；422 `weak_password`；429；503 `busy`（6.6） | 4 + 会话数（含当前；密码错 1） |
 | `POST /api/account/recovery-code` | 登录；平台页 | `{"currentPassword"}` | 200 `{"recoveryCode"}`，旧码作废 | 401 `bad_credentials`；429；503 `busy` | 2 |
 | `POST /api/account/logout-others` | 登录；平台页 | `{"currentPassword"}` | 204 | 401 `bad_credentials`；429；503 `busy`（6.6） | 1 + 其他会话数 |
@@ -1900,14 +1902,14 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 - **超越提示**：好友这周的最好成绩比我的高，就在大厅顶上提一句"小明超过了你这周的开盘每日挑战纪录 [去挑战]"，只提好友里最高的那个；我这周还没成绩的不提。打开大厅问一次，问失败就不提。
 - **读多少**：从好友名单出发，按 `boards` 主键 `(user_id, game_id, board_id)` 的范围查，每人每个游戏最多 7 天 × 几版；好友 ≤ 200 时一次几百行以内。
 
-### 15.17 好友动态（草案，等主线过目；`docs/social.md` 第 2 节）
+### 15.17 好友动态（0.17.0，`docs/social.md` 第 2 节；主线 2026-10-16 过目）
 
 好友的名场面按模板生成一条动态，只给好友看，保留 7 天；好友能点赞或扔一个道具，每条每人一次。本人能在"我的"里关掉。
 
 **两个来源**
 
 1. **实盘结回自动生成**（游戏不用改）：钱包 RPC 的 `settle` 结回成功、带了合格的 `stats`（5.10）时，平台顺手判断要不要生成一条：
-   - 只记"值得说"的：这一份净赢 ≥ 半份（`stakeUnit` 的一半，和每日上限同一个"一份"），或者这一份里拿到了**第一次拿到**的称号；
+   - 只记"值得说"的（主线定）：这一份净赢 ≥ 半份（`stakeUnit` 的一半，和每日上限同一个"一份"），或者这一份里拿到了**第一次拿到**的称号；
    - 输了不生成（不拿输钱给好友看）；`statsIgnored`、重复的 `op`、到期退回、放弃都不生成；
    - 存 `{tier, units, titles}`：`units` 是净赢按份算乘 10 取整（1.6 份存 16），`titles` 是这一份里新拿到的称号 id（≤ 3 个）。文字在浏览器里拼："老王在掼蛋小档赢了 1.6 份，称号：双下王"，称号名读游戏的 `titles.json`（读不到写"神秘称号"）。
    - 动态写在"在线"类（`db.as('live')`）：类别预算用完、全站只读、本人关了开关，就不生成，**结回照常**，钱包那一行不受影响。
@@ -1917,8 +1919,10 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 |---|---|---|---|---|---|
 | `POST /api/feed` | 登录；游戏页 | `{"game": 登记的游戏 id, "moment": 名场面编号, "n"?: [整数, …]}` | 204（超了每天 10 条、关了开关、预算用完都静默 204、不写） | 400 `bad_request`（游戏没登记、编号不是 1–24 位 `[a-z0-9_]` 字母开头、`n` 超过 3 个或不是安全整数）；401；403（CSRF） | 2；被丢的 0 |
 
-   - 只报编号和数字，**文字由游戏的 `/games/<id>/moments.json` 给模板**（和 `titles.json` 一样是同域公开文件，游戏自己维护，加名场面不用平台发版）：
-     `{"four_bombs": {"text": "一副牌里扔了 {0} 个炸弹"}}`，`{0}`…`{2}` 换成 `n` 里的数（千分位）。模板 ≤ 40 字；读不到或没有这个编号的那条不显示。
+   - 只报编号和数字，**文字由游戏的 `public/moments.json` 给模板**（平台按 `/games/<id>/moments.json` 读、缓存，和 `titles.json`、`daily.json` 一样是游戏的同域公开文件，加名场面不用平台发版）：
+     `{"four_bombs": {"text": "{name}一副牌扔了 {n} 个炸弹"}}`。只认四个占位符：`{name}`（发的人的昵称）、`{n}` `{n2}` `{n3}`（`n` 里第 1、2、3 个数，按千分位写）；
+     模板 ≤ 40 字，有别的花括号、缺数字、读不到、没有这个编号，那条就不显示。拼出来一律按纯文本渲染（React 的文字节点），不当 HTML。
+   - 游戏页经 kit 报：`arcade-kit/social` 加 `postMoment(game, moment, n?)`（接口合并后由主线派人加）。
    - 每人每天（北京时间）10 条，两个来源合计；第 11 条起静默丢弃（204、0 行）。和邀请一样，数和插入写在同一条语句里。
 
 **看、赞**
@@ -1937,9 +1941,7 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 
 **写入估算**（50 个活跃用户）：动态按每人每天 3 条 × 2 行 = 300 行；赞和道具按每人每天 5 次 = 250 行；合计约 550 行/天。最坏每人 10 条 + 100 次 = 50 × 120 = 6,000，由"在线"类预算兜住（超了静默不写）。
 
-**要主线定的**
-1. 结回自动生成的门槛：净赢 ≥ 半份或第一次拿到称号，行不行？输的一律不发。
-2. 名场面模板放游戏的 `moments.json`（游戏管文字、平台只拼）还是写死在平台？我倾向前者，和 `titles.json` 一样。
-3. 游戏页报名场面走 kit（`arcade-kit/social` 加一个 `postMoment`）还是游戏直接调，kit 由谁加。
-4. 好友动态显示在哪：好友页顶上一栏，还是大厅单独一块？我倾向好友页顶上，大厅只在有新的赞时给"好友"加红点（不另存，读的时候比上次看的时间要存一处，先不做）。
+**界面**：好友页最上面一栏"好友动态"（全部，能赞、扔道具）；大厅一条小条（最新 3 条 + "看全部"进好友页，有好友的新动态时带红点）。
+"看过"记在本机 `localStorage` 的 `arcade.feedSeen`（最新看过的那条的时间），只是提醒，换设备不同步。结回的文字："小明在掼蛋小档赢了 1.6 份，称号：双下王"；
+只拿到称号没赢够半份的写"小明在掼蛋小档拿到称号：双下王"。
 

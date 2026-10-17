@@ -150,7 +150,14 @@ const json = (body: unknown, status = 200) => ({ status, contentType: 'applicati
  */
 async function mockSession(
   page: Page,
-  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET, invites = [], overtakes = [] }: { user?: object; me?: Record<string, unknown>; wallet?: object | (() => object); invites?: object[]; overtakes?: object[] } = {},
+  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET, invites = [], overtakes = [], feed = [] }: {
+    user?: object;
+    me?: Record<string, unknown>;
+    wallet?: object | (() => object);
+    invites?: object[];
+    overtakes?: object[];
+    feed?: object[];
+  } = {},
 ): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill(json({ user, service: 'ok', saves: 'ok', registration: 'closed', ...me })));
   await page.route('**/api/wallet', (r) => r.fulfill(json(typeof wallet === 'function' ? wallet() : wallet)));
@@ -161,6 +168,9 @@ async function mockSession(
   await page.route('**/api/invites/*/dismiss', (r) => r.fulfill({ status: 204 }));
   // 大厅问一次"这周哪个好友超过了我"（0.15.0）
   await page.route('**/api/friends/overtakes', (r) => r.fulfill(json({ overtakes })));
+  // 好友动态（0.17.0）：大厅小条和好友页都读；赞和扔道具回 204
+  await page.route('**/api/feed', (r) => r.fulfill(json({ items: feed })));
+  await page.route('**/api/feed/*/react', (r) => r.fulfill({ status: 204 }));
   await fakeLoginHint(page);
 }
 
@@ -601,7 +611,12 @@ async function friendsFlow(a: Page, b: Page): Promise<void> {
   await a.getByTestId('person-冒烟小王').getByText('今天来过').waitFor();
   check((await a.getByTestId('person-冒烟小王').locator('.people__online').count()) === 0, '关了开关不该有绿点');
   await b.getByTestId('show-where').check();
-  await b.getByText('好友在好友页能看到你').waitFor();
+  await b.getByText('好友在好友页能看到你在不在线').waitFor();
+  // 0.17.0：好友动态的开关，关了再开（真接口）
+  await b.getByTestId('show-feed').uncheck();
+  await b.getByText('不再生成你的动态，已有的好友也看不到。').waitFor();
+  await b.getByTestId('show-feed').check();
+  await b.getByText('好友在好友页能看到你最近 7 天的动态').waitFor();
   await b.goto(`${BASE}/friends`);
 
   console.log('管理员叫朋友来掼蛋房（真接口）：朋友顶上弹一条、"好友"带红点，点"不了"收起');
@@ -993,8 +1008,23 @@ const FAKE_FRIENDS = {
 };
 
 /** 用模拟的登录状态打开好友页（不占真实登录次数）。 */
-async function fakeFriends(page: Page, invites: object[] = []): Promise<void> {
-  await mockSession(page, { invites });
+/** 好友动态的样子（0.17.0）：结回生成的（带称号）、游戏报的名场面（模板读游戏的 moments.json）、模板不合格的（不显示） */
+const FAKE_FEED = [
+  { id: '00000000aAAAAAAAAAAAA', user: { userId: 'f1', displayName: '小明', avatar: null }, game: 'guandan', kind: 'settle', at: Date.now() - 5 * 60_000, data: { tier: 'small', units: 16, titles: ['double_down'] }, reactions: { like: 2 } },
+  { id: '00000000bAAAAAAAAAAAA', user: { userId: 'f3', displayName: '阿花', avatar: null }, game: 'guandan', kind: 'moment', at: Date.now() - 3 * 3_600_000, data: { m: 'four_bombs', n: [4] }, reactions: {}, mine: 'tomato' },
+  { id: '00000000cAAAAAAAAAAAA', user: { userId: 'f3', displayName: '阿花', avatar: null }, game: 'guandan', kind: 'moment', at: Date.now() - 4 * 3_600_000, data: { m: 'bad_tpl' }, reactions: {} },
+];
+
+async function fakeFeedFiles(page: Page): Promise<void> {
+  await page.route('**/games/guandan/moments.json', (r) =>
+    r.fulfill(json({ four_bombs: { text: '{name}一副牌扔了 {n} 个炸弹' }, bad_tpl: { text: '<b>{who}</b>' } })),
+  );
+  await page.route('**/games/guandan/titles.json', (r) => r.fulfill(json({ double_down: { name: '双下王', desc: '打出双下' } })));
+}
+
+async function fakeFriends(page: Page, invites: object[] = [], feed: object[] = []): Promise<void> {
+  await mockSession(page, { invites, feed });
+  await fakeFeedFiles(page);
   await page.route('**/api/friends', (r) => r.fulfill(json(FAKE_FRIENDS)));
   await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [{ userId: 'f6', displayName: '烦人的人', avatar: null }] })));
   await page.route('**/api/friends/code/*', (r) => r.fulfill(json({ user: { userId: 'f7', displayName: '小红', avatar: null }, relation: 'pending_in' })));
@@ -1041,13 +1071,20 @@ async function mobile(browser: Browser): Promise<void> {
   await shot(page, 'mobile-privacy');
   // 用模拟的登录状态打开"我的账号"，量点击区
   // 0.15.0：好友超过了我这周的开盘每日挑战，大厅顶上提一句
-  await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }] });
+  // 0.17.0：大厅一条好友动态的小条，最新 3 条 + "看全部"，没看过的带红点
+  await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }], feed: FAKE_FEED });
+  await fakeFeedFiles(page);
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
   // 登录后的首页：掼蛋卡片的"进入游戏""好友房"并排，都至少 44 高
   await page.goto(`${BASE}/`);
   const overtake = page.getByTestId('nudge-overtake');
   await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
   check((await overtake.getByRole('link', { name: '去挑战' }).getAttribute('href'))?.startsWith('/games/kaipan/') === true, '"去挑战"该进开盘');
+  const strip = page.getByTestId('feed-strip');
+  await strip.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
+  await strip.getByTestId('feed-dot').waitFor();
+  check((await strip.getByRole('button').count()) === 0, '大厅小条上不放赞的按钮');
+  check((await strip.getByRole('link', { name: /看全部/ }).getAttribute('href')) === '/friends', '"看全部"该进好友页');
   await shot(page, 'mobile-home-overtake');
   const guandan = page.locator('.card', { hasText: '掼蛋' });
   await guandan.getByRole('link', { name: '好友房' }).waitFor();
@@ -1097,7 +1134,7 @@ async function mobile(browser: Browser): Promise<void> {
 
   const fr = await newPage(browser, '手机竖屏好友', 'portrait');
   // 0.14.0：小明在掼蛋房里，有"加入"；有人叫我时顶上一条、顶栏"好友"带红点
-  await fakeFriends(fr.page, [{ id: 'inv-0000000000001', from: { id: 'f3', name: '阿花' }, game: 'guandan', room: '654321', until: Date.now() + 600_000 }]);
+  await fakeFriends(fr.page, [{ id: 'inv-0000000000001', from: { id: 'f3', name: '阿花' }, game: 'guandan', room: '654321', until: Date.now() + 600_000 }], FAKE_FEED);
   await fr.page.getByText('23 天前来过').waitFor();
   await fr.page.getByText('昨天来过').waitFor();
   await fr.page.getByTestId('person-小明').getByText('在掼蛋房里 · 3/4 人').waitFor();
@@ -1112,6 +1149,18 @@ async function mobile(browser: Browser): Promise<void> {
   await fr.page.getByTestId('invite-bar').getByRole('button', { name: '不了' }).click();
   await fr.page.getByTestId('invite-bar').waitFor({ state: 'detached' });
   check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
+  // 0.17.0 好友动态：结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
+  const feed = fr.page.getByTestId('feed');
+  await feed.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
+  await feed.getByText('阿花一副牌扔了 4 个炸弹').waitFor();
+  check((await feed.getByTestId('feed-item').count()) === 2, '模板不合格的动态不该显示');
+  check((await feed.getByText('<b>').count()) === 0, '模板不能当 HTML');
+  await feed.getByTestId('feed-item').nth(1).getByText('你扔了番茄').waitFor();
+  const first = feed.getByTestId('feed-item').first();
+  await first.getByText('赞 2').waitFor();
+  await first.getByRole('button', { name: '扔个道具' }).click();
+  await first.getByRole('button', { name: '玫瑰' }).waitFor();
+  await shot(fr.page, 'mobile-friends-feed');
   for (const t of await fr.page.locator('.people .btn').all()) {
     const box = await t.boundingBox();
     check(box && box.height >= 44, `好友页的按钮不到 44 高：${await t.textContent()}（${box?.height ?? 0}）`);
@@ -1776,6 +1825,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
     await page.route('**/api/invites', (r) => r.fulfill(json({ invites: [] })));
     await page.route('**/api/friends/overtakes', (r) => r.fulfill(json({ overtakes: [] })));
+    await page.route('**/api/feed', (r) => r.fulfill(json({ items: [] })));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();

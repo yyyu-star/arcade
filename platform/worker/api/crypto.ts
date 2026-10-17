@@ -36,6 +36,12 @@ export function newUserId(): string {
   return b64url(randomBytes(16));
 }
 
+/** 动态的 id：毫秒时间的 36 进制（补到 9 位）+ 64 位随机。按 id 的字典序就是按时间，Cron 能按范围删。 */
+export function newFeedId(now: number): string {
+  return feedIdPrefix(now) + b64url(randomBytes(8));
+}
+export const feedIdPrefix = (ms: number): string => Math.max(0, Math.floor(ms)).toString(36).padStart(9, '0');
+
 /** 96 位随机的邀请 id（16 位 base64url）：知道 id 也只能对自己收到的点"不了"，不用更长。 */
 export function newInviteId(): string {
   return b64url(randomBytes(12));

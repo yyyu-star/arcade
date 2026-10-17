@@ -19,6 +19,7 @@ import {
   setWalletRules,
 } from './admin';
 import { getMe, login, logout, patchMe, recover, register } from './auth';
+import { feedParams, listFeed, postMoment, react } from './feed';
 import { dismissInvite, inviteParams, listInvites, sendInvite } from './invites';
 import { friendsWeek, overtakes, weekParams } from './friends-week';
 import { postPresence } from './presence';
@@ -93,6 +94,9 @@ const ROUTES: Route[] = [
   // 好友在线（0.13.0，15.13）：每人每 2 分钟最多写 1 行；写不了就静默 204
   { method: 'POST', path: '/api/presence', cat: 'live', auth: 'user', quiet: true, handler: postPresence },
   { method: 'POST', path: '/api/invites', cat: 'live', auth: 'user', handler: sendInvite },
+  { method: 'GET', path: '/api/feed', cat: 'live', auth: 'user', handler: listFeed },
+  { method: 'POST', path: '/api/feed', cat: 'live', auth: 'user', quiet: true, handler: postMoment },
+  { method: 'POST', path: /^\/api\/feed\/([^/]+)\/react$/, params: feedParams, cat: 'live', auth: 'user', handler: react },
   { method: 'GET', path: '/api/invites', cat: 'live', auth: 'user', handler: listInvites },
   { method: 'POST', path: /^\/api\/invites\/([^/]+)\/dismiss$/, params: inviteParams, cat: 'live', auth: 'user', handler: dismissInvite },
   // 战绩（0.10.3，5.10）：对登录的人公开，只读

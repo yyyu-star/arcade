@@ -131,7 +131,7 @@ function passwordFrom(body: Record<string, unknown>, username: string): { passwo
 async function loadTarget(c: Ctx): Promise<UserRow> {
   const u = await c.db.first<UserRow>(
     c.db.stmt(
-      'SELECT id, username, display_name, friend_code, avatar_json, catchphrase_id, created_at, last_seen_at, role, presence_at, show_where FROM users WHERE id = ?1',
+      'SELECT id, username, display_name, friend_code, avatar_json, catchphrase_id, created_at, last_seen_at, role, presence_at, show_where, show_feed FROM users WHERE id = ?1',
       c.params.userId,
     ),
   );

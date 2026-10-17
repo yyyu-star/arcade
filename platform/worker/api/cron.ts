@@ -3,6 +3,7 @@
  * 清理前先记一行昨天的全站筹码统计（5.9）。
  * 写入记在"系统"类；每次最多删 cleanupMaxRows 行，删不完留到第二天，系统类预算用完就当天不清。
  */
+import { feedCleanupCutoff } from './feed';
 import type { Env } from '../env';
 import { limitsOf } from './config';
 import { DAY } from './context';
@@ -66,6 +67,20 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
           `DELETE FROM boards WHERE (user_id, game_id, board_id) IN
              (SELECT user_id, game_id, board_id FROM boards WHERE game_id = ?1 AND board_id >= 'daily-' AND board_id < ?2 LIMIT ?3)`,
           gameId, `daily-${beijingDate(now - limits.dailyBoardKeepDays * DAY)}`, budget(),
+        ),
+      );
+    }
+    // 好友动态留 feedKeepMs：id 带时间前缀，动态和赞都按主键范围删
+    if (budget() > 0) {
+      const cutoff = feedCleanupCutoff(now, limits);
+      await db.run(db.stmt('DELETE FROM feed WHERE id IN (SELECT id FROM feed WHERE id < ?1 LIMIT ?2)', cutoff, budget()));
+    }
+    if (budget() > 0) {
+      const cutoff = feedCleanupCutoff(now, limits);
+      await db.run(
+        db.stmt(
+          'DELETE FROM feed_reactions WHERE (item_id, user_id) IN (SELECT item_id, user_id FROM feed_reactions WHERE item_id < ?1 LIMIT ?2)',
+          cutoff, budget(),
         ),
       );
     }
