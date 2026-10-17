@@ -22,16 +22,18 @@ function evSeen(w: World, t: number, a = -1): boolean {
 }
 
 describe('双修：符剑合璧（飞剑 + 符咒）', () => {
-  it('两件进化后宝箱合成；缺一件进化不合成', () => {
+  it('一件进化、另一件满级就在宝箱合成（1.1）；另一件没满级不合成', () => {
     const w = arena('flysword', 'talisman');
     expect(w.merges).toContain('fujian');
-    const v = createWorld({ seed: 7, mode: 'vigil', danger: 0 });
-    v.weapons.length = 0;
-    v.wstats.length = 0;
-    grantWeapon(v, 'flysword', 8, true);
-    grantWeapon(v, 'talisman', 8, false);
-    openChestNow(v);
-    expect(v.merges).not.toContain('fujian');
+    for (const [lv, want] of [[8, true], [7, false]] as const) {
+      const v = createWorld({ seed: 7, mode: 'vigil', danger: 0 });
+      v.weapons.length = 0;
+      v.wstats.length = 0;
+      grantWeapon(v, 'flysword', 8, true);
+      grantWeapon(v, 'talisman', lv, false);
+      openChestNow(v);
+      expect(v.merges.includes('fujian')).toBe(want);
+    }
   });
 
   it('飞剑打中的怪被贴符，到点炸开；没合成就不贴', () => {

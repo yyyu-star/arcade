@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_BY_KIND } from '../src/content/enemies.ts';
-import { ASSIST, CHARACTERS, CHARACTER_IDS, PERK_FX } from '../src/content/meta.ts';
+import { ASSIST, CHAR_FX, CHARACTERS, CHARACTER_IDS, PERK_FX } from '../src/content/meta.ts';
 import { DANGERS, EVENTS, TWIN_BOSS_HP } from '../src/content/waves.ts';
 import { createWorld, Ev, normalizeSetup, spawnNow, step, type Setup, type World } from '../src/core/index.ts';
 
@@ -95,10 +95,10 @@ describe('角色', () => {
   it('起手法器按角色', () => {
     for (const c of CHARACTER_IDS) expect(make({ character: c }).weapons[0]!.id).toBe(CHARACTERS[c].start);
   });
-  it('更夫整分钟敲锣；胖师叔挨打震开身边', () => {
+  it('更夫按 gongEvery 敲锣；胖师叔挨打震开身边', () => {
     const g = make({ character: 'gengfu' });
     let gong = 0;
-    g.tick = 60 * 30 - 2;
+    g.tick = CHAR_FX.gongEvery * 2 - 2;
     g.nextEvent = g.schedule.length;
     for (let k = 0; k < 3; k++) {
       step(g, 0);

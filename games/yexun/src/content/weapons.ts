@@ -191,9 +191,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '身边一圈光环，里面的怪持续挨打、走得慢',
     el: '金',
     type: '镇',
-    base: { dmg: 12, cd: 15, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+    // 1.1：镇流派中、大档最弱（前期清怪慢），1、2 级光环 66 → 73，3 级起和原来一样（第一次变大只 +5）
+    base: { dmg: 12, cd: 15, area: 73, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
     ups: [
-      { text: '光环变大', delta: { area: 12 } },
+      { text: '光环变大', delta: { area: 5 } },
       { text: '伤害 +5', delta: { dmg: 5 } },
       { text: '光环变大', delta: { area: 12 } },
       { text: '响得更勤', delta: { cd: -3 } },

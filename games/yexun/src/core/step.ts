@@ -2861,7 +2861,11 @@ function openChest(w: World): void {
     if (w.merges.includes(def.id)) continue;
     const a = w.weapons.find((o) => o.id === def.a);
     const b = w.weapons.find((o) => o.id === def.b);
-    if (a?.evolved && b?.evolved) {
+    // 老的三个合成要两件都进化；双修（1.1）门槛低一点：一件进化、另一件满级就行（机器人每 20 局只合成 1–2 次，玩家更难见到）
+    const ok = def.dual
+      ? !!a && !!b && ((a.evolved && (b.evolved || b.level >= MAX_WEAPON_LEVEL)) || (b.evolved && a.level >= MAX_WEAPON_LEVEL))
+      : !!a?.evolved && !!b?.evolved;
+    if (ok) {
       w.merges.push(def.id);
       recompute(w);
       w.ev.push(Ev.Merge, w.x, w.y, m);
