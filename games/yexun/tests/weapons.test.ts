@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WEAPON_IDS, WEAPONS } from '../src/content/weapons.ts';
-import { createWorld, Ev, grantWeapon, step } from '../src/core/index.ts';
+import { MERGES, WEAPON_IDS, WEAPONS } from '../src/content/weapons.ts';
+import { createWorld, Ev, grantWeapon, openChestNow, step } from '../src/core/index.ts';
 
 // 每件法器单独拿着（满级），原地站 40 秒：都要打出伤害、杀得了怪，事件里有它自己的特效
 describe('法器', () => {
@@ -69,5 +69,51 @@ describe('法器', () => {
     }
     expect(bound).toBeGreaterThan(0);
     expect(boundMove / bound).toBeLessThan((freeMove / free) * 0.3);
+  }, 20_000);
+});
+
+describe('进化和合成', () => {
+  const run = (id: (typeof WEAPON_IDS)[number], evolved: boolean): number => {
+    const w = createWorld({ seed: 3, mode: 'vigil', difficulty: 'easy' });
+    w.weapons.length = 0;
+    w.wstats.length = 0;
+    grantWeapon(w, id, 8, evolved);
+    while (w.tick < 30 * 40 && w.phase !== 'over') step(w, 0, w.phase === 'choose' ? 0 : -1);
+    return w.weapons.find((x) => x.id === id)!.dmg;
+  };
+  for (const id of WEAPON_IDS) {
+    it(`${WEAPONS[id].evolve!.name}：进化后打得比满级多`, () => {
+      expect(run(id, true)).toBeGreaterThan(run(id, false));
+    }, 30_000);
+  }
+
+  it('两件都进化了，宝箱合成，空出一个法器格', () => {
+    for (const m of MERGES) {
+      const w = createWorld({ seed: 1, mode: 'vigil', difficulty: 'easy' });
+      w.weapons.length = 0;
+      w.wstats.length = 0;
+      grantWeapon(w, m.a, 8, true);
+      grantWeapon(w, m.b, 8, true);
+      openChestNow(w);
+      expect(w.merges).toContain(m.id);
+      expect(w.ev.type.slice(0, w.ev.n)).toContain(Ev.Merge);
+      // 再开不会重复合成
+      openChestNow(w);
+      expect(w.merges.filter((x) => x === m.id).length).toBe(1);
+    }
+  });
+
+  it('合成以后照样能凑满 7 件法器', () => {
+    const w = createWorld({ seed: 2, mode: 'vigil', difficulty: 'easy' });
+    w.weapons.length = 0;
+    w.wstats.length = 0;
+    grantWeapon(w, 'sword', 8, true);
+    grantWeapon(w, 'flysword', 8, true);
+    openChestNow(w);
+    for (const id of ['talisman', 'coins', 'mirror', 'bell', 'rope'] as const) grantWeapon(w, id, 1);
+    expect(w.weapons.length).toBe(7);
+    // 跑一阵不出错（第 7 格的命中冷却不越界）
+    while (w.tick < 30 * 30 && w.phase !== 'over') step(w, 0, w.phase === 'choose' ? 0 : -1);
+    expect(w.weapons[6]!.dmg).toBeGreaterThan(0);
   }, 20_000);
 });

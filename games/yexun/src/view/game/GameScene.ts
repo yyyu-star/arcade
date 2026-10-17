@@ -10,8 +10,8 @@ import Phaser from 'phaser';
 import { ENEMIES, HOP_AIR, HOP_PERIOD } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
-import { PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
-import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, step, type World } from '../../core/index.ts';
+import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
+import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
 import { inputCos, inputSin } from '../../core/fmath.ts';
 import type { Atlas, Frame } from '../art/atlas.ts';
@@ -24,6 +24,7 @@ import { Cards, describe } from '../ui/cards.ts';
 import type { Hud, HudSlot } from '../ui/hud.ts';
 import { LOW_MEMORY } from '../viewport.ts';
 import { DamageNumbers, Fx } from './fx.ts';
+import { weaponLook } from './look.ts';
 import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
@@ -34,7 +35,7 @@ const MOB_FALLBACK: Record<string, string> = { fox: 'wisp', shishi: 'jiangshi_bi
 const MOB_TINT = [MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e];
 
 /** 子弹种类 → 图集帧（光波画在 Graphics 上，这里给个占位） */
-const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane' };
+const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane', [Shot.Burn]: 'burn' };
 
 const FIRE_SFX: Partial<Record<string, SfxName>> = { sword: 'sword', talisman: 'talisman', coins: 'coins', flysword: 'flysword', thunder: 'thunder', bell: 'bell', mirror: 'mirror', gourd: 'fire', rope: 'rope', petals: 'petal', crane: 'crane' };
 
@@ -274,6 +275,7 @@ export class GameScene extends Phaser.Scene {
   private readEvents(): void {
     const ev = this.w.ev;
     let hits = 0;
+    let chests = 0;
     for (let i = 0; i < ev.n; i++) {
       const x = ev.x[i]!;
       const y = ev.y[i]!;
@@ -295,7 +297,11 @@ export class GameScene extends Phaser.Scene {
           this.slash(x, y, ev.a[i]!, ev.b[i]!, ev.c[i] === 1);
           break;
         case Ev.Thunder:
-          this.thunder(x, y, ev.b[i]!);
+          this.thunder(x, y, ev.b[i]!, ev.c[i] === 1);
+          break;
+        case Ev.Chain:
+          // 连锁雷：两只怪之间拉一道横着的电弧
+          this.bolts.push({ pts: this.jagged(x, y - 20, ev.b[i]!, ev.c[i]! - 20, 6, 26), life: 220 });
           break;
         case Ev.Bell:
           this.fx.spawn({ frame: 'ring', x, y: y - 10, life: 420, s0: (ev.b[i]! * 2) / 128 * 0.6, s1: (ev.b[i]! * 2) / 128, a0: 0.75, a1: 0, tint: 0xe2b54a, depth: 50 });
@@ -352,7 +358,9 @@ export class GameScene extends Phaser.Scene {
           this.time.delayedCall(90, () => this.hero.clearTint());
           break;
         case Ev.Chest:
-          this.onChest(ev.a[i]!);
+          // 黄历让一个宝箱多升一件：第二件只给一行横幅，不再弹第二次演出
+          if (chests++ === 0) this.onChest(ev.a[i]!);
+          else this.d.banners.say(`另外 ${this.chestTitle(ev.a[i]!)} 也升了`, 'gold', 1600);
           break;
         case Ev.Evolve:
           break;
@@ -440,6 +448,13 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private chestTitle(code: number): string {
+    if (code >= MERGE_CODE) return MERGES[code - MERGE_CODE]!.name;
+    if (code >= 100) return PASSIVES[PASSIVE_IDS[code - 100]!].name;
+    if (code >= 0) return WEAPONS[WEAPON_IDS[code]!].name;
+    return '铜钱';
+  }
+
   private onChest(code: number): void {
     sfx.play('chest');
     const w = this.w;
@@ -447,7 +462,16 @@ export class GameScene extends Phaser.Scene {
     let title = '铜钱一袋';
     let sub = '铜钱 +40，回 30 点血';
     let evolve = false;
-    if (code >= 100) {
+    if (code >= MERGE_CODE) {
+      // 合成：比进化更隆重（白闪 + 进化音），空出一个法器格
+      const m = MERGES[code - MERGE_CODE]!;
+      evolve = true;
+      icon = m.icon;
+      title = m.name;
+      sub = `合成！${m.desc}。空出一个法器格`;
+      sfx.play('evolve');
+      this.d.banners.whiteFlash();
+    } else if (code >= 100) {
       const p = PASSIVES[PASSIVE_IDS[code - 100]!];
       icon = p.icon;
       title = p.name;
@@ -525,16 +549,27 @@ export class GameScene extends Phaser.Scene {
     this.fx.spawn({ frame: 'slash', x: x + COS[dirIdx]! * 10, y: y - 24 + SIN[dirIdx]! * 10, life: 170 + 40 * k, s0: scale * 0.95, s1: scale * 1.2, a0: 0.55 + 0.3 * k, a1: 0, rot: rot + 0.08, sx, tint: 0xffffff, depth: d + 0.5 });
   }
 
-  private thunder(x: number, y: number, r: number): void {
+  /** 从 (x0, y0) 到 (x1, y1) 的折线，中间 n 段随机抖 amp */
+  private jagged(x0: number, y0: number, x1: number, y1: number, n: number, amp: number): number[] {
     const pts: number[] = [];
-    const x0 = x + (Math.random() - 0.5) * 80;
-    const y0 = y - 560;
-    for (let k = 0; k <= 10; k++) pts.push(x0 + (x - x0) * (k / 10) + (k > 0 && k < 10 ? (Math.random() - 0.5) * 46 : 0), y0 + (y - 20 - y0) * (k / 10));
-    this.bolts.push({ pts, life: 260 });
+    for (let k = 0; k <= n; k++) {
+      const j = k > 0 && k < n ? (Math.random() - 0.5) * amp : 0;
+      pts.push(x0 + (x1 - x0) * (k / n) + j, y0 + (y1 - y0) * (k / n) + j * 0.4);
+    }
+    return pts;
+  }
+
+  /** 天雷落点；chained：连锁跳过来的那几下不从天上劈（电弧由 Chain 事件画），震屏和停顿也轻一点 */
+  private thunder(x: number, y: number, r: number, chained = false): void {
+    if (!chained) {
+      const x0 = x + (Math.random() - 0.5) * 80;
+      this.bolts.push({ pts: this.jagged(x0, y - 560, x, y - 20, 10, 46), life: 260 });
+    }
     // 落点闪光圈（主线第 1 条）
     this.fx.spawn({ frame: 'ring', x, y, life: 360, s0: 0.2, s1: (r * 2.6) / 128, a0: 1, a1: 0, tint: 0x3a8fe0, depth: 60 });
     this.fx.spawn({ frame: 'haze', x, y: y - 10, life: 260, s0: r / 30, s1: r / 18, a0: 0.9, a1: 0, tint: 0xbfe6ff, depth: 61 });
-    this.burst(x, y - 10, 0x55c8ff, 1.4);
+    this.burst(x, y - 10, 0x55c8ff, chained ? 0.9 : 1.4);
+    if (chained) return;
     this.shake(110, 0.004);
     this.freeze = Math.max(this.freeze, 55);
   }
@@ -719,7 +754,7 @@ export class GameScene extends Phaser.Scene {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
         img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
-        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 2.2 : kind === Shot.Crane ? 1.3 : 1.2;
+        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 2.2 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);
         // 光波不用图，画在 Graphics 上（drawGfx）
@@ -729,7 +764,8 @@ export class GameScene extends Phaser.Scene {
       const x = inter(w.sPX[i]!, w.sX[i]!);
       const y = inter(w.sPY[i]!, w.sY[i]!);
       if (kind === Shot.Wave) {
-        if (w.sR[i]! > 0) this.waves.push(x, y, w.sR[i]!, w.sDist[i]!);
+        // 太极镜：单号白、双号黑
+        if (w.sR[i]! > 0) this.waves.push(x, y, w.sR[i]!, w.sDist[i]!, w.sState[i] === 1 ? 1 + (w.sIdx[i]! & 1) : 0);
         continue;
       }
       s.img.setPosition(x, y).setDepth(y + 40);
@@ -746,6 +782,13 @@ export class GameScene extends Phaser.Scene {
         // 剑尖朝飞的方向（图是剑尖朝上）；待命时微微晃
         s.img.setRotation(st === 0 ? Math.sin(this.now * 0.005 + i) * 0.2 : Math.atan2(vy, vx) + Math.PI / 2);
         if (st !== 0 && !LOW_MEMORY) this.fx.spawn({ frame: 'flysword', x, y, life: 140, s0: 1.1, s1: 1, a0: 0.35, a1: 0, rot: s.img.rotation, tint: 0x9fd8ff });
+      } else if (kind === Shot.Burn) {
+        // 地上的火：贴地、一跳一跳，快灭时淡出
+        const f = this.frame('burn');
+        s.img
+          .setDepth(y - 30)
+          .setScale((1.5 + Math.sin(this.now * 0.03 + i) * 0.1) / f.res, (1.6 + Math.sin(this.now * 0.04 + i * 2) * 0.15) / f.res)
+          .setAlpha(Math.min(1, w.sLife[i]! / 20));
       } else if (kind === Shot.Petal) {
         // 从上面飘下来：还剩几拍就离地多高，边落边转
         const left = w.sLife[i]!;
@@ -793,11 +836,13 @@ export class GameScene extends Phaser.Scene {
     const g = this.gfx;
     // 八卦镜的光波：深靛外圈 + 亮青内圈，越往外越淡
     const wv = this.waves;
-    for (let k = 0; k < wv.length; k += 4) {
+    for (let k = 0; k < wv.length; k += 5) {
       const a = Math.max(0.15, 1 - wv[k + 2]! / wv[k + 3]!);
-      g.lineStyle(10, 0x1f3a78, a * 0.7);
+      const style = wv[k + 4]!;
+      const [edge, core] = style === 1 ? [0x17131c, 0x6a6470] : style === 2 ? [0x17131c, 0xffffff] : [0x1f3a78, 0x7fe0ff];
+      g.lineStyle(10, edge, a * 0.7);
       g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
-      g.lineStyle(5, 0x7fe0ff, a);
+      g.lineStyle(5, core, a);
       g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
     }
     // 缚妖索：金绳加墨边，一串连起来
@@ -843,8 +888,7 @@ export class GameScene extends Phaser.Scene {
     const slots: HudSlot[] = w.weapons.map((o, k) => {
       const s = w.wstats[k]!;
       const cd = Math.max(4, Math.round(s.cd * w.stats.cdMul));
-      const def = WEAPONS[o.id];
-      return { icon: o.evolved && def.evolve ? def.evolve.icon : def.icon, level: o.evolved ? 9 : o.level, cd: o.id === 'flysword' || o.id === 'coins' ? 1 : Math.max(0, Math.min(1, 1 - o.timer / cd)) };
+      return { icon: weaponLook(w, o).icon, level: o.evolved ? 9 : o.level, cd: o.id === 'flysword' || o.id === 'coins' || o.id === 'crane' || o.id === 'shield' ? 1 : Math.max(0, Math.min(1, 1 - o.timer / cd)) };
     });
     this.d.hud.update({
       hp: Math.max(0, w.hp),

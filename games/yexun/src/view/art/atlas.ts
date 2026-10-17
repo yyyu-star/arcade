@@ -6,6 +6,7 @@
 import { SPRITES, type SpriteDef } from './sprites.ts';
 import { SPRITES2 } from './sprites2.ts';
 import { SPRITES3 } from './sprites3.ts';
+import { SPRITES4 } from './sprites4.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -54,7 +55,7 @@ function digitDefs(): SpriteDef[] {
 
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  const defs = [...SPRITES, ...SPRITES2, ...SPRITES3, ...digitDefs()];
+  const defs = [...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...digitDefs()];
   const items = defs.map((d) => {
     const r = res * (d.scale ?? 1);
     return { d, r, pw: Math.ceil(d.w * r) + PAD * 2, ph: Math.ceil(d.h * r) + PAD * 2 };

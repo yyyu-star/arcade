@@ -6,12 +6,13 @@
 import Phaser from 'phaser';
 import { DAWN_TICK, DIFFICULTIES, type Difficulty } from './content/waves.ts';
 import { PASSIVE_IDS, PASSIVES, WEAPONS, type WeaponId } from './content/weapons.ts';
-import { createWorld, grantWeapon, step, type World } from './core/index.ts';
+import { createWorld, grantWeapon, openChestNow, step, type World } from './core/index.ts';
 import { loadSave, recordRun, settings, writeSave } from './platform/save.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
 import { GameScene } from './view/game/GameScene.ts';
+import { weaponLook } from './view/game/look.ts';
 import { Input } from './view/game/input.ts';
 import { Banners } from './view/ui/banner.ts';
 import { Cards } from './view/ui/cards.ts';
@@ -128,11 +129,7 @@ async function boot(): Promise<void> {
   };
 
   const buildRows = (w: World): BuildRow[] => [
-    ...w.weapons.map((o) => {
-      const def = WEAPONS[o.id];
-      const evo = o.evolved && def.evolve;
-      return { icon: evo ? def.evolve!.icon : def.icon, name: evo ? def.evolve!.name : def.name, level: o.evolved ? 9 : o.level, dmg: o.dmg, kills: o.kills };
-    }),
+    ...w.weapons.map((o) => ({ ...weaponLook(w, o), level: o.evolved ? 9 : o.level, dmg: o.dmg, kills: o.kills })),
     ...PASSIVE_IDS.filter((id) => w.passives[id] !== undefined).map((id) => ({ icon: PASSIVES[id].icon, name: PASSIVES[id].name, level: w.passives[id]!, dmg: -1, kills: 0 })),
   ];
 
@@ -211,13 +208,14 @@ async function boot(): Promise<void> {
     world = w;
     autopilot = undefined;
     if (import.meta.env.DEV && q.has('give')) {
-      // ?give=mirror:8,gourd:8：开局换成这几件法器（看新法器的画面用）
+      // ?give=mirror:8,gourd:8e：开局换成这几件法器（等级后面带 e 是直接进化），再加 &merge 当场开宝箱合成
       w.weapons.length = 0;
       w.wstats.length = 0;
       for (const part of q.get('give')!.split(',')) {
-        const [id, lv] = part.split(':');
-        if (id && id in WEAPONS) grantWeapon(w, id as WeaponId, Number(lv ?? 1));
+        const [id, lv = '1'] = part.split(':');
+        if (id && id in WEAPONS) grantWeapon(w, id as WeaponId, parseInt(lv, 10), lv.endsWith('e'));
       }
+      if (q.has('merge')) for (let k = 0; k < 3; k++) openChestNow(w);
     }
     if (import.meta.env.DEV && (q.has('auto') || q.has('warp'))) {
       const { Bot } = await import('../tools/bots.ts');

@@ -4,15 +4,17 @@
  */
 import { ENEMIES } from '../content/enemies.ts';
 import type { Difficulty } from '../content/waves.ts';
-import { MAX_WEAPONS, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
+import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
+/** 法器格最多几个：6 个，每合成一次空出一个（合成以后两件都还在出手） */
+export const WEAPON_SLOTS = MAX_WEAPONS + MERGES.length;
 export const MAX_SHOTS = 400;
 export const MAX_DROPS = 400;
 
@@ -29,6 +31,8 @@ export const Shot = {
   Petal: 6,
   /** 纸鹤：sState 0 盘旋 1 俯冲（sLife 是还要飞几拍）2 飞回 */
   Crane: 7,
+  /** 三昧真火留在地上的火：sLife 拍后灭 */
+  Burn: 8,
 } as const;
 export type Shot = (typeof Shot)[keyof typeof Shot];
 
@@ -69,6 +73,18 @@ export interface Stats {
   armor: number;
   hpMax: number;
   regen: number;
+  /** 黄历：暴击、宝箱多给、好卡的概率加成（0.1 一级） */
+  luck: number;
+  /** 灵芝、引魂灯：经验倍数 */
+  xpMul: number;
+  /** 引魂灯：铜钱多给的概率 */
+  coinBonus: number;
+  /** 墨斗：持续倍数（火、绳、铜钱、护盾回层） */
+  durMul: number;
+  /** 引魂灯的级数（怪多、怪快） */
+  curse: number;
+  /** 捆仙绳：捆住的挨打加倍 */
+  bindDouble: boolean;
 }
 
 export interface Choice {
@@ -125,6 +141,11 @@ export class World {
   shield = 0;
   shieldMax = 0;
   shieldBurst = false;
+  /** 合成了哪几个（MergeDef.id） */
+  merges: MergeDef['id'][] = [];
+  /** 往生铃：光环半径（这一拍），光环里的怪死了回血；下次能回血的拍 */
+  bellArea = 0;
+  bellHealAt = 0;
   /** 回血的零头（每拍加一点，满 1 才加到血上，免得血量出现很长的小数） */
   regenAcc = 0;
 
@@ -155,12 +176,15 @@ export class World {
   readonly eAY = new Float64Array(MAX_ENEMIES);
   /** 行为里的速度（尸王跳砸这一跳每拍走多远） */
   readonly eV = new Float64Array(MAX_ENEMIES);
+  /** 最近一次挨打的拍和法器槽（连锁雷找"还没劈过的"） */
+  readonly eLastHit = new Int32Array(MAX_ENEMIES);
+  readonly eLastBy = new Int8Array(MAX_ENEMIES);
   /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
   readonly eBind = new Int32Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
   readonly eSlow = new Uint8Array(MAX_ENEMIES);
   /** 同一件法器连着打同一只的冷却：[怪 × 法器槽] = 下次能打的拍数 */
-  readonly eHitAt = new Int32Array(MAX_ENEMIES * MAX_WEAPONS);
+  readonly eHitAt = new Int32Array(MAX_ENEMIES * WEAPON_SLOTS);
   eCount = 0;
 
   // 子弹
@@ -222,7 +246,7 @@ export class World {
 }
 
 export function baseStats(): Stats {
-  return { might: 1, cdMul: 1, areaMul: 1, amount: 0, speed: PLAYER.speed, magnet: PLAYER.magnet, armor: 0, hpMax: PLAYER.hp, regen: 0 };
+  return { might: 1, cdMul: 1, areaMul: 1, amount: 0, speed: PLAYER.speed, magnet: PLAYER.magnet, armor: 0, hpMax: PLAYER.hp, regen: 0, luck: 0, xpMul: 1, coinBonus: 0, durMul: 1, curse: 0, bindDouble: false };
 }
 
 /** 怪种类编号 → 定义 */

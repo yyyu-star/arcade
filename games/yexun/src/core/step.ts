@@ -10,6 +10,7 @@ import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
   MAX_WEAPONS,
+  MERGES,
   PASSIVE_IDS,
   PASSIVES,
   WEAPON_IDS,
@@ -23,10 +24,12 @@ import { Ev } from './events.ts';
 import { DIR_N } from './dirs.ts';
 import { clamp, dcos, dirIndex, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
 import { Grid } from './grid.ts';
-import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, World, type Choice, type Setup } from './state.ts';
+import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, WEAPON_SLOTS, World, type Choice, type Setup } from './state.ts';
 
 /** 法器在事件里的编号 */
 export const WEAPON_CODE: Record<WeaponId, number> = Object.fromEntries(WEAPON_IDS.map((id, i) => [id, i])) as Record<WeaponId, number>;
+/** 宝箱事件里合成的编号：200 + MERGES 下标 */
+export const MERGE_CODE = 200;
 export const PASSIVE_CODE: Record<PassiveId, number> = Object.fromEntries(PASSIVE_IDS.map((id, i) => [id, 100 + i])) as Record<PassiveId, number>;
 
 const grids = new WeakMap<World, Grid>();
@@ -181,7 +184,8 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eKY[i] = 0;
   w.eHp[i] = hp;
   w.eHpMax[i] = hp;
-  w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2);
+  // 引魂灯：每级怪快 5%
+  w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2) * (1 + 0.05 * w.stats.curse);
   w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min);
   w.eR[i] = def.r * size;
   w.eSize[i] = size;
@@ -191,7 +195,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eAY[i] = 0;
   w.eSlow[i] = 0;
   w.eBind[i] = 0;
-  w.eHitAt.fill(0, i * MAX_WEAPONS, (i + 1) * MAX_WEAPONS);
+  w.eHitAt.fill(0, i * WEAPON_SLOTS, (i + 1) * WEAPON_SLOTS);
   w.eCount++;
   if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
   if (kind === 'boss') w.bossSlot = i;
@@ -256,9 +260,11 @@ function spawnWaves(w: World): void {
   // 按分钟补怪
   const m = MINUTES[Math.min(MINUTES.length - 1, Math.floor(minuteOf(w)))]!;
   const diff = DIFFICULTIES[w.setup.difficulty];
-  const keep = m.keep * diff.countMul;
+  // 引魂灯：每级怪多 10%
+  const curse = 1 + 0.1 * w.stats.curse;
+  const keep = m.keep * diff.countMul * curse;
   if (w.eCount >= keep) return;
-  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul) / 30;
+  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
     const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
@@ -270,10 +276,16 @@ function spawnWaves(w: World): void {
 
 function markSlow(w: World, g: Grid): void {
   w.eSlow.fill(0);
+  w.bellArea = 0;
   for (let k = 0; k < w.weapons.length; k++) {
-    if (w.weapons[k]!.id !== 'bell') continue;
-    const n = g.query(w, w.x, w.y, w.wstats[k]!.area);
-    for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = 1;
+    const o = w.weapons[k]!;
+    if (o.id !== 'bell') continue;
+    const area = w.wstats[k]!.area * w.stats.areaMul;
+    // 阴阳镇魂：光环里减速一半（记 2）；往生铃：光环里的怪死了回血（记下半径）
+    const mark = w.merges.includes('yinyang') ? 2 : 1;
+    if (o.evolved) w.bellArea = area;
+    const n = g.query(w, w.x, w.y, area);
+    for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = mark;
   }
 }
 
@@ -304,7 +316,7 @@ function moveEnemies(w: World): void {
       w.ePY[i] = y;
       continue;
     }
-    let sp = w.eSpeed[i]! * (w.eSlow[i] ? 0.62 : 1);
+    let sp = w.eSpeed[i]! * (w.eSlow[i] === 2 ? 0.5 : w.eSlow[i] ? 0.62 : 1);
     let vx = dx;
     let vy = dy;
     switch (kind) {
@@ -469,12 +481,14 @@ function separate(w: World, g: Grid): void {
 function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky: number, knock: number, rehit: number, credit = slot): boolean {
   if (!w.eAlive[i]) return false;
   if (slot >= 0) {
-    const k = i * MAX_WEAPONS + slot;
+    const k = i * WEAPON_SLOTS + slot;
     if (w.eHitAt[k]! > w.tick) return false;
     w.eHitAt[k] = w.tick + rehit;
   }
-  const crit = w.rHit.next() < PLAYER.crit;
-  const d = Math.max(1, Math.round(dmg * w.stats.might * (crit ? PLAYER.critMul : 1)));
+  const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck);
+  // 捆仙绳：捆住的挨打加倍
+  const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
+  const d = Math.max(1, Math.round(dmg * bound * w.stats.might * (crit ? PLAYER.critMul : 1)));
   w.eHp[i]! -= d;
   // 结算页的"每件法器打了多少"：只记，不影响规则
   const owned = credit >= 0 ? w.weapons[credit] : undefined;
@@ -486,13 +500,30 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
     w.eKX[i]! += kx * k;
     w.eKY[i]! += ky * k;
   }
+  w.eLastHit[i] = w.tick;
+  w.eLastBy[i] = credit;
   w.ev.push(Ev.Hit, w.eX[i]!, w.eY[i]!, d, crit ? 1 : 0, i);
   if (w.eHp[i]! <= 0) {
     if (owned) owned.kills++;
+    const x = w.eX[i]!;
+    const y = w.eY[i]!;
     killEnemy(w, i);
+    // 千鹤引魂：纸鹤啄死的怪变成一只小纸鹤（同时最多 12 只，飞 5 秒）
+    if (owned && owned.id === 'crane' && owned.evolved) spawnMiniCrane(w, credit, x, y);
   }
   return true;
 }
+
+function spawnMiniCrane(w: World, k: number, x: number, y: number): void {
+  let n = 0;
+  for (let s = 0; s < MAX_SHOTS; s++) if (w.sAlive[s] && w.sKind[s] === Shot.Crane && w.sIdx[s]! >= MINI_CRANE) n++;
+  if (n >= 12) return;
+  const s = addShot(w, Shot.Crane, x, y - 30, 0, 0, 0, eff(w, w.wstats[k]!).dmg * 0.6, 22, 0, k, MINI_CRANE + n);
+  if (s >= 0) w.sDist[s] = 150;
+}
+
+/** 小纸鹤的编号从这里起（和常驻的纸鹤分开：不算数量、到时候就散） */
+const MINI_CRANE = 1000;
 
 function killEnemy(w: World, i: number): void {
   const def = ENEMIES[w.eKind[i]!]!;
@@ -502,6 +533,15 @@ function killEnemy(w: World, i: number): void {
   const x = w.eX[i]!;
   const y = w.eY[i]!;
   w.ev.push(Ev.Kill, x, y, def.code, def.elite ? 1 : 0, i);
+  // 往生铃：光环里死的怪给主角回 1 点血，最多每 6 拍一次
+  if (w.bellArea > 0 && w.tick >= w.bellHealAt) {
+    const dx = x - w.x;
+    const dy = y - w.y;
+    if (dx * dx + dy * dy <= w.bellArea * w.bellArea) {
+      heal(w, 1);
+      w.bellHealAt = w.tick + 6;
+    }
+  }
   if (def.kind === 'boss') {
     w.bossKilled = true;
     w.bossSlot = -1;
@@ -590,10 +630,12 @@ function fireWeapons(w: World, g: Grid): void {
           wp.timer = e.cd;
           w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.mirror);
           // 几道光波一起放出去，后面的晚 8 拍（起始半径是负的）
+          // 阴阳镇魂：光波从镇魂铃光环的边上放出去
+          const from = w.merges.includes('yinyang') ? w.bellArea : 0;
           for (let j = 0; j < e.amount; j++) {
-            const i = addShot(w, Shot.Wave, w.x, w.y, 0, 0, 1 << 30, e.dmg, -j * 8 * s.speed, 0, k, j);
-            if (i >= 0) w.sDist[i] = e.area;
-            w.ev.push(Ev.Wave, w.x, w.y, j * 8, e.area, s.speed);
+            const i = addShot(w, Shot.Wave, w.x, w.y, 0, 0, 1 << 30, e.dmg, from - j * 8 * s.speed, wp.evolved ? 1 : 0, k, j);
+            if (i >= 0) w.sDist[i] = e.area + from;
+            w.ev.push(Ev.Wave, w.x, w.y, j * 8, e.area + from, s.speed);
           }
         }
         break;
@@ -606,8 +648,8 @@ function fireWeapons(w: World, g: Grid): void {
       case 'petals':
         if (--wp.timer <= 0) {
           wp.timer = e.cd;
-          // 这一阵最多回 2 点血（记在 phase 上，花瓣砸中时扣）
-          wp.phase = 2;
+          // 这一阵最多回 2 点血（十里桃林 5 点；记在 phase 上，花瓣砸中时扣）
+          wp.phase = wp.evolved ? 5 : 2;
           w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.petals);
           for (let j = 0; j < e.amount; j++) {
             const a = w.rWeapon.int(DIR_N);
@@ -627,7 +669,7 @@ function fireWeapons(w: World, g: Grid): void {
 }
 
 /** 火葫芦：没在喷时找最近的怪定方向；喷的那几拍，扇面里的怪隔 rehit 拍挨一下 */
-function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number; angle: number }, s: WeaponStats, e: { dmg: number; cd: number; area: number; amount: number }): void {
+function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number; angle: number; evolved: boolean }, s: WeaponStats, e: { dmg: number; cd: number; area: number; amount: number }): void {
   if (wp.phase > 0) {
     wp.phase--;
     const ux = dcos(wp.angle);
@@ -637,6 +679,16 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
     const c = dcos(half);
     const c2 = c * c;
     if (wp.phase % 2 === 0) w.ev.push(Ev.Flame, w.x, w.y - 18, wp.angle, e.area, half);
+    // 三昧真火：每 6 拍在火舌中段留一摊火
+    if (wp.evolved && wp.phase % 6 === 0) {
+      const a = wp.angle + w.rWeapon.int(half * 2 + 1) - half;
+      const r = e.area * (0.35 + w.rWeapon.next() * 0.45);
+      const life = Math.round(90 * w.stats.durMul);
+      const bx = w.x + dcos(a) * r;
+      const by = w.y + dsin(a) * r;
+      addShot(w, Shot.Burn, bx, by, 0, 0, life, e.dmg * 0.5, 40, 0, k, 0);
+      w.ev.push(Ev.Burn, bx, by, 0, 40, life);
+    }
     const n = g.query(w, w.x, w.y, e.area);
     for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
     for (let q = 0; q < n; q++) {
@@ -656,7 +708,7 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
     return;
   }
   wp.angle = dirIndex(w.eX[t]! - w.x, w.eY[t]! - w.y);
-  wp.phase = s.duration;
+  wp.phase = Math.round(s.duration * w.stats.durMul);
   wp.timer = e.cd;
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.gourd);
 }
@@ -686,7 +738,8 @@ function rope(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; ar
     if (best < 0) break;
     if (got === 0) w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.rope);
     const elite = ENEMIES[w.eKind[best]!]!.elite;
-    w.eBind[best] = w.tick + (elite ? s.duration >> 1 : s.duration);
+    const t = Math.round(s.duration * w.stats.durMul);
+    w.eBind[best] = w.tick + (elite ? t >> 1 : t);
     w.ev.push(Ev.Bind, w.eX[best]!, w.eY[best]!, got, 0, best);
     hitEnemy(w, best, e.dmg, k, 0, 0, 0, s.rehit);
     got++;
@@ -715,16 +768,20 @@ function shieldTick(w: World, g: Grid, k: number, wp: { timer: number }, s: Weap
     wp.timer = e.cd;
     return;
   }
+  // 墨斗：回层更快
+  const cd = Math.max(4, Math.round(e.cd / w.stats.durMul));
+  if (wp.timer > cd) wp.timer = cd;
   if (--wp.timer > 0) return;
-  wp.timer = e.cd;
-  w.shield++;
+  wp.timer = cd;
+  // 不坏金身：一回就回满
+  w.shield = (w.weapons[k]!.evolved ? w.shieldMax : w.shield + 1);
   w.ev.push(Ev.Shield, w.x, w.y, 1, e.area);
 }
 
 /** 纸鹤：常驻盘旋，轮流俯冲到最近的怪那里啄一下（落点一小圈），再飞回来 */
 function craneTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number }, s: WeaponStats, e: { cd: number; amount: number; dmg: number; area: number }): void {
   let have = 0;
-  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Crane && w.sSlot[i] === k) have++;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Crane && w.sSlot[i] === k && w.sIdx[i]! < MINI_CRANE) have++;
   for (let j = have; j < e.amount; j++) addShot(w, Shot.Crane, w.x, w.y - 60, 0, 0, 0, e.dmg, 26, 0, k, j);
   if (--wp.timer > 0) return;
   const target = nearest(w, g, w.x, w.y, e.area);
@@ -783,6 +840,12 @@ function swordSwing(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: numb
       }
     }
   }
+  // 诛邪剑阵：挥剑时待命的飞剑一起射出去
+  if (w.merges.includes('zhuxie')) {
+    const kf = w.weapons.findIndex((o) => o.id === 'flysword');
+    const t = kf >= 0 ? nearest(w, g, w.x, w.y, 420) : -1;
+    if (t >= 0) launchAllFly(w, kf, w.wstats[kf]!, eff(w, w.wstats[kf]!).dmg, w.eX[t]!, w.eY[t]! - 20);
+  }
 }
 
 function fireTalismans(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
@@ -820,7 +883,17 @@ function fireTalismans(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: n
   }
 }
 
-function coinsTick(w: World, k: number, wp: { timer: number; phase: number; angle: number }, s: WeaponStats, e: { area: number; amount: number; dmg: number }): void {
+function coinsTick(w: World, k: number, wp: { timer: number; phase: number; angle: number; evolved: boolean }, s: WeaponStats, e: { area: number; amount: number; dmg: number }): void {
+  if (wp.evolved) {
+    // 金钱阵：两圈铜钱常驻，不歇
+    wp.angle = (wp.angle + s.speed) & (DIR_N - 1);
+    let have = 0;
+    for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Coin && w.sSlot[i] === k) have++;
+    for (let j = have; j < e.amount; j++) addShot(w, Shot.Coin, w.x, w.y, 0, 0, 1 << 30, e.dmg, 12, 0, k, j);
+    return;
+  }
+  // 墨斗：转得更久
+  const dur = Math.round(s.duration * w.stats.durMul);
   if (wp.phase > 0) {
     wp.phase--;
     wp.angle = (wp.angle + s.speed) & (DIR_N - 1);
@@ -831,12 +904,34 @@ function coinsTick(w: World, k: number, wp: { timer: number; phase: number; angl
     return;
   }
   if (--wp.timer > 0) return;
-  wp.phase = s.duration;
+  wp.phase = dur;
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.coins);
-  for (let j = 0; j < e.amount; j++) addShot(w, Shot.Coin, w.x, w.y, 0, 0, s.duration + 1, e.dmg, 12, 0, k, j);
+  for (let j = 0; j < e.amount; j++) addShot(w, Shot.Coin, w.x, w.y, 0, 0, dur + 1, e.dmg, 12, 0, k, j);
 }
 
-function flyTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number }, s: WeaponStats, e: { amount: number; dmg: number }): void {
+/** 把这一格所有待命的飞剑一起射向 (tx, ty)，排成扇面（万剑归宗、诛邪剑阵） */
+function launchAllFly(w: World, k: number, s: WeaponStats, dmg: number, tx: number, ty: number): number {
+  let n = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Fly && w.sSlot[i] === k && w.sState[i] === 0) n++;
+  if (n === 0) return 0;
+  const base = dirIndex(tx - w.x, ty - w.y);
+  let j = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) {
+    if (!w.sAlive[i] || w.sKind[i] !== Shot.Fly || w.sSlot[i] !== k || w.sState[i] !== 0) continue;
+    // 扇面：每把错开 6 格（约 8°）
+    const a = base + Math.round((j - (n - 1) / 2) * 6);
+    w.sState[i] = 1;
+    w.sVX[i] = dcos(a) * s.speed;
+    w.sVY[i] = dsin(a) * s.speed;
+    w.sDist[i] = 0;
+    w.sDmg[i] = dmg;
+    j++;
+  }
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.flysword);
+  return n;
+}
+
+function flyTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number; evolved: boolean }, s: WeaponStats, e: { cd: number; amount: number; dmg: number }): void {
   // 飞剑常驻：数量不够就补上（升级、令牌加数量时）
   let have = 0;
   for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Fly && w.sSlot[i] === k) have++;
@@ -846,6 +941,11 @@ function flyTick(w: World, g: Grid, k: number, wp: { timer: number; phase: numbe
   const target = nearest(w, g, w.x, w.y, s.duration * 0.9);
   if (target < 0) {
     wp.timer = 6;
+    return;
+  }
+  if (wp.evolved) {
+    // 万剑归宗：一次全射出去
+    wp.timer = launchAllFly(w, k, s, e.dmg, w.eX[target]!, w.eY[target]! - 20) > 0 ? e.cd : 4;
     return;
   }
   for (let tries = 0; tries < e.amount; tries++) {
@@ -874,19 +974,53 @@ function thunder(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number;
   if (n === 0) return;
   for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.thunder);
-  const local = scratch2;
+  // 五雷正法：每道雷劈完再连着往最近的没劈过的跳，一共五下
+  const chain = w.weapons[k]!.evolved ? 5 : 1;
   for (let j = 0; j < e.amount; j++) {
-    const t = scratch[w.rWeapon.int(n)]!;
-    const tx = w.eX[t]!;
-    const ty = w.eY[t]!;
-    w.ev.push(Ev.Thunder, tx, ty, 0, e.area);
-    const m = g.query(w, tx, ty, e.area);
-    for (let q = 0; q < m; q++) local[q] = g.out[q]!;
-    for (let q = 0; q < m; q++) {
-      const i = local[q]!;
-      hitEnemy(w, i, e.dmg, -1, w.eX[i]! - tx, w.eY[i]! - ty, s.knock, 0, k);
+    let t = scratch[w.rWeapon.int(n)]!;
+    let px = w.eX[t]!;
+    let py = w.eY[t]! - 400;
+    for (let c = 0; c < chain && t >= 0; c++) {
+      const tx = w.eX[t]!;
+      const ty = w.eY[t]!;
+      w.ev.push(Ev.Thunder, tx, ty, c, e.area, c === 0 ? 0 : 1);
+      if (c > 0) w.ev.push(Ev.Chain, px, py, 0, tx, ty);
+      strike(w, g, k, tx, ty, e.dmg, e.area, s.knock);
+      px = tx;
+      py = ty;
+      t = c + 1 < chain ? nearestUnhit(w, g, tx, ty, 220, k) : -1;
     }
   }
+}
+
+/** 一道雷落在 (x, y)：一圈都挨打（雷符、雷火符箓） */
+function strike(w: World, g: Grid, k: number, x: number, y: number, dmg: number, area: number, knock: number): void {
+  const m = g.query(w, x, y, area);
+  const local = scratch2;
+  for (let q = 0; q < m; q++) local[q] = g.out[q]!;
+  for (let q = 0; q < m; q++) {
+    const i = local[q]!;
+    hitEnemy(w, i, dmg, -1, w.eX[i]! - x, w.eY[i]! - y, knock, 0, k);
+  }
+}
+
+/** 离 (x, y) 最近、这一拍还没被这件法器打过的怪（连锁雷用） */
+function nearestUnhit(w: World, g: Grid, x: number, y: number, r: number, k: number): number {
+  const n = g.query(w, x, y, r);
+  let best = -1;
+  let bd = Infinity;
+  for (let j = 0; j < n; j++) {
+    const i = g.out[j]!;
+    if (w.eLastHit[i] === w.tick && w.eLastBy[i] === k) continue;
+    const dx = w.eX[i]! - x;
+    const dy = w.eY[i]! - y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  return best;
 }
 
 // ───────────────────────── 子弹 ─────────────────────────
@@ -979,6 +1113,15 @@ function moveShots(w: World, g: Grid): void {
           const e = scratch[q]!;
           hitEnemy(w, e, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
         }
+        // 雷火符箓：爆开的地方再落一道雷
+        if (w.merges.includes('leihuo')) {
+          const kt = w.weapons.findIndex((o) => o.id === 'thunder');
+          if (kt >= 0) {
+            const te = eff(w, w.wstats[kt]!);
+            w.ev.push(Ev.Thunder, bx, by, 0, te.area, 0);
+            strike(w, g, kt, bx, by, te.dmg, te.area, w.wstats[kt]!.knock);
+          }
+        }
         killShot(w, i);
         continue;
       }
@@ -987,9 +1130,22 @@ function moveShots(w: World, g: Grid): void {
     }
     if (kind === Shot.Coin) {
       const e = eff(w, s);
-      const a = wp.angle + Math.floor((w.sIdx[i]! * DIR_N) / e.amount);
-      w.sX[i] = w.x + dcos(a) * e.area;
-      w.sY[i] = w.y - 16 + dsin(a) * e.area * 0.8;
+      let a: number;
+      let r = e.area;
+      if (wp.evolved) {
+        // 两圈：单号在外圈反着转
+        const outer = w.sIdx[i]! & 1;
+        const per = (e.amount + 1) >> 1;
+        const j = w.sIdx[i]! >> 1;
+        if (w.sIdx[i]! >= e.amount) {
+          killShot(w, i);
+          continue;
+        }
+        a = (outer ? -wp.angle : wp.angle) + Math.floor((j * DIR_N) / per) + (outer ? DIR_N / (2 * per) : 0);
+        if (outer) r *= 1.55;
+      } else a = wp.angle + Math.floor((w.sIdx[i]! * DIR_N) / e.amount);
+      w.sX[i] = w.x + dcos(a) * r;
+      w.sY[i] = w.y - 16 + dsin(a) * r * 0.8;
       const n = g.query(w, w.sX[i]!, w.sY[i]! + 16, w.sR[i]!);
       for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
       for (let q = 0; q < n; q++) {
@@ -1015,8 +1171,29 @@ function moveShots(w: World, g: Grid): void {
           if (dx * dx + dy * dy < inner) continue;
           hitEnemy(w, en, w.sDmg[i]!, k, dx, dy, s.knock, s.rehit);
         }
+        // 太极镜：扫掉环带里怪的火球
+        if (w.sState[i] === 1) {
+          const outer = r * r;
+          for (let f = 0; f < MAX_SHOTS; f++) {
+            if (!w.sAlive[f] || w.sKind[f] !== Shot.Fireball) continue;
+            const dx = w.sX[f]! - cx;
+            const dy = w.sY[f]! - cy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= inner && d2 <= outer) {
+              w.ev.push(Ev.Burst, w.sX[f]!, w.sY[f]!, 1, 20);
+              killShot(w, f);
+            }
+          }
+        }
       }
       if (r >= w.sDist[i]!) killShot(w, i);
+      continue;
+    }
+    if (kind === Shot.Burn) {
+      const n = g.query(w, w.sX[i]!, w.sY[i]!, w.sR[i]!);
+      for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+      for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, 0, 0, 0, 10);
+      if (--w.sLife[i]! <= 0) killShot(w, i);
       continue;
     }
     if (kind === Shot.Petal) {
@@ -1037,11 +1214,30 @@ function moveShots(w: World, g: Grid): void {
     }
     if (kind === Shot.Crane) {
       const amount = eff(w, s).amount;
-      if (w.sIdx[i]! >= amount) {
+      const mini = w.sIdx[i]! >= MINI_CRANE;
+      if (mini ? --w.sDist[i]! <= 0 : w.sIdx[i]! >= amount) {
         killShot(w, i);
         continue;
       }
       const cs = w.sState[i]!;
+      if (cs === 0 && mini) {
+        // 小纸鹤不盘旋：找最近的怪直接扑过去，没有就原地等
+        const t = nearest(w, g, w.sX[i]!, w.sY[i]!, s.area);
+        if (t >= 0) {
+          const dx = w.eX[t]! - w.sX[i]!;
+          const dy = w.eY[t]! - w.sY[i]!;
+          const d = fsqrt(dx * dx + dy * dy) || 1;
+          w.sState[i] = 1;
+          w.sVX[i] = (dx / d) * s.speed;
+          w.sVY[i] = (dy / d) * s.speed;
+          w.sLife[i] = Math.max(1, Math.ceil(d / s.speed));
+        }
+        continue;
+      }
+      if (cs === 2 && mini) {
+        w.sState[i] = 0;
+        continue;
+      }
       if (cs === 0) {
         // 盘旋：比飞剑高、圈更大、转得慢
         const a = w.tick * 2 + Math.floor((w.sIdx[i]! * DIR_N) / amount);
@@ -1233,7 +1429,8 @@ function collect(w: World, i: number): void {
       gainXp(w, val);
       break;
     case Drop.Coin:
-      w.coins += val;
+      // 引魂灯：有一定概率多给一枚（铜钱保持整数）
+      w.coins += val + (w.stats.coinBonus > 0 && w.rDrop.next() < w.stats.coinBonus ? 1 : 0);
       break;
     case Drop.Bun:
       heal(w, val);
@@ -1248,7 +1445,7 @@ function collect(w: World, i: number): void {
 }
 
 function gainXp(w: World, v: number): void {
-  w.xp += v;
+  w.xp += v * w.stats.xpMul;
   for (;;) {
     const need = xpNeed(w.level);
     if (w.xp < need) break;
@@ -1273,19 +1470,31 @@ function recompute(w: World): void {
   s.armor = p('daopao');
   s.areaMul = 1 + 0.1 * p('nianzhu');
   s.amount = p('lingpai');
+  s.luck = 0.1 * p('huangli');
+  s.xpMul = 1 + 0.08 * p('lingzhi') + 0.12 * p('yinhun');
+  s.coinBonus = 0.12 * p('yinhun');
+  s.durMul = 1 + 0.1 * p('modou');
+  s.curse = p('yinhun');
+  s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
   const grow = s.hpMax - w.stats.hpMax;
   w.stats = s;
   if (grow > 0) w.hp += grow;
   w.wstats = w.weapons.map((o) => weaponStats(o.id, o.level, o.evolved));
 }
 
-/** 测试和调试用：开局直接给一件法器（到某一级）。规则照常，只是跳过选卡 */
-export function grantWeapon(w: World, id: WeaponId, level = 1): void {
+/** 测试和调试用：开局直接给一件法器（到某一级、可直接进化）。规则照常，只是跳过选卡 */
+export function grantWeapon(w: World, id: WeaponId, level = 1, evolved = false): void {
   const o = w.weapons.find((x) => x.id === id);
   if (!o) addWeapon(w, id);
   const owned = w.weapons.find((x) => x.id === id)!;
   owned.level = Math.max(owned.level, Math.min(MAX_WEAPON_LEVEL, level));
+  if (evolved && WEAPONS[id].evolve) owned.evolved = true;
   recompute(w);
+}
+
+/** 测试和调试用：当场开一个宝箱 */
+export function openChestNow(w: World): void {
+  openChest(w);
 }
 
 function addWeapon(w: World, id: WeaponId): void {
@@ -1311,14 +1520,15 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
   for (const id of WEAPON_IDS) {
     const o = w.weapons.find((x) => x.id === id);
     if (o) {
-      if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 });
-    } else if (w.weapons.length < MAX_WEAPONS) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
+      // 黄历：手上东西的升级更容易出（好卡）
+      if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 * (1 + w.stats.luck) });
+    } else if (w.weapons.length < MAX_WEAPONS + w.merges.length) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
   }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
     const lv = w.passives[id];
     if (lv !== undefined) {
-      if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 });
+      if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 + w.stats.luck });
     } else if (owned < MAX_PASSIVES) pool.push({ c: { kind: 'passive', id }, weight: 0.8 });
   }
   return pool;
@@ -1357,8 +1567,21 @@ function applyChoice(w: World, c: Choice): void {
   if (w.pendingLevels > 0) openChoices(w);
 }
 
-/** 宝箱：能进化就进化；不然随机升一件手上的东西；都满了给铜钱和回血 */
+/** 宝箱：能合成先合成，能进化就进化；不然随机升一件手上的东西（黄历：有概率再升一件）；都满了给铜钱和回血 */
 function openChest(w: World): void {
+  for (let m = 0; m < MERGES.length; m++) {
+    const def = MERGES[m]!;
+    if (w.merges.includes(def.id)) continue;
+    const a = w.weapons.find((o) => o.id === def.a);
+    const b = w.weapons.find((o) => o.id === def.b);
+    if (a?.evolved && b?.evolved) {
+      w.merges.push(def.id);
+      recompute(w);
+      w.ev.push(Ev.Merge, w.x, w.y, m);
+      w.ev.push(Ev.Chest, w.x, w.y, MERGE_CODE + m);
+      return;
+    }
+  }
   for (const o of w.weapons) {
     const evo = WEAPONS[o.id].evolve;
     if (!o.evolved && evo && o.level >= MAX_WEAPON_LEVEL && (w.passives[evo.with] ?? 0) > 0) {
@@ -1369,17 +1592,24 @@ function openChest(w: World): void {
       return;
     }
   }
-  const pool: Choice[] = [];
-  for (const o of w.weapons) if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ kind: 'weapon', id: o.id });
-  for (const id of PASSIVE_IDS) if ((w.passives[id] ?? 0) > 0 && w.passives[id]! < PASSIVES[id].max) pool.push({ kind: 'passive', id });
-  if (pool.length === 0) {
+  if (!chestUpgrade(w)) {
     w.coins += 40;
     heal(w, 30);
     w.ev.push(Ev.Chest, w.x, w.y, -1);
     return;
   }
+  if (w.stats.luck > 0 && w.rChest.next() < w.stats.luck) chestUpgrade(w);
+}
+
+/** 宝箱里随机升一件手上没满的；没有可升的返回 false */
+function chestUpgrade(w: World): boolean {
+  const pool: Choice[] = [];
+  for (const o of w.weapons) if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ kind: 'weapon', id: o.id });
+  for (const id of PASSIVE_IDS) if ((w.passives[id] ?? 0) > 0 && w.passives[id]! < PASSIVES[id].max) pool.push({ kind: 'passive', id });
+  if (pool.length === 0) return false;
   const c = pool[w.rChest.int(pool.length)]!;
   if (c.kind === 'weapon') upgradeWeapon(w, c.id as WeaponId);
   else upgradePassive(w, c.id as PassiveId);
   w.ev.push(Ev.Chest, w.x, w.y, c.kind === 'weapon' ? WEAPON_CODE[c.id as WeaponId] : PASSIVE_CODE[c.id as PassiveId]);
+  return true;
 }
