@@ -514,9 +514,28 @@ describe('只用一个闹钟', () => {
     expect((await inspect(code)).persist).not.toBeNull();
   });
 
-  it('setAlarm 自己出错（0.11.1）：不往外抛；闹钟改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排', async () => {
+  it('setAlarm 出错一次（0.13.1）：当场再试一次就设上了，不用等下一个入口', async () => {
     const { code, conns } = await fullTable();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     await failSetAlarm(code, 1);
+    await startAll(conns);
+    expect(await alarmOf(code)).toBe(Date.now() + 30_000);
+    // 只算一行写入（失败的那次没写）
+    expect((await inspect(code)).max).toBeLessThanOrEqual(2);
+    err.mockRestore();
+  });
+
+  it('状态消息带房间的时间 now（0.13.1，浏览器的看门狗用它算时限还剩多久）', async () => {
+    const { conns } = await fullTable();
+    conns[0]!.send({ t: 'start' });
+    const s = await conns[0]!.state();
+    expect(s.now).toBe(Date.now());
+    expect(s.room.turn!.deadline! - s.now!).toBe(30_000);
+  });
+
+  it('setAlarm 连着出错（0.11.1、0.13.1 两次都失败）：不往外抛；闹钟改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排', async () => {
+    const { code, conns } = await fullTable();
+    await failSetAlarm(code, 2);
     await startAll(conns);
     // 开局要设的出牌超时（30 秒后）没设上，存储里还是开局前的那个
     expect(await alarmOf(code)).not.toBe(Date.now() + 30_000);
@@ -526,10 +545,30 @@ describe('只用一个闹钟', () => {
     expect(await alarmOf(code)).toBe(Date.now() + 30_000);
   });
 
-  it('闹钟里重设闹钟失败（0.11.1）：过 60 秒再醒来，不会从此没有闹钟', async () => {
+  it('不是闹钟的那一步 setAlarm 两次都失败、存储里也没有闹钟（0.13.1，第三轮审计）：当场补一个 60 秒后的，不等下一个入口', async () => {
+    const { code, conns } = await fullTable();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // 存储里没有闹钟，内存里也不知道
+    await runInDurableObject(stub(code), async (room: ToyRoom, state) => {
+      await state.storage.deleteAlarm();
+      (room as unknown as { alarmAt: undefined }).alarmAt = undefined;
+    });
+    await failSetAlarm(code, 2);
+    await startAll(conns);
+    expect(await alarmOf(code)).toBe(Date.now() + 60_000);
+    // 补设的这次顶替没写成的那次：这一步仍然最多 2 行
+    expect((await inspect(code)).max).toBeLessThanOrEqual(2);
+    // 醒来时按状态重新算：出牌超时（30 秒）已经过了，照常代出
+    advance(60_000);
+    expect(await runDurableObjectAlarm(stub(code))).toBe(true);
+    expect(await played(code)).toBeGreaterThan(0);
+    err.mockRestore();
+  });
+
+  it('闹钟里重设闹钟失败（0.11.1；0.13.1 起当场再试一次，两次都失败才走这条）：过 60 秒再醒来，不会从此没有闹钟', async () => {
     const { code, conns } = await fullTable();
     await startAll(conns);
-    await failSetAlarm(code, 1);
+    await failSetAlarm(code, 2);
     advance(30_000);
     expect(await runDurableObjectAlarm(stub(code))).toBe(true);
     expect(await alarmOf(code)).toBe(Date.now() + 60_000);

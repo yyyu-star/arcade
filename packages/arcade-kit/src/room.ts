@@ -119,6 +119,8 @@ export const DEFAULT_LIMITS: RoomLimits = {
 
 /** 闹钟里出错时，过这么久再醒来重试（不用"马上"，免得每次都出错时连着计费）。 */
 const ALARM_RETRY_MS = 60_000;
+/** setAlarm 一次最多试几回（0.13.1）：存储一时出错当场再试一次，不等下一个入口 */
+const SET_ALARM_TRIES = 2;
 /** 每个座位记住最近几个做成的 moveId（0.11.1）：客户端断线时攒着没确认的操作，重连后原样补发 */
 const RECENT_MOVES = 8;
 
@@ -461,24 +463,54 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     this.totalWrites += this.writes;
     this.unmetered += this.writes;
     this.maxStepWrites = Math.max(this.maxStepWrites, this.writes);
-    if (at !== null && !(await this.setAlarmSafely(at))) this.lastStepFailed = true;
+    if (at !== null && !(await this.setAlarmSafely(at))) {
+      this.lastStepFailed = true;
+      await this.recoverAlarm();
+    }
     await this.afterStep();
     return out;
   }
 
   /**
-   * 设闹钟；失败了不往外抛（0.11.1）。planAlarm 已经把 alarmAt 改成了新时间，失败时它就是错的：
-   * 留着的话以后 planAlarm 看"已经设了更早的"一直不重设，房间就没人收场。改回"不知道"，下一个入口按 getAlarm() 重新读、照常重排
+   * 这一步要设的闹钟两次都没设上（0.13.1，第三轮审计）：按 getAlarm() 核对存储里还有没有闹钟（以前设的更早的那个可能还在）；
+   * 有就以它为准，没有而房间还在，就补一个 ALARM_RETRY_MS 后的，醒来时 onAlarm 按状态重新算（到点的照常处理）。
+   * 以前只靠下一个入口重排：全是电脑、大家都在等时限的房间没人发消息，就一直停着，不关房、结回也不重试。
+   * 补设也失败（存储一直坏着）就只剩浏览器的看门狗（RoomClient）重连来叫醒。读不了存储时不抛（入口里不往外抛）
+   */
+  private async recoverAlarm(): Promise<void> {
+    try {
+      if (!this.load()) return;
+      const cur = await this.ctx.storage.getAlarm();
+      if (cur !== null) {
+        this.alarmAt = cur;
+        return;
+      }
+      // 不另记一行：这一步的那次 setAlarm 已经记过了，它没写成，补设的这次顶替它
+      this.alarmAt = Date.now() + ALARM_RETRY_MS;
+      await this.setAlarmSafely(this.alarmAt);
+    } catch (e) {
+      console.error('room alarm recovery failed', e instanceof Error ? e.message : e);
+      this.alarmAt = undefined;
+    }
+  }
+
+  /**
+   * 设闹钟；失败了不往外抛（0.11.1）。存储一时出错大多下一次就好，所以当场再试一次（0.13.1）；还不行：
+   * planAlarm 已经把 alarmAt 改成了新时间，失败时它就是错的，留着的话以后 planAlarm 看"已经设了更早的"一直不重设，房间就没人收场。
+   * 改回"不知道"，下一个入口（任何消息、进房、闹钟）按 getAlarm() 重新读、照常重排。
+   * 一直没人发消息（全是电脑在打、大家都在等时限）时，下一个入口由浏览器的看门狗给（RoomClient：时限过了很久还没有新状态就重连一次）
    */
   private async setAlarmSafely(at: number): Promise<boolean> {
-    try {
-      await this.ctx.storage.setAlarm(at);
-      return true;
-    } catch (e) {
-      console.error('room setAlarm failed', e instanceof Error ? e.message : e);
-      this.alarmAt = undefined;
-      return false;
+    for (let i = 0; i < SET_ALARM_TRIES; i++) {
+      try {
+        await this.ctx.storage.setAlarm(at);
+        return true;
+      } catch (e) {
+        console.error('room setAlarm failed', i + 1, e instanceof Error ? e.message : e);
+      }
     }
+    this.alarmAt = undefined;
+    return false;
   }
 
   // ---------- 计量（0.2.0） ----------
@@ -1584,6 +1616,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       you: { seat, bound },
       room: this.roomInfo(),
       view: st.game === null ? null : this.game.view(st.game, seat),
+      now: Date.now(),
       // 有短语的游戏告诉页面限速的节奏（0.7.0），RoomClient 按它排队，用户感觉不到限速
       ...(hasEmotes(this.game.emotes) ? { emote: this.emoteRate() } : {}),
     };
@@ -1592,7 +1625,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private stateMsg(seat: number | null, bound: number | null, frames: { state: S | null; delay: number }[], ack?: string, quiet = false): DownMsg<V> {
     const st = this.st!;
     const out: Frame<V>[] = frames.map((f) => ({ view: (f.state === null ? null : this.game.view(f.state, seat)) as V, delay: f.delay }));
-    return { t: 'state', seq: st.seq, you: { seat, bound }, room: this.roomInfo(), frames: out, ...(ack ? { ack } : {}), ...(quiet ? { quiet: true as const } : {}) };
+    return { t: 'state', seq: st.seq, you: { seat, bound }, room: this.roomInfo(), frames: out, now: Date.now(), ...(ack ? { ack } : {}), ...(quiet ? { quiet: true as const } : {}) };
   }
 
   /** 按座位过滤后广播：同一个座位（加上绑定的座位，没入座的人各自不同）的消息只算一次。只发给已经收到快照（有 attachment）的连接。 */

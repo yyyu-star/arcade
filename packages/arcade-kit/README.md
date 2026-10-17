@@ -289,7 +289,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 import { TableFun, funIdCount, type FunSeat } from 'arcade-kit/table-fun';
 
 const fun = new TableFun({
-  storageKey: 'mygame',                          // 存储前缀：mygame.hint.fun（localStorage）、mygame.fun.blocked（sessionStorage）
+  storageKey: 'mygame',                          // 存储前缀：mygame.hint.fun（localStorage）、mygame.fun.blocked（sessionStorage）；只认游戏 id 的写法，不合格构造时抛错（0.13.1）
   phrases: PHRASES,                              // 本游戏的短语表；编号 0..P-1 是短语，P..P+11 表情，P+12..P+19 道具
   named: [3, 4, 2],                              // 头像菜单里的 3 句点名短语（短语表下标）
   seats: (): (FunSeat | null)[] => view.seats.map((s, i) => s && ({
@@ -460,6 +460,9 @@ export class CardRoom extends GameRoom<State, Action, View, Env> {
   - 一个人最多用掉房间入站额度的 `maxInboundShare`（默认四成，1,200 条）：超了只断开他（4030），以后也进不来，房间和别人照常；
   - 入站额度用完关房时，日志里记下发得最多的那个 userId 和条数（不记消息内容），方便事后查；
   - 每个入口都包一层，游戏代码抛错只记日志；闹钟里不往外抛（会自动重试 6 次，每次都计费）。
+  - 闹钟设不上（0.13.1）：当场再试一次；还不行就按 `getAlarm()` 核对，存储里没有闹钟就补一个 60 秒后的（顶替没写成的那次，不多算一行）；
+    补也补不上时，浏览器的 `RoomClient` 看门狗兜底：房间说的时限（按消息里房间给的 `now` 算，不看浏览器的钟）过了 20–30 秒还没有新状态，就重连一次，
+    进房这个入口会让房间重排闹钟、把过期的那一手照常处理；同一个 seq 只踢一次。
 - **座位绑人**（0.1.1）：开局时记下每个座位坐的是谁。开打后坐过某个座位的人只能回这个座位；没坐过的人只能接管没绑人的电脑座位，接管后绑给他；
   绑给别人的座位（主人离座了也算）谁也接管不了，电脑一直替主人打，主人回来照样能坐。一个 userId 一局只对应一个座位，所以离座、换到对手座位看牌、再回来这条路走不通；
   也不能由同伙先占掉你的原座位、把你变成"没绑座位"的人。0.1.0 存下的已开打房间读出来时，电脑座位一律算已绑（旧格式看不出谁离过座）。
