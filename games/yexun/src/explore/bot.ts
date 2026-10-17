@@ -10,17 +10,27 @@ import { gateField, guide, newGuide, type Guide } from './guide.ts';
 import { NAV_INF } from './nav.ts';
 import type { Raid } from './raid.ts';
 
+/** 盯一个箱子多久没靠近就放下（拍）、放下后多久再考虑它 */
+const GIVE_UP = 600;
+const RETRY = 3600;
+
 export class RaidBot {
   private readonly raid: Raid;
   /** 这一拍以后，门一开就走 */
   private readonly leaveAt: number;
   private target = -1;
   private field: Int32Array | null = null;
+  /** 盯着同一个箱子时：这段里离它最近到过多少、从哪一拍开始算 */
+  private bestD = Infinity;
+  private since = 0;
+  /** 放弃过的箱子：到这一拍之前不再挑（石兽守着的宝库、被怪堵住的院子，玩家也会先去别处） */
+  private skipUntil: Int32Array;
   readonly g: Guide = newGuide();
 
   constructor(raid: Raid, leaveAt = 0) {
     this.raid = raid;
     this.leaveAt = leaveAt;
+    this.skipUntil = new Int32Array(raid.map.chests.length);
   }
 
   /** 这一拍往哪走 */
@@ -38,9 +48,20 @@ export class RaidBot {
     for (let c = 0; c < chests.length; c++) {
       if (!raid.chestOpen[c] && dist(chests[c]!.x - x, chests[c]!.y - y) <= CHEST_OPEN.range * 0.8) return 0;
     }
-    if (this.target < 0 || raid.chestOpen[this.target]) this.pick(x, y);
+    if (this.target < 0 || raid.chestOpen[this.target]) this.pick(x, y, tick);
     if (this.target < 0 || !this.field) return 0;
-    const ch = chests[this.target]!;
+    let ch = chests[this.target]!;
+    // 20 秒没往它靠近 40 以上：先放下，2 分钟内不再挑
+    const d = dist(ch.x - x, ch.y - y);
+    if (d < this.bestD - 40) {
+      this.bestD = d;
+      this.since = tick;
+    } else if (tick - this.since > GIVE_UP) {
+      this.skipUntil[this.target] = tick + RETRY;
+      this.pick(x, y, tick);
+      if (this.target < 0 || !this.field) return 0;
+      ch = chests[this.target]!;
+    }
     if (dist(ch.x - x, ch.y - y) < 60) return toward(ch.x - x, ch.y - y);
     return this.step(x, y, this.field);
   }
@@ -93,12 +114,14 @@ export class RaidBot {
   }
 
   /** 挑直线最近的没开的箱子，算一张到它的最短路场 */
-  private pick(x: number, y: number): void {
+  private pick(x: number, y: number, tick: number): void {
     const chests = this.raid.map.chests;
     let best = -1;
     let bd = Infinity;
+    this.bestD = Infinity;
+    this.since = tick;
     for (let c = 0; c < chests.length; c++) {
-      if (this.raid.chestOpen[c]) continue;
+      if (this.raid.chestOpen[c] || this.skipUntil[c]! > tick) continue;
       const d = dist(chests[c]!.x - x, chests[c]!.y - y);
       if (d < bd) {
         bd = d;
