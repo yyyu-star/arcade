@@ -137,7 +137,9 @@ const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
 
 function paintTop(): void {
-  speedBtn.textContent = prefs.fast ? '快' : '慢';
+  // 写的是现在的速度（以前常速时写"慢"，像是在说电脑慢）
+  speedBtn.textContent = prefs.fast ? '快速' : '常速';
+  speedBtn.title = '电脑出牌的速度：点一下切换';
   speedBtn.title = prefs.fast ? '电脑出牌快' : '电脑出牌慢';
   soundBtn.textContent = prefs.sound && prefs.volume > 0 ? '声' : '静';
   muteBtn.textContent = prefs.sound ? '静音' : '开声';
@@ -681,7 +683,7 @@ const soloUi = {
           if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
           cheer(box, mine, v.result?.seats[v.me!.seat]?.net ?? 0);
-          const row = el('div', 'row', box);
+          const row = el('div', 'row end-acts', box);
           button('act soft', row, '回选桌', () => {
             closeDialog();
             lobby();
@@ -699,7 +701,7 @@ const soloUi = {
       }
       dialog(stage, 'end', (box) => {
         box.appendChild(roundSummary(v, names, unit));
-        button('act go', box, '下一局', () => {
+        button('act go', el('div', 'row end-acts', box), '下一局', () => {
           closeDialog();
           solo?.next();
         });

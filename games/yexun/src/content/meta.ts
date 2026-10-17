@@ -40,36 +40,50 @@ export interface CharacterDef {
   id: CharacterId;
   name: string;
   start: WeaponId;
+  /** 专属被动的名字（角色卡上的小标题） */
+  perkName: string;
   /** 专属被动，一句话 */
   perk: string;
   /** 怎么解锁，一句话（判断在 save.ts） */
   unlock: string;
+  /** 一句话的人设（角色卡上） */
+  look: string;
+  /** 台词：选中时显示在卡上，开局时头上冒一次气泡。大白话，有性格 */
+  line: string;
 }
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
-  xiaodao: { id: 'xiaodao', name: '小道士', start: 'sword', perk: '每升 10 级，伤害、范围、持续、移速各 +3%', unlock: '一开始就有' },
-  fushi: { id: 'fushi', name: '符师', start: 'talisman', perk: '符类冷却 −10%，符咒有 15% 多发一张', unlock: '守夜撑过 10 分钟' },
-  jianxia: { id: 'jianxia', name: '剑侠', start: 'flysword', perk: '走动时暴击 +10%', unlock: '一局打死 1,500 只' },
-  pang: { id: 'pang', name: '胖师叔', start: 'bell', perk: '挨打时震开身边的怪', unlock: '花 600 铜钱' },
-  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perk: '每到整分钟敲一声锣，全屏的怪往后退', unlock: '守夜危险 2 撑到天亮' },
-  caiyao: { id: 'caiyao', name: '采药女', start: 'petals', perk: '吃肉包回血加倍，魂珠 +10%', unlock: '藏宝阁收集 20 件' },
+  xiaodao: { id: 'xiaodao', name: '小道士', start: 'sword', perkName: '越战越勇', perk: '每升 5 级，伤害、范围、持续、移速各 +1.5%', unlock: '一开始就有', look: '蓝袍桃木剑，什么都会一点', line: '师父说，夜路不怕，怕的是不走。' },
+  fushi: { id: 'fushi', name: '符师', start: 'talisman', perkName: '连环符', perk: '符类冷却 −10%，每第 4 次出符多飞一张', unlock: '一开始就有', look: '紫袍高冠，腰上挂满黄符', line: '符纸管够，今晚谁来都是一张。' },
+  jianxia: { id: 'jianxia', name: '剑侠', start: 'flysword', perkName: '剑不停步', perk: '走动时暴击 +12%，暴击更疼 +30%', unlock: '一开始就有', look: '青衣红围巾，背着一把长剑', line: '剑在鞘里闷得慌，边走边打。' },
+  pang: { id: 'pang', name: '胖师叔', start: 'bell', perkName: '皮糙肉厚', perk: '血量 +50，走得慢一点（−8%），挨打时震开身边的怪', unlock: '花 300 铜钱请他', look: '橙袍大圆脸，手里摇着小铃', line: '吃饱了才有力气，挨两下不算啥。' },
+  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perkName: '三更锣', perk: '每 20 秒敲一声锣：全屏的怪被震退并受伤，金钟罩补一层', unlock: '守夜撑过 8 分钟', look: '灰袄毡帽，一手锣一手灯笼', line: '天干物燥——小心火烛——咣！' },
+  caiyao: { id: 'caiyao', name: '采药女', start: 'petals', perkName: '百草香', perk: '每秒回 0.7 血，肉包回血加倍，经验 +20%', unlock: '夜探成功撤出 1 次', look: '青裙双髻，背着药篓采药', line: '药篓里什么都有，也有给你的。' },
 };
 
 /** 角色被动的数值 */
 export const CHAR_FX = {
-  xiaodaoEvery: 10,
-  xiaodaoStep: 0.03,
+  xiaodaoEvery: 5,
+  xiaodaoStep: 0.015,
   fushiCd: 0.9,
-  fushiExtra: 0.15,
-  jianxiaCrit: 0.1,
-  /** 胖师叔震开的半径和力道 */
+  /** 每第几次出符，那一轮多飞一张 */
+  fushiEvery: 4,
+  jianxiaCrit: 0.12,
+  jianxiaCritDmg: 0.3,
+  /** 胖师叔：多的血、移速倍数，挨打时震开的半径和力道 */
+  pangHp: 50,
+  pangSpeed: 0.92,
   pangArea: 130,
   pangKnock: 40,
-  /** 更夫的锣：多远的怪往后退、退多远 */
+  /** 更夫的锣：隔几拍一次、多远的怪被震、退多远，伤害 = 底 + 每级 × 等级 */
+  gongEvery: 20 * 30,
   gongArea: 720,
-  gongKnock: 60,
+  gongKnock: 40,
+  gongDmg: 20,
+  gongPerLevel: 3,
   caiyaoBun: 2,
-  caiyaoXp: 0.1,
+  caiyaoXp: 0.2,
+  caiyaoRegen: 0.7,
 };
 
 // ───────────────────────── 永久加成 ─────────────────────────

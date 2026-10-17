@@ -27,6 +27,8 @@ import { prepareShare, type ShareCard } from 'arcade-kit/share';
 import { mountSocial, openInvite, postMoment, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
+import { ROOM_NAME, setRoom } from './view/rooms.ts';
+import { mountScene } from './view/scene.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
 import { PROPS, propId, TableFun, type FunSeat } from 'arcade-kit/table-fun';
 import { loadFunOff, saveFunOff, suggest } from './view/fun.ts';
@@ -40,6 +42,10 @@ import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
 // 夜场牌桌的皮（0.10.0）：材质、光影、颜色都在这里，压在 style.css 的布局上
 import './view/skin.css';
+// 分层背景（0.18.0，docs/art-v3.md）：墙、散景、吊灯吧台、光锥，在舞台后面
+import './view/scene.css';
+// 主题房（0.18.1）：四个档位各一间，只换颜色和材质
+import './view/rooms.css';
 
 interface Settings {
   sound: boolean;
@@ -70,6 +76,7 @@ const AUTO_NEXT_MS = 3_500;
 
 const app = document.getElementById('app')!;
 const stage = el('div', 'stage', app);
+const scene = mountScene(app, stage);
 const top = el('div', 'topbar', stage);
 const home = el('a', 'home', top);
 home.href = '/';
@@ -170,7 +177,20 @@ rebuyBtn.type = 'button';
 rebuyBtn.addEventListener('click', () => online?.act({ t: 'rebuy', ...(rebuyAmount ? { amount: rebuyAmount } : {}) }));
 const toastEl = el('div', 'toast', stage);
 const bar = new ActionBar(screen, (a) => void act(a), (r) => tableView.avoid(r));
-const lobby = new Lobby(stage, { start, resume, relief, openRoom, joinRoom, backToRoom });
+/** 选桌上选中的那一间（标题页时背景按它） */
+let lobbyRoom: StakesId | null = null;
+const lobby = new Lobby(stage, {
+  start,
+  resume,
+  relief,
+  openRoom,
+  joinRoom,
+  backToRoom,
+  preview: (id) => {
+    lobbyRoom = id;
+    drawRoomTheme();
+  },
+});
 const roomPanel = new RoomPanel(stage, {
   sit: (i) => online?.sit(i),
   start: () => online?.start(),
@@ -369,6 +389,7 @@ async function refreshWallet(): Promise<void> {
 
 function showLobby(): void {
   stage.classList.remove('at-table');
+  lobby.home();
   notMyTurn();
   closeFun();
   closeDialog();
@@ -393,6 +414,7 @@ function drawLobby(): void {
     resume: s ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, level: s.table.level, waiting: s.pending !== null } : null,
     orphan: texasStakes(wallet, 'client').find((x) => x.ref !== s?.id) ?? null,
     busy,
+    stats: cloud.stats(),
     room: back
       ? { code: back.code, text: inRoom ? `好友房 ${back.code} 里还有 ${chips(inRoom.amount)} 在桌上。${settle}` : `刚才在好友房 ${back.code}` }
       : null,
@@ -904,8 +926,20 @@ async function tips(): Promise<void> {
 
 // ---------- 顶栏 ----------
 
+/**
+ * 主题房（0.18.1，view/rooms.ts）：好友房按房间的档位，单机实盘按这一桌的档位，娱乐都在小桌那一间；
+ * 标题页按选桌上选中的那一档（主页是小桌那一间）
+ */
+function drawRoomTheme(): void {
+  const v = online?.state.view;
+  const id = online ? (v?.stakes ?? online.state.opts?.stakes ?? null) : stage.classList.contains('at-table') && solo ? (solo.session.practice ? null : solo.table.stakes) : lobbyRoom;
+  setRoom([stage, scene], id);
+  tableView.setMark(ROOM_NAME[id ?? 'small']);
+}
+
 function drawTop(): void {
   drawFunToggle();
+  drawRoomTheme();
   if (online) return drawRoomTop(online.state);
   const at = stage.classList.contains('at-table') && solo;
   const diff = solo?.session.practice ? difficultyOf(solo.table.level) : null;

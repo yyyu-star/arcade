@@ -8,7 +8,7 @@ import { fullDateText, timeText } from '../format.ts';
 import { GAMES } from '../games.ts';
 import { confirmLeave, Link, navigate } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Field, FormError, Panel, RecoveryCodeCard, SubmitButton, useSubmit, useWritable } from '../ui.tsx';
+import { Field, FormError, Panel, RecoveryCodeCard, Skeleton, SubmitButton, useSubmit, useWritable } from '../ui.tsx';
 
 /** 再验证（输当前密码）时 bad_credentials 只可能是密码错，别说"用户名或密码不对"。 */
 const REAUTH = { bad_credentials: '密码不对' };
@@ -16,7 +16,7 @@ const REAUTH = { bad_credentials: '密码不对' };
 
 export function MePage() {
   const { loading, user, service } = useSession();
-  if (loading) return <Panel icon="user" title="我的账号"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="user" title="我的账号"><Skeleton rows={3} /></Panel>;
   // 停服、连不上时读不到账号（不是没登录）：顶上已有提示，这里别让人去登录
   if (service === 'off') return <Panel icon="user" title="我的账号"><p className="note">账号服务暂时休息，过一会儿再来看。</p></Panel>;
   if (service === 'unreachable') return <Panel icon="user" title="我的账号"><p className="note">连不上服务器，点上面的"重试"。</p></Panel>;
@@ -30,9 +30,11 @@ export function MePage() {
       </Panel>
     );
   }
+  // 电脑上（0.23.0）左边一列是账号和邀请，右边是隐私开关、云存档和账号安全
   return (
-    <>
+    <div className="desk">
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
+      <div className="desk__col">
       <Panel icon="user" title="我的账号">
         <dl className="facts">
           <dt>昵称</dt>
@@ -58,6 +60,9 @@ export function MePage() {
         <Rename />
         <LogoutButton />
       </Panel>
+      <InviteFriends />
+      </div>
+      <div className="desk__col">
       <Panel icon="people" title="好友能看到什么">
         <PrivacySwitch
           field="showWhere"
@@ -84,7 +89,6 @@ export function MePage() {
           testId="show-mates"
         />
       </Panel>
-      <InviteFriends />
       <Saves />
       <Panel icon="lock" title="账号安全">
         <ChangePassword />
@@ -92,7 +96,8 @@ export function MePage() {
         <LogoutOthers />
         <DeleteAccount />
       </Panel>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -384,7 +389,7 @@ function InviteFriends() {
     await api.createInviteCode();
     reload();
   });
-  if (!data) return <Panel icon="people" title="邀请朋友">{error ? <p className="note">{error}</p> : <p className="note">正在读取…</p>}</Panel>;
+  if (!data) return <Panel icon="people" title="邀请朋友">{error ? <p className="note">{error}</p> : <Skeleton rows={3} />}</Panel>;
   return (
     <Panel icon="people" title="邀请朋友">
       <p className="note" data-testid="invite-left">

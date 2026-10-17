@@ -4,7 +4,7 @@
  * 不碰规则核心：只读 World 和它这一拍的事件；这里的代码不用随机数和时间。
  */
 import { ENEMIES, type EnemyKind } from '../content/enemies.ts';
-import type { MapId } from '../content/maps.ts';
+import { MAP_IDS, type MapId } from '../content/maps.ts';
 import type { Danger } from '../content/waves.ts';
 
 /** 危险档当键（JSON 里是字符串） */
@@ -83,7 +83,7 @@ export interface Records {
 }
 
 const DANGER_KEYS: DangerKey[] = ['0', '1', '2', '3', '4', '5'];
-const MAPS_: MapId[] = ['snow', 'yizhuang'];
+const MAPS_: MapId[] = [...MAP_IDS];
 const KINDS = ENEMIES.map((e) => e.kind);
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];

@@ -10,6 +10,7 @@
  * - 公平：人人一样、免费；只是画面和声音，不停计时、不改规则；电脑的出牌不读这些。电脑的反应只在画面层（单机）或房间的互动钩子里算。
  * - kit 不认识任何游戏：短语表、名场面的映射、电脑人物都由游戏给。
  */
+import { applyTheme, type KitTheme } from './theme.js';
 import { PROPS, STICKERS, createFunLayer, propSvg, showSticker, stickerSvg, throwAt, type FunLayer, type FunPhase, type PropId, type RectLike, type StickerId } from './fun.js';
 import {
   BOT_REACT,
@@ -94,6 +95,8 @@ export interface TableFunOptions {
   log?(line: string): void;
   /** 效果图层的 z-index，菜单和热区在它上面一层；默认 50 */
   zIndex?: number;
+  /** 主题（0.16.0）：写到菜单根节点（.atf-ui）上的 `--ak-*` 变量；不传就用页面 CSS 里的变量或默认外观 */
+  theme?: KitTheme;
   /** 电脑反应的参数，默认规范的数字 */
   react?: BotReactConfig;
   /** 测试、复现用 */
@@ -113,26 +116,27 @@ const DEFAULT_LINES: Record<FunMood, readonly string[]> = {
 const HINT_TEXT = '点头像扔道具，长按连扔';
 const CSS_ID = 'arcade-table-fun-css';
 const CSS = `
-.atf-ui{position:fixed;inset:0;pointer-events:none;font-family:inherit;-webkit-tap-highlight-color:transparent}
+.atf-ui{position:fixed;inset:0;pointer-events:none;font-family:var(--ak-font,inherit);-webkit-tap-highlight-color:transparent}
 .atf-hot{position:absolute;left:0;top:0;pointer-events:auto;border-radius:50%;touch-action:manipulation;cursor:pointer;-webkit-user-select:none;user-select:none}
 .atf-away{position:absolute;inset:0;pointer-events:auto}
-.atf-box{position:absolute;left:0;top:0;pointer-events:auto;background:rgba(43,29,20,.96);border:2px solid #d4a64a;border-radius:14px;padding:8px;box-sizing:border-box;color:#fff6e0;box-shadow:0 6px 18px rgba(0,0,0,.45);transform-origin:center;animation:atf-pop .14s ease-out}
-.atf-title{font-size:15px;font-weight:700;color:#f3d98b;margin:0 4px 6px}
+.atf-box{position:absolute;left:0;top:0;pointer-events:auto;background:var(--ak-bg,rgba(43,29,20,.96));border:2px solid var(--ak-border,#d4a64a);border-radius:var(--ak-radius,14px);padding:8px;box-sizing:border-box;color:var(--ak-fg,#fff6e0);box-shadow:0 6px 18px rgba(0,0,0,.45);transform-origin:center;animation:atf-pop .14s ease-out}
+.atf-title{font-size:15px;font-weight:700;color:var(--ak-title,#f3d98b);margin:0 4px 6px}
 .atf-row{display:flex;gap:4px;flex-wrap:wrap}
-.atf-cell{position:relative;width:48px;height:48px;border:0;border-radius:10px;background:#4a3220;padding:4px;box-sizing:border-box;cursor:pointer;overflow:hidden}
+.atf-cell{position:relative;width:48px;height:48px;border:0;border-radius:var(--ak-radius-btn,10px);background:var(--ak-soft,#4a3220);padding:4px;box-sizing:border-box;cursor:pointer;overflow:hidden}
 .atf-cell svg{width:100%;height:100%;display:block;pointer-events:none}
-.atf-chip{min-height:44px;border:1px solid rgba(212,166,74,.6);border-radius:22px;background:#7a2a1e;color:#fff6e0;font:inherit;font-size:14px;font-weight:700;padding:0 12px;cursor:pointer}
-.atf-chip.atf-soft{background:#4a3220}.atf-chip.atf-grey{background:#3a3a3a}.atf-chip.atf-on{background:#b3202a}.atf-chip.atf-pick{background:#3a6a2a}
+.atf-chip{min-height:44px;border:1px solid var(--ak-border,rgba(212,166,74,.6));border-radius:var(--ak-radius-btn,22px);background:var(--ak-accent,#7a2a1e);color:var(--ak-accent-fg,#fff6e0);font:inherit;font-size:14px;font-weight:700;padding:0 12px;cursor:pointer}
+.atf-chip.atf-soft,.atf-chip.atf-grey,.atf-chip.atf-on,.atf-chip.atf-pick{color:var(--ak-fg,#fff6e0)}
+.atf-chip.atf-soft{background:var(--ak-soft,#4a3220)}.atf-chip.atf-grey{background:#3a3a3a}.atf-chip.atf-on{background:#b3202a}.atf-chip.atf-pick{background:#3a6a2a}
 .atf-grid{display:grid;gap:4px}
 .atf-scroll{overflow-y:auto;overscroll-behavior:contain}
-.atf-cool{position:absolute;inset:0;border-radius:10px;background:rgba(0,0,0,.5);pointer-events:none}
-.atf-cool::after{content:'';position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#f3d98b;animation:atf-spin .7s linear infinite}
-.atf-btn{position:absolute;left:0;top:0;pointer-events:auto;min-width:44px;min-height:44px;border-radius:22px;border:2px solid #d4a64a;background:#5a3a22;color:#fff6e0;font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px 6px;box-sizing:border-box}
+.atf-cool{position:absolute;inset:0;border-radius:var(--ak-radius-btn,10px);background:rgba(0,0,0,.5);pointer-events:none}
+.atf-cool::after{content:'';position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--ak-title,#f3d98b);animation:atf-spin .7s linear infinite}
+.atf-btn{position:absolute;left:0;top:0;pointer-events:auto;min-width:44px;min-height:44px;border-radius:var(--ak-radius-btn,22px);border:2px solid var(--ak-border,#d4a64a);background:var(--ak-soft,#5a3a22);color:var(--ak-fg,#fff6e0);font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px 6px;box-sizing:border-box}
 .atf-btn svg{width:22px;height:22px}
-.atf-bubble{position:absolute;left:0;top:0;max-width:220px;padding:6px 12px;border-radius:14px;background:#fffaf0;color:#2b1d14;font-size:15px;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
-.atf-flash{position:absolute;left:0;top:0;font-size:26px;font-weight:900;color:#f3d98b;-webkit-text-stroke:1.5px #2b1d14;pointer-events:none;white-space:nowrap}
-.atf-banner{position:absolute;left:50%;top:18%;padding:10px 34px;background:linear-gradient(#c8323a,#8a1a20);border:2px solid #f3d98b;border-radius:6px;color:#fff6e0;font-size:28px;font-weight:900;letter-spacing:4px;text-align:center;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
-.atf-banner small{display:block;font-size:15px;letter-spacing:1px;color:#f3d98b}
+.atf-bubble{position:absolute;left:0;top:0;max-width:220px;padding:6px 12px;border-radius:var(--ak-radius,14px);background:#fffaf0;color:#2b1d14;font-size:15px;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.atf-flash{position:absolute;left:0;top:0;font-size:26px;font-weight:900;color:var(--ak-title,#f3d98b);-webkit-text-stroke:1.5px #2b1d14;pointer-events:none;white-space:nowrap}
+.atf-banner{position:absolute;left:50%;top:18%;padding:10px 34px;background:linear-gradient(#c8323a,#8a1a20);border:2px solid var(--ak-title,#f3d98b);border-radius:6px;color:var(--ak-fg,#fff6e0);font-size:28px;font-weight:900;letter-spacing:4px;text-align:center;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.atf-banner small{display:block;font-size:15px;letter-spacing:1px;color:var(--ak-title,#f3d98b)}
 @keyframes atf-pop{from{opacity:0;scale:.92}to{opacity:1;scale:1}}
 @keyframes atf-spin{to{transform:rotate(360deg)}}
 `;
@@ -193,6 +197,7 @@ export class TableFun {
     this.ui = this.doc.createElement('div');
     this.ui.className = 'atf-ui';
     this.ui.style.zIndex = String(z + 1);
+    applyTheme(this.ui, opts.theme);
     this.doc.body.appendChild(this.ui);
     window.addEventListener('resize', this.onResize);
     this.refresh();

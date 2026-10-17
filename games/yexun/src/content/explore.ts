@@ -231,10 +231,28 @@ export const RAID_MINUTES: readonly Minute[] = [
  * 巡夜将：守金箱、会追人，比主角慢一点（追得上停下来的人，追不上一直跑的）；黑甲，刀剑砍着费劲。
  * 镇门石兽：守最值钱的院子，青石身子，刀剑、土都不太吃；怕水（冲刷）和镇（镇物压得住）。
  */
-export type RaidEnemyKind = 'patrol' | 'beast';
+export type RaidEnemyKind = 'patrol' | 'beast' | 'goblin';
 export const RAID_ENEMIES: Record<RaidEnemyKind, Omit<EnemyDef, 'kind' | 'code'>> = {
   patrol: { hp: 900, speed: 2.5, dmg: 14, r: 26, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.25 } },
   beast: { hp: 9000, speed: 1.4, dmg: 20, r: 46, xp: 80, steady: 0.97, boss: true, vs: { 剑: 0.6, 土: 0.7, 水: 1.4, 镇: 1.3 } },
+  // 宝妖：背着宝袋的小妖，见人就跑（比主角慢一点，追得上），不打人；打倒掉两件好宝物
+  goblin: { hp: 420, speed: 2.6, dmg: 0, r: 20, xp: 20, steady: 0.95, elite: true },
+};
+
+/**
+ * 夜探后半段（DESIGN.md 2.3，主线 2026-10-17 批的 B）：所有者试玩觉得 6 分钟以后没东西可搜、只剩躲怪等门。
+ * 都按夜探自己的随机流（raid-late）抽，录像和每日挑战能复现；不加"越晚撤越多倍"的倍数，多出来的价值全来自这些。
+ * - restock：6:00 起每 90 秒，把 n 个已经开过的箱子重新封上、换一批东西（每一波深度 +deepStep，越晚越值钱）；
+ * - goblin：5:00、10:00 各出一只宝妖，离主角 900–1,600 的路口；life 拍后钻地跑掉；打倒直接进背包 items 件（深度 1 抽）；
+ * - market：7:00–8:00 镇中心附近的鬼市，三个摊子各摆一件，站在摊前 hold 拍、身上铜钱够就按价值 × rate 买下；
+ * - vault：最深的金箱从开局就贴着封条，8:00 以后、身上有钥匙才能搜，开出 items 件（深度 1）；
+ *   钥匙：keyFrom 以后打倒的第一只精英或守卫掉（宝妖不算），一局一把。
+ */
+export const RAID_LATE = {
+  restock: { from: 6 * M, every: 90 * 30, n: 3, deepStep: 0.25 },
+  goblin: { at: [5 * M, 10 * M], life: 45 * 30, minD: 900, maxD: 1600, items: 2, flee: 520 },
+  market: { from: 7 * M, to: 8 * M, stalls: 3, rate: 0.7, r: 56, hold: 30, gap: 110, depth: 0.8 },
+  vault: { at: 8 * M, items: 6, keyFrom: 5 * M },
 };
 
 /**
@@ -269,30 +287,41 @@ export const BEAST = {
 export const ROAM_SPEED = 0.6;
 
 /**
- * 实盘结回（DESIGN.md 4.2）：倍数 = clamp(带出的宝物价值 ÷ 基准价值, 0, 封顶)，死亡或迷失为 0；结回 = 带入 × 倍数 向下取整，按万分之一传。
- * 基准价值目前按下面的"估算节奏"定（10 分钟撤约 1.3 倍）；第 7 步用机器人模拟的真实数换掉。
- * 封顶先和守夜打倒尸王一样是 3（4.1：夜探要不要放宽到 5 份，等模拟数出来报主线定）。
- * 档位 → 危险：小 0、中 2、大 3、豪华 4（4.1；夜探豪华档先不开）。
+ * 实盘结回（DESIGN.md 4.2）：撤出时倍数 = clamp(带出的宝物价值 ÷ 基准价值, 保底, 封顶)；死亡、迷失、认输为 0。结回 = 带入 × 倍数 向下取整，按万分之一传。
+ * 基准按"档位 × 镇子"各一个：三个镇子同一档的平均带出价值差三成（模拟器第 3 轮），只按一个数会有"挑镇子赚钱"的空子。
+ * 保底（1.1）：按撤出时刻从 1 涨到满额，按档分开定（见下面 floor / floorRamp）；不按镇子分开：保底一高，手熟的人"开门就走"就比认真搜还赚。
+ * 档位 → 危险：小 0、中 1、大 2（主线 2026-10-17 同意放低一档）；夜探的危险 1、2 走 waves.ts 的 RAID_DANGERS（比守夜缓），0.2.0 起三档都开。
+ * 基准是 1.1 全量模拟（每格 2,000 局）拟合的：普通玩家落在区间里、且比开门就走至少多 0.15 份，见 DESIGN.md 4.2 的表。
  */
 export const RAID_LIVE = {
   cap: 3,
-  base: { small: 221, mid: 221, large: 221 } as Record<RaidLiveTier, number>,
-  danger: { small: 0, mid: 2, large: 3 } as Record<RaidLiveTier, number>,
+  /**
+   * 保底满额和几拍给满：撤出越早给得越少，从 1.0 线性涨到满额（1.1：认真搜要比开门就走多拿 ≥ 0.15 份）。
+   * 按档分开：中、大档第一座门 5 分钟才开，开门就走也在 6 分钟左右，同样的保底在那里就等于白送，所以中档给满拖到 10 分钟、大档满额压到 1.25。
+   */
+  floor: { small: 1.6, medium: 1.6, large: 1.25 } as Record<RaidLiveTier, number>,
+  floorRamp: { small: 5 * 60 * 30, medium: 10 * 60 * 30, large: 8 * 60 * 30 } as Record<RaidLiveTier, number>,
+  base: {
+    small: { guzhen: 212, dukou: 173, shansi: 201 },
+    medium: { guzhen: 175, dukou: 150, shansi: 132 },
+    large: { guzhen: 148, dukou: 122, shansi: 82 },
+  } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
+  danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
+  open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],
 };
-export type RaidLiveTier = 'small' | 'mid' | 'large';
-
-/**
- * 估算节奏（模拟器出数前用来定基准价值）：普通玩家撤出时大约开了几个箱子，箱子在什么深度。
- * 4.2 的形状：5 分钟早撤约 0.5、10 分钟约 1.3、15 分钟约 2。
- */
-export const RAID_PACE_MODEL: readonly { minute: number; target: number; chests: Partial<Record<ChestTier, number>>; depth: number }[] = [
-  { minute: 5, target: 0.5, chests: { wood: 5, copper: 2 }, depth: 0.2 },
-  { minute: 10, target: 1.3, chests: { wood: 8, copper: 4, gold: 1 }, depth: 0.45 },
-  { minute: 15, target: 2, chests: { wood: 10, copper: 5, gold: 2 }, depth: 0.55 },
-];
+export type RaidLiveTier = 'small' | 'medium' | 'large';
+/** 能开实盘的镇子（教学镇不能） */
+export type RaidLiveTemplate = Exclude<RaidTemplateId, 'teach'>;
+export const RAID_LIVE_TIERS: readonly RaidLiveTier[] = ['small', 'medium', 'large'];
 
 /** 娱乐：撤出时背包按价值换铜钱（1 价值 = 1 铜钱）；死了或迷失拿这局捡到的铜钱的一半 */
 export const RAID_EXCHANGE = { rate: 1, deathCoinShare: 0.5 };
+
+/**
+ * 早搜奖励（1.1）：前 until 拍（5 分钟）里、离出生点 near 以内的木箱和铜箱，开出来的宝物结算时价值按 mul 算。
+ * 让"顺手搜两三个箱子再走"的小白不靠保底也有赚；纯刷保底不碰箱子拿不到。不改抽到什么（宝物照旧），只在结算时加价。
+ */
+export const RAID_EARLY = { until: 5 * 60 * 30, near: 1200, mul: 1.3 };
 
 /** 藏宝阁：带出过多少件不同的宝物解锁采药女（DESIGN.md 3.7） */
 export const VAULT_UNLOCK = { herbalist: 20 };

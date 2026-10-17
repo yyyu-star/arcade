@@ -351,6 +351,53 @@ button {
   opacity: 0.8;
 }
 
+/* 横屏选桌页分两栏（0.16.1）：左边店名、开打、进房，右边选档和规则设置。横屏舞台只有 520 高，排成一列要在框里滚动；
+ * DOM 不动（竖屏照旧一列），按格子放。舞台随屏幕变宽（viewport.ts），两栏跟着撑开 */
+[data-orient='land'] .screen.lobby {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(560px, 1.7fr);
+  grid-template-areas:
+    'head pick'
+    'resume pick'
+    'go pick'
+    'nick pick'
+    'join note'
+    'link opts';
+  grid-template-rows: auto auto auto auto 1fr auto;
+  align-content: center;
+  justify-items: center;
+  column-gap: var(--sp-6);
+  row-gap: var(--sp-3);
+  /* 顶上让出竹帘（30 高） */
+  padding: 40px var(--sp-6) var(--sp-4);
+}
+[data-orient='land'] .screen.lobby > .lobby-head { grid-area: head; }
+[data-orient='land'] .screen.lobby > .resume { grid-area: resume; }
+[data-orient='land'] .screen.lobby > .go-row { grid-area: go; flex-direction: column; gap: var(--sp-3); }
+[data-orient='land'] .screen.lobby > .nick { grid-area: nick; }
+[data-orient='land'] .screen.lobby > .join { grid-area: join; align-self: start; }
+[data-orient='land'] .screen.lobby > .link { grid-area: link; }
+[data-orient='land'] .screen.lobby > .stakes-box { grid-area: pick; align-self: center; }
+[data-orient='land'] .screen.lobby > .wallet-note { grid-area: note; align-self: start; }
+[data-orient='land'] .screen.lobby > .rules-opts { grid-area: opts; }
+/* 左栏的店名在板壁上，放大一点；右栏的卡片宽一点，一排四张正好 */
+[data-orient='land'] .screen.lobby .lobby-head h1 { font-size: 64px; }
+[data-orient='land'] .stake { min-width: 128px; }
+/* 规则设置展开后两项一行，不把右栏撑出舞台 */
+[data-orient='land'] .rules-opts[open] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--sp-4);
+}
+[data-orient='land'] .rules-opts summary { grid-column: 1 / -1; }
+/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边是同一块呢子 */
+[data-orient='land'] .table {
+  inset: 0 auto 0 calc(50% - 500px);
+  width: 1000px;
+  /* 木框外面压暗，看得出桌子到哪为止（外阴影只画在框外，盖不到框和桌面） */
+  box-shadow: 0 0 0 400px #0000004d;
+}
+
 /* ---------- 好友房 ---------- */
 .screen.room {
   display: flex;
@@ -1105,6 +1152,28 @@ button {
 .my-hand .tile.up {
   transform: translateY(-14px);
 }
+/* 有鼠标时悬停先抬一点（0.16.2，对标雀魂），点下去再抬到选中的高度；触屏没有悬停，不受影响 */
+@media (hover: hover) and (pointer: fine) {
+  .my-hand .tile:not(.off):not(.up):not(.drag):hover {
+    transform: translateY(-7px);
+  }
+}
+/* 轮到我打牌：手牌底下一道金边，轻轻呼吸（减少动态效果时只亮不动） */
+.my-hand.turn {
+  border-radius: 8px;
+  box-shadow: 0 6px 0 -2px var(--gold);
+  animation: turn-glow 1.6s ease-in-out infinite;
+}
+@keyframes turn-glow {
+  50% {
+    box-shadow: 0 6px 10px -2px var(--gold);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .my-hand.turn {
+    animation: none;
+  }
+}
 .my-hand .tile.drawn {
   margin-left: calc(var(--lg-w) / 2);
 }
@@ -1171,11 +1240,29 @@ button {
 .bar .claim-tile {
   display: flex;
 }
-/* 给 kit 的"互动"按钮留的空位：不画东西、不挡点击，只告诉 kit 按钮放哪、多大 */
+/* 给 kit 的"互动"按钮留的空位：不画东西、不挡点击，只告诉 kit 按钮放哪、多大。
+ * 高至少 --tap（屏幕上 44 像素折成舞台里的像素）：kit 给按钮保底 44 像素，空位比它矮时按钮会撑出来压到手牌（iPhone SE 竖屏） */
 .fun-slot {
   width: 112px;
-  height: 48px;
+  height: max(48px, var(--tap, 48px));
   pointer-events: none;
+}
+/* kit 的"互动"按钮浮在舞台外面（屏幕像素），字是固定的 13 像素：电脑上舞台放大后成了大框小字。
+ * 按舞台的缩放（viewport.ts 写的 --stage-scale）放大字和图标，横排，和牌桌上别的按钮一个样子（0.16.2） */
+html .atf-btn {
+  flex-direction: row;
+  gap: calc(6px * var(--stage-scale, 1));
+  font-size: max(13px, calc(var(--fs-lg) * var(--stage-scale, 1)));
+  border: 1px solid #ffffff26;
+  border-radius: calc(var(--r-md) * var(--stage-scale, 1));
+  background: linear-gradient(#ffffff38, #ffffff1a), #2a4a3c;
+  box-shadow:
+    inset 0 1px 0 #ffffff40,
+    0 3px 0 #0006;
+}
+html .atf-btn svg {
+  width: max(18px, calc(24px * var(--stage-scale, 1)));
+  height: max(18px, calc(24px * var(--stage-scale, 1)));
 }
 /* 碰杠胡过：大、醒目，浮在手牌右上方 */
 .bar .act {
@@ -1553,7 +1640,7 @@ button {
 [data-orient='port'] .river.r0 { left: 213px; top: calc(var(--c) + 62px + var(--spread)); width: 134px; }
 [data-orient='port'] .river.r3 { left: 100px; top: calc(var(--c) - 74px); width: 108px; flex-direction: row-reverse; }
 [data-orient='port'] .river.r1 { left: 352px; top: calc(var(--c) - 74px); width: 108px; }
-[data-orient='port'] .bar { left: 50%; bottom: 146px; height: 64px; transform: translateX(-50%); justify-content: center; }
+[data-orient='port'] .bar { left: 50%; bottom: 162px; height: 64px; transform: translateX(-50%); justify-content: center; }
 /* 头像右边、手牌抬起来（离底 78）也碰不到 */
 [data-orient='port'] .fun-slot { left: 204px; bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }
@@ -1796,6 +1883,30 @@ button {
 }
 .end .dialog > .summary + .summary {
   margin-top: var(--sp-4);
+}
+/* 结算的按钮行贴在弹窗底：内容再长（一场打完的总结算、名场面），"下一局""再来一场"也不用滚到下面去找（0.16.3，1920 宽时被切掉一半） */
+.end .dialog > .end-acts {
+  position: sticky;
+  bottom: calc(-1 * var(--sp-5));
+  margin: var(--sp-3) calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5));
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  background: linear-gradient(#0f2c2200, #0f2c22 var(--sp-4));
+  z-index: 1;
+}
+/* 横屏高度只有 560：每家的牌并进名字那一行（名字、牌、胡了什么、分），一局的结算一屏放得下 */
+[data-orient='land'] .end .dialog {
+  max-width: min(960px, 96%);
+}
+[data-orient='land'] .summary .row .hand-line {
+  order: 1;
+  width: auto;
+}
+[data-orient='land'] .summary .row:has(> .hand-line) .what {
+  order: 2;
+  min-width: 0;
+}
+[data-orient='land'] .summary .row:has(> .hand-line) .net {
+  order: 3;
 }
 
 /* 从平台大厅的"好友房"进来：开房、进房亮两下 */

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { APP_VERSION } from '../../platform/version.ts';
 import { ensureAtlas, finishBoot, loadOptionalArt, prepareArt, queueBoot, stocksForThemes, warmLazy, type AtlasMode } from '../assets.ts';
+import { loadNumFont } from '../numFont.ts';
 import type { Session } from '../session.ts';
 import { COLOR, PHONE, VIEW } from '../theme.ts';
 import { addText } from '../ui/text.ts';
@@ -53,7 +54,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   private async run(): Promise<void> {
-    await prepareArt(atlasMode());
+    await Promise.all([prepareArt(atlasMode()), loadNumFont()]);
     const stocks = stocksForThemes(this.session.state.themeIds);
     this.load.on(Phaser.Loader.Events.PROGRESS, (p: number) => this.progress(p * 0.95));
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {

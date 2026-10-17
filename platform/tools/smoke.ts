@@ -1382,6 +1382,8 @@ async function adminOverview(browser: Browser): Promise<void> {
     }
     check(await page.locator('.panel__head').getByTestId('admin-chips-open').isVisible(), '"管理筹码"应该在"今天各游戏"的标题行里');
     await shot(page, `admin-console-${screen}`);
+    // 0.23.1：管理后台在 1280、1920 宽也不是窄列、不横着滑
+    if (screen === 'desktop') await deskLayout(page, 'admin-console');
     const trendOld = await page.getByTestId('trend').locator('tbody tr').nth(1).locator('td').nth(1).textContent();
     check(trendOld === '—', `0.10.7 以前的记录应该写"—"：${trendOld}`);
     const trendHead = await page.getByTestId('trend').locator('thead th').allTextContents();
@@ -1429,7 +1431,8 @@ async function adminInvites(browser: Browser): Promise<void> {
     const table = page.getByTestId('invite-code-table');
     await table.getByText('K7QM-2RTP-XCWJ').waitFor();
     const rowH = await table.locator('tbody tr').first().evaluate((el) => el.getBoundingClientRect().height);
-    check(rowH < 60, `邀请码表一行不该被撑高：${rowH}px`);
+    // 竖屏上"复制"按钮是 44 高的点击区（0.24.0），一行约 61px；折行撑高时远不止这些
+    check(rowH < (screen === 'portrait' ? 68 : 60), `邀请码表一行不该被撑高：${rowH}px`);
     const panel = page.locator('.panel', { has: table });
     const [pb, sb, segW] = await Promise.all([panel.boundingBox(), page.locator('.table-scroll').boundingBox(), panel.locator('.seg').evaluate((el) => el.getBoundingClientRect().width - [...el.children].reduce((w, c) => w + c.getBoundingClientRect().width, 0))]);
     check(!!pb && !!sb && sb.x + sb.width <= pb.x + pb.width + 1, '表格的框不该超出面板');
@@ -1595,6 +1598,17 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.route('**/games/yexun/daily.json', (r) =>
       r.fulfill(json({ note: '今天所有人玩同一局。', score: [{ text: '{n}' }], boards: { vigil: { note: '撑到天亮的比拼击杀，没撑到的比谁撑得久。', score: [{ from: 1_000_000, text: '天亮 · 斩 {n}' }, { text: '撑了 {n} 秒' }] }, raid: { note: '比谁撤出时带出的宝物更值钱。', score: [{ text: '带出 {n} 铜钱' }] } } })),
     );
+    // 各游戏总榜（0.23.0）：夜巡守夜，分数按夜巡 boards.json 的 fields 拆开写
+    await page.route('**/api/boards/yexun/vigil?scope=*', (r) =>
+      r.fulfill(json({ entries: [
+        { rank: 1, userId: u(1), displayName: '小明', avatar: null, score: 3 * 1e10 + 900 * 1e4 + 2_050, isMe: false },
+        { rank: 2, userId: u(0), displayName: '老王的徒弟', avatar: null, score: 2 * 1e10 + 754 * 1e4 + 1_234, isMe: false },
+        { rank: 3, userId: u(2), displayName: '某人', avatar: null, score: 1 * 1e10 + 61 * 1e4 + 88, isMe: true },
+      ], me: { rank: 3, score: 1 * 1e10 + 61 * 1e4 + 88 } })),
+    );
+    await page.route('**/games/yexun/boards.json', (r) =>
+      r.fulfill(json({ boards: { vigil: { note: '危险档高的排前面，同档比撑多久、斩多少。', score: [{ fields: { d: [1e10, null], s: [1e4, 1e6], k: [1, 1e4] }, fmt: { s: 'mmss' }, text: '危险{d} · {s} · 斩 {k}' }] } } })),
+    );
     await page.goto(`${BASE}/`);
     await page.locator('.topbar').getByRole('link', { name: '排行' }).click();
     await page.getByTestId('ranks').getByText('+48,000').waitFor();
@@ -1621,6 +1635,14 @@ async function boardsPage(browser: Browser): Promise<void> {
     check(fit.h <= 48 && fit.lines === 1, `"晒名次"该是一行字、不高于 48px：${JSON.stringify(fit)}`);
     check(fit.sameLine && fit.rowH <= 64, `"晒名次"该和分数在同一行、行不被撑高：${JSON.stringify(fit)}`);
     await shot(page, `boards-me-in-list-${screen}`);
+    await page.getByRole('link', { name: '夜巡守夜' }).click();
+    await page.getByText('危险2 · 12:34 · 斩 1,234').waitFor();
+    await page.locator('.rank--me').getByText('危险1 · 1:01 · 斩 88').waitFor();
+    await page.getByText('夜巡守夜：危险档高的排前面').waitFor();
+    check((await page.getByRole('link', { name: '夜巡夜探' }).count()) === 1 && (await page.getByRole('link', { name: '夜巡无尽' }).count()) === 1, '夜巡另两个总榜该有标签');
+    await shot(page, `boards-yexun-fixed-${screen}`);
+    if (screen === 'desktop') await deskLayout(page, 'boards');
+    await page.getByRole('link', { name: '本周净赢' }).click();
     await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '掼蛋' }).click();
     await page.getByTestId('board-empty').waitFor();
     // 不用钱包的游戏（飞驰，0.10.25）不开"本周净赢"的标签：只会是空的
@@ -1746,6 +1768,264 @@ async function loginNext(browser: Browser): Promise<void> {
   await ctx.close();
 }
 
+/**
+ * 电脑版排版（0.23.0）：在 1280、1920 宽各看一次——主区不能还是中间一窄列（至少占内容区的 85%），整页不能横着滑；各截一张。
+ * 看完把窗口恢复成原来的大小
+ */
+async function deskLayout(page: Page, name: string): Promise<void> {
+  const before = page.viewportSize()!;
+  for (const width of [1280, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const m = await page.evaluate(() => {
+      const shell = document.querySelector('.page')!;
+      const cs = getComputedStyle(shell);
+      const inner = shell.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return { main: document.querySelector('main')!.getBoundingClientRect().width, inner, scroll: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    check(m.main >= m.inner * 0.85, `${name}（${width} 宽）主区还是窄列：${Math.round(m.main)} / ${Math.round(m.inner)}`);
+    check(m.scroll <= 0, `${name}（${width} 宽）整页能横着滑：多出 ${m.scroll}px`);
+    await shot(page, `${name}-desk-${width}`);
+  }
+  await page.setViewportSize(before);
+}
+
+/** 电脑版排版（0.23.0）：大厅、好友、我的、我的战绩在 1280、1920 宽各一张（不是窄长列、不横着滑），手机竖屏各一张 */
+async function deskPages(browser: Browser): Promise<void> {
+  const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
+  const games = {
+    kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000, titles: [{ id: 'first_year', at: Date.UTC(2026, 9, 13, 3) }] }),
+    guandan: career({ n: 6, wnet: -800, rounds: 40, wins: 22, best: 3_200 }),
+    texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }),
+    mahjong: career({ n: 3, rounds: 25, wins: 6, best: 1_200 }),
+  };
+  const pages = [
+    ['home', '/', async (page: Page) => void (await page.locator('.card').first().waitFor())],
+    ['friends', '/friends', async (page: Page) => void (await page.getByText('名字有十二个字那么长的人').first().waitFor())],
+    ['me', '/me', async (page: Page) => void (await page.getByTestId('saves-kaipan').getByText('还没有存档').waitFor())],
+    ['stats', '/me/stats', async (page: Page) => void (await page.getByTestId('career-texas').waitFor())],
+  ] as const;
+  for (const screen of ['desktop', 'portrait'] as const) {
+    console.log(`电脑版排版（${screen}）：大厅、好友、我的、战绩`);
+    const { ctx, page } = await newPage(browser, `电脑排版 ${screen}`, screen);
+    await mockSession(page, { feed: FAKE_FEED });
+    await fakeFeedFiles(page);
+    await page.route('**/api/friends', (r) => r.fulfill(json(FAKE_FRIENDS)));
+    await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [] })));
+    await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+    await page.route('**/api/stats/me', (r) => r.fulfill(json({ user: { userId: FAKE_USER.id, displayName: FAKE_USER.displayName, avatar: null }, relation: 'self', week: '2026-10-12', games })));
+    await page.route('**/games/*/titles.json', (r) => r.fulfill(json({ first_year: { name: '熬过一年', desc: '实盘打满 12 个月' } })));
+    for (const [name, path, ready] of pages) {
+      await page.goto(`${BASE}${path}`);
+      await ready(page);
+      if (screen === 'desktop') await deskLayout(page, name);
+      else await shot(page, `${name}-phone`);
+    }
+    await ctx.close();
+  }
+}
+
+/**
+ * 手机界面专项（0.24.0，所有者 10-17 深夜排的清单）：iPhone SE 375×667 竖、390×844 竖、844×390 横、iPad 820×1180 竖，
+ * 平台各页逐页量：能点的东西 ≥ 44×44、字 ≥ 12px（数字 ≥ 14px）、整页不横着滑、没有东西伸出屏幕、顶栏一行放得下；
+ * 第一屏就有主操作（大厅的游戏卡、钱包的余额和补给、排行的自己）。用管理员登录（顶栏按钮最多）。
+ */
+const PHONES = [
+  ['se', { width: 375, height: 667 }],
+  ['iphone', { width: 390, height: 844 }],
+  ['landscape', { width: 844, height: 390 }],
+  ['ipad', { width: 820, height: 1180 }],
+] as const;
+
+/** 在页面里量一遍，返回不合格的地方（一句话一条） */
+async function phoneIssues(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const vw = window.innerWidth;
+    const name = (el: Element) => `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''}「${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 16)}」`;
+    const visible = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
+    };
+    // 在能横着滑的框里（表格、标签条）的东西伸出屏幕不算
+    const inScroller = (el: Element) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
+      }
+      return false;
+    };
+    if (document.documentElement.scrollWidth > vw + 1) out.push(`整页能横着滑：宽 ${document.documentElement.scrollWidth} > ${vw}`);
+    for (const el of document.querySelectorAll('a[href], button, summary, input:not([type=hidden]), select, textarea')) {
+      if (!visible(el) || el.closest('[aria-hidden="true"]')) continue;
+      // 句子里的文字链接（隐私说明里的"我的账号"这种）按 WCAG 2.5.8 不算：它跟着一行字走，放大了反而把句子撑开
+      if (el.tagName === 'A' && el.parentElement?.matches('p, li') && (el.parentElement.textContent ?? '').trim().length > (el.textContent ?? '').trim().length + 4) continue;
+      // 复选框、单选框按它外面那一整行标签算
+      const target = (el as HTMLInputElement).type === 'checkbox' || (el as HTMLInputElement).type === 'radio' ? (el.closest('label') ?? el) : el;
+      const r = target.getBoundingClientRect();
+      if (r.width < 44 - 0.5 || r.height < 44 - 0.5) out.push(`点击区小：${name(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
+      if (r.right > vw + 1 && !inScroller(el)) out.push(`伸出屏幕：${name(el)} 右边到 ${Math.round(r.right)}`);
+    }
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const seen = new Set<Element>();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const text = (n.textContent ?? '').trim();
+      const el = n.parentElement;
+      if (!text || !el || seen.has(el) || !visible(el) || el.closest('svg, [aria-hidden="true"], .sr-only')) continue;
+      seen.add(el);
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      const numeric = /^[+\-−]?[\d,.:%·\s]+$/.test(text);
+      if (size < (numeric ? 14 : 12) - 0.01) out.push(`字小：${name(el)} ${size}px${numeric ? '（数字）' : ''}`);
+      const r = el.getBoundingClientRect();
+      if (r.right > vw + 1 && !inScroller(el)) out.push(`字伸出屏幕：${name(el)}`);
+    }
+    const tops = [...document.querySelectorAll('.topbar .account')].filter(visible).map((e) => Math.round(e.getBoundingClientRect().top));
+    if (new Set(tops).size > 1) out.push(`顶栏折成了 ${new Set(tops).size} 行`);
+    return [...new Set(out)];
+  });
+}
+
+/**
+ * 手机上"回去接着打"的底部固定条（0.24.1）：贴着屏幕底边、约 56 高，按钮够大，游戏名和数字没被省略，
+ * 页面里只有这一条（原来那条就是它），翻到底时页脚不被它盖住
+ */
+async function stakeBarIssues(page: Page, viewport: { width: number; height: number }): Promise<string[]> {
+  const out: string[] = [];
+  const bar = page.getByTestId('nudge-stake');
+  const box = (await bar.boundingBox())!;
+  if (Math.abs(box.y + box.height - viewport.height) > 1) out.push(`固定条没贴着底边：底在 ${Math.round(box.y + box.height)}`);
+  if (box.height < 52 || box.height > 64) out.push(`固定条高 ${Math.round(box.height)}，要 56 左右`);
+  const btn = (await bar.getByRole('link', { name: '回去接着打' }).boundingBox())!;
+  if (btn.height < 44) out.push(`"回去接着打"高 ${Math.round(btn.height)}，不到 44`);
+  const cut = await bar.locator('.nudge__keep').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent));
+  if (cut.length) out.push(`游戏名或数字被省略了：${cut.join('、')}`);
+  if (!/德州扑克.*2,000/.test((await bar.textContent()) ?? '')) out.push('固定条上没写游戏名和数字');
+  if ((await page.getByRole('link', { name: '回去接着打' }).count()) !== 1) out.push('"回去接着打"不止一个');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(100);
+  const foot = (await page.locator('.foot').boundingBox())!;
+  const top = (await bar.boundingBox())!.y;
+  if (foot.y + foot.height > top + 1) out.push(`翻到底时页脚被固定条盖住：页脚底 ${Math.round(foot.y + foot.height)}，条顶 ${Math.round(top)}`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  return out;
+}
+
+async function phoneAudit(browser: Browser): Promise<void> {
+  const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
+  const games = { kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000 }), texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }) };
+  const u = (i: number) => String.fromCharCode(65 + i).repeat(22);
+  const row = (i: number, name: string, value: number, rank = i + 1, isMe = false) => ({ rank, userId: u(i), displayName: name, avatar: null, value, isMe });
+  const many = Array.from({ length: 12 }, (_, i) => row(i, `玩家${i + 1}`, 50_000 - i * 3_000));
+  many[8] = row(8, FAKE_ADMIN.displayName, 26_000, 9, true);
+  const leaderboard = { week: '2026-10-12', daily: {}, boards: { total: { entries: many, me: { rank: 9, value: 26_000 } }, titles: { entries: [], me: null } } };
+  const wallet = {
+    ...FAKE_WALLET,
+    wallet: { ...FAKE_WALLET.wallet, balance: 1_200, canRelief: true, fresh: false, stakes: [{ game: 'texas', ref: 'r1', amount: 2_000, at: Date.UTC(2026, 9, 17, 2), until: Date.UTC(2026, 9, 18, 2), mode: 'server' }], caps: { kaipan: { net: 2_400, cap: 6_000 } } },
+    ledger: [{ at: Date.UTC(2026, 9, 17, 3), t: 'settle', g: 'kaipan', a: 12_000, capped: 1_200 }, { at: Date.UTC(2026, 9, 17, 2), t: 'buyin', g: 'texas', a: -2_000 }],
+    week: { kaipan: 9_400, texas: -1_200 },
+  };
+  const pages = [
+    ['home', '/', '.card'],
+    ['wallet', '/wallet', '[data-testid="wallet-balance"]'],
+    ['boards', '/boards', '[data-testid="ranks"]'],
+    ['friends', '/friends', '[data-testid="person-小明"]'],
+    ['me', '/me', '[data-testid="saves-kaipan"]'],
+    ['stats', '/me/stats', '[data-testid="career-texas"]'],
+    ['admin', '/admin', '[data-testid="admin-overview"]'],
+    ['admin-users', '/admin?s=users', '[data-testid="user-xiaoming_2026"]'],
+    ['admin-invites', '/admin?s=invites', '[data-testid="invite-rules"]'],
+    ['privacy', '/privacy', 'main h2'],
+  ] as const;
+  // 第一屏要整个看得到的东西：大厅的"回去接着打"（继续）和第一张游戏卡的标题、钱包的余额和补给、排行的自己
+  const firstScreen: Record<string, string[]> = {
+    home: ['[data-testid="nudge-stake"] a', '.card .card__title'],
+    wallet: ['[data-testid="wallet-balance"]', '.wallet__relief button'],
+    boards: ['[data-testid="my-rank"]'],
+  };
+  // 主按钮（主线清单里的主操作）：大厅的"回去接着打"（继续）、钱包的补给。大厅的"领补给"一天一次、钱包页底下也有，不算大厅的主操作
+  const reach: Record<string, string[]> = {
+    home: ['[data-testid="nudge-stake"] a'],
+    wallet: ['.wallet__relief button'],
+  };
+  const problems: string[] = [];
+  for (const [label, viewport] of PHONES) {
+    console.log(`手机清单（${label} ${viewport.width}×${viewport.height}）：${pages.map((p) => p[0]).join('、')}`);
+    const { ctx, page } = await newPage(browser, `手机清单 ${label}`, 'portrait', { viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await mockAdmin(page);
+    await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
+    await page.route('**/api/wallet', (r) => r.fulfill(json(wallet)));
+    await page.route('**/api/feed', (r) => r.fulfill(json({ items: FAKE_FEED })));
+    await fakeFeedFiles(page);
+    await page.route('**/api/friends', (r) => r.fulfill(json(FAKE_FRIENDS)));
+    await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [] })));
+    await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+    await page.route('**/api/stats/me', (r) => r.fulfill(json({ user: { userId: FAKE_ADMIN.id, displayName: FAKE_ADMIN.displayName, avatar: null }, relation: 'self', week: '2026-10-12', games })));
+    await page.route('**/api/leaderboard?scope=*', (r) => r.fulfill(json(leaderboard)));
+    await page.route('**/games/*/titles.json', (r) => r.fulfill(json({})));
+    await page.route('**/api/admin/settings/invites', (r) => r.fulfill(json({ rules: { userQuota: 3, adminQuota: 50, ttlDays: 7, perDay: 5 }, defaults: { userQuota: 3, adminQuota: 50, ttlDays: 7, perDay: 5 }, range: { userQuota: [0, 100], adminQuota: [0, 1_000], ttlDays: [1, 90], perDay: [1, 100] } })));
+    await page.route('**/api/admin/invite-codes?*', (r) => r.fulfill(json({ codes: [] })));
+    await page.route('**/api/admin/wallet-adjustments', (r) => r.fulfill(json({ recent: [] })));
+    for (const [name, path, ready] of pages) {
+      await page.goto(`${BASE}${path}`);
+      await page.locator(ready).first().waitFor();
+      await page.waitForTimeout(150);
+      for (const p of await phoneIssues(page)) problems.push(`${label} ${name}：${p}`);
+      // 第一屏就有主操作（竖着拿的时候；横屏只有 390 高，标题和顶栏占掉一半，往下翻一下是正常的）
+      if (label !== 'landscape') {
+        for (const sel of firstScreen[name] ?? []) {
+          const box = await page.locator(sel).first().boundingBox();
+          if (!box || box.y < 0 || box.y + box.height > viewport.height) problems.push(`${label} ${name}：第一屏看不到 ${sel}${box ? `（在 ${Math.round(box.y)}–${Math.round(box.y + box.height)}）` : ''}`);
+        }
+      }
+      // 单手够得着：手机竖着拿时主按钮的中心不在屏幕最上面三分之一（拇指最难够的地方）；iPad 一般两手拿，不量
+      if (label === 'se' || label === 'iphone') {
+        for (const sel of reach[name] ?? []) {
+          const box = await page.locator(sel).first().boundingBox();
+          const mid = box ? box.y + box.height / 2 : -1;
+          if (mid < viewport.height / 3) problems.push(`${label} ${name}：主按钮 ${sel} 在屏幕最上面三分之一，单手够不着（中心 ${Math.round(mid)}，要 ≥ ${Math.round(viewport.height / 3)}）`);
+        }
+      }
+      if (name === 'home') problems.push(...(await stakeBarIssues(page, viewport)).map((p) => `${label} home：${p}`));
+      await shot(page, `phone-${label}-${name}`);
+    }
+    // 管理筹码小窗口在 SE 上不出屏、里面能点的够大
+    if (label === 'se') {
+      await page.goto(`${BASE}/admin`);
+      await page.getByTestId('admin-chips-open').click();
+      await page.getByTestId('admin-chips').waitFor();
+      await page.waitForTimeout(150);
+      const box = await page.getByTestId('admin-chips').boundingBox();
+      if (!box || box.x < 0 || box.y < 0 || box.x + box.width > viewport.width || box.y + box.height > viewport.height) problems.push(`se 管理筹码：小窗口出了屏幕 ${JSON.stringify(box)}`);
+      for (const p of await phoneIssues(page)) problems.push(`se 管理筹码：${p}`);
+      await shot(page, 'phone-se-admin-chips');
+    }
+    // 竖着转横着再转回来：不横着滑、顶栏不折行
+    if (label === 'iphone') {
+      await page.goto(`${BASE}/`);
+      await page.locator('.card').first().waitFor();
+      for (const vp of [{ width: 844, height: 390 }, viewport]) {
+        await page.setViewportSize(vp);
+        await page.waitForTimeout(300);
+        for (const p of await phoneIssues(page)) problems.push(`转屏 ${vp.width}×${vp.height} home：${p}`);
+      }
+    }
+    await ctx.close();
+  }
+  // 电脑上（宽窗口、鼠标）还是页面里的一条提示，不是底部固定条
+  {
+    const { ctx, page } = await newPage(browser, '手机清单 电脑对照', 'desktop');
+    await mockAdmin(page);
+    await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
+    await page.route('**/api/wallet', (r) => r.fulfill(json(wallet)));
+    await page.goto(`${BASE}/`);
+    const pos = await page.getByTestId('nudge-stake').evaluate((el) => getComputedStyle(el).position);
+    if (pos !== 'static') problems.push(`电脑大厅："回去接着打"应该是页面里的一条提示，实际 position=${pos}`);
+    await ctx.close();
+  }
+  for (const p of problems) console.log(`  · ${p}`);
+  check(problems.length === 0, `手机清单有 ${problems.length} 处不合格（见上面的列表）`);
+}
+
 /** 0.9.8：发版后旧分块没了（404）：整页重载一次拿新版；还是 404 就停下来提示刷新，不来回重载、不白屏。 */
 async function staleChunk(browser: Browser): Promise<void> {
   console.log('发版后点进钱包页，分块 404：重载一次，还不行就提示刷新；好了以后点"刷新"能进');
@@ -1848,7 +2128,18 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     // 0.10.10 最近进出
     await page.getByTestId('ledger').locator('.ledger__row', { hasText: '开盘' }).getByText('到顶没进 1,200').waitFor();
     await page.getByTestId('ledger').getByText('+12,000').waitFor();
+    // 0.23.0 这周的输赢：合计 + 每个游戏一根条
+    await page.getByTestId('week-summary').getByText('+8,200').waitFor();
+    check((await page.locator('.week-bars__row').count()) === 2, '这周的输赢该有开盘、德州两根条');
     await shot(page, `wallet-${screen}`);
+    if (screen === 'desktop') {
+      // 最近进出按游戏筛
+      await page.getByRole('group', { name: '看哪个游戏' }).getByRole('button', { name: '开盘' }).click();
+      const games = await page.locator('.ledger__what').evaluateAll((els) => [...new Set(els.map((e) => e.firstChild?.textContent ?? ''))]);
+      check(games.join() === '开盘', `只看开盘时不该有别的：${games.join()}`);
+      await page.getByRole('group', { name: '看哪个游戏' }).getByRole('button', { name: '全部' }).click();
+      await deskLayout(page, 'wallet');
+    }
     await ctx.close();
   }
   for (const screen of ['desktop', 'portrait'] as const) {
@@ -2005,6 +2296,8 @@ try {
     chunk: staleChunk, // 发版后分块 404
     next: loginNext, // 登录页的 next
     stats: statsPage, // 战绩页
+    desk: deskPages, // 电脑版排版：大厅、好友、我的、战绩
+    phone: phoneAudit, // 手机界面专项：四种屏幕逐页量
     boards: boardsPage, // 排行榜
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则
@@ -2025,6 +2318,8 @@ try {
     await staleChunk(browser);
     await loginNext(browser);
     await statsPage(browser);
+    await deskPages(browser);
+    await phoneAudit(browser);
     await boardsPage(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);

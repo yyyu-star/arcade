@@ -1,6 +1,6 @@
 /** 排行榜（简单版，不防作弊）：交分只留最好的、写入行数、榜单 ID 和分数检查、每天上限、读榜的名次和范围、读的行数、清理。 */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { GAMES } from '../src/games';
+import { fixedBoards, GAMES } from '../src/games';
 import { acceptsScore, FIXED_BOARD_RE, isKnownBoard } from '../worker/api/boards';
 import { beijingDate } from '../worker/api/time';
 import { runCleanup } from '../worker/api/cron';
@@ -226,7 +226,7 @@ describe('榜单 ID', () => {
   });
 
   it('games.ts 里登记的固定榜名字合规：不以 daily 开头（不和每日榜混、不被 Cron 当成每日榜删）', () => {
-    for (const g of GAMES) for (const b of g.boards ?? []) expect(FIXED_BOARD_RE.test(b), `${g.id}/${b}`).toBe(true);
+    for (const g of GAMES) for (const { id } of fixedBoards(g)) expect(FIXED_BOARD_RE.test(id), `${g.id}/${id}`).toBe(true);
     expect(FIXED_BOARD_RE.test('daily')).toBe(false);
     expect(FIXED_BOARD_RE.test('daily-best')).toBe(false);
     expect(FIXED_BOARD_RE.test('endless')).toBe(true);

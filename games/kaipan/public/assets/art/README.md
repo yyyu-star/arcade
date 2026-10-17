@@ -48,7 +48,8 @@
 | `v3/difficulty/<1..8>.svg` | 难度（市场环境）徽记，带数字，由温和到凶险 | 96×96 |
 | `v3/achievements/frame_<bronze\|silver\|gold\|locked>.svg` | 成就章框，中间是直径 62 的图标窗口 | 96×96 |
 | `v3/achievements/icon_<name>.svg` | 成就图标（透明底），居中叠在框上（偏移 16,16） | 64×64 |
-| `v3/scene/title_keyart.svg` | 标题页主视觉；中上部 x 380–1220、y 40–440 留给 Logo 和按钮 | 1600×900 |
+| `v3/scene/title_{city,hills,house,cloud}.svg`、`title_bubble_<0..5>.svg` | 0.14.0 开始菜单主视觉的分层：远处城市、山坡和后排小人（这两张左右各加宽 400，窗口变宽时露出来）、小屋、一朵云、六个群聊气泡；天空在画面里画 | 城市、山坡 2400 宽；其余见 `tools/art/keyart.ts` |
+| `v3/scene/title_keyart.svg` | 上面几层拼好的一整张（前排小人烤进去），游戏不加载，给 README 配图和平台大厅封面用 | 1600×900 |
 | `v3/guide/<rotation\|buy\|sell>.svg` | 说明书插图（风口轮流火 / 开始火时买 / 太火了卖、月底还钱）；上方 0–226 是画，下方 y 232–296 留给文字 | 520×300 |
 | `v3/ui/stage_<cold\|warm\|hot\|overheat\|cooling>.svg` | 风口五种状态（没人理 / 开始火 / 正火 / 太火了 / 在降温），颜色从冷到热、降温回到冷色 | 32×32 |
 | `v3/ui/news.svg`、`v3/ui/recap_paper.svg` | 收盘新闻小报纸；收盘小结卡纸张（九宫格 [24, 24, 24, 24]，不带颗粒） | 40×40、96×96 |
@@ -153,9 +154,11 @@ node tools/art/bake.ts                  # 生成完再烘焙图集（WebP；像�
 
 层序（下 → 上）：`sky_<bull|flat|bear>` → `city` → `haze_bear`（熊，压暗城市灯光）→ `rain`（熊）→
 `lightning` / `lightning_2` / `lightning_3`（熊，3 个位置变体，每次随机闪一个）→ `wall` →
-`desk` → `steam` → `cat` → `cat_tail` → `cat_zzz` → `ambient_<bull|flat|bear>` → `lamp_light` → `monitor_glow`。
+`desk` → `room_left` / `room_right` / `room_top` / `room_bottom` → `steam` → `cat` → `cat_tail` → `cat_zzz` → `ambient_bull` → 阴天和雷雨的压暗、时段色调（游戏里画的纯色矩形）→ `lamp_light` → `monitor_glow`。
 
-- 牛 / 平 / 熊 = 晴 / 阴 / 雷雨；切换时 `sky_*` 与 `ambient_*` 交叉淡入淡出。
+- 牛 / 平 / 熊 = 晴 / 阴 / 雷雨；切换时 `sky_*` 与室内光交叉淡入淡出。阴天、雷雨的室内压暗原来是 `ambient_flat` / `ambient_bear` 两张纯色图，0.15.0 起游戏里直接画矩形（连延伸出来的那圈一起盖住），这两张图删了。
+- 铺满（0.15.0）：`room_left`、`room_right`（各 320×936）、`room_top`、`room_bottom`（各 1280×108）是安全区外接着画的墙、护墙板、桌子和几件摆设（相框、存钱罐、落地绿植、软木板、废纸篓），按房间坐标画，接缝处花纹对得上；宽屏、16:10 时露出来，进对局时才加载。
+- 时段（0.15.0）：盘前清晨、开盘白天、收盘傍晚、月底算账夜里，各一层整屏色调（游戏里画），台灯跟着亮暗。
 - 窗洞：x 420–860，y 56–336（`wall` 在这里镂空）。天色、城市、雨都画满全画布，方便做视差平移。
 - `rain` 竖直方向无缝平铺（周期 720px），向下平移循环即可。
 - 小火箭摆在显示器顶上、多肉摆在书桌上（都在 `desk` 层），窗台上不放东西（会被窗帘和显示器挡住）。
@@ -207,7 +210,7 @@ node tools/art/bake.ts                  # 生成完再烘焙图集（WebP；像�
 
 ## 大厅封面（平台的 `covers/kaipan.webp`）
 
-平台大厅里开盘那张封面（960×540 webp，平台 0.1.0 起就在，2026-10-11 加入），就是开盘的标题页主视觉 `v3/scene/title_keyart.svg`
+平台大厅里开盘那张封面（960×540 webp，平台 0.1.0 起就在，2026-10-11 加入），就是开盘的标题页主视觉 `v3/scene/title_keyart.svg`（0.14.0 起是分层素材拼好的一整张，构图没变）
 （1600×900，`tools/art/keyart.ts` 程序生成，见文件开头"全部素材为程序生成的原创 SVG"）去掉 Logo 和按钮、缩到 960×540 转成的 webp。
 当时没有留下生成记录；2026-10-15 核对：现在的主视觉按 960×540 渲染出来和封面构图、角色、配色一致，只有个别小人的表情、几颗星星是后来改过的（主视觉 0.3.0 起就有，早于封面）。
 所以封面的来源和许可同开盘的其余素材：原创，无第三方素材或字体。

@@ -14,7 +14,7 @@
 import { checkBodyUser, type Ctx, DAY } from './context';
 import { ApiError, json } from './http';
 import { hit } from './ratelimit';
-import { DAILY_SUB_RE, GAME_IDS, GAMES } from '../../src/games';
+import { DAILY_SUB_RE, fixedBoards, GAME_IDS, GAMES } from '../../src/games';
 import { daily } from './daily';
 import { beijingDate } from './time';
 import { avatarOf } from './session';
@@ -23,7 +23,7 @@ import { avatarOf } from './session';
 const DAILY_RE = /^daily-(\d{4}-\d{2}-\d{2})(?:-((?!v\d)[a-z][a-z0-9]{0,15}))?(?:-v([1-9]\d?))?$/;
 /** 固定榜的名字：小写字母、数字、短横线，不以 daily 开头（和每日榜分开，也不落进 Cron 删每日榜的范围）。 */
 export const FIXED_BOARD_RE = /^(?!daily)[a-z0-9-]{1,40}$/;
-const FIXED_BOARDS: ReadonlyMap<string, ReadonlySet<string>> = new Map(GAMES.map((g) => [g.id, new Set(g.boards ?? [])]));
+const FIXED_BOARDS: ReadonlyMap<string, ReadonlySet<string>> = new Map(GAMES.map((g) => [g.id, new Set(fixedBoards(g).map((b) => b.id))]));
 
 /** 每日榜的日期、子榜、版本号（没有版本号是 0）；不是每日榜的形式时为 null。"v2" 这样的不当子榜（是版本号）。 */
 export function parseDaily(boardId: string): { date: string; sub: string | null; v: number } | null {

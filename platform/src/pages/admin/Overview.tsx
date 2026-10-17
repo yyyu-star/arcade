@@ -1,7 +1,7 @@
 /** 管理页·概览：顶上一排数字卡片，下面近 7 天趋势图、各游戏今天的情况、"管理筹码"入口、趋势明细表。 */
 import { useEffect, useState } from 'react';
 import { type AdminOverview, api, errorText, type WalletDayStats } from '../../api.ts';
-import { FormError, Panel } from '../../ui.tsx';
+import { FormError, Panel, Skeleton } from '../../ui.tsx';
 import { WALLET_GAMES } from '../../games.ts';
 import { AdminChipsButton } from './AdminChips.tsx';
 import { gameName, num } from './common.ts';
@@ -29,7 +29,7 @@ export function Overview() {
     };
   }, []);
   if (error) return <FormError text={error} />;
-  if (!data) return <p className="note">正在读取…</p>;
+  if (!data) return <Skeleton rows={3} />;
   const { today } = data;
   const days = [today, ...data.days];
   const tiles: [string, string, number?][] = [

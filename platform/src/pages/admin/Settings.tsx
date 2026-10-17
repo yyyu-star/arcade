@@ -1,7 +1,7 @@
 /** 管理页：全站设置，大厅公告、开放注册、钱包规则。 */
 import { useEffect, useState } from 'react';
 import { api, errorText, type NoticeState, type RegistrationState, type WalletRules, type WalletRulesState } from '../../api.ts';
-import { Field, FormError, Panel, SubmitButton, useSubmit, useWritable } from '../../ui.tsx';
+import { Field, FormError, Panel, Skeleton, SubmitButton, useSubmit, useWritable } from '../../ui.tsx';
 import { num, timeText } from './common.ts';
 
 /** 大厅公告（0.10.8）：发了以后登录的人在大厅顶上看到，别的服务器最多晚 30 秒 */
@@ -43,7 +43,7 @@ export function NoticePanel() {
   return (
     <Panel icon="shield" title="大厅公告">
       {loadError && <FormError text={loadError} />}
-      {!state && !loadError && <p className="note">正在读取…</p>}
+      {!state && !loadError && <Skeleton rows={3} />}
       {state && (
         <form className="form" onSubmit={publish.onSubmit} data-testid="notice-admin">
           <p className={state.notice ? 'ok' : 'note'} role="status">
@@ -98,7 +98,7 @@ export function RegistrationSwitch() {
   return (
     <Panel icon="shield" title="开放注册">
       {loadError && <FormError text={loadError} />}
-      {!state && !loadError && <p className="note">正在读取…</p>}
+      {!state && !loadError && <Skeleton rows={3} />}
       {state && (
         <form className="form" onSubmit={onSubmit} data-testid="registration-switch">
           <p className={state.open ? 'ok' : 'note'} role="status">
@@ -169,7 +169,7 @@ export function WalletRulesPanel() {
   return (
     <Panel icon="coin" title="钱包规则">
       {loadError && <FormError text={loadError} />}
-      {!state && !loadError && <p className="note">正在读取…</p>}
+      {!state && !loadError && <Skeleton rows={3} />}
       {state && (
         <form className="form" onSubmit={(e) => { setSaved(false); void onSubmit(e); }} data-testid="wallet-rules">
           {RULE_KEYS.map((k) => (

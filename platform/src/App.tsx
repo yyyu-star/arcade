@@ -176,7 +176,7 @@ function Home({ deleted }: { deleted: boolean }) {
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }, [deleted]);
   return (
-    <>
+    <div className="lobby">
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
       {user && <OvertakeNudge />}
@@ -199,7 +199,7 @@ function Home({ deleted }: { deleted: boolean }) {
           </div>
         </article>
       </main>
-    </>
+    </div>
   );
 }
 
@@ -232,13 +232,16 @@ function LobbyNudge() {
   return (
     <div className="nudges" data-testid="nudges">
       {stakes.length > 0 && (
-        <p className="banner nudge" data-testid="nudge-stake">
-          <span>
-            {g
-              ? `${g.name}${where}桌上还有 ${num(onTable)}${parts}`
-              : games.size > 1
-                ? `${games.size} 个游戏的桌上还有 ${num(onTable)}`
-                : `桌上还有 ${num(onTable)}${parts}`}
+        // 手机上这一条变成底部固定条（0.24.1，样式见 .nudge--stake）：字太长时中间那段先省略，游戏名和数字留着
+        <p className="banner nudge nudge--stake" data-testid="nudge-stake">
+          <span className="nudge__what">
+            <span className="nudge__keep">{g ? g.name : games.size > 1 ? `${games.size} 个游戏` : ''}</span>
+            <span className="nudge__mid">{g ? `${where}桌上还有` : games.size > 1 ? '的桌上还有' : '桌上还有'}</span>
+            <span className="nudge__keep">
+              {' '}
+              {num(onTable)}
+              {parts}
+            </span>
           </span>
           {g ? (
             <a className="inline-link" href={playUrl(g)}>
@@ -370,6 +373,10 @@ function SoundToggle() {
   );
 }
 
+/** 做好了电脑版排版的页面（0.23.0）：电脑上主区放开成两栏（styles.css 的 .desk），手机上照旧是中间一窄列 */
+const DESK_PAGES = new Set(['/wallet', '/boards', '/friends', '/me', '/me/stats']);
+const isDesk = (path: string) => DESK_PAGES.has(path) || path.startsWith('/u/');
+
 export function App() {
   const loc = useLocation();
   const { service, refresh, loading, slow, user } = useSession();
@@ -401,7 +408,7 @@ export function App() {
       )}
       {Page ? (
         // 管理页是控制台布局，要整页宽；其余账号页面都是中间一栏
-        <main className={loc.pathname === '/admin' ? 'wide' : 'narrow'}>
+        <main className={loc.pathname === '/admin' ? 'wide' : isDesk(loc.pathname) ? 'narrow narrow--desk' : 'narrow'}>
           <Suspense fallback={<p className="note page-loading">正在打开…</p>}>
             <Page />
           </Suspense>

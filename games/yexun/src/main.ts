@@ -5,10 +5,10 @@
  */
 import Phaser from 'phaser';
 import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
-import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
+import { CHARACTER_IDS, CHARACTERS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Setup, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, charProgress, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
 import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
@@ -30,15 +30,16 @@ import { createSubmitter, outcomeText } from './online/submit.ts';
 import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
+import { heroKey } from './view/art/heroes.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
-import type { MapId } from './content/maps.ts';
-import { buildAtlas, buildGround, buildRaidAtlas, type Atlas } from './view/art/atlas.ts';
+import { MAP_IDS, type MapId } from './content/maps.ts';
+import { buildAtlas, buildGround, buildHeroAtlas, buildMobAtlas, buildRaidAtlas, peekHeroAtlas, peekMobAtlas, type Atlas } from './view/art/atlas.ts';
 import { treasureIconKey } from './view/art/sprites8.ts';
 import { Vault } from './view/ui/vault.ts';
 import { settleRaid } from './explore/settle.ts';
 import { recordRaid, vaultProgress } from './explore/vault.ts';
 import { TREASURES } from './content/treasures.ts';
-import { RAID_TEMPLATES, type RaidTemplateId } from './content/explore.ts';
+import { RAID_LIVE, RAID_TEMPLATES, type RaidLiveTemplate, type RaidTemplateId } from './content/explore.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
 import { GameScene } from './view/game/GameScene.ts';
@@ -59,11 +60,14 @@ function iconMaker(atlas: Atlas): (key: string, px?: number) => string {
     const id = `${key}@${px}`;
     let url = cache.get(id);
     if (url) return url;
-    const f = atlas.frames.get(key) ?? atlas.frames.get('soul')!;
+    const hero = peekHeroAtlas();
+    const mob = peekMobAtlas();
+    const hit = atlas.frames.has(key) ? atlas : hero?.frames.has(key) ? hero : mob?.frames.has(key) ? mob : atlas;
+    const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
     const c = document.createElement('canvas');
     c.width = px;
     c.height = Math.round((px * f.h) / f.w);
-    c.getContext('2d')!.drawImage(atlas.canvas, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
+    c.getContext('2d')!.drawImage(hit.canvas, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
     url = c.toDataURL();
     cache.set(id, url);
     return url;
@@ -82,11 +86,15 @@ async function boot(): Promise<void> {
   // 毛笔字体先载好再出横幅（font-display: block 也挡不住第一帧用后备字体量尺寸）
   await document.fonts?.load('40px YxBrush').catch(() => undefined);
   const atlas = buildAtlas(res);
+  const mobAtlas = buildMobAtlas(res);
+  buildHeroAtlas(res);
   const ground = buildGround(512);
   if (q.has('sheet')) {
-    atlas.canvas.style.cssText = 'position:absolute;left:0;top:0;background:#9aa3b5';
+    // ?sheet 看主图集，?sheet=mob 看特色怪的图集
+    const sheet = q.get('sheet') === 'mob' ? mobAtlas : atlas;
+    sheet.canvas.style.cssText = 'position:absolute;left:0;top:0;background:#e4e8f0';
     document.body.style.overflow = 'auto';
-    document.body.appendChild(atlas.canvas);
+    document.body.appendChild(sheet.canvas);
     return;
   }
   const icon = iconMaker(atlas);
@@ -180,7 +188,7 @@ async function boot(): Promise<void> {
     result.onShare = () => void prepared.share();
   };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
-  let lastLive: LiveTier | null = null;
+  let lastLive: { tier: LiveTier; raid?: RaidLiveTemplate } | null = null;
   let liveTier: LiveTier = 'small';
   /** 结回以后的那一份记录 → 结算页那一行 */
   const recordText = (rec: Readonly<LiveRecord> | null): string => {
@@ -213,7 +221,7 @@ async function boot(): Promise<void> {
   const result = new Result(stage, (k) => icon(k));
   const confirm = new Confirm(stage);
   const tips = new Tips(stage);
-  const prep = new Prep(stage, (k) => icon(k));
+  const prep = new Prep(stage, (k, px) => icon(k, px));
   // 成就和图鉴（5c）：累计统计存 yexun.records；每局按事件计数，结算时一起算解锁
   let records = loadRecords();
   let tally = new RunTally();
@@ -228,7 +236,7 @@ async function boot(): Promise<void> {
   const prepState = (): PrepState => ({
     coins: coins(save),
     character: save.character,
-    chars: Object.fromEntries(CHARACTER_IDS.map((c) => [c, { open: charOpen(save, c), price: CHAR_PRICE[c] }])) as PrepState['chars'],
+    chars: Object.fromEntries(CHARACTER_IDS.map((c) => [c, { open: charOpen(save, c), price: CHAR_PRICE[c], progress: charProgress(save, c) }])) as PrepState['chars'],
     curses: save.curses,
     cursesOpen: save.cleared >= 0,
     perks: save.perks,
@@ -241,9 +249,10 @@ async function boot(): Promise<void> {
     dangerOpen: dangerOpen(save),
     best: save.bestD,
     map: save.map,
-    yizhuang: yizhuangOpen(save),
+    maps: Object.fromEntries(MAP_IDS.map((m) => [m, mapOpen(save, m)])) as Record<MapId, boolean>,
     coins: coins(save),
     character: charOpen(save, save.character) ? save.character : ('xiaodao' as CharacterId),
+    charFace: icon(heroKey(charOpen(save, save.character) ? save.character : 'xiaodao'), 64),
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
     // 有平台登录、收到过 501（单独部署）就藏起来
@@ -398,13 +407,15 @@ async function boot(): Promise<void> {
   stage.addEventListener('pointerdown', () => banners.skipReveal());
 
   /** 夜探结算：撤出全带走、换铜钱；倒下 / 迷失丢包，铜钱剩一半（教学镇不丢）；宝物记进藏宝阁 */
-  const finishRaid = (w: World, quit: boolean, seconds: number): void => {
+  const finishRaid = (w: World, quit: boolean, seconds: number, liveSeed: number | null = null): void => {
     const raid = w.raid!;
     const st = settleRaid(raid, w.coins);
     const rr = recordRaid(save.vault, st);
     save.vault = rr.vault;
     if (raid.teach) save.raidDone = true;
-    if (st.coins > 0) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
+    if (st.outcome === 'escaped') save.extracts++;
+    // 实盘的夜探不发铜钱（筹码走钱包，按撤出时带出的价值结回），宝物照样记进藏宝阁
+    if (st.coins > 0 && liveSeed === null) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
     writeSave(save);
     showPlay(false);
     const view = (code: number) => {
@@ -419,13 +430,24 @@ async function boot(): Promise<void> {
       seconds,
       kills: w.kills,
       level: w.level,
-      coins: st.coins,
+      coins: liveSeed === null ? st.coins : 0,
       coinsTotal: coins(save),
-      label: `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}`,
+      label: liveSeed === null ? `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}` : `实盘 · 夜探 · ${RAID_TEMPLATES[tpl].name} · ${LIVE_TIERS[liveTier].name}档`,
+      ...(liveSeed === null ? {} : { live: '正在结回…' }),
       record: false,
       build: buildRows(w),
       raid: { outcome: st.outcome === 'escaped' || st.outcome === 'lost' ? st.outcome : 'dead', teach: raid.teach, kept: st.kept.map(view), lost: st.lost.map(view), value: st.value },
     });
+    if (liveSeed !== null) void live.finishRaid(liveSeed, st.bp).then(showLiveResult);
+  };
+  /** 实盘结回完：结算页写结果，结完的记录清掉 */
+  const showLiveResult = (): void => {
+    const rec = live.record;
+    result.setLive(recordText(rec));
+    if (rec?.step === 'done') {
+      live.markTold();
+      live.clearFinished();
+    }
   };
   const finish = (w: World, quit: boolean): void => {
     if (ended) return;
@@ -438,20 +460,19 @@ async function boot(): Promise<void> {
     const run = archive(w, quit);
     social.setWhere('menu');
     offerShare(liveRun ? null : run);
+    if (liveRun && w.raid) {
+      // 夜探实盘：撤出才有钱（按带出的价值），倒下、迷失、认输都是 0
+      const seed = liveRun.seed;
+      liveRun = null;
+      return finishRaid(w, quit, seconds, seed);
+    }
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
       liveRun = null;
       showPlay(false);
       result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: 0, label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
-      void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(() => {
-        const rec = live.record;
-        result.setLive(recordText(rec));
-        if (rec?.step === 'done') {
-          live.markTold();
-          live.clearFinished();
-        }
-      });
+      void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(showLiveResult);
       return;
     }
     if (w.raid) return finishRaid(w, quit, seconds);
@@ -511,7 +532,8 @@ async function boot(): Promise<void> {
         const [id, lv = '1'] = part.split(':');
         if (id && id in WEAPONS) grantWeapon(w, id as WeaponId, parseInt(lv, 10), lv.endsWith('e'));
       }
-      if (q.has('merge')) for (let k = 0; k < 3; k++) openChestNow(w);
+      // &merge=late：第 28 拍才开宝箱（带合成演出，截图看横幅用）；平时 &merge 开局就合成
+      if (q.has('merge') && q.get('merge') !== 'late') for (let k = 0; k < 3; k++) openChestNow(w);
     }
     if (import.meta.env.DEV && (q.has('auto') || q.has('warp'))) {
       const { Bot } = await import('../tools/bots.ts');
@@ -527,6 +549,12 @@ async function boot(): Promise<void> {
         step(w, a.dir, w.phase === 'choose' ? a.choice : -1);
         tally.feed(w);
       }
+      // &at=x,y：把主角挪到这个位置（截河边、冰边、竹林用）
+      const at = q.get('at')?.split(',').map(Number);
+      if (at && at.length === 2 && at.every(Number.isFinite)) {
+        w.x = w.px = at[0]!;
+        w.y = w.py = at[1]!;
+      }
     }
     const firstRun = save.runs === 0;
     showPlay(true);
@@ -534,6 +562,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: w,
       atlas,
+      mobAtlas,
       ...(w.raid ? { raidAtlas: buildRaidAtlas(res) } : {}),
       hud,
       cards,
@@ -554,6 +583,7 @@ async function boot(): Promise<void> {
       beforeStep: (x: World, dir: number, choice: number) => rec?.before(x, dir, choice),
       afterStep: (x: World) => {
         tally.feed(x);
+        if (import.meta.env.DEV && x.tick === 28 && q.get('merge') === 'late') openChestNow(x);
         if (liveRun && x.tick % 300 === 0) live.progress(liveRun.seed, x.tick);
       },
     });
@@ -629,6 +659,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: player.world,
       atlas,
+      mobAtlas,
       hud,
       cards,
       banners,
@@ -651,12 +682,15 @@ async function boot(): Promise<void> {
     save.liveTier = tier;
     writeSave(save);
   };
-  const startLive = async (tier: LiveTier): Promise<void> => {
+  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate): Promise<void> => {
+    if (raid && tier === 'luxe') return;
     const seed = (Math.random() * 0x100000000) >>> 0;
-    const r = await live.buyin(tier, seed);
+    const r = await live.buyin(tier, seed, raid);
     if (r.ok) {
-      lastLive = liveTier = tier;
-      return startRun(LIVE_TIERS[tier].danger, 'snow', true, liveSetup(tier, seed), 'live');
+      liveTier = tier;
+      lastLive = raid ? { tier, raid } : { tier };
+      const danger = raid ? (RAID_LIVE.danger[tier as Exclude<LiveTier, 'luxe'>] as Danger) : LIVE_TIERS[tier].danger;
+      return startRun(danger, 'snow', true, liveSetup(tier, seed, raid), 'live');
     }
     const o = r.outcome;
     const why =
@@ -678,6 +712,7 @@ async function boot(): Promise<void> {
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
   menu.onLive = (tier) => void startLive(tier);
+  menu.onRaidLive = (tier, tpl) => void startLive(tier, tpl);
   // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
   menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
     const ms = menuState();
@@ -696,7 +731,7 @@ async function boot(): Promise<void> {
     vault.show();
   };
   result.onAgain = () => {
-    if (lastLive) return void startLive(lastLive);
+    if (lastLive) return void startLive(lastLive.tier, lastLive.raid);
     if (world?.setup.mode === 'raid') return menu.onRaid(world.setup.raid?.template ?? 'guzhen', world.setup.danger);
     if (dailyDate) return void startDaily();
     wantEndless = !!world?.setup.endless;
@@ -743,10 +778,19 @@ async function boot(): Promise<void> {
     const dq = q.get('danger');
     const qd: Danger | null = dq && /^[0-5]$/.test(dq) ? (Number(dq) as Danger) : (legacy[q.get('diff') ?? ''] ?? null);
     // ?map=yizhuang 指定地图（冒烟截图用）
-    const qm = q.get('map') === 'yizhuang' ? 'yizhuang' : q.has('map') ? 'snow' : null;
+    const qm: MapId | null = q.has('map') ? ((MAP_IDS as readonly string[]).includes(q.get('map') ?? '') ? (q.get('map') as MapId) : 'snow') : null;
+    // ?char=pang 出战指定角色（只在开发服务器里有，截图用；会在内存里当作都解锁了）；?prep 直接打开角色页
+    const qc = q.get('char');
+    if (import.meta.env.DEV && qc && qc in CHARACTERS) {
+      save.character = qc as CharacterId;
+      save.bought = [...CHARACTER_IDS];
+      save.maxSeconds = Math.max(save.maxSeconds, 9999);
+      save.extracts = Math.max(save.extracts, 1);
+    }
     // ?raid=guzhen|dukou|shansi|teach 直接开一局夜探（冒烟截图用；可带 &auto 机器人代打）
     const qr = q.get('raid');
     if (qr && qr in RAID_TEMPLATES) menu.onRaid(qr as RaidTemplateId, qd ?? 2);
+    else if (import.meta.env.DEV && q.has('prep')) prep.show('char', prepState());
     else if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 2, qm ?? 'snow', true);
     else {
       if (qd !== null) save.danger = qd;

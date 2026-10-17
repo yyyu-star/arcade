@@ -11,6 +11,7 @@ import { api, type FeedItem } from './api.ts';
 import { gameName, num } from './format.ts';
 import { loadGameFile } from './gamefile.ts';
 import { Link } from './router.tsx';
+import { Skeleton } from './ui.tsx';
 import { loadTitles } from './titles.ts';
 
 const TIERS: Record<string, string> = { small: '小档', mid: '中档', big: '大档', lux: '豪华档' };
@@ -161,7 +162,7 @@ export function FeedPanel({ me }: { me: string }) {
   useEffect(() => {
     if (items?.[0]) localStorage.setItem(SEEN_KEY, String(items[0].at));
   }, [items]);
-  if (!items) return <p className="note">正在读取…</p>;
+  if (!items) return <Skeleton rows={3} />;
   if (!items.length) return <p className="note">最近 7 天你和好友还没有动态。实盘赢了、拿到新称号，或者在游戏里打出名场面，好友就能看到。</p>;
   return (
     <ul className="feed" data-testid="feed">
