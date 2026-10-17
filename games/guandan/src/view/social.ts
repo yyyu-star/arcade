@@ -50,6 +50,15 @@ export async function openInvitePanel(code: string): Promise<void> {
   openInvite({ ...inv, friends: false });
 }
 
+/**
+ * 报一条名场面到好友动态（0.15.0，feed.ts 挑的）：只有挂上了 social（有平台、已登录）才报，不然一个请求都不发。
+ * 平台超了每天 10 条也静默 204，结果不用管
+ */
+export function postFeed(m: { moment: string; n?: number }): void {
+  if (!handle) return;
+  void import('arcade-kit/social').then(({ postMoment }) => postMoment('guandan', m.moment, m.n));
+}
+
 /** 位置变了（进房、离开房间、开打）：马上报一次 */
 export function presenceNow(): void {
   handle?.presenceNow(true);

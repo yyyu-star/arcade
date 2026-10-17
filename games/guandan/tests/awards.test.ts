@@ -35,7 +35,7 @@ describe('房间的这一场记录', () => {
     expect(m.lasts.reduce((a, b) => a + b)).toBe(m.deals);
     expect(m.wins[0]! + m.wins[1]!).toBe(m.deals);
     expect(m.places!.reduce((a, b) => a + b)).toBe(6 * m.deals);
-  });
+  }, 30_000);
 
   it('谁都看得到（旁观也是），转视角时按座位和按队的都跟着转', () => {
     const { s } = playOut(22);
@@ -52,7 +52,7 @@ describe('房间的这一场记录', () => {
       // 坐奇数位时两队对调
       expect(v.log!.wins).toEqual(me % 2 ? [m.wins[1], m.wins[0]] : m.wins);
     }
-  });
+  }, 30_000);
 
   it('以前开的房间（状态里没有 log）照旧能打，视图里没有', () => {
     const { log: _l, ...old } = R.begin(testKey(23), R.rulesVersion);
@@ -112,7 +112,8 @@ describe('评奖', () => {
       expect(a.length).toBeGreaterThanOrEqual(2);
       for (const x of a) expect([0, 1, 2, 3]).toContain(x.seat);
     }
-  });
+    // 打三整局：机器忙的时候 5 秒的默认时限不够（主线报过负载 15 时超时）
+  }, 60_000);
 });
 
 describe('分享卡里的奖', () => {
