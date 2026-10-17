@@ -2032,3 +2032,72 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 
 **kit 和游戏**：`arcade-kit/room` 加一个 `reportTogether(env, op, players)`，房间在一场结束时调（平台合并后主线派人加）；掼蛋、雀馆、德州的好友房接上，游戏自己定"一场"和 `win`
 （写进各自的 DESIGN）。单独部署没有 `WALLET` 绑定时 kit 直接跳过。
+
+### 15.20 邀请码（草稿，0.20.0；待主线过目）
+
+所有者要做邀请制：测好上线后由主线关掉公开注册，之后**新人只能凭老用户给的邀请码注册**。管理员开关（5.1 的 `registration`）不变：开着时码可填可不填，关着时必须带有效的码。
+
+**码**
+- 12 位 Crockford base32（60 bit，猜不中），显示成 `ABCD-EFGH-JKMN`；不分大小写，输入时去掉空格和横线，`I`/`L` 当 `1`、`O` 当 `0`（和恢复码一样的归一化）。一码一用。
+- **库里只存哈希**（HMAC-SHA256，复用 `PEPPER_RC`，输入加前缀 `invite:` 和恢复码分开）和末 4 位（列表里显示"…JKMN"认码用）。明文只在生成那一下回给浏览器：
+  生成后弹一层"复制链接 / 分享"，关了以后列表里只能看末 4 位、能撤回，不能再复制。这样数据库被拖走也拿不到能用的码（同"恢复码、令牌只存哈希"那条）。
+  **待主线定 ①**：如果要"列表里随时再复制"，就得存明文，我不推荐。
+- 链接 `/i/<码>`：打开注册页并预填好码（注册关着时也露出"注册"页签，因为带了码）。
+
+**额度**（管理员可调，和钱包规则一样存在 D1 `settings` 的 `invite_rules`，改了即时生效、不用发版）
+
+| 项 | 默认 | 范围 |
+|---|---|---|
+| `userQuota` 普通用户每人几个 | 3 | 0–100 |
+| `adminQuota` 管理员每人几个 | 50 | 0–1000 |
+| `ttlDays` 码的有效期 | 7 天 | 1–90 |
+| `perDay` 每人每 24 小时最多生成几个（防刷） | 5 | 1–100 |
+
+- "用掉的额度" = 已用的码 + 还有效的码（没用、没撤回、没过期）。过期、撤回的未用码把额度还回来。
+- 管理员能给某个人单独改：`users` 加一列 `invite_quota`（空 = 按角色用默认）。
+- 已用的码一直算在额度里，被邀请的人注销了也算（见下面"删干净"）：不然"邀请 → 让对方注销 → 再邀请"能绕过额度。
+
+**接口**（写入类别：生成、撤回记在"好友与资料"类，注册那一套还在"注册"类，管理的在"账号安全"类）
+
+| 接口 | 谁能调 | 请求 | 成功 | 错误 | 写入 |
+|---|---|---|---|---|---|
+| `GET /api/invite-codes` | 登录 | — | 200 `{"quota", "used", "active", "left", "ttlDays", "codes": [{"id", "hint", "createdAt", "expiresAt", "status": "unused" \| "used" \| "expired" \| "revoked", "usedBy"?: 公开资料}]}`，新的在前，最多 50 条 | 401 | 0 |
+| `POST /api/invite-codes` | 登录；要 CSRF | `{}` | 201 `{"code", "link": "/i/<码>", "id", "expiresAt", "left"}`（明文只这一次） | 409 `quota_full`（带 `quota`）；429（24 小时满 `perDay`）；403；503（停增长档） | 3（表 + 两个索引）；被拒 0 |
+| `POST /api/invite-codes/<id>/revoke` | 登录；要 CSRF | `{}` | 204 | 404（不是自己的、不存在、已用、已撤回） | 1；被拒 0 |
+| `POST /api/auth/register` | 匿名 | 多一个可选 `inviteCode` | 同 15.2；带码注册的人和邀请人自动成为好友 | 403 `registration_closed`（关着又没带码）；400 `invite_invalid`（码不对、已用、过期、撤回，一个错误码，不说是哪种）；409 `invite_used`（并发里被别人先用了）；429（试码按 IP 的上限） | 带码：9 + 试码计数 1 + 码 1 + 好友 2 = 13；码不对 1（只有试码计数） |
+
+- **生成**：额度和每天的上限都写在插入语句的条件里（`INSERT … SELECT … WHERE (用掉的额度) < 额度 AND (24 小时内生成的) < perDay`），并发冲不破，被拒 0 行；不另开计数行。
+- **注册时的顺序**：令牌桶 → 读开关（关着又没带码 403）→ 校验请求体（422）→ **试码**：`inv:ip:<ip>` 每 IP 每小时 10 次（成败都算，带条件 UPSERT，超了 429、0 行）→ 按哈希查码（不对 400、只写了计数那 1 行）→ `reg:ip`、`reg:all`（429）→ 用户名查重 → 一个 batch：
+  1. `UPDATE invite_codes SET used_by = 新 id, used_at = now WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now`；
+  2. 建号的几条（users、credentials、sessions）都改成 `INSERT … SELECT … WHERE EXISTS (SELECT 1 FROM invite_codes WHERE id = ? AND used_by = 新 id)`：第 1 条没改成（并发里被别人先用了），后面一行都不写，回 409 `invite_used`。
+     D1 的 batch 是一个事务、按顺序执行，同一个码两个人同时用，只有一个能建成号；
+  3. 好友关系一行（`accepted`），条件同上，再加"邀请人好友没满 200"——满了就只是不加好友，号照建。
+- **试码的防撞库**（同 5.4 的登录、找回）：码 60 bit，每 IP 每小时 10 次，换 100 万个 IP 一年也试不到 2^37 次，猜中概率可以忽略。**不设全站每小时上限**：
+  0.19.2 的教训——全站计数只要算了乱试的，就能被几个 IP 段耗光，挡住所有拿着真码的人；而只算"码对了"的又没有意义。真码注册成功以后照旧受 `reg:ip`、`reg:all` 管。
+- **管理员**（5.8 的两种认证；改的操作和别的管理写操作一样计 `admin:` 每日次数）：
+
+| 接口 | 请求 | 成功 | 写入 |
+|---|---|---|---|
+| `GET /api/admin/settings/invites` | — | 200 `{"rules", "defaults", "range", "log", "updatedAt"}`（同钱包规则） | 0 |
+| `POST /api/admin/settings/invites` | `{"userQuota"?, "adminQuota"?, "ttlDays"?, "perDay"?}` | 200 同上；超出范围 400 | 有变化 2（settings 1 + `admin` 计数 1），没变化 0 |
+| `POST /api/admin/users/<用户名>/invite-quota` | `{"quota": 整数 0–1000 \| null}`（null 恢复默认） | 200 `{"quota", "custom": boolean}` | 2（users 1 + 计数 1） |
+| `GET /api/admin/invite-codes` | `?status=unused\|used\|all`（默认 all） | 200 `{"codes": [{"id", "hint", "owner": {"username", "displayName"}, "status", "createdAt", "expiresAt", "usedBy"?: {"username", "displayName"}, "usedAt"?}]}`，全站最近 100 条 | 0 |
+| `POST /api/admin/invite-codes/<id>/revoke` | `{}` | 204；已用的、已撤回的 404 | 2（码 1 + 计数 1） |
+
+**存储**（迁移 `0011_invite_codes.sql`；表名避开好友房邀请的 `invites`）
+- `invite_codes`：`id`（时间前缀 id，`newTimeId`）主键、`code_hash` 唯一索引、`hint`（末 4 位）、`owner_id`、`created_at`、`expires_at`、`used_by`（可空）、`used_at`（可空）、`revoked_at`（可空）；索引 `(owner_id, created_at)` 给"我的码""用掉的额度""24 小时内生成了几个"。
+- `users` 加 `invite_quota INTEGER`（可空）。
+
+**删干净**（7.3 加上，配测试）
+- 注销、一年清理：删本人生成的所有码（`DELETE … WHERE owner_id = ?`，走索引）；本人用过的那个码，`used_by` 清成空（`used_at` 留着，邀请人那边还算已用、额度不还；列表里显示"已用（账号已注销）"）。`used_by` 没有索引，按它清要扫全表——表只有"每人几个码"那么大、注销很少，接受。
+- Cron：没用的码过期或撤回满 30 天就删（已用的留着，额度要算）；按 `created_at` 扫，表小。
+- 隐私说明补一条：谁邀请了谁（邀请人能在"我的"里看到用了自己码的人的昵称），码只存哈希。
+
+**写入估算**：50 个用户每人生成 3 个 → 150 × 3 = 450 行，分摊到很多天；带码注册每人 13 行。可以忽略。
+
+**界面**
+- "我的"加一栏"邀请朋友"：还能邀请几个、"生成邀请码"、生成后那一层（码、链接、复制、系统分享，文案"我在街机厅等你，用这个邀请码注册"，不支持系统分享就只复制）、列表（未用 / 已用和用的人 / 过期 / 撤回，未用的能撤回）。
+- 注册页：多一个"邀请码"输入框（注册关着时必填、开着时选填），`/i/<码>` 预填。登录页：从好友链接 `/f/<码>` 或游戏链接过来、注册又关着时，顶上一句"朋友邀请你来街机厅。现在是邀请制，找 TA 要个邀请就能玩。"（原来分在晒战绩里，挪到这里，两个 PR 不碰同一个文件）。
+- 管理后台加一页：四个数、给某人改额度、全站的码和撤回。
+
+**待主线定**：① 码只存哈希（推荐，明文只给一次）还是存明文方便再复制；② 被邀请人注销后码仍算用掉（推荐，防绕额度）；③ 生成、撤回不另设计数行，只靠额度和 24 小时条件（推荐）。
