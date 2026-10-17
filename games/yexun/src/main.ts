@@ -8,7 +8,7 @@ import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
 import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Setup, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
 import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
@@ -31,7 +31,7 @@ import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
-import { MAPS, type MapId } from './content/maps.ts';
+import { MAP_IDS, type MapId } from './content/maps.ts';
 import { buildAtlas, buildGround, buildMobAtlas, buildRaidAtlas, peekMobAtlas, type Atlas } from './view/art/atlas.ts';
 import { treasureIconKey } from './view/art/sprites8.ts';
 import { Vault } from './view/ui/vault.ts';
@@ -247,7 +247,7 @@ async function boot(): Promise<void> {
     dangerOpen: dangerOpen(save),
     best: save.bestD,
     map: save.map,
-    yizhuang: yizhuangOpen(save),
+    maps: Object.fromEntries(MAP_IDS.map((m) => [m, mapOpen(save, m)])) as Record<MapId, boolean>,
     coins: coins(save),
     character: charOpen(save, save.character) ? save.character : ('xiaodao' as CharacterId),
     curses: save.cleared >= 0 ? save.curses : [],
@@ -544,6 +544,12 @@ async function boot(): Promise<void> {
         step(w, a.dir, w.phase === 'choose' ? a.choice : -1);
         tally.feed(w);
       }
+      // &at=x,y：把主角挪到这个位置（截河边、冰边、竹林用）
+      const at = q.get('at')?.split(',').map(Number);
+      if (at && at.length === 2 && at.every(Number.isFinite)) {
+        w.x = w.px = at[0]!;
+        w.y = w.py = at[1]!;
+      }
     }
     const firstRun = save.runs === 0;
     showPlay(true);
@@ -766,7 +772,7 @@ async function boot(): Promise<void> {
     const dq = q.get('danger');
     const qd: Danger | null = dq && /^[0-5]$/.test(dq) ? (Number(dq) as Danger) : (legacy[q.get('diff') ?? ''] ?? null);
     // ?map=yizhuang 指定地图（冒烟截图用）
-    const qm = q.get('map') && q.get('map')! in MAPS ? (q.get('map') as MapId) : q.has('map') ? 'snow' : null;
+    const qm: MapId | null = q.has('map') ? ((MAP_IDS as readonly string[]).includes(q.get('map') ?? '') ? (q.get('map') as MapId) : 'snow') : null;
     // ?raid=guzhen|dukou|shansi|teach 直接开一局夜探（冒烟截图用；可带 &auto 机器人代打）
     const qr = q.get('raid');
     if (qr && qr in RAID_TEMPLATES) menu.onRaid(qr as RaidTemplateId, qd ?? 2);

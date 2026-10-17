@@ -69,6 +69,8 @@ export const Ev = {
    * 8 冰魄预警 9 冰魄霜环 10 更夫敲梆 11 石僧预警 12 石僧掌击 13 竹王破土
    */
   Mob: 31,
+  /** 竹子挨了一下：x, y = 竹丛脚底中心, a = 第几块（MapDef.blocks 的下标）, b = 剩下的血占几分之几（0–1）, c = 1 倒了 */
+  Chop: 32,
   // 40–54 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,
