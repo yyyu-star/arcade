@@ -61,7 +61,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'scarecrow', code: 12, hp: 55, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8, vs: { 剑: 0.6, 火: 1.25 } },
   { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
   { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2, vs: { 剑: 0.5, 火: 1.2, 镇: 1.3 } },
-  { kind: 'whitefox', code: 15, hp: 400, speed: 1.7, dmg: 9, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.15, 符: 1.4 } },
+  { kind: 'whitefox', code: 15, hp: 400, speed: 1.7, dmg: 9, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.15, 符: 1.4, 火: 0.8, 木: 1.25, 水: 1.2 } },
   { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.25, 符: 1.2 } },
   { kind: 'lord', code: 17, hp: 6000, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true, vs: { 火: 1.15 } },
   // 夜探的守卫（数值在 content/explore.ts，移动由 src/explore/guards.ts 算）
@@ -83,9 +83,9 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'frostsoul', code: 29, hp: 620, speed: 1.15, dmg: 14, r: 30, xp: 30, steady: 0.85, elite: true, vs: { 火: 1.3, 剑: 0.6, 符: 1.3 } },
   // 夜探：古镇的更夫鬼、山寺的石僧（渡口用溺鬼）
   { kind: 'nightwatch', code: 30, hp: 26, speed: 1.3, dmg: 7, r: 15, xp: 3, steady: 0.3, vs: { 火: 1.3, 镇: 1.3, 剑: 0.8 } },
-  { kind: 'stonemonk', code: 31, hp: 60, speed: 0.9, dmg: 11, r: 19, xp: 4, steady: 0.8, vs: { 剑: 0.5, 火: 0.85, 水: 1.3, 镇: 1.4 } },
+  { kind: 'stonemonk', code: 31, hp: 60, speed: 0.9, dmg: 11, r: 19, xp: 4, steady: 0.8, vs: { 剑: 0.5, 火: 0.85, 水: 1.3, 镇: 1.1, 符: 1.25 } },
   // 守夜危险 3 起的常规怪（waves.ts LAMP 决定谁在几分钟出）：提灯鬼，近战直走，不怕火，给火流派一个对手；怕符怕铃。数值按同期的河蟹、冰傀
-  { kind: 'lampghost', code: 32, hp: 26, speed: 1.35, dmg: 8, r: 15, xp: 3, steady: 0.2, vs: { 火: 0.6, 符: 1.2, 镇: 1.15 } },
+  { kind: 'lampghost', code: 32, hp: 40, speed: 1.35, dmg: 8, r: 15, xp: 3, steady: 0.2, vs: { 火: 0.6, 符: 1.2, 镇: 1.15 } },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
