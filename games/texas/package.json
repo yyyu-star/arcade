@@ -2,7 +2,7 @@
   "name": "texas",
   "private": true,
   "license": "MIT",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "type": "module",
   "description": "德州扑克：单机对电脑和好友房，筹码跨场保留（无任何现金价值）",
   "scripts": {
@@ -20,7 +20,7 @@
     "smoke": "node scripts/smoke.ts"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.13.1"
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.15.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.2",

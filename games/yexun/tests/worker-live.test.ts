@@ -43,7 +43,7 @@ function post(action: string, body: unknown, headers: Record<string, string> = {
   const h = method === 'GET' || 'content-length' in headers ? headers : { ...headers, 'content-length': String(new TextEncoder().encode(text).length) };
   return new Request(`${ORIGIN}/games/yexun/api/live/${action}`, { method, headers: h, body: method === 'GET' ? undefined : text });
 }
-const run = (e: LiveEnv, r: Request, t = 200) => handleLive(r, e, t);
+const run = (e: LiveEnv, r: Request, t = 200) => handleLive(r, e, t, true);
 
 describe('三个动作的正常路径', () => {
   it('buyin：金额和到期由 Worker 定，原样回钱包结果并带上账号，不缓存，带回 Set-Cookie', async () => {
@@ -143,6 +143,17 @@ describe('入口校验', () => {
     const res = await run(e, post('buyin', { ref: REF, tier: 'small' }));
     expect(res.status).toBe(501);
     expect(await res.json()).toEqual({ ok: false, error: 'no_wallet' });
+  });
+
+  it('实盘没开（LIVE_OPEN 关着）：带入回 501 closed、不问平台和钱包；结回照常走', async () => {
+    const e = env({ ARCADE: arcade(() => json(LOGGED_IN)) });
+    const w = wallet({ ok: true, wallet: { balance: 8000 } });
+    e.WALLET = w.rpc;
+    const res = await handleLive(post('buyin', { ref: REF, tier: 'small' }), e, 200, false);
+    expect(res.status).toBe(501);
+    expect(await res.json()).toEqual({ ok: false, error: 'closed' });
+    expect(w.calls).toHaveLength(0);
+    expect((await handleLive(post('refund', { ref: REF }), e, 200, false)).status).not.toBe(501);
   });
 
   it('GATE=login 却没有 ARCADE：当平台不可用（503）', async () => {

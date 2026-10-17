@@ -65,11 +65,15 @@
 .yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
 .yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
 .yx-settings {
-  position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: 64px;
+  /* 固定在齿轮下面、盖在标题之上；矮屏（手机横屏）开关多了放不下就自己滚 */
+  right: max(10px, env(safe-area-inset-right, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 54px);
+  max-height: calc(var(--app-h, 100dvh) - max(10px, env(safe-area-inset-top, 0px)) - 64px); overflow-y: auto;
   display: none; flex-direction: column; gap: 8px; padding: 10px;
-  border: 3px solid var(--ink); border-radius: 14px; background: #fbf5e4; box-shadow: 0 4px 0 var(--ink); z-index: 2;
+  border: 3px solid var(--ink); border-radius: 14px; background: #fbf5e4; box-shadow: 0 4px 0 var(--ink); z-index: 20;
 }
 .yx-menu.show-settings .yx-settings { display: flex; }
+/* 要压过 .yx-menu-ui 子元素统一的 position: relative */
+.yx-menu > .yx-menu-ui > .yx-settings { position: fixed; z-index: 20; }
 .yx-title { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .yx-title b {
   font-family: 'YxBrush', serif; font-weight: 400; font-size: 128px; line-height: 1; letter-spacing: 16px; color: #f6efdc;
@@ -101,6 +105,8 @@
 .yx-chip.yx-map small { letter-spacing: 0; font-size: 10px; padding: 0 4px; text-align: center; }
 .yx-chip.locked { opacity: 0.5; cursor: default; }
 .yx-dangers .yx-chip { min-width: 44px; min-height: 46px; }
+.yx-dangers { gap: 4px; }
+.yx-lock { width: 12px; height: 12px; vertical-align: -1px; }
 .yx-dangers .yx-chip b { font-size: 18px; line-height: 1; }
 .yx-chip.yx-prep { min-height: 46px; }
 .yx-chip.yx-prep b { display: flex; align-items: center; gap: 4px; font-size: 14px; }
@@ -264,7 +270,8 @@
   .yx-title span { display: none; }
   .yx-go { min-height: 56px; font-size: 22px; }
   .yx-modes { gap: 10px; }
-  .yx-mode { width: 250px; padding: 0 10px 10px; gap: 6px; }
+  /* 6 个危险档（每个 ≥ 44 宽）要放得下 */
+  .yx-mode { width: 310px; padding: 0 10px 10px; gap: 6px; }
   .yx-scene { height: 34px; width: calc(100% + 20px); margin: 0 -10px; }
   .yx-mode-head b { font-size: 26px; }
   .yx-mode-head em { font-size: 11px; width: auto; }
