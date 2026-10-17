@@ -5,7 +5,10 @@
  */
 import { ENEMIES, type EnemyKind } from '../content/enemies.ts';
 import type { MapId } from '../content/maps.ts';
-import type { Difficulty } from '../content/waves.ts';
+import type { Danger } from '../content/waves.ts';
+
+/** 危险档当键（JSON 里是字符串） */
+export type DangerKey = `${Danger}`;
 import { MAX_WEAPON_LEVEL, MERGES, PASSIVES, WEAPONS, type MergeDef, type PassiveId, type WeaponId } from '../content/weapons.ts';
 import { ACHIEVEMENTS } from '../content/achievements.ts';
 import { Ev } from '../core/events.ts';
@@ -15,7 +18,7 @@ export const RECORDS_KEY = 'yexun.records';
 
 /** 一局结束时的摘要。字段都来自 World（见 summarize）；需要累计的几项由 RunTally 逐拍从事件里数 */
 export interface RunSummary {
-  difficulty: Difficulty;
+  danger: Danger;
   map: MapId;
   /** 赢了（天亮或打倒尸王） */
   won: boolean;
@@ -61,7 +64,8 @@ export interface Records {
   wins: number;
   kills: number;
   seconds: number;
-  winsByDiff: Partial<Record<Difficulty, number>>;
+  /** 每个危险档撑到天亮几次 */
+  winsByDanger: Partial<Record<DangerKey, number>>;
   winsByMap: Partial<Record<MapId, number>>;
   /** 见过的怪；各怪累计打倒几只 */
   seen: EnemyKind[];
@@ -78,7 +82,7 @@ export interface Records {
   achievements: string[];
 }
 
-const DIFFS: Difficulty[] = ['easy', 'normal', 'hard'];
+const DANGER_KEYS: DangerKey[] = ['0', '1', '2', '3', '4', '5'];
 const MAPS_: MapId[] = ['snow', 'yizhuang'];
 const KINDS = ENEMIES.map((e) => e.kind);
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
@@ -86,7 +90,7 @@ const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];
 const MERGE_IDS = MERGES.map((m) => m.id);
 
 export function emptyRecords(): Records {
-  return { v: 1, runs: 0, wins: 0, kills: 0, seconds: 0, winsByDiff: {}, winsByMap: {}, seen: [], killed: {}, weaponsUsed: [], weaponsMaxed: [], weaponsEvolved: [], merges: [], passivesMaxed: [], achievements: [] };
+  return { v: 1, runs: 0, wins: 0, kills: 0, seconds: 0, winsByDanger: {}, winsByMap: {}, seen: [], killed: {}, weaponsUsed: [], weaponsMaxed: [], weaponsEvolved: [], merges: [], passivesMaxed: [], achievements: [] };
 }
 
 // ───────────────────────── 从对局里摘要 ─────────────────────────
@@ -132,7 +136,7 @@ export function summarize(w: World, tally: RunTally, quit = false): RunSummary {
   const passives: Partial<Record<PassiveId, number>> = {};
   for (const id of PASSIVE_IDS) if (w.passives[id] !== undefined) passives[id] = w.passives[id];
   return {
-    difficulty: w.setup.difficulty,
+    danger: w.setup.danger,
     map: w.setup.map ?? 'snow',
     won: w.won,
     quit,
@@ -163,7 +167,7 @@ const addAll = <T>(list: T[], more: readonly T[]): T[] => [...new Set([...list, 
 export function applyRun(records: Records, run: RunSummary): { records: Records; unlocked: string[] } {
   const r: Records = {
     ...records,
-    winsByDiff: { ...records.winsByDiff },
+    winsByDanger: { ...records.winsByDanger },
     winsByMap: { ...records.winsByMap },
     killed: { ...records.killed },
   };
@@ -172,7 +176,8 @@ export function applyRun(records: Records, run: RunSummary): { records: Records;
   r.seconds += run.seconds;
   if (run.won) {
     r.wins += 1;
-    r.winsByDiff[run.difficulty] = (r.winsByDiff[run.difficulty] ?? 0) + 1;
+    const dk = String(run.danger) as DangerKey;
+    r.winsByDanger[dk] = (r.winsByDanger[dk] ?? 0) + 1;
     r.winsByMap[run.map] = (r.winsByMap[run.map] ?? 0) + 1;
   }
   for (const k of KINDS) {
@@ -228,7 +233,7 @@ export function sanitize(raw: unknown): Records {
     wins: num(o.wins),
     kills: num(o.kills),
     seconds: num(o.seconds),
-    winsByDiff: counts(o.winsByDiff, DIFFS),
+    winsByDanger: counts(o.winsByDanger, DANGER_KEYS),
     winsByMap: counts(o.winsByMap, MAPS_),
     seen: pick(o.seen, KINDS),
     killed: counts(o.killed, KINDS),

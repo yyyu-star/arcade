@@ -61,6 +61,7 @@
 /* 左边留给小道士立绘，内容整体往右让 */
 .yx-menu { padding-left: max(18vw, env(safe-area-inset-left, 0px)); }
 .yx-menu .yx-home { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
+.yx-menu .yx-codex-btn { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 56px); top: max(10px, env(safe-area-inset-top, 0px)); min-height: 44px; padding: 0 14px; font-size: 16px; }
 .yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
 .yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
 .yx-settings {

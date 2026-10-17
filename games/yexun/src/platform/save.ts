@@ -299,6 +299,13 @@ function earn(s: Save, id: string, n: number): void {
   }
 }
 
+/** 记一笔别处来的铜钱（成就奖励等）；同一个 id 只记一次 */
+export function grantCoins(s: Save, id: string, n: number): void {
+  if (n <= 0) return;
+  earn(s, id, n);
+  writeSave(s);
+}
+
 /** 流水 id 要在两台设备上都不撞：带上本机的随机后缀（画面层传进来，核心不碰随机） */
 function spend(s: Save, id: string, n: number): boolean {
   if (n > coins(s)) return false;

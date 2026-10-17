@@ -10,14 +10,14 @@ const allPassives = (): Partial<Record<PassiveId, number>> => Object.fromEntries
 
 /** 一局很差的：开局就倒，什么都没有 */
 const poor = (): RunSummary => ({
-  difficulty: 'easy', map: 'snow', won: false, quit: false, seconds: 10, kills: 0, killsByKind: {}, seen: [], bossKilled: false, level: 1, coins: 0,
+  danger: 0, map: 'snow', won: false, quit: false, seconds: 10, kills: 0, killsByKind: {}, seen: [], bossKilled: false, level: 1, coins: 0,
   weapons: [], merges: [], passives: {}, sets: [], hurts: 5, hpLeft: 0, hpMax: 100, chests: 0, blocks: 0,
 });
 
 /** 各种"极致"的局，合起来要能解锁全部 50 个 */
 function godRuns(): RunSummary[] {
   const base: RunSummary = {
-    ...poor(), difficulty: 'hard', won: true, seconds: 900, kills: 5000, level: 45, coins: 999, bossKilled: true,
+    ...poor(), danger: 4, won: true, seconds: 900, kills: 5000, level: 45, coins: 999, bossKilled: true,
     killsByKind: Object.fromEntries(ENEMIES.map((e) => [e.kind, 400])), seen: ENEMIES.map((e) => e.kind),
     weapons: WEAPON_IDS.slice(0, 6).map((id) => ({ id, level: MAX_WEAPON_LEVEL, evolved: true })),
     merges: MERGES.map((m) => m.id), passives: allPassives(), sets: ['剑3', '金3'], hurts: 3, hpLeft: 50, hpMax: 100, chests: 8, blocks: 20,
@@ -25,7 +25,7 @@ function godRuns(): RunSummary[] {
   return [
     base,
     { ...base, weapons: WEAPON_IDS.slice(6).map((id) => ({ id, level: MAX_WEAPON_LEVEL, evolved: true })) },
-    { ...base, difficulty: 'normal', map: 'yizhuang', hurts: 0 },
+    { ...base, danger: 2, map: 'yizhuang', hurts: 0 },
     { ...base, hpLeft: 5 },
   ];
 }

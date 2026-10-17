@@ -7,6 +7,13 @@ import type { Records, RunSummary } from '../meta/records.ts';
 import { ENEMIES, type EnemyKind } from './enemies.ts';
 import { MAX_WEAPON_LEVEL, MERGES, PASSIVES, WEAPONS } from './weapons.ts';
 
+/** 危险 d 及以上一共撑到天亮几次 */
+function winsFrom(c: Records, d: number): number {
+  let n = 0;
+  for (const [k, v] of Object.entries(c.winsByDanger)) if (Number(k) >= d) n += v ?? 0;
+  return n;
+}
+
 export type AchievementGroup = '守夜' | '斩妖' | '怪物' | '法器' | '构筑' | '挑战';
 
 export interface Achievement {
@@ -34,15 +41,15 @@ const finished = (run: RunSummary): boolean => run.won && !run.quit;
 export const ACHIEVEMENTS: readonly Achievement[] = [
   // ── 守夜 ──
   { id: 'dawn_1', group: '守夜', name: '天亮了', desc: '撑到天亮一次', coins: 30, test: (r) => finished(r) },
-  { id: 'dawn_normal', group: '守夜', name: '普通的一夜', desc: '在"普通"难度撑到天亮', coins: 60, test: (_r, c) => (c.winsByDiff.normal ?? 0) + (c.winsByDiff.hard ?? 0) >= 1 },
-  { id: 'dawn_hard', group: '守夜', name: '老道', desc: '在"高手"难度撑到天亮', coins: 150, title: '老道', test: (_r, c) => (c.winsByDiff.hard ?? 0) >= 1 },
+  { id: 'dawn_normal', group: '守夜', name: '普通的一夜', desc: '在危险 2 或更高撑到天亮', coins: 60, test: (_r, c) => winsFrom(c, 2) >= 1 },
+  { id: 'dawn_hard', group: '守夜', name: '老道', desc: '在危险 4 或更高撑到天亮', coins: 150, title: '老道', test: (_r, c) => winsFrom(c, 4) >= 1 },
   { id: 'dawn_yizhuang', group: '守夜', name: '义庄过夜', desc: '在义庄撑到天亮', coins: 80, test: (_r, c) => (c.winsByMap.yizhuang ?? 0) >= 1 },
   { id: 'dawn_5', group: '守夜', name: '五夜平安', desc: '一共撑到天亮 5 次', coins: 60, test: (_r, c) => c.wins >= 5 },
   { id: 'dawn_20', group: '守夜', name: '守夜人', desc: '一共撑到天亮 20 次', coins: 150, title: '守夜人', test: (_r, c) => c.wins >= 20 },
   { id: 'survive_5', group: '守夜', name: '站稳五分钟', desc: '一局撑过 5 分钟', coins: 20, test: (r) => r.seconds >= 300 },
   { id: 'survive_10', group: '守夜', name: '十分钟不倒', desc: '一局撑过 10 分钟', coins: 40, test: (r) => r.seconds >= 600 },
   { id: 'survive_14', group: '守夜', name: '尸王来了', desc: '一局撑过 14 分钟，见到尸王', coins: 60, test: (r) => r.seconds >= 840 },
-  { id: 'dawn_hard_5', group: '守夜', name: '高手常客', desc: '在"高手"难度撑到天亮 5 次', coins: 200, test: (_r, c) => (c.winsByDiff.hard ?? 0) >= 5 },
+  { id: 'dawn_hard_5', group: '守夜', name: '高手常客', desc: '在危险 4 或更高撑到天亮 5 次', coins: 200, test: (_r, c) => winsFrom(c, 4) >= 5 },
 
   // ── 斩妖 ──
   { id: 'kills_100', group: '斩妖', name: '小试牛刀', desc: '一局斩 100 只', coins: 20, test: (r) => r.kills >= 100 },
@@ -53,7 +60,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   { id: 'total_50000', group: '斩妖', name: '万鬼克星', desc: '一共斩 50,000 只', coins: 200, title: '万鬼克星', test: (_r, c) => c.kills >= 50000 },
   { id: 'lord_kill', group: '斩妖', name: '老爷下轿', desc: '打倒纸扎老爷', coins: 60, test: (_r, c) => killed(c, 'lord') >= 1 },
   { id: 'boss_kill', group: '斩妖', name: '尸王伏诛', desc: '打倒尸王', coins: 100, title: '伏尸', test: (r) => r.bossKilled },
-  { id: 'boss_hard', group: '斩妖', name: '高手伏尸', desc: '在"高手"难度打倒尸王', coins: 200, title: '镇尸人', test: (r) => r.bossKilled && r.difficulty === 'hard' },
+  { id: 'boss_hard', group: '斩妖', name: '高手伏尸', desc: '在危险 4 或更高打倒尸王', coins: 200, title: '镇尸人', test: (r) => r.bossKilled && r.danger >= 4 },
   { id: 'boss_5', group: '斩妖', name: '尸王克星', desc: '一共打倒尸王 5 次', coins: 120, test: (_r, c) => killed(c, 'boss') >= 5 },
 
   // ── 怪物 ──

@@ -71,6 +71,9 @@ export interface GameDeps {
   /** 第一局：卡片上带一行说明 */
   firstRun: boolean;
   onEnd: (w: World) => void;
+  /** 每推一拍（含选卡）的前后：录像在前面记输入，成就计数在后面读事件 */
+  beforeStep?: (w: World, dir: number, choice: number) => void;
+  afterStep?: (w: World) => void;
   /** 设置里的"震屏"开关（手感清单第 2 条：能关） */
   shake: () => boolean;
   /** 开了宝箱（引导用：第一次开宝箱时提示进化） */
@@ -287,7 +290,7 @@ export class GameScene extends Phaser.Scene {
 
   private tick(): void {
     const a = this.d.autopilot?.(this.w);
-    step(this.w, a ? a.dir : this.d.input.dir(), -1);
+    this.advance(a ? a.dir : this.d.input.dir(), -1);
     this.readEvents();
     if (this.w.phase === 'choose') {
       // 升级演出：先"叮 + 光柱" 0.3 秒再弹卡片（手感清单第 5 条）
@@ -299,11 +302,18 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 推一拍：所有 step 都从这里走，前后钩子才不会漏 */
+  private advance(dir: number, choice: number): void {
+    this.d.beforeStep?.(this.w, dir, choice);
+    step(this.w, dir, choice);
+    this.d.afterStep?.(this.w);
+  }
+
   private openCards(): void {
     if (this.d.cards.open) return;
     const w = this.w;
     if (this.d.autopilot) {
-      step(w, 0, this.d.autopilot(w).choice);
+      this.advance(0, this.d.autopilot(w).choice);
       this.readEvents();
       return;
     }
@@ -315,7 +325,7 @@ export class GameScene extends Phaser.Scene {
       (i) => {
         this.cardsSeen = true;
         sfx.play('choose');
-        step(w, 0, i);
+        this.advance(0, i);
         this.readEvents();
       },
     );
