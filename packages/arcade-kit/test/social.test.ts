@@ -8,6 +8,7 @@ import {
   dismissInvite,
   fetchFriends,
   fetchInvites,
+  inviteErrorText,
   inviteText,
   inviteUrl,
   mountSocial,
@@ -18,6 +19,7 @@ import {
   sendInvite,
   setShowWhere,
   untilOf,
+  whereText,
 } from '../src/social.ts';
 
 interface Call {
@@ -198,5 +200,31 @@ describe('挑哪条邀请弹', () => {
     const { f, calls } = fake(json({ user: { id: 'u1' } }));
     expect(await mountSocial({ where: () => null, fetchImpl: f })).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('"叫朋友来"面板的字（0.12.2）', () => {
+  const names = (id: string): string | undefined => ({ cards: '打牌' })[id];
+
+  it('在哪：好友房带人数、游戏写名字、大厅；不在线按几天前来过', () => {
+    expect(whereText({ online: true, where: { place: 'room', game: 'cards', room: 'ABC123', seats: '3/4' } }, names)).toBe('在打牌的好友房 · 3/4');
+    expect(whereText({ online: true, where: { place: 'room', game: 'other', room: 'ABC123' } }, names)).toBe('在好友房');
+    expect(whereText({ online: true, where: { place: 'game', game: 'cards' } }, names)).toBe('在打牌');
+    expect(whereText({ online: true, where: { place: 'game', game: 'other' } }, names)).toBe('在玩游戏');
+    expect(whereText({ online: true, where: { place: 'lobby' } })).toBe('在大厅');
+    expect(whereText({ online: true })).toBe('在线');
+    expect(whereText({ online: false, lastSeenDaysAgo: 0 })).toBe('今天来过');
+    expect(whereText({ online: false, lastSeenDaysAgo: 1 })).toBe('昨天来过');
+    expect(whereText({ online: false, lastSeenDaysAgo: 5 })).toBe('5 天前来过');
+    expect(whereText({ online: false })).toBe('不在线');
+  });
+
+  it('叫不了的大白话：刚叫过、今天次数用完（等两分钟以上）、不是好友、没登录、别的', () => {
+    expect(inviteErrorText({ ok: false, error: 'limit', retryAfter: 40 })).toBe('刚叫过他，过一会儿再叫');
+    expect(inviteErrorText({ ok: false, error: 'limit' })).toBe('刚叫过他，过一会儿再叫');
+    expect(inviteErrorText({ ok: false, error: 'limit', retryAfter: 3600 })).toBe('今天叫人的次数用完了，明天再叫');
+    expect(inviteErrorText({ ok: false, error: 'blocked' })).toContain('叫不了他');
+    expect(inviteErrorText({ ok: false, error: 'login' })).toContain('登录');
+    expect(inviteErrorText({ ok: false, error: 'failed' })).toBe('没发出去，过一会儿再试');
   });
 });

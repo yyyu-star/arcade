@@ -396,6 +396,9 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   "不了"`dismiss` 后弹下一条，到期自己收起。按钮 `data-key` 是 `invite:go`、`invite:no`；`log` 给 `位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期`。
 - 发邀请 `sendInvite({ to, game, room })` → `{ ok: true, id }` 或 `{ ok: false, error: 'limit' | 'blocked' | 'login' | 'failed', retryAfter? }`（429 是每天 50 条、同一好友 1 分钟 1 条超了）。
   `fetchFriends()` 把平台每项的公开资料 `{ userId, displayName, avatar }` 统一成 `id`、`name`（原样字段留着），带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
+- **"叫朋友来"面板**（0.12.2）：`social.openInvite({ game, room })`（`social` 是 `mountSocial` 的返回值；没挂上时用导出的 `openInvite({ game, room, friends: false })`，只有"复制邀请链接"）。
+  列好友（在线的在前，写在哪），每人一个"叫他来"，发出后 1 分钟内是灰的"已叫"，叫不了的写成大白话；底下"复制邀请链接"（能系统分享就分享）。
+  样式和 table-fun 一样，z-index 默认 1600；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。
 - 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
 
 ## 房间怎么守规矩
