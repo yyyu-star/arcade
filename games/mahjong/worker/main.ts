@@ -136,6 +136,8 @@ async function stake(request: Request, env: Env, site: string, sub: string): Pro
   if (!b || !id(b.op) || !id(soloOp(b.op)) || !id(b.session) || typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return json({ error: 'bad_request' }, 400);
   const tier = stakesOf(b.stakes);
   if (sub === 'buyin' && (!tier || !tier.wallet)) return json({ error: 'bad_request' }, 400);
+  // 只带整份（0.15.2）：底分和"最多赢 3 份"按整份算，少带的输得少、赢得一样多（第三轮审计）；页面也不发少带的
+  if (sub === 'buyin' && amount !== tier!.share) return json({ error: 'bad_amount' }, 400);
   const who = await whoIs(request, env.ARCADE);
   if (!('user' in who)) return denied(who);
   // 单机的操作 id 加 solo- 前缀，和好友房的永远分开（src/game/ops.ts）

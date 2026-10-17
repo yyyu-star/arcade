@@ -142,7 +142,7 @@ export const PAY_KIND: Record<string, string> = {
 export function walletError(code: string, retryAfter?: number): { text: string; fix?: 'less' | 'wallet' | 'refresh' } {
   switch (code) {
     case 'no_funds':
-      return { text: '钱包里的筹码不够，少带一点，或者去大厅领补给', fix: 'less' };
+      return { text: '钱包里的筹码不够一份，换个小一点的档位，或者去大厅领补给', fix: 'less' };
     case 'limit':
       return { text: '今天开局太多了，明早 0 点恢复；桌上的照常结回。娱乐局照常能玩' };
     case 'at_table':

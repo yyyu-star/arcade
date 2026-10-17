@@ -4,10 +4,11 @@
  *
  * 座位上坐的是谁由 kit 管（kinds），座位上的筹码是谁的由这里管（own）：
  * - 娱乐：不碰钱包，真人一坐下就是他的；
- * - 实盘：真人坐下（开局、接管电脑）先从他的钱包扣一份（钱包不够一份就少带，平台 0.10.2），到账了才是他的（restake 按带进来的重新算）；
+ * - 实盘：真人坐下（开局、接管电脑）先从他的钱包扣一整份（不够一份就被拒，不少带：底分和封顶都按整份），到账了才是他的；
  *   开局时等所有人的带入都有回话（最多 OPENING_MS）再开始换三张，免得有人拿没到账的筹码打；
  * - 没到账、被拒了的真人座位由庄家出筹码、这里替电脑打（kit 只替电脑座位和托管出手），他看着，可以再带一次（rebuy）；
- * - 真人离座：马上把他手上的筹码（按"最多赢 3 份"截过）连同小结结回钱包，座位交给电脑，筹码归庄家接着打；
+ * - 真人离座：把他手上的筹码（按"最多赢 3 份"截过）连同小结结回钱包，座位交给电脑，筹码归庄家接着打；
+ *   实盘一局打到一半走的，电脑替他打完这一局再结回；最后一个真人也走了，电脑替所有座位打完这一局再结回（躲不掉查叫）；
  * - 整场打完、桌上没真人了、房间要关：所有还在桌上的人结回。
  *
  * 实盘至少两个真人（DESIGN.md 第 4 节）：好友房是来和朋友打的，不是来赢电脑的（电脑座位的钱归庄家）。
@@ -130,7 +131,7 @@ export interface RoomView {
   own: boolean[];
   /** 每个座位：正在等钱包扣带入 */
   buying: boolean[];
-  /** 我这一份带进来多少（娱乐、没到账、旁观是 0）。只给本人：少带时它就是钱包余额 */
+  /** 我这一份带进来多少（娱乐、没到账、旁观是 0）。只给本人 */
   inn: number;
   /** 我上一次带入被拒的原因 */
   refused: string | null;
@@ -284,8 +285,9 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
       if (!s.own[seat]) return sync(s);
       if (walletOf(s) && !s.opening && !v.breakPoint(s.g)) {
         s = { ...s, leaving: set(s.leaving ?? noOne(), seat, true) };
-        // 桌上一个真人都没了：kit 不推只有电脑的桌、房间就此打完（over），等不到这一局结束，离座的都按这一刻结回
-        return sync(s.kinds.includes('human') ? s : release(s, true));
+        // 桌上一个真人都没了：kit 不推只有电脑的桌、房间就此打完（over），所以由这里替所有座位把这一局打完再结回，
+        // 不按半局的筹码结（几个人串通一起走就能躲掉查叫，第三轮审计）
+        return sync(s.kinds.includes('human') ? s : release(playOut(s), true));
       }
       s = settle(s, seat);
       return sync({ ...s, g: v.seated(s.g, seat, 'ai') });
@@ -330,9 +332,7 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     if (e.kind === 'credit') return sync(next);
     if (!isOk(result)) {
       const why = errorOf(result);
-      const bal = balanceOf(result);
-      // 钱包不够一份：有多少带多少（平台 0.10.2 允许少带），同一份、换个操作 id 再扣一次
-      if (why === 'no_funds' && bal > 0 && bal < e.amount && s.kinds[e.seat] === 'human' && !s.closed && !s.done) return sync(buy(next, e.seat, bal));
+      // 钱包不够一份也不少带（0.15.2）：底分和"最多赢 3 份"都按整份，少带的人输得少、赢得一样多（第三轮审计）。
       // 这一份没开成（下次带入还用这个号），座位由庄家出筹码、电脑接着打
       const g = s.closed ? s.g : vOf(s).seated(s.g, e.seat, 'ai');
       return sync({ ...next, g, refused: set(s.refused, e.seat, why), sealed: set(s.sealed, e.seat, true), share: set(s.share, e.seat, s.share[e.seat]! - 1) });
@@ -369,12 +369,6 @@ function errorOf(r: unknown): string {
   return typeof e === 'string' && /^[a-z_]{1,32}$/.test(e) ? e : 'error';
 }
 
-/** 被拒时平台带回来的余额（房间的 perform 转过来） */
-function balanceOf(r: unknown): number {
-  const b = (r as { balance?: unknown } | null)?.balance;
-  return typeof b === 'number' && Number.isSafeInteger(b) && b > 0 ? b : 0;
-}
-
 /** 这一桌碰钱包：实盘档，而且开局时真人够数 */
 const walletOf = (s: RoomState): boolean => stakesOf(s.stakes)!.wallet && !s.unrated;
 
@@ -382,6 +376,22 @@ const walletOf = (s: RoomState): boolean => stakesOf(s.stakes)!.wallet && !s.unr
 const betting = (s: RoomState): number => s.kinds.filter((k, i) => s.own[i] || (k === 'human' && debiting(s, i))).length;
 
 const noOne = (): boolean[] => new Array<boolean>(SEATS).fill(false);
+
+/** 桌上没真人了：电脑替所有座位（含离座、这一局还没结回的）把这一局打到结算；事件只留最后一步的（没人在打，旁观的不用看整局的动画） */
+function playOut(s: RoomState): RoomState {
+  const v = vOf(s);
+  const ai = aiOf(s);
+  let g = s.g;
+  // 上限同 sync：一局几百步就到结算，推不完（不该发生）就按这一刻结回
+  for (let k = 0; k < 2_000 && !v.breakPoint(g) && !v.over(g); k++) {
+    const seat = v.actors(g)?.seats[0];
+    if (seat === undefined) break;
+    const next = v.apply(g, seat, v.auto(g, seat, ai));
+    if (isError(next)) throw new Error(`mahjong room: play-out move rejected: ${next.error}`);
+    g = next;
+  }
+  return { ...s, g, n: s.n + 1 };
+}
 
 /** 一局打完了（停在结算），或者 now（桌上没真人了）：这一局里离座的人现在结回，座位交给电脑 */
 function release(s0: RoomState, now = false): RoomState {
@@ -402,7 +412,7 @@ const debiting = (s: RoomState, seat: number): boolean => s.fx.some((e) => e.sea
 /** 开局时还在等钱包回话的第一个座位 */
 const openingSeat = (s: RoomState): number | null => s.fx.find((e) => e.kind === 'debit')?.seat ?? null;
 
-/** 真人坐着、筹码不是他的、没有带入在路上：再带一次（被拒了、少带也不够的） */
+/** 真人坐着、筹码不是他的、没有带入在路上：再带一次（被拒了的，比如钱包补够了一份） */
 const canRebuy = (s: RoomState, seat: number): boolean =>
   !s.closed && !s.done && s.kinds[seat] === 'human' && !s.own[seat] && !debiting(s, seat) && walletOf(s);
 

@@ -1,6 +1,6 @@
 /**
  * 好友房跑在本地 workerd 里（DESIGN.md 第 6 节）：真的房间 DO（kit + 麻将的房间规则）、真的（假平台的）钱包 DO。
- * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时少带、一场打完报搭子战绩。
+ * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时不少带、一场打完报搭子战绩。
  * 不打整场（牌局本身在 node 单测里）；不等真实计时，只停在开局后的换三张阶段。
  */
 import { runInDurableObject } from 'cloudflare:test';
@@ -183,16 +183,14 @@ describe('实盘开局', () => {
     expect((await walletOf(ids[1]!)).stakes).toEqual([]);
   });
 
-  it('钱包只有 500：先被拒 no_funds，房间自动少带 500 再扣一次，成功', async () => {
+  it('钱包只有 500：不少带，按被拒算（第三轮审计）；只剩一个人下注，这一场当场结束，另一个人的那一份原样结回', async () => {
     const { ids, host, guest } = await table({ 1: 500 });
-    const v = await guest.see((x) => x.own[1]! && !x.opening);
-    expect(v.inn).toBe(500);
-    expect(v.refused).toBeNull();
-    expect(await walletOf(ids[1]!)).toMatchObject({ balance: 0, stakes: [{ game: 'mahjong', amount: 500 }] });
-    // 钱够的那位照常一整份
-    const h = await host.see((x) => x.own[0]! && x.own[1]!);
-    // 我的 inn 只是我的；他少带的数（就是他的钱包余额）不另外给别人
-    expect(h.inn).toBe(SHARE);
+    const v = await guest.see((x) => x.refused !== null);
+    expect([v.refused, v.inn, v.own[1]]).toEqual(['no_funds', 0, false]);
+    await host.see((x) => x.done && x.cut);
+    for (let i = 0; i < 150 && (await walletOf(ids[0]!)).stakes.length > 0; i++) await sleep(20);
+    expect(await walletOf(ids[1]!)).toMatchObject({ balance: 500, stakes: [] });
+    expect(await walletOf(ids[0]!)).toMatchObject({ balance: NEW_BALANCE, stakes: [] });
   });
 });
 

@@ -10,6 +10,7 @@ import { STRONGEST } from '../src/ai/personas.ts';
 import { VENUES } from '../src/ai/venues.ts';
 import { EMOTES } from '../src/game/emotes.ts';
 import { roomOp, SOLO_OP, soloOp } from '../src/game/ops.ts';
+import { stakesOf } from '../src/game/stakes.ts';
 import { RoomTalk } from '../src/room/talk.ts';
 import { mahjongRoom as G, matchWins, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
@@ -115,18 +116,21 @@ describe('开局和带入', () => {
     expect(G.view(s, null).inn).toBe(0);
   });
 
-  test('钱包不够一份：有多少带多少（同一份、换个操作 id），筹码按带进来的算', () => {
-    let s = G.settled!(begin(['human', 'human', 'ai', 'ai']), 'b1', OK);
-    s = G.settled!(s, 'b0', { ok: false, error: 'no_funds', balance: 500 });
-    expect(fx(s).map(strip)).toEqual([{ id: 'b2', seat: 0, kind: 'debit', amount: 500 }]);
-    expect(fx(s)[0]!.ref).toBe(`${s.ref}s0n1`);
-    s = G.settled!(s, 'b2', OK);
-    expect(s.own[0]).toBe(true);
-    expect(g(s, 0).seats[0]!.chips).toBe(500);
-    expect(G.view(s, 0).inn).toBe(500);
-    // 少带的数就是他的钱包余额：只给本人看；桌上的筹码本来就公开
-    expect(G.view(s, 1).inn).toBe(SHARE);
-    expect(G.view(s, 2).inn).toBe(0);
+  test('钱包不够一份：不少带（底分和"最多赢 3 份"都按整份，少带的输得少、赢得一样多，第三轮审计），按被拒算', () => {
+    // 豪华档两个真人，一个钱包只有 1：他进不去，只剩一个人下注，这一场当场结束，另一个人的那一份原样结回
+    const lux = stakesOf('lux')!.share;
+    let s = G.settled!(begin(['human', 'human', 'ai', 'ai'], 'lux'), 'b1', OK);
+    s = G.settled!(s, 'b0', { ok: false, error: 'no_funds', balance: 1 });
+    expect(fx(s).every((e) => e.kind !== 'debit')).toBe(true);
+    expect([s.own[0], G.view(s, 0).refused, G.view(s, 0).inn]).toEqual([false, 'no_funds', 0]);
+    expect(s.cut).toBe(true);
+    expect(fx(s).map(strip)).toEqual([{ id: 'c2', seat: 1, kind: 'credit', amount: lux }]);
+    // 三个真人时被拒的那位接着看，带入一律整份
+    s = G.settled!(G.settled!(begin(['human', 'human', 'human', 'ai'], 'lux'), 'b1', OK), 'b2', OK);
+    s = G.settled!(s, 'b0', { ok: false, error: 'no_funds', balance: 1 });
+    expect([s.own[0], s.cut]).toEqual([false, false]);
+    s = act(s, 0, { t: 'rebuy' });
+    expect(fx(s).map(strip)).toEqual([{ id: 'b3', seat: 0, kind: 'debit', amount: lux }]);
   });
 
   test('被拒（一分钱没有）：座位由庄家出筹码、这里替电脑打，他不能出手；可以再带一次', () => {
@@ -269,16 +273,24 @@ describe('离座和结回', () => {
     expect([f.own[0], !!f.leaving?.[0]]).toEqual([false, false]);
   });
 
-  test('真人都走了：房间就算打完，桌上的筹码按那一刻结回（含这一局里先走的）', () => {
-    let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
-    s = G.seated!(G.seated!(s, 0, 'ai'), 1, 'ai');
-    // 一局打到一半两个人都走了：kit 桌上没真人时不推电脑，等不到这一局打完，两个人都按这一刻结回、马上收场
-    expect(G.over(s)).toBe(true);
-    expect(fx(s).map((e) => [e.seat, e.kind])).toEqual([
-      [0, 'credit'],
-      [1, 'credit'],
-    ]);
-    expect(s.leaving).toEqual([false, false, false, false]);
+  test('真人在一局中途一起走了：电脑替所有座位把这一局打完（查叫、查花猪、退税照算）再结回，房间就算打完（第三轮审计）', () => {
+    let dodged = 0;
+    for (let k = 0; k < 12; k++) {
+      let s = settleAll(begin(['human', 'human', 'ai', 'ai'], 'small', KEY.map((x, i) => (i === 0 ? x + k : x))));
+      s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
+      const mid = g(s, null).seats.map((x) => x.chips);
+      s = G.seated!(G.seated!(s, 0, 'ai'), 1, 'ai');
+      // kit 桌上没真人时不推电脑：这一局在这一步里就打到了结算，两个人按结算后的筹码结回、马上收场
+      const x = s.g as XzState;
+      expect(['end', 'over']).toContain(x.phase);
+      expect(G.over(s)).toBe(true);
+      expect(s.leaving).toEqual([false, false, false, false]);
+      const end = g(s, null).seats.map((y) => y.chips);
+      expect(fx(s).map(strip)).toEqual([0, 1].map((seat, i) => ({ id: `c${2 + i}`, seat, kind: 'credit', amount: Math.max(0, Math.min(end[seat]!, 4 * SHARE)) })));
+      // 流局的赔付（查大叫、查花猪、退税）落在他们头上的：按半局的筹码结就躲掉了
+      if (x.ledger.some((p) => ['cha', 'pig', 'tax'].includes(p.kind) && p.from <= 1) && end[0]! + end[1]! < mid[0]! + mid[1]!) dodged++;
+    }
+    expect(dodged).toBeGreaterThan(0);
   });
 
   test('带入还在路上人就走了：到账后原样结回', () => {
@@ -500,7 +512,7 @@ describe('钱包操作 id（src/game/ops.ts，审计高危）', () => {
     expect(soloOp('op-000001')).toBe('solo-op-000001');
     expect(soloOp('solo-op-000001')).toBe('solo-op-000001');
     expect(soloOp('r0123456789abcdef-b0')).toBe('solo-r0123456789abcdef-b0');
-    // 好友房里会出现的每一种：开局带入、少带重扣、离座结回、回来开新的一份、打完结回，几个房间号
+    // 好友房里会出现的每一种：开局带入、被拒再带、离座结回、回来开新的一份、打完结回，几个房间号
     const ops: string[] = [];
     const record = (e: WalletEffect) => {
       ops.push(roomOp(e));

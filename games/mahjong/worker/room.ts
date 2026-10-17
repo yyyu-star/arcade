@@ -63,8 +63,7 @@ export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, 
     // 结回时那一份已经没了（到期退回过 expired，或者没有 no_stake）也算办完
     if (RETRY.has(r.error)) throw new Error(`wallet ${r.error}`);
     if (e.kind === 'credit' && r.error !== 'expired') console.error('mahjong room: settle refused', e.ref, r.error);
-    // 带入被拒告诉他本人；钱不够时带上余额，规则按它少带一点再扣一次
-    const balance = (r.wallet as { balance?: unknown } | undefined)?.balance;
-    return { ok: false, error: r.error, ...(typeof balance === 'number' ? { balance } : {}) };
+    // 带入被拒告诉他本人（钱不够一份不少带，规则不看余额）
+    return { ok: false, error: r.error };
   }
 }

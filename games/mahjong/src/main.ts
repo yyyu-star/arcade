@@ -296,13 +296,12 @@ async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.le
     if (!old!.done) return showError(`上一场还没结上：${walletError(r && !r.ok ? r.error : 'network').text}`);
   }
   const st = stakesOf(stakes)!;
-  let chips = st.share;
+  const chips = st.share;
   if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level), soloUi));
   await refreshWallet();
   if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-  chips = Math.min(st.share, wallet.balance);
-  if (chips <= 0) return showError(walletError('no_funds').text, 'less');
-  if (chips < st.share && !(await confirmBox(stage, `钱包只有 ${num(chips)}，不够一份（${num(st.share)}）。带 ${num(chips)} 上桌？`, '带上桌', '不了'))) return;
+  // 实盘只带整份（0.15.2）：底分和"最多赢 3 份"按整份算，少带等于输得少、赢得一样多
+  if (wallet.balance < chips) return showError(walletError('no_funds').text, 'less');
   // 带入前先存"带入中"（ref、操作号），回包丢了下次用同一个号重发（自审 C3）
   const save = newSolo(stakes, opts, myName, randomId(), chips);
   save.buying = { op: randomId(), amount: chips };
@@ -390,7 +389,7 @@ async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
   if (st.wallet) {
     await refreshWallet();
     if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
-    if (wallet.balance <= 0) return showError(walletError('no_funds').text, 'less');
+    if (wallet.balance < st.share) return showError(walletError('no_funds').text, 'less');
   }
   const r = await createRoom(withNick('rooms'), { variant: 'sichuan-xuezhan', stakes, rules: opts });
   if ('error' in r) return showError(createError(r.error), r.error === 'login' ? 'refresh' : undefined);
