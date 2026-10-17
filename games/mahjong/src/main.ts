@@ -18,7 +18,7 @@ import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
-import { renderWaiting, roomNotice, shareRoom } from './view/room.ts';
+import { renderWaiting, roomNotice, shareRoom, type Watching } from './view/room.ts';
 import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { cardOf, shareResult } from './view/share.ts';
@@ -520,12 +520,23 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   if (mine !== ownShown) void refreshWallet();
   ownShown = mine;
   table.root.querySelector('.room-note')?.remove();
-  const n = roomNotice(rv, seat, () => online?.rebuy());
+  const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
   if (!replay) publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
   alertTurn(v);
   roomRoundEnd(s, rv, g, replay);
+}
+
+/** 没入座：回自己坐过的座位，或者能接管的电脑座位（没绑人的；实盘房间旁观只看，不给坐） */
+function watching(s: OnlineState, g: XzView): Watching {
+  const metas = seatMetas(s, g);
+  return {
+    back: s.you?.bound ?? null,
+    free: s.room!.seats.flatMap((x, i) => (x.kind === 'ai' && !x.reserved ? [{ seat: i, name: metas[i]!.name }] : [])),
+    wallet: !!stakesOf(s.view?.stakes)?.wallet,
+    onSit: (seat) => online?.sit(seat),
+  };
 }
 
 /** 一局打完：房间停 8 秒自动发下一局，结算摆着不用点；一场打完给总结算 */
@@ -556,7 +567,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           if (stakesOf(rv.stakes)?.wallet) el('p', 'room-hint', box, '新房间里各人自己坐下，开打时才从钱包带一份');
         }
       }, false);
-      play((g.result?.seats[g.me?.seat ?? 0]?.net ?? 0) >= 0 ? 'win' : 'lose');
+      if (g.me) play((g.result?.seats[g.me.seat]?.net ?? 0) >= 0 ? 'win' : 'lose');
       void refreshWallet();
     }
     // 别人开了新房间：结算上写一句，几秒后跟过去（娱乐坐回原来的相对位置，实盘只亮座位、自己点了才坐）
