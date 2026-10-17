@@ -87,6 +87,8 @@ export const DEFAULT_LIMITS = {
   /** 报位置（0.13.0，docs/social.md 1.2）：浏览器每 2 分钟报一次，平台按这个节流（略短于 2 分钟，计时器的抖动不至于丢掉一半）；超过 presenceOnlineMs 没报算离线 */
   presenceEveryMs: 110_000,
   presenceOnlineMs: 300_000,
+  /** 位置变了（进房、换游戏）马上写，但同一个人最快这么久写一次（0.14.1） */
+  presenceMoveGapMs: 10_000,
   /** 邀请（0.14.0，docs/social.md 1.3）：10 分钟有效；每人 24 小时最多发这么多条、叫同一个好友至少隔这么久 */
   inviteTtlMs: 600_000,
   invitesPerDay: 50,

@@ -30,13 +30,51 @@ describe('报位置', () => {
     expect(rowsWritten()).toBe(1);
     expect(rowsBy('live')).toBe(1);
     advance(60_000);
-    expect((await report(a, { place: 'game', game: 'kaipan' })).status).toBe(204);
+    expect((await report(a, { place: 'lobby' })).status).toBe(204);
     expect(rowsWritten()).toBe(0);
     advance(60_000);
-    expect((await report(a, { place: 'game', game: 'kaipan' })).status).toBe(204);
+    expect((await report(a, { place: 'lobby' })).status).toBe(204);
     expect(rowsWritten()).toBe(1);
     expect((await call('/api/presence', { body: { place: 'lobby' } })).status).toBe(401);
     expect((await call('/api/presence', { body: { place: 'lobby' }, cookie: a.cookie, csrf: false })).status).toBe(403);
+  });
+
+  it('位置变了马上写（0.14.1）：进房那一下好友立刻看到；10 秒内再变不写；没变照旧 2 分钟一次；只是人数变了不算变', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    await befriend(a, b);
+    const at = async () => (await friendsOf(b))[0]!.where;
+    await report(a, { place: 'game', game: 'guandan' });
+    expect(rowsWritten()).toBe(1);
+    advance(15_000);
+    // 进房：变了，马上写
+    await report(a, { place: 'room', game: 'guandan', room: '123456', seats: '1/4' });
+    expect(rowsWritten()).toBe(1);
+    expect(await at()).toEqual({ place: 'room', game: 'guandan', room: '123456', seats: '1/4' });
+    // 10 秒内又换了房：不写，好友那边还是上一个房
+    advance(5_000);
+    await report(a, { place: 'room', game: 'guandan', room: '654321' });
+    expect(rowsWritten()).toBe(0);
+    expect((await at())!.room).toBe('123456');
+    // 过了 10 秒再报换过的房：写
+    advance(6_000);
+    await report(a, { place: 'room', game: 'guandan', room: '654321' });
+    expect(rowsWritten()).toBe(1);
+    // 同一个房、只是人数变了：不算变，按 2 分钟节流
+    advance(30_000);
+    await report(a, { place: 'room', game: 'guandan', room: '654321', seats: '3/4' });
+    expect(rowsWritten()).toBe(0);
+    advance(90_000);
+    await report(a, { place: 'room', game: 'guandan', room: '654321', seats: '3/4' });
+    expect(rowsWritten()).toBe(1);
+    expect(await at()).toEqual({ place: 'room', game: 'guandan', room: '654321', seats: '3/4' });
+    // 换游戏、回大厅也算变
+    advance(11_000);
+    await report(a, { place: 'game', game: 'texas' });
+    expect(rowsWritten()).toBe(1);
+    advance(11_000);
+    await report(a, { place: 'lobby' });
+    expect(rowsWritten()).toBe(1);
   });
 
   it('格式不对 400：不认识的地方、不认识的游戏、房间没带码、码和人数格式不对', async () => {

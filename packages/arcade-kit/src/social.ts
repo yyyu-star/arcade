@@ -210,6 +210,40 @@ export async function setShowWhere(show: boolean, opts: ApiOptions = {}): Promis
   }
 }
 
+/** "在哪"那一行：好友房带人数，在游戏里写游戏名（不认识的说"在玩游戏"），大厅；没给 where 按离线写几天前来过 */
+export function whereText(f: Pick<Friend, 'online' | 'where'> & { lastSeenDaysAgo?: unknown }, gameName?: (id: string) => string | undefined): string {
+  if (!f.online) {
+    const d = f.lastSeenDaysAgo;
+    return typeof d !== 'number' ? '不在线' : d <= 0 ? '今天来过' : d === 1 ? '昨天来过' : `${d} 天前来过`;
+  }
+  const w = f.where;
+  if (!w) return '在线';
+  if (w.place === 'lobby') return '在大厅';
+  const g = w.game ? gameName?.(w.game) : undefined;
+  if (w.place === 'room') return `在${g ? `${g}的` : ''}好友房${w.seats ? ` · ${w.seats}` : ''}`;
+  return g ? `在${g}` : '在玩游戏';
+}
+
+/**
+ * 叫不了的大白话（平台：429 rate_limited 带 Retry-After，同一个好友 1 分钟一条、每人 24 小时 50 条；403 not_friend：不是好友、屏蔽了、对方不存在一律这个）。
+ * 等的时间超过两分钟的是每天的次数用完了
+ */
+export function inviteErrorText(r: Exclude<SendInviteResult, { ok: true }>): string {
+  switch (r.error) {
+    case 'limit':
+      return r.retryAfter !== undefined && r.retryAfter > 120 ? '今天叫人的次数用完了，明天再叫' : '刚叫过他，过一会儿再叫';
+    case 'blocked':
+      return '叫不了他（可能已经不是好友了）';
+    case 'login':
+      return '登录过期了，刷新一下再叫';
+    default:
+      return '没发出去，过一会儿再试';
+  }
+}
+
+/** 叫过以后多久不能再叫同一个人（平台同一个好友 1 分钟一条） */
+export const INVITE_GAP_MS = 60_000;
+
 // ───────────── 挂到页面上（只在调用时碰 DOM） ─────────────
 
 export interface SocialOptions extends ApiOptions {
@@ -242,6 +276,8 @@ export interface SocialHandle {
   pollNow(): void;
   /** 收起横条、停掉计时、解开监听 */
   stop(): void;
+  /** 打开"叫朋友来"面板（0.12.2）：列好友、"叫他来"、复制邀请链接。游戏名用 mountSocial 给的 gameName */
+  openInvite(inv: Omit<InvitePanelOptions, 'fetchImpl' | 'gameName'>): InvitePanel;
 }
 
 const BANNER_ID = 'arcade-invite-banner';
@@ -276,6 +312,15 @@ class Social implements SocialHandle {
 
   private now(): number {
     return this.o.now?.() ?? Date.now();
+  }
+
+  openInvite(inv: Omit<InvitePanelOptions, 'fetchImpl' | 'gameName'>): InvitePanel {
+    return openInvite({
+      ...inv,
+      ...(this.o.fetchImpl ? { fetchImpl: this.o.fetchImpl } : {}),
+      ...(this.o.gameName ? { gameName: this.o.gameName } : {}),
+      ...(this.o.now ? { now: this.o.now } : {}),
+    });
   }
 
   private visible(): boolean {
@@ -408,4 +453,211 @@ class Social implements SocialHandle {
     document.removeEventListener('visibilitychange', this.onVis);
     this.hide();
   }
+}
+
+// ───────────── "叫朋友来"面板（0.12.2，只在调用时碰 DOM） ─────────────
+
+export interface InvitePanelOptions extends ApiOptions {
+  /** 游戏 id、房间码：叫来的就是这个房间 */
+  game: string;
+  room: string;
+  /** 列好友、"叫他来"（有平台、已登录时）；false 只有"复制邀请链接"（单独部署、没登录） */
+  friends?: boolean;
+  /** 邀请链接，默认 `<站点>/games/<id>/?room=<码>` */
+  url?: string;
+  /** 系统分享、复制时的那句话，默认"来一起玩！房间码 <码>" */
+  text?: string;
+  /** 游戏 id → 名字（好友"在哪"那一行） */
+  gameName?(id: string): string | undefined;
+  /** 默认 1600（在邀请横条之上，在分享预览之下） */
+  zIndex?: number;
+  /** 冒烟、调试看的流水：`叫人 打开 <n>`、`叫人 <id> ok|<错误>`、`叫人 复制`、`叫人 关闭` */
+  log?(line: string): void;
+  /** 测试用：时钟 */
+  now?(): number;
+}
+
+export interface InvitePanel {
+  close(): void;
+}
+
+const PANEL_ID = 'arcade-invite-panel';
+const PANEL_CSS_ID = 'arcade-invite-css';
+/** 和牌桌互动（table-fun）同一套颜色、圆角、按钮 */
+const PANEL_CSS = `
+.aiv-back{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;background:rgba(0,0,0,.5);font-family:inherit;-webkit-tap-highlight-color:transparent}
+.aiv-box{position:relative;display:flex;flex-direction:column;width:min(420px,calc(100vw - 16px));max-height:calc(100% - 16px);background:rgba(43,29,20,.97);border:2px solid #d4a64a;border-radius:14px;padding:12px;box-sizing:border-box;color:#fff6e0;box-shadow:0 6px 18px rgba(0,0,0,.45);animation:aiv-pop .14s ease-out}
+.aiv-title{font-size:17px;font-weight:700;color:#f3d98b;margin:2px 48px 2px 4px}
+.aiv-sub{font-size:13px;opacity:.75;margin:0 4px 8px}
+.aiv-x{position:absolute;right:6px;top:6px;width:44px;height:44px;border:0;border-radius:22px;background:transparent;color:#f3d98b;font:inherit;font-size:22px;cursor:pointer}
+.aiv-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px}
+.aiv-row{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 10px;border-radius:10px;background:#4a3220}
+.aiv-dot{flex:none;width:10px;height:10px;border-radius:50%;background:#6a6a6a}.aiv-dot.aiv-on{background:#6fd36f}
+.aiv-who{flex:1 1 auto;min-width:0}
+.aiv-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aiv-where{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aiv-chip{flex:none;min-width:84px;min-height:44px;border:1px solid rgba(212,166,74,.6);border-radius:22px;background:#7a2a1e;color:#fff6e0;font:inherit;font-size:14px;font-weight:700;padding:0 12px;cursor:pointer}
+.aiv-chip:disabled{background:#3a3a3a;cursor:default;opacity:.8}.aiv-chip.aiv-soft{background:#4a3220}
+.aiv-note{font-size:13px;text-align:center;opacity:.85;padding:10px 4px;min-height:1em}
+.aiv-err{color:#ffb0a0}
+.aiv-foot{display:flex;justify-content:center;padding-top:10px}
+@keyframes aiv-pop{from{opacity:0;scale:.94}to{opacity:1;scale:1}}
+`;
+
+/** 叫过的人什么时候能再叫（这一页里记着，关了面板再开也灰着） */
+const calledUntil = new Map<string, number>();
+
+/**
+ * 打开"叫朋友来"面板：列好友（在线的在前，写在哪），每人一个"叫他来"，发出后变"已叫"、1 分钟内灰着，叫不了的换成大白话；
+ * 底下"复制邀请链接"（能系统分享就分享）。点空白处、✕、Esc 关掉。只发平台的 `POST /api/invites`，不写别的
+ */
+export function openInvite(o: InvitePanelOptions): InvitePanel {
+  const doc = document;
+  doc.getElementById(PANEL_ID)?.remove();
+  if (!doc.getElementById(PANEL_CSS_ID)) {
+    const st = doc.createElement('style');
+    st.id = PANEL_CSS_ID;
+    st.textContent = PANEL_CSS;
+    doc.head.appendChild(st);
+  }
+  const now = (): number => o.now?.() ?? Date.now();
+  const url = o.url ?? `${location.origin}${inviteUrl(o)}`;
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = ''): HTMLElementTagNameMap[K] => {
+    const e = doc.createElement(tag);
+    e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  };
+  const back = el('div', 'aiv-back');
+  back.id = PANEL_ID;
+  back.style.zIndex = String(o.zIndex ?? 1600);
+  const box = el('div', 'aiv-box');
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', '叫朋友来');
+  const x = el('button', 'aiv-x', '✕');
+  x.type = 'button';
+  x.dataset['key'] = 'invite:close';
+  x.setAttribute('aria-label', '关闭');
+  const list = el('div', 'aiv-list');
+  const note = el('div', 'aiv-note', o.friends === false ? '把链接发给朋友，点开就进房' : '正在找好友…');
+  const copy = el('button', 'aiv-chip aiv-soft', '复制邀请链接');
+  copy.type = 'button';
+  copy.dataset['key'] = 'invite:copy';
+  const foot = el('div', 'aiv-foot');
+  foot.appendChild(copy);
+  box.appendChild(x);
+  box.appendChild(el('div', 'aiv-title', '叫朋友来'));
+  box.appendChild(el('div', 'aiv-sub', `房间码 ${o.room}`));
+  box.appendChild(list);
+  box.appendChild(note);
+  box.appendChild(foot);
+  back.appendChild(box);
+  doc.body.appendChild(back);
+
+  let closed = false;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') close();
+  };
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    for (const t of timers) clearTimeout(t);
+    doc.removeEventListener('keydown', onKey);
+    back.remove();
+    o.log?.('叫人 关闭');
+  };
+  doc.addEventListener('keydown', onKey);
+  back.addEventListener('click', (e) => {
+    if (e.target === back) close();
+  });
+  x.addEventListener('click', close);
+
+  copy.addEventListener('click', () => {
+    const text = o.text ?? `来一起玩！房间码 ${o.room}`;
+    const done = (msg: string, err = false): void => {
+      note.textContent = msg;
+      note.classList.toggle('aiv-err', err);
+      o.log?.('叫人 复制');
+    };
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    if (typeof nav.share === 'function') {
+      nav.share({ title: text, text, url }).then(
+        () => done('发出去了'),
+        (e: { name?: string }) => (e?.name === 'AbortError' ? undefined : clip()),
+      );
+      return;
+    }
+    clip();
+    function clip(): void {
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(`${text}：${url}`).then(() => done('链接复制好了，发给朋友，点开就进房'), () => done(`把这个链接发给朋友：${url}`, true));
+      else done(`把这个链接发给朋友：${url}`, true);
+    }
+  });
+
+  /** "叫他来"按钮的样子：叫过的 1 分钟内灰着，到点自己变回来 */
+  const paint = (b: HTMLButtonElement, id: string): void => {
+    const left = (calledUntil.get(id) ?? 0) - now();
+    b.disabled = left > 0;
+    b.textContent = left > 0 ? '已叫' : '叫他来';
+    if (left > 0) {
+      const t = setTimeout(() => {
+        timers.delete(t);
+        if (!closed) paint(b, id);
+      }, left);
+      timers.add(t);
+    }
+  };
+
+  const render = (friends: Friend[]): void => {
+    note.textContent = friends.length ? '' : '还没有好友，先把链接发给朋友';
+    // 平台已经按在线、最近来过排好；这里再保证在线的在前（稳定排序）
+    const sorted = [...friends].sort((a, b) => Number(b.online) - Number(a.online));
+    for (const f of sorted) {
+      const row = el('div', 'aiv-row');
+      row.appendChild(el('span', `aiv-dot${f.online ? ' aiv-on' : ''}`));
+      const who = el('div', 'aiv-who');
+      who.appendChild(el('div', 'aiv-name', f.name || '好友'));
+      who.appendChild(el('div', 'aiv-where', whereText(f, o.gameName)));
+      const b = el('button', 'aiv-chip', '叫他来');
+      b.type = 'button';
+      b.dataset['key'] = `invite:call:${f.id}`;
+      paint(b, f.id);
+      b.addEventListener('click', () => {
+        b.disabled = true;
+        void sendInvite({ to: f.id, game: o.game, room: o.room }, o).then((r) => {
+          if (closed) return;
+          o.log?.(`叫人 ${f.id} ${r.ok ? 'ok' : r.error}`);
+          if (r.ok) {
+            calledUntil.set(f.id, now() + INVITE_GAP_MS);
+            note.textContent = `叫了 ${f.name || '好友'}，他会在页面顶上看到`;
+            note.classList.remove('aiv-err');
+          } else {
+            // 刚叫过（平台按 1 分钟算）也灰到能叫为止
+            if (r.error === 'limit') calledUntil.set(f.id, now() + Math.min(r.retryAfter ?? 60, 60) * 1000);
+            note.textContent = inviteErrorText(r);
+            note.classList.add('aiv-err');
+          }
+          paint(b, f.id);
+        });
+      });
+      row.appendChild(who);
+      row.appendChild(b);
+      list.appendChild(row);
+    }
+    o.log?.(`叫人 打开 ${friends.length}`);
+  };
+
+  if (o.friends === false) o.log?.('叫人 打开 0');
+  else
+    void fetchFriends(o).then((fs) => {
+      if (closed) return;
+      if (fs) render(fs);
+      else {
+        note.textContent = '好友列表暂时打不开，可以先把链接发给朋友';
+        o.log?.('叫人 打开 失败');
+      }
+    });
+  copy.focus();
+  return { close };
 }
