@@ -25,6 +25,8 @@ import { opt } from './args.ts';
 
 const HANDS = Number(opt('hands', '30'));
 const SHOTS = opt('shots', join(tmpdir(), 'texas-shots'));
+/** 电脑的窗口大小（art v3：改前改后在 1280、1920 各截一套），--desk 1920x1080 */
+const [DESK_W, DESK_H] = opt('desk', '1280x720').split('x').map(Number) as [number, number];
 mkdirSync(SHOTS, { recursive: true });
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -104,7 +106,7 @@ async function fakePlatform(ctx: BrowserContext, userId: string): Promise<void> 
 }
 
 async function newContext(browser: Browser, base: string, userId: string, device: Parameters<Browser['newContext']>[0] = {}): Promise<BrowserContext> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, ...device });
+  const ctx = await browser.newContext({ viewport: { width: DESK_W, height: DESK_H }, ...device });
   await cspWatch(ctx);
   // 平台的两个 cookie（__Host- 的不能带 Domain；CDP 这里要写 domain，浏览器照样当 host-only，localhost 算安全来源）
   const host = new URL(base).hostname;
@@ -296,20 +298,36 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
   }
 }
 
+/** 0.18.0 起标题页先是主页：在主页就点模式卡，已经在选桌就点上面的玩法按钮 */
+async function enter(page: Page, mode: '娱乐' | '实盘' | '好友房', tap = false): Promise<void> {
+  const id = { 娱乐: 'fun', 实盘: 'real', 好友房: 'room' }[mode];
+  const card = page.locator(`.mcard[data-mode="${id}"]`);
+  const target = (await card.isVisible()) ? card : page.locator('.lobby .mode', { hasText: mode });
+  await (tap ? target.tap() : target.click());
+}
+
 async function desktop(browser: Browser, base: string): Promise<void> {
   const ctx = await newContext(browser, base, 'smoke-desk');
   await ctx.addInitScript(() => localStorage.setItem('texas.settings', JSON.stringify({ fast: true })));
   const page = await ctx.newPage();
   watch(page, 'desktop');
   await page.goto(`${base}/games/texas/`);
-  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
   const before = await balance(page);
   if (before !== 10_000) throw new Error(`new wallet should have 10,000, got ${before}`);
-  // 0.12.0：第一次来默认娱乐·新手，三张难度卡、不显示档位卡；切到实盘才是四张档位卡
+  // 0.18.0：一进来是主页，不摆选项（所有者："一进去就直接选游戏方式"）；快速开始第一次是娱乐·新手·6 人，背景是分层的
+  if ((await page.locator('.tile:visible').count()) !== 0) throw new Error('home should not show the stakes cards');
+  const quick = (await page.locator('.qstart').textContent()) ?? '';
+  if (!quick.includes('快速开始') || !quick.includes('娱乐 · 新手 · 6 人')) throw new Error(`first visit quick start: ${quick}`);
+  if ((await page.locator('.scene .sc-bokeh i').count()) < 8) throw new Error('layered background missing');
+  await shot(page, 'home');
+  // 选桌：娱乐默认新手，三张难度卡；切到实盘才是四张档位卡
+  await enter(page, '娱乐');
   if ((await page.locator('.tile.diff:visible').count()) !== 3 || (await page.locator('.tile.diff.sel', { hasText: '新手' }).count()) !== 1)
     throw new Error('first visit should default to 娱乐 · 新手 with three difficulty cards');
   await shot(page, 'lobby');
-  await page.locator('.lobby .mode', { hasText: '实盘' }).click();
+  await page.locator('.p-back').click();
+  await enter(page, '实盘');
   if ((await page.locator('.tile:not(.diff):visible').count()) !== 4) throw new Error('real mode should show four stakes cards');
   await shot(page, 'lobby-real');
   await page.locator('.lobby .start').click();
@@ -392,15 +410,17 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await page.locator('.d-btn.primary').click();
   const net = await summary(page, 'summary');
   await page.locator('.lobby').waitFor();
-  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
   await page.waitForTimeout(400);
   const after = await balance(page);
   log('wallet', before, '→', after, 'summary', net);
   // 结算页写的"这一场"就是钱包的变化（小桌到不了每日上限）
   if (!Number.isFinite(net) || after !== before + net) throw new Error(`wallet ${before} → ${after} but summary says ${net}`);
+  // 离桌回来是主页，快速开始记着上次的实盘
+  if (!((await page.locator('.qstart').textContent()) ?? '').includes('实盘')) throw new Error('quick start should remember 实盘');
   await shot(page, 'lobby-after');
   // 娱乐：不碰钱包（平台那边没有德州的一份）；再在桌上点回大厅（确认后走）
-  await page.locator('.lobby .mode', { hasText: '娱乐' }).click();
+  await enter(page, '娱乐');
   await shot(page, 'lobby-fun');
   await page.locator('.lobby .start').click();
   await skipTips(page);
@@ -452,9 +472,10 @@ async function mobile(browser: Browser, base: string): Promise<void> {
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await page.goto(`${base}/games/texas/`);
-  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
   await shot(page, 'phone-lobby');
-  await page.locator('.lobby .start').tap();
+  // 快速开始：第一次来是娱乐·新手·6 人
+  await page.locator('.qstart').tap();
   await skipTips(page);
   await page.locator('.seat.me .card.up').first().waitFor();
   await playUntil(page, 3, new Set([2]));
@@ -559,7 +580,7 @@ async function playRoom(page: Page, hands: number, tag: string, shotAt: Set<numb
 async function settled(page: Page, tag: string): Promise<number> {
   for (let i = 0; i < 60; i++) {
     await page.goto(page.url().split('?')[0]!);
-    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
     await page.waitForTimeout(300);
     const note = (await page.locator('.note').isVisible()) ? await page.locator('.note').textContent() : '';
     if (!note?.includes('好友房里还有一桌')) return balance(page);
@@ -603,7 +624,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await shot(hp, 'online-entry');
   for (const p of [hp, ap, bp, dp]) {
     if (p !== hp) await p.goto(`${base}/games/texas/`);
-    await p.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+    await p.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
   }
 
   // 房主选 4 人桌开房：自己坐 1 号
@@ -628,11 +649,11 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await ap.goto(`${base}/games/texas/?room=${code}`);
   await ap.locator('.room-wait').waitFor();
   if (new URL(ap.url()).search) throw new Error('invite link query not stripped');
-  // 好友房和娱乐、实盘并排（0.17.4）：手机第一屏就看得见，点了才出开房、输码
-  const tab = await bp.locator('.lobby .mode', { hasText: '好友房' }).boundingBox();
+  // 好友房卡在主页第一屏（0.17.4 起第一屏就看得见，0.18.0 换成模式卡），点了才出开房、输码
+  const tab = await bp.locator('.mcard[data-mode="room"]').boundingBox();
   if (!tab || tab.y + tab.height > PHONE.viewport.height) throw new Error(`phone: 好友房 should be on the first screen, got ${JSON.stringify(tab)}`);
-  if (await bp.locator('.friends.join').isVisible()) throw new Error('phone: friends row should wait for the 好友房 tab');
-  await bp.locator('.lobby .mode', { hasText: '好友房' }).tap();
+  if (await bp.locator('.friends.join').isVisible()) throw new Error('phone: friends row should wait for the 好友房 card');
+  await enter(bp, '好友房', true);
   await shot(bp, 'phone-friends-tab');
   await bp.locator('.code-in:not(.nick-in)').fill(code);
   await bp.locator('.friends .pill', { hasText: '进房间' }).tap();
@@ -736,7 +757,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   }
   // 都离开了：房间没有真人就结束（0.2.4），标题页不给"回到房间"；房主再点"开房间"开出一个新的，不会 409、不会回到原来的房间
   if (await hp.locator('.banner.room').isVisible()) throw new Error('left the room: no "back to room" banner');
-  await hp.locator('.lobby .mode', { hasText: '好友房' }).click();
+  await enter(hp, '好友房');
   await hp.locator('.friends .pill', { hasText: '开房间' }).click();
   await hp.locator('.room-wait').waitFor({ timeout: 20_000 });
   const code2 = ((await hp.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
@@ -761,7 +782,7 @@ async function withWorker(config: string[], run: (base: string) => Promise<void>
 
 /** 单独部署：见文件头 */
 async function standalone(browser: Browser, base: string): Promise<void> {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const ctx = await browser.newContext({ viewport: { width: DESK_W, height: DESK_H } });
   await cspWatch(ctx);
   await ctx.addInitScript(() => {
     if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true, nick: '小明' }));
@@ -770,11 +791,13 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   watch(page, 'alone');
   await page.goto(`${base}/`);
   if (new URL(page.url()).pathname !== '/games/texas/') throw new Error(`standalone: / should go to /games/texas/, got ${page.url()}`);
-  await page.locator('.lobby .mode', { hasText: '好友房' }).waitFor();
-  for (const sel of ['.lobby .wallet', '.topbar .cloud']) if (await page.locator(sel).first().isVisible()) throw new Error(`standalone: ${sel} should be hidden`);
-  if (await page.locator('.lobby .mode', { hasText: '实盘' }).isVisible()) throw new Error('standalone: 实盘 should be hidden');
+  await page.locator('.mcard[data-mode="room"]').waitFor();
+  for (const sel of ['.lobby .wallet', '.lobby .disclaimer', '.topbar .cloud']) if (await page.locator(sel).first().isVisible()) throw new Error(`standalone: ${sel} should be hidden`);
+  if (await page.locator('.mcard[data-mode="real"]').isVisible()) throw new Error('standalone: 实盘 should be hidden');
+  await shot(page, 'alone-home');
   // 好友房：昵称框和开房间在这一栏里
-  await page.locator('.lobby .mode', { hasText: '好友房' }).click();
+  await enter(page, '好友房');
+  if (await page.locator('.lobby .mode', { hasText: '实盘' }).isVisible()) throw new Error('standalone: 实盘 should be hidden');
   await page.locator('.nick-row').waitFor();
   const home = await page.locator('.home').evaluate((a) => (a as HTMLAnchorElement).href);
   if (home !== `${base}/games/texas/`) throw new Error(`standalone: "大厅" should go to the game, got ${home}`);
@@ -782,7 +805,7 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await shot(page, 'alone-lobby');
 
   // 单机：只有娱乐
-  await page.locator('.lobby .mode', { hasText: '娱乐' }).click();
+  await enter(page, '娱乐');
   await page.locator('.tile', { hasText: '新手' }).click();
   await page.locator('.size', { hasText: /^4$/ }).click();
   await page.locator('.lobby .start').click();
@@ -797,7 +820,7 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await summary(page, 'alone-solo-summary');
 
   // 好友房：房主带昵称"小明"开房，手机点邀请链接进来（没填昵称，是"游客1234"）
-  await page.locator('.lobby .mode', { hasText: '好友房' }).click();
+  await enter(page, '好友房');
   await page.locator('.size', { hasText: /^4$/ }).click();
   await page.locator('.friends .pill', { hasText: '开房间' }).click();
   await page.locator('.rw-seat.me').waitFor({ timeout: 20_000 });
@@ -827,26 +850,34 @@ async function standalone(browser: Browser, base: string): Promise<void> {
 }
 
 /**
- * 竖着拿的手机看标题页（0.17.4，所有者：手机上找不到好友房）：iPhone SE 和常见的 390 宽，"好友房"在第一屏，
+ * 竖着拿的手机看标题页（0.17.4，所有者：手机上找不到好友房）：iPhone SE 和常见的 390 宽，快速开始和"好友房"卡在第一屏，
  * 点了以后输码进房那一行也在第一屏（开房间在选完档位的下面，和"坐下开打"一个位置）
  */
 async function portraitLobby(browser: Browser, base: string): Promise<void> {
-  for (const [tag, width, height] of [
-    ['se', 375, 667],
-    ['portrait', 390, 844],
+  // 0.18.0 加上手机横屏和电脑：主页的快速开始、三张模式卡都在第一屏（手机横屏的标题页最挤）
+  for (const [tag, width, height, phone] of [
+    ['se', 375, 667, true],
+    ['portrait', 390, 844, true],
+    ['landscape', 844, 390, true],
+    ['desk', DESK_W, DESK_H, false],
   ] as const) {
-    const ctx = await newContext(browser, base, `smoke-${tag}`, { viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const ctx = await newContext(browser, base, `smoke-${tag}`, { viewport: { width, height }, ...(phone ? { deviceScaleFactor: 2, isMobile: true, hasTouch: true } : {}) });
     const page = await ctx.newPage();
     watch(page, tag);
     await page.goto(`${base}/games/texas/`);
-    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
     const onScreen = async (sel: string, what: string): Promise<void> => {
       const b = await page.locator(sel).first().boundingBox();
-      if (!b || b.y < 0 || b.y + b.height > height) throw new Error(`${tag}: ${what} should be on the first screen, got ${JSON.stringify(b)}`);
+      if (!b || b.y < 0 || b.y + b.height > height) {
+        await shot(page, `debug-${tag}`);
+        throw new Error(`${tag}: ${what} should be on the first screen, got ${JSON.stringify(b)}`);
+      }
     };
-    await onScreen('.lobby .mode:text("好友房")', '好友房');
+    await onScreen('.qstart', '快速开始');
+    for (const m of ['fun', 'real', 'room']) await onScreen(`.mcard[data-mode="${m}"]`, `mode card ${m}`);
+    await onScreen('.mystats', 'stats');
     await shot(page, `${tag}-lobby`);
-    await page.locator('.lobby .mode', { hasText: '好友房' }).tap();
+    await enter(page, '好友房', phone);
     await onScreen('.friends.join .code-in', 'room code');
     if (!(await page.locator('.friends.open .pill', { hasText: '开房间' }).isVisible())) throw new Error(`${tag}: 开房间 missing`);
     await shot(page, `${tag}-friends`);

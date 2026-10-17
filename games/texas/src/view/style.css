@@ -197,8 +197,8 @@ body::before {
 /* 主按钮（金）：开打、下一手、弹窗里的确定、横幅上的按钮 */
 .pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go { border: 0; background: var(--btn-gold); color: var(--gold-ink); font-weight: 800; --spin: var(--gold-ink); }
 /* 立体的大按钮：底下一条边，按下去往下沉 */
-.start, .next-hand, .act { box-shadow: 0 4px 0 var(--edge, rgba(0, 0, 0, .35)), var(--sh-2); }
-:is(.start, .next-hand, .act):not(:disabled):active { scale: 1; translate: 0 2px; box-shadow: 0 2px 0 var(--edge, rgba(0, 0, 0, .35)), var(--sh-1); }
+.start, .qstart, .next-hand, .act { box-shadow: 0 4px 0 var(--edge, rgba(0, 0, 0, .35)), var(--sh-2); }
+:is(.start, .qstart, .next-hand, .act):not(:disabled):active { scale: 1; translate: 0 2px; box-shadow: 0 2px 0 var(--edge, rgba(0, 0, 0, .35)), var(--sh-1); }
 
 /* ---------- 牌桌 ---------- */
 .screen { position: absolute; inset: 0; display: none; }
@@ -786,8 +786,10 @@ body::before {
 .fan-card .c-pip { width: 18px; height: 18px; }
 .fan-card .c-big { width: 40px; height: 40px; }
 
+/* 右栏（0.18.0）：横幅 + 主页或选桌，两屏一样宽，切换时左边的标题不动 */
+.side { width: 430px; max-height: 100%; display: flex; flex-direction: column; gap: var(--s-3); }
+.side > :is(.banner, .note) { margin-top: 0; }
 .panel {
-  width: 430px;
   padding: var(--s-4) var(--s-4) var(--s-4);
   border-radius: var(--r-5);
   background: rgba(8, 16, 12, .72);
@@ -882,13 +884,83 @@ body::before {
   --spin: var(--gold-ink);
 }
 
+/* ---------- 主页（0.18.0，docs/art-v3.md 第 4 节）：快速开始 → 三张模式卡 → 钱包 → 战绩 ---------- */
+.front {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-5);
+  border: 1px solid rgba(255, 255, 255, .1);
+}
+.qstart {
+  height: 76px;
+  border: 0;
+  border-radius: var(--r-4);
+  background: var(--btn-gold);
+  color: var(--gold-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-0);
+  --edge: var(--btn-gold-edge);
+  --spin: var(--gold-ink);
+}
+.qstart b { font-size: 28px; font-weight: 900; letter-spacing: 6px; line-height: 1.1; }
+.qstart small { font-size: var(--fs-3); font-weight: 700; opacity: .72; letter-spacing: 1px; }
+/* 单独部署时实盘卡藏起来，剩两张平分 */
+.mcards { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--s-2); }
+.mcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 112px;
+  padding: var(--s-3) var(--s-2);
+  border-radius: var(--r-4);
+  border: 1px solid var(--line);
+  line-height: 1.25;
+}
+.mcard svg { width: 32px; height: 32px; fill: var(--gold); }
+.mcard b { font-size: var(--fs-6); }
+.mcard span { font-size: var(--fs-2); color: var(--muted); text-align: center; }
+.front .disclaimer { margin-top: calc(var(--s-3) * -1 + var(--s-0)); }
+.mystats {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 52px;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-3);
+  background: rgba(0, 0, 0, .28);
+  border: 1px solid var(--line);
+}
+.ms-label { font-size: var(--fs-2); color: var(--muted); }
+.ms { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+.ms b { font-size: var(--fs-5); }
+.ms small { font-size: var(--fs-1); color: var(--faint); }
+/* 选桌的抬头：返回、标题、钱包（实盘时） */
+.p-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-1); }
+.p-back { height: 36px; padding: 0 var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--line); font-size: var(--fs-3); font-weight: 700; }
+.p-title { font-size: var(--fs-5); letter-spacing: 2px; }
+.p-balance { margin-left: auto; font-size: var(--fs-3); font-weight: 800; color: var(--gold); }
+/* 扇形牌在光锥下面轻轻浮着 */
+.fan { animation: fan-float 6s ease-in-out infinite alternate; }
+@keyframes fan-float { to { transform: translateY(-6px); } }
+
 /* 手机横屏（viewport.ts 加 .tight）：字和按钮按 --ui 放大了，面板加宽少折行、行距收紧，标题和扇形牌让出地方 */
 .stage.tight .lobby { gap: var(--s-5); padding: 56px var(--s-4) var(--s-2); }
 .stage.tight .hero { max-width: 360px; }
 .stage.tight .title { font-size: 64px; }
 .stage.tight .fan { height: 120px; margin-top: var(--s-4); transform: scale(.85); }
 .stage.tight .ver { margin-top: var(--s-2); }
-.stage.tight .panel { width: 560px; max-height: 100%; overflow-y: auto; padding: var(--s-3) var(--s-4); }
+.stage.tight .side { width: 560px; overflow-y: auto; gap: var(--s-2); }
+.stage.tight :is(.panel, .front) { padding: var(--s-3) var(--s-4); }
+.stage.tight .front { gap: var(--s-2); }
+.stage.tight .qstart { height: 64px; }
+.stage.tight .mcard { min-height: 0; padding: var(--s-2); }
+.stage.tight .mcard svg { width: 26px; height: 26px; }
 .stage.tight :is(.modes, .stakes, .sizes, .buyin, .go-row, .friends) { margin-top: var(--s-2); }
 
 /* ---------- 好友房 ---------- */
@@ -1046,13 +1118,14 @@ body::before {
 .stage.tall .between { justify-content: flex-end; }
 .stage.tall .rebuy-cta { bottom: 300px; }
 /* 标题页、好友房等人页：上下排 */
-.stage.tall .lobby { flex-direction: column; justify-content: flex-start; gap: var(--s-4); padding: 72px var(--s-4) var(--s-4); }
+.stage.tall .lobby { flex-direction: column; justify-content: center; gap: var(--s-4); padding: 72px var(--s-4) var(--s-4); }
 .stage.tall .hero { flex: none; max-width: none; }
 .stage.tall .title { font-size: 60px; }
 .stage.tall .fan { height: 120px; margin-top: var(--s-3); transform: scale(.85); }
 .stage.tall .ver { margin-top: 0; }
 .stage.tall .stakes { grid-template-columns: repeat(2, 1fr); }
-.stage.tall .panel { width: 100%; max-height: none; overflow: visible; padding: var(--s-4); }
+.stage.tall .side { width: 100%; max-height: none; }
+.stage.tall .panel { padding: var(--s-4); }
 .stage.tall .room-wait { width: calc(100% - 24px); max-width: none; }
 .stage.tall .rw-seats { grid-template-columns: repeat(2, 1fr); }
 .stage.tall .rw-head { flex-wrap: wrap; }

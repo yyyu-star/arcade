@@ -204,13 +204,13 @@ html, body, body::before { background: var(--night); }
 @keyframes skin-spin { to { transform: rotate(360deg); } }
 
 /* ---------- 按钮：一套"上亮下暗 + 底边 + 顶沿高光"，按下沉 2px ---------- */
-.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next {
+.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next, .mcard, .p-back {
   background: var(--btn-glass);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 0 #070d0a, 0 4px 6px rgba(0, 0, 0, .42);
   text-shadow: 0 1px 0 #000;
 }
 .home, .icon, .pill { border-color: rgba(255, 255, 255, .2); }
-.tile, .size, .mode, .preset { border-color: rgba(255, 255, 255, .16); background: linear-gradient(#2c3d34, #1b2a23 55%, #121c17); }
+.tile, .size, .mode, .preset, .mcard { border-color: rgba(255, 255, 255, .16); background: linear-gradient(#2c3d34, #1b2a23 55%, #121c17); }
 
 .qbet {
   background: linear-gradient(rgba(243, 200, 107, .26), rgba(243, 200, 107, .07)), #1a2a22;
@@ -223,23 +223,23 @@ html, body, body::before { background: var(--night); }
 }
 
 .tile.locked { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
-:is(.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next):not(:disabled):active {
+:is(.home, .icon, .pill, .qbet, .preset, .d-btn, .size, .mode, .tile, .step, .pre-btn, .auto-next, .mcard, .p-back):not(:disabled):active {
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, .5), 0 1px 0 #070d0a;
   translate: 0 1px;
 }
 
 /* 主按钮（金）：开打、下一手、确定、横幅上的按钮 */
-.pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go, .start, .next-hand, .act.raise {
+.pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go, .start, .qstart, .next-hand, .act.raise {
   color: #2a1a04;
   text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
 }
 .pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 -2px 0 rgba(0, 0, 0, .16), 0 2px 0 var(--btn-gold-edge), 0 4px 7px rgba(0, 0, 0, .45);
 }
-.start, .next-hand, .act {
+.start, .qstart, .next-hand, .act {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -2px 0 rgba(0, 0, 0, .18), inset 0 0 0 1px var(--edge, rgba(0, 0, 0, .35)), 0 4px 0 var(--edge, rgba(0, 0, 0, .35)), 0 8px 10px rgba(0, 0, 0, .45);
 }
-:is(.start, .next-hand, .act):not(:disabled):active {
+:is(.start, .qstart, .next-hand, .act):not(:disabled):active {
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, .45), inset 0 0 0 1px var(--edge, rgba(0, 0, 0, .35)), 0 2px 0 var(--edge, rgba(0, 0, 0, .35));
 }
 :is(.pill.go, .banner .go, .d-btn.primary, .rebuy-cta .rc-go):not(:disabled):active {
@@ -260,7 +260,7 @@ html, body, body::before { background: var(--night); }
 .slider::-moz-range-track { box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6), 0 1px 0 rgba(255, 255, 255, .12); }
 
 /* ---------- 面板和弹窗 ---------- */
-.panel, .room-wait {
+.panel, .front, .room-wait {
   background: var(--panel-bg);
   border-color: rgba(255, 255, 255, .1);
   box-shadow: var(--hi), var(--sh-3);

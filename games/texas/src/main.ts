@@ -27,6 +27,7 @@ import { prepareShare, type ShareCard } from 'arcade-kit/share';
 import { mountSocial, openInvite, postMoment, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
+import { mountScene } from './view/scene.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
 import { PROPS, propId, TableFun, type FunSeat } from 'arcade-kit/table-fun';
 import { loadFunOff, saveFunOff, suggest } from './view/fun.ts';
@@ -40,6 +41,8 @@ import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
 // 夜场牌桌的皮（0.10.0）：材质、光影、颜色都在这里，压在 style.css 的布局上
 import './view/skin.css';
+// 分层背景（0.18.0，docs/art-v3.md）：墙、散景、吊灯吧台、光锥，在舞台后面
+import './view/scene.css';
 
 interface Settings {
   sound: boolean;
@@ -70,6 +73,7 @@ const AUTO_NEXT_MS = 3_500;
 
 const app = document.getElementById('app')!;
 const stage = el('div', 'stage', app);
+mountScene(app, stage);
 const top = el('div', 'topbar', stage);
 const home = el('a', 'home', top);
 home.href = '/';
@@ -369,6 +373,7 @@ async function refreshWallet(): Promise<void> {
 
 function showLobby(): void {
   stage.classList.remove('at-table');
+  lobby.home();
   notMyTurn();
   closeFun();
   closeDialog();
@@ -393,6 +398,7 @@ function drawLobby(): void {
     resume: s ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, level: s.table.level, waiting: s.pending !== null } : null,
     orphan: texasStakes(wallet, 'client').find((x) => x.ref !== s?.id) ?? null,
     busy,
+    stats: cloud.stats(),
     room: back
       ? { code: back.code, text: inRoom ? `好友房 ${back.code} 里还有 ${chips(inRoom.amount)} 在桌上。${settle}` : `刚才在好友房 ${back.code}` }
       : null,

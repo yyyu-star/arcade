@@ -50,11 +50,7 @@ The rest of this README, the design document (`DESIGN.md`) and the code comments
 "画布倍数封顶 2""整屏背景 1 倍""WebGL 上下文丢失"这三条不适用（DESIGN.md 8.1）。冒烟里模拟了省内存设备（CPU 降速 4 倍）和双指放大。
 
 ### 素材
-全部由本模块的代码生成，没有图片、音频、字体文件，没有第三方素材：
-- 四种花色是自己画的 SVG 路径（`src/view/art.ts`）；人头牌的半身像（`art.ts`）、数字牌的中心花色（`src/view/pips.ts`）都是自己画的 SVG；
-- 10 个电脑和"我"的头像按性格用 SVG 拼出来（脸、发型、眼镜、帽子，加渐变光影）；
-- 毡面、桌边、牌背、筹码、按钮、背景是 CSS 渐变和内联 SVG（`src/view/skin.css`），没有图片文件；
-- 音效用 WebAudio 现合成（`src/view/sound.ts`）；文字用系统字体。
+全部由本模块的代码生成，没有图片、音频、字体文件，没有第三方素材。逐项来源见 [ASSETS.md](ASSETS.md)。
 
 ## 本地开发
 ```bash
