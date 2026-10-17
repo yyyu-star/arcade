@@ -1,11 +1,12 @@
 /**
  * 好友房（DESIGN.md 第 6 节）：kit 的房间 + 麻将的房间规则（src/room/rules.ts）。这里做两件事：把规则记下的钱包的事交给平台钱包办（server 模式），
+ * 一场打完把同桌真人的输赢报给平台的搭子战绩（kit 的 reportMatch）；
  * 每一步之后让电脑按公开的事发个表情、真人冲电脑发了东西让它回一句（src/room/talk.ts，不碰牌局、不写存储）。
  * 带入、结回经服务绑定调平台，平台按操作 id 去重，房间重办不会多扣多给；每个座位同一时间只有一笔、一份只结回一次（规则保证）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { roomOp } from '../src/game/ops.ts';
-import { AI_DELAY_MS, mahjongRoom, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
+import { AI_DELAY_MS, mahjongRoom, matchWins, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import { RoomTalk, talkSeed } from '../src/room/talk.ts';
 import { GAME } from './game.ts';
 import type { Env } from './main.ts';
@@ -25,8 +26,15 @@ export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, 
   protected override readonly limits = ROOM_LIMITS;
   /** 电脑的互动只在内存里（被驱逐了重新记） */
   private talk: RoomTalk | null = null;
+  /** 这一场报过搭子战绩了：打完以后还有"再来一场"等几步，不每步都报（被驱逐了再报一次，平台按 op 去重） */
+  private reported = false;
 
   protected override onStep(s: RoomState): void {
+    // 一个房间只打一场（"再来一场"开新房间），场次固定 1；娱乐、实盘都报，电脑座位 kit 跳过
+    if (s.done && !this.reported) {
+      this.reported = true;
+      this.reportMatch(matchWins(s).map((win, seat) => ({ seat, win })), 1);
+    }
     this.talk ??= new RoomTalk(talkSeed(s.ref));
     for (const a of this.talk.step(s, Date.now())) this.botEmote(a.seat, a.id, a.to);
   }

@@ -144,6 +144,14 @@ export interface RoomView {
   cut: boolean;
 }
 
+/**
+ * 搭子战绩（docs/platform-backend.md 15.19，DESIGN.md 第 6 节）的输赢：这一场分数（净输赢）为正算赢，平和输都不算。
+ * 按座位给，电脑座位也给（kit 按开打时绑的人认，没绑真人的不报）；提前收场（cut）的按收场那一刻算
+ */
+export function matchWins(s: RoomState): boolean[] {
+  return vOf(s).result(s.g).seats.map((x) => x.net > 0);
+}
+
 export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, WalletEffect> = {
   seats: SEATS,
   rulesVersion: ROOM_RULES,

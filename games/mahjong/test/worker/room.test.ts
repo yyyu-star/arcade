@@ -1,6 +1,6 @@
 /**
  * 好友房跑在本地 workerd 里（DESIGN.md 第 6 节）：真的房间 DO（kit + 麻将的房间规则）、真的（假平台的）钱包 DO。
- * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时少带。
+ * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时少带、一场打完报搭子战绩。
  * 不打整场（牌局本身在 node 单测里）；不等真实计时，只停在开局后的换三张阶段。
  */
 import { runInDurableObject } from 'cloudflare:test';
@@ -193,5 +193,28 @@ describe('实盘开局', () => {
     const h = await host.see((x) => x.own[0]! && x.own[1]!);
     // 我的 inn 只是我的；他少带的数（就是他的钱包余额）不另外给别人
     expect(h.inn).toBe(SHARE);
+  });
+});
+
+describe('搭子战绩', () => {
+  const together = (userId: string) =>
+    runInDurableObject(env.FAKE_BANK.get(env.FAKE_BANK.idFromName(userId)), (b: FakeBank) => b.together.map(({ game, op, players }) => ({ game, op, players })));
+
+  it('一场打完报一次同桌真人和输赢（电脑不报）；同一场重报不加', async () => {
+    // 客人钱包是空的：带入被拒，下注的真人不到两个，这一场当场收场（cut），两人都没输赢
+    const { code, ids, host } = await table({ 1: 0 });
+    await host.see((x) => x.done && x.cut);
+    let got: Awaited<ReturnType<typeof together>> = [];
+    for (let i = 0; i < 150 && !(got = await together(ids[0]!)).length; i++) await sleep(20);
+    expect(got).toEqual([
+      { game: 'mahjong', op: expect.stringMatching(new RegExp(`^${code}-[0-9a-z]+-1$`)), players: [{ userId: ids[0], win: false }, { userId: ids[1], win: false }] },
+    ]);
+    expect(await together(ids[1]!)).toEqual(got);
+    // 房间被驱逐后重建、再报同一场：同一个 op，平台（假钱包）不加
+    await runInDurableObject(stub(code), (room: MahjongRoom) => {
+      (room as unknown as { reportMatch(p: { seat: number; win: boolean }[], m: number): number }).reportMatch([0, 1, 2, 3].map((seat) => ({ seat, win: seat === 0 })), 1);
+    });
+    await sleep(100);
+    expect(await together(ids[0]!)).toEqual(got);
   });
 });

@@ -471,6 +471,10 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
   - 一样多先比胡的局数、再按座位号，同一场结果每家看到的奖一样；电脑座位也评。
   - 只用结算里本来就公开的数（每家净输赢，胡、自摸、杠的次数），不挂筹码、不进钱包、不写库；话是模板（`view/text.ts` 的 `awardLine`），"最背"那句给台阶不挖苦人。
   - 单机不颁（对面都是电脑，没有可比的人）。`test/awards.test.ts` 覆盖评法、并列、门槛和分享卡；`smoke:room` 打完一整场查两边的奖一样、"分享颁奖"出预览。
+- **搭子战绩**（0.15.0，`docs/platform-backend.md` 15.19，`worker/room.ts` 的 `onStep`、`src/room/rules.ts` 的 `matchWins`）：好友房一个房间只打一场（"再来一场"开新房间），
+  这一场打完（`done`：打满局数，或者实盘提前收场 `cut`）时经 kit 的 `reportMatch` 报一次，场次固定 1，op 由 kit 拼成"房间码-开房时刻-1"。
+  **win = 这一场分数（净输赢）为正**（主线定），平和输都不算；麻将不分队，不带 `team`。娱乐、实盘、不计输赢的都报；电脑座位 kit 按开打时绑的人跳过，中途离座的真人照样算在这一场里。
+  打完后还有"再来一场"等几步，房间内存里记着报过了不再报；被驱逐重建后最多再报一次，平台按 op 去重。单机不报。`test/worker/room.test.ts` 查假钱包里记了这一场、重报不加。
 - **好友动态的名场面**（0.14.0，`docs/platform-backend.md` 15.17 第 2 条，`src/game/feed.ts`、`public/moments.json`）：娱乐局（单机、好友房娱乐和不计输赢的）里自己胡出
   天胡地胡、龙七对、清一色、杠上开花、海底捞月、七对，画面层经 kit 的 `postMoment` 报编号和番数，文字由 `moments.json` 的模板给（平台按编号拼）。
   一把只取最响的一个（按上面的顺序），一场最多 2 条、同一个只报一次（平台每人每天也只收 10 条）；一炮多响记在点炮的人头上，不报；实盘由平台结回时自己生成，不报。
@@ -640,3 +644,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.12.1 | 分享卡结算页一出来就画好（kit 0.12.3 的 `prepareShare`，iOS 才能调起系统分享） |
 | 0.13.0 | 好友房结束颁奖（MVP、手气最背、杠王或自摸王）和颁奖分享卡；kit 0.12.4 |
 | 0.14.0 | 娱乐局的名场面报进好友动态（`public/moments.json`）；kit 0.12.5 |
+| 0.15.0 | 好友房一场打完报搭子战绩（净赢为正算赢）；kit 0.13.0 |

@@ -11,7 +11,7 @@ import { VENUES } from '../src/ai/venues.ts';
 import { EMOTES } from '../src/game/emotes.ts';
 import { roomOp, SOLO_OP, soloOp } from '../src/game/ops.ts';
 import { RoomTalk } from '../src/room/talk.ts';
-import { mahjongRoom as G, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
+import { mahjongRoom as G, matchWins, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
 import { RON, tileIn } from './xz-table.ts';
 
@@ -407,6 +407,13 @@ describe('再来一场', () => {
     expect(G.over(s)).toBe(false);
     expect(seatsOf(s)).toEqual([]);
     expect(G.pause!(s)).toBe(REMATCH_MS);
+  });
+
+  test('搭子战绩的输赢：这一场净赢为正算赢，平和输不算；按座位给', () => {
+    const s = done();
+    const nets = g(s, 0).result!.seats.map((x) => x.net);
+    expect(matchWins(s)).toEqual(nets.map((n) => n > 0));
+    expect(matchWins(s)).toContain(true);
   });
 
   test('到点没人点：收场', () => {
