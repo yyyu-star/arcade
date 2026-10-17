@@ -1151,7 +1151,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   forgetRoom();
   // 还没结回的那一份由标题页按钱包说（drawLobby），这里不另记一句：记了会一直挂着，和钱包对不上
   exitRoom(null);
-  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.titles(rows), share);
+  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.awards(rows), share);
   if (goHome) {
     cloud.flush();
     location.href = hall();
@@ -1197,7 +1197,7 @@ function soloWhere(s: Solo): string {
 function roomShare(s: OnlineState, rows: RoomSummaryRow[], withRoom: boolean): (() => void) | undefined {
   const v = s.view;
   if (site.standalone || !v) return undefined;
-  const card = roomCard(rows, tally.titles(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
+  const card = roomCard(rows, tally.awards(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
   return card ? shareIt(card, withRoom ? s.code : null) : undefined;
 }
 
@@ -1305,7 +1305,7 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     // 房间关了：分享链接不带房间码（进不去了）
     const share = rows ? roomShare(o.state, rows, false) : undefined;
     exitRoom(null, code === CLOSE.replaced);
-    if (rows) void roomSummary(stage, '这一场', text, rows, tally.titles(rows), share);
+    if (rows) void roomSummary(stage, '这一场', text, rows, tally.awards(rows), share);
     else void dialog(stage, '好友房', text, [{ label: '好', value: 'ok', primary: true }]);
   },
   wait: (ms) => new Promise((ok) => window.setTimeout(ok, ms * pace())),
