@@ -3,7 +3,7 @@
  * 规则在 src/core，单机的流程在 solo.ts，好友房的连接在 online.ts，这里只把它们和画面连起来。
  */
 import { createRoom, detectPlatform, withNickname, type PlatformInfo } from 'arcade-kit/client';
-import { inviteUrl, mountSocial, openInvite, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
+import { inviteUrl, mountSocial, openInvite, postMoment, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { DEFAULT_OPTS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
@@ -11,6 +11,7 @@ import { createError, Online, roomUrl, type OnlineState } from './online.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { awardsOf, type Award } from './game/awards.ts';
 import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/banter.ts';
+import { feedMomentsOf, toReport, type FeedMomentId } from './game/feed.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
@@ -524,7 +525,10 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
-  if (!replay) publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
+  if (!replay) {
+    publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
+    if (seat !== null && !(stakesOf(rv.stakes)?.wallet && !rv.unrated)) feed(s.code, v, seat);
+  }
   alertTurn(v);
   roomRoundEnd(s, rv, g, replay);
 }
@@ -659,6 +663,7 @@ const soloUi = {
     table.render({ v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
     fun?.refresh();
     publicMoments(v, names, true);
+    if (solo && !stakesOf(solo.stakes)?.wallet) feed(solo, v, 0);
     alertTurn(v);
   },
   roundEnd(v: XzView, names: string[]): void {
@@ -821,6 +826,23 @@ function publicMoments(v: XzView, names: string[], local: boolean): void {
   }
   if (!local || !fun) return;
   for (const ev of funMoments(momentsOf(v.events), v.seats.map((x) => !x.won), v.round)) fun.moment(ev);
+}
+
+/** 这一场（单机按局面对象、好友房按房间号认；再来一场是新房间）已经报过的名场面 */
+let feedFor: object | string | null = null;
+let feedSent: FeedMomentId[] = [];
+
+/**
+ * 娱乐局里自己胡出名场面：报一条好友动态（docs/platform-backend.md 15.17 第 2 条）。实盘的由平台结回时自己生成，不报；
+ * 没平台、没登录（social 没挂上）不报；失败不提示，丢一条动态不影响打牌
+ */
+function feed(match: object | string, v: XzView, me: number): void {
+  if (!social) return;
+  if (feedFor !== match) [feedFor, feedSent] = [match, []];
+  for (const m of toReport(feedMomentsOf(v.events, me), feedSent)) {
+    feedSent.push(m.moment);
+    void postMoment(GAME_ID, m.moment, m.n);
+  }
 }
 
 /** 好友房里离开：开打了先确认（实盘这一局由电脑替他打完再结回），座位交给电脑 */
