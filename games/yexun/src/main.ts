@@ -11,7 +11,7 @@ import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Se
 import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
-import { LIVE_TIERS, type LiveTier } from './content/live.ts';
+import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
@@ -168,7 +168,7 @@ async function boot(): Promise<void> {
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
     // 有平台登录、收到过 501（单独部署）就藏起来
-    live: { available: hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
+    live: { available: LIVE_OPEN && hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
   });
   const refreshPrep = (): void => {
     writeSave(save);

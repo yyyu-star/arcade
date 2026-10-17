@@ -11,7 +11,7 @@
  *
  * 只从 src/content/live.ts 取档位表（不引规则核心）。
  */
-import { LIVE_MAX_BP, LIVE_TIERS, isLiveTier, liveReturn, type LiveTier } from '../src/content/live.ts';
+import { LIVE_MAX_BP, LIVE_OPEN, LIVE_TIERS, isLiveTier, liveReturn, type LiveTier } from '../src/content/live.ts';
 
 type WalletReply = { ok: true; wallet: unknown; credited?: number; capped?: number; dup?: boolean } | { ok: false; error: string; wallet?: unknown };
 
@@ -112,13 +112,16 @@ function stakeAmount(wallet: unknown, ref: string): number | null {
   return st && Number.isSafeInteger(st.amount) && st.amount > 0 ? st.amount : null;
 }
 
-export async function handleLive(req: Request, env: LiveEnv, timeoutMs = WALLET_TIMEOUT_MS): Promise<Response> {
+/** open：实盘开没开（LIVE_OPEN）；测试传 true 测带入 */
+export async function handleLive(req: Request, env: LiveEnv, timeoutMs = WALLET_TIMEOUT_MS, open = LIVE_OPEN): Promise<Response> {
   const url = new URL(req.url);
   const action = url.pathname.startsWith(LIVE_PREFIX) ? ACTIONS.find((a) => a === url.pathname.slice(LIVE_PREFIX.length)) : undefined;
   if (!action) return fail(404, 'not_found');
   if (req.method !== 'POST') return fail(405, 'method');
   // 单独部署没有平台钱包：说清楚是"这里没有"（501），不是"暂时连不上"（503），页面不会去重试
   if (standalone(env)) return fail(501, 'no_wallet');
+  // 没开实盘：只挡带入（页面按 501 把入口藏起来），结回、退回照常
+  if (!open && action === 'buyin') return fail(501, 'closed');
   // CSRF：自定义头让跨站表单发不出来，Origin 对得上才认
   if (req.headers.get('X-Arcade') !== '1' || req.headers.get('Origin') !== url.origin) return fail(403, 'csrf');
 
