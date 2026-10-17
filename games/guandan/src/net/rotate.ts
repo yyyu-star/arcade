@@ -123,5 +123,11 @@ export function rotateNetView(nv: NetView, me: number): NetView {
   // 再来一场（0.6.2）：谁点的换成画面座位，房间码不动
   if (nv.again !== undefined) out.again = nv.again && { code: nv.again.code, by: r.seat(nv.again.by) };
   if (nv.afk) out.afk = r.bySeat(nv.afk);
+  // 这一场的记录（0.14.0）：按座位的转座位，赢的副数按队转
+  if (nv.log) {
+    const m = nv.log;
+    out.log = { deals: m.deals, firsts: r.bySeat(m.firsts), lasts: r.bySeat(m.lasts), bombs: r.bySeat(m.bombs), wins: r.byTeam(m.wins as [number, number]) };
+    if (m.places) out.log.places = r.bySeat(m.places);
+  }
   return out;
 }

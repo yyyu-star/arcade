@@ -19,6 +19,7 @@ import { decide, type Difficulty, type PersonaId } from '../ai/index.ts';
 import type { FunBot } from 'arcade-kit/fun-logic';
 import { TEMPER } from './fun-moments.ts';
 import { botFor } from '../ai/venue.ts';
+import { emptyMatchLog, logDeal, type MatchLog } from '../stake/titles.ts';
 import {
   RULES_VERSION,
   createKeyedGame,
@@ -54,6 +55,8 @@ export interface NetState {
   again?: Again | null;
   /** 每个真实座位连着被房间代出了几手（0.6.3）：到 IDLE_AFTER 就算走开了、每手只等 IDLE_MS；自己出一手或者点"我回来了"清零。0.6.3 以前开的局没有 */
   idle?: number[];
+  /** 这一场攒的公开记录（0.14.0，结束颁奖用，src/net/awards.ts）：每副的名次、炸弹、赢家，按真实座位。0.14.0 以前开的局没有 */
+  log?: MatchLog;
 }
 
 /** 新房间的码和点的人（真实座位），所有人看得到：大家跟着进同一个房间 */
@@ -91,6 +94,8 @@ export interface NetView {
   again?: Again | null;
   /** 每个座位是不是走开了、房间在替他快速代出（0.6.3，公开：大家看得到他为什么出得快）；0.6.3 以前开的局没有 */
   afk?: boolean[];
+  /** 这一场的公开记录（0.14.0，同 NetState.log）：名次、炸弹谁都看得见，大家算出来的奖一样 */
+  log?: MatchLog;
 }
 
 /** 结算页等大家点"继续"最多多久（docs 9.1） */
@@ -273,6 +278,11 @@ function step(s: NetState, a: SeatAction | { type: 'nextDeal' }): NetState | { e
   const out: NetState = { g: r.state, ev: r.events, next: end ? previewNext(r.state) : null, ready: end ? [false, false, false, false] : null };
   if (s.humans) out.humans = s.humans;
   if (s.idle) out.idle = s.idle;
+  if (s.log) {
+    let m = s.log;
+    for (const e of r.events) if (e.type === 'dealEnd') m = logDeal(m, e.result, r.state.history);
+    out.log = m;
+  }
   if (s.stake) {
     let t = s.stake;
     for (const e of r.events) if (e.type === 'dealEnd') t = stakeDeal(t, e.result, r.state.phase, r.state.history);
@@ -354,7 +364,7 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
   // 房间开局给 256 位熵（arcade-kit 0.2.0 的 begin），当发牌的密钥；状态里不留种子。规则版本由核心自己记进状态
   begin: (entropy, _rv, setup) => {
     const { state, events } = createKeyedGame(entropy);
-    const out: NetState = { g: state, ev: events, next: null, ready: null };
+    const out: NetState = { g: state, ev: events, next: null, ready: null, log: emptyMatchLog() };
     if (setup) {
       out.humans = setup.seats.map((k) => k === 'human');
       out.idle = [0, 0, 0, 0];
@@ -406,6 +416,7 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
     if (s.stake) v.stake = stakeView(s.stake, me);
     if (s.again !== undefined) v.again = s.again;
     if (s.idle) v.afk = s.idle.map((_, i) => isAfk(s, i));
+    if (s.log) v.log = s.log;
     return v;
   },
   ai: (s, seat) => {
