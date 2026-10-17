@@ -665,3 +665,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.15.2 | 安全响应头（CSP、只许同源嵌入）；好友房每人每天 30 个；老存档少带的提示；kit 0.13.1 |
 | 0.15.3 | CSP 放行 Cloudflare 访问统计；connect-src 写明 wss:（老 Safari） |
 | 0.15.4 | kit 0.15.0：分享卡带二维码（单机是游戏入口，好友房带房间号） |
+| 0.15.5 | kit 0.15.1：电脑上分享直接出预览、能复制图片 |
