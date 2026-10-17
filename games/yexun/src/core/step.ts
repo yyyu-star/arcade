@@ -855,8 +855,8 @@ function moveEnemies(w: World): void {
   }
 }
 
-/** 飞的和水里的怪不受水和冰影响（水鬼在水里本来就自在） */
-const FLIES = new Set<EnemyKind>(['bat', 'water']);
+/** 飞的、水里的、冰上的怪不受水和冰影响（水鬼、溺鬼、河蟹、河伯在水里本来就自在，冰傀、冰锥、冰魄生在冰湖） */
+const FLIES = new Set<EnemyKind>(['bat', 'water', 'drown', 'crab', 'hebo', 'icegolem', 'icicle', 'frostsoul']);
 const tmpP = { x: 0, y: 0 };
 
 /** 墙和棺材挡路：怪挪完、互相挤完以后再推出来（Boss 跳砸在空中，不挡） */
