@@ -188,8 +188,8 @@ export interface WalletState {
   today: DayCounters;
   /** 上一个有计数的日子：Cron 第二天凌晨统计"昨天"时，今天已经碰过的钱包从这里取 */
   prev: DayCounters | null;
-  /** 最近的操作：id 是"游戏:操作 id"，各游戏合计留 RECENT_OPS 个 */
-  ops: { id: string; r: OpResult }[];
+  /** 最近的操作：id 是"游戏:操作 id"，各游戏合计留 RECENT_OPS 个；f 是这条操作的指纹（0.12.2 起才有，见 opPrint） */
+  ops: { id: string; r: OpResult; f?: string }[];
   expired: string[];
   /** 最近的管理员调整（0.9.4），留 ADMIN_LOG 条 */
   adminLog?: AdminAdjust[];
@@ -216,6 +216,7 @@ export type WalletError =
   | 'relief_used'
   | 'relief_not_needed'
   | 'no_change'
+  | 'op_conflict'
   | 'busy'
   | 'internal';
 
@@ -386,7 +387,17 @@ export function viewOf(s: WalletState, fresh: boolean, rules: WalletRules): Wall
 }
 
 /**
+ * 一条操作是什么：同一个 op 再来，指纹也一样才算重发（0.12.2）。
+ * 只认 op 的话，单机接口的 op 由浏览器给、好友房的 op 能猜，先用单机拿 1 筹码占住房间接下来的 op，
+ * 房间补码时就会被当成已经扣过，白拿筹码。amount 不进指纹：重发的金额本来就一样，指纹只要分得清是不是同一件事。
+ */
+function opPrint(cmd: Extract<Cmd, { op: string }>): string {
+  return [cmd.t, cmd.mode, cmd.ref, cmd.t === 'buyin' ? cmd.tier : ''].join('|');
+}
+
+/**
  * 做一条操作。dup：这个操作 id 最近做过，什么都不改、不写，回当时的结果。
+ * op_conflict：这个操作 id 最近做过，但做的是别的事（类型、mode、ref、档位不一样），什么都不改、不写。
  * 拒绝时不写；成功时当天写入次数 + 1、记下操作 id 和结果。
  */
 export function apply(
@@ -397,11 +408,17 @@ export function apply(
 ): { state: WalletState; result: OpResult } | { dup: OpResult } | { error: WalletError } {
   // 操作 id 按游戏分开记：两个游戏碰巧拼出同一个 op，不能拿到对方的结果当成重复
   const key = cmd.t === 'relief' || cmd.t === 'admin' ? '' : `${cmd.game}:${cmd.op}`;
+  const print = cmd.t === 'relief' || cmd.t === 'admin' ? '' : opPrint(cmd);
   if (key) {
     const seen = s0.ops.find((o) => o.id === key);
-    if (seen) return { dup: seen.r };
-    // 带入成功的结果总是 {}，不用记在全钱包的 ops 里也能回
-    if (cmd.t === 'buyin' && s0.stakes[stakeKey(cmd.game, cmd.ref)]?.ops?.includes(cmd.op)) return { dup: {} };
+    // 0.12.2 之前记的没有指纹，按旧办法认；最多 RECENT_OPS 条以后就滚出去了
+    if (seen) return seen.f === undefined || seen.f === print ? { dup: seen.r } : { error: 'op_conflict' };
+    // 带入成功的结果总是 {}，不用记在全钱包的 ops 里也能回。那一份本来就按 ref 找，
+    // 档位和 mode 也只能是那一份的（不一样的带入会被拒、进不了 st.ops），对不上就不是重发
+    if (cmd.t === 'buyin') {
+      const st = s0.stakes[stakeKey(cmd.game, cmd.ref)];
+      if (st?.ops?.includes(cmd.op)) return st.tier === cmd.tier && st.mode === cmd.mode ? { dup: {} } : { error: 'op_conflict' };
+    }
   }
   const { s } = normalize(s0, now);
   // 结回、放弃不受每天的次数管：桌上的筹码总要能回来（次数由带入那头管住）
@@ -418,7 +435,7 @@ export function apply(
   });
   // 管理员调整不占这个人每天 DAILY_WRITES 次的写入
   if (cmd.t !== 'admin') s.today.writes++;
-  if (key) s.ops = [...s.ops, { id: key, r: out }].slice(-RECENT_OPS);
+  if (key) s.ops = [...s.ops, { id: key, r: out, f: print }].slice(-RECENT_OPS);
   return { state: s, result: out };
 }
 

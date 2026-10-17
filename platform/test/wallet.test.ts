@@ -291,6 +291,72 @@ describe('带入、结回、放弃', () => {
     expect(await settle(uid, { game: 'texas', ref: 'room-0001', mode: 'server', amount: 5_000, op: 'same-op-01' })).toMatchObject({ dup: true, credited: 5_000 });
     expect(wrote()).toBe(0);
   });
+
+  it('抢先占住好友房的 op 白拿不了（0.12.2）：单机拿 1 筹码用掉房间接下来的 op，房间补码回 op_conflict，什么都不改、0 行', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    const room = 'room-0002';
+    expect(await buyin(uid, { game: 'texas', ref: room, mode: 'server', amount: 2_000, op: `${room}-b1` })).toMatchObject({ ok: true });
+    // 单机接口的 op 由浏览器给：填房间下一次补码的 op
+    expect(await buyin(uid, { game: 'texas', ref: 'solo-0001', mode: 'client', amount: 1, op: `${room}-b2` })).toMatchObject({ ok: true });
+    const before = await state(uid);
+    const r = await buyin(uid, { game: 'texas', ref: room, mode: 'server', amount: 2_000, op: `${room}-b2` });
+    expect(r).toMatchObject({ ok: false, error: 'op_conflict', wallet: { balance: 10_000 - 2_000 - 1 } });
+    expect(wrote()).toBe(0);
+    expect(await state(uid)).toEqual(before);
+  });
+
+  it('同一个 op 做的不是同一件事：类型、ref、mode、档位不一样都回 op_conflict（0 行）；一样的照旧是重复', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    const op = id('op');
+    expect(await buyin(uid, { op })).toMatchObject({ ok: true });
+    const cases = [
+      () => refund(uid, { op }), // 类型不同
+      () => settle(uid, { op, amount: 0 }), // 类型不同
+      () => buyin(uid, { op, ref: 'ref-000002' }), // ref 不同
+      () => buyin(uid, { op, mode: 'server' }), // mode 不同
+      () => buyin(uid, { op, tier: 'mid' }), // 档位不同
+    ];
+    for (const f of cases) {
+      expect(await f()).toMatchObject({ ok: false, error: 'op_conflict' });
+      expect(wrote()).toBe(0);
+    }
+    expect(await buyin(uid, { op })).toMatchObject({ ok: true, dup: true, wallet: { balance: 8_000 } });
+    // 结回、放弃也核指纹：同一个 op 换个 ref 重发不是重复
+    await buyin(uid, { ref: 'ref-000003', mode: 'server' });
+    const sop = id('op');
+    expect(await settle(uid, { ref: 'ref-000003', mode: 'server', amount: 1_000, op: sop })).toMatchObject({ ok: true });
+    expect(await settle(uid, { ref: 'ref-000001', amount: 1_000, op: sop })).toMatchObject({ ok: false, error: 'op_conflict' });
+    expect(await refund(uid, { ref: 'ref-000001', op: sop })).toMatchObject({ ok: false, error: 'op_conflict' });
+  });
+
+  it('补码记在那一份上的 op（挤出最近 32 个之后）：档位、mode 对不上回 op_conflict', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    const bop = id('op');
+    await buyin(uid, { amount: 500, op: bop });
+    for (let i = 0; i < 17; i++) {
+      const ref = `ref-y${String(i).padStart(5, '0')}`;
+      await buyin(uid, { ref, amount: 100 });
+      await refund(uid, { ref });
+    }
+    expect(await buyin(uid, { amount: 500, op: bop, mode: 'server' })).toMatchObject({ ok: false, error: 'op_conflict' });
+    expect(await buyin(uid, { amount: 500, op: bop, tier: 'mid' })).toMatchObject({ ok: false, error: 'op_conflict' });
+    expect(await buyin(uid, { amount: 500, op: bop })).toMatchObject({ ok: true, dup: true });
+  });
+
+  it('0.12.2 之前记的操作没有指纹：按旧办法认成重复', async () => {
+    const u = await registerUser();
+    const uid = u.user.id;
+    const op = id('op');
+    await buyin(uid, { op });
+    await patchState(uid, (s) => {
+      for (const o of s.ops) delete o.f;
+    });
+    expect(await refund(uid, { op })).toMatchObject({ ok: true, dup: true });
+    expect(wrote()).toBe(0);
+  });
 });
 
 describe('RPC 只露出四个方法', () => {

@@ -63,21 +63,28 @@ describe('昵称', () => {
     for (const n of ['老张', '小美2', '阿 强', '老王！', '张姐123', '电脑小王', '官方客服']) {
       expect(checkDisplayName(normalizeDisplayName(n))).toBe('reserved_display_name');
     }
-    expect(checkDisplayName('小美丽')).toBe('ok');
+    expect(checkDisplayName('小明丽')).toBe('ok');
   });
 
-  it('德州扑克的 6 个电脑名字（德州还没上线，先拦）：原样、加数字、加空格符号都不许；只是包含它们的长名字照常可用', () => {
+  it('电脑人物名按"包含"查，繁体、大小写归一（0.12.2）：老张a、老張、小美丽、阿強 都拦，不沾边的照常', () => {
+    for (const n of ['老张a', '老张A', '老張', '老張B', '小美丽', '阿強', 'x熊貓哥', '刹車王', '我是老趙', '電腦', '管理員']) {
+      expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
+    }
+    for (const n of ['张三', '老李', '小王子', 'Alice']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('ok');
+  });
+
+  it('德州扑克的 6 个电脑名字：原样、加数字、加空格符号都不许；0.12.2 起包含它们的长名字也不许', () => {
     for (const n of ['稳哥', '阿飙', '老好', '慢慢', '算盘', '江湖', '稳哥2', '阿 飙', '江湖！', '算盘007']) {
       expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
     }
-    for (const n of ['慢慢来', '江湖老王子', '小算盘']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('ok');
+    for (const n of ['慢慢来', '江湖老王子', '小算盘']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
   });
 
-  it('德州 0.2.0 新加的 4 个电脑名字（虎子、老鹰、叨叨、小白）也拦；只是包含它们的长名字照常可用', () => {
+  it('德州 0.2.0 新加的 4 个电脑名字（虎子、老鹰、叨叨、小白）也拦；0.12.2 起包含它们的长名字也拦', () => {
     for (const n of ['虎子', '老鹰', '叨叨', '小白', '小白1', '虎 子', '老鹰！']) {
       expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
     }
-    for (const n of ['小白兔', '虎子哥哥', '老鹰捉小鸡']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('ok');
+    for (const n of ['小白兔', '虎子哥哥', '老鹰捉小鸡']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
   });
 
   it('电脑名字按游戏分组：games.ts 登记的每个游戏都有一组（没有电脑就空数组），不多不少', () => {
