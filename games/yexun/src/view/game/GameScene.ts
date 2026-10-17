@@ -114,6 +114,8 @@ export class GameScene extends Phaser.Scene {
   private bolts: { pts: number[]; life: number }[] = [];
   /** 这一帧要画的光波：x, y, 半径, 最大半径 */
   private waves: number[] = [];
+  /** 桃花雨的落点标记：x、y、离落地多近（0–1） */
+  private petalMarks: number[] = [];
   /** 缚妖索的绳子：一串点（从主角开始） */
   private ropes: { pts: number[]; life: number }[] = [];
   private shieldImg!: Phaser.GameObjects.Image;
@@ -735,6 +737,7 @@ export class GameScene extends Phaser.Scene {
 
     this.gfx.clear();
     this.waves.length = 0;
+    this.petalMarks.length = 0;
     this.drawMobs(inter, dt);
     this.drawShots(inter);
     this.drawDrops(inter);
@@ -840,7 +843,7 @@ export class GameScene extends Phaser.Scene {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
         img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
-        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 2.2 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : 1.2;
+        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);
         // 光波不用图，画在 Graphics 上（drawGfx）
@@ -881,6 +884,12 @@ export class GameScene extends Phaser.Scene {
         // 从上面飘下来：还剩几拍就离地多高，边落边转
         const left = w.sLife[i]!;
         s.img.setPosition(x + Math.sin(left * 0.7 + i) * 6, y - left * 12).setRotation(left * 0.4 + i).setDepth(y + 40);
+        // 地上先亮一圈粉色落点，落地时再迸一小撮花瓣：雪地上也看得见
+        this.petalMarks.push(x, y, 1 - Math.min(1, left / 14));
+        if (!LOW_MEMORY && left <= 1 && s.trail === 0) {
+          s.trail = 1;
+          for (let k = 0; k < 4; k++) this.fx.spawn({ frame: 'petal', x, y: y - 4, vx: (Math.random() - 0.5) * 200, vy: -70 - Math.random() * 70, g: 320, life: 460, s0: 1.8, s1: 0.8, rot: Math.random() * 6, spin: 9 });
+        }
       } else if (kind === Shot.Crane) {
         const dx = w.sX[i]! - w.sPX[i]!;
         if (Math.abs(dx) > 0.3) s.img.setFlipX(dx < 0);
@@ -925,14 +934,30 @@ export class GameScene extends Phaser.Scene {
     // 八卦镜的光波：深靛外圈 + 亮青内圈，越往外越淡
     const wv = this.waves;
     for (let k = 0; k < wv.length; k += 5) {
-      const a = Math.max(0.15, 1 - wv[k + 2]! / wv[k + 3]!);
+      const a = Math.max(0.35, 1 - wv[k + 2]! / wv[k + 3]!);
       const style = wv[k + 4]!;
       const [edge, core] = style === 1 ? [0x17131c, 0x6a6470] : style === 2 ? [0x17131c, 0xffffff] : [0x1f3a78, 0x7fe0ff];
-      g.lineStyle(10, edge, a * 0.7);
-      g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
-      g.lineStyle(5, core, a);
-      g.strokeCircle(wv[k]!, wv[k + 1]!, wv[k + 2]!);
+      const r = wv[k + 2]!;
+      // 里面铺一层淡色，圈本身加粗：雪地上静帧里也要一眼看见
+      g.fillStyle(core, a * 0.16);
+      g.fillCircle(wv[k]!, wv[k + 1]!, r);
+      g.lineStyle(16, edge, a * 0.8);
+      g.strokeCircle(wv[k]!, wv[k + 1]!, r);
+      g.lineStyle(8, core, a);
+      g.strokeCircle(wv[k]!, wv[k + 1]!, r);
+      g.lineStyle(2.5, 0xffffff, a * 0.9);
+      g.strokeCircle(wv[k]!, wv[k + 1]!, r - 2);
     }
+    // 桃花雨的落点：粉圈 + 深玫瑰边，越近越实
+    const pm = this.petalMarks;
+    for (let k = 0; k < pm.length; k += 3) {
+      const t = pm[k + 2]!;
+      g.fillStyle(0xff8fb8, 0.2 + t * 0.35);
+      g.fillEllipse(pm[k]!, pm[k + 1]!, 34 + t * 14, 20 + t * 8);
+      g.lineStyle(3, 0xb8325f, 0.45 + t * 0.4);
+      g.strokeEllipse(pm[k]!, pm[k + 1]!, 34 + t * 14, 20 + t * 8);
+    }
+    pm.length = 0;
     // 缚妖索：金绳加墨边，一串连起来
     for (const r of this.ropes) {
       r.life -= dt;

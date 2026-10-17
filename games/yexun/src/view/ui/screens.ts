@@ -6,6 +6,7 @@
 import { MAPS, type MapId } from '../../content/maps.ts';
 import { DIFFICULTIES, type Difficulty } from '../../content/waves.ts';
 import type { Best } from '../../platform/save.ts';
+import { drawFlakes, drawModeScene, drawTitleLive, drawTitleStill, makeFlakes, type Flake } from '../art/sprites7.ts';
 import './screens.css';
 
 const HOME_SVG =
@@ -69,8 +70,34 @@ export interface MenuState {
   yizhuang: boolean;
 }
 
+/** 模式卡上的小场景图（画一次缓存成 data URL） */
+const sceneCache = new Map<string, string>();
+function sceneUrl(kind: 'watch' | 'raid', w: number, h: number): string {
+  const key = `${kind}${w}x${h}`;
+  let u = sceneCache.get(key);
+  if (!u) {
+    const cv = document.createElement('canvas');
+    cv.width = w * 2;
+    cv.height = h * 2;
+    const c = cv.getContext('2d')!;
+    c.scale(2, 2);
+    drawModeScene(c, w, h, kind);
+    u = cv.toDataURL();
+    sceneCache.set(key, u);
+  }
+  return u;
+}
+
 export class Menu {
   readonly root: HTMLDivElement;
+  private readonly art: HTMLCanvasElement;
+  private readonly ui: HTMLDivElement;
+  private raf = 0;
+  private artSize = '';
+  private still: HTMLCanvasElement | null = null;
+  private info: ReturnType<typeof drawTitleStill> | null = null;
+  private flakes: Flake[] = [];
+  private last = 0;
   private diff: Difficulty = 'easy';
   private map: MapId = 'snow';
   private readonly toggles: Toggle[];
@@ -79,6 +106,12 @@ export class Menu {
 
   constructor(parent: HTMLElement, toggles: Toggle[]) {
     this.root = layer(parent, 'yx-menu');
+    this.art = document.createElement('canvas');
+    this.art.className = 'yx-art';
+    this.art.setAttribute('aria-hidden', 'true');
+    this.ui = document.createElement('div');
+    this.ui.className = 'yx-menu-ui';
+    this.root.append(this.art, this.ui);
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
@@ -104,7 +137,7 @@ export class Menu {
   private best: MenuState['best'] = {};
 
   private renderBest(): void {
-    const el = this.root.querySelector('.yx-best');
+    const el = this.ui.querySelector('.yx-best');
     if (!el) return;
     const b = this.best[this.diff];
     el.textContent = !b ? '还没玩过这个难度' : b.won ? `最好：天亮了 · 斩 ${b.kills.toLocaleString('zh-CN')}` : `最好：撑了 ${mmss(b.ticks / 30)} · 斩 ${b.kills.toLocaleString('zh-CN')}`;
@@ -120,7 +153,7 @@ export class Menu {
       `<div class="yx-settings">${togglesHtml(this.toggles)}</div>`;
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     if (s.firstTime) {
-      this.root.innerHTML =
+      this.ui.innerHTML =
         top +
         title +
         '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button>' +
@@ -135,21 +168,63 @@ export class Menu {
           return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '普通档撑到天亮开' : MAPS[m].blurb}</small></button>`;
         })
         .join('');
-      this.root.innerHTML =
+      this.ui.innerHTML =
         top +
         title +
         '<div class="yx-modes">' +
-        `<div class="yx-mode"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
-        '<div class="yx-mode off"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>' +
+        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
+        `<div class="yx-mode off"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>` +
         '</div>';
       this.renderBest();
     }
     this.root.style.display = '';
+    this.startArt();
   }
 
   hide(): void {
     this.root.style.display = 'none';
     this.root.classList.remove('show-settings');
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
+
+  /** 主视觉：静的底图画一次，动的（月晕、灯笼、飘雪）每帧叠；尺寸变了才重画底图。设备像素最多 2 倍（省内存设备同） */
+  private startArt(): void {
+    cancelAnimationFrame(this.raf);
+    const frame = (now: number): void => {
+      const w = this.root.clientWidth;
+      const h = this.root.clientHeight;
+      if (w < 2 || h < 2) {
+        this.raf = requestAnimationFrame(frame);
+        return;
+      }
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const sizeKey = `${w}x${h}@${dpr}`;
+      if (sizeKey !== this.artSize) {
+        this.artSize = sizeKey;
+        this.art.width = Math.round(w * dpr);
+        this.art.height = Math.round(h * dpr);
+        const st = document.createElement('canvas');
+        st.width = this.art.width;
+        st.height = this.art.height;
+        const sc = st.getContext('2d')!;
+        sc.scale(dpr, dpr);
+        this.info = drawTitleStill(sc, w, h);
+        this.still = st;
+        this.flakes = makeFlakes(w < 600 ? 50 : 90, w, h);
+      }
+      const c = this.art.getContext('2d')!;
+      const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 0.016;
+      this.last = now;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(this.still!, 0, 0);
+      c.scale(dpr, dpr);
+      drawTitleLive(c, w, h, this.info!, now);
+      drawFlakes(c, this.flakes, w, h, dt, now);
+      this.raf = requestAnimationFrame(frame);
+    };
+    this.last = 0;
+    this.raf = requestAnimationFrame(frame);
   }
 }
 
@@ -164,6 +239,8 @@ export interface BuildRow {
   kills: number;
   /** 进化还差什么（暂停页显示；进化好了或没有进化的为空） */
   hint?: string;
+  /** 一句说明（悬停/点一下在面板下方显示）；没有就只显示名字和成绩 */
+  desc?: string;
 }
 
 export class Pause {
@@ -184,6 +261,13 @@ export class Pause {
       home: () => this.onHome(),
       quit: () => this.onQuit(),
     });
+    const pick = (e: Event): void => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('.yx-cell');
+      if (el) this.detail(Number(el.dataset.i));
+    };
+    this.root.addEventListener('mouseover', pick);
+    this.root.addEventListener('click', pick);
+    this.root.addEventListener('focusin', pick);
   }
 
   get open(): boolean {
@@ -192,24 +276,39 @@ export class Pause {
 
   /** sets：凑成的套装说明（"剑 2 件 · 暴击 +8%"） */
   show(build: BuildRow[], left: number, sets: string[] = []): void {
-    const rows = build
-      .map(
-        (r) =>
-          `<div class="yx-brow"><img alt="" src="${this.icons(r.icon)}"><b>${esc(r.name)}</b><em>${r.level > 8 ? '进化' : r.level === 8 ? '满级' : `Lv ${r.level}`}</em>` +
-          (r.dmg >= 0 ? `<span>${Math.round(r.dmg).toLocaleString('zh-CN')} 伤 · ${r.kills} 斩${r.hint ? ` · <i>${esc(r.hint)}</i>` : ''}</span>` : '<span></span>') +
-          '</div>',
-      )
-      .join('') + (sets.length ? `<div class="yx-sets">${sets.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : '');
+    this.rows = build;
+    const cell = (r: BuildRow, i: number): string =>
+      `<button type="button" class="yx-cell${r.level > 8 ? ' evo' : r.level === 8 ? ' max' : ''}" data-i="${i}" aria-label="${esc(r.name)}"><img alt="" src="${this.icons(r.icon)}"><em>${r.level > 8 ? '进' : r.level === 8 ? '满' : r.level}</em></button>`;
+    const weapons = build.map((r, i) => (r.dmg >= 0 ? cell(r, i) : '')).join('');
+    const passives = build.map((r, i) => (r.dmg < 0 ? cell(r, i) : '')).join('');
     this.root.innerHTML =
       '<div class="yx-panel yx-pause-panel">' +
       `<div class="yx-panel-head"><b class="yx-brush">暂停</b><em>离天亮 ${mmss(left)}</em></div>` +
       '<div class="yx-pause-body">' +
-      `<div class="yx-build">${rows}</div>` +
+      '<div class="yx-build">' +
+      `<div class="yx-bline"><label>法器</label><div class="yx-grid">${weapons || '<span class="yx-none">还没有</span>'}</div></div>` +
+      `<div class="yx-bline"><label>被动</label><div class="yx-grid">${passives || '<span class="yx-none">还没有</span>'}</div></div>` +
+      (sets.length ? `<div class="yx-sets">${sets.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : '') +
+      `<div class="yx-bdetail">悬停或点一下图标，看说明</div>` +
+      '</div>' +
       `<div class="yx-pause-side"><div class="yx-toggles">${togglesHtml(this.toggles)}</div>` +
-      '<button type="button" class="yx-big" data-a="resume">继续</button>' +
+      '<button type="button" class="yx-big yx-resume" data-a="resume">继续</button>' +
       '<div class="yx-row2"><button type="button" class="yx-big ghost" data-a="quit">认输</button><button type="button" class="yx-big ghost" data-a="home">回大厅</button></div>' +
       '</div></div></div>';
     this.root.style.display = '';
+  }
+
+  private rows: BuildRow[] = [];
+
+  /** 图标下面那一行详情 */
+  private detail(i: number): void {
+    const r = this.rows[i];
+    const el = this.root.querySelector<HTMLElement>('.yx-bdetail');
+    if (!r || !el) return;
+    const lv = r.level > 8 ? '已进化' : r.level === 8 ? '满级' : `Lv ${r.level}`;
+    const score = r.dmg >= 0 ? ` · ${Math.round(r.dmg).toLocaleString('zh-CN')} 伤 · ${r.kills} 斩` : '';
+    el.innerHTML = `<b>${esc(r.name)}</b> ${lv}${score}${r.desc ? `<br><span>${esc(r.desc)}</span>` : ''}${r.hint ? `<br><i>${esc(r.hint)}</i>` : ''}`;
+    for (const c of this.root.querySelectorAll<HTMLElement>('.yx-cell')) c.classList.toggle('sel', c.dataset.i === String(i));
   }
 
   hide(): void {
@@ -262,6 +361,10 @@ export interface ResultView {
   difficulty: Difficulty;
   record: boolean;
   build: BuildRow[];
+  /** 可选：结算后铜钱总数（本局的 coins 已加进去）。有就画"飞进总数"的动画，没有就只显示本局收获 */
+  coinsTotal?: number;
+  /** 可选：本局的目标时长（秒），默认 900；用于"离天亮还差" */
+  dawnSeconds?: number;
 }
 
 export class Result {
@@ -284,37 +387,64 @@ export class Result {
 
   show(r: ResultView): void {
     const title = r.won ? (r.bossKilled ? '尸王伏诛' : '天亮了') : r.quit ? '收工' : '倒下了';
-    const sub = r.won ? (r.bossKilled ? '打倒尸王，天提前亮了' : '撑过了一整夜') : `撑了 ${mmss(r.seconds)}，离天亮还差 ${mmss(Math.max(0, 900 - r.seconds))}`;
-    const top = Math.max(1, ...r.build.map((b) => b.dmg));
-    const rows = r.build
-      .filter((b) => b.dmg >= 0)
-      .sort((a, b) => b.dmg - a.dmg)
+    const dawn = r.dawnSeconds ?? 900;
+    const sub = r.won ? (r.bossKilled ? '打倒尸王，天提前亮了' : '撑过了一整夜') : `离天亮还差 ${mmss(Math.max(0, dawn - r.seconds))}`;
+    const fmt = (n: number): string => Math.round(n).toLocaleString('zh-CN');
+    const weapons = r.build.filter((b) => b.dmg >= 0).sort((a, b) => b.dmg - a.dmg);
+    const top = Math.max(1, ...weapons.map((b) => b.dmg));
+    const best = weapons[0] && weapons[0].dmg > 0 ? weapons[0] : null;
+    const rows = weapons
       .map(
-        (b) =>
-          `<div class="yx-rrow"><img alt="" src="${this.icons(b.icon)}"><b>${esc(b.name)}</b><div class="yx-rbar"><i style="width:${Math.round((100 * b.dmg) / top)}%"></i></div><span>${Math.round(b.dmg).toLocaleString('zh-CN')}</span></div>`,
+        (b, i) =>
+          `<div class="yx-rrow${i === 0 && best ? ' top' : ''}"><img alt="" src="${this.icons(b.icon)}"><b>${esc(b.name)}</b><div class="yx-rbar"><i style="width:${Math.max(3, Math.round((100 * b.dmg) / top))}%;animation-delay:${0.25 + i * 0.08}s"></i></div><span>${fmt(b.dmg)}</span></div>`,
       )
       .join('');
     const passives = r.build
       .filter((b) => b.dmg < 0)
       .map((b) => `<span class="yx-rpass"><img alt="" src="${this.icons(b.icon)}"><em>${b.level}</em></span>`)
       .join('');
+    const total = r.coinsTotal;
+    const coinImg = this.icons('coin');
+    const coinRow =
+      total !== undefined
+        ? `<div class="yx-rcoins"><span class="yx-gain"><img alt="" src="${coinImg}">+${fmt(r.coins)}</span><span class="yx-arrow">→</span><span class="yx-tot"><img alt="" src="${coinImg}"><b data-from="${Math.max(0, total - r.coins)}" data-to="${total}">${fmt(Math.max(0, total - r.coins))}</b><small>铜钱</small></span>${Array.from({ length: 6 }, (_, i) => `<img class="yx-fly" alt="" src="${coinImg}" style="--i:${i}">`).join('')}</div>`
+        : '';
     this.root.innerHTML =
       `<div class="yx-panel yx-result-panel${r.won ? ' won' : ''}">` +
-      `<div class="yx-panel-head"><b class="yx-brush">${title}</b><em>${DIFFICULTIES[r.difficulty].name}${r.record ? ' · <strong>新纪录</strong>' : ''}</em></div>` +
-      `<div class="yx-rsub">${sub}</div>` +
+      `<div class="yx-rhead"><b class="yx-brush">${title}</b><div class="yx-rtags"><em>${DIFFICULTIES[r.difficulty].name}</em>${r.record ? '<strong class="yx-record">新纪录</strong>' : ''}</div></div>` +
+      '<div class="yx-rmain">' +
+      '<div class="yx-rleft">' +
+      `<div class="yx-rtime"><span>撑了</span><b>${mmss(r.seconds)}</b><small>${sub}</small></div>` +
       '<div class="yx-rstats">' +
       `<div><b>${r.kills.toLocaleString('zh-CN')}</b><span>斩</span></div>` +
       `<div><b>${r.level}</b><span>级</span></div>` +
-      `<div><b>${r.coins.toLocaleString('zh-CN')}</b><span>铜钱</span></div>` +
-      `<div><b>${mmss(r.seconds)}</b><span>撑了</span></div>` +
+      (total === undefined ? `<div><b>${r.coins.toLocaleString('zh-CN')}</b><span>铜钱</span></div>` : '') +
       '</div>' +
-      `<div class="yx-rbuild">${rows}${passives ? `<div class="yx-rpasses">${passives}</div>` : ''}</div>` +
+      (best ? `<div class="yx-rbest"><img alt="" src="${this.icons('ui_medal')}"><div><small>本局最强</small><b>${esc(best.name)}</b><span>${fmt(best.dmg)} 伤 · ${best.kills} 斩</span></div></div>` : '') +
+      '</div>' +
+      `<div class="yx-rbuild"><label>法器伤害</label>${rows}${passives ? `<div class="yx-rpasses">${passives}</div>` : ''}</div>` +
+      '</div>' +
+      coinRow +
       '<div class="yx-row3">' +
       '<button type="button" class="yx-big ghost" data-a="home">大厅</button>' +
       '<button type="button" class="yx-big ghost" data-a="menu">换难度</button>' +
-      '<button type="button" class="yx-big" data-a="again">再来一局</button>' +
+      '<button type="button" class="yx-big yx-again" data-a="again">再来一局</button>' +
       '</div></div>';
     this.root.style.display = '';
+    // 铜钱总数从"加之前"数到"加之后"，和飞币动画同步
+    const num = this.root.querySelector<HTMLElement>('.yx-tot b');
+    if (num) {
+      const from = Number(num.dataset.from);
+      const to = Number(num.dataset.to);
+      const t0 = performance.now() + 700;
+      const tick = (now: number): void => {
+        if (!num.isConnected) return;
+        const k = Math.max(0, Math.min(1, (now - t0) / 800));
+        num.textContent = fmt(from + (to - from) * k);
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
   }
 
   hide(): void {
