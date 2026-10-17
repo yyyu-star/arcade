@@ -1,4 +1,4 @@
-import { achievementHints, achievementView, dailyBoardId, difficultyView, formatMoney, formatPoints, personaView, storyView, runSummary, stocksOf, stockCard, type AchievementHint, type GameState, type RunSummary } from '../../core/index.ts';
+import { achievementHints, achievementView, canChallenge, challengeScore, dailyBoardId, difficultyView, formatMoney, formatPoints, personaView, storyView, runSummary, stocksOf, stockCard, type AchievementHint, type GameState, type RunSummary } from '../../core/index.ts';
 import { RevealPanel } from '../meta/revealPanel.ts';
 import { BoardPanel } from '../meta/boardPanel.ts';
 import { onBoardChange, retryRun, runBoard } from '../dailyBoard.ts';
@@ -10,7 +10,7 @@ import { bestKey, isDifficultyUnlocked, isPersonaUnlocked, loadProfile, type Pro
 import { ensureMetaArt, hasArt, stockKey, type Glyph } from '../assets.ts';
 import { addBackdrop } from '../fx/effects.ts';
 import { confetti } from '../fx/particles.ts';
-import { bestText, boardLine, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
+import { bestText, boardLine, boardScoreText, dailyTag, dailyText, endSubtitle, ledgerRows, levelLabel, summaryRows } from '../labels.ts';
 import { funSetup, loadLastSetup, saveLastSetup } from '../meta/prefs.ts';
 import { playUnlocks } from '../meta/unlockDialog.ts';
 import { unlocksOf, type Unlock } from '../meta/unlocks.ts';
@@ -23,11 +23,16 @@ import { statTile, tipOnButton } from '../meta/bits.ts';
 import { addBadge, addPortrait } from '../meta/setupPanel.ts';
 import { Button } from '../ui/button.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
-import { addText } from '../ui/text.ts';
+import { addText, fitWidth } from '../ui/text.ts';
 import type Phaser from 'phaser';
 import { Room } from '../trade/room.ts';
 import { phoneLayout } from '../viewport.ts';
 import { gameLink, shareArt, shareData } from '../shareCard.ts';
+import { onChallengeChange, readChallenge, retryChallengeEnd, runChallenge, startChallenge } from '../challenge.ts';
+import { ChallengeLinkDialog, ChallengePanel } from '../meta/challengePanel.ts';
+import type { ChallengeFail } from '../../platform/challenge.ts';
+import { cloudUserId } from '../cloudSync.ts';
+import { standalone } from '../../platform/mode.ts';
 import { prepareShare, type PreparedShare } from 'arcade-kit/share';
 import { myName } from '../../platform/mode.ts';
 import { BaseScene } from './BaseScene.ts';
@@ -271,7 +276,10 @@ export class EndScene extends BaseScene {
     }
     // 这局的经历（借钱、押跌……）：最多两条，整段在「收获」的包里；每日挑战第二条的位置给排行榜（0.5.10）
     const board = sum.daily ? sum.daily : null;
-    sum.recap.slice(0, lv0 ? 0 : board ? 1 : 2).forEach((l, i) => {
+    // 0.13.0 好友挑战那一行占同一个位置（挑战局不会是每日挑战）：挑战局交成绩；能发起的局（娱乐局、计入了档案、登录了）放「挑战好友」
+    const chal = !board && (runChallenge(s.seed) !== null || (canChallenge(s) && !!this.result && !this.result.ignored && cloudUserId() !== null && !standalone()));
+    const row = !!board || chal;
+    sum.recap.slice(0, lv0 ? 0 : row ? 1 : 2).forEach((l, i) => {
       const t = addText(this, mx + 30, ky + 92 + i * 22, l, { size: TYPE.label - 1, color: COLOR.muted });
       let cut = Array.from(t.text);
       const rw = ph ? G.rightW - 40 : 380;
@@ -283,11 +291,12 @@ export class EndScene extends BaseScene {
     });
 
     if (board) this.boardRow(mx, ky + 114, ph ? G.rightW : 404, sum.runId, board);
+    else if (chal) this.challengeRow(mx, ky + 114, ph ? G.rightW : 404, sum);
 
     // 0.6.8 下次可以试试：离得最近的一两个成就和这局的进度。只在娱乐局放（实盘局不在筹码局里推"再来"，economy.md 第 0 节），
     // 只说成就进度，不提输赢和筹码；放不下（手机上经历多了）就不放
     if (!lv0) {
-      const hy = board ? ky + 150 : ky + 92 + Math.min(sum.recap.length, 2) * 22;
+      const hy = row ? ky + 150 : ky + 92 + Math.min(sum.recap.length, 2) * 22;
       const hints = achievementHints(s, Object.keys(profile.achievements));
       if (hints.length > 0 && hy + 20 <= y + H - G.btnBottom - 6) this.hintRow(mx, hy, ph ? G.rightW - 40 : 380, hints);
     }
@@ -411,6 +420,65 @@ export class EndScene extends BaseScene {
     };
     draw();
     const off = onBoardChange(() => box.active && draw());
+    box.once('destroy', off);
+  }
+
+  /**
+   * 0.13.0 好友挑战的一行：挑战局写交成绩的状态和「看成绩」；别的娱乐局写一句邀请和「挑战好友」（点了交给平台、拿链接）。
+   * 交成绩是异步的，状态变了只重画这一行。
+   */
+  private challengeRow(x: number, y: number, w: number, sum: RunSummary): void {
+    const s = this.session.state;
+    const box = this.add.container(0, 0);
+    const keys = ['challenge', 'challenge:results', 'challenge:retry'];
+    const line = (text: string, good = false): void => {
+      const t = addText(this, x + 30, y + 13, text, { size: TYPE.label - 1, bold: good, color: good ? COLOR.accentDark : COLOR.muted, originY: 0.5 });
+      fitWidth(t, w - 30 - 108 - (this.buttons['challenge:retry'] ? 72 : 0));
+      box.add([addGlyph(this, x + 12, y + 13, 'trophy', 18), t]);
+    };
+    const button = (key: string, label: string, bx: number, bw: number, fn: () => void): Button => {
+      const b = new Button(this, bx, y - 4, { width: bw, height: 34, label, fontSize: 14 });
+      b.setHandler(fn);
+      box.add(b);
+      this.buttons[key] = b;
+      return b;
+    };
+    const draw = (): void => {
+      box.removeAll(true);
+      for (const k of keys) delete this.buttons[k];
+      const r = runChallenge(s.seed);
+      if (!r) {
+        line('发给好友，同一局比一比');
+        const b = button('challenge', '挑战好友', x + w - 100, 100, () => {
+          b.setLoading(true, '建挑战');
+          void startChallenge(s, sum).then((c) => {
+            if (!b.scene) return;
+            b.setLoading(false, c.ok ? '挑战好友' : CHALLENGE_SEND_FAIL[c.why]);
+            if (c.ok && !this.dialogOpen) this.trackDialog(new ChallengeLinkDialog(this, c.url, `开盘挑战：我${boardScoreText(challengeScore(sum))}，同一局你来试试`));
+          });
+        });
+        return;
+      }
+      const open = button('challenge:results', '看成绩', x + w - 100, 100, () => {
+        open.setLoading(true, '读成绩');
+        void readChallenge(r.id).then((v) => {
+          if (!open.scene) return;
+          open.setLoading(false, v.ok ? '看成绩' : '没读到');
+          if (v.ok && !this.dialogOpen) this.trackDialog(new ChallengePanel(this, v.view));
+        });
+      });
+      open.setEnabled(r.state === 'done');
+      if (r.state === 'error' && r.why !== 'gone' && r.why !== 'full') button('challenge:retry', '重试', x + w - 100 - 72, 64, () => retryChallengeEnd(s, sum));
+      if (r.state === 'sending') line(`正在把成绩交给 ${r.owner} 的挑战……`);
+      else if (r.state === 'error') line(CHALLENGE_END_FAIL[r.why]);
+      else {
+        const me = r.view?.me;
+        const where = me ? `挑战里第 ${me.rank ?? '—'} 名 · 共 ${r.view?.count ?? 1} 人` : '成绩交上了';
+        line(r.already ? `之前交过，只算第一次：${where}` : where, !r.already);
+      }
+    };
+    draw();
+    const off = onChallengeChange(() => box.active && draw());
     box.once('destroy', off);
   }
 
@@ -600,3 +668,25 @@ export class EndScene extends BaseScene {
     return out;
   }
 }
+
+/** 发起没成：按钮上写一句（下一次点照样能发） */
+const CHALLENGE_SEND_FAIL: Record<ChallengeFail, string> = {
+  out: '先登录',
+  gone: '发不了',
+  full: '发不了',
+  limit: '今天发够了',
+  busy: '服务器忙',
+  offline: '没连上',
+  bug: '发不了',
+};
+
+/** 挑战局交成绩没成：那一行写什么 */
+const CHALLENGE_END_FAIL: Record<ChallengeFail, string> = {
+  out: '登录后才能交挑战的成绩',
+  gone: '这个挑战已经打不开了（过期了），成绩没交上',
+  full: '这个挑战已经满 100 人了，成绩没交上',
+  limit: '服务器今天有点忙，挑战的成绩没交上',
+  busy: '服务器今天有点忙，挑战的成绩没交上',
+  offline: '没连上，挑战的成绩没交上',
+  bug: '挑战的成绩没交上',
+};

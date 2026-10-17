@@ -131,6 +131,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 报位置、收邀请（0.13.0，`src/view/social.ts`）：kit 的 `mountSocial`，`main.ts` 在 `detectOnce` 之后挂，没平台、没登录不挂；`where()` 在好友房里报 `place: room`、房间码和真人几个（"3/4"），
     别的时候报 `place: game`；进房（第一次连上）、离开房间时 `presenceNow()` 补报一次。邀请横条和"去"（跳 `/games/<id>/?room=<码>`）都是 kit 的。
     房间大厅的"叫朋友来"（`ol-share`）和牌桌顶上的邀请图标（控件 `invite`）都调 `openInvitePanel`（0.13.1）：kit 的"叫朋友来"面板，没挂上 social 时 `friends: false` 只有复制链接；链接按当前页面地址拼。
+    面板传 `zIndex: INVITE_Z`（8800，0.13.2）：要盖住房间弹窗 `#online`（8500），在"请横过来"（9000）、出错面板（9500）之下；改这几个 DOM 层级时 `tests/share-card.test.ts` 会核对。
   - 改了房间和页面之间的约定（动作、视图形状）就加 `src/net/version.ts` 的 `CLIENT_VERSION`：旧页面进房会被 4005 请去刷新。改规则加 `RULES_VERSION`，打到一半的房间按旧规则打完。
   - 验收：`npm run test:room`（真房间机器人对打、写入行数、断线、让位、座位绑人、结算等人）、`npm run room-sim`（规则层大批量）、`npm run online-smoke`（四个浏览器端到端，约 5 分钟，`--quick` 跳过 70 秒托管那项）。
 - 实盘（0.4.0 起单机；设计和数字在 `docs/stake.md`，钱包接口是仓库 `docs/platform-backend.md` 5.9）：
@@ -170,7 +171,13 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     浏览器每次连上（welcome：打开页面、断线重连）看到自己还 afk 就自动发一次 `back`（0.6.4）：连得上说明人回来了；一直连着只是走开的照旧要自己点。
 - 分享卡（0.13.0，`src/view/share-card.ts`，仓库根 `docs/social.md` 1.1）：整局结束页、单机实盘结算、好友房实盘结算（到账的人）右上角一个"分享"图标，用 kit 的分享卡画 1080×1350 的战绩图。
   结算页一出来就 `prepareResult` 先画好（kit 0.12.3 的 `prepareShare`），按钮的点击里同步调 `share()`、前面不许 await：iOS 只许在点击的那一下里调系统分享（0.13.1）。
-  卡上只有公开的：胜负或这一场的筹码、打了几副、我的头游和炸弹次数、我的称号（模板拼的话）；图标是 `favicon.svg`。链接是游戏地址，好友房带房间码。冒烟的控件名 `share`。
+  卡上只有公开的：胜负或这一场的筹码、打了几副、我的头游和炸弹次数、我的称号（模板拼的话）；图标是 `favicon.svg`。链接是游戏地址（`location.origin + location.pathname`，好友房带 `?room=`），kit 0.15.0 起按它在卡的右下角画二维码。冒烟的控件名 `share`，`gameover` 一段点一次、把预览卡存成 `16b-share-card.png`。
+- 结束颁奖（0.14.0，`src/net/awards.ts`，设计 `docs/design.md` 4.1）：好友房一场打完评本场 MVP、最惨的人、炸弹王（2–3 个），数据是房间攒的 `NetState.log`（公开的名次、炸弹，随视图下发、`rotate.ts` 转座位），
+  页面 `NetSession.matchLog` 取、`TableScene.roomAwards` 评、`addAwards` 画，分享卡经 `shareCardOf` 的 `awards` 写进去。只用公开信息、话从模板拼；改评法同步改 design.md 4.1 和 `tests/awards.test.ts`。
+- 好友动态的名场面（0.15.0，`src/view/feed.ts`、`public/moments.json`，设计 `docs/design.md` 4.2）：一副打完 `TableScene.feedDeal` 从 `highlights.ts` 的名场面里挑和我有关的一条，经 `social.ts` 的 `postFeed`（kit 的 `postMoment`）报给平台；
+  一局最多 `FEED_MAX`（2）条、同一种一次，只报娱乐、不是旁观。加编号同时加模板（只用 `{name}`、`{n}`，≤ 40 字），`tests/feed.test.ts` 核对。冒烟的假平台都回 204。
+- 搭子战绩（0.16.0，`src/net/together.ts`，设计 `docs/design.md` 4.3）：`worker/room.ts` 的 `onStep` 用 `matchEnd` 认"这一步刚打完一场"，调 kit 的 `reportMatch`（交给 waitUntil、不重试、不写状态）。
+  win 的定义改了同步改 design.md 4.3 和 `tests/together.test.ts`；房间测试的假钱包（`tests/room/wallet.ts`）记下每次 `together`，`bots.spec`、`stake.spec` 核对报了几次、报了谁。
 - 界面的刻度和按钮（0.9.0 界面改版①）：间距、圆角、投影、按钮配色只从 `theme.ts` 取（`SPACE`、`RADIUS`、`SHADOW`、`BUTTON`），DOM 用 `THEME_CSS` 的 `--gd-` 变量和 `.gd-btn`（`tests/ui-theme.test.ts` 查 DOM 按钮）。
   画布里能点的一律用 `ui/kit.ts` 的 `Button`、`iconButton`、`segmented`（自带悬停、按下、禁用、加载中，登记进 `ui/focus.ts` 的键盘焦点；弹窗用 `modal()`，自带焦点层和 Esc）。
   点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距，不许互相压着。

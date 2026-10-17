@@ -58,6 +58,17 @@ export function roomStub(ns: DurableObjectNamespace, code: string): DurableObjec
 /** 计量的名字：每个游戏 Worker 只有这一个实例（meter.ts）。 */
 export const METER_NAME = 'kit-meter';
 
+/** 进房猜码的计数（0.14.0）：按人（u:<userId>）、按 IP（ip:<地址>）各一个小实例，和全站的计量同一个类、不同名字，不挤一个热点 */
+export function missStub(ns: DurableObjectNamespace, key: string): DurableObjectStub {
+  return ns.get(ns.idFromName(`kit-miss:${key}`), { locationHint: 'apac' });
+}
+
+/** 房间告诉 acceptJoin"这个码没有房间"的内部头（只在房间回给 Worker 的 101 上，转给浏览器前去掉） */
+export const MISS_HEADER = 'x-kit-miss';
+
+/** acceptJoin 告诉房间"这个人猜码超了门槛"的内部头：房间只放自己人（房主、入座的、绑过座位的）进来，别人一律 1013 */
+export const LIMITED_HEADER = 'x-kit-limited';
+
 /** 计量的 stub：和房间一样放在亚太，开房、报数少绕路。 */
 export function meterStub(ns: DurableObjectNamespace): DurableObjectStub {
   return ns.get(ns.idFromName(METER_NAME), { locationHint: 'apac' });

@@ -22,11 +22,21 @@ function leave(from: string | null, next: string | null): void {
   else navigate(returnFriendPath(from) ?? '/');
 }
 
+/** /i/<码>（0.20.0）：邀请链接，换成带着码的注册页（replace，后退不回到这一跳） */
+export function InviteLinkPage() {
+  const loc = useLocation();
+  const code = decodeURIComponent(loc.pathname.slice(3));
+  useEffect(() => navigate(`/login?${new URLSearchParams({ tab: 'register', invite: code })}`, true), [code]);
+  return null;
+}
+
 export function LoginPage() {
   const loc = useLocation();
   const from = loc.searchParams.get('from');
   const next = safeNext(loc.searchParams.get('next'), location.origin);
-  const tab = loc.searchParams.get('tab') === 'register' ? 'register' : 'login';
+  // 邀请链接 /i/<码>（0.20.0）进来的：带着码，注册关着也给注册表单
+  const invite = loc.searchParams.get('invite');
+  const tab = loc.searchParams.get('tab') === 'register' || invite !== null ? 'register' : 'login';
   const { user } = useSession();
   const [fresh, setFresh] = useState<{ code: string; username: string } | null>(null);
   const game = next ? gameOfPath(next) : returnGame(from);
@@ -62,21 +72,34 @@ export function LoginPage() {
     );
   }
 
-  if (registration !== 'open') {
+  if (registration !== 'open' && invite === null) {
+    // 打开别人分享的好友链接、游戏链接过来的（0.20.0）：顶上先说一句是朋友叫你来的
+    const invited = !!game || !!returnFriendPath(from)?.startsWith('/f/');
     return (
       <Panel icon="key" title="登录">
+        {invited && (
+          <p className="invited" data-testid="invited">
+            朋友邀请你来街机厅。现在是邀请制，找 TA 要个邀请就能玩。
+          </p>
+        )}
         <Welcome />
         {game && <p className="note">登录后回到「{game.name}」，存档会自动同步。</p>}
         {back && <p className="note">登录后回到刚才那一页。</p>}
-        <p className="note" data-testid="invite-only">
-          现在只对受邀的朋友开放，账号找邀请你的人要。
-        </p>
+        {!invited && (
+          <p className="note" data-testid="invite-only">
+            现在只对受邀的朋友开放，找邀请你的人要个邀请码。
+          </p>
+        )}
         <LoginForm onDone={done} />
+        <p className="note">
+          有邀请码？<Link href={`/login?${new URLSearchParams({ ...(from ? { from } : {}), ...(next ? { next } : {}), tab: 'register', invite: '' })}`}>用邀请码注册</Link>
+        </p>
       </Panel>
     );
   }
 
-  const tabHref = (t: string) => `/login?${new URLSearchParams({ ...(from ? { from } : {}), ...(next ? { next } : {}), ...(t === 'register' ? { tab: t } : {}) })}`;
+  const tabHref = (t: string) =>
+    `/login?${new URLSearchParams({ ...(from ? { from } : {}), ...(next ? { next } : {}), ...(t === 'register' ? { tab: t } : {}), ...(t === 'register' && invite !== null ? { invite } : {}) })}`;
   return (
     <Panel icon="key" title={tab === 'login' ? '登录' : '注册'}>
       <Welcome />
@@ -90,7 +113,7 @@ export function LoginPage() {
           注册
         </Link>
       </nav>
-      {tab === 'login' ? <LoginForm onDone={done} /> : <RegisterForm onDone={setFresh} />}
+      {tab === 'login' ? <LoginForm onDone={done} /> : <RegisterForm onDone={setFresh} invite={(invite ?? '').trim()} needCode={registration !== 'open'} />}
     </Panel>
   );
 }
@@ -146,14 +169,16 @@ function LoginForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function RegisterForm({ onDone }: { onDone: (r: { code: string; username: string }) => void }) {
+/** invite：链接里带的码（预填）；needCode：注册关着，必须填码（0.20.0） */
+function RegisterForm({ onDone, invite, needCode }: { onDone: (r: { code: string; username: string }) => void; invite: string; needCode: boolean }) {
   const { setUser } = useSession();
+  const [code, setCode] = useState(invite);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const { busy, error, setError, onSubmit } = useSubmit(async () => {
-    const r = await api.register(username, password, displayName);
+    const r = await api.register(username, password, displayName, code.trim() || undefined);
     setUser(r.user);
     onDone({ code: r.recoveryCode, username: r.user.username });
   });
@@ -170,6 +195,17 @@ function RegisterForm({ onDone }: { onDone: (r: { code: string; username: string
       }}
     >
       <p className="note">不收手机号和邮箱。注册后会给你一串恢复码，忘了密码只能靠它。</p>
+      <Field
+        label="邀请码"
+        hint={needCode ? '朋友给的 12 位码，不分大小写；用它注册后你们自动成为好友' : '选填：朋友给的码，用它注册后你们自动成为好友'}
+        name="inviteCode"
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        required={needCode}
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+      />
       <Field label="用户名" hint="登录用，3–20 位小写字母、数字或下划线" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(e) => setUsername(e.target.value)} />
       <Field label="昵称" hint="别人看到的名字，2–12 个字" name="displayName" autoComplete="nickname" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
       <Field label="密码" hint="至少 8 位，别用常见密码" name="password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />

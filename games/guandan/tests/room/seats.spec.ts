@@ -76,7 +76,8 @@ describe('结算页等人', () => {
     const c0 = t.seats.get(0)!;
 
     for (const how of ['ready', 'timeout'] as const) {
-      for (let i = 0; i < 4000 && !atAiHeadSettle(); i++) expect(await t.step()).toBe(true);
+      // CI 上偶发 step() 回 false（本地连跑不出来）：把房间记下的问题和当时的状态带进失败信息，下次挂了能看到原因
+      for (let i = 0; i < 4000 && !atAiHeadSettle(); i++) expect(await t.step(), `${how} 第 ${i} 步：${t.problems.join('；')} status=${t.t?.row?.status} phase=${t.t?.row?.game?.g.phase}`).toBe(true);
       expect(atAiHeadSettle()).toBe(true);
       // 电脑一次最多连出 3 手：最后几手和电脑点继续可能排在后面的闹钟里
       for (let i = 0; i < 10 && R.actors(row().game!).seats.some((x) => x !== 0); i++) expect(await t.runNextAlarm()).toBe(true);
