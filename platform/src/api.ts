@@ -10,6 +10,8 @@ export interface User {
   showWhere?: boolean;
   /** 好友动态开关（0.17.0）；没有就是开着 */
   showFeed?: boolean;
+  /** 搭子战绩开关（0.19.0）；没有就是开着 */
+  showMates?: boolean;
   /** 只有管理员有，值总是 true。 */
   isAdmin?: true;
 }
@@ -65,9 +67,18 @@ export interface Where {
   seats?: string;
 }
 
+/** 搭子战绩（0.19.0，15.19）：我和这个好友一起打的，wins 是我赢的、theirWins 是他赢的；teamN、teamWins 是做搭档（同一队）的 */
+export interface Together {
+  n: number;
+  wins: number;
+  theirWins: number;
+  teamN: number;
+  teamWins: number;
+}
+
 export interface FriendLists {
   /** online、where（0.13.0）：对方关了"让好友看到我在哪"时 online 是 false、没有 where */
-  friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where })[];
+  friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where; together?: Together })[];
   incoming: Profile[];
   outgoing: Profile[];
 }
@@ -126,6 +137,8 @@ export interface StatsResponse {
   relation: Relation;
   week: string;
   games: Record<string, CareerView>;
+  /** 搭子战绩（0.19.0）：是好友、两边都开着、一起打过才有，按游戏分开 */
+  together?: Record<string, Together>;
 }
 
 /** 管理员可调的钱包规则（0.10.6，15.7） */
@@ -358,6 +371,7 @@ export const api = {
   feed: () => request<{ items: FeedItem[] }>('GET', '/api/feed'),
   react: (id: string, kind: string) => request<void>('POST', `/api/feed/${encodeURIComponent(id)}/react`, { kind }),
   setShowFeed: (showFeed: boolean) => request<{ user: User }>('PATCH', '/api/me', { showFeed }),
+  setShowMates: (showMates: boolean) => request<{ user: User }>('PATCH', '/api/me', { showMates }),
   dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),

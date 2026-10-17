@@ -21,6 +21,8 @@ export interface UserRow {
   show_where: number;
   /** 好友动态（0.17.0）：0 是关了，好友看不到我的动态，也不再生成 */
   show_feed: number;
+  /** 搭子战绩（0.19.0）：0 是关了，我和好友一起打的场数两边都看不到（照样记） */
+  show_mates: number;
 }
 
 export interface Session {
@@ -47,13 +49,14 @@ export function userJson(u: UserRow) {
     createdAt: u.created_at,
     showWhere: u.show_where !== 0,
     showFeed: u.show_feed !== 0,
+    showMates: u.show_mates !== 0,
     // 只增不改（15.1）：普通用户没有这个字段，前端据此决定露不露"管理"入口；接口另有服务端检查
     ...(u.role === 'admin' ? { isAdmin: true as const } : {}),
   };
 }
 
 export const USER_COLUMNS =
-  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role, u.presence_at, u.show_where, u.show_feed';
+  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role, u.presence_at, u.show_where, u.show_feed, u.show_mates';
 
 /** 没带 cookie、cookie 格式不对、会话不存在或过期，都返回 null。 */
 export async function loadSession(request: Request, env: Env, db: Db, now: number): Promise<Session | null> {
@@ -144,6 +147,9 @@ export function deleteUserStatements(db: Db, userId: string, username: string): 
     db.stmt('DELETE FROM challenge_results WHERE challenge_id IN (SELECT id FROM challenges WHERE owner_id = ?1)', userId),
     db.stmt('DELETE FROM challenges WHERE owner_id = ?1', userId),
     db.stmt('DELETE FROM challenge_results WHERE user_id = ?1', userId),
+    // 搭子战绩（迁移 0010）：本人在 lo 一边的走主键前缀，在 hi 一边的走 mates_hi 索引
+    db.stmt('DELETE FROM mates WHERE lo = ?1', userId),
+    db.stmt('DELETE FROM mates WHERE hi = ?1', userId),
     db.stmt(`DELETE FROM rate_counters WHERE key IN (${counterKeys.map((_, i) => `?${i + 1}`).join(', ')})`, ...counterKeys),
     db.stmt('DELETE FROM users WHERE id = ?1', userId),
   ];

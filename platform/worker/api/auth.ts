@@ -60,24 +60,28 @@ async function touch(c: Ctx): Promise<string[]> {
   return touchSession(c.db.as('social'), c.session, c.sidCookie, c.limits, c.now);
 }
 
-/** PATCH /api/me：改昵称、开关"让好友看到我在哪"（0.13.0），和改昵称共用每人每天 profilePerDay 次。 */
+/** PATCH /api/me：改昵称和几个隐私开关，共用每人每天 profilePerDay 次。 */
 export async function patchMe(c: Ctx): Promise<Response> {
   const user = c.session!.user;
-  // 改昵称、"让好友看到我在哪"（0.13.0）、"好友动态"（0.17.0）两个开关：至少带一样，几样一起带就一起改（一次计数、一行）
+  // 改昵称、"让好友看到我在哪"（0.13.0）、"好友动态"（0.17.0）、"搭子战绩"（0.19.0）三个开关：至少带一样，几样一起带就一起改（一次计数、一行）
   const hasName = c.body.displayName !== undefined;
-  const { showWhere, showFeed } = c.body;
-  if (!hasName && showWhere === undefined && showFeed === undefined) throw new ApiError(400, 'bad_request');
-  if (showWhere !== undefined && typeof showWhere !== 'boolean') throw new ApiError(400, 'bad_request');
-  if (showFeed !== undefined && typeof showFeed !== 'boolean') throw new ApiError(400, 'bad_request');
+  const { showWhere, showFeed, showMates } = c.body;
+  if (!hasName && showWhere === undefined && showFeed === undefined && showMates === undefined) throw new ApiError(400, 'bad_request');
+  for (const v of [showWhere, showFeed, showMates]) if (v !== undefined && typeof v !== 'boolean') throw new ApiError(400, 'bad_request');
   const displayName = hasName ? normalizeDisplayName(str(c.body.displayName)) : user.display_name;
   if (hasName) check(checkDisplayName(displayName));
-  const flag = showWhere === undefined ? user.show_where : showWhere ? 1 : 0;
-  const feed = showFeed === undefined ? user.show_feed : showFeed ? 1 : 0;
+  const flagOf = (v: unknown, old: number) => (v === undefined ? old : v ? 1 : 0);
+  const flag = flagOf(showWhere, user.show_where);
+  const feed = flagOf(showFeed, user.show_feed);
+  const mates = flagOf(showMates, user.show_mates);
   await hit(c.db, `profile:${user.id}`, c.limits.profilePerDay, DAY, c.now);
-  await c.db.run(c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2, show_feed = ?3 WHERE id = ?4', displayName, flag, feed, user.id));
+  await c.db.run(
+    c.db.stmt('UPDATE users SET display_name = ?1, show_where = ?2, show_feed = ?3, show_mates = ?4 WHERE id = ?5', displayName, flag, feed, mates, user.id),
+  );
   user.display_name = displayName;
   user.show_where = flag;
   user.show_feed = feed;
+  user.show_mates = mates;
   const cookies = await touch(c);
   return withCookies(json(200, { user: userJson(user) }), cookies);
 }
@@ -159,7 +163,7 @@ export async function insertUser(
       ]);
       const user: UserRow = {
         id: u.userId, username: u.username, display_name: u.displayName, friend_code: friendCode, avatar_json: null,
-        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1, show_feed: 1,
+        catchphrase_id: null, created_at: now, last_seen_at: now, role: u.role, presence_at: 0, show_where: 1, show_feed: 1, show_mates: 1,
       };
       return { user, recoveryCode };
     } catch (e) {

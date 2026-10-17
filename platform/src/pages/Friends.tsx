@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { FeedPanel } from '../feed.tsx';
 import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation, type Where } from '../api.ts';
 import { gameName } from '../format.ts';
+import { bestPartner, togetherText } from '../mates.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Empty, Field, FormError, Panel, useWritable } from '../ui.tsx';
@@ -86,6 +87,8 @@ function Friends() {
   const [loadError, setLoadError] = useState('');
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  // 最佳搭档（0.19.0）：好友里做搭档赢得最多的那个
+  const best = data ? bestPartner(data.friends) : null;
 
   useEffect(() => {
     let alive = true;
@@ -134,7 +137,7 @@ function Friends() {
           ) : (
             <ul className="people">
               {data.friends.map((p) => (
-                <Friend key={p.userId} p={p} onChanged={reload} />
+                <Friend key={p.userId} p={p} best={p.userId === best} onChanged={reload} />
               ))}
             </ul>
           )}
@@ -258,7 +261,16 @@ function AddByCode() {
 }
 
 /** 一行人：头像、昵称、说明，右边是按钮；confirm 展开时在下面要求确认。 */
-function Person({ p, sub, children, confirm, stats, online }: { p: Profile; sub?: string; children: ReactNode; confirm?: ReactNode; stats?: boolean; online?: boolean }) {
+function Person({ p, sub, mates, children, confirm, stats, online }: {
+  p: Profile;
+  sub?: string;
+  /** 搭子战绩那一行（0.19.0） */
+  mates?: ReactNode;
+  children: ReactNode;
+  confirm?: ReactNode;
+  stats?: boolean;
+  online?: boolean;
+}) {
   return (
     <li className="people__item" data-testid={`person-${p.displayName}`}>
       <div className="people__row">
@@ -276,6 +288,7 @@ function Person({ p, sub, children, confirm, stats, online }: { p: Profile; sub?
             <span className="people__name">{p.displayName}</span>
           )}
           {sub && <span className={`people__sub${online ? ' people__sub--online' : ''}`}>{sub}</span>}
+          {mates}
         </span>
       </div>
       <div className="row">{children}</div>
@@ -312,7 +325,7 @@ function Incoming({ p, onChanged }: { p: Profile; onChanged: () => void }) {
   );
 }
 
-function Friend({ p, onChanged }: { p: FriendLists['friends'][number]; onChanged: () => void }) {
+function Friend({ p, best, onChanged }: { p: FriendLists['friends'][number]; best: boolean; onChanged: () => void }) {
   const writable = useWritable();
   const [open, setOpen] = useState<'remove' | 'block' | null>(null);
   const toggle = (what: 'remove' | 'block') => setOpen(open === what ? null : what);
@@ -322,6 +335,14 @@ function Friend({ p, onChanged }: { p: FriendLists['friends'][number]; onChanged
       stats
       online={p.online}
       sub={p.online ? whereText(p.where) : lastSeenText(p.lastSeenDaysAgo)}
+      mates={
+        p.together && (
+          <span className="people__mates" data-testid="together">
+            {best && <span className="people__best">最佳搭档</span>}
+            {togetherText(p.together)}
+          </span>
+        )
+      }
       confirm={
         open === 'remove' ? (
           <Confirm label={`确定不再和「${p.displayName}」做好友`} button="删好友" action={() => api.removeFriend(p.userId)} onDone={onChanged} />

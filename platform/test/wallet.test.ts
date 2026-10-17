@@ -360,8 +360,8 @@ describe('带入、结回、放弃', () => {
 });
 
 describe('RPC 只露出四个方法', () => {
-  it('原型上只有 view、buyin、settle、refund：RPC 能调的就是原型上的方法，内部的 #op、#run 调不到（否则能把带入当成"回"，绕过只读档的拦截）', () => {
-    expect(Object.getOwnPropertyNames(WalletService.prototype).sort()).toEqual(['buyin', 'constructor', 'refund', 'settle', 'view']);
+  it('原型上只有 view、buyin、settle、refund、together（0.19.0 搭子战绩）：RPC 能调的就是原型上的方法，内部的 #op、#run 调不到（否则能把带入当成"回"，绕过只读档的拦截）', () => {
+    expect(Object.getOwnPropertyNames(WalletService.prototype).sort()).toEqual(['buyin', 'constructor', 'refund', 'settle', 'together', 'view']);
   });
 });
 
