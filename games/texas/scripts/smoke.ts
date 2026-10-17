@@ -628,6 +628,12 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await ap.goto(`${base}/games/texas/?room=${code}`);
   await ap.locator('.room-wait').waitFor();
   if (new URL(ap.url()).search) throw new Error('invite link query not stripped');
+  // 好友房和娱乐、实盘并排（0.17.4）：手机第一屏就看得见，点了才出开房、输码
+  const tab = await bp.locator('.lobby .mode', { hasText: '好友房' }).boundingBox();
+  if (!tab || tab.y + tab.height > PHONE.viewport.height) throw new Error(`phone: 好友房 should be on the first screen, got ${JSON.stringify(tab)}`);
+  if (await bp.locator('.friends.join').isVisible()) throw new Error('phone: friends row should wait for the 好友房 tab');
+  await bp.locator('.lobby .mode', { hasText: '好友房' }).tap();
+  await shot(bp, 'phone-friends-tab');
   await bp.locator('.code-in:not(.nick-in)').fill(code);
   await bp.locator('.friends .pill', { hasText: '进房间' }).tap();
   await bp.locator('.room-wait').waitFor();
@@ -730,6 +736,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   }
   // 都离开了：房间没有真人就结束（0.2.4），标题页不给"回到房间"；房主再点"开房间"开出一个新的，不会 409、不会回到原来的房间
   if (await hp.locator('.banner.room').isVisible()) throw new Error('left the room: no "back to room" banner');
+  await hp.locator('.lobby .mode', { hasText: '好友房' }).click();
   await hp.locator('.friends .pill', { hasText: '开房间' }).click();
   await hp.locator('.room-wait').waitFor({ timeout: 20_000 });
   const code2 = ((await hp.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
@@ -763,14 +770,19 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   watch(page, 'alone');
   await page.goto(`${base}/`);
   if (new URL(page.url()).pathname !== '/games/texas/') throw new Error(`standalone: / should go to /games/texas/, got ${page.url()}`);
+  await page.locator('.lobby .mode', { hasText: '好友房' }).waitFor();
+  for (const sel of ['.lobby .wallet', '.topbar .cloud']) if (await page.locator(sel).first().isVisible()) throw new Error(`standalone: ${sel} should be hidden`);
+  if (await page.locator('.lobby .mode', { hasText: '实盘' }).isVisible()) throw new Error('standalone: 实盘 should be hidden');
+  // 好友房：昵称框和开房间在这一栏里
+  await page.locator('.lobby .mode', { hasText: '好友房' }).click();
   await page.locator('.nick-row').waitFor();
-  for (const sel of ['.lobby .wallet', '.lobby .mode', '.topbar .cloud']) if (await page.locator(sel).first().isVisible()) throw new Error(`standalone: ${sel} should be hidden`);
   const home = await page.locator('.home').evaluate((a) => (a as HTMLAnchorElement).href);
   if (home !== `${base}/games/texas/`) throw new Error(`standalone: "大厅" should go to the game, got ${home}`);
   if (!(await page.locator('.friends .pill', { hasText: '开房间' }).isEnabled())) throw new Error('standalone: 开房间 should work without a wallet');
   await shot(page, 'alone-lobby');
 
   // 单机：只有娱乐
+  await page.locator('.lobby .mode', { hasText: '娱乐' }).click();
   await page.locator('.tile', { hasText: '新手' }).click();
   await page.locator('.size', { hasText: /^4$/ }).click();
   await page.locator('.lobby .start').click();
@@ -785,6 +797,7 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await summary(page, 'alone-solo-summary');
 
   // 好友房：房主带昵称"小明"开房，手机点邀请链接进来（没填昵称，是"游客1234"）
+  await page.locator('.lobby .mode', { hasText: '好友房' }).click();
   await page.locator('.size', { hasText: /^4$/ }).click();
   await page.locator('.friends .pill', { hasText: '开房间' }).click();
   await page.locator('.rw-seat.me').waitFor({ timeout: 20_000 });
@@ -813,6 +826,34 @@ async function standalone(browser: Browser, base: string): Promise<void> {
   await Promise.all([ctx.close(), phone.close()]);
 }
 
+/**
+ * 竖着拿的手机看标题页（0.17.4，所有者：手机上找不到好友房）：iPhone SE 和常见的 390 宽，"好友房"在第一屏，
+ * 点了以后输码进房那一行也在第一屏（开房间在选完档位的下面，和"坐下开打"一个位置）
+ */
+async function portraitLobby(browser: Browser, base: string): Promise<void> {
+  for (const [tag, width, height] of [
+    ['se', 375, 667],
+    ['portrait', 390, 844],
+  ] as const) {
+    const ctx = await newContext(browser, base, `smoke-${tag}`, { viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const page = await ctx.newPage();
+    watch(page, tag);
+    await page.goto(`${base}/games/texas/`);
+    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor();
+    const onScreen = async (sel: string, what: string): Promise<void> => {
+      const b = await page.locator(sel).first().boundingBox();
+      if (!b || b.y < 0 || b.y + b.height > height) throw new Error(`${tag}: ${what} should be on the first screen, got ${JSON.stringify(b)}`);
+    };
+    await onScreen('.lobby .mode:text("好友房")', '好友房');
+    await shot(page, `${tag}-lobby`);
+    await page.locator('.lobby .mode', { hasText: '好友房' }).tap();
+    await onScreen('.friends.join .code-in', 'room code');
+    if (!(await page.locator('.friends.open .pill', { hasText: '开房间' }).isVisible())) throw new Error(`${tag}: 开房间 missing`);
+    await shot(page, `${tag}-friends`);
+    await ctx.close();
+  }
+}
+
 async function main(): Promise<void> {
   // 有的沙箱环境里 zygote 拉不起 GPU 子进程，浏览器会直接退出；不用 zygote 就好（CI 上加不加都一样）
   const browser = await chromium.launch({ args: ['--no-zygote', '--disable-gpu'] });
@@ -822,6 +863,7 @@ async function main(): Promise<void> {
       await withWorker(PLATFORM_CONFIG, async (base) => {
         if (!only || only === 'desktop') await desktop(browser, base);
         if (!only || only === 'mobile') await mobile(browser, base);
+        if (!only || only === 'mobile' || only === 'portrait') await portraitLobby(browser, base);
         if (!only || only === 'room') await room(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
