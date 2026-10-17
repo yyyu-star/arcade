@@ -212,7 +212,7 @@ export function StatsPage() {
         )}
         {mine && (
           <div className="row">
-            {/* 晒一晒（0.20.0）：本人看自己、有战绩时才有；链接是自己的好友链接 */}
+            {/* 晒一晒（0.21.0）：本人看自己、有战绩时才有；链接是自己的好友链接 */}
             {shareable && <ShareButton card={statsCard(data.user.displayName, data.games, badge ?? undefined)} url={friendLink(user.friendCode)} label="晒一晒" testId="share-stats" />}
             <Link className="btn" href="/wallet">
               我的筹码

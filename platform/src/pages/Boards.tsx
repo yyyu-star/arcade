@@ -32,11 +32,7 @@ interface Row {
   tone?: 'up' | 'down';
 }
 
-/**
- * 排行：前三名站上领奖台（第二、第一、第三从左到右，第一最高），后面的一行一个；自己那行高亮。
- * 并列时名次一样，领奖台按名单顺序取前三个名次在 3 以内的人。
- */
-/** 晒名次（0.20.0）：全站前 10 名，或者只看好友时第一名，自己那行旁边给一个按钮 */
+/** 晒名次（0.21.0）：全站前 10 名，或者只看好友时第一名，自己那行旁边给一个按钮 */
 const SHARE_TOP = 10;
 
 function MyShare({ r, share }: { r: Row; share?: { board: string; friends: boolean } }) {
@@ -52,6 +48,10 @@ function MyShare({ r, share }: { r: Row; share?: { board: string; friends: boole
   );
 }
 
+/**
+ * 排行：前三名站上领奖台（第二、第一、第三从左到右，第一最高），后面的一行一个；自己那行高亮。
+ * 并列时名次一样，领奖台按名单顺序取前三个名次在 3 以内的人。
+ */
 function RankList({ rows, me, empty, share }: { rows: Row[]; me: Row | null; empty: string; share?: { board: string; friends: boolean } }) {
   if (!rows.length) return <Empty testId="board-empty">{empty}</Empty>;
   const top = rows.slice(0, 3).filter((r) => r.rank !== null && r.rank <= 3);

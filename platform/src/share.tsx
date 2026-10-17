@@ -1,5 +1,5 @@
 /**
- * 晒战绩、晒名次（0.20.0）：卡由共用包 arcade-kit/share 画（和游戏的分享卡一个样），平台只交数据。
+ * 晒战绩、晒名次（0.21.0）：卡由共用包 arcade-kit/share 画（和游戏的分享卡一个样），平台只交数据。
  * 链接是本人的好友链接 /f/<码>：朋友扫码或点开，登录后直接加好友。图在浏览器里画，不上传、不写库。
  * iOS 只许在点击的那一下里调系统分享，所以卡在 effect 里先画好（prepareShare），点的时候同步调 share()。
  */
@@ -34,7 +34,7 @@ function avatarArt(name: string): HTMLCanvasElement {
 const rate = (c: CareerView) => (c.rounds > 0 ? Math.round((c.wins / c.rounds) * 100) : 0);
 
 /**
- * 战绩卡：大数字是一共打了多少局；小数据挑局数最多的两三个游戏写"胜率 · 局数"；一句话写最大一把和称号数。
+ * 战绩卡：大数字是一共打了多少局；小数据挑局数最多的三个游戏写胜率（kit 每条值最多 10 个字，写长了会被截）；一句话写最大一把和称号数。
  * 称号名给了就挂在昵称旁边（第一个），读不到就不挂。
  */
 export function statsCard(name: string, games: Record<string, CareerView>, badge?: string): ShareCard {
@@ -45,7 +45,7 @@ export function statsCard(name: string, games: Record<string, CareerView>, badge
   const top = [...list]
     .sort(([a, x], [b, y]) => y.rounds - x.rounds || GAMES.findIndex((g) => g.id === a) - GAMES.findIndex((g) => g.id === b))
     .slice(0, 3)
-    .map(([g, c]) => ({ label: gameName(g), value: c.rounds > 0 ? `胜率 ${rate(c)}% · ${num(c.rounds)} 局` : `上桌 ${num(c.n)} 次` }));
+    .map(([g, c]) => ({ label: c.rounds > 0 ? `${gameName(g)}胜率` : gameName(g), value: c.rounds > 0 ? `${rate(c)}%` : `上桌 ${num(c.n)} 次` }));
   const line = [best && `最大一把 ${gameName(best[0])} ${num(best[1])}`, titles > 0 && `称号 ${titles} 个`].filter(Boolean).join(' · ');
   return {
     game: '街机厅战绩',
