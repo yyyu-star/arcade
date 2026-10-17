@@ -75,15 +75,29 @@ describe('局外成长（第 5 步）', () => {
     expect(finishRun(s, end({ id: 'd3' })).askAssist).toBe(true);
     expect(finishRun(s, end({ id: 'd4' })).askAssist).toBe(false);
   });
-  it('角色解锁按成绩和铜钱', async () => {
+  it('角色解锁：前三个一开始就有，其余按铜钱 / 守夜 8 分钟 / 夜探撤出', async () => {
     const { fresh, charOpen, buyChar, finishRun } = await import('../src/platform/save.ts');
     const s = fresh();
-    expect(charOpen(s, 'fushi')).toBe(false);
-    finishRun(s, end({ id: 'a', ticks: 600 * 30, kills: 1500, coins: 800 }));
-    expect(charOpen(s, 'fushi')).toBe(true);
-    expect(charOpen(s, 'jianxia')).toBe(true);
+    for (const c of ['xiaodao', 'fushi', 'jianxia'] as const) expect(charOpen(s, c)).toBe(true);
+    expect(charOpen(s, 'gengfu')).toBe(false);
+    expect(charOpen(s, 'caiyao')).toBe(false);
+    finishRun(s, end({ id: 'a', ticks: 479 * 30, coins: 800 }));
+    expect(charOpen(s, 'gengfu')).toBe(false);
+    finishRun(s, end({ id: 'b', ticks: 480 * 30 }));
+    expect(charOpen(s, 'gengfu')).toBe(true);
     expect(buyChar(s, 'pang', 'n')).toBe(true);
     expect(charOpen(s, 'pang')).toBe(true);
+    s.extracts = 1;
+    expect(charOpen(s, 'caiyao')).toBe(true);
+  });
+  it('老存档已经解锁的角色不会被收回（危险 2 通关的更夫、花钱买的胖师叔）', async () => {
+    const { fresh, charOpen, reviveSave } = await import('../src/platform/save.ts');
+    const s = fresh();
+    s.cleared = 2;
+    s.bought = ['pang'];
+    const old = reviveSave(JSON.parse(JSON.stringify(s)))!;
+    expect(old.extracts).toBe(0);
+    for (const c of ['gengfu', 'pang'] as const) expect(charOpen(old, c)).toBe(true);
   });
   it('云存档合并：流水按 id 并集，两台设备各赚各花不丢不重；坏数据读成默认', async () => {
     const { fresh, finishRun, coins, mergeSave, reviveSave, buyPerk } = await import('../src/platform/save.ts');

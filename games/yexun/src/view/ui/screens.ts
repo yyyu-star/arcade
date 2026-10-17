@@ -78,6 +78,8 @@ export interface MenuState {
   /** 铜钱、角色、咒印（开局准备里改，这里只显示） */
   coins: number;
   character: CharacterId;
+  /** 出战角色的头像（data URL） */
+  charFace?: string;
   curses: CurseId[];
   /** 咒印开了没有（撑到过一次天亮） */
   cursesOpen: boolean;
@@ -254,7 +256,7 @@ export class Menu {
         `<div class="yx-livenote">危险 ${LIVE_TIERS[s.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>${liveNote(s.live.tier)}</div>`;
       const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
       const prep =
-        `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="char"><b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
+        `<button type="button" class="yx-chip yx-prep yx-prepchar" data-a="prep" data-t="char">${s.charFace ? `<img alt="" src="${s.charFace}">` : ''}<b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
         (s.cursesOpen ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
         `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
       const maps = (['snow', 'yizhuang'] as const)

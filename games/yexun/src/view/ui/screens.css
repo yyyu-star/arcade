@@ -342,3 +342,6 @@
   .yx-result-panel .yx-row3 .yx-again { font-size: 19px; }
   .yx-tip span { font-size: 14px; }
 }
+
+.yx-prepchar { position: relative; }
+.yx-prepchar img { position: absolute; top: -14px; right: -4px; width: 30px; height: auto; pointer-events: none; }

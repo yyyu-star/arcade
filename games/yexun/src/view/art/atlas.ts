@@ -14,6 +14,7 @@ import { SPRITES8 } from './sprites8.ts';
 import { SPRITES9 } from './sprites9.ts';
 import { SPRITES10 } from './sprites10.ts';
 import { SPRITES11 } from './sprites11.ts';
+import { HERO_SPRITES } from './heroes.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -70,6 +71,18 @@ export function buildAtlas(res: number): Atlas {
   return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...digitDefs()], res);
 }
 
+/** 角色的第三张小图集（5 个角色 × 对局图和头像；小道士在主图集里）：不挤主图集的 2,048，开局就画好，对局和角色页都用 */
+export const HERO_TEX = 'atlasH';
+let heroCache: { res: number; atlas: Atlas } | null = null;
+export function buildHeroAtlas(res: number): Atlas {
+  if (heroCache?.res === res) return heroCache.atlas;
+  heroCache = { res, atlas: pack(HERO_SPRITES, res, HERO_TEX) };
+  return heroCache.atlas;
+}
+export function peekHeroAtlas(): Atlas | null {
+  return heroCache?.atlas ?? null;
+}
+
 let raidCache: { res: number; atlas: Atlas } | null = null;
 
 /** 夜探的第二张图集（巡夜将、石兽、房子、宝箱、门、宝物图标）；同一个 res 只画一次 */
@@ -91,7 +104,7 @@ export function makeIcons(atlas: Atlas): (key: string, px?: number) => string {
     const id = `${key}@${px}`;
     let url = cache.get(id);
     if (url) return url;
-    const hit = atlas.frames.has(key) ? atlas : (peekRaidAtlas()?.frames.has(key) ? peekRaidAtlas()! : atlas);
+    const hit = atlas.frames.has(key) ? atlas : peekHeroAtlas()?.frames.has(key) ? peekHeroAtlas()! : peekRaidAtlas()?.frames.has(key) ? peekRaidAtlas()! : atlas;
     const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
     const c = document.createElement('canvas');
     c.width = px;

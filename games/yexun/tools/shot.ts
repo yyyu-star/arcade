@@ -31,13 +31,15 @@ const FLOW = argv.includes('--flow');
 const PAUSE = argv.includes('--pause');
 /** CPU 降速倍数（CDP Emulation.setCPUThrottlingRate），模拟低端手机 */
 const CPU = Number(opt('--cpu') ?? 1);
-/** 只跑某个视口（desktop | phone） */
+/** 只跑某个视口（desktop | phone | phonep 手机竖屏） */
 const ONLY = opt('--view');
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
   { name: 'desktop', viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
   { name: 'phone', viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  // 手机竖屏（角色页、菜单要放得下）：只在 --view phonep 时跑
+  { name: 'phonep', viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
 ];
 
 /** 页面里检查：可点的东西 ≥ 44×44、文字没有溢出自己的框 */
@@ -67,7 +69,7 @@ const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '-
 const problems: string[] = [];
 try {
   for (const v of VIEWS) {
-    if (ONLY && v.name !== ONLY) continue;
+    if (ONLY ? v.name !== ONLY : v.name === 'phonep') continue;
     const ctx = await browser.newContext({ ...v, ...(VIDEO ? { recordVideo: { dir: OUT, size: v.viewport } } : {}) });
     const page = await ctx.newPage();
     if (CPU > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: CPU });
