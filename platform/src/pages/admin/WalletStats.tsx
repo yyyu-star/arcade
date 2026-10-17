@@ -1,7 +1,7 @@
 /** 管理页：全站筹码统计（近 30 天，每天一行）。 */
 import { useEffect, useState } from 'react';
 import { api, errorText, type WalletDayStats } from '../../api.ts';
-import { FormError, Panel } from '../../ui.tsx';
+import { FormError, Panel, Skeleton } from '../../ui.tsx';
 import { num, gameName } from './common.ts';
 
 /**
@@ -25,7 +25,7 @@ export function WalletStats() {
   return (
     <Panel icon="coin" title="筹码统计">
       {loadError && <FormError text={loadError} />}
-      {!days && !loadError && <p className="note">正在读取…</p>}
+      {!days && !loadError && <Skeleton rows={3} />}
       {days && days.length === 0 && <p className="note">还没有记录：每天凌晨 3 点多记一次前一天的。</p>}
       {days && days.length > 0 && (
         <table className="stats-table cards-on-phone" data-testid="wallet-stats">

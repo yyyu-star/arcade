@@ -139,3 +139,6 @@
 .code-status--used { background: var(--highlight-warm); border-color: var(--accent); color: #9a4416; }
 .code-status--expired { background: var(--soft); border-color: #b9aaa2; color: var(--muted); }
 .code-status--revoked { background: #f6e3e3; border-color: #c46a6a; color: #8a3434; }
+/* 宽表格的行（0.23.1）：电脑上鼠标移上去整行浅浅一亮，横着看一行对得上 */
+@media (hover: hover) { .stats-table tbody tr:hover { background: var(--highlight-warm); } }
+.users-split__hint .empty { padding: var(--s-4) 0; }

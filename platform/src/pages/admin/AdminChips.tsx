@@ -6,7 +6,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, errorText, type AdminAdjust, type Wallet } from '../../api.ts';
 import { num, signed, timeText } from '../../format.ts';
-import { FormError } from '../../ui.tsx';
+import { FormError, Skeleton } from '../../ui.tsx';
 
 
 /** "管理筹码"按钮，点了弹小窗口。只放在 /admin 最上面（维护者 0.9.7：外面重复了，只留管理页里的） */
@@ -118,7 +118,7 @@ function ChipsDialog({ onClose }: { onClose: () => void }) {
         <FormError text={error} />
         <h3>最近 10 次调整</h3>
         {recent === null ? (
-          <p className="note">正在读取…</p>
+          <Skeleton rows={3} />
         ) : recent.length === 0 ? (
           <p className="note">还没有调整过。</p>
         ) : (

@@ -1382,6 +1382,8 @@ async function adminOverview(browser: Browser): Promise<void> {
     }
     check(await page.locator('.panel__head').getByTestId('admin-chips-open').isVisible(), '"管理筹码"应该在"今天各游戏"的标题行里');
     await shot(page, `admin-console-${screen}`);
+    // 0.23.1：管理后台在 1280、1920 宽也不是窄列、不横着滑
+    if (screen === 'desktop') await deskLayout(page, 'admin-console');
     const trendOld = await page.getByTestId('trend').locator('tbody tr').nth(1).locator('td').nth(1).textContent();
     check(trendOld === '—', `0.10.7 以前的记录应该写"—"：${trendOld}`);
     const trendHead = await page.getByTestId('trend').locator('thead th').allTextContents();
