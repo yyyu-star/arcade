@@ -71,6 +71,10 @@ export const Ev = {
   Mob: 31,
   /** 竹子挨了一下：x, y = 竹丛脚底中心, a = 第几块（MapDef.blocks 的下标）, b = 剩下的血占几分之几（0–1）, c = 1 倒了 */
   Chop: 32,
+  /** 符剑合璧：飞剑给怪贴了一张符：x, y；a = 1 炸了，b = 半径 */
+  Seal: 33,
+  /** 焚天金钟：外圈火环烧一下：x, y, b = 半径 */
+  FireRing: 34,
   // 40–54 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,

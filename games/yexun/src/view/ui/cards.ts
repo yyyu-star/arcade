@@ -4,6 +4,7 @@
  */
 import { ELEMENT_SET, PASSIVES, TYPE_SETS, WEAPONS, MAX_WEAPON_LEVEL, type PassiveId, type WeaponId } from '../../content/weapons.ts';
 import { Pick, type Choice, type World } from '../../core/index.ts';
+import { mergeHint, type MergeHint } from './mergeHint.ts';
 import './cards.css';
 
 export interface CardView {
@@ -18,9 +19,17 @@ export interface CardView {
   tags?: string;
   /** 拿了以后凑成的套装："剑 2 件：暴击 +8%" */
   set?: string;
+  /** 拿了离合成 / 双修只差一步或正好凑成 */
+  merge?: MergeHint;
 }
 
 export function describe(w: World, c: Choice): CardView {
+  const v = describeBase(w, c);
+  const merge = mergeHint(w, c);
+  return merge ? { ...v, merge } : v;
+}
+
+function describeBase(w: World, c: Choice): CardView {
   if (c.kind === 'weapon') {
     const def = WEAPONS[c.id as WeaponId];
     const o = w.weapons.find((x) => x.id === def.id);
@@ -117,6 +126,7 @@ export class Cards {
         (c.tags ? `<span class="yx-pick-tags">${c.tags}</span>` : '') +
         `<span class="yx-pick-text">${c.text}</span>` +
         (c.set ? `<span class="yx-pick-set">${c.set}</span>` : '') +
+        (c.merge ? `<span class="yx-pick-merge${c.merge.ready ? ' ready' : ''}" style="--mc:${c.merge.color}"><b>${c.merge.dual ? '双' : '合'}</b>${c.merge.text}</span>` : '') +
         (c.hint ? `<span class="yx-pick-hint">${c.hint}</span>` : '');
       b.addEventListener('click', () => this.pick(i));
       row.appendChild(b);

@@ -747,6 +747,25 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Evolve:
           break;
+        case Ev.Merge: {
+          // 合成：用这个合成自己的颜色炸一圈（三个双修各一种）
+          const tint = parseInt(MERGES[ev.a[i]!]!.color.slice(1), 16);
+          this.fx.spawn({ frame: 'ring', x, y: y - 20, life: 700, s0: 0.5, s1: 7, a0: 1, a1: 0, tint, depth: 60 });
+          this.burst(x, y - 30, tint, 2.2);
+          break;
+        }
+        case Ev.Seal:
+          if (ev.a[i] === 0) {
+            // 贴符：怪头上一枚朱红小印
+            this.spark(x, y - 28, 0xd0362e, 1.2);
+          } else {
+            this.burst(x, y - 14, 0xff5a4a, ev.b[i]! / 34);
+            this.fx.spawn({ frame: 'ring', x, y: y - 10, life: 300, s0: 0.3, s1: (ev.b[i]! * 2) / 128, a0: 0.9, a1: 0, tint: 0xd0362e });
+          }
+          break;
+        case Ev.FireRing:
+          this.fx.spawn({ frame: 'ring', x, y: y - 8, life: 380, s0: ((ev.b[i]! * 2) / 128) * 0.8, s1: (ev.b[i]! * 2) / 128, a0: 0.8, a1: 0, tint: 0xff8a2a, depth: 60 });
+          break;
         case Ev.Arrive:
           // 夜探里守卫开局就在场上，出场横幅和 Boss 音乐不放（守卫发现主角时由"!"和石兽的预警说话）
           if (!this.raid) this.onArrive(ev.a[i]!);
@@ -917,11 +936,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 一件升级的展示内容：图标、名字、说明；evolve 表示进化 / 合成（更隆重） */
-  private chestInfo(code: number): { icon: string; title: string; sub: string; evolve: boolean } {
+  private chestInfo(code: number): { icon: string; title: string; sub: string; evolve: boolean; tint?: string } {
     const w = this.w;
     if (code >= MERGE_CODE) {
       const m = MERGES[code - MERGE_CODE]!;
-      return { icon: m.icon, title: m.name, sub: `合成！${m.desc}。空出一个法器格`, evolve: true };
+      return { icon: m.icon, title: m.name, sub: `${m.dual ? '双修' : '合成'}！${m.desc}。空出一个法器格`, evolve: true, tint: m.color };
     }
     if (code >= 100) {
       const p = PASSIVES[PASSIVE_IDS[code - 100]!];
@@ -958,7 +977,7 @@ export class GameScene extends Phaser.Scene {
       this.d.banners.reveal(this.d.icon(it.icon), it.title, it.sub, it.evolve, () => {
         this.hold = 0;
         this.d.onChest?.();
-      });
+      }, it.tint);
       return;
     }
     // 光效按核心说的件数（big），列表按实际收到的件数；两者一致，不一致以实际为准

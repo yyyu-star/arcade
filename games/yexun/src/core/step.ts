@@ -49,6 +49,7 @@ import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
   MAX_WEAPONS,
+  DUAL_FX,
   MERGES,
   PASSIVE_IDS,
   PASSIVES,
@@ -88,6 +89,8 @@ function gridOf(w: World): Grid {
 /** 查询结果要在遍历时再查别的，先拷到这里 */
 const scratch = new Int32Array(MAX_ENEMIES);
 const scratch2 = new Int32Array(MAX_ENEMIES);
+/** 双修：到点要炸的符 */
+const sealDue = new Int32Array(MAX_ENEMIES);
 
 export function createWorld(setup: Setup): World {
   const w = new World(setup);
@@ -159,6 +162,7 @@ export function step(w: World, dir: number, choice = -1): void {
   w.dPY.set(w.dY);
 
   movePlayer(w, dir);
+  if (w.marks > 0) clearDeadSeals(w);
   spawnWaves(w);
   const g = gridOf(w);
   markSlow(w, g);
@@ -168,6 +172,7 @@ export function step(w: World, dir: number, choice = -1): void {
   if (w.blocks.length) blockEnemies(w);
   fireWeapons(w, g);
   moveShots(w, g);
+  dualTick(w, g);
   touchPlayer(w, g);
   if (w.quake) quake(w, g, w.x, w.y, CHAR_FX.pangArea, CHAR_FX.pangKnock);
   if (w.setup.character === 'gengfu' && w.tick > 0 && w.tick % CHAR_FX.gongEvery === 0) gong(w, g);
@@ -1706,6 +1711,7 @@ function shieldTick(w: World, g: Grid, k: number, wp: { timer: number }, s: Weap
     w.shieldBurst = false;
     w.ev.push(Ev.Shield, w.x, w.y, 0, e.area);
     chop(w, w.x, w.y, e.area, e.dmg);
+    if (w.merges.includes('fenzhong')) shieldFire(w);
     const n = g.query(w, w.x, w.y, e.area);
     for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
     for (let q = 0; q < n; q++) {
@@ -2187,6 +2193,7 @@ function moveShots(w: World, g: Grid): void {
       continue;
     }
     if (kind === Shot.Petal) {
+      if (w.merges.includes('linghua')) homePetal(w, g, i);
       if (--w.sLife[i]! > 0) continue;
       const cx = w.sX[i]!;
       const cy = w.sY[i]!;
@@ -2284,7 +2291,7 @@ function moveShots(w: World, g: Grid): void {
       w.sDist[i]! += s.speed;
       const n = g.query(w, w.sX[i]!, w.sY[i]! + 20, w.sR[i]!);
       for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
-      for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+      for (let q = 0; q < n; q++) if (hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit)) sealEnemy(w, scratch[q]!);
       if (w.sDist[i]! >= s.duration) w.sState[i] = 2;
       continue;
     }
@@ -2303,7 +2310,7 @@ function moveShots(w: World, g: Grid): void {
     w.sY[i]! += w.sVY[i]!;
     const n = g.query(w, w.sX[i]!, w.sY[i]! + 20, w.sR[i]!);
     for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
-    for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+    for (let q = 0; q < n; q++) if (hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit)) sealEnemy(w, scratch[q]!);
   }
 }
 
@@ -2646,6 +2653,108 @@ function recompute(w: World): void {
     if (d.type === '符' && ch === 'fushi') ws.cd *= CHAR_FX.fushiCd;
     return ws;
   });
+}
+
+// ───────────────────────── 双修（DESIGN.md 3.3b；数值在 DUAL_FX） ─────────────────────────
+
+/** 符剑合璧：飞剑打中的怪贴一张符（已有就不重贴），DUAL_FX.seal.delay 拍后炸 */
+function sealEnemy(w: World, i: number): void {
+  if (w.eMark[i]! > 0 || !w.eAlive[i] || !w.merges.includes('fujian')) return;
+  w.eMark[i] = w.tick + DUAL_FX.seal.delay;
+  w.marks++;
+  w.ev.push(Ev.Seal, w.eX[i]!, w.eY[i]!, 0, 0, i);
+}
+
+/** 怪没了（被打死、被清掉）就把它身上的符一并去掉；在刷怪之前跑，免得符落到顶替它的新怪身上 */
+function clearDeadSeals(w: World): void {
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (w.eMark[i]! > 0 && !w.eAlive[i]) {
+      w.eMark[i] = 0;
+      w.marks--;
+    }
+  }
+}
+
+/** 双修每拍要做的事：贴着的符到点就炸；焚天金钟的火环 */
+function dualTick(w: World, g: Grid): void {
+  if (w.marks > 0) {
+    const kt = w.weapons.findIndex((o) => o.id === 'talisman');
+    const dmg = kt >= 0 ? eff(w, w.wstats[kt]!).dmg * DUAL_FX.seal.mul : 0;
+    const area = DUAL_FX.seal.area * w.stats.areaMul;
+    // 先收齐到点的，再统一炸（炸的时候怪可能死，不能边扫边改）
+    let due = 0;
+    for (let i = 0; i < MAX_ENEMIES; i++) {
+      if (w.eMark[i]! === 0) continue;
+      if (!w.eAlive[i]) {
+        w.eMark[i] = 0;
+        w.marks--;
+      } else if (w.tick >= w.eMark[i]!) sealDue[due++] = i;
+    }
+    for (let q = 0; q < due; q++) {
+      const i = sealDue[q]!;
+      w.eMark[i] = 0;
+      w.marks--;
+      if (!w.eAlive[i] || kt < 0) continue;
+      const bx = w.eX[i]!;
+      const by = w.eY[i]!;
+      w.ev.push(Ev.Seal, bx, by, 1, area, i);
+      const n = g.query(w, bx, by, area);
+      for (let r = 0; r < n; r++) scratch2[r] = g.out[r]!;
+      for (let r = 0; r < n; r++) hitEnemy(w, scratch2[r]!, dmg, -1, w.eX[scratch2[r]!]! - bx, w.eY[scratch2[r]!]! - by, 0, 0, kt);
+    }
+  }
+  if (w.shield > 0 && w.tick % DUAL_FX.ring.every === 0 && w.merges.includes('fenzhong')) {
+    const kg = w.weapons.findIndex((o) => o.id === 'gourd');
+    if (kg < 0) return;
+    const R = DUAL_FX.ring.radius * w.stats.areaMul;
+    const inner = R * DUAL_FX.ring.inner;
+    const dmg = eff(w, w.wstats[kg]!).dmg * DUAL_FX.ring.mul;
+    w.ev.push(Ev.FireRing, w.x, w.y, 0, R);
+    const n = g.query(w, w.x, w.y, R);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) {
+      const i = scratch[q]!;
+      const dx = w.eX[i]! - w.x;
+      const dy = w.eY[i]! - w.y;
+      if (dx * dx + dy * dy < inner * inner) continue;
+      hitEnemy(w, i, dmg, -1, dx, dy, 0, 0, kg);
+    }
+  }
+}
+
+/** 焚天金钟：盾碎时在外圈留几摊火（用火葫芦的火摊，伤害按葫芦算） */
+function shieldFire(w: World): void {
+  const kg = w.weapons.findIndex((o) => o.id === 'gourd');
+  if (kg < 0) return;
+  const F = DUAL_FX.ring;
+  const dmg = eff(w, w.wstats[kg]!).dmg * F.poolMul;
+  const life = Math.round(F.poolLife * w.stats.durMul);
+  const r = F.radius * w.stats.areaMul * 0.8;
+  for (let j = 0; j < F.pools; j++) {
+    const a = Math.floor((j * DIR_N) / F.pools) + w.face;
+    const bx = w.x + dcos(a) * r;
+    const by = w.y + dsin(a) * r;
+    addShot(w, Shot.Burn, bx, by, 0, 0, life, dmg, F.poolR, 0, kg, 0);
+    w.ev.push(Ev.Burn, bx, by, 0, F.poolR, life);
+  }
+}
+
+/** 铃落桃花：空中的花瓣朝最近的怪挪过去（挪到头顶就停），落地时的圈也大一点 */
+function homePetal(w: World, g: Grid, i: number): void {
+  const P = DUAL_FX.petal;
+  if (w.sR[i]! < 34 + P.bonusR) w.sR[i] = 34 + P.bonusR;
+  const t = nearest(w, g, w.sX[i]!, w.sY[i]!, P.reach);
+  if (t < 0) return;
+  const dx = w.eX[t]! - w.sX[i]!;
+  const dy = w.eY[t]! - w.sY[i]!;
+  const d = fsqrt(dx * dx + dy * dy);
+  if (d <= P.speed) {
+    w.sX[i] = w.eX[t]!;
+    w.sY[i] = w.eY[t]!;
+  } else {
+    w.sX[i]! += (dx / d) * P.speed;
+    w.sY[i]! += (dy / d) * P.speed;
+  }
 }
 
 /** 测试和调试用：开局直接给一件法器（到某一级、可直接进化）。规则照常，只是跳过选卡 */

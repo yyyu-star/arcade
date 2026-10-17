@@ -80,7 +80,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   { id: 'evolve_6', group: '法器', name: '六器归位', desc: '累计让 6 种法器进化过', coins: 120, test: (_r, c) => c.weaponsEvolved.length >= 6 },
   { id: 'evolve_all', group: '法器', name: '万法归宗', desc: '累计让全部法器都进化过', coins: 300, title: '万法归宗', test: (_r, c) => c.weaponsEvolved.length >= nWeapons },
   { id: 'merge_1', group: '法器', name: '二器合一', desc: '合成一次', coins: 80, test: (_r, c) => c.merges.length >= 1 },
-  { id: 'merge_all', group: '法器', name: '合成宗师', desc: '三种合成都做过', coins: 200, title: '合成宗师', test: (_r, c) => MERGES.every((m) => c.merges.includes(m.id)) },
+  { id: 'merge_all', group: '法器', name: '合成宗师', desc: '三种合成都做过', coins: 200, title: '合成宗师', test: (_r, c) => MERGES.filter((m) => !m.dual).every((m) => c.merges.includes(m.id)) },
   { id: 'use_6', group: '法器', name: '兵器架', desc: '累计用过 6 种法器', coins: 30, test: (_r, c) => c.weaponsUsed.length >= 6 },
   { id: 'use_all', group: '法器', name: '十二件齐', desc: '累计用过全部法器', coins: 100, test: (_r, c) => c.weaponsUsed.length >= nWeapons },
   { id: 'max_all', group: '法器', name: '件件满级', desc: '累计把全部法器都升到过满级', coins: 200, test: (_r, c) => c.weaponsMaxed.length >= nWeapons },

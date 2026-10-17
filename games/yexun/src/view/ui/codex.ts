@@ -134,12 +134,16 @@ export class Codex {
         );
       })
       .join('');
+    // 合成页：配方一直写明（让玩家知道凑什么），没做成过的压暗；双修用自己的颜色描边
     const merges = MERGES.map((m) => {
       const done = rec.merges.includes(m.id);
-      const ic = WEAPONS[m.a].icon;
-      return done
-        ? `<div class="yx-ccard done"><img alt="" src="${this.icons(ic)}"><b>${esc(m.name)}</b><span>合成</span><p>${esc(m.desc)}</p><em>合成过</em></div>`
-        : `<div class="yx-ccard lock"><img class="sil" alt="" src="${this.icons(ic)}"><b>？？？</b><span>合成</span><em>两件进化后的法器在宝箱里合成</em></div>`;
+      const recipe = `${esc(WEAPONS[m.a].evolve!.name)} + ${esc(WEAPONS[m.b].evolve!.name)}`;
+      const tags = m.dual ? `${esc(WEAPONS[m.a].el)}·${esc(WEAPONS[m.a].type)} × ${esc(WEAPONS[m.b].el)}·${esc(WEAPONS[m.b].type)}` : '合成';
+      return (
+        `<div class="yx-ccard ${done ? 'done' : 'lock'}${m.dual ? ' dual' : ''}" style="--mc:${m.color}">` +
+        `<img${done ? '' : ' class="sil"'} alt="" src="${this.icons(done ? m.icon : WEAPONS[m.a].icon)}"><b>${m.dual ? '双修 · ' : ''}${esc(m.name)}</b><span>${tags}</span>` +
+        `<p class="evo">${recipe}</p><p>${esc(m.desc)}</p>${done ? '<em>合成过</em>' : '<em>两件进化后在宝箱里合成</em>'}</div>`
+      );
     }).join('');
     const usedN = rec.weaponsUsed.length;
     return `<div class="yx-csub">用过 ${usedN}/${ids.length} · 满级 ${rec.weaponsMaxed.length} · 进化 ${rec.weaponsEvolved.length} · 合成 ${rec.merges.length}/${MERGES.length}</div><div class="yx-cgrid">${cards}${merges}</div>`;

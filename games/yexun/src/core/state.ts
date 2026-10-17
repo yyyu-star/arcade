@@ -279,6 +279,9 @@ export class World {
   readonly eLastBy = new Int8Array(MAX_ENEMIES);
   /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
   readonly eBind = new Int32Array(MAX_ENEMIES);
+  /** 符剑合璧：身上的符几拍炸（0 = 没贴）；marks 是现在贴着几张，没有时不用扫 */
+  readonly eMark = new Int32Array(MAX_ENEMIES);
+  marks = 0;
   /** Boss 打到第几段（0 起） */
   readonly ePhase = new Uint8Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
