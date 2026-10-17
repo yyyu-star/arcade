@@ -118,6 +118,23 @@ export const GAMES: readonly GameEntry[] = [
     wallet: false,
     online: { label: '好友房', query: 'online=1' },
   },
+  {
+    // 夜巡 1.0 整体验收通过后才登记上线（主线 2026-10-16：不先登记"即将上线"）。榜名照夜巡交分用的（games/yexun/src/online/score.ts）
+    id: 'yexun',
+    name: '夜巡',
+    tagline: '雪夜古镇，只管走位，撑到天亮',
+    desc: '道士夜巡雪夜古镇：只管走位，符咒、桃木剑自己出手，升级三选一、法器进化。守夜是成群的跳尸纸人扑上来，撑到天亮；夜探是进镇搜宝，趁镇门开着撤出去。',
+    tags: ['动作', '单人', '守夜·夜探', '约 15 分钟一局'],
+    cover: '/covers/yexun.webp',
+    path: '/games/yexun/',
+    devUrl: 'http://localhost:5178/',
+    status: 'playable',
+    boards: ['vigil', 'raid', 'endless'],
+    daily: [
+      { id: 'vigil', name: '守夜' },
+      { id: 'raid', name: '夜探' },
+    ],
+  },
 ];
 
 /** 登记过的游戏 id：接口的游戏白名单（云存档、分数榜、钱包），只从上面这一份派生 */

@@ -520,6 +520,10 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   const racing = friend.page.locator('.card', { hasText: '飞驰' });
   check((await racing.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/racing/', '飞驰"进入游戏"应该指向 /games/racing/');
   check((await racing.getByRole('link', { name: '好友房' }).getAttribute('href')) === '/games/racing/?online=1', '飞驰"好友房"应该指向 /games/racing/?online=1');
+  // 《夜巡》（0.22.0）：单机，只有"进入游戏"，没有好友房
+  const yexun = friend.page.locator('.card', { hasText: '夜巡' });
+  check((await yexun.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/yexun/', '夜巡"进入游戏"应该指向 /games/yexun/');
+  check((await yexun.getByRole('link', { name: '好友房' }).count()) === 0, '夜巡不该有"好友房"');
   for (const img of await friend.page.locator('.card__cover').all()) {
     await img.scrollIntoViewIfNeeded();
     await img.evaluate((el: HTMLImageElement) => el.decode());
@@ -1504,7 +1508,8 @@ async function boardsPage(browser: Browser): Promise<void> {
   const board = (entries: ReturnType<typeof row>[], me: { rank: number; value: number } | null = null) => ({ entries, me });
   const all = {
     week: '2026-10-12',
-    daily: { kaipan: 'daily-2026-10-15-v2' },
+    // 夜巡（0.22.0）一天两个每日榜（子榜，0.16.0）：今天守夜有人交了分，夜探还没人交
+    daily: { kaipan: 'daily-2026-10-15-v2', 'yexun:vigil': 'daily-2026-10-15-vigil', 'yexun:raid': null },
     boards: {
       total: board([row(0, '老王的徒弟', 48_000), row(1, '小明', 12_500), row(2, '某人', 12_500, 2, true), row(3, '输光了', -6_000, 4)], { rank: 2, value: 12_500 }),
       kaipan: board([row(1, '小明', 12_000)]),
@@ -1528,6 +1533,13 @@ async function boardsPage(browser: Browser): Promise<void> {
     // 跟开盘约定的格式（docs/platform-backend.md 15.12）
     await page.route('**/games/kaipan/daily.json', (r) =>
       r.fulfill(json({ note: '每天一样的行情，比谁打得好。', score: [{ from: 1e11, text: '通关 · {n} 元' }, { text: '撑了 {n} 个月' }] })),
+    );
+    // 照夜巡 public/daily.json 的写法（平台只读，不引用游戏的文件）：撑到天亮的分数加了 100 万
+    await page.route('**/api/boards/yexun/daily-2026-10-15-vigil?scope=*', (r) =>
+      r.fulfill(json({ entries: [{ rank: 1, userId: u(1), displayName: '小明', avatar: null, score: 1_000_000 + 1_320, isMe: false }, { rank: 2, userId: u(2), displayName: '某人', avatar: null, score: 600, isMe: true }], me: { rank: 2, score: 600 } })),
+    );
+    await page.route('**/games/yexun/daily.json', (r) =>
+      r.fulfill(json({ note: '今天所有人玩同一局。', score: [{ text: '{n}' }], boards: { vigil: { note: '守夜：撑到天亮的比拼击杀，没撑到的比谁撑得久。', score: [{ from: 1_000_000, text: '天亮 · 斩 {n}' }, { text: '撑了 {n} 秒' }] }, raid: { note: '夜探：比谁撤出时带出的宝物更值钱。', score: [{ text: '带出 {n} 铜钱' }] } } })),
     );
     await page.goto(`${BASE}/`);
     await page.locator('.topbar').getByRole('link', { name: '排行' }).click();
@@ -1554,6 +1566,13 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.locator('.rank--me').getByText('撑了 9 个月').waitFor();
     if (screen === 'desktop') await shot(page, 'boards-friends-week');
     await page.getByRole('button', { name: '全部' }).click();
+    // 夜巡的两个子榜各一个标签，分数按子榜的写法
+    await page.getByRole('link', { name: '夜巡每日·守夜' }).click();
+    await page.getByText('天亮 · 斩 1,320').waitFor();
+    await page.locator('.rank--me').getByText('撑了 600 秒').waitFor();
+    await page.getByText('撑到天亮的比拼击杀').waitFor();
+    check((await page.getByRole('link', { name: '夜巡每日·夜探' }).count()) === 1, '夜巡应该还有"夜探"的每日标签');
+    if (screen === 'desktop') await shot(page, 'boards-yexun-daily');
     await page.getByRole('link', { name: '称号收集' }).click();
     await page.getByTestId('my-rank').getByText('第 73 名').waitFor();
     if (screen === 'portrait') await shot(page, 'boards-titles-portrait');

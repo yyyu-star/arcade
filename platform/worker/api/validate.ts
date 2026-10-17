@@ -27,6 +27,8 @@ export const RESERVED_PERSONAS: Readonly<Record<string, readonly string[]>> = {
   texas: ['稳哥', '阿飙', '老好', '慢慢', '算盘', '江湖', '虎子', '老鹰', '叨叨', '小白'],
   mahjong: ['幺妹儿', '熊猫哥', '盖碗儿', '兔头哥', '火锅婆婆', '板凳儿'], // 0.10.9，麻将上线前先加上
   racing: ['嘟嘟', '慢半拍', '冲冲', '跟屁虫', '刹车王', '弯道王', '精算师'], // 0.10.22，飞驰上线前先加上
+  // 0.22.0，夜巡上线前先加上：没有电脑对手，按主线的意思把可选的角色和有名字的精英、Boss 保留下来（games/yexun/src/content/meta.ts、画面层的出场横幅）
+  yexun: ['小道士', '符师', '剑侠', '胖师叔', '更夫', '采药女', '尸王', '纸扎老爷', '巡夜将', '镇门石兽', '石狮怪', '跳尸将军', '白狐'],
 };
 /**
  * 繁体折成简体，只收保留名和保留词里用到的字（0.12.2）：'老張' 和 '老张' 在牌桌上看着是同一个人。
@@ -35,7 +37,8 @@ export const RESERVED_PERSONAS: Readonly<Record<string, readonly string[]>> = {
 const TRAD_TO_SIMP: Readonly<Record<string, string>> = {
   張: '张', 強: '强', 趙: '赵', 穩: '稳', 飆: '飙', 飈: '飙', 盤: '盘', 鷹: '鹰', 兒: '儿', 貓: '猫', 蓋: '盖',
   頭: '头', 鍋: '锅', 衝: '冲', 沖: '冲', 蟲: '虫', 剎: '刹', 車: '车', 彎: '弯', 師: '师', 電: '电', 腦: '脑',
-  員: '员', 統: '统',
+  員: '员', 統: '统', 劍: '剑', 俠: '侠', 採: '采', 藥: '药', 屍: '尸', 紙: '纸', 紮: '扎', 爺: '爷', 將: '将', 門: '门', 獸: '兽',
+  獅: '狮', 鎮: '镇',
 };
 const foldTrad = (s: string): string => s.replace(/[^\x00-\x7f]/gu, (ch) => TRAD_TO_SIMP[ch] ?? ch);
 const PERSONA_NAMES = new Set(Object.values(RESERVED_PERSONAS).flat());
