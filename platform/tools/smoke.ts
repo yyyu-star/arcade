@@ -1885,6 +1885,31 @@ async function phoneIssues(page: Page): Promise<string[]> {
   });
 }
 
+/**
+ * 手机上"回去接着打"的底部固定条（0.24.1）：贴着屏幕底边、约 56 高，按钮够大，游戏名和数字没被省略，
+ * 页面里只有这一条（原来那条就是它），翻到底时页脚不被它盖住
+ */
+async function stakeBarIssues(page: Page, viewport: { width: number; height: number }): Promise<string[]> {
+  const out: string[] = [];
+  const bar = page.getByTestId('nudge-stake');
+  const box = (await bar.boundingBox())!;
+  if (Math.abs(box.y + box.height - viewport.height) > 1) out.push(`固定条没贴着底边：底在 ${Math.round(box.y + box.height)}`);
+  if (box.height < 52 || box.height > 64) out.push(`固定条高 ${Math.round(box.height)}，要 56 左右`);
+  const btn = (await bar.getByRole('link', { name: '回去接着打' }).boundingBox())!;
+  if (btn.height < 44) out.push(`"回去接着打"高 ${Math.round(btn.height)}，不到 44`);
+  const cut = await bar.locator('.nudge__keep').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent));
+  if (cut.length) out.push(`游戏名或数字被省略了：${cut.join('、')}`);
+  if (!/德州扑克.*2,000/.test((await bar.textContent()) ?? '')) out.push('固定条上没写游戏名和数字');
+  if ((await page.getByRole('link', { name: '回去接着打' }).count()) !== 1) out.push('"回去接着打"不止一个');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(100);
+  const foot = (await page.locator('.foot').boundingBox())!;
+  const top = (await bar.boundingBox())!.y;
+  if (foot.y + foot.height > top + 1) out.push(`翻到底时页脚被固定条盖住：页脚底 ${Math.round(foot.y + foot.height)}，条顶 ${Math.round(top)}`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  return out;
+}
+
 async function phoneAudit(browser: Browser): Promise<void> {
   const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
   const games = { kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000 }), texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }) };
@@ -1917,9 +1942,9 @@ async function phoneAudit(browser: Browser): Promise<void> {
     wallet: ['[data-testid="wallet-balance"]', '.wallet__relief button'],
     boards: ['[data-testid="my-rank"]'],
   };
-  // 主按钮（主线清单里的主操作）：大厅的"回去接着打"和"领补给"、钱包的补给
+  // 主按钮（主线清单里的主操作）：大厅的"回去接着打"（继续）、钱包的补给。大厅的"领补给"一天一次、钱包页底下也有，不算大厅的主操作
   const reach: Record<string, string[]> = {
-    home: ['[data-testid="nudge-stake"] a', '[data-testid="nudge-relief"] button'],
+    home: ['[data-testid="nudge-stake"] a'],
     wallet: ['.wallet__relief button'],
   };
   const problems: string[] = [];
@@ -1960,6 +1985,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
           if (mid < viewport.height / 3) problems.push(`${label} ${name}：主按钮 ${sel} 在屏幕最上面三分之一，单手够不着（中心 ${Math.round(mid)}，要 ≥ ${Math.round(viewport.height / 3)}）`);
         }
       }
+      if (name === 'home') problems.push(...(await stakeBarIssues(page, viewport)).map((p) => `${label} home：${p}`));
       await shot(page, `phone-${label}-${name}`);
     }
     // 管理筹码小窗口在 SE 上不出屏、里面能点的够大
@@ -1983,6 +2009,17 @@ async function phoneAudit(browser: Browser): Promise<void> {
         for (const p of await phoneIssues(page)) problems.push(`转屏 ${vp.width}×${vp.height} home：${p}`);
       }
     }
+    await ctx.close();
+  }
+  // 电脑上（宽窗口、鼠标）还是页面里的一条提示，不是底部固定条
+  {
+    const { ctx, page } = await newPage(browser, '手机清单 电脑对照', 'desktop');
+    await mockAdmin(page);
+    await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
+    await page.route('**/api/wallet', (r) => r.fulfill(json(wallet)));
+    await page.goto(`${BASE}/`);
+    const pos = await page.getByTestId('nudge-stake').evaluate((el) => getComputedStyle(el).position);
+    if (pos !== 'static') problems.push(`电脑大厅："回去接着打"应该是页面里的一条提示，实际 position=${pos}`);
     await ctx.close();
   }
   for (const p of problems) console.log(`  · ${p}`);

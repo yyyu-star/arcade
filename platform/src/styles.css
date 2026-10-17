@@ -501,3 +501,28 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   .people__link { display: inline-block; }
   .stats-table { font-size: var(--fs-sm); }
 }
+/*
+ * 桌上还有筹码时"回去接着打"做成底部固定条（0.24.1）：手机竖着拿时大厅这条提示在屏幕最上面三分之一，单手够不着。
+ * 用的就是页面里原来那条（同一个元素换样式），所以不会上下各一条；页面底部让出同样高，不盖住最后一张卡和页脚
+ */
+@media (pointer: coarse), (max-width: 959px) {
+  .nudge--stake {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; margin: 0;
+    flex-wrap: nowrap; gap: var(--s-3);
+    min-height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: var(--s-1) max(var(--s-4), env(safe-area-inset-right, 0px)) calc(var(--s-1) + env(safe-area-inset-bottom, 0px)) max(var(--s-4), env(safe-area-inset-left, 0px));
+    border-width: var(--bw) 0 0; border-radius: 0; box-shadow: 0 -4px 12px rgb(40 25 30 / 12%);
+  }
+  /* 只有这一条时它飘到底下去了，原位置不再空出一段 */
+  .nudges:has(> .nudge--stake:only-child) { margin: 0; }
+  .nudge--stake .nudge__what { display: flex; min-width: 0; white-space: nowrap; font-weight: 700; }
+  .nudge--stake .nudge__keep { flex: none; }
+  /* 弹性盒里开头的空格会被吃掉，数字前的空隙用边距补 */
+  .nudge--stake .nudge__keep:last-child { margin-left: 0.3em; }
+  .nudge--stake .nudge__mid { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .nudge--stake > a {
+    flex: none; justify-content: center; min-height: var(--tap); padding: 0 var(--s-4);
+    border: var(--bw) solid var(--line); border-radius: var(--r-pill); background: var(--accent); color: var(--white); text-decoration: none; box-shadow: var(--sh-sm);
+  }
+  .page:has(.nudge--stake) { padding-bottom: calc(var(--s-12) + 56px + env(safe-area-inset-bottom, 0px)); }
+}
