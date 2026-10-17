@@ -5,8 +5,8 @@
  */
 import Phaser from 'phaser';
 import { DAWN_TICK, DIFFICULTIES, type Difficulty } from './content/waves.ts';
-import { PASSIVE_IDS, PASSIVES, WEAPONS, type WeaponId } from './content/weapons.ts';
-import { createWorld, grantWeapon, openChestNow, step, type World } from './core/index.ts';
+import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
+import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type World } from './core/index.ts';
 import { loadSave, recordRun, settings, writeSave } from './platform/save.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
 import { music } from './view/audio/music.ts';
@@ -129,7 +129,7 @@ async function boot(): Promise<void> {
   };
 
   const buildRows = (w: World): BuildRow[] => [
-    ...w.weapons.map((o) => ({ ...weaponLook(w, o), level: o.evolved ? 9 : o.level, dmg: o.dmg, kills: o.kills })),
+    ...w.weapons.map((o) => ({ ...weaponLook(w, o), level: o.evolved ? 9 : o.level, dmg: o.dmg, kills: o.kills, hint: evolveHint(w, o) })),
     ...PASSIVE_IDS.filter((id) => w.passives[id] !== undefined).map((id) => ({ icon: PASSIVES[id].icon, name: PASSIVES[id].name, level: w.passives[id]!, dmg: -1, kills: 0 })),
   ];
 
@@ -144,7 +144,7 @@ async function boot(): Promise<void> {
     if (!world || ended || pause.open || confirm.open) return;
     setPaused(true);
     tips.hide();
-    pause.show(buildRows(world), Math.max(0, (DAWN_TICK - world.tick) / 30));
+    pause.show(buildRows(world), Math.max(0, (DAWN_TICK - world.tick) / 30), setLines(world));
   };
   pause.onResume = () => {
     pause.hide();
@@ -296,6 +296,26 @@ async function boot(): Promise<void> {
     game.scale.resize(s.w * r, s.h * r);
     game.scale.setZoom(1 / r);
     scene?.cameras.main.setZoom(worldZoom(s.w, s.h) * r);
+  });
+}
+
+/** 进化还差什么（13.4：卡片和暂停页写清"还差哪个被动"） */
+function evolveHint(w: World, o: OwnedWeapon): string | undefined {
+  const evo = WEAPONS[o.id].evolve;
+  if (!evo || o.evolved) return undefined;
+  const has = (w.passives[evo.with] ?? 0) > 0;
+  const p = PASSIVES[evo.with].name;
+  if (o.level >= 8) return has ? `下个宝箱进化成${evo.name}` : `还差${p}就能进化`;
+  return `满级 + ${p}${has ? '（已有）' : ''} → ${evo.name}`;
+}
+
+/** 凑成的套装，写成"剑 2 件 · 暴击 +8%" */
+function setLines(w: World): string[] {
+  return w.sets.map((s) => {
+    const k = s.slice(0, -1);
+    const n = Number(s.slice(-1));
+    const desc = k in TYPE_SETS ? TYPE_SETS[k as keyof typeof TYPE_SETS][n - 2] : ELEMENT_SET[n - 2];
+    return `${k} ${n} 件 · ${desc}`;
   });
 }
 

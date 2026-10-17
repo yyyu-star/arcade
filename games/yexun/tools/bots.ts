@@ -2,22 +2,30 @@
  * 配平用的玩家模型（DESIGN.md 第 8 节，docs/balance.md 第 1 节）：确定性（带种子），只看主角周围一屏以内的东西。
  * - 小白：每 10 拍才重新决定方向，躲得粗、带噪声，见什么捡什么；升级随便挑。
  * - 普通：每 3 拍决定一次，按"怪的推力 + 魂珠的拉力 + 离墙的推力"走（势场），会躲火球；升级按流派挑，奔着进化去。
- * 流派（普通玩家选卡的偏好）：剑阵、符箓、镇守，见 DESIGN.md 3.4。
+ * 流派（普通玩家选卡的偏好）：剑阵、符箓、镇守、木（五雷）、火，见 DESIGN.md 3.4；普通玩家三张都不想要时先刷新，刷新用完再跳过。
  */
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
 import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
-import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, type Choice, type World } from '../src/core/index.ts';
+import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
 
 export type Skill = 'novice' | 'normal';
-export type Build = 'sword' | 'talisman' | 'ward';
+export type Build = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire';
+export const BUILD_IDS: Build[] = ['sword', 'talisman', 'ward', 'wood', 'fire'];
 
 /** 各流派想要的法器（按先后）和被动（进化要的放前面） */
 const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] }> = {
-  sword: { weapons: ['sword', 'flysword', 'coins', 'thunder'], passives: ['zhusha', 'caoxie', 'lingpai', 'xianglu', 'nianzhu', 'xiantao'] },
-  talisman: { weapons: ['talisman', 'thunder', 'sword', 'flysword'], passives: ['xianglu', 'nianzhu', 'zhusha', 'lingpai', 'caoxie', 'xiantao'] },
-  ward: { weapons: ['bell', 'coins', 'sword', 'thunder'], passives: ['xiantao', 'daopao', 'nianzhu', 'zhusha', 'xianglu', 'luopan'] },
+  // 剑阵：剑类三件（剑 3 件暴击伤害），金 2 件
+  sword: { weapons: ['sword', 'flysword', 'coins', 'thunder', 'bell'], passives: ['zhusha', 'caoxie', 'lingpai', 'xianglu', 'nianzhu', 'xiantao'] },
+  // 符箓：符类三件（符 3 件多发一张）
+  talisman: { weapons: ['talisman', 'thunder', 'crane', 'sword', 'flysword'], passives: ['xianglu', 'nianzhu', 'yinhun', 'zhusha', 'lingpai', 'caoxie'] },
+  // 镇守：镇类四件（镇 3 件近身减速），靠光环和光波
+  ward: { weapons: ['bell', 'mirror', 'shield', 'rope', 'sword'], passives: ['xiantao', 'daopao', 'huangli', 'modou', 'nianzhu', 'zhusha'] },
+  // 木（五雷）：雷符、桃木剑、桃花雨，木 3 件（相生到火）
+  wood: { weapons: ['thunder', 'sword', 'petals', 'talisman', 'gourd'], passives: ['nianzhu', 'zhusha', 'lingzhi', 'xianglu', 'luopan', 'xiantao'] },
+  // 火：符咒、火葫芦，火 2 件
+  fire: { weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'], passives: ['xianglu', 'luopan', 'zhusha', 'nianzhu', 'lingpai', 'caoxie'] },
 };
 
 const VIEW = 560;
@@ -142,6 +150,11 @@ export class Bot {
         best = i;
       }
     });
+    // 三张都不在计划里（分数很低）：先刷新，刷新用完再跳过；还没凑够法器时不跳（拿到什么都比没有强）
+    if (bs < 12) {
+      if (w.rerolls > 0) return Pick.Reroll;
+      if (w.weapons.length >= 4) return Pick.Skip;
+    }
     return best;
   }
 

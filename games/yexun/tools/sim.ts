@@ -1,5 +1,5 @@
 /**
- * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward] [--threads N]
+ * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--threads N]
  *
  * 每个组合跑 N 局（种子 1..N），报：胜率（撑到天亮）± 2 倍标准误、平均撑了多久、打倒尸王的比例、
  * 节奏指标（第一次升级、3 分钟 / 5 分钟内升级次数、全局升级次数，DESIGN.md 13.3）、击杀、一局耗时。

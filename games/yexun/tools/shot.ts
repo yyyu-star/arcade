@@ -27,6 +27,8 @@ const QUERY = opt('--query');
 const TAG = opt('--tag') ?? '';
 /** 走一遍界面：首次菜单 → 开打 → 暂停 → 认输确认 → 结算 → 换难度回菜单，每一屏截图并检查 */
 const FLOW = argv.includes('--flow');
+/** 开打后点暂停再截（看暂停页的构筑和套装） */
+const PAUSE = argv.includes('--pause');
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -103,6 +105,10 @@ try {
       continue;
     }
     await page.waitForTimeout(3500);
+    if (PAUSE) {
+      await page.locator('.yx-pause').first().click();
+      await page.waitForTimeout(400);
+    }
     await page.screenshot({ path: join(OUT, `${TAG}${v.name}.png`) });
     for (let i = 0; i < FRAMES; i++) {
       await page.screenshot({ path: join(OUT, `${TAG}${v.name}-${String(i).padStart(3, '0')}.png`) });

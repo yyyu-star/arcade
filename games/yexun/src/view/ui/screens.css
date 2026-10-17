@@ -107,8 +107,13 @@
 .yx-brow b { font-size: 14px; }
 .yx-brow em { font-style: normal; font-size: 12px; color: #7a4a20; }
 .yx-brow span { grid-column: 2 / span 2; font-size: 12px; font-weight: 600; color: #5a4a3a; }
+.yx-brow span i { font-style: normal; color: #7a4a20; }
+.yx-sets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.yx-sets span { font-size: 12px; padding: 2px 8px; border-radius: 8px; background: #4a7a5a; color: #fbf5e4; }
 .yx-pause-side { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
 .yx-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* 侧栏宽度跟着开关走，两个大按钮各占一半，不撑出面板 */
+.yx-pause-side .yx-row2 > .yx-big { flex: 1; min-width: 0; }
 
 /* ── 确认框 ── */
 .yx-confirm { z-index: 60; }

@@ -261,6 +261,7 @@ export class GameScene extends Phaser.Scene {
       w.level - w.pendingLevels + 1,
       w.choices.map((c) => describe(w, c)),
       this.d.firstRun && !this.cardsSeen,
+      { rerolls: w.rerolls, bans: w.bans },
       (i) => {
         this.cardsSeen = true;
         sfx.play('choose');

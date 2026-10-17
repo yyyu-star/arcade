@@ -16,15 +16,19 @@ import {
   WEAPON_IDS,
   WEAPONS,
   weaponStats,
+  NEXT_ELEMENT,
+  TYPE_SETS,
+  type Element,
   type PassiveId,
   type WeaponId,
   type WeaponStats,
+  type WeaponType,
 } from '../content/weapons.ts';
 import { Ev } from './events.ts';
 import { DIR_N } from './dirs.ts';
 import { clamp, dcos, dirIndex, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
 import { Grid } from './grid.ts';
-import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, WEAPON_SLOTS, World, type Choice, type Setup } from './state.ts';
+import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Pick, Shot, WEAPON_SLOTS, World, type Choice, type Setup } from './state.ts';
 
 /** 法器在事件里的编号 */
 export const WEAPON_CODE: Record<WeaponId, number> = Object.fromEntries(WEAPON_IDS.map((id, i) => [id, i])) as Record<WeaponId, number>;
@@ -59,6 +63,25 @@ export function step(w: World, dir: number, choice = -1): void {
   if (w.phase === 'over') return;
   if (w.phase === 'choose') {
     if (choice >= 0 && choice < w.choices.length) applyChoice(w, w.choices[choice]!);
+    else if (choice === Pick.Reroll && w.rerolls > 0) {
+      w.rerolls--;
+      openChoices(w);
+    } else if (choice >= Pick.Ban && choice < Pick.Ban + w.choices.length && w.bans > 0) {
+      // 封禁：这张以后不再出现，三张重新抽
+      const c = w.choices[choice - Pick.Ban]!;
+      if (c.kind !== 'coins') {
+        w.bans--;
+        w.banned.push(c.id as WeaponId | PassiveId);
+        openChoices(w);
+      }
+    } else if (choice === Pick.Skip) {
+      // 跳过：换一点魂（这一级要的经验的 15%），不选
+      w.pendingLevels--;
+      w.choices = [];
+      w.phase = 'play';
+      gainXp(w, xpNeed(w.level) * 0.15);
+      if (w.pendingLevels > 0) openChoices(w);
+    }
     return;
   }
   w.tick++;
@@ -277,6 +300,11 @@ function spawnWaves(w: World): void {
 function markSlow(w: World, g: Grid): void {
   w.eSlow.fill(0);
   w.bellArea = 0;
+  // 镇 3 件：靠近主角（120 以内）的怪减速 20%（记 3；镇魂铃的光环更狠，后写覆盖）
+  if (w.stats.nearSlow) {
+    const n = g.query(w, w.x, w.y, 120);
+    for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = 3;
+  }
   for (let k = 0; k < w.weapons.length; k++) {
     const o = w.weapons[k]!;
     if (o.id !== 'bell') continue;
@@ -316,7 +344,8 @@ function moveEnemies(w: World): void {
       w.ePY[i] = y;
       continue;
     }
-    let sp = w.eSpeed[i]! * (w.eSlow[i] === 2 ? 0.5 : w.eSlow[i] ? 0.62 : 1);
+    const slow = w.eSlow[i];
+    let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1);
     let vx = dx;
     let vy = dy;
     switch (kind) {
@@ -485,10 +514,10 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
     if (w.eHitAt[k]! > w.tick) return false;
     w.eHitAt[k] = w.tick + rehit;
   }
-  const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck);
+  const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck) + w.stats.critAdd;
   // 捆仙绳：捆住的挨打加倍
   const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
-  const d = Math.max(1, Math.round(dmg * bound * w.stats.might * (crit ? PLAYER.critMul : 1)));
+  const d = Math.max(1, Math.round(dmg * bound * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
   w.eHp[i]! -= d;
   // 结算页的"每件法器打了多少"：只记，不影响规则
   const owned = credit >= 0 ? w.weapons[credit] : undefined;
@@ -1476,10 +1505,41 @@ function recompute(w: World): void {
   s.durMul = 1 + 0.1 * p('modou');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
+  // 套装：按类型和五行数件数
+  const types: Partial<Record<WeaponType, number>> = {};
+  const els: Partial<Record<Element, number>> = {};
+  for (const o of w.weapons) {
+    const d = WEAPONS[o.id];
+    types[d.type] = (types[d.type] ?? 0) + 1;
+    els[d.el] = (els[d.el] ?? 0) + 1;
+  }
+  const t = (k: WeaponType): number => types[k] ?? 0;
+  w.sets = [];
+  for (const k of Object.keys(TYPE_SETS) as WeaponType[]) if (t(k) >= 2) w.sets.push(`${k}${t(k) >= 3 ? 3 : 2}`);
+  if (t('剑') >= 2) s.critAdd = 0.08;
+  if (t('剑') >= 3) s.critDmg = 0.5;
+  if (t('符') >= 2) s.cdMul *= 0.92;
+  if (t('镇') >= 2) s.areaMul *= 1.12;
+  if (t('镇') >= 3) s.nearSlow = true;
+  if (t('灵') >= 2) s.durMul *= 1.15;
+  const elMul: Partial<Record<Element, number>> = {};
+  for (const e of Object.keys(els) as Element[]) {
+    const n = els[e]!;
+    if (n < 2) continue;
+    w.sets.push(`${e}${n >= 3 ? 3 : 2}`);
+    elMul[e] = (elMul[e] ?? 1) + 0.1;
+    if (n >= 3) elMul[NEXT_ELEMENT[e]] = (elMul[NEXT_ELEMENT[e]] ?? 1) + 0.1;
+  }
   const grow = s.hpMax - w.stats.hpMax;
   w.stats = s;
   if (grow > 0) w.hp += grow;
-  w.wstats = w.weapons.map((o) => weaponStats(o.id, o.level, o.evolved));
+  w.wstats = w.weapons.map((o) => {
+    const ws = weaponStats(o.id, o.level, o.evolved);
+    const d = WEAPONS[o.id];
+    ws.dmg *= (elMul[d.el] ?? 1) * (d.type === '灵' && t('灵') >= 3 ? 1.25 : 1);
+    if (d.type === '符' && t('符') >= 3) ws.amount += 1;
+    return ws;
+  });
 }
 
 /** 测试和调试用：开局直接给一件法器（到某一级、可直接进化）。规则照常，只是跳过选卡 */
@@ -1518,6 +1578,7 @@ function upgradePassive(w: World, id: PassiveId): void {
 function choicePool(w: World): { c: Choice; weight: number }[] {
   const pool: { c: Choice; weight: number }[] = [];
   for (const id of WEAPON_IDS) {
+    if (w.banned.includes(id)) continue;
     const o = w.weapons.find((x) => x.id === id);
     if (o) {
       // 黄历：手上东西的升级更容易出（好卡）
@@ -1526,6 +1587,7 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
   }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
+    if (w.banned.includes(id)) continue;
     const lv = w.passives[id];
     if (lv !== undefined) {
       if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 + w.stats.luck });

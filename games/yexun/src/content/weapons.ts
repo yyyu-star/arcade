@@ -370,6 +370,17 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 
+/** 套装（DESIGN.md 3.4）：同类型 / 同五行的法器凑够 2 件、3 件各有加成。卡片和暂停页的说明也从这里取 */
+export const TYPE_SETS: Record<WeaponType, [string, string]> = {
+  剑: ['暴击 +8%', '暴击伤害 +50%'],
+  符: ['冷却 −8%', '符类每次多发一张'],
+  镇: ['范围 +12%', '靠近你的怪减速 20%'],
+  灵: ['持续 +15%', '灵类伤害 +25%'],
+};
+/** 五行相生：木生火、火生土、土生金、金生水、水生木 */
+export const NEXT_ELEMENT: Record<Element, Element> = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' };
+export const ELEMENT_SET: [string, string] = ['这一行伤害 +10%', '相生的下一行伤害也 +10%'];
+
 /** 某件法器在某一级（1–8）的数值；进化后用进化的数值 */
 export function weaponStats(id: WeaponId, level: number, evolved: boolean): WeaponStats {
   const def = WEAPONS[id];

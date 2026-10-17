@@ -9,7 +9,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -85,7 +85,20 @@ export interface Stats {
   curse: number;
   /** 捆仙绳：捆住的挨打加倍 */
   bindDouble: boolean;
+  /** 剑 2 件：暴击率另加；剑 3 件：暴击伤害另加 */
+  critAdd: number;
+  critDmg: number;
+  /** 镇 3 件：靠近主角的怪减速 */
+  nearSlow: boolean;
 }
+
+/** 三选一时除了选第几张以外的操作（step 的 choice 参数） */
+export const Pick = {
+  Reroll: 100,
+  /** + 第几张 */
+  Ban: 200,
+  Skip: 300,
+} as const;
 
 export interface Choice {
   kind: 'weapon' | 'passive' | 'coins';
@@ -141,6 +154,12 @@ export class World {
   shield = 0;
   shieldMax = 0;
   shieldBurst = false;
+  /** 凑成的套装（显示用）：比如 剑2、金3 */
+  sets: string[] = [];
+  /** 刷新、封禁还剩几次；封禁掉的（不再出现在三选一里） */
+  rerolls = 2;
+  bans = 1;
+  banned: (WeaponId | PassiveId)[] = [];
   /** 合成了哪几个（MergeDef.id） */
   merges: MergeDef['id'][] = [];
   /** 往生铃：光环半径（这一拍），光环里的怪死了回血；下次能回血的拍 */
@@ -246,7 +265,7 @@ export class World {
 }
 
 export function baseStats(): Stats {
-  return { might: 1, cdMul: 1, areaMul: 1, amount: 0, speed: PLAYER.speed, magnet: PLAYER.magnet, armor: 0, hpMax: PLAYER.hp, regen: 0, luck: 0, xpMul: 1, coinBonus: 0, durMul: 1, curse: 0, bindDouble: false };
+  return { might: 1, cdMul: 1, areaMul: 1, amount: 0, speed: PLAYER.speed, magnet: PLAYER.magnet, armor: 0, hpMax: PLAYER.hp, regen: 0, luck: 0, xpMul: 1, coinBonus: 0, durMul: 1, curse: 0, bindDouble: false, critAdd: 0, critDmg: 0, nearSlow: false };
 }
 
 /** 怪种类编号 → 定义 */

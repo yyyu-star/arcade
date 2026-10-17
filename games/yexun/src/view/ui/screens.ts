@@ -145,6 +145,8 @@ export interface BuildRow {
   /** 法器：伤害；被动：-1 */
   dmg: number;
   kills: number;
+  /** 进化还差什么（暂停页显示；进化好了或没有进化的为空） */
+  hint?: string;
 }
 
 export class Pause {
@@ -171,15 +173,16 @@ export class Pause {
     return this.root.style.display !== 'none';
   }
 
-  show(build: BuildRow[], left: number): void {
+  /** sets：凑成的套装说明（"剑 2 件 · 暴击 +8%"） */
+  show(build: BuildRow[], left: number, sets: string[] = []): void {
     const rows = build
       .map(
         (r) =>
           `<div class="yx-brow"><img alt="" src="${this.icons(r.icon)}"><b>${esc(r.name)}</b><em>${r.level > 8 ? '进化' : r.level === 8 ? '满级' : `Lv ${r.level}`}</em>` +
-          (r.dmg >= 0 ? `<span>${Math.round(r.dmg).toLocaleString('zh-CN')} 伤 · ${r.kills} 斩</span>` : '<span></span>') +
+          (r.dmg >= 0 ? `<span>${Math.round(r.dmg).toLocaleString('zh-CN')} 伤 · ${r.kills} 斩${r.hint ? ` · <i>${esc(r.hint)}</i>` : ''}</span>` : '<span></span>') +
           '</div>',
       )
-      .join('');
+      .join('') + (sets.length ? `<div class="yx-sets">${sets.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : '');
     this.root.innerHTML =
       '<div class="yx-panel yx-pause-panel">' +
       `<div class="yx-panel-head"><b class="yx-brush">暂停</b><em>离天亮 ${mmss(left)}</em></div>` +
