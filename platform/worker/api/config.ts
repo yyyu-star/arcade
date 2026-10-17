@@ -23,8 +23,9 @@ export const DEFAULT_LIMITS = {
    * 排行榜（board）从存档里分出 2_500（0.7.0）：交分一次最多 3 行，够 800 多次交分；刷榜只停排行榜，不把云存档挤停。
    * 钱包（wallet）再从存档里分出 3_000（0.9.0）：每次带入、结回、放弃、领补给 1 行，一场实盘 2 行，够 1,500 场；合计仍是 4 万。
    * 0.10.2 再从存档挪 3_000 给钱包（维护者定）：三个游戏都接了钱包，玩的人多了不该先撞上"服务器有点忙"；有几天实际用量后再调。
+   * 好友在线和邀请（live，0.13.0，docs/social.md）：从存档、登录找回各挪 2_000。报位置每人每 2 分钟最多 1 行，50 人每天在线 2 小时约 3,000 行，邀请另算（platform-backend.md 15.13）。
    */
-  budget: { reg: 2_700, auth: 12_000, save: 6_300, social: 5_000, acct: 2_000, board: 2_500, wallet: 6_000, sys: 3_500 },
+  budget: { reg: 2_700, auth: 10_000, save: 4_300, social: 5_000, acct: 2_000, board: 2_500, wallet: 6_000, live: 4_000, sys: 3_500 },
   /** 账号安全类超出预算后另给的封顶；0 表示不给超额。 */
   acctOverflow: 3_000,
   noGrowthDbBytes: 300_000_000,
@@ -83,6 +84,9 @@ export const DEFAULT_LIMITS = {
   sessionTtlMs: 400 * 86_400_000,
   sessionRenewMs: 30 * 86_400_000,
   lastSeenEveryMs: 3_600_000,
+  /** 报位置（0.13.0，docs/social.md 1.2）：浏览器每 2 分钟报一次，平台按这个节流（略短于 2 分钟，计时器的抖动不至于丢掉一半）；超过 presenceOnlineMs 没报算离线 */
+  presenceEveryMs: 110_000,
+  presenceOnlineMs: 300_000,
 
   // Cron 清理（7.3）
   cleanupMaxRows: 3_000,

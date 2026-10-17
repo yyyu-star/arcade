@@ -10,16 +10,16 @@
 ## 2. 目录
 
 ```
-src/core/      模拟核心：固定节拍（每秒 30 拍）、确定性（第 2 步起）
+src/core/      模拟核心：固定节拍（每秒 30 拍）、确定性；state.ts（状态）、step.ts（一拍）、grid.ts（格子分区）、fmath.ts + dirs.ts（数学）、rng.ts、events.ts、fingerprint.ts
 src/content/   内容表：法器、被动、进化、怪物、刷怪表、角色、地图、实盘倍数；改数值只改这里
 src/view/      画面层：art/（程序画的图集和雪地）、scenes/（Phaser 场景）、ui/（DOM 界面：HUD、菜单、卡片）、viewport.ts（iOS 适配）
 src/platform/  本地存储、云存档、平台接口
 worker/        Worker（登录闸门、单独部署的根路径；第 5 步加实盘带入结回），自己一份 tsconfig（workers-types）
-tools/         shot.ts（冒烟截图）、subset-font.ts（毛笔字子集）；以后 sim.ts（机器人配平）、bench.ts（核心耗时）
+tools/         shot.ts（冒烟截图）、subset-font.ts（毛笔字子集）、gen-dirs.ts（生成方向表）、bots.ts + sim.ts（机器人配平）、bench.ts（核心耗时）
 tests/         vitest
 ```
 
-## 3. 规则核心的约束（第 2 步起生效）
+## 3. 规则核心的约束
 
 - `src/core`、`src/content` 不依赖 DOM、Phaser、网络；画面层只读核心的状态和事件，不自己算规则。
 - **确定性**：禁止 `Math.random`、`Date`、`performance`，以及 `Math.sin/cos/tan/atan2/sqrt/hypot/exp/log/pow/cbrt`；
@@ -28,6 +28,7 @@ tests/         vitest
 - **主线批准的例外**：`step` 原地修改它拥有的状态（几百个单位每秒 30 拍，整体复制太慢），不是"输入旧状态、输出新状态"。
   存档和回放靠"种子 + 输入"重算；确定性由重放测试（状态指纹逐拍相同）锁住。
 - 改数值必须跑模拟器（DESIGN.md 第 8 节），不凭感觉。
+- 规则一改，`tests/core.test.ts` 的金标准指纹就会变：确认是有意的改动后用 `npx vitest run -u` 更新，同时把 `RULES_VERSION` 加一（旧录像会标"旧版本"）。
 
 ## 4. 画面
 
@@ -44,6 +45,8 @@ tests/         vitest
 | `npm run dev` / `npm run preview` | 开发 0.0.0.0:5178 / 预览 0.0.0.0:4178 |
 | `npm test` | 类型检查（页面 + Worker）+ vitest |
 | `npm run build:cf` | 部署用构建到 `dist-cf/games/yexun/` |
+| `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward` | 机器人模拟，出胜率和节奏表 |
+| `npm run bench -- <种子> <难度>` | 核心每拍耗时 |
 | `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem` |
 
 ## 6. 浏览器存储 key（全部 `yexun.` 前缀）

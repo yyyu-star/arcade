@@ -1,0 +1,1091 @@
+/**
+ * 一拍的模拟（DESIGN.md 5.1）。`step(w, dir, choice)` 原地推进 World，事件写进 w.ev。
+ * 顺序固定：主角走 → 刷怪 → 怪的行为和移动 → 重建格子、推挤 → 法器 → 子弹 → 挨打 → 掉落 → 升级 → 结束。
+ * 只用四则运算、方向表和 fsqrt；随机都走 World 上分好流的 Rng。
+ */
+import { BOSS, ENEMIES, ENEMY_BY_KIND, FOX, GENERAL, HOP_AIR, HOP_PERIOD, HOP_SPEED_MUL, LANTERN, type EnemyKind } from '../content/enemies.ts';
+import { ARENA, DROPS, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
+import { DAWN_TICK, DIFFICULTIES, EVENTS, MINUTES, SCALE } from '../content/waves.ts';
+import {
+  MAX_PASSIVES,
+  MAX_WEAPON_LEVEL,
+  MAX_WEAPONS,
+  PASSIVE_IDS,
+  PASSIVES,
+  WEAPON_IDS,
+  WEAPONS,
+  weaponStats,
+  type PassiveId,
+  type WeaponId,
+  type WeaponStats,
+} from '../content/weapons.ts';
+import { Ev } from './events.ts';
+import { DIR_N } from './dirs.ts';
+import { clamp, dcos, dsin, fsqrt, inputCos, inputSin } from './fmath.ts';
+import { Grid } from './grid.ts';
+import { baseStats, Drop, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, Shot, World, type Choice, type Setup } from './state.ts';
+
+/** 法器在事件里的编号 */
+export const WEAPON_CODE: Record<WeaponId, number> = Object.fromEntries(WEAPON_IDS.map((id, i) => [id, i])) as Record<WeaponId, number>;
+export const PASSIVE_CODE: Record<PassiveId, number> = Object.fromEntries(PASSIVE_IDS.map((id, i) => [id, 100 + i])) as Record<PassiveId, number>;
+
+const grids = new WeakMap<World, Grid>();
+function gridOf(w: World): Grid {
+  let g = grids.get(w);
+  if (!g) {
+    g = new Grid();
+    grids.set(w, g);
+  }
+  return g;
+}
+
+/** 查询结果要在遍历时再查别的，先拷到这里 */
+const scratch = new Int32Array(MAX_ENEMIES);
+const scratch2 = new Int32Array(MAX_ENEMIES);
+
+export function createWorld(setup: Setup): World {
+  const w = new World(setup);
+  addWeapon(w, PLAYER.start);
+  return w;
+}
+
+// ───────────────────────── 一拍 ─────────────────────────
+
+export function step(w: World, dir: number, choice = -1): void {
+  w.ev.n = 0;
+  if (w.phase === 'over') return;
+  if (w.phase === 'choose') {
+    if (choice >= 0 && choice < w.choices.length) applyChoice(w, w.choices[choice]!);
+    return;
+  }
+  w.tick++;
+  w.px = w.x;
+  w.py = w.y;
+  w.ePX.set(w.eX);
+  w.ePY.set(w.eY);
+  w.sPX.set(w.sX);
+  w.sPY.set(w.sY);
+  w.dPX.set(w.dX);
+  w.dPY.set(w.dY);
+
+  movePlayer(w, dir);
+  spawnWaves(w);
+  const g = gridOf(w);
+  g.build(w);
+  markSlow(w, g);
+  moveEnemies(w);
+  g.build(w);
+  separate(w, g);
+  fireWeapons(w, g);
+  moveShots(w, g);
+  touchPlayer(w, g);
+  movePickups(w);
+  regen(w);
+  if (w.phase !== 'play') return;
+  if (w.hp <= 0) return end(w, false);
+  if (w.tick >= DAWN_TICK) return end(w, true);
+  if (w.pendingLevels > 0) openChoices(w);
+}
+
+function end(w: World, won: boolean): void {
+  w.phase = 'over';
+  w.won = won;
+  w.ev.push(Ev.End, w.x, w.y, won ? 1 : 0, w.bossKilled ? 1 : 0);
+}
+
+// ───────────────────────── 主角 ─────────────────────────
+
+function movePlayer(w: World, dir: number): void {
+  w.moving = dir !== 0;
+  if (dir !== 0) {
+    w.face = ((dir - 1) * (DIR_N / 32)) & (DIR_N - 1);
+    w.x = clamp(w.x + inputCos(dir) * w.stats.speed, 20, ARENA.w - 20);
+    w.y = clamp(w.y + inputSin(dir) * w.stats.speed, 20, ARENA.h - 20);
+  }
+  if (w.invuln > 0) w.invuln--;
+}
+
+function regen(w: World): void {
+  if (w.stats.regen <= 0 || w.hp >= w.stats.hpMax) return;
+  w.regenAcc += w.stats.regen / 30;
+  if (w.regenAcc >= 1) {
+    w.hp = Math.min(w.stats.hpMax, w.hp + 1);
+    w.regenAcc -= 1;
+  }
+}
+
+function heal(w: World, n: number): void {
+  w.hp = Math.min(w.stats.hpMax, w.hp + n);
+}
+
+function hurt(w: World, dmg: number): void {
+  if (w.invuln > 0 || w.phase !== 'play') return;
+  const d = Math.max(1, Math.round(dmg * DIFFICULTIES[w.setup.difficulty].dmgMul - w.stats.armor));
+  w.hp -= d;
+  w.invuln = PLAYER.invuln;
+  w.ev.push(Ev.Hurt, w.x, w.y, d);
+}
+
+// ───────────────────────── 刷怪 ─────────────────────────
+
+function minuteOf(w: World): number {
+  return w.tick / (60 * 30);
+}
+
+function freeEnemySlot(w: World): number {
+  for (let i = 0; i < MAX_ENEMIES; i++) if (!w.eAlive[i]) return i;
+  // 满了：把离主角最远的一只普通怪收掉（不掉东西），给新来的让位
+  let far = -1;
+  let fd = -1;
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (ENEMIES[w.eKind[i]!]!.elite || w.eKind[i] === ENEMY_BY_KIND.boss.code) continue;
+    const dx = w.eX[i]! - w.x;
+    const dy = w.eY[i]! - w.y;
+    const d = dx * dx + dy * dy;
+    if (d > fd) {
+      fd = d;
+      far = i;
+    }
+  }
+  if (far >= 0) {
+    w.eAlive[far] = 0;
+    w.eCount--;
+  }
+  return far;
+}
+
+function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
+  const i = freeEnemySlot(w);
+  if (i < 0) return -1;
+  const def = ENEMY_BY_KIND[kind];
+  const diff = DIFFICULTIES[w.setup.difficulty];
+  const min = minuteOf(w);
+  const big = def.elite || kind === 'boss';
+  const size = big ? 1 : 0.88 + w.rSpawn.next() * 0.24;
+  const hp = kind === 'boss' ? def.hp * diff.hpMul : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
+  w.eAlive[i] = 1;
+  w.eGen[i]!++;
+  w.eKind[i] = def.code;
+  w.eX[i] = clamp(x, 10, ARENA.w - 10);
+  w.eY[i] = clamp(y, 10, ARENA.h - 10);
+  w.ePX[i] = w.eX[i]!;
+  w.ePY[i] = w.eY[i]!;
+  w.eKX[i] = 0;
+  w.eKY[i] = 0;
+  w.eHp[i] = hp;
+  w.eHpMax[i] = hp;
+  w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2);
+  w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min);
+  w.eR[i] = def.r * size;
+  w.eSize[i] = size;
+  w.eT[i] = kind === 'boss' ? BOSS.every : w.rSpawn.int(HOP_PERIOD);
+  w.eS[i] = 0;
+  w.eAX[i] = 0;
+  w.eAY[i] = 0;
+  w.eSlow[i] = 0;
+  w.eHitAt.fill(0, i * MAX_WEAPONS, (i + 1) * MAX_WEAPONS);
+  w.eCount++;
+  if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
+  if (kind === 'boss') w.bossSlot = i;
+  return i;
+}
+
+/**
+ * 刷怪的一圈：刚好在屏幕外（一屏约 1000 × 560 到 1080 × 500 单位，画面层 viewport.ts 的 worldZoom），
+ * 椭圆横向宽；出了场地就换到对面。
+ */
+const RING_X = 600;
+const RING_Y = 360;
+function ringPoint(w: World, a: number, scale = 1): [number, number] {
+  let x = w.x + dcos(a) * RING_X * scale;
+  let y = w.y + dsin(a) * RING_Y * scale;
+  if (x < 10 || x > ARENA.w - 10) x = w.x - dcos(a) * RING_X * scale;
+  if (y < 10 || y > ARENA.h - 10) y = w.y - dsin(a) * RING_Y * scale;
+  return [x, y];
+}
+
+function pickKind(w: World, mix: Partial<Record<EnemyKind, number>>): EnemyKind {
+  let total = 0;
+  for (const k in mix) total += mix[k as EnemyKind]!;
+  let r = w.rSpawn.next() * total;
+  let last: EnemyKind = 'paper';
+  for (const k in mix) {
+    last = k as EnemyKind;
+    r -= mix[last]!;
+    if (r < 0) return last;
+  }
+  return last;
+}
+
+function spawnWaves(w: World): void {
+  // 定点事件
+  while (w.nextEvent < EVENTS.length && w.tick >= EVENTS[w.nextEvent]!.at) {
+    const e = EVENTS[w.nextEvent++]!;
+    if (e.kind === 'boss') {
+      const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.8);
+      spawnEnemy(w, 'boss', x, y);
+    } else if (e.kind === 'front') {
+      for (let k = 0; k < e.count; k++) {
+        const a = w.face + w.rSpawn.int(44) - 22;
+        const d = 260 + w.rSpawn.next() * 60;
+        spawnEnemy(w, e.enemy, w.x + dcos(a) * d, w.y + dsin(a) * d);
+      }
+    } else if (e.kind === 'ring') {
+      for (let k = 0; k < e.count; k++) {
+        const a = (k * DIR_N) / e.count;
+        spawnEnemy(w, e.enemy, w.x + dcos(a) * e.radius, w.y + dsin(a) * e.radius * 0.8);
+      }
+    } else if (e.kind === 'line') {
+      const side = w.rSpawn.chance(0.5) ? -1 : 1;
+      for (let k = 0; k < e.count; k++) spawnEnemy(w, e.enemy, w.x + side * 720, w.y + (k - e.count / 2) * 30);
+    } else {
+      for (let k = 0; k < e.count; k++) {
+        const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.85);
+        spawnEnemy(w, e.enemy, x, y);
+      }
+    }
+  }
+  // 按分钟补怪
+  const m = MINUTES[Math.min(MINUTES.length - 1, Math.floor(minuteOf(w)))]!;
+  const diff = DIFFICULTIES[w.setup.difficulty];
+  const keep = m.keep * diff.countMul;
+  if (w.eCount >= keep) return;
+  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul) / 30;
+  while (w.spawnAcc >= 1) {
+    w.spawnAcc -= 1;
+    const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
+    spawnEnemy(w, pickKind(w, m.mix), x, y);
+  }
+}
+
+// ───────────────────────── 怪 ─────────────────────────
+
+function markSlow(w: World, g: Grid): void {
+  w.eSlow.fill(0);
+  for (let k = 0; k < w.weapons.length; k++) {
+    if (w.weapons[k]!.id !== 'bell') continue;
+    const n = g.query(w, w.x, w.y, w.wstats[k]!.area);
+    for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = 1;
+  }
+}
+
+function moveEnemies(w: World): void {
+  const boss = ENEMY_BY_KIND.boss.code;
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (!w.eAlive[i]) continue;
+    const kind = ENEMIES[w.eKind[i]!]!.kind;
+    let dx = w.x - w.eX[i]!;
+    let dy = w.y - w.eY[i]!;
+    const d = fsqrt(dx * dx + dy * dy) || 1;
+    dx /= d;
+    dy /= d;
+    // 离得太远的普通怪挪到主角前面的圈上（一直有压力，也不会被甩开）
+    if (d > 900 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite) {
+      const [x, y] = ringPoint(w, w.face + w.rAi.int(64) - 32);
+      w.eX[i] = x;
+      w.eY[i] = y;
+      w.ePX[i] = x;
+      w.ePY[i] = y;
+      continue;
+    }
+    let sp = w.eSpeed[i]! * (w.eSlow[i] ? 0.62 : 1);
+    let vx = dx;
+    let vy = dy;
+    switch (kind) {
+      case 'jiangshi':
+      case 'general': {
+        const t = (w.eT[i]! + 1) % HOP_PERIOD;
+        w.eT[i] = t;
+        sp = t < HOP_AIR ? sp * HOP_SPEED_MUL : 0;
+        if (kind === 'general') {
+          w.eS[i]!++;
+          if (w.eS[i]! >= GENERAL.every) {
+            w.eS[i] = 0;
+            for (let k = 0; k < GENERAL.count; k++) {
+              const a = (k * DIR_N) / GENERAL.count;
+              spawnEnemy(w, 'jiangshi', w.eX[i]! + dcos(a) * GENERAL.ring, w.eY[i]! + dsin(a) * GENERAL.ring);
+            }
+          }
+        }
+        break;
+      }
+      case 'lantern': {
+        if (d < LANTERN.range) sp = 0;
+        w.eT[i]!--;
+        if (w.eT[i]! <= 0 && d < LANTERN.range + 80) {
+          w.eT[i] = LANTERN.every;
+          addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 20, dx * LANTERN.speed, dy * LANTERN.speed, LANTERN.life, LANTERN.dmg, LANTERN.r, 0, -1, 0);
+        }
+        break;
+      }
+      case 'fox': {
+        // 0 走近 1 蓄力 2 冲刺
+        if (w.eS[i] === 0) {
+          if (w.eT[i]! > 0) w.eT[i]!--;
+          else if (d < FOX.trigger) {
+            w.eS[i] = 1;
+            w.eT[i] = FOX.windup;
+            w.eAX[i] = dx;
+            w.eAY[i] = dy;
+          }
+        } else if (w.eS[i] === 1) {
+          sp = 0;
+          if (--w.eT[i]! <= 0) {
+            w.eS[i] = 2;
+            w.eT[i] = FOX.dash;
+          }
+        } else {
+          sp = FOX.dashSpeed;
+          vx = w.eAX[i]!;
+          vy = w.eAY[i]!;
+          if (--w.eT[i]! <= 0) {
+            w.eS[i] = 0;
+            w.eT[i] = FOX.rest;
+          }
+        }
+        break;
+      }
+      case 'boss':
+        sp = bossAct(w, i, sp);
+        if (w.eS[i] === 1) {
+          vx = w.eAX[i]!;
+          vy = w.eAY[i]!;
+        }
+        break;
+      default:
+        break;
+    }
+    w.eX[i] = clamp(w.eX[i]! + vx * sp + w.eKX[i]!, 10, ARENA.w - 10);
+    w.eY[i] = clamp(w.eY[i]! + vy * sp + w.eKY[i]!, 10, ARENA.h - 10);
+    w.eKX[i]! *= 0.72;
+    w.eKY[i]! *= 0.72;
+  }
+}
+
+/**
+ * 尸王：eT 倒数到下一个技能；eS = 1 时正在跳砸（eAX/eAY 是每拍的位移方向，速度另算）。
+ * 跳砸：在主角站的地方画圈警告，boss 用 stompWarn 拍跳过去，落地一圈伤害。
+ */
+function bossAct(w: World, i: number, sp: number): number {
+  const enraged = w.eHp[i]! < w.eHpMax[i]! / 2;
+  if (w.eS[i] === 1) {
+    // 跳砸中：直线飞向落点
+    if (--w.eT[i]! <= 0) {
+      w.eS[i] = 0;
+      w.eT[i] = enraged ? BOSS.everyEnraged : BOSS.every;
+      w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 1, BOSS.stompRadius);
+      const dx = w.x - w.eX[i]!;
+      const dy = w.y - w.eY[i]!;
+      if (dx * dx + dy * dy < BOSS.stompRadius * BOSS.stompRadius) hurt(w, BOSS.stompDmg);
+      return 0;
+    }
+    return w.eV[i]!;
+  }
+  if (--w.eT[i]! > 0) return sp;
+  const skill = w.rAi.int(3);
+  if (skill === 0) {
+    // 落点：主角现在的位置；每拍走 (距离 / 拍数)，这一跳的速度记在 eV
+    const tx = w.x;
+    const ty = w.y;
+    const dx = tx - w.eX[i]!;
+    const dy = ty - w.eY[i]!;
+    const d = fsqrt(dx * dx + dy * dy) || 1;
+    w.eS[i] = 1;
+    w.eT[i] = BOSS.stompWarn;
+    w.eAX[i] = dx / d;
+    w.eAY[i] = dy / d;
+    w.eV[i] = d / BOSS.stompWarn;
+    w.ev.push(Ev.Boss, tx, ty, 0, BOSS.stompRadius);
+    return 0;
+  }
+  w.eT[i] = enraged ? BOSS.everyEnraged : BOSS.every;
+  if (skill === 1) {
+    w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 2, 90);
+    for (let k = 0; k < BOSS.summon; k++) {
+      const a = (k * DIR_N) / BOSS.summon;
+      spawnEnemy(w, 'jiangshi', w.eX[i]! + dcos(a) * 90, w.eY[i]! + dsin(a) * 90);
+    }
+  } else {
+    w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 3, 0);
+    const n = enraged ? BOSS.breath + 6 : BOSS.breath;
+    const off = w.rAi.int(DIR_N);
+    for (let k = 0; k < n; k++) {
+      const a = off + Math.floor((k * DIR_N) / n);
+      addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 30, dcos(a) * BOSS.breathSpeed, dsin(a) * BOSS.breathSpeed, 240, BOSS.breathDmg, 12, 0, -1, 0);
+    }
+  }
+  return sp;
+}
+
+/** 怪与怪之间轻推挤：只和同格、邻格的比 */
+function separate(w: World, g: Grid): void {
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (!w.eAlive[i]) continue;
+    const n = g.query(w, w.eX[i]!, w.eY[i]!, w.eR[i]!);
+    for (let j = 0; j < n; j++) {
+      const o = g.out[j]!;
+      if (o === i) continue;
+      const dx = w.eX[i]! - w.eX[o]!;
+      const dy = w.eY[i]! - w.eY[o]!;
+      const rr = w.eR[i]! + w.eR[o]!;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= rr * rr) continue;
+      if (d2 < 1e-6) {
+        // 完全重叠：按槽位号错开，方向确定
+        w.eX[i]! += i < o ? -0.5 : 0.5;
+        continue;
+      }
+      const d = fsqrt(d2);
+      // 大的推小的：按半径分配
+      const share = w.eR[o]! / rr;
+      const push = ((rr - d) / d) * 0.5 * share;
+      w.eX[i]! += dx * push;
+      w.eY[i]! += dy * push;
+    }
+  }
+}
+
+// ───────────────────────── 打怪 ─────────────────────────
+
+/** 打一下。slot 是法器槽（同一件法器对同一只有冷却），-1 不算冷却。返回打没打到 */
+function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky: number, knock: number, rehit: number): boolean {
+  if (!w.eAlive[i]) return false;
+  if (slot >= 0) {
+    const k = i * MAX_WEAPONS + slot;
+    if (w.eHitAt[k]! > w.tick) return false;
+    w.eHitAt[k] = w.tick + rehit;
+  }
+  const crit = w.rHit.next() < PLAYER.crit;
+  const d = Math.max(1, Math.round(dmg * w.stats.might * (crit ? PLAYER.critMul : 1)));
+  w.eHp[i]! -= d;
+  const def = ENEMIES[w.eKind[i]!]!;
+  const kd = fsqrt(kx * kx + ky * ky);
+  if (kd > 0 && knock > 0) {
+    const k = (knock * (1 - def.steady)) / kd / 3;
+    w.eKX[i]! += kx * k;
+    w.eKY[i]! += ky * k;
+  }
+  w.ev.push(Ev.Hit, w.eX[i]!, w.eY[i]!, d, crit ? 1 : 0, i);
+  if (w.eHp[i]! <= 0) killEnemy(w, i);
+  return true;
+}
+
+function killEnemy(w: World, i: number): void {
+  const def = ENEMIES[w.eKind[i]!]!;
+  w.eAlive[i] = 0;
+  w.eCount--;
+  w.kills++;
+  const x = w.eX[i]!;
+  const y = w.eY[i]!;
+  w.ev.push(Ev.Kill, x, y, def.code, def.elite ? 1 : 0, i);
+  if (def.kind === 'boss') {
+    w.bossKilled = true;
+    w.bossSlot = -1;
+    if (w.phase === 'play') end(w, true);
+    return;
+  }
+  if (def.elite) {
+    addDrop(w, Drop.Chest, x, y, 1);
+    for (let k = 0; k < 6; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 60, y + (w.rDrop.next() - 0.5) * 40, def.xp / 6);
+    return;
+  }
+  addDrop(w, Drop.Soul, x, y, def.xp);
+  const r = w.rDrop.next();
+  if (r < DROPS.scroll) addDrop(w, Drop.Scroll, x + 8, y, 1);
+  else if (r < DROPS.scroll + DROPS.bun) addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
+  else if (r < DROPS.scroll + DROPS.bun + DROPS.coin) addDrop(w, Drop.Coin, x + 8, y, 1);
+}
+
+function eff(w: World, s: WeaponStats): { dmg: number; cd: number; area: number; amount: number } {
+  return { dmg: s.dmg, cd: Math.max(4, Math.round(s.cd * w.stats.cdMul)), area: s.area * w.stats.areaMul, amount: s.amount + w.stats.amount };
+}
+
+/** 离 (x, y) 最近的怪（r 以内），没有为 -1 */
+function nearest(w: World, g: Grid, x: number, y: number, r: number, skip = -1): number {
+  const n = g.query(w, x, y, r);
+  let best = -1;
+  let bd = Infinity;
+  for (let j = 0; j < n; j++) {
+    const i = g.out[j]!;
+    if (i === skip) continue;
+    const dx = w.eX[i]! - x;
+    const dy = w.eY[i]! - y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function fireWeapons(w: World, g: Grid): void {
+  for (let k = 0; k < w.weapons.length; k++) {
+    const wp = w.weapons[k]!;
+    const s = w.wstats[k]!;
+    const e = eff(w, s);
+    switch (wp.id) {
+      case 'sword':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          swordSwing(w, g, k, s, e);
+        }
+        break;
+      case 'talisman':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          fireTalismans(w, g, k, s, e);
+        }
+        break;
+      case 'coins':
+        coinsTick(w, k, wp, s, e);
+        break;
+      case 'flysword':
+        flyTick(w, g, k, wp, s, e);
+        break;
+      case 'thunder':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          thunder(w, g, s, e);
+        }
+        break;
+      case 'bell':
+        if (--wp.timer <= 0) {
+          wp.timer = e.cd;
+          w.ev.push(Ev.Bell, w.x, w.y, 0, e.area);
+          const n = g.query(w, w.x, w.y, e.area);
+          for (let j = 0; j < n; j++) scratch[j] = g.out[j]!;
+          for (let j = 0; j < n; j++) {
+            const i = scratch[j]!;
+            hitEnemy(w, i, e.dmg, k, w.eX[i]! - w.x, w.eY[i]! - w.y, s.knock, s.rehit);
+          }
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * 桃木剑：第 j 道的方向——0 面前、1 身后、2 面前偏上、3 身后偏下……扇形 ±75°。
+ * 进化后（斩妖剑）砍中回血，每一挥最多回 4 点。
+ */
+function swordSwing(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
+  const evolved = w.weapons[k]!.evolved;
+  let healed = 0;
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.sword);
+  for (let j = 0; j < e.amount; j++) {
+    const base = j % 2 === 0 ? w.face : w.face + DIR_N / 2;
+    const tilt = j < 2 ? 0 : ((j >> 1) % 2 === 1 ? -1 : 1) * 22;
+    const a = base + tilt;
+    const ux = dcos(a);
+    const uy = dsin(a);
+    w.ev.push(Ev.Slash, w.x, w.y, a & (DIR_N - 1), e.area, evolved ? 1 : 0);
+    const n = g.query(w, w.x, w.y, e.area);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) {
+      const i = scratch[q]!;
+      const dx = w.eX[i]! - w.x;
+      const dy = w.eY[i]! - w.y;
+      const dot = dx * ux + dy * uy;
+      // cos 75° ≈ 0.26：dot ≥ 0.26 × |d|，两边平方免得开方
+      if (dot < 0 || dot * dot < 0.0676 * (dx * dx + dy * dy)) continue;
+      if (hitEnemy(w, i, e.dmg, k, ux, uy, s.knock, s.rehit) && evolved && healed < 4) {
+        heal(w, 1);
+        healed++;
+      }
+    }
+  }
+}
+
+function fireTalismans(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
+  // 依次瞄最近的几只（不重复），没有怪就朝面前飞
+  const n = g.query(w, w.x, w.y, 520);
+  for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+  let taken = 0;
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.talisman);
+  for (let j = 0; j < e.amount; j++) {
+    let best = -1;
+    let bd = Infinity;
+    for (let q = taken; q < n; q++) {
+      const i = scratch[q]!;
+      const dx = w.eX[i]! - w.x;
+      const dy = w.eY[i]! - w.y;
+      const d = dx * dx + dy * dy;
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    let vx = dcos(w.face + j * 9);
+    let vy = dsin(w.face + j * 9);
+    if (best >= 0) {
+      const i = scratch[best]!;
+      scratch[best] = scratch[taken]!;
+      scratch[taken++] = i;
+      const dx = w.eX[i]! - w.x;
+      const dy = w.eY[i]! - (w.y - 24);
+      const d = fsqrt(dx * dx + dy * dy) || 1;
+      vx = dx / d;
+      vy = dy / d;
+    }
+    addShot(w, Shot.Talisman, w.x, w.y - 24, vx * s.speed, vy * s.speed, s.duration, e.dmg, e.area, 1, k, j);
+  }
+}
+
+function coinsTick(w: World, k: number, wp: { timer: number; phase: number; angle: number }, s: WeaponStats, e: { area: number; amount: number; dmg: number }): void {
+  if (wp.phase > 0) {
+    wp.phase--;
+    wp.angle = (wp.angle + s.speed) & (DIR_N - 1);
+    if (wp.phase === 0) {
+      removeShots(w, Shot.Coin, k);
+      wp.timer = Math.max(4, Math.round((s.cd - s.duration) * w.stats.cdMul));
+    }
+    return;
+  }
+  if (--wp.timer > 0) return;
+  wp.phase = s.duration;
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.coins);
+  for (let j = 0; j < e.amount; j++) addShot(w, Shot.Coin, w.x, w.y, 0, 0, s.duration + 1, e.dmg, 12, 0, k, j);
+}
+
+function flyTick(w: World, g: Grid, k: number, wp: { timer: number; phase: number }, s: WeaponStats, e: { amount: number; dmg: number }): void {
+  // 飞剑常驻：数量不够就补上（升级、令牌加数量时）
+  let have = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Fly && w.sSlot[i] === k) have++;
+  for (let j = have; j < e.amount; j++) addShot(w, Shot.Fly, w.x, w.y, 0, 0, 1 << 30, e.dmg, 14, 0, k, j);
+  if (--wp.timer > 0) return;
+  // 轮到下一把待命的飞出去
+  const target = nearest(w, g, w.x, w.y, s.duration * 0.9);
+  if (target < 0) {
+    wp.timer = 6;
+    return;
+  }
+  for (let tries = 0; tries < e.amount; tries++) {
+    const idx = wp.phase % e.amount;
+    wp.phase++;
+    for (let i = 0; i < MAX_SHOTS; i++) {
+      if (!w.sAlive[i] || w.sKind[i] !== Shot.Fly || w.sSlot[i] !== k || w.sIdx[i] !== idx || w.sState[i] !== 0) continue;
+      const dx = w.eX[target]! - w.sX[i]!;
+      const dy = w.eY[target]! - 20 - w.sY[i]!;
+      const d = fsqrt(dx * dx + dy * dy) || 1;
+      w.sState[i] = 1;
+      w.sVX[i] = (dx / d) * s.speed;
+      w.sVY[i] = (dy / d) * s.speed;
+      w.sDist[i] = 0;
+      w.sDmg[i] = e.dmg;
+      w.ev.push(Ev.Fire, w.sX[i]!, w.sY[i]!, WEAPON_CODE.flysword);
+      wp.timer = Math.max(3, Math.round((Math.max(4, Math.round(s.cd * w.stats.cdMul)) / e.amount) * 1.2));
+      return;
+    }
+  }
+  wp.timer = 4;
+}
+
+function thunder(w: World, g: Grid, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
+  const n = g.query(w, w.x, w.y, s.duration);
+  if (n === 0) return;
+  for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.thunder);
+  const local = scratch2;
+  for (let j = 0; j < e.amount; j++) {
+    const t = scratch[w.rWeapon.int(n)]!;
+    const tx = w.eX[t]!;
+    const ty = w.eY[t]!;
+    w.ev.push(Ev.Thunder, tx, ty, 0, e.area);
+    const m = g.query(w, tx, ty, e.area);
+    for (let q = 0; q < m; q++) local[q] = g.out[q]!;
+    for (let q = 0; q < m; q++) {
+      const i = local[q]!;
+      hitEnemy(w, i, e.dmg, -1, w.eX[i]! - tx, w.eY[i]! - ty, s.knock, 0);
+    }
+  }
+}
+
+// ───────────────────────── 子弹 ─────────────────────────
+
+function addShot(w: World, kind: Shot, x: number, y: number, vx: number, vy: number, life: number, dmg: number, r: number, state: number, slot: number, idx: number): number {
+  let i = -1;
+  for (let s = 0; s < MAX_SHOTS; s++) {
+    if (!w.sAlive[s]) {
+      i = s;
+      break;
+    }
+  }
+  if (i < 0) return -1;
+  w.sAlive[i] = 1;
+  w.sGen[i]!++;
+  w.sKind[i] = kind;
+  w.sX[i] = x;
+  w.sY[i] = y;
+  w.sPX[i] = x;
+  w.sPY[i] = y;
+  w.sVX[i] = vx;
+  w.sVY[i] = vy;
+  w.sLife[i] = life;
+  w.sDmg[i] = dmg;
+  w.sR[i] = r;
+  w.sState[i] = state;
+  w.sSlot[i] = slot;
+  w.sIdx[i] = idx;
+  w.sDist[i] = 0;
+  w.sCount++;
+  return i;
+}
+
+function killShot(w: World, i: number): void {
+  w.sAlive[i] = 0;
+  w.sCount--;
+}
+
+function removeShots(w: World, kind: Shot, slot: number): void {
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === kind && w.sSlot[i] === slot) killShot(w, i);
+}
+
+function moveShots(w: World, g: Grid): void {
+  for (let i = 0; i < MAX_SHOTS; i++) {
+    if (!w.sAlive[i]) continue;
+    const kind = w.sKind[i] as Shot;
+    if (kind === Shot.Fireball) {
+      w.sX[i]! += w.sVX[i]!;
+      w.sY[i]! += w.sVY[i]!;
+      const dx = w.sX[i]! - w.x;
+      const dy = w.sY[i]! + 16 - w.y;
+      const rr = w.sR[i]! + PLAYER.r;
+      if (dx * dx + dy * dy < rr * rr && w.invuln === 0) {
+        hurt(w, w.sDmg[i]!);
+        killShot(w, i);
+        continue;
+      }
+      if (--w.sLife[i]! <= 0) killShot(w, i);
+      continue;
+    }
+    const k = w.sSlot[i]!;
+    const wp = w.weapons[k];
+    const s = w.wstats[k];
+    if (!wp || !s) {
+      killShot(w, i);
+      continue;
+    }
+    if (kind === Shot.Talisman) {
+      // 追踪：慢慢转向离符最近的怪（进化后转得更快）
+      const t = nearest(w, g, w.sX[i]!, w.sY[i]!, 260);
+      if (t >= 0) {
+        const dx = w.eX[t]! - w.sX[i]!;
+        const dy = w.eY[t]! - 20 - w.sY[i]!;
+        const d = fsqrt(dx * dx + dy * dy) || 1;
+        const turn = wp.evolved ? 0.35 : 0.18;
+        w.sVX[i] = w.sVX[i]! + ((dx / d) * s.speed - w.sVX[i]!) * turn;
+        w.sVY[i] = w.sVY[i]! + ((dy / d) * s.speed - w.sVY[i]!) * turn;
+      }
+      w.sX[i]! += w.sVX[i]!;
+      w.sY[i]! += w.sVY[i]!;
+      const hit = nearest(w, g, w.sX[i]!, w.sY[i]! + 20, 10);
+      if (hit >= 0) {
+        // 爆开：一圈都挨打
+        const bx = w.sX[i]!;
+        const by = w.sY[i]! + 20;
+        w.ev.push(Ev.Burst, bx, by, 0, w.sR[i]!);
+        const n = g.query(w, bx, by, w.sR[i]!);
+        for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+        for (let q = 0; q < n; q++) {
+          const e = scratch[q]!;
+          hitEnemy(w, e, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+        }
+        killShot(w, i);
+        continue;
+      }
+      if (--w.sLife[i]! <= 0) killShot(w, i);
+      continue;
+    }
+    if (kind === Shot.Coin) {
+      const e = eff(w, s);
+      const a = wp.angle + Math.floor((w.sIdx[i]! * DIR_N) / e.amount);
+      w.sX[i] = w.x + dcos(a) * e.area;
+      w.sY[i] = w.y - 16 + dsin(a) * e.area * 0.8;
+      const n = g.query(w, w.sX[i]!, w.sY[i]! + 16, w.sR[i]!);
+      for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+      for (let q = 0; q < n; q++) {
+        const en = scratch[q]!;
+        hitEnemy(w, en, w.sDmg[i]!, k, w.eX[en]! - w.x, w.eY[en]! - w.y, s.knock, s.rehit);
+      }
+      continue;
+    }
+    // 飞剑
+    const st = w.sState[i]!;
+    if (st === 0) {
+      // 待命：绕身转，几把均匀分布
+      const amount = eff(w, s).amount;
+      if (w.sIdx[i]! >= amount) {
+        killShot(w, i);
+        continue;
+      }
+      const a = w.tick * 3 + Math.floor((w.sIdx[i]! * DIR_N) / amount);
+      const tx = w.x + dcos(a) * 46;
+      const ty = w.y - 30 + dsin(a) * 30;
+      w.sX[i] = w.sX[i]! + (tx - w.sX[i]!) * 0.35;
+      w.sY[i] = w.sY[i]! + (ty - w.sY[i]!) * 0.35;
+      continue;
+    }
+    if (st === 1) {
+      w.sX[i]! += w.sVX[i]!;
+      w.sY[i]! += w.sVY[i]!;
+      w.sDist[i]! += s.speed;
+      const n = g.query(w, w.sX[i]!, w.sY[i]! + 20, w.sR[i]!);
+      for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+      for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+      if (w.sDist[i]! >= s.duration) w.sState[i] = 2;
+      continue;
+    }
+    // 飞回来：朝主角身边飞，路上照样打
+    const dx = w.x - w.sX[i]!;
+    const dy = w.y - 30 - w.sY[i]!;
+    const d = fsqrt(dx * dx + dy * dy) || 1;
+    const sp = s.speed * 1.1;
+    if (d <= sp + 40) {
+      w.sState[i] = 0;
+      continue;
+    }
+    w.sVX[i] = (dx / d) * sp;
+    w.sVY[i] = (dy / d) * sp;
+    w.sX[i]! += w.sVX[i]!;
+    w.sY[i]! += w.sVY[i]!;
+    const n = g.query(w, w.sX[i]!, w.sY[i]! + 20, w.sR[i]!);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, w.sDmg[i]!, k, w.sVX[i]!, w.sVY[i]!, s.knock, s.rehit);
+  }
+}
+
+// ───────────────────────── 挨打 ─────────────────────────
+
+function touchPlayer(w: World, g: Grid): void {
+  if (w.invuln > 0) return;
+  const n = g.query(w, w.x, w.y, PLAYER.r);
+  let worst = 0;
+  for (let j = 0; j < n; j++) {
+    const i = g.out[j]!;
+    if (w.eDmg[i]! > worst) worst = w.eDmg[i]!;
+  }
+  if (worst > 0) hurt(w, worst);
+}
+
+// ───────────────────────── 掉落 ─────────────────────────
+
+function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void {
+  let i = -1;
+  for (let s = 0; s < MAX_DROPS; s++) {
+    if (!w.dAlive[s]) {
+      i = s;
+      break;
+    }
+  }
+  if (i < 0) {
+    // 满了：魂珠加到离主角最远的那颗魂珠上（不丢经验）；别的东西挤掉最远的魂珠
+    let far = -1;
+    let fd = -1;
+    for (let s = 0; s < MAX_DROPS; s++) {
+      if (w.dKind[s] !== Drop.Soul) continue;
+      const dx = w.dX[s]! - w.x;
+      const dy = w.dY[s]! - w.y;
+      const d = dx * dx + dy * dy;
+      if (d > fd) {
+        fd = d;
+        far = s;
+      }
+    }
+    if (far < 0) return;
+    if (kind === Drop.Soul) {
+      w.dVal[far]! += val;
+      return;
+    }
+    i = far;
+    w.dCount--;
+  }
+  w.dAlive[i] = 1;
+  w.dGen[i]!++;
+  w.dKind[i] = kind;
+  w.dX[i] = clamp(x, 10, ARENA.w - 10);
+  w.dY[i] = clamp(y, 10, ARENA.h - 10);
+  w.dPX[i] = w.dX[i]!;
+  w.dPY[i] = w.dY[i]!;
+  w.dVal[i] = val;
+  w.dPull[i] = 0;
+  w.dCount++;
+}
+
+function movePickups(w: World): void {
+  const m2 = w.stats.magnet * w.stats.magnet;
+  for (let i = 0; i < MAX_DROPS; i++) {
+    if (!w.dAlive[i]) continue;
+    const dx = w.x - w.dX[i]!;
+    const dy = w.y - 12 - w.dY[i]!;
+    const d2 = dx * dx + dy * dy;
+    if (w.dPull[i] === 0) {
+      // 宝箱、肉包、符纸卷要走过去才捡（魂珠和铜钱会被吸）
+      const kind = w.dKind[i];
+      const reach = kind === Drop.Soul || kind === Drop.Coin ? m2 : PICKUP.grab * PICKUP.grab * 4;
+      if (d2 > reach) continue;
+      w.dPull[i] = PICKUP.pull;
+    }
+    const d = fsqrt(d2);
+    if (d <= w.dPull[i]! + PICKUP.grab) {
+      collect(w, i);
+      continue;
+    }
+    w.dX[i]! += (dx / d) * w.dPull[i]!;
+    w.dY[i]! += (dy / d) * w.dPull[i]!;
+    w.dPull[i]! += PICKUP.pullAccel;
+  }
+}
+
+function collect(w: World, i: number): void {
+  const kind = w.dKind[i] as Drop;
+  const val = w.dVal[i]!;
+  w.dAlive[i] = 0;
+  w.dCount--;
+  w.ev.push(Ev.Pickup, w.dX[i]!, w.dY[i]!, kind, val);
+  switch (kind) {
+    case Drop.Soul:
+      gainXp(w, val);
+      break;
+    case Drop.Coin:
+      w.coins += val;
+      break;
+    case Drop.Bun:
+      heal(w, val);
+      break;
+    case Drop.Scroll:
+      for (let s = 0; s < MAX_DROPS; s++) if (w.dAlive[s] && w.dKind[s] === Drop.Soul) w.dPull[s] = PICKUP.pull;
+      break;
+    case Drop.Chest:
+      openChest(w);
+      break;
+  }
+}
+
+function gainXp(w: World, v: number): void {
+  w.xp += v;
+  for (;;) {
+    const need = xpNeed(w.level);
+    if (w.xp < need) break;
+    w.xp -= need;
+    w.level++;
+    w.pendingLevels++;
+    w.ev.push(Ev.LevelUp, w.x, w.y, w.level);
+  }
+}
+
+// ───────────────────────── 升级、宝箱 ─────────────────────────
+
+function recompute(w: World): void {
+  const p = (id: PassiveId): number => w.passives[id] ?? 0;
+  const s = baseStats();
+  s.might = 1 + 0.1 * p('zhusha');
+  s.cdMul = 1 - 0.08 * p('xianglu');
+  s.speed = PLAYER.speed * (1 + 0.1 * p('caoxie'));
+  s.hpMax = PLAYER.hp + 20 * p('xiantao');
+  s.regen = 0.3 * p('xiantao');
+  s.magnet = PLAYER.magnet * (1 + 0.3 * p('luopan'));
+  s.armor = p('daopao');
+  s.areaMul = 1 + 0.1 * p('nianzhu');
+  s.amount = p('lingpai');
+  const grow = s.hpMax - w.stats.hpMax;
+  w.stats = s;
+  if (grow > 0) w.hp += grow;
+  w.wstats = w.weapons.map((o) => weaponStats(o.id, o.level, o.evolved));
+}
+
+function addWeapon(w: World, id: WeaponId): void {
+  w.weapons.push({ id, level: 1, evolved: false, timer: 8, phase: 0, angle: 0 });
+  recompute(w);
+}
+
+function upgradeWeapon(w: World, id: WeaponId): void {
+  const o = w.weapons.find((x) => x.id === id);
+  if (!o) return addWeapon(w, id);
+  if (o.level < MAX_WEAPON_LEVEL) o.level++;
+  recompute(w);
+}
+
+function upgradePassive(w: World, id: PassiveId): void {
+  w.passives[id] = Math.min(PASSIVES[id].max, (w.passives[id] ?? 0) + 1);
+  recompute(w);
+}
+
+/** 三选一的候选：手上没满级的法器、还能拿的新法器、被动同理 */
+function choicePool(w: World): { c: Choice; weight: number }[] {
+  const pool: { c: Choice; weight: number }[] = [];
+  for (const id of WEAPON_IDS) {
+    const o = w.weapons.find((x) => x.id === id);
+    if (o) {
+      if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 });
+    } else if (w.weapons.length < MAX_WEAPONS) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
+  }
+  const owned = Object.keys(w.passives).length;
+  for (const id of PASSIVE_IDS) {
+    const lv = w.passives[id];
+    if (lv !== undefined) {
+      if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 });
+    } else if (owned < MAX_PASSIVES) pool.push({ c: { kind: 'passive', id }, weight: 0.8 });
+  }
+  return pool;
+}
+
+function openChoices(w: World): void {
+  const pool = choicePool(w);
+  const picks: Choice[] = [];
+  while (picks.length < 3 && pool.length > 0) {
+    let total = 0;
+    for (const p of pool) total += p.weight;
+    let r = w.rUp.next() * total;
+    let k = 0;
+    for (; k < pool.length - 1; k++) {
+      r -= pool[k]!.weight;
+      if (r < 0) break;
+    }
+    picks.push(pool[k]!.c);
+    pool.splice(k, 1);
+  }
+  if (picks.length === 0) picks.push({ kind: 'coins', id: 'coins' });
+  w.choices = picks;
+  w.phase = 'choose';
+}
+
+function applyChoice(w: World, c: Choice): void {
+  if (c.kind === 'weapon') upgradeWeapon(w, c.id as WeaponId);
+  else if (c.kind === 'passive') upgradePassive(w, c.id as PassiveId);
+  else {
+    w.coins += 25;
+    heal(w, 20);
+  }
+  w.pendingLevels--;
+  w.choices = [];
+  w.phase = 'play';
+  if (w.pendingLevels > 0) openChoices(w);
+}
+
+/** 宝箱：能进化就进化；不然随机升一件手上的东西；都满了给铜钱和回血 */
+function openChest(w: World): void {
+  for (const o of w.weapons) {
+    const evo = WEAPONS[o.id].evolve;
+    if (!o.evolved && evo && o.level >= MAX_WEAPON_LEVEL && (w.passives[evo.with] ?? 0) > 0) {
+      o.evolved = true;
+      recompute(w);
+      w.ev.push(Ev.Evolve, w.x, w.y, WEAPON_CODE[o.id]);
+      w.ev.push(Ev.Chest, w.x, w.y, WEAPON_CODE[o.id]);
+      return;
+    }
+  }
+  const pool: Choice[] = [];
+  for (const o of w.weapons) if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ kind: 'weapon', id: o.id });
+  for (const id of PASSIVE_IDS) if ((w.passives[id] ?? 0) > 0 && w.passives[id]! < PASSIVES[id].max) pool.push({ kind: 'passive', id });
+  if (pool.length === 0) {
+    w.coins += 40;
+    heal(w, 30);
+    w.ev.push(Ev.Chest, w.x, w.y, -1);
+    return;
+  }
+  const c = pool[w.rChest.int(pool.length)]!;
+  if (c.kind === 'weapon') upgradeWeapon(w, c.id as WeaponId);
+  else upgradePassive(w, c.id as PassiveId);
+  w.ev.push(Ev.Chest, w.x, w.y, c.kind === 'weapon' ? WEAPON_CODE[c.id as WeaponId] : PASSIVE_CODE[c.id as PassiveId]);
+}

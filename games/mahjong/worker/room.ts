@@ -4,6 +4,7 @@
  * 带入、结回经服务绑定调平台，平台按操作 id 去重，房间重办不会多扣多给；每个座位同一时间只有一笔、一份只结回一次（规则保证）。
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
+import { roomOp } from '../src/game/ops.ts';
 import { AI_DELAY_MS, mahjongRoom, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import { RoomTalk, talkSeed } from '../src/room/talk.ts';
 import { GAME } from './game.ts';
@@ -41,7 +42,7 @@ export class MahjongRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, 
     // 单独部署没有钱包（开房时已经挡住实盘，这里兜底：按带入被拒处理，不去重试）
     if (!this.env.WALLET) return { ok: false, error: 'no_wallet' };
     const wallet = this.env.WALLET;
-    const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: `${e.ref}-${e.id}` };
+    const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: roomOp(e) };
     const r =
       e.kind === 'debit'
         ? await wallet.buyin({ ...base, tier: e.stakes, amount: e.amount, until: Date.now() + HOLD_MS })

@@ -19,6 +19,7 @@ import {
   setWalletRules,
 } from './admin';
 import { getMe, login, logout, patchMe, recover, register } from './auth';
+import { postPresence } from './presence';
 import { boardParams, getBoard, submitScore } from './boards';
 import {
   acceptRequest,
@@ -41,7 +42,7 @@ import { limitsOf } from './config';
 import { type Ctx, userParams } from './context';
 import { hashIp, MissingSecretError } from './crypto';
 import { d1Trouble, Db, newStats, type RequestStats } from './db';
-import { ApiError, clearCookies, errorResponse, readCookie, SID_COOKIE, unavailable } from './http';
+import { ApiError, clearCookies, errorResponse, noContent, readCookie, SID_COOKIE, unavailable } from './http';
 import { type Category, effectiveTier, meter } from './meter';
 import { loadSession } from './session';
 
@@ -67,6 +68,8 @@ interface Route {
   acct?: AcctPolicy;
   /** 退出：任何档位都能用。 */
   alwaysOpen?: boolean;
+  /** 可丢的写（报位置，0.13.0）：只读档、这一类预算用完时不写、直接 204，不打扰玩家（docs/social.md 0："超了静默丢弃"） */
+  quiet?: boolean;
   handler: (c: Ctx) => Promise<Response>;
 }
 
@@ -83,6 +86,8 @@ const ROUTES: Route[] = [
   { method: 'POST', path: '/api/account/delete', cat: 'acct', auth: 'user', acct: 'always', handler: deleteAccount },
   { method: 'POST', path: '/api/me/friend-code', cat: 'social', auth: 'user', handler: changeFriendCode },
   { method: 'GET', path: '/api/friends', cat: 'social', auth: 'user', handler: listFriends },
+  // 好友在线（0.13.0，15.13）：每人每 2 分钟最多写 1 行；写不了就静默 204
+  { method: 'POST', path: '/api/presence', cat: 'live', auth: 'user', quiet: true, handler: postPresence },
   // 战绩（0.10.3，5.10）：对登录的人公开，只读
   { method: 'GET', path: /^\/api\/stats\/([^/]+)$/, params: statsParams, cat: 'social', auth: 'user', handler: getStats },
   // 排行榜页（0.10.4，15.12）：本周净赢、称号收集，读走缓存
@@ -236,6 +241,7 @@ async function dispatch(
   const tier = effectiveTier(env, meter.tier(limits, now));
   if (!route.alwaysOpen) {
     if (tier === 'off') throw meter.unreachable() ? unavailable(Math.ceil(limits.meterRetryMs / 1000)) : new ApiError(503, 'busy');
+    if (write && route.quiet && (tier === 'readonly' || meter.exhausted(route.cat, limits, now))) return noContent();
     if (write && tier === 'readonly') throw new ApiError(503, 'busy');
     if (route.growth && tier === 'noGrowth') throw new ApiError(503, 'busy');
     if (write && meter.exhausted(route.cat, limits, now)) {

@@ -8,7 +8,7 @@
  * 1. 娱乐房：A 开房（局数 4）、B 凭 ?room= 进等人页坐下、A 开打，两边自动打满 N 局（换三张、定缺、能胡就胡、不然过、打最右边那张），
  *    B 离开并确认，A 继续打、牌桌还在动；
  * 2. 实盘小档房：A 一个人时"开打"灰着、有"至少要两个人"的提示；A、B 进房开打，检查假钱包各扣 2,000、stakes 里各有 mahjong 的 server 模式一份；
- *    B 中途离开，只剩 A 一个人在下注：这一场当场结束，两个人的那一份都马上结回、余额加回结回的数，A 的结算上写着提前结束。
+ *    B 一局打到一半离开：这一局由电脑替他打完、那一份先还在；A 打完这一局，只剩 A 一个人在下注：这一场结束，两个人的那一份都结回、余额加回结回的数，A 的结算上写着提前结束。
  * 两边控制台零报错。端口由系统分配（不占 5176 / 4176）。截图放在 shots/（--shots 可改）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -143,7 +143,8 @@ async function playUntil(players: Player[], done: () => boolean, ms: number, wha
 async function openRoom(page: Page, base: string, stake: '娱乐' | '小档'): Promise<string> {
   await page.goto(`${base}/games/mahjong/`);
   await page.waitForSelector('.lobby-head');
-  await page.click(`.stakes .stake:has-text("${stake}")`);
+  // 娱乐分三个难度（0.10.0），好友房用哪个都一样（房间按自己的场地表挑电脑），点"新手"那张
+  await page.click(`.stakes .stake:has-text("${stake === '娱乐' ? '新手' : stake}")`);
   await page.click('.rules-opts summary');
   await page.click('.rules-opts .chip:has-text("4 局")');
   await page.click('text=开房间叫朋友');
@@ -300,14 +301,17 @@ try {
   await playUntil([A, B], () => B.discards >= d0 + 3, 120_000, '实盘房先打几张');
   await pa.screenshot({ path: join(SHOTS, 'room-stake-a.png') });
   await leaveRoom(pb, 'B');
+  // 一局打到一半走的：这一局由电脑替他打完（输赢照算），那一份还在；A 接着打完这一局才结回
   let w2 = await wallet(pb);
-  for (let i = 0; i < 25 && w2.stakes.length > 0; i++) {
-    await sleep(200);
-    w2 = await wallet(pb);
+  check(w2.stakes.length === 1, 'B 一局打到一半离开：这一局还没完，那一份还在（电脑替他打完）');
+  for (let i = 0; i < 900 && w2.stakes.length > 0; i++) {
+    await step(A);
+    await sleep(150);
+    if (i % 4 === 0) w2 = await wallet(pb);
   }
   log('B 离开后钱包', w2.balance, JSON.stringify(w2.stakes));
-  check(w2.stakes.length === 0, 'B 离开后那一份马上没了');
-  check(w2.balance > w1.b.balance, `B 余额加回结回的数：${w1.b.balance} → ${w2.balance}（结回 ${w2.balance - w1.b.balance}）`);
+  check(w2.stakes.length === 0, 'A 打完这一局，B 的那一份结回了');
+  check(w2.balance >= w1.b.balance, `B 余额加回结回的数：${w1.b.balance} → ${w2.balance}（结回 ${w2.balance - w1.b.balance}）`);
   // 只剩 A 一个人在下注：这一场当场结束，A 的那一份也马上结回（实盘至少两个真人）
   let wa = await wallet(pa);
   for (let i = 0; i < 25 && wa.stakes.length > 0; i++) {
