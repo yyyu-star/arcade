@@ -1,5 +1,5 @@
 /**
- * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--danger 0,2,4 | --diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--map snow|yizhuang] [--threads N] [--json 文件] [--from 偏移]
+ * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--danger 0,2,4 | --diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--map snow|yizhuang] [--char xiaodao|fushi|jianxia|pang|gengfu|caiyao] [--threads N] [--json 文件] [--from 偏移]
  * --json：把每局的结局（赢没赢、打没打倒尸王、撑了几拍）按格存下来，第 7 步离线调实盘倍数曲线用（曲线不影响对局，改曲线不用重跑）。
  *
  * --from：种子从 from+1 起（默认 0），把一格拆成几片分到不同机器上跑，再用 tools/sim-merge.ts 拼表。
@@ -15,6 +15,7 @@ import { writeFileSync } from 'node:fs';
 import { DIFFICULTIES, type Danger } from '../src/content/waves.ts';
 import { tierOfDanger, vigilBp } from '../src/content/live.ts';
 import type { MapId } from '../src/content/maps.ts';
+import type { CharacterId } from '../src/content/meta.ts';
 import { Bot, type Build, type Skill } from './bots.ts';
 import { RaidBot } from '../src/explore/bot.ts';
 import { settleRaid } from '../src/explore/settle.ts';
@@ -61,8 +62,8 @@ export function runRaid(seed: number, danger: Danger, who: string, build: Build,
   return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0 };
 }
 
-export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow'): RunResult {
-  const w = createWorld({ seed, mode: 'vigil', danger, map });
+export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow', character: CharacterId = 'xiaodao'): RunResult {
+  const w = createWorld({ seed, mode: 'vigil', danger, map, character });
   const bot = new Bot(skill, build, seed);
   let firstLevel = -1;
   let levels3 = 0;
@@ -101,13 +102,15 @@ interface Task {
   /** 守夜的地图，或夜探的镇子模板（raid 为真时） */
   map: string;
   raid: boolean;
+  /** 守夜的出战角色（--char） */
+  char: CharacterId;
   seeds: number[];
 }
 
 if (!isMainThread) {
   // 常驻工作线程：每个进程只启动一次（导入核心和内容表要几百毫秒），一直接活到被关掉
   parentPort!.on('message', (t: Task) => {
-    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId))) });
+    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId, t.char))) });
   });
 } else if (process.argv[1]?.endsWith('sim.ts')) {
   const arg = (name: string, def: string): string => {
@@ -129,6 +132,7 @@ if (!isMainThread) {
   const chunk = Math.max(1, Number(arg('--chunk', '4')));
   const maps = arg('--map', raid ? 'guzhen,dukou,shansi' : 'snow').split(',');
   const map = maps[0]!;
+  const char = arg('--char', 'xiaodao') as CharacterId;
 
   const cells: (Cell & { map: string })[] = [];
   for (const m of raid ? maps : [map])
@@ -145,7 +149,7 @@ if (!isMainThread) {
       const seeds: number[] = [];
       for (let s = from; s < Math.min(n, from + chunk); s++) seeds.push(seedFrom + s + 1);
       owner.push({ cell: ci, from });
-      tasks.push({ id: tid++, cell, map: cell.map, raid, seeds });
+      tasks.push({ id: tid++, cell, map: cell.map, raid, char, seeds });
     }
   });
 

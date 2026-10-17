@@ -36,3 +36,36 @@
   .yx-pcard img { width: 30px; height: 30px; }
   .yx-pcard p { font-size: 11px; }
 }
+
+/* 角色卡：头像大一点，锁着的灰掉 */
+.yx-pchars { grid-template-columns: repeat(3, 1fr); }
+.yx-pchar { gap: 3px; padding: 8px 6px 10px; }
+.yx-pface { width: 68px; height: 68px; display: flex; align-items: flex-end; justify-content: center; border-radius: 50%; background: radial-gradient(circle at 50% 70%, #fff6dc, #e8d8aa); border: 2px solid var(--ink); overflow: hidden; }
+.yx-pface img { width: 66px; height: auto; margin-bottom: -2px; }
+.yx-pchar .yx-pstart { display: flex; align-items: center; gap: 3px; font-size: 11px; color: #8a6a3a; }
+.yx-pchar .yx-pstart img { width: 18px; height: 18px; }
+.yx-pperkname { font-size: 13px; font-weight: 700; color: #b8322a; }
+.yx-pchar p { margin: 0; min-height: 2.7em; }
+.yx-plook { font-size: 11px; color: #7a6a58; }
+.yx-pline { display: block; font-size: 12px; line-height: 1.35; color: #5a2a6a; font-style: italic; }
+.yx-pline::before { content: '“'; }
+.yx-pline::after { content: '”'; }
+.yx-pneed { font-size: 11px; line-height: 1.35; color: #5a4a3a; }
+.yx-pchar.locked { background: #d9d4c6; color: #4a4a4a; cursor: default; }
+.yx-pchar.locked .yx-pface { filter: grayscale(1) brightness(0.8); }
+.yx-pchar.locked .yx-pperkname { color: #6a6a6a; }
+.yx-pchar.locked em { color: #5a4a3a; font-weight: 400; font-size: 11px; }
+.yx-pchar.locked[data-a='buychar'] { cursor: pointer; }
+.yx-pchar.locked[data-a='buychar'] em { color: #b8322a; font-weight: 700; font-size: 13px; }
+.yx-pchar[aria-disabled='true'] { opacity: 1; }
+.yx-pchar.locked[aria-disabled='true'] { opacity: 0.88; }
+.yx-lock { width: 11px; height: 11px; vertical-align: -1px; }
+@media (max-width: 640px) {
+  .yx-pchars { grid-template-columns: repeat(2, 1fr); }
+  .yx-prep { width: 96vw; }
+}
+@media (max-height: 500px) {
+  .yx-pchars { grid-template-columns: repeat(3, 1fr); }
+  .yx-pface { width: 46px; height: 46px; }
+  .yx-pface img { width: 46px; }
+}

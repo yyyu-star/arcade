@@ -5,10 +5,10 @@
  */
 import Phaser from 'phaser';
 import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
-import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
+import { CHARACTER_IDS, CHARACTERS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Setup, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, charProgress, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
 import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
@@ -30,9 +30,10 @@ import { createSubmitter, outcomeText } from './online/submit.ts';
 import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
+import { heroKey } from './view/art/heroes.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import { MAP_IDS, type MapId } from './content/maps.ts';
-import { buildAtlas, buildGround, buildMobAtlas, buildRaidAtlas, peekMobAtlas, type Atlas } from './view/art/atlas.ts';
+import { buildAtlas, buildGround, buildHeroAtlas, buildMobAtlas, buildRaidAtlas, peekHeroAtlas, peekMobAtlas, type Atlas } from './view/art/atlas.ts';
 import { treasureIconKey } from './view/art/sprites8.ts';
 import { Vault } from './view/ui/vault.ts';
 import { settleRaid } from './explore/settle.ts';
@@ -59,9 +60,9 @@ function iconMaker(atlas: Atlas): (key: string, px?: number) => string {
     const id = `${key}@${px}`;
     let url = cache.get(id);
     if (url) return url;
-    // 特色怪的图在第二张图集里（图鉴要用）
+    const hero = peekHeroAtlas();
     const mob = peekMobAtlas();
-    const hit = atlas.frames.has(key) || !mob?.frames.has(key) ? atlas : mob;
+    const hit = atlas.frames.has(key) ? atlas : hero?.frames.has(key) ? hero : mob?.frames.has(key) ? mob : atlas;
     const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
     const c = document.createElement('canvas');
     c.width = px;
@@ -86,6 +87,7 @@ async function boot(): Promise<void> {
   await document.fonts?.load('40px YxBrush').catch(() => undefined);
   const atlas = buildAtlas(res);
   const mobAtlas = buildMobAtlas(res);
+  buildHeroAtlas(res);
   const ground = buildGround(512);
   if (q.has('sheet')) {
     // ?sheet 看主图集，?sheet=mob 看特色怪的图集
@@ -219,7 +221,7 @@ async function boot(): Promise<void> {
   const result = new Result(stage, (k) => icon(k));
   const confirm = new Confirm(stage);
   const tips = new Tips(stage);
-  const prep = new Prep(stage, (k) => icon(k));
+  const prep = new Prep(stage, (k, px) => icon(k, px));
   // 成就和图鉴（5c）：累计统计存 yexun.records；每局按事件计数，结算时一起算解锁
   let records = loadRecords();
   let tally = new RunTally();
@@ -234,7 +236,7 @@ async function boot(): Promise<void> {
   const prepState = (): PrepState => ({
     coins: coins(save),
     character: save.character,
-    chars: Object.fromEntries(CHARACTER_IDS.map((c) => [c, { open: charOpen(save, c), price: CHAR_PRICE[c] }])) as PrepState['chars'],
+    chars: Object.fromEntries(CHARACTER_IDS.map((c) => [c, { open: charOpen(save, c), price: CHAR_PRICE[c], progress: charProgress(save, c) }])) as PrepState['chars'],
     curses: save.curses,
     cursesOpen: save.cleared >= 0,
     perks: save.perks,
@@ -250,6 +252,7 @@ async function boot(): Promise<void> {
     maps: Object.fromEntries(MAP_IDS.map((m) => [m, mapOpen(save, m)])) as Record<MapId, boolean>,
     coins: coins(save),
     character: charOpen(save, save.character) ? save.character : ('xiaodao' as CharacterId),
+    charFace: icon(heroKey(charOpen(save, save.character) ? save.character : 'xiaodao'), 64),
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
     // 有平台登录、收到过 501（单独部署）就藏起来
@@ -410,6 +413,7 @@ async function boot(): Promise<void> {
     const rr = recordRaid(save.vault, st);
     save.vault = rr.vault;
     if (raid.teach) save.raidDone = true;
+    if (st.outcome === 'escaped') save.extracts++;
     // 实盘的夜探不发铜钱（筹码走钱包，按撤出时带出的价值结回），宝物照样记进藏宝阁
     if (st.coins > 0 && liveSeed === null) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
     writeSave(save);
@@ -773,9 +777,18 @@ async function boot(): Promise<void> {
     const qd: Danger | null = dq && /^[0-5]$/.test(dq) ? (Number(dq) as Danger) : (legacy[q.get('diff') ?? ''] ?? null);
     // ?map=yizhuang 指定地图（冒烟截图用）
     const qm: MapId | null = q.has('map') ? ((MAP_IDS as readonly string[]).includes(q.get('map') ?? '') ? (q.get('map') as MapId) : 'snow') : null;
+    // ?char=pang 出战指定角色（只在开发服务器里有，截图用；会在内存里当作都解锁了）；?prep 直接打开角色页
+    const qc = q.get('char');
+    if (import.meta.env.DEV && qc && qc in CHARACTERS) {
+      save.character = qc as CharacterId;
+      save.bought = [...CHARACTER_IDS];
+      save.maxSeconds = Math.max(save.maxSeconds, 9999);
+      save.extracts = Math.max(save.extracts, 1);
+    }
     // ?raid=guzhen|dukou|shansi|teach 直接开一局夜探（冒烟截图用；可带 &auto 机器人代打）
     const qr = q.get('raid');
     if (qr && qr in RAID_TEMPLATES) menu.onRaid(qr as RaidTemplateId, qd ?? 2);
+    else if (import.meta.env.DEV && q.has('prep')) prep.show('char', prepState());
     else if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 2, qm ?? 'snow', true);
     else {
       if (qd !== null) save.danger = qd;

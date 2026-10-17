@@ -8,6 +8,7 @@
  */
 import Phaser from 'phaser';
 import { DROWN, ENEMIES, HOP_AIR, HOP_PERIOD, SPROUT, WATER } from '../../content/enemies.ts';
+import { CHARACTERS } from '../../content/meta.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { inRects, MAPS } from '../../content/maps.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
@@ -19,7 +20,8 @@ import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
-import { MOB_TEX, RAID_TEX, makeIcons, type Atlas, type Frame } from '../art/atlas.ts';
+import { HERO_TEX, MOB_TEX, RAID_TEX, makeIcons, peekHeroAtlas, type Atlas, type Frame } from '../art/atlas.ts';
+import { faceKey, heroKey } from '../art/heroes.ts';
 import { artRng } from '../art/draw.ts';
 import { bambooCanvas, bambooKey, GROUND_TINT, paintTerrain, stumpCanvas } from '../art/terrain.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
@@ -135,6 +137,9 @@ export class GameScene extends Phaser.Scene {
   private frames!: Map<string, Frame>;
   private hero!: Phaser.GameObjects.Image;
   private heroBack!: Phaser.GameObjects.Image;
+  /** 开局头上冒一次的台词气泡（角色的 line）；到点收掉 */
+  private bubble: Phaser.GameObjects.Text | null = null;
+  private bubbleUntil = 0;
   private heroShadow!: Phaser.GameObjects.Image;
   private aura!: Phaser.GameObjects.Image;
   private mobs: (MobView | null)[] = [];
@@ -215,6 +220,11 @@ export class GameScene extends Phaser.Scene {
     if (this.d.shake()) this.cameras.main.shake(ms, k);
   }
 
+  /** 出战角色的对局图名 */
+  private get heroFrame(): string {
+    return heroKey(this.w.setup.character ?? 'xiaodao');
+  }
+
   private frame(key: string): Frame {
     return this.frames.get(key) ?? this.frames.get(MOB_FALLBACK[key] ?? 'glow')!;
   }
@@ -235,6 +245,14 @@ export class GameScene extends Phaser.Scene {
     for (const f of this.d.mobAtlas.frames.values()) {
       this.frames.set(f.key, f);
       if (!tm.has(f.key)) tm.add(f.key, 0, f.x, f.y, f.w, f.h);
+    }
+    const ha = peekHeroAtlas();
+    if (ha) {
+      const th = this.textures.exists(HERO_TEX) ? this.textures.get(HERO_TEX) : this.textures.addCanvas(HERO_TEX, ha.canvas)!;
+      for (const f of ha.frames.values()) {
+        this.frames.set(f.key, f);
+        if (!th.has(f.key)) th.add(f.key, 0, f.x, f.y, f.w, f.h);
+      }
     }
     if (this.raid && this.d.raidAtlas) {
       const t8 = this.textures.exists(RAID_TEX) ? this.textures.get(RAID_TEX) : this.textures.addCanvas(RAID_TEX, this.d.raidAtlas.canvas)!;
@@ -293,8 +311,15 @@ export class GameScene extends Phaser.Scene {
     this.aura = this.img('aura', 0, 0, 1).setAlpha(0.9);
     this.heroShadow = this.img('shadow', 0, 0, 1.1).setAlpha(0.9);
     // 主角外面再描一圈：同一张图涂成墨色、放大一点垫在后面，轮廓更粗、在怪堆里一眼找得到
-    this.heroBack = this.img('hero').setTint(0x17131c).setTintMode(Phaser.TintModes.FILL);
-    this.hero = this.img('hero');
+    this.heroBack = this.img(this.heroFrame).setTint(0x17131c).setTintMode(Phaser.TintModes.FILL);
+    this.hero = this.img(this.heroFrame);
+    const line = CHARACTERS[this.w.setup.character ?? 'xiaodao'].line;
+    this.bubble = this.add
+      .text(0, 0, line, { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#2a1f14', backgroundColor: '#fff6dc', padding: { x: 8, y: 5 }, wordWrap: { width: 190 }, align: 'center' })
+      .setOrigin(0.5, 1)
+      .setDepth(9300);
+    this.bubbleUntil = this.now + 3600;
+    this.d.hud.setFace(this.d.icon(faceKey(this.w.setup.character ?? 'xiaodao')));
     // 金钟罩：有护盾时罩在主角身上（半透明，前面）
     this.shieldImg = this.img('goldbell', 0, 0, 1).setVisible(false);
     this.mobs = new Array(MAX_ENEMIES).fill(null);
@@ -1358,7 +1383,7 @@ export class GameScene extends Phaser.Scene {
     const walking = w.moving || dir !== 0;
     if (walking && moving) this.walk += dt * 0.012;
     const bob = walking ? Math.abs(Math.sin(this.walk)) : 0;
-    const f = this.frame('hero');
+    const f = this.frame(this.heroFrame);
     const face = COS[w.face]! < -0.1 ? -1 : COS[w.face]! > 0.1 ? 1 : this.hero.scaleX < 0 ? -1 : 1;
     // 走路基本是平移：只留不到 1 像素的起伏和极小的挤压，当脚步感（幸存者类走位多，大幅上下晃会让人觉得在抖）
     const sx = (1 / f.res) * (1 + (1 - bob) * 0.012 * (walking ? 1 : 0)) * face;
@@ -1367,6 +1392,12 @@ export class GameScene extends Phaser.Scene {
     this.hero.setPosition(hx, hy - bob * 0.8).setScale(sx, sy).setRotation(0).setDepth(hy).setAlpha(blink ? 0.5 : 1);
     this.heroBack.setPosition(hx, hy - bob * 0.8 + 1).setScale(sx * 1.07, sy * 1.05).setRotation(this.hero.rotation).setDepth(hy - 0.1).setAlpha(this.hero.alpha);
     this.heroShadow.setPosition(hx, hy).setDepth(-400);
+    if (this.bubble) {
+      if (this.now > this.bubbleUntil) {
+        this.bubble.destroy();
+        this.bubble = null;
+      } else this.bubble.setPosition(hx, hy - 82).setAlpha(Math.min(1, (this.bubbleUntil - this.now) / 500));
+    }
     // 被冰锥、水鬼拖慢：脚下冒冰屑
     if (slowed && !LOW_MEMORY && (this.frost += dt) > 90) {
       this.frost = 0;

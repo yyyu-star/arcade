@@ -3,6 +3,7 @@
  */
 import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, CURSES, MAX_CURSES, PERK_IDS, PERKS, type CharacterId, type CurseId, type PerkId } from '../../content/meta.ts';
 import { WEAPONS } from '../../content/weapons.ts';
+import { heroKey } from '../art/heroes.ts';
 import './prep.css';
 
 /** 锁：不用表情字符（有的设备、无头浏览器没有表情字体，显示成方框） */
@@ -14,7 +15,7 @@ export interface PrepState {
   coins: number;
   character: CharacterId;
   /** 每个角色：开了没有、买得到的价格 */
-  chars: Record<CharacterId, { open: boolean; price?: number }>;
+  chars: Record<CharacterId, { open: boolean; price?: number; progress: string }>;
   curses: CurseId[];
   cursesOpen: boolean;
   perks: Partial<Record<PerkId, number>>;
@@ -33,9 +34,9 @@ export class Prep {
   onRefund: () => void = () => undefined;
   onClose: () => void = () => undefined;
 
-  private readonly icons: (k: string) => string;
+  private readonly icons: (k: string, px?: number) => string;
 
-  constructor(parent: HTMLElement, icons: (k: string) => string) {
+  constructor(parent: HTMLElement, icons: (k: string, px?: number) => string) {
     this.icons = icons;
     this.root = document.createElement('div');
     this.root.className = 'yx-screen yx-prep-layer';
@@ -112,18 +113,30 @@ export class Prep {
       `<div class="yx-prep-body">${body}</div></div>`;
   }
 
+  /** 六张角色卡：头像（对局精灵）、名字、起手法器、被动、人设；选中的显示台词；没解锁的灰着显示怎么解锁和进度 */
   private chars(s: PrepState): string {
     return (
-      '<div class="yx-pgrid">' +
+      '<div class="yx-pgrid yx-pchars">' +
       CHARACTER_IDS.map((id) => {
         const c = CHARACTERS[id];
         const st = s.chars[id];
         const on = id === s.character;
-        const action = st.open ? `data-a="char" data-id="${id}"` : st.price !== undefined ? `data-a="buychar" data-id="${id}"${s.coins < st.price ? ' aria-disabled="true"' : ''}` : 'aria-disabled="true"';
-        const foot = st.open ? (on ? '出战中' : '选他') : st.price !== undefined ? `<span class="yx-coin"></span>${st.price}` : `${LOCK_SVG} ${esc(c.unlock)}`;
+        const w = WEAPONS[c.start];
+        const canBuy = !st.open && st.price !== undefined;
+        const afford = canBuy && s.coins >= st.price!;
+        const action = st.open ? `data-a="char" data-id="${id}"` : canBuy ? `data-a="buychar" data-id="${id}"${afford ? '' : ' aria-disabled="true"'}` : 'aria-disabled="true"';
+        let foot: string;
+        if (st.open) foot = on ? '出战中' : '选他';
+        else if (canBuy) foot = afford ? `<span class="yx-coin"></span>${st.price} 请他` : `<span class="yx-coin"></span>${st.price}（还差 ${st.price! - s.coins}）`;
+        else foot = `${LOCK_SVG} 还没解锁`;
+        const note = st.open ? '' : `<small class="yx-pneed">${esc(st.progress || c.unlock)}</small>`;
         return (
-          `<button type="button" class="yx-pcard${on ? ' on' : ''}${st.open ? '' : ' locked'}" ${action}>` +
-          `<img alt="" src="${this.icons(WEAPONS[c.start].icon)}"><b>${esc(c.name)}</b><small>起手 ${esc(WEAPONS[c.start].name)}</small><p>${esc(c.perk)}</p><em>${foot}</em></button>`
+          `<button type="button" class="yx-pcard yx-pchar${on ? ' on' : ''}${st.open ? '' : ' locked'}" ${action}>` +
+          `<span class="yx-pface"><img alt="" src="${this.icons(heroKey(id), 128)}"></span>` +
+          `<b>${esc(c.name)}</b><span class="yx-pstart"><img alt="" src="${this.icons(w.icon)}">起手 ${esc(w.name)}</span>` +
+          `<span class="yx-pperkname">${esc(c.perkName)}</span><p>${esc(c.perk)}</p>` +
+          (on && st.open ? `<q class="yx-pline">${esc(c.line)}</q>` : `<span class="yx-plook">${esc(c.look)}</span>`) +
+          `${canBuy ? '' : note}<em>${foot}</em></button>`
         );
       }).join('') +
       '</div>'

@@ -170,11 +170,7 @@ export function step(w: World, dir: number, choice = -1): void {
   moveShots(w, g);
   touchPlayer(w, g);
   if (w.quake) quake(w, g, w.x, w.y, CHAR_FX.pangArea, CHAR_FX.pangKnock);
-  if (w.setup.character === 'gengfu' && w.tick % (60 * 30) === 0) {
-    // 更夫的锣：整分钟全屏的怪往后退（Boss 也退，只是退得少：steady）
-    quake(w, g, w.x, w.y, CHAR_FX.gongArea, CHAR_FX.gongKnock);
-    w.ev.push(Ev.Gong, w.x, w.y, 0, CHAR_FX.gongArea);
-  }
+  if (w.setup.character === 'gengfu' && w.tick > 0 && w.tick % CHAR_FX.gongEvery === 0) gong(w, g);
   movePickups(w);
   if (!w.raid) props(w);
   regen(w);
@@ -214,6 +210,24 @@ function quake(w: World, g: Grid, x: number, y: number, r: number, knock: number
     w.eKX[i]! += dx * k;
     w.eKY[i]! += dy * k;
   }
+}
+
+/**
+ * 更夫的锣：全屏的怪往后退（Boss 也退，只是退得少：steady）并挨一下，金钟罩补一层。
+ * 伤害按等级涨，前期一声锣能清一片杂兵，后期是个定时的小清场，不靠它撑全场。
+ */
+function gong(w: World, g: Grid): void {
+  quake(w, g, w.x, w.y, CHAR_FX.gongArea, CHAR_FX.gongKnock);
+  const r2 = CHAR_FX.gongArea * CHAR_FX.gongArea;
+  const dmg = CHAR_FX.gongDmg + CHAR_FX.gongPerLevel * w.level;
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (!w.eAlive[i]) continue;
+    const dx = w.eX[i]! - w.x;
+    const dy = w.eY[i]! - w.y;
+    if (dx * dx + dy * dy <= r2) hitEnemy(w, i, dmg, -1, 0, 0, 0, 0, -1);
+  }
+  if (w.shield < w.shieldMax) w.shield++;
+  w.ev.push(Ev.Gong, w.x, w.y, 0, CHAR_FX.gongArea);
 }
 
 /** 永久加成"复活"：原地站起来，半血，短暂无敌，震开身边 */
@@ -1790,8 +1804,8 @@ function fireTalismans(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: n
   for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
   let taken = 0;
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.talisman);
-  // 符师：15% 多发一张
-  const amount = e.amount + (w.setup.character === 'fushi' && w.rWeapon.next() < CHAR_FX.fushiExtra ? 1 : 0);
+  // 符师：每第 4 次出符多发一张
+  const amount = e.amount + (w.setup.character === 'fushi' && ++w.weapons[k]!.phase % CHAR_FX.fushiEvery === 0 ? 1 : 0);
   for (let j = 0; j < amount; j++) {
     let best = -1;
     let bd = Infinity;
@@ -2588,7 +2602,13 @@ function recompute(w: World): void {
     s.areaMul *= up;
     s.durMul *= up;
     s.speed *= up;
-  } else if (ch === 'caiyao') s.xpMul += CHAR_FX.caiyaoXp;
+  } else if (ch === 'caiyao') {
+    s.xpMul += CHAR_FX.caiyaoXp;
+    s.regen += CHAR_FX.caiyaoRegen;
+  } else if (ch === 'pang') {
+    s.hpMax += CHAR_FX.pangHp;
+    s.speed *= CHAR_FX.pangSpeed;
+  }
   // 套装：按类型和五行数件数
   const types: Partial<Record<WeaponType, number>> = {};
   const els: Partial<Record<Element, number>> = {};
@@ -2602,6 +2622,7 @@ function recompute(w: World): void {
   for (const k of Object.keys(TYPE_SETS) as WeaponType[]) if (t(k) >= 2) w.sets.push(`${k}${t(k) >= 3 ? 3 : 2}`);
   if (t('剑') >= 2) s.critAdd = 0.08;
   if (t('剑') >= 3) s.critDmg = 0.5;
+  if (ch === 'jianxia') s.critDmg += CHAR_FX.jianxiaCritDmg;
   if (t('符') >= 2) s.cdMul *= 0.92;
   if (t('镇') >= 2) s.areaMul *= 1.12;
   if (t('镇') >= 3) s.nearSlow = true;
