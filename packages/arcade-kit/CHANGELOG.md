@@ -1,5 +1,15 @@
 # 更新日志
 
+## 0.12.3
+
+开盘、麻将接分享卡时报上来的两处（主线派）。
+- **iOS 上调不起系统分享**：iOS 只许在点击的那一下（用户激活）里调 `navigator.share`，`shareCard` 是点了才画卡（解码图标、`toBlob` 要几百毫秒），激活过期了，只能退到预览。
+  加 `prepareShare(card, opts)` → `{ ready, share() }`：结算页一出现就调它先画好，点"分享"时在点击的处理函数里直接调 `share()`（前面别 await）——卡已经画好就同步调 `navigator.share`；
+  没画好就等画完再试，调不起来退回预览。`ready` 画失败也是 resolve（到 `share()` 时再报错）。`shareCard` 保留，内部走 `prepareShare`。
+- **名场面的结尾引号单独掉到下一行**：折行时收尾的引号、右括号、逗号句号这些标点不放行首，把上一行最后一个字一起带下来（`wrapLines`）。
+- 测试：`test/share.test.ts` 加 5 条（结尾引号、中间标点、带下来正好是最后一行要截断、一个字时不硬拆，`prepareShare` 画不了时 `ready` 不抛）。
+  浏览器里用演示页 `demo/share.html` 的"分享第一张（先画好）"核对：假的 `navigator.share` 记下被调时还在点击的处理函数里（带 1 个 PNG 文件）；对照的 `shareCard` 是画完才调（已经出了点击）。
+
 ## 0.12.2
 
 - **"叫朋友来"面板** `openInvite({ game, room })`（`arcade-kit/social`；mountSocial 返回的 handle 上也有 `openInvite`，自动带上游戏名）：0.12.0 只有 `sendInvite` 接口，游戏里没有叫人的界面。
