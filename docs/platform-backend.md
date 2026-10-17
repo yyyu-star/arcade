@@ -1654,7 +1654,8 @@ guard（熔断）、Lobby、入场票、Meter DO 还没做，第一版的取舍�
 | `POST /api/scores` | 登录；游戏页可调 | `{"gameId", "boardId", "score", "userId"?: 预期账号}` | 200 `{"best": 最好成绩, "improved": true}`（新纪录）或 `{"best": 原来的, "improved": false}`（没比原来好，含相等） | 400 `bad_request`（类型不对、`userId` 格式不对）；404 `unknown_game`；409 `wrong_user`；422 `invalid_board` / `invalid_score`；429（每天 200 次）；503 `busy`（排行榜预算用完、停增长档、只读、停服） | 新上榜或刷新纪录 3；没更好 1；各种被拒 0 |
 | `GET /api/boards/<gameId>/<boardId>?scope=all\|friends` | 登录；游戏页可调 | `scope` 可省，默认 `all` | 200 `{"entries": [{"rank", "displayName", "avatar", "score", "isMe"}], "me": {"rank", "score"} 或 null}` | 400 `bad_request`（`scope` 不对）；401；404 `unknown_game` / `not_found`（不认识的榜） | 0 |
 
-- **榜单 ID**（交分时，9.2）：每日榜 `daily-YYYY-MM-DD` 或 `daily-YYYY-MM-DD-v<n>`（n 为 1–99），日期必须是北京时间的昨天、今天或明天；固定榜要在 `platform/src/games.ts` 该游戏的 `boards` 里登记（名字 `[a-z0-9-]{1,40}`，不以 `daily` 开头）。
+- **榜单 ID**（交分时，9.2）：每日榜 `daily-YYYY-MM-DD` 或 `daily-YYYY-MM-DD-v<n>`（n 为 1–99），日期必须是北京时间的昨天、今天或明天；
+  一天几个每日榜的游戏（`games.ts` 的 `daily` 写了子榜，0.16.0）是 `daily-YYYY-MM-DD-<子榜>[-v<n>]`，子榜要登记过（`[a-z][a-z0-9]{0,15}`，不能像版本号 `v2`），写了子榜的游戏不再收不带子榜的每日榜；没写子榜的游戏照旧，不收带子榜的；固定榜要在 `platform/src/games.ts` 该游戏的 `boards` 里登记（名字 `[a-z0-9-]{1,40}`，不以 `daily` 开头）。
   读榜时每日榜不限日期（过期还没删的照样能读），固定榜同样要登记过。
 - **分数**：安全整数，|score| ≤ 1e12；越高越好，越低越好的游戏交相反数。每人每榜只留最好的一条。
 - **每天 200 次**（0.10.2 从 50 放宽）：`score:<userId>`，所有游戏、所有榜合计，没刷新纪录的也算；超了 429，写 0 行。
@@ -1824,10 +1825,11 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 
 | 接口 | 请求 | 成功 | 主要错误 | 写入 |
 |---|---|---|---|---|
-| `GET /api/leaderboard?scope=all\|friends` | 要登录 | 200 `{"week", "scope", "boards": {"total" \| "<game>" \| "titles": {"entries": [{"rank", "userId", "displayName", "avatar", "value", "isMe"}], "me": {"rank", "value"} \| null}}, "daily": {"<game>": "<今天的每日榜 id>" \| null}}`（只列 games.ts 里登记了 `daily` 的游戏）；每榜前 50，同分同名次（1, 2, 2, 4）；本周榜只算这周结回过的人，称号榜只算拿过称号的人 | 400（scope 不对）；401 | 0 |
+| `GET /api/leaderboard?scope=all\|friends` | 要登录 | 200 `{"week", "scope", "boards": {"total" \| "<game>" \| "titles": {"entries": [{"rank", "userId", "displayName", "avatar", "value", "isMe"}], "me": {"rank", "value"} \| null}}, "daily": {"<game>" \| "<game>:<子榜>": "<今天的每日榜 id>" \| null}}`（只列 games.ts 里登记了 `daily` 的游戏；写了子榜的每个子榜一项，key 是"游戏 id:子榜 id"，0.16.0）；每榜前 50，同分同名次（1, 2, 2, 4）；本周榜只算这周结回过的人，称号榜只算拿过称号的人 | 400（scope 不对）；401 | 0 |
 
 - **读多少**：全站的汇总每个 isolate 缓存 5 分钟（换周、换日立即重算）。缓存过期时读一遍 wallets 加 users（行数 = 钱包数），并按 `boards_rank` 索引的前缀一次查出登记了每日榜的各游戏今天的榜 id。只看好友时，另外读我的好友关系（我的好友数行），在缓存里筛。
 - **每日挑战**（0.10.18 起由登记驱动，以前写死了开盘）：哪个游戏有每日榜，在 `platform/src/games.ts` 里登记 `daily: true`，排行榜页就多一个"<游戏名>每日"标签页。
+  一天有几个每日榜的（0.16.0，比如夜巡的守夜、夜探），`daily` 写子榜列表 `[{"id": "vigil", "name": "守夜"}, {"id": "raid", "name": "夜探"}]`，每个子榜一个"<游戏名>每日·<子榜名>"标签页，榜 id 见 15.5。
   读榜用现有的 `GET /api/boards/<game>/<每日榜 id>?scope=`（15.5）。每日榜 id 带规则版本（`daily-YYYY-MM-DD[-v<n>]`），平台不知道游戏现在是第几版，所以从今天已有的榜里取版本号最大的。
 - **分数怎么显示由游戏给**：各游戏的分数编码不一样（开盘把"通关"编进 10^11 以上），平台不知道。游戏在自己的模块里放 `/games/<id>/daily.json`（和 `titles.json` 一样是同域公开 HTTP 接口，5.10），平台在浏览器里读：
   ```json
@@ -1835,6 +1837,7 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
   ```
   `score` 从上往下取第一条能用的：没写 `from` 的总能用，写了的要分数 ≥ `from`；`{n}` 是分数减去 `from`（没写就是分数本身），按千分位写。`text` 必须含 `{n}`，最多 30 字；`note` 可选，最多 80 字，显示成"<游戏名>的每日挑战：<note>"；文件最多 32 KB。
   读不到、格式不对、没有一条能用：分数直接按千分位写，不显示说明，不报错。表里只存分数，所以旧行不用迁移，照这个文件显示。
+  有子榜的游戏按子榜分开写（0.16.0）：`{"boards": {"vigil": {"note": …, "score": […]}, "raid": {…}}}`，某个子榜没写就用最外层的 `note`、`score`。
 - 记在"排行榜"类（只读，不占写入预算）。
 
 ### 15.13 好友更好用（0.10.5）
@@ -1891,8 +1894,8 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 
 | 接口 | 谁能调 | 请求 | 成功 | 错误 | 写入 |
 |---|---|---|---|---|---|
-| `GET /api/friends/week/<gameId>` | 登录；平台页 | — | 200 `{"week": "这周一的日期", "entries": [{rank, displayName, avatar, score, isMe}]（前 50）, "me": {rank, score} \| null}`，形状和 `GET /api/boards` 一样 | 404 `unknown_game`、`not_found`（游戏没有每日挑战榜）；401 | 0 |
-| `GET /api/friends/overtakes` | 登录；平台页 | — | 200 `{"overtakes": [{gameId, "by": {userId, displayName}, score, mine}]}`，每个游戏最多一条 | 401 | 0 |
+| `GET /api/friends/week/<gameId>[?board=<子榜>]` | 登录；平台页 | 有子榜的游戏必须带 `board`（登记过的子榜，0.16.0），没有子榜的不能带 | 200 `{"week": "这周一的日期", "entries": [{rank, displayName, avatar, score, isMe}]（前 50）, "me": {rank, score} \| null}`，形状和 `GET /api/boards` 一样 | 404 `unknown_game`、`not_found`（游戏没有每日挑战榜，或 `board` 不对）；401 | 0 |
+| `GET /api/friends/overtakes` | 登录；平台页 | — | 200 `{"overtakes": [{gameId, "board"?, "by": {userId, displayName}, score, mine}]}`，每个每日榜（有子榜的每个子榜，带 `board`）最多一条 | 401 | 0 |
 
 - **比什么**：只算登记了 `daily` 的游戏。这周（北京时间周一 0 点起）每天的 `daily-<日期>` 榜里，我和每个好友各取最好的一次；同分先达到的在前。
   同一周里规则改版（`-v<n>`）的两版分数不能比，只认这周最新的那一版（日期最晚、版本号最大的那个榜的版本）。

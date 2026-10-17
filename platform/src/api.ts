@@ -95,6 +95,8 @@ export interface LeaderboardResponse {
 /** 好友这周的最好成绩超过了我的（0.15.0，读的时候比） */
 export interface Overtake {
   gameId: string;
+  /** 子榜（0.16.0）：一天几个每日榜的游戏才有 */
+  board?: string;
   by: { userId: string; displayName: string };
   score: number;
   mine: number;
@@ -322,7 +324,8 @@ export const api = {
   board: (game: string, board: string, scope: 'all' | 'friends') =>
     request<ScoreBoard>('GET', `/api/boards/${encodeURIComponent(game)}/${encodeURIComponent(board)}?scope=${scope}`),
   /** 我和好友这周在每日挑战上的最好成绩（0.15.0）；week 是这周一的日期 */
-  friendsWeek: (game: string) => request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}`),
+  friendsWeek: (game: string, board: string | null = null) =>
+    request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}${board ? `?board=${encodeURIComponent(board)}` : ''}`),
   /** 这周哪个好友超过了我（0.15.0）：每个游戏最多一条 */
   overtakes: () => request<{ overtakes: Overtake[] }>('GET', '/api/friends/overtakes'),
   register: (username: string, password: string, displayName: string) =>

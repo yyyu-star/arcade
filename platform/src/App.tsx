@@ -275,10 +275,13 @@ function OvertakeNudge() {
   }, []);
   const g = o && GAMES.find((x) => x.id === o.gameId);
   if (!o || !g) return null;
+  // 一天几个每日榜的游戏（0.16.0）说是哪个子榜："夜巡·守夜"
+  const sub = Array.isArray(g.daily) ? g.daily.find((x) => x.id === o.board) : undefined;
   return (
     <p className="banner nudge" data-testid="nudge-overtake">
       <span>
-        <strong>{o.by.displayName}</strong>超过了你这周的{g.name}每日挑战纪录
+        <strong>{o.by.displayName}</strong>超过了你这周的{g.name}
+        {sub ? `·${sub.name}` : ''}每日挑战纪录
       </span>
       <a className="inline-link" href={playUrl(g)}>
         去挑战
