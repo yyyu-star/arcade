@@ -109,6 +109,11 @@ export function sellKey(i: number): string {
   return `Shift+${i + 1}`;
 }
 
+/** 0.18.1 炒股合计按正负叫「净赚」或「净亏」（以前亏了也写「炒股净赚 −¥325万」，和副标题的「炒股净亏」对不上） */
+export function tradeWord(tradeMoney: number): string {
+  return tradeMoney >= 0 ? '炒股净赚' : '炒股净亏';
+}
+
 /**
  * 0.5.4：一本加得起来的账——本钱 + 炒股净赚 − 账单 + 其他 (+ 没还的借款) = 最后剩。
  * 旧存档没有炒股和账单合计：只列本钱和最后剩。
@@ -116,7 +121,7 @@ export function sellKey(i: number): string {
 export function ledgerRows(s: RunSummary): [string, string][] {
   const rows: [string, string][] = [['本钱', formatMoney(s.startAccount)]];
   if (s.tradeMoney !== null && s.billMoney !== null && s.otherMoney !== null) {
-    rows.push(['炒股净赚', formatMoney(s.tradeMoney, { sign: true })]);
+    rows.push([tradeWord(s.tradeMoney), formatMoney(s.tradeMoney, { sign: true })]);
     rows.push(['还掉的账单', formatMoney(-s.billMoney, { sign: true })]);
     rows.push(['其他（奖励、利息、罚款）', formatMoney(s.otherMoney, { sign: true })]);
     if (s.debtLeft > 0) rows.push(['借来还没还', formatMoney(s.debtLeft, { sign: true })]);
@@ -134,7 +139,7 @@ export function summaryRows(s: RunSummary): [string, string][] {
     ['涨停天数', `${s.limitUpDays} 天`],
     ['最长连续涨停', s.maxBoards > 1 ? `${s.maxBoards} 天` : '没有'],
     ['大哥带小弟', `${s.chains} 次`],
-    ['最赚的一笔', s.bestTrade ? `${s.bestTrade.name} ${formatPoints(s.bestTrade.ret)}` : '没有交易'],
+    [s.bestTrade && s.bestTrade.ret < 0 ? '亏得最少的一笔' : '最赚的一笔', s.bestTrade ? `${s.bestTrade.name} ${formatPoints(s.bestTrade.ret)}` : '没有交易'],
   ];
 }
 
@@ -143,7 +148,7 @@ export function summaryRows(s: RunSummary): [string, string][] {
  * 旧存档没有账单和炒股合计时退回旧说法。
  */
 export function endSubtitle(s: RunSummary): string {
-  const trade = s.tradeMoney === null ? '' : `炒股${s.tradeMoney >= 0 ? '净赚' : '净亏'} ${formatMoney(Math.abs(s.tradeMoney))}`;
+  const trade = s.tradeMoney === null ? '' : `${tradeWord(s.tradeMoney)} ${formatMoney(Math.abs(s.tradeMoney))}`;
   const bills = s.billMoney === null ? '' : `还了 ${formatMoney(s.billMoney)} 账单`;
   if (s.won) {
     if (!trade || !bills) return `12 个月的钱全还上了，带着 ${formatMoney(s.account)} 上岸`;
