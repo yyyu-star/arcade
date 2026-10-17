@@ -50,6 +50,7 @@ import { PanelTabs, type PanelTab } from '../trade/tabs.ts';
 import { EventPanel, RewardPanel, eventResult, monthIntro, playBill, rewardSlots } from '../trade/monthEnd.ts';
 import { Room } from '../trade/room.ts';
 import { ThemeBoardView } from '../trade/themeBoard.ts';
+import { coverOf } from '../viewport.ts';
 import { TopBarView } from '../trade/topBar.ts';
 import { onTutorialChange } from '../tutorial.ts';
 import { BaseScene, setupCamera } from './BaseScene.ts';
@@ -449,7 +450,8 @@ export class TradeScene extends BaseScene {
   private async playMarginCall(): Promise<void> {
     sound.cue({ type: 'runLost' });
     const layer = this.add.container(0, 0).setDepth(300);
-    layer.add(this.add.rectangle(0, 0, VIEW.w, VIEW.h, COLOR.ink, 0.45).setOrigin(0, 0).setInteractive());
+    const cv = coverOf(this);
+    layer.add(this.add.rectangle(cv.x, cv.y, cv.w, cv.h, COLOR.ink, 0.45).setOrigin(0, 0).setInteractive());
     const cw = PHONE_MODE ? 520 : 560;
     const cy = PHONE_MODE ? 190 : 330;
     const x = this.session.state.setup?.live?.gear?.x ?? 1;

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { COLOR, RADIUS } from '../theme.ts';
 import { addText } from '../ui/text.ts';
 import type { Animator } from './anim.ts';
-import { viewOf } from '../viewport.ts';
+import { coverOf, viewOf } from '../viewport.ts';
 
 /**
  * 飘字：在 (x, y) 处弹出一段文字（白色描边，压在任何底色上都清楚），上浮后淡出销毁。
@@ -55,7 +55,8 @@ export function jiggle(anim: Animator, target: Phaser.GameObjects.Components.Tra
 
 /** 全屏半透明遮罩，吞掉下层点击。 */
 export function addBackdrop(scene: Phaser.Scene, alpha = 0.45): Phaser.GameObjects.Image {
-  return scene.add.image(0, 0, '__WHITE').setOrigin(0, 0).setDisplaySize(viewOf(scene).w, viewOf(scene).h).setTint(COLOR.overlay).setAlpha(alpha).setInteractive();
+  const r = coverOf(scene);
+  return scene.add.image(r.x, r.y, '__WHITE').setOrigin(0, 0).setDisplaySize(r.w, r.h).setTint(COLOR.overlay).setAlpha(alpha).setInteractive();
 }
 
 /** 震屏（减少动态效果、快进时不震）。 */

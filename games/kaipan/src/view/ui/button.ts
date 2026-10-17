@@ -172,6 +172,12 @@ export class Button extends Phaser.GameObjects.Container implements Focusable {
     });
   }
 
+  /** 0.14.0 卡片式按钮：在按钮面上加自己的内容（坐标相对按钮左上角，按下时跟着下沉）。 */
+  addContent(...objs: Phaser.GameObjects.GameObject[]): this {
+    this.face.add(objs);
+    return this;
+  }
+
   /** 像被点了一下（键盘快捷键也走这里，按钮会闪一下）。 */
   press(): boolean {
     if (!this.clickable()) {

@@ -40,6 +40,15 @@ describe('相机', () => {
     expect(cameraFor(true, true, 2)).toEqual({ zoom: 2, scrollX: 0, scrollY: 0, phoneLayout: true });
   });
 
+  it('0.14.0 EXPAND：窗口比 16:9 宽或高时画布变长，1280×720 的世界居中、多出来的边左右（上下）平分', () => {
+    // 1920×960 的窗口：画布高 720、宽 1440，世界左右各多出 80
+    expect(cameraFor(false, false, 1, { w: 1440, h: 720 })).toEqual({ zoom: 1, scrollX: -80, scrollY: 0, phoneLayout: false });
+    // 1440×900（16:10）：画布宽 1280、高 800，上下各多出 40；渲染倍数 2 时画布像素翻倍，世界不变
+    expect(cameraFor(false, false, 2, { w: 2560, h: 1600 })).toEqual({ zoom: 2, scrollX: 0, scrollY: -40, phoneLayout: false });
+    // 手机适配过的场景按 960×444 居中
+    expect(cameraFor(true, true, 1, { w: 1000, h: 444 })).toEqual({ zoom: 1, scrollX: -20, scrollY: 0, phoneLayout: true });
+  });
+
   it('手机上还没适配的场景：整个 1280×720 缩小后居中放进 960×444，不裁掉任何一边', () => {
     const scale = 2;
     const c = cameraFor(false, true, scale);
@@ -80,8 +89,14 @@ async function asPhone(): Promise<{ viewport: typeof import('../src/view/viewpor
 }
 
 function fakeScene(): Phaser.Scene {
-  const cam = { setOrigin: () => cam, setZoom: () => cam, setScroll: () => cam };
-  return { cameras: { main: cam } } as unknown as Phaser.Scene;
+  const cam = { setOrigin: () => cam, setSize: () => cam, setZoom: () => cam, setScroll: () => cam };
+  // 0.14.0 applyCamera 读画布尺寸、挂窗口缩放的监听
+  return {
+    cameras: { main: cam },
+    scale: { gameSize: { width: 960, height: 444 }, on: () => undefined, off: () => undefined },
+    events: { once: () => undefined },
+    sys: { isActive: () => true },
+  } as unknown as Phaser.Scene;
 }
 
 describe('手机上（844×390）', () => {

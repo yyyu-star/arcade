@@ -279,7 +279,7 @@ function friendlyBlock(): string {
 }
 
 function keyartBlock(): string {
-  return `<div class="keyart"><img src="${A}scene/title_keyart.svg" alt=""><div class="safe"><span>Logo / 按钮安全区（x 380–1220，y 40–440）</span></div></div>`;
+  return `<div class="keyart"><img src="${A}scene/title_keyart.svg" alt=""></div>`;
 }
 
 const CSS_031 = `
@@ -636,7 +636,7 @@ export function build(): number {
 
 <section id="friendly"><h2>0.3.1 看得懂 · 说明书插图、风口状态、收盘小结、新手提示猫</h2><p class="desc">guide/*.svg 520×300：上方 0–226 是画，下方留一条纸面写字（这里用网页文字演示）。stage_*.svg 32×32，颜色从冷到热、降温回到冷色；news.svg 40×40；recap_paper.svg 九宫格 24（不带颗粒）；cat_hint.svg 是小屋里那只橘猫醒着的样子。</p>${friendlyBlock()}</section>
 
-<section id="keyart"><h2>标题页主视觉 · scene/title_keyart.svg</h2><p class="desc">1600×900：小屋 + 两侧股票小人 + 左上右上的群聊气泡；虚线框是留给 Logo 和按钮的中上部空白（只有天空和柔光）。主体集中在中间 1400 宽内，裁窄时先丢贴角的气泡。不进图集，单独加载。</p>${keyartBlock()}</section>
+<section id="keyart"><h2>开始菜单主视觉 · scene/title_keyart.svg</h2><p class="desc">0.14.0 起游戏里用的是分层素材（title_city / hills / house / cloud / bubble_0..5，画面里叠起来、会动）；这张是拼好的一整张，只给 README 和大厅封面用。</p>${keyartBlock()}</section>
 
 <section id="new14"><h2>0.3.0 新增 14 只</h2><p class="desc">和原有 26 只同一套部件与目录结构（stocks/&lt;id&gt;/、parts/、manifest.json）。白马股稳重对称打领带，跟风股整体缩小一号（0.86）举小旗，ST 用褪色旧灰配色贴创可贴。左侧大图是待机眨眼（calm↔blink）。</p><div class="news">${newStocks(m)}</div></section>
 
