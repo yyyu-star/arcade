@@ -57,6 +57,8 @@ function tutorialProgress(keep?: string[]): string {
 
 const errors: string[] = [];
 const shots: string[] = [];
+/** 社交部件报上来的位置（请求体），冒烟核对开盘报的是"在玩开盘" */
+const presence: string[] = [];
 const notes: string[] = [];
 
 interface Ctx {
@@ -110,7 +112,15 @@ async function openPage(browser: Browser, name: string, query: string, opts: Ope
     for (const [k, v] of Object.entries(kv)) localStorage.setItem(k, v);
   }, storage);
   for (const r of opts.routes ?? []) await context.route(r.pattern, (route) => route.fulfill({ status: 200, contentType: r.type, body: r.body }));
-  if (opts.api) await context.route('**/api/**', opts.api);
+  if (opts.api) {
+    await context.route('**/api/**', opts.api);
+    // 0.12.0 社交部件（共用包）：有假平台、有登录提示时它会报位置、问邀请；后注册的先匹配，这两条不进各场景的假接口
+    await context.route('**/api/presence', async (route) => {
+      presence.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 204 });
+    });
+    await context.route('**/api/invites**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"invites":[]}' }));
+  }
   // __Host- cookie 只能在 https 下设，冒烟是 http：直接让页面读到提示 cookie
   if (opts.loginHint) await context.addInitScript(() => Object.defineProperty(Document.prototype, 'cookie', { configurable: true, get: () => '__Host-arcade_li=1', set: () => undefined }));
   const page = await context.newPage();
@@ -755,15 +765,18 @@ async function run(browser: Browser): Promise<void> {
     await waitIdle(ctx, '结束页', "window.__game.scene === 'end'");
     await ctx.page.waitForTimeout(400);
     await shot(ctx, '51-end-won');
-    // 0.6.5 结局海报：无头 Chromium 没有系统分享，走下载；存下来看一眼
-    await waitFor(ctx, '海报画好', "window.__game.controls?.().poster !== undefined");
-    await ctx.page.waitForTimeout(800);
+    // 0.12.0 分享卡（共用包画）：无头 Chromium 不能带文件调系统分享，出预览层；点「保存图片」存下来看一眼，再关掉
+    await click(ctx, 'share');
+    await ctx.page.waitForSelector('[data-key="share:save"]', { timeout: 15_000 });
+    await shot(ctx, '51b-share-preview');
     const dl = ctx.page.waitForEvent('download', { timeout: 15_000 });
-    await click(ctx, 'poster');
+    await ctx.page.click('[data-key="share:save"]');
     const file = await dl;
-    expect(file.suggestedFilename() === 'kaipan-won-1.png', `海报文件名 ${file.suggestedFilename()}`);
-    await file.saveAs(`${OUT}/51b-poster.png`);
-    shots.push(`${OUT}/51b-poster.png`);
+    expect(file.suggestedFilename() === 'kaipan-won-1.png', `分享卡文件名 ${file.suggestedFilename()}`);
+    await file.saveAs(`${OUT}/51c-share-card.png`);
+    shots.push(`${OUT}/51c-share-card.png`);
+    await ctx.page.click('[data-key="share:close"]');
+    await ctx.page.waitForSelector('[data-key="share:save"]', { state: 'detached' });
     await click(ctx, 'menu');
     await waitIdle(ctx, '回菜单', "window.__game.scene === 'title'");
     await shot(ctx, '52-title-records');
@@ -952,8 +965,12 @@ async function cloudShots(browser: Browser): Promise<void> {
   {
     // 本机没有档案、云端有：直接用云端的，什么都不用传 → 已同步
     apiCalls.length = 0;
+    presence.length = 0;
     const ctx = await openPage(browser, 'cloud-synced', '', { api: fake('ok'), loginHint: true, touch: PHONE });
     await waitFor(ctx, '云朵"已同步"', `window.__game?.cloud().state === 'synced'`);
+    // 0.12.0 社交：登录了就报一次"在玩开盘"
+    for (let i = 0; i < 20 && !presence.length; i++) await ctx.page.waitForTimeout(250);
+    expect(presence.some((b) => JSON.parse(b).place === 'game' && JSON.parse(b).game === 'kaipan'), `应报位置"在玩开盘"（${presence.join(' | ')}）`);
     // 冒烟打开页面时总会写一份教程进度（关着），那一槽照常传；档案不该传
     expect(!apiCalls.some((c) => c.method === 'PUT' && c.path.endsWith('/profile')), '本机没有档案时不该上传档案');
     await ctx.page.waitForTimeout(400);
