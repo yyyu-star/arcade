@@ -39,6 +39,9 @@
 @keyframes yx-spin { to { transform: rotate(360deg); } }
 
 /* 全屏白闪（进化） */
+.yx-hurt { position: absolute; inset: 0; pointer-events: none; z-index: 14; opacity: 0; box-shadow: inset 0 0 70px 18px rgba(214, 48, 36, 0.55); }
+.yx-hurt.on { animation: yx-hurt 0.32s ease-out; }
+@keyframes yx-hurt { 0% { opacity: 0.9; } 100% { opacity: 0; } }
 .yx-flash { position: absolute; inset: 0; pointer-events: none; z-index: 26; background: #fff; opacity: 0; }
 .yx-flash.on { animation: yx-flash 0.35s ease-out; }
 @keyframes yx-flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }

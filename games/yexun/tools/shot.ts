@@ -103,6 +103,13 @@ try {
       await snap('confirm');
       await click('.yx-confirm [data-a="yes"]');
       await snap('result');
+      // 分享（kit 0.15.1）：桌面不弹系统共享面板，直接出预览；预览出来截一张，点"关闭"收起
+      if (await page.locator('.yx-rshare').count()) {
+        await click('.yx-rshare');
+        await page.getByText(/保存图片|复制图片|长按/).first().waitFor({ timeout: 8000 });
+        await snap('share');
+        await page.getByRole('button', { name: '关闭' }).click();
+      }
       await click('[data-a="menu"]');
       await snap('menu');
       await page.locator('.yx-gear').click();
