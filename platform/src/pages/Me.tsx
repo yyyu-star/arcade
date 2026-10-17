@@ -30,9 +30,11 @@ export function MePage() {
       </Panel>
     );
   }
+  // 电脑上（0.23.0）左边一列是账号和邀请，右边是隐私开关、云存档和账号安全
   return (
-    <>
+    <div className="desk">
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
+      <div className="desk__col">
       <Panel icon="user" title="我的账号">
         <dl className="facts">
           <dt>昵称</dt>
@@ -58,6 +60,9 @@ export function MePage() {
         <Rename />
         <LogoutButton />
       </Panel>
+      <InviteFriends />
+      </div>
+      <div className="desk__col">
       <Panel icon="people" title="好友能看到什么">
         <PrivacySwitch
           field="showWhere"
@@ -84,7 +89,6 @@ export function MePage() {
           testId="show-mates"
         />
       </Panel>
-      <InviteFriends />
       <Saves />
       <Panel icon="lock" title="账号安全">
         <ChangePassword />
@@ -92,7 +96,8 @@ export function MePage() {
         <LogoutOthers />
         <DeleteAccount />
       </Panel>
-    </>
+      </div>
+    </div>
   );
 }
 

@@ -1,5 +1,18 @@
 # 更新日志
 
+## 0.16.0
+
+DOM 组件的主题参数（主线要的：kit 的菜单、面板和各游戏的风格不一致）。
+- **`--ak-*` 变量**：`share.ts` 的预览层、`social.ts` 的邀请横条和"叫朋友来"面板、`table-fun.ts` 的菜单和面板，颜色、圆角、字体改成 `var(--ak-xxx, <原来的值>)`，
+  共 11 个：`bg`、`fg`、`accent`、`accent-fg`、`border`、`radius`、`radius-btn`、`font`、`overlay`、`soft`、`title`（每个用在哪见 README"主题"一节）。**默认值就是原来写死的值，不传主题外观不变。**
+- **`theme?: KitTheme`**：`ShareOptions`（`shareCard`、`prepareShare`）、`SocialOptions`（`mountSocial`；`handle.openInvite` 的面板默认用它）、`InvitePanelOptions`（`openInvite`）、`TableFunOptions` 都多一个可选的 `theme`，
+  传了就把变量写到组件根节点的 style 上，没传就不写（游戏也可以只在自己的 CSS 里把 `--ak-*` 写在 `:root` 上，靠继承生效）。
+- **新入口 `arcade-kit/theme`**：`KitTheme` 类型、纯函数 `themeVars(theme)`（主题 → `[变量名, 值][]`）、`applyTheme(el, theme)`、`safeThemeValue`。
+  值含 `;` `{` `}` `<` `>` `\`、`/*`、`url(`、`expression`、`@import`、`javascript:` 或超过 200 字的字段忽略（防 CSS 注入）。import 时不碰 DOM，无运行时依赖。
+- 不动的：分享卡 canvas 的配色（由游戏给的 `card.accent` 定）、`fun.ts` 的素材、状态色（灰、开、选中）、气泡米色底、名场面横幅红渐变。
+- 测试：`test/theme.test.ts` 11 条：`themeVars` 的映射、空对象、拒绝注入；源码守卫扫 `share.ts`、`social.ts`、`table-fun.ts`、`fun.ts`，每个 `var(--ak-` 都带默认值、变量名都在 `theme.ts` 的表里，`applyTheme` 写在根节点 `cssText` 之后（自审时发现横条写反了，主题会被清掉）。
+  反证：让 `themeVars` 接受带 `;` 的值、去掉 `share.ts` 一处默认值，对应测试都失败。演示页（`demo/*.html?theme`）换深色木纹 + 金色强调，默认和换主题各截了图对比。
+
 ## 0.15.1
 
 急修：桌面上点"分享"每次失败（所有者在 Windows Chrome 上点德州"分享这一场"）。

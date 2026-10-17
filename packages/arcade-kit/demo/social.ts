@@ -1,4 +1,5 @@
 /** 社交的演示：假平台记下每个请求；邀请一条 6 秒后过期、一条 10 分钟。冒烟由脚本读 window.social */
+import { demoTheme } from './theme.ts';
 import { mountSocial, type Invite } from '../src/social.ts';
 
 const t0 = Date.now();
@@ -46,6 +47,7 @@ const handle = await mountSocial({
   fetchImpl: fake,
   where: () => ({ place: 'room', game: 'demo', room: 'ROOM01', seats: '3/4' }),
   gameName: (id) => ({ cards: '打牌' })[id],
+  theme: demoTheme,
   onGo: (v) => went.push(`${v.game}/${v.room}`),
   log: (l) => log.push(l),
 });

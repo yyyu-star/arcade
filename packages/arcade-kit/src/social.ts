@@ -9,6 +9,7 @@
  * - 接口形状是主线定的（docs/platform-backend.md 里平台写细节）：都要登录，写的请求带 `x-arcade: 1`、同源（平台的 CSRF 规矩）。
  */
 import { detectPlatform, type PlatformInfo } from './client.js';
+import { applyTheme, type KitTheme } from './theme.js';
 
 /** 报位置：在大厅、在玩某个游戏、在某个好友房里（seats 是"3/4"这样的人数） */
 export interface Presence {
@@ -291,6 +292,8 @@ export interface SocialOptions extends ApiOptions {
   onGo?(invite: Invite): void;
   /** 横条的 z-index，默认 10500（SOCIAL_Z.banner：盖得住游戏的弹窗，在"叫朋友来"面板和分享预览之下） */
   zIndex?: number;
+  /** 主题（0.16.0）：写到横条根节点上的 `--ak-*` 变量（`handle.openInvite` 打开的面板默认也用它）；不传就用页面 CSS 里的变量或默认外观 */
+  theme?: KitTheme;
   /** 冒烟、调试看的流水：`位置 204`、`邀请 弹 <id>`、`邀请 去`、`邀请 不了`、`邀请 过期` */
   log?(line: string): void;
   /** 测试用：时钟 */
@@ -344,6 +347,8 @@ class Social implements SocialHandle {
 
   openInvite(inv: Omit<InvitePanelOptions, 'fetchImpl' | 'gameName'>): InvitePanel {
     return openInvite({
+      // mountSocial 的主题也给面板用，面板自己传了就以面板的为准
+      ...(this.o.theme ? { theme: this.o.theme } : {}),
       ...inv,
       ...(this.o.fetchImpl ? { fetchImpl: this.o.fetchImpl } : {}),
       ...(this.o.gameName ? { gameName: this.o.gameName } : {}),
@@ -411,15 +416,17 @@ class Social implements SocialHandle {
       'max-width:calc(100vw - 16px)',
       'box-sizing:border-box',
       'padding:6px 6px 6px 16px',
-      'border-radius:28px',
-      'background:rgba(28,28,32,.94)',
-      'color:#fff',
+      'border-radius:var(--ak-radius,28px)',
+      'background:var(--ak-bg,rgba(28,28,32,.94))',
+      'color:var(--ak-fg,#fff)',
       'box-shadow:0 6px 24px rgba(0,0,0,.35)',
-      'font:600 16px system-ui,"PingFang SC","Microsoft YaHei",sans-serif',
+      'font:600 16px var(--ak-font,system-ui,"PingFang SC","Microsoft YaHei",sans-serif)',
       'transform:translate(-50%,-140%)',
       'opacity:0',
       'transition:transform .25s ease-out,opacity .25s ease-out',
     ].join(';');
+    // 写在 cssText 之后：cssText 赋值会清掉之前 setProperty 的变量
+    applyTheme(el, this.o.theme);
     const text = document.createElement('span');
     text.textContent = inviteText(v, this.o.gameName);
     text.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0';
@@ -428,7 +435,7 @@ class Social implements SocialHandle {
       b.type = 'button';
       b.textContent = label;
       b.dataset['key'] = key;
-      b.style.cssText = `flex:none;min-width:64px;min-height:44px;padding:0 14px;border-radius:22px;border:0;font:inherit;cursor:pointer;${primary ? 'background:#f5c542;color:#222' : 'background:rgba(255,255,255,.14);color:#fff'}`;
+      b.style.cssText = `flex:none;min-width:64px;min-height:44px;padding:0 14px;border-radius:var(--ak-radius-btn,22px);border:0;font:inherit;cursor:pointer;${primary ? 'background:var(--ak-accent,#f5c542);color:var(--ak-accent-fg,#222)' : 'background:var(--ak-soft,rgba(255,255,255,.14));color:var(--ak-fg,#fff)'}`;
       b.addEventListener('click', fn);
       return b;
     };
@@ -499,6 +506,8 @@ export interface InvitePanelOptions extends ApiOptions {
   gameName?(id: string): string | undefined;
   /** 默认 10600（SOCIAL_Z.panel：在游戏的弹窗、邀请横条之上，在分享预览之下）；游戏的层更高就传更大的 */
   zIndex?: number;
+  /** 主题（0.16.0）：写到面板根节点上的 `--ak-*` 变量；不传就用页面 CSS 里的变量或默认外观 */
+  theme?: KitTheme;
   /** 冒烟、调试看的流水：`叫人 打开 <n>`、`叫人 <id> ok|<错误>`、`叫人 复制`、`叫人 关闭` */
   log?(line: string): void;
   /** 测试用：时钟 */
@@ -513,19 +522,20 @@ const PANEL_ID = 'arcade-invite-panel';
 const PANEL_CSS_ID = 'arcade-invite-css';
 /** 和牌桌互动（table-fun）同一套颜色、圆角、按钮 */
 const PANEL_CSS = `
-.aiv-back{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;background:rgba(0,0,0,.5);font-family:inherit;-webkit-tap-highlight-color:transparent}
-.aiv-box{position:relative;display:flex;flex-direction:column;width:min(420px,calc(100vw - 16px));max-height:calc(100% - 16px);background:rgba(43,29,20,.97);border:2px solid #d4a64a;border-radius:14px;padding:12px;box-sizing:border-box;color:#fff6e0;box-shadow:0 6px 18px rgba(0,0,0,.45);animation:aiv-pop .14s ease-out}
-.aiv-title{font-size:17px;font-weight:700;color:#f3d98b;margin:2px 48px 2px 4px}
+.aiv-back{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;background:var(--ak-overlay,rgba(0,0,0,.5));font-family:var(--ak-font,inherit);-webkit-tap-highlight-color:transparent}
+.aiv-box{position:relative;display:flex;flex-direction:column;width:min(420px,calc(100vw - 16px));max-height:calc(100% - 16px);background:var(--ak-bg,rgba(43,29,20,.97));border:2px solid var(--ak-border,#d4a64a);border-radius:var(--ak-radius,14px);padding:12px;box-sizing:border-box;color:var(--ak-fg,#fff6e0);box-shadow:0 6px 18px rgba(0,0,0,.45);animation:aiv-pop .14s ease-out}
+.aiv-title{font-size:17px;font-weight:700;color:var(--ak-title,#f3d98b);margin:2px 48px 2px 4px}
 .aiv-sub{font-size:13px;opacity:.75;margin:0 4px 8px}
-.aiv-x{position:absolute;right:6px;top:6px;width:44px;height:44px;border:0;border-radius:22px;background:transparent;color:#f3d98b;font:inherit;font-size:22px;cursor:pointer}
+.aiv-x{position:absolute;right:6px;top:6px;width:44px;height:44px;border:0;border-radius:var(--ak-radius-btn,22px);background:transparent;color:var(--ak-title,#f3d98b);font:inherit;font-size:22px;cursor:pointer}
 .aiv-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px}
-.aiv-row{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 10px;border-radius:10px;background:#4a3220}
+.aiv-row{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 10px;border-radius:var(--ak-radius-btn,10px);background:var(--ak-soft,#4a3220)}
 .aiv-dot{flex:none;width:10px;height:10px;border-radius:50%;background:#6a6a6a}.aiv-dot.aiv-on{background:#6fd36f}
 .aiv-who{flex:1 1 auto;min-width:0}
 .aiv-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .aiv-where{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.aiv-chip{flex:none;min-width:84px;min-height:44px;border:1px solid rgba(212,166,74,.6);border-radius:22px;background:#7a2a1e;color:#fff6e0;font:inherit;font-size:14px;font-weight:700;padding:0 12px;cursor:pointer}
-.aiv-chip:disabled{background:#3a3a3a;cursor:default;opacity:.8}.aiv-chip.aiv-soft{background:#4a3220}
+.aiv-chip{flex:none;min-width:84px;min-height:44px;border:1px solid var(--ak-border,rgba(212,166,74,.6));border-radius:var(--ak-radius-btn,22px);background:var(--ak-accent,#7a2a1e);color:var(--ak-accent-fg,#fff6e0);font:inherit;font-size:14px;font-weight:700;padding:0 12px;cursor:pointer}
+.aiv-chip:disabled,.aiv-chip.aiv-soft{color:var(--ak-fg,#fff6e0)}
+.aiv-chip:disabled{background:#3a3a3a;cursor:default;opacity:.8}.aiv-chip.aiv-soft{background:var(--ak-soft,#4a3220)}
 .aiv-note{font-size:13px;text-align:center;opacity:.85;padding:10px 4px;min-height:1em}
 .aiv-err{color:#ffb0a0}
 .aiv-foot{display:flex;justify-content:center;padding-top:10px}
@@ -559,6 +569,7 @@ export function openInvite(o: InvitePanelOptions): InvitePanel {
   const back = el('div', 'aiv-back');
   back.id = PANEL_ID;
   back.style.zIndex = String(o.zIndex ?? SOCIAL_Z.panel);
+  applyTheme(back, o.theme);
   const box = el('div', 'aiv-box');
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', '叫朋友来');

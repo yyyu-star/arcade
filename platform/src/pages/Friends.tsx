@@ -9,7 +9,7 @@ import { gameName } from '../format.ts';
 import { bestPartner, togetherText } from '../mates.ts';
 import { Link, navigate, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Empty, Field, FormError, Panel, useWritable } from '../ui.tsx';
+import { Empty, Field, FormError, Panel, Skeleton, useWritable } from '../ui.tsx';
 
 import './friends.css';
 
@@ -106,63 +106,69 @@ function Friends() {
     };
   }, [version]);
 
+  // 电脑上（0.23.0）左边一列是好友码、加好友和各种请求，右边是好友列表和好友动态。
+  // 手机上两列拆开（display: contents），按 CSS 的 order 排回原来的顺序：动态最上面，等对方接受、屏蔽的人最下面
   return (
-    <>
+    <div className="desk desk--friends">
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
-      {/* 好友动态（0.17.0）：好友页最上面一栏 */}
-      <Panel icon="people" title="好友动态">
-        <FeedPanel me={user!.id} />
-      </Panel>
-      <MyCode />
-      <AddByCode />
-      {loadError && <FormError text={loadError} />}
-      {!data && !loadError && (
-        <Panel icon="people" title="好友">
-          <p className="note">正在读取…</p>
-        </Panel>
-      )}
-      {data && data.incoming.length > 0 && (
-        <Panel icon="people" title={`想加你的人（${data.incoming.length}）`}>
-          <ul className="people">
-            {data.incoming.map((p) => (
-              <Incoming key={p.userId} p={p} onChanged={reload} />
-            ))}
-          </ul>
-        </Panel>
-      )}
-      {data && (
-        <Panel icon="people" title={`好友（${data.friends.length}）`}>
-          {data.friends.length === 0 ? (
-            <Empty>还没有好友。把上面的好友链接发给朋友，对方点开就能加你。</Empty>
-          ) : (
+      <div className="desk__col">
+        <MyCode />
+        <AddByCode />
+        {loadError && <FormError text={loadError} />}
+        {data && data.incoming.length > 0 && (
+          <Panel icon="people" title={`想加你的人（${data.incoming.length}）`}>
             <ul className="people">
-              {data.friends.map((p) => (
-                <Friend key={p.userId} p={p} best={p.userId === best} onChanged={reload} />
+              {data.incoming.map((p) => (
+                <Incoming key={p.userId} p={p} onChanged={reload} />
               ))}
             </ul>
-          )}
+          </Panel>
+        )}
+        {data && data.outgoing.length > 0 && (
+          <Panel icon="people" title={`等对方接受（${data.outgoing.length}）`} className="friends-late">
+            <ul className="people">
+              {data.outgoing.map((p) => (
+                <Outgoing key={p.userId} p={p} onChanged={reload} />
+              ))}
+            </ul>
+          </Panel>
+        )}
+        {blocks && blocks.length > 0 && (
+          <Panel icon="people" title={`屏蔽的人（${blocks.length}）`} className="friends-late">
+            <p className="note">屏蔽的人发来的请求你看不到，也加不了你。对方不会知道自己被屏蔽了。</p>
+            <ul className="people">
+              {blocks.map((p) => (
+                <Blocked key={p.userId} p={p} onChanged={reload} />
+              ))}
+            </ul>
+          </Panel>
+        )}
+      </div>
+      <div className="desk__col">
+        {!data && !loadError && (
+          <Panel icon="people" title="好友">
+            <Skeleton rows={3} />
+          </Panel>
+        )}
+        {data && (
+          <Panel icon="people" title={`好友（${data.friends.length}）`}>
+            {data.friends.length === 0 ? (
+              <Empty>还没有好友。把好友链接发给朋友，对方点开就能加你。</Empty>
+            ) : (
+              <ul className="people">
+                {data.friends.map((p) => (
+                  <Friend key={p.userId} p={p} best={p.userId === best} onChanged={reload} />
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
+        {/* 好友动态（0.17.0）：手机上是好友页最上面一栏 */}
+        <Panel icon="people" title="好友动态" className="friends-feed">
+          <FeedPanel me={user!.id} />
         </Panel>
-      )}
-      {data && data.outgoing.length > 0 && (
-        <Panel icon="people" title={`等对方接受（${data.outgoing.length}）`}>
-          <ul className="people">
-            {data.outgoing.map((p) => (
-              <Outgoing key={p.userId} p={p} onChanged={reload} />
-            ))}
-          </ul>
-        </Panel>
-      )}
-      {blocks && blocks.length > 0 && (
-        <Panel icon="people" title={`屏蔽的人（${blocks.length}）`}>
-          <p className="note">屏蔽的人发来的请求你看不到，也加不了你。对方不会知道自己被屏蔽了。</p>
-          <ul className="people">
-            {blocks.map((p) => (
-              <Blocked key={p.userId} p={p} onChanged={reload} />
-            ))}
-          </ul>
-        </Panel>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 

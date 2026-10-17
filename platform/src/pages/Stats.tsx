@@ -10,7 +10,7 @@ import { togetherText } from '../mates.ts';
 import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
-import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { Empty, FormError, Panel, Skeleton, useSubmit, useWritable } from '../ui.tsx';
 import { friendLink, ShareButton, statsCard } from '../share.tsx';
 import { pickBadge } from '../share-pick.ts';
 
@@ -174,7 +174,7 @@ export function StatsPage() {
 
   const badge = useBadge(data);
 
-  if (loading) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="trophy" title="战绩"><Skeleton rows={4} /></Panel>;
   if (!user) {
     return (
       <Panel icon="trophy" title="战绩">
@@ -186,15 +186,17 @@ export function StatsPage() {
     );
   }
   if (error) return <Panel icon="trophy" title="战绩"><p className="note">{errorText(error, { not_found: '没有找到这个人' })}</p></Panel>;
-  if (!data) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
+  if (!data) return <Panel icon="trophy" title="战绩"><Skeleton rows={4} /></Panel>;
 
   const mine = data.relation === 'self';
   const games = Object.entries(data.games).sort(([a], [b]) => order(a) - order(b));
   const shareable = mine && games.length > 0 && user.friendCode;
   const week = games.reduce((t, [, c]) => t + c.wnet, 0);
   const titles = games.reduce((t, [, c]) => t + c.titles.length, 0);
+  // 电脑上（0.23.0）左边一列是概况、按钮和"和我一起"，右边是各游戏的战绩和称号墙
   return (
-    <>
+    <div className="desk">
+      <div className="desk__col">
       <Panel icon="trophy" title={mine ? '我的战绩' : `${data.user.displayName} 的战绩`}>
         {!mine && <FriendAction userId={data.user.userId} relation={data.relation} onChange={(relation) => setData({ ...data, relation })} />}
         {games.length === 0 ? (
@@ -209,11 +211,6 @@ export function StatsPage() {
                 称号 <strong>{titles}</strong> 个
               </span>
             </p>
-            <ul className="careers">
-              {games.map(([g, c]) => (
-                <GameStats key={g} game={g} c={c} />
-              ))}
-            </ul>
           </>
         )}
         {mine && (
@@ -243,14 +240,24 @@ export function StatsPage() {
           </ul>
         </Panel>
       )}
+      </div>
       {games.length > 0 && (
+      <div className="desk__col">
+        <Panel icon="trophy" title="各游戏">
+          <ul className="careers">
+            {games.map(([g, c]) => (
+              <GameStats key={g} game={g} c={c} />
+            ))}
+          </ul>
+        </Panel>
         <Panel icon="trophy" title="称号墙">
           {games.map(([g, c]) => (
             <TitleShelf key={g} game={g} earned={c.titles} />
           ))}
           {titles === 0 && <p className="note">还没拿到称号。打出名场面，游戏会发给你。</p>}
         </Panel>
+      </div>
       )}
-    </>
+    </div>
   );
 }

@@ -5,3 +5,9 @@
 /* 搭子战绩（0.19.0）：昵称下面第二行小字；最佳搭档是一个小牌子 */
 .people__mates { display: block; font-size: 0.85em; color: var(--muted); }
 .people__best { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; background: #f6c445; color: #3a2a00; font-weight: 700; }
+/* 电脑上（0.23.0）右栏宽（左栏窄，照旧上下排）：名字在左、按钮在同一行右边；确认框（删好友、屏蔽）照旧在下面一整行 */
+@media (min-width: 960px) {
+  .desk > .desk__col:last-child .people__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-4); }
+  .desk > .desk__col:last-child .people__item > .row { justify-content: flex-end; }
+  .desk > .desk__col:last-child .people__item > :nth-child(n + 3) { grid-column: 1 / -1; }
+}
