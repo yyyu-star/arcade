@@ -9,13 +9,19 @@
 import Phaser from 'phaser';
 import { ENEMIES, HOP_AIR, HOP_PERIOD, PLAYER_SLOW, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
+import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
+import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
+import { edgeArrow } from '../../explore/view/guide-hud.ts';
+import { guide, newGuide } from '../../explore/guide.ts';
+import type { Raid } from '../../explore/raid.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
 import { inputCos, inputSin } from '../../core/fmath.ts';
-import type { Atlas, Frame } from '../art/atlas.ts';
+import { RAID_TEX, type Atlas, type Frame } from '../art/atlas.ts';
 import { artRng } from '../art/draw.ts';
+import { treasureIconKey } from '../art/sprites8.ts';
 import { MOB_COLOR } from '../art/sprites.ts';
 import { music } from '../audio/music.ts';
 import { sfx, type SfxName } from '../audio/sfx.ts';
@@ -29,6 +35,15 @@ import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
 
+/** 夜探院子的铺地：颜色和透明度（盖在雪地上，深度在雪地和点缀之间） */
+const YARD_FLOOR: Record<string, [number, number]> = {
+  yard: [0xc9bfa8, 0.42],
+  plaza: [0xd4c8ae, 0.45],
+  ruin: [0xd8dde6, 0.22],
+  temple: [0xe0c27a, 0.45],
+  vault: [0x8d9bb5, 0.5],
+};
+
 /** 怪种类编号 → 图集帧（没画好的先借相近的） */
 const MOB_FRAME = ENEMIES.map((e) => e.kind as string);
 const MOB_FALLBACK: Record<string, string> = {
@@ -39,6 +54,8 @@ const MOB_FALLBACK: Record<string, string> = {
 const MOB_TINT = [
   MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e,
   0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e, 0xf0e0b0,
+  // 夜探的守卫：巡夜将（黑甲）、镇门石兽（青石）
+  0x343a4a, 0x7f8da0,
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
@@ -62,6 +79,8 @@ const FIRE_SFX: Partial<Record<string, SfxName>> = { sword: 'sword', talisman: '
 export interface GameDeps {
   world: World;
   atlas: Atlas;
+  /** 夜探用的第二张图集（buildRaidAtlas）；夜探必传，守夜不用 */
+  raidAtlas?: Atlas;
   hud: Hud;
   cards: Cards;
   banners: Banners;
@@ -122,7 +141,23 @@ export class GameScene extends Phaser.Scene {
   /** 缚妖索的绳子：一串点（从主角开始） */
   private ropes: { pts: number[]; life: number }[] = [];
   private shieldImg!: Phaser.GameObjects.Image;
-  private telegraphs: { x: number; y: number; r: number; life: number; max: number }[] = [];
+  private telegraphs: { x: number; y: number; r: number; life: number; max: number; round?: boolean; color?: number }[] = [];
+  // ───── 夜探 ─────
+  private raid: Raid | null = null;
+  private arenaW = ARENA.w;
+  private arenaH = ARENA.h;
+  /** 地面层的圈（门圈）：画在影子下面，站在圈里的主角和怪盖在它上面 */
+  private rg!: Phaser.GameObjects.Graphics;
+  private chestViews: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image | null; open: boolean }[] = [];
+  private gateViews: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; open: boolean }[] = [];
+  private gd = newGuide();
+  private gdAt = -99;
+  private gdMask = -1;
+  /** 守卫头上的"!"：跟着那只怪走 */
+  private alerts: { slot: number; gen: number; life: number; img: Phaser.GameObjects.Image }[] = [];
+  /** 捡到宝物的飘字（图标 + 名字） */
+  private floats: { img: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text; x: number; y: number; life: number }[] = [];
+  private bossShown = false;
   private renderX = 0;
   private renderY = 0;
   private walk = 0;
@@ -160,21 +195,33 @@ export class GameScene extends Phaser.Scene {
 
   private img(key: string, x = 0, y = 0, scale = 1): Phaser.GameObjects.Image {
     const f = this.frame(key);
-    return this.add.image(x, y, 'atlas', f.key).setOrigin(f.ox, f.oy).setScale(scale / f.res);
+    return this.add.image(x, y, f.tex ?? 'atlas', f.key).setOrigin(f.ox, f.oy).setScale(scale / f.res);
   }
 
   create(): void {
-    this.frames = this.d.atlas.frames;
+    this.raid = this.w.raid;
+    this.arenaW = this.w.arenaW;
+    this.arenaH = this.w.arenaH;
+    this.frames = new Map(this.d.atlas.frames);
     const tex = this.textures.exists('atlas') ? this.textures.get('atlas') : this.textures.addCanvas('atlas', this.d.atlas.canvas)!;
     for (const f of this.frames.values()) if (!tex.has(f.key)) tex.add(f.key, 0, f.x, f.y, f.w, f.h);
+    if (this.raid && this.d.raidAtlas) {
+      const t8 = this.textures.exists(RAID_TEX) ? this.textures.get(RAID_TEX) : this.textures.addCanvas(RAID_TEX, this.d.raidAtlas.canvas)!;
+      for (const f of this.d.raidAtlas.frames.values()) {
+        this.frames.set(f.key, f);
+        if (!t8.has(f.key)) t8.add(f.key, 0, f.x, f.y, f.w, f.h);
+      }
+    }
     const cam = this.cameras.main;
     cam.setZoom(this.d.zoom);
     cam.setBackgroundColor('#dfe4ee');
-    cam.setBounds(-200, -200, ARENA.w + 400, ARENA.h + 400);
+    cam.setBounds(-200, -200, this.arenaW + 400, this.arenaH + 400);
 
     // 雪地：一张可平铺的贴图铺满场地，四周一圈压暗当边界
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
-    this.add.tileSprite(ARENA.w / 2, ARENA.h / 2, ARENA.w + 400, ARENA.h + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
+    this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
+    this.rg = this.add.graphics().setDepth(-500);
+    if (this.raid) this.setupRaid(this.raid);
     this.scatterDecor();
     this.drawBlocks();
 
@@ -212,7 +259,122 @@ export class GameScene extends Phaser.Scene {
         const step = b.h / n;
         for (let k = 0; k < n; k++) this.img('wall_v', b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / this.frame('wall_v').res, step / 80 / this.frame('wall_v').res).setDepth(b.y + step * (k + 1));
       } else if (b.look === 'coffin') this.img('coffin', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
+      else if (b.look === 'house' || (b.look === 'hall' && this.raid)) this.drawHouse(b, b.look === 'hall');
+      else if (b.look === 'stall') this.img('stall', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
+      else if (b.look === 'terrace') {
+        const n = Math.max(1, Math.round(b.w / 80));
+        const step = b.w / n;
+        const f = this.frame('terrace_h');
+        for (let k = 0; k < n; k++) this.img('terrace_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
+      } else if (b.look === 'river') continue;
       else this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h);
+    }
+  }
+
+  /** 夜探的房子：长边上一段段拼（横的画正面，竖的画俯视的瓦顶）；庙和石兽院的正房换红墙青瓦，横的中间再立一座门楼 */
+  private drawHouse(b: { x: number; y: number; w: number; h: number }, hall: boolean): void {
+    if (b.w >= b.h) {
+      const n = Math.max(1, Math.round(b.w / 80));
+      const step = b.w / n;
+      const key = hall ? 'hall_h' : 'house_h';
+      const f = this.frame(key);
+      for (let k = 0; k < n; k++) this.img(key, b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
+      if (hall && b.w >= 300) this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h + 0.1);
+    } else {
+      const n = Math.max(1, Math.round(b.h / 80));
+      const step = b.h / n;
+      const key = hall ? 'hall_v' : 'house_v';
+      const f = this.frame(key);
+      for (let k = 0; k < n; k++) this.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(b.w / 110 / f.res, step / 80 / f.res).setDepth(b.y + step * (k + 1));
+    }
+  }
+
+  /** 夜探场地的地面：院子的铺地、河（含桥）、宝箱、门 */
+  private setupRaid(raid: Raid): void {
+    const floor = this.add.graphics().setDepth(-980);
+    for (const y of raid.map.yards) {
+      const [color, a] = YARD_FLOOR[y.kind] ?? [0xc9bfa8, 0.4];
+      floor.fillStyle(color, a);
+      floor.fillRect(y.x, y.y, y.w, y.h);
+    }
+    this.drawRiver(raid);
+    const sh = this.frame('shadow');
+    for (const c of raid.map.chests) {
+      this.add.image(c.x, c.y + 14, 'atlas', 'shadow').setScale(0.8 / sh.res).setDepth(-400).setAlpha(0.8);
+      const img = this.img(`chest_${c.tier}`, c.x, c.y + 14).setDepth(c.y + 14);
+      const glow = c.tier === 'wood' ? null : this.img('haze', c.x, c.y - 4, c.tier === 'gold' ? 2 : 1.4).setTint(c.tier === 'gold' ? 0xffd860 : 0xffa860).setDepth(c.y + 13);
+      this.chestViews.push({ img, glow, open: false });
+    }
+    for (const g of raid.map.gates) {
+      const foot = g.y - 50;
+      const img = this.img('gate_closed', g.x, foot).setDepth(foot);
+      const glow = this.img('haze', g.x, foot - 56, 4.4).setTint(0xffe08a).setDepth(foot - 1).setVisible(false);
+      const label = this.add
+        .text(g.x, foot - 112, g.name, { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: '#f6efdc', stroke: '#17131c', strokeThickness: 6 })
+        .setOrigin(0.5, 1)
+        .setResolution(2)
+        .setDepth(9100);
+      this.gateViews.push({ img, glow, label, open: false });
+    }
+  }
+
+  /** 渡口的河：深蓝的水加浅色水纹和浮冰，上下两道雪岸；相邻两段河之间的空当是桥 */
+  private drawRiver(raid: Raid): void {
+    const rivers = raid.map.blocks.filter((b) => b.look === 'river').sort((a, b) => a.x - b.x);
+    if (rivers.length === 0) return;
+    const g = this.add.graphics().setDepth(-970);
+    const r = artRng(raid.setup.seed ^ 0x51ed);
+    const y0 = rivers[0]!.y;
+    const h = rivers[0]!.h;
+    for (const b of rivers) {
+      g.fillStyle(0x2f5f86, 1);
+      g.fillRect(b.x, b.y, b.w, b.h);
+      g.lineStyle(3, 0x8cc0e0, 0.55);
+      for (let i = 0, n = Math.round((b.w * b.h) / 9000); i < n; i++) {
+        const x = b.x + r() * b.w;
+        const y = b.y + 20 + r() * (b.h - 40);
+        const len = 40 + r() * 70;
+        g.lineBetween(x, y, x + len, y + (r() - 0.5) * 6);
+      }
+      g.fillStyle(0xe8f1fa, 0.92);
+      g.lineStyle(2.5, 0x17131c, 0.6);
+      for (let i = 0, n = Math.round((b.w * b.h) / 60000); i < n; i++) {
+        const x = b.x + 40 + r() * (b.w - 80);
+        const y = b.y + 40 + r() * (b.h - 80);
+        const ew = 60 + r() * 60;
+        const eh = 26 + r() * 20;
+        g.fillEllipse(x, y, ew, eh);
+        g.strokeEllipse(x, y, ew, eh);
+      }
+      for (const yy of [b.y, b.y + b.h - 12]) {
+        g.fillStyle(0xf6f9fd, 1);
+        g.fillRect(b.x, yy, b.w, 12);
+      }
+      g.lineStyle(4, 0x17131c, 0.85);
+      g.lineBetween(b.x, b.y + 12, b.x + b.w, b.y + 12);
+      g.lineBetween(b.x, b.y + b.h - 12, b.x + b.w, b.y + b.h - 12);
+    }
+    // 桥：相邻河段之间、最左和最右的空当
+    const gaps: [number, number][] = [];
+    if (rivers[0]!.x > 0) gaps.push([0, rivers[0]!.x]);
+    for (let i = 0; i + 1 < rivers.length; i++) gaps.push([rivers[i]!.x + rivers[i]!.w, rivers[i + 1]!.x]);
+    const last = rivers[rivers.length - 1]!;
+    if (last.x + last.w < raid.map.size) gaps.push([last.x + last.w, raid.map.size]);
+    const br = this.add.graphics().setDepth(-960);
+    for (const [x0, x1] of gaps) {
+      if (x1 - x0 < 20) continue;
+      br.fillStyle(0xa8743f, 1);
+      br.fillRect(x0, y0 - 6, x1 - x0, h + 12);
+      br.lineStyle(2, 0x5e3b20, 0.8);
+      for (let y = y0; y < y0 + h; y += 24) br.lineBetween(x0, y, x1, y);
+      for (const x of [x0, x1 - 12]) {
+        br.fillStyle(0x6a4a38, 1);
+        br.fillRect(x, y0 - 6, 12, h + 12);
+        br.lineStyle(3, 0x17131c, 0.9);
+        br.strokeRect(x, y0 - 6, 12, h + 12);
+        br.fillStyle(0xf6f9fd, 0.9);
+        br.fillRect(x + 2, y0 - 6, 8, h + 12);
+      }
     }
   }
 
@@ -220,13 +382,15 @@ export class GameScene extends Phaser.Scene {
   private scatterDecor(): void {
     const r = artRng(this.w.setup.seed);
     const blocks = this.w.blocks;
+    const spawnX = this.raid ? this.w.x : this.arenaW / 2;
+    const spawnY = this.raid ? this.w.y : this.arenaH / 2;
     const put = (key: string, n: number, ground: boolean): void => {
       if (!this.frames.has(key)) return;
       for (let i = 0; i < n; i++) {
-        const x = 100 + r() * (ARENA.w - 200);
-        const y = 100 + r() * (ARENA.h - 200);
-        // 出生点附近留空，开场看得清
-        if (Math.abs(x - ARENA.w / 2) < 220 && Math.abs(y - ARENA.h / 2) < 160) continue;
+        const x = 100 + r() * (this.arenaW - 200);
+        const y = 100 + r() * (this.arenaH - 200);
+        // 出生点附近留空，开场看得清（夜探的出生点在角上，不在中心）
+        if (Math.abs(x - spawnX) < 220 && Math.abs(y - spawnY) < 160) continue;
         // 不压在墙、棺材上（立着的东西离远一点）
         const pad = ground ? 10 : 50;
         if (blocks.some((b) => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad * 2)) continue;
@@ -235,12 +399,13 @@ export class GameScene extends Phaser.Scene {
         o.setDepth(ground ? -900 + r() : y);
       }
     };
-    const dense = LOW_MEMORY ? 0.6 : 1;
+    // 夜探的场地是守夜的四倍大，点缀只多一倍（墙和房子已经很多）
+    const dense = (LOW_MEMORY ? 0.6 : 1) * (this.raid ? 2 : 1);
     put('drift', Math.round(60 * dense), true);
     put('puddle', Math.round(26 * dense), true);
     put('slabs', Math.round(30 * dense), true);
     put('grass', Math.round(220 * dense), true);
-    const yz = blocks.length > 0;
+    const yz = !this.raid && blocks.length > 0;
     put('tree', Math.round((yz ? 26 : 46) * dense), false);
     put('rock', Math.round(60 * dense), false);
     put('stele', Math.round(18 * dense), false);
@@ -437,12 +602,55 @@ export class GameScene extends Phaser.Scene {
         case Ev.Evolve:
           break;
         case Ev.Arrive:
-          this.onArrive(ev.a[i]!);
+          // 夜探里守卫开局就在场上，出场横幅和 Boss 音乐不放（守卫发现主角时由"!"和石兽的预警说话）
+          if (!this.raid) this.onArrive(ev.a[i]!);
+          break;
+        case Ev.GateOpen:
+          this.onGateOpen(x, y, ev.a[i]!);
+          break;
+        case Ev.GateClose:
+          this.d.banners.say(`${this.raid!.map.gates[ev.a[i]!]!.name}关了`, 'ink', 1600);
+          break;
+        case Ev.ChestOpen:
+          this.onChestOpen(x, y, ev.b[i]!);
+          break;
+        case Ev.Loot:
+          this.onLoot(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Escape:
+          sfx.play('extract');
+          this.fx.spawn({ frame: 'ring', x, y, life: 700, s0: 0.5, s1: (GATE.r * 2.4) / 128, a0: 1, a1: 0, tint: 0xf2c94c, depth: 6000 });
+          this.d.banners.say('撤出了', 'gold', 2400);
+          break;
+        case Ev.Dawn:
+          if (ev.a[i] === 0) this.d.banners.say('还剩 1 分钟天亮', 'warn', 2400, '找到开着的门，撤出去');
+          else {
+            sfx.play('heartbeat', { volume: 0.8 });
+            this.d.banners.say('最后 30 秒', 'warn', 2000, '天亮还在镇里，就迷失了');
+          }
+          break;
+        case Ev.Lost:
+          sfx.play('death');
+          this.d.banners.say('天亮了 · 没能撤出去', 'warn', 2400);
+          break;
+        case Ev.Alert:
+          this.onAlert(ev.a[i]!, ev.c[i]!);
+          break;
+        case Ev.Beast:
+          this.onBeast(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Roamer:
+          this.onRoamer(x, y);
           break;
         case Ev.Boss:
           this.onBoss(x, y, ev.a[i]!, ev.b[i]!, ev.c[i]!);
           break;
         case Ev.End:
+          if (this.raid) {
+            // 夜探：撤出、迷失的提示在 Escape / Lost 里放过了，这里只补倒下的声音
+            if (ev.a[i] !== 1 && this.raid.outcome === 'dead') sfx.play('death');
+            break;
+          }
           sfx.play(ev.a[i] === 1 ? 'dawn' : 'death');
           if (ev.a[i] === 1) this.d.banners.say(ev.b[i] === 1 ? '尸王伏诛 · 天亮了' : '天亮了', 'gold', 2400);
           break;
@@ -570,6 +778,88 @@ export class GameScene extends Phaser.Scene {
       this.hold = 0;
       this.d.onChest?.();
     });
+  }
+
+  // ───────────────────────── 夜探的事件 ─────────────────────────
+
+  private onGateOpen(x: number, y: number, k: number): void {
+    sfx.play('gateOpen');
+    this.d.banners.say(`${this.raid!.map.gates[k]!.name}开了`, 'gold', 2600, '站进门圈里 3 秒就能撤出去');
+    this.fx.spawn({ frame: 'ring', x, y, life: 900, s0: 0.5, s1: (GATE.r * 2.6) / 128, a0: 1, a1: 0, tint: 0xf2c94c, depth: 60 });
+    this.fx.spawn({ frame: 'pillar', x, y, life: 1100, s0: 1, s1: 1.3, a0: 0.9, a1: 0, tint: 0xffe08a, depth: 61 });
+  }
+
+  private onChestOpen(x: number, y: number, tier: number): void {
+    sfx.play('chest', { volume: 0.8 });
+    const tint = tier === 2 ? 0xffd860 : tier === 1 ? 0xffa860 : 0xe8d8b0;
+    this.burst(x, y - 10, tint, tier === 2 ? 2 : tier === 1 ? 1.4 : 1);
+    this.fx.spawn({ frame: 'ring', x, y, life: 420, s0: 0.3, s1: 1.8 + tier * 0.5, a0: 1, a1: 0, tint, depth: 60 });
+    if (tier === 2) this.shake(160, 0.005);
+  }
+
+  /** 捡到宝物：图标和名字从箱子上飘起来，颜色按档；一次开出好几件就错开排 */
+  private onLoot(x: number, y: number, code: number, tierIdx: number): void {
+    const t = TREASURES[code]!;
+    const info = TIER_INFO[TIERS[tierIdx]!];
+    const hex = `#${info.color.toString(16).padStart(6, '0')}`;
+    const n = this.floats.length;
+    const f = this.frame(treasureIconKey(t.icon));
+    const oy = -64 - n * 30;
+    const img = this.add.image(x - 4, y + oy, f.tex ?? 'atlas', f.key).setScale(1.15 / f.res).setDepth(9200);
+    const text = this.add
+      .text(x + 8, y + oy, t.name, { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '20px', fontStyle: 'bold', color: hex, stroke: '#17131c', strokeThickness: 5 })
+      .setOrigin(0, 0.5)
+      .setResolution(2)
+      .setDepth(9200);
+    this.floats.push({ img, text, x, y: y + oy, life: 1600 });
+    sfx.play('coin', { pitch: 1 + tierIdx * 0.18 });
+    this.burst(x, y + oy, info.color, 0.7 + tierIdx * 0.3);
+    if (tierIdx === 3) this.d.banners.say(`绝品 · ${t.name}`, 'gold', 2200, t.blurb);
+  }
+
+  private onAlert(role: number, slot: number): void {
+    const w = this.w;
+    if (!w.eAlive[slot]) return;
+    if (this.alerts.some((a) => a.slot === slot && a.life > 0)) return;
+    const img = this.img('alert', w.eX[slot]!, w.eY[slot]!).setDepth(9300);
+    this.alerts.push({ slot, gen: w.eGen[slot]!, life: 1100, img });
+    // 铜箱的精英常见，只有巡夜将和石兽才发声
+    if (role >= 1) sfx.play('elite', { volume: 0.45 });
+  }
+
+  /** 石兽：0 扑击预警（落点）1 扑下 2 甩尾预警 3 甩尾 4 进二段 */
+  private onBeast(x: number, y: number, a: number, r: number): void {
+    const tick = 1000 / 30;
+    if (a === 0) this.telegraphs.push({ x, y, r, life: 0, max: BEAST.pounce.warn * tick, round: true, color: 0xd23a2a });
+    else if (a === 2) this.telegraphs.push({ x, y, r, life: 0, max: BEAST.sweep.warn * tick, round: true, color: 0xe27a1a });
+    else if (a === 1) {
+      sfx.play('bossStomp');
+      this.shake(220, 0.01);
+      this.freeze = Math.max(this.freeze, 80);
+      this.fx.spawn({ frame: 'ring', x, y, life: 500, s0: 0.4, s1: (r * 2.4) / 128, a0: 1, a1: 0, tint: 0x6a7890, depth: 60 });
+      for (let k = 0; k < 10; k++) {
+        const ang = (k / 10) * Math.PI * 2;
+        this.fx.spawn({ frame: 'haze', x: x + Math.cos(ang) * r * 0.6, y: y + Math.sin(ang) * r * 0.5, life: 650, s0: 0.6, s1: 1.4, a0: 0.7, a1: 0, tint: 0xc8d0dc });
+      }
+    } else if (a === 3) {
+      sfx.play('bossBreath');
+      this.shake(160, 0.007);
+      this.fx.spawn({ frame: 'ring', x, y, life: 420, s0: 0.5, s1: (r * 2.2) / 128, a0: 1, a1: 0, tint: 0xe27a1a, depth: 60 });
+    } else if (a === 4) {
+      sfx.play('boss');
+      this.shake(360, 0.008);
+      this.d.banners.say('石兽发怒', 'warn', 1800, '扑得更勤，扫得更大');
+    }
+  }
+
+  /** 游荡的巡夜将出来了：提示它从哪个方向来（相对主角） */
+  private onRoamer(x: number, y: number): void {
+    const dx = x - this.w.x;
+    const dy = y - this.w.y;
+    const ew = Math.abs(dx) > Math.abs(dy) * 0.45 ? (dx > 0 ? '东' : '西') : '';
+    const ns = Math.abs(dy) > Math.abs(dx) * 0.45 ? (dy > 0 ? '南' : '北') : '';
+    sfx.play('elite');
+    this.d.banners.say('巡夜将出来了', 'warn', 2200, `从${ns}${ew}边的街上过来，别让它撞见`);
   }
 
   private onArrive(code: number): void {
@@ -751,6 +1041,7 @@ export class GameScene extends Phaser.Scene {
     this.drawMobs(inter, dt);
     this.drawShots(inter);
     this.drawDrops(inter);
+    if (this.raid) this.drawRaid(dt);
     this.drawGfx(dt);
     this.fx.update(dt);
     this.ground.update(dt);
@@ -809,7 +1100,15 @@ export class GameScene extends Phaser.Scene {
     }
     // Boss 血条
     const b = w.bossSlot;
-    if (b >= 0 && w.eAlive[b] && w.phase !== 'over') this.d.banners.setBoss(ENEMIES[w.eKind[b]!]!.kind === 'lord' ? '纸扎老爷' : '尸王', w.eHp[b]! / w.eHpMax[b]!);
+    if (this.raid) {
+      // 夜探：只有镇门石兽有血条，主角走近了（它在追或要扑）才亮
+      const near = b >= 0 && !!w.eAlive[b] && w.phase !== 'over' && ENEMIES[w.eKind[b]!]!.kind === 'beast' && (w.eX[b]! - w.x) ** 2 + (w.eY[b]! - w.y) ** 2 < 640 * 640;
+      if (near) this.d.banners.setBoss('镇门石兽', w.eHp[b]! / w.eHpMax[b]!);
+      if (near !== this.bossShown) {
+        this.bossShown = near;
+        if (!near) this.d.banners.setBoss(null);
+      }
+    } else if (b >= 0 && w.eAlive[b] && w.phase !== 'over') this.d.banners.setBoss(ENEMIES[w.eKind[b]!]!.kind === 'lord' ? '纸扎老爷' : '尸王', w.eHp[b]! / w.eHpMax[b]!);
     else if (this.bossOn) {
       this.d.banners.setBoss(null);
       this.bossOn = false;
@@ -823,8 +1122,8 @@ export class GameScene extends Phaser.Scene {
     const def = ENEMIES[code]!;
     const key = MOB_FRAME[code]!;
     const f = this.frame(key);
-    const img = old?.img ?? this.add.image(0, 0, 'atlas', f.key);
-    img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
+    const img = old?.img ?? this.add.image(0, 0, f.tex ?? 'atlas', f.key);
+    img.setTexture(f.tex ?? 'atlas', f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
     // 没画好专属造型的怪先用相近的图换个颜色
     if (!this.frames.has(key)) img.setTint(MOB_TINT[code]!);
     const shadow = old?.shadow ?? this.img('shadow');
@@ -939,6 +1238,135 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 夜探每帧要画的：门（换图、光圈）、开过的宝箱、搜箱和撤离的读条、撤离指引（脚印、屏幕边的箭头）、"!"、飘字 */
+  private drawRaid(dt: number): void {
+    const raid = this.raid!;
+    const w = this.w;
+    const rg = this.rg;
+    const g = this.gfx;
+    rg.clear();
+    // 宝箱：开了就换成开着的图，光晕收掉
+    raid.map.chests.forEach((c, i) => {
+      const v = this.chestViews[i]!;
+      const open = raid.chestOpen[i] === 1;
+      if (open !== v.open) {
+        v.open = open;
+        v.img.setFrame(`chest_${c.tier}${open ? '_open' : ''}`);
+        v.glow?.setVisible(false);
+      } else if (!open && v.glow) v.glow.setAlpha(0.45 + Math.sin(this.now * 0.004 + i) * 0.15);
+    });
+    // 门：开着的门发光，圈里站着读条
+    raid.map.gates.forEach((gt, k) => {
+      const v = this.gateViews[k]!;
+      const open = raid.gateOpen[k] === 1;
+      if (open !== v.open) {
+        v.open = open;
+        v.img.setFrame(open ? 'gate_open' : 'gate_closed');
+        v.glow.setVisible(open);
+      }
+      if (open) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.now * 0.005 + k);
+        rg.fillStyle(0xffd860, 0.24 + pulse * 0.12);
+        rg.fillCircle(gt.x, gt.y, GATE.r);
+        rg.lineStyle(9, 0x17131c, 0.55);
+        rg.strokeCircle(gt.x, gt.y, GATE.r);
+        rg.lineStyle(5, 0xe8a820, 1);
+        rg.strokeCircle(gt.x, gt.y, GATE.r);
+        v.glow.setAlpha(0.5 + pulse * 0.25);
+      } else {
+        rg.fillStyle(0x4a5060, 0.08);
+        rg.fillCircle(gt.x, gt.y, GATE.r);
+        rg.lineStyle(4, 0x4a5060, 0.3);
+        rg.strokeCircle(gt.x, gt.y, GATE.r);
+      }
+    });
+    // 撤离读条：门圈里一圈金色，主角头上一条
+    const hx = this.renderX;
+    const hy = this.renderY;
+    const ep = raid.exitProgress();
+    if (ep > 0 && raid.exitGate >= 0) {
+      const gt = raid.map.gates[raid.exitGate]!;
+      g.lineStyle(14, 0x17131c, 0.9);
+      g.beginPath();
+      g.arc(gt.x, gt.y, GATE.r - 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ep);
+      g.strokePath();
+      g.lineStyle(8, 0xffd23a, 1);
+      g.beginPath();
+      g.arc(gt.x, gt.y, GATE.r - 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ep);
+      g.strokePath();
+      this.progressBar(hx, hy - 84, ep, 0xffd23a);
+    }
+    // 搜箱读条
+    const sp = raid.searchProgress();
+    if (sp > 0 && raid.searchChest >= 0) {
+      const c = raid.map.chests[raid.searchChest]!;
+      this.progressBar(c.x, c.y - 56, sp, c.tier === 'gold' ? 0xffd23a : c.tier === 'copper' ? 0xff9a3a : 0xf0e0b0);
+    }
+    // 撤离指引：每 4 帧重算一次（最短路场按开着的门缓存），脚印画在地上，门在屏幕外时边上一个箭头
+    if (raid.outcome === 'none') {
+      if (this.gdMask !== raid.gateMask || this.now - this.gdAt > 120) {
+        this.gdMask = raid.gateMask;
+        this.gdAt = this.now;
+        guide(raid, w.x, w.y, this.gd);
+      }
+      const gd = this.gd;
+      for (let i = 0; i < gd.trailN; i++) {
+        const t = 1 - i / (gd.trailN + 2);
+        g.fillStyle(0x17131c, 0.55 * t);
+        g.fillCircle(gd.trail[i * 2]!, gd.trail[i * 2 + 1]!, 8);
+        g.fillStyle(0xffd23a, 0.95 * t);
+        g.fillCircle(gd.trail[i * 2]!, gd.trail[i * 2 + 1]!, 5);
+      }
+      const cam = this.cameras.main;
+      const cssW = this.scale.displaySize.width;
+      const cssH = this.scale.displaySize.height;
+      const k = cssW / (cam.width / cam.zoom);
+      const gate = gd.gate >= 0 ? raid.map.gates[gd.gate]! : null;
+      const arrow = gate ? edgeArrow(raid, gd, (gate.x - cam.midPoint.x) * k, (gate.y - cam.midPoint.y) * k, cssW, cssH, 84) : null;
+      this.d.hud.setArrow(arrow && !arrow.onScreen ? arrow : null);
+    } else this.d.hud.setArrow(null);
+    // 守卫头上的"!"
+    for (const a of this.alerts) {
+      a.life -= dt;
+      const i = a.slot;
+      if (a.life <= 0 || !w.eAlive[i] || w.eGen[i] !== a.gen) {
+        a.life = 0;
+        a.img.destroy();
+        continue;
+      }
+      const born = Math.min(1, (1100 - a.life) / 140);
+      const f = this.frame('alert');
+      a.img.setPosition(w.eX[i]!, w.eY[i]! - w.eR[i]! * 2.4 - 28 - Math.sin(this.now * 0.02) * 2).setScale((1.1 * (0.4 + 0.6 * born)) / f.res).setAlpha(Math.min(1, a.life / 250));
+    }
+    this.alerts = this.alerts.filter((a) => a.life > 0);
+    // 捡到宝物的飘字
+    for (const fl of this.floats) {
+      fl.life -= dt;
+      const t = 1 - fl.life / 1600;
+      const y = fl.y - t * 46;
+      const al = fl.life < 400 ? Math.max(0, fl.life / 400) : 1;
+      fl.img.setPosition(fl.x - 4 - fl.text.width / 2 - 8, y).setAlpha(al);
+      fl.text.setPosition(fl.x - fl.text.width / 2 + 8, y).setAlpha(al);
+      if (fl.life <= 0) {
+        fl.img.destroy();
+        fl.text.destroy();
+      }
+    }
+    this.floats = this.floats.filter((fl) => fl.life > 0);
+  }
+
+  /** 头上或箱子上的读条：深色边、金色（或档色）填充 */
+  private progressBar(x: number, y: number, p: number, color: number): void {
+    const g = this.gfx;
+    const wd = 64;
+    g.fillStyle(0x17131c, 0.9);
+    g.fillRoundedRect(x - wd / 2 - 4, y - 8, wd + 8, 16, 6);
+    g.fillStyle(0x4a4350, 1);
+    g.fillRoundedRect(x - wd / 2, y - 4, wd, 8, 3);
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(x - wd / 2, y - 4, Math.max(2, wd * p), 8, 3);
+  }
+
   private drawGfx(dt: number): void {
     const g = this.gfx;
     // 八卦镜的光波：深靛外圈 + 亮青内圈，越往外越淡
@@ -998,6 +1426,19 @@ export class GameScene extends Phaser.Scene {
     for (const t of this.telegraphs) {
       t.life += dt;
       const k = Math.min(1, t.life / t.max);
+      const col = t.color ?? 0xd23a2a;
+      if (t.round) {
+        // 石兽的圈按真实的受击范围画成正圆；外圈深色边，里面从圆心往外涨满就是落下的时候
+        g.fillStyle(col, 0.06);
+        g.fillCircle(t.x, t.y, t.r);
+        g.lineStyle(9, 0x17131c, 0.6);
+        g.strokeCircle(t.x, t.y, t.r);
+        g.lineStyle(5, col, 0.95);
+        g.strokeCircle(t.x, t.y, t.r);
+        g.fillStyle(col, 0.1 + k * 0.2);
+        g.fillCircle(t.x, t.y, t.r * k);
+        continue;
+      }
       g.lineStyle(4, 0xd23a2a, 0.9);
       g.strokeEllipse(t.x, t.y, t.r * 2, t.r * 1.3);
       g.fillStyle(0xd23a2a, 0.12 + k * 0.2);
@@ -1013,6 +1454,7 @@ export class GameScene extends Phaser.Scene {
       const cd = Math.max(4, Math.round(s.cd * w.stats.cdMul));
       return { icon: weaponLook(w, o).icon, level: o.evolved ? 9 : o.level, cd: o.id === 'flysword' || o.id === 'coins' || o.id === 'crane' || o.id === 'shield' ? 1 : Math.max(0, Math.min(1, 1 - o.timer / cd)) };
     });
+    const raid = this.raid;
     this.d.hud.update({
       hp: Math.max(0, w.hp),
       hpMax: w.stats.hpMax,
@@ -1020,14 +1462,16 @@ export class GameScene extends Phaser.Scene {
       shieldMax: w.shieldMax,
       level: w.level,
       xp: w.xp / xpNeed(w.level),
-      left: (DAWN_TICK - w.tick) / 30,
+      left: ((raid ? RAID_DAWN : DAWN_TICK) - w.tick) / 30,
+      raid: raid ? { label: w.tick >= DAWN_WARN ? '天亮' : '离天亮', level: w.tick >= DAWN_RED ? 2 : w.tick >= DAWN_WARN ? 1 : 0, bag: raid.bag.length } : undefined,
       kills: w.kills,
       coins: w.coins,
       slots,
       passives: PASSIVE_IDS.filter((id) => w.passives[id] !== undefined).map((id) => ({ icon: PASSIVES[id].icon, level: w.passives[id]! })),
     });
     // 低血：屏幕边红框 + 心跳（手感清单第 9 条）
-    const low = w.hp > 0 && w.hp < w.stats.hpMax * 0.3 && w.phase === 'play' && !this.paused;
+    // 夜探最后 30 秒也用这层红框和心跳催人
+    const low = ((w.hp > 0 && w.hp < w.stats.hpMax * 0.3) || (raid !== null && raid.outcome === 'none' && w.tick >= DAWN_RED)) && w.phase === 'play' && !this.paused;
     this.d.banners.setLow(low);
     if (low && this.now - this.lowBeat > 1000) {
       sfx.play('heartbeat', { volume: 0.7 });

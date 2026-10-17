@@ -10,6 +10,7 @@ import { SPRITES4 } from './sprites4.ts';
 import { SPRITES5 } from './sprites5.ts';
 import { SPRITES6 } from './sprites6.ts';
 import { SPRITES7 } from './sprites7.ts';
+import { SPRITES8 } from './sprites8.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -23,6 +24,8 @@ export interface Frame {
   oy: number;
   /** 显示时按 1 / res 缩放就是它在世界里的大小（画得更细的大怪，res 照基础倍数算，显示出来就是放大的） */
   res: number;
+  /** 所在的 Phaser 贴图名；缺省是主图集 'atlas'（夜探的图在第二张 RAID_TEX） */
+  tex?: string;
 }
 
 export interface Atlas {
@@ -56,9 +59,48 @@ function digitDefs(): SpriteDef[] {
   }));
 }
 
+/** 主图集在 res 3 时已经用掉 1,866 / 2,048，装不下夜探的图：夜探的图单独一张（守夜不用，进夜探前才需要） */
+export const RAID_TEX = 'atlas8';
+
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  const defs = [...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...digitDefs()];
+  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...digitDefs()], res);
+}
+
+let raidCache: { res: number; atlas: Atlas } | null = null;
+
+/** 夜探的第二张图集（巡夜将、石兽、房子、宝箱、门、宝物图标）；同一个 res 只画一次 */
+export function buildRaidAtlas(res: number): Atlas {
+  if (raidCache?.res === res) return raidCache.atlas;
+  raidCache = { res, atlas: pack(SPRITES8, res, RAID_TEX) };
+  return raidCache.atlas;
+}
+
+/** 画好的夜探图集（没画过回 null） */
+export function peekRaidAtlas(): Atlas | null {
+  return raidCache?.atlas ?? null;
+}
+
+/** 图集里一帧画成 data URL（HUD 的头像、法器和宝物图标用）：先找主图集，再找夜探图集；同一张只画一次 */
+export function makeIcons(atlas: Atlas): (key: string, px?: number) => string {
+  const cache = new Map<string, string>();
+  return (key, px = 64) => {
+    const id = `${key}@${px}`;
+    let url = cache.get(id);
+    if (url) return url;
+    const hit = atlas.frames.has(key) ? atlas : (peekRaidAtlas()?.frames.has(key) ? peekRaidAtlas()! : atlas);
+    const f = hit.frames.get(key) ?? atlas.frames.get('soul')!;
+    const c = document.createElement('canvas');
+    c.width = px;
+    c.height = Math.round((px * f.h) / f.w);
+    c.getContext('2d')!.drawImage(hit.canvas, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
+    url = c.toDataURL();
+    cache.set(id, url);
+    return url;
+  };
+}
+
+function pack(defs: SpriteDef[], res: number, tex?: string): Atlas {
   const items = defs.map((d) => {
     const r = res * (d.scale ?? 1);
     return { d, r, pw: Math.ceil(d.w * r) + PAD * 2, ph: Math.ceil(d.h * r) + PAD * 2 };
@@ -96,7 +138,7 @@ export function buildAtlas(res: number): Atlas {
     c.clip();
     it.d.draw(c);
     c.restore();
-    frames.set(it.d.key, { key: it.d.key, x: p.x + PAD, y: p.y + PAD, w: it.pw - PAD * 2, h: it.ph - PAD * 2, ox: it.d.ox, oy: it.d.oy, res: it.r / (it.d.scale ?? 1) });
+    frames.set(it.d.key, { key: it.d.key, x: p.x + PAD, y: p.y + PAD, w: it.pw - PAD * 2, h: it.ph - PAD * 2, ox: it.d.ox, oy: it.d.oy, res: it.r / (it.d.scale ?? 1), tex });
   });
   return { canvas, frames };
 }
