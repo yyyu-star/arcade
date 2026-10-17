@@ -6,7 +6,7 @@
  */
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
-import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
+import { MERGES, WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
 import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
@@ -280,7 +280,7 @@ export class Bot {
     cs.forEach((c, i) => {
       // 认得合成配方（和卡上的提示同一个纯函数）：正好凑成的先拿，差一步的往前排（1.1，双修以前机器人很少凑得齐）
       const h = mergeHint(w, c);
-      const s = this.score(w, c, plan) + (h ? (h.ready ? 30 : 12) : 0);
+      const s = this.score(w, c, plan) + (h ? (h.ready ? 30 : 12) : 0) + this.dualPartner(w, c);
       if (s > bs) {
         bs = s;
         best = i;
@@ -292,6 +292,20 @@ export class Bot {
       if (w.weapons.length >= 4) return Pick.Skip;
     }
     return best;
+  }
+
+  /**
+   * 双修配方的另一半：手上有配方的一件、还没合成，这张卡是另一件（新拿或升级）就加分，分量和流派单子里靠前的法器差不多。
+   * 真人看得到卡上的"双"字提示会去凑；机器人按流派单子拿，不加这一条时配方另一半几乎从不进手（1.1 第一轮每 20 局不到 1 次）。
+   */
+  private dualPartner(w: World, c: Choice): number {
+    if (c.kind !== 'weapon') return 0;
+    for (const m of MERGES) {
+      if (!m.dual || w.merges.includes(m.id)) continue;
+      const other = c.id === m.a ? m.b : c.id === m.b ? m.a : null;
+      if (other && w.weapons.some((o) => o.id === other)) return 20;
+    }
+    return 0;
   }
 
   private score(w: World, c: Choice, plan: { weapons: WeaponId[]; passives: PassiveId[] }): number {

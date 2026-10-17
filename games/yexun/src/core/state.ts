@@ -195,6 +195,8 @@ export class World {
   face = 0;
   moving = false;
   invuln = 0;
+  /** 最后一下是谁打的（模拟器死因统计用，不进指纹） */
+  hurtBy = -1;
   level = 1;
   xp = 0;
   /** 攒着还没选的升级次数 */

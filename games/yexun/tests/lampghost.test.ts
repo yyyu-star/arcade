@@ -41,22 +41,22 @@ describe('提灯鬼', () => {
     expect(ENEMY_BY_KIND.lampghost.elite).toBeUndefined();
   });
 
-  it('占比：危险 3 起、第 6 分钟起 10%，第 12 分钟起 15%；守夜以外和低档为 0', () => {
+  it('占比：危险 3 起、第 5 分钟起 15%，第 12 分钟起 25%；守夜以外和低档为 0', () => {
     expect(lampShare('vigil', 2, 8)).toBe(0);
-    expect(lampShare('vigil', 3, 5.9)).toBe(0);
-    expect(lampShare('vigil', 3, 6)).toBe(0.1);
-    expect(lampShare('vigil', 4, 11.9)).toBe(0.1);
-    expect(lampShare('vigil', 5, 12)).toBe(0.15);
+    expect(lampShare('vigil', 3, 4.9)).toBe(0);
+    expect(lampShare('vigil', 3, 5)).toBe(0.15);
+    expect(lampShare('vigil', 4, 11.9)).toBe(0.15);
+    expect(lampShare('vigil', 5, 12)).toBe(0.25);
     expect(lampShare('raid', 5, 12)).toBe(0);
   });
 
-  it('刷怪：危险 2 不出；危险 3 第 6 分钟后出，比例在一成上下；第 4 分钟还不出', () => {
+  it('刷怪：危险 2 不出；危险 3 第 5 分钟后出，比例在一成半上下；第 4 分钟还不出', () => {
     expect(census('vigil', 2, 8, 900).lamp).toBe(0);
     expect(census('vigil', 3, 4, 900).lamp).toBe(0);
     const c = census('vigil', 3, 8, 900);
     expect(c.lamp).toBeGreaterThan(0);
-    expect(c.lamp / c.all).toBeGreaterThan(0.04);
-    expect(c.lamp / c.all).toBeLessThan(0.2);
+    expect(c.lamp / c.all).toBeGreaterThan(0.07);
+    expect(c.lamp / c.all).toBeLessThan(0.25);
   });
 
   it('夜探不出（夜探走自己的刷怪表）', () => {

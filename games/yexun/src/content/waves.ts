@@ -71,7 +71,7 @@ export const CALM = { afterElite: 25 * S, afterSpike: 30 * S, keepMul: 0.5, drop
  * 提灯鬼（不怕火，克火流派）：只在守夜、危险 minDanger 起，第 from 分钟起占常规怪的 share[0]，第 late 分钟起 share[1]。
  * 夜探走自己的刷怪表（explore.ts），不受影响。
  */
-export const LAMP = { minDanger: 3 as Danger, from: 6, late: 12, share: [0.1, 0.15] as const };
+export const LAMP = { minDanger: 3 as Danger, from: 5, late: 12, share: [0.15, 0.25] as const };
 /** 这一分钟提灯鬼占多少（0 = 不出） */
 export function lampShare(mode: 'vigil' | 'raid', danger: Danger, minute: number): number {
   if (mode !== 'vigil' || danger < LAMP.minDanger || minute < LAMP.from) return 0;
