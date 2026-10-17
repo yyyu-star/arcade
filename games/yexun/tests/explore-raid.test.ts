@@ -253,12 +253,13 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
     expect(() => new Raid({ seed: 1, template: 'teach', danger: 0, live: 'small' })).toThrow();
   });
 
-  it('实盘：倍数 = 价值 ÷ 基准，封顶，万分之一向下取整；结回向下取整（4.2）', () => {
+  it('实盘：撤出时倍数 = 价值 ÷ 基准，至少保底、最多封顶，万分之一向下取整；结回向下取整（4.2）', () => {
     const base = RAID_LIVE.base.small.guzhen;
-    expect(liveBp(0, 'small')).toBe(0);
-    expect(liveBp(base, 'small')).toBe(10000);
+    expect(liveBp(0, 'small')).toBe(RAID_LIVE.floor * 10000);
+    expect(liveBp(base * 2, 'small')).toBe(20000);
     expect(liveBp(base * 100, 'small')).toBe(RAID_LIVE.cap * 10000);
-    expect(liveBp(1, 'small')).toBe(Math.floor((1 / base) * 10000));
+    expect(liveBp(Math.ceil(base * 1.5), 'small', 'guzhen')).toBe(Math.floor((Math.ceil(base * 1.5) / base) * 10000));
+    expect(liveBp(base * 2, 'small', 'dukou')).toBe(Math.floor(((base * 2) / RAID_LIVE.base.small.dukou) * 10000));
     let prev = -1;
     for (let v = 0; v < base * 4; v += 7) {
       const bp = liveBp(v, 'small');

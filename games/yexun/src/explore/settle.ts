@@ -38,8 +38,9 @@ export function settleRaid(raid: Raid, pickedCoins: number): RaidResult {
 
 /** 实盘倍数（浮点，显示用） */
 export function liveMultiplier(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen'): number {
+  // 撤出了才会调到这里：至少保底，最多封顶
   const m = value / RAID_LIVE.base[tier][template];
-  return m < 0 ? 0 : m > RAID_LIVE.cap ? RAID_LIVE.cap : m;
+  return m < RAID_LIVE.floor ? RAID_LIVE.floor : m > RAID_LIVE.cap ? RAID_LIVE.cap : m;
 }
 
 /** 实盘倍数的万分之一（向下取整） */

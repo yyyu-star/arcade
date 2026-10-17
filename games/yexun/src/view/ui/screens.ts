@@ -175,7 +175,8 @@ export class Menu {
       raid: () => {
         if (this.lastState?.raidFirst) return this.onRaid('teach', 0);
         if (this.live.on && this.live.available) {
-          if (this.live.tier !== 'luxe' && this.tpl !== 'teach') this.onRaidLive(this.live.tier, this.tpl);
+          const t = this.live.tier;
+          if (t !== 'luxe' && RAID_LIVE.open.includes(t) && this.tpl !== 'teach') this.onRaidLive(t, this.tpl);
           return;
         }
         this.onRaid(this.tpl, this.diff);
@@ -186,7 +187,7 @@ export class Menu {
         const note = this.root.querySelector('.yx-tplnote');
         if (note) note.textContent = RAID_TEMPLATES[this.tpl].blurb;
         const ln = this.root.querySelector('.yx-raidlivenote');
-        if (ln && this.live.tier !== 'luxe' && this.tpl !== 'teach') ln.innerHTML = raidLiveNote(this.live.tier, this.tpl);
+        if (ln && this.live.tier !== 'luxe' && RAID_LIVE.open.includes(this.live.tier) && this.tpl !== 'teach') ln.innerHTML = raidLiveNote(this.live.tier, this.tpl);
       },
       vault: () => this.onVault(),
       map: (el) => {
@@ -305,12 +306,13 @@ export class Menu {
       const tier = s.live.tier;
       const tiers = RAID_LIVE_TIERS.map((t) => `<button type="button" class="yx-chip${t === tier ? ' on' : ''}" data-a="tier" data-t="${t}"><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('');
       const tpl = this.tpl === 'teach' ? 'guzhen' : this.tpl;
-      const note = tier === 'luxe' ? '豪华档只有守夜，夜探选小、中、大' : raidLiveNote(tier, tpl);
+      const open = tier !== 'luxe' && RAID_LIVE.open.includes(tier);
+      const note = tier === 'luxe' ? '豪华档只有守夜；夜探先开小档' : !open ? '夜探的中、大档还在调，先开小档' : raidLiveNote(tier, tpl);
       return (
         `<div class="yx-chips yx-tpls" aria-label="镇子">${chips}</div>` +
         `<div class="yx-chips yx-tiers">${tiers}</div>` +
         `<div class="yx-livenote yx-raidlivenote">${note}</div>` +
-        `<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid"${tier === 'luxe' ? ' disabled' : ''}>开始夜探</button>${vault}</div>`
+        `<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid"${open ? '' : ' disabled'}>开始夜探</button>${vault}</div>`
       );
     }
     return (
@@ -738,7 +740,7 @@ export class Tips {
 /** 夜探实盘的说明：危险档、多少价值算一份、上限 */
 function raidLiveNote(tier: RaidLiveTier, tpl: RaidLiveTemplate): string {
   const base = RAID_LIVE.base[tier][tpl];
-  return `危险 ${RAID_LIVE.danger[tier]} · 固定小道士，不带加成<br>撤出时带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物 = 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
+  return `危险 ${RAID_LIVE.danger[tier]} · 固定小道士，不带加成<br>撤出来至少拿回 ${RAID_LIVE.floor} 份，带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物算 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
 }
 
 function liveNote(tier: LiveTier): string {
