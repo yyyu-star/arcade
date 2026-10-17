@@ -6,6 +6,7 @@
  *                                      → 大屏 1920×1080；任何 console error / pageerror / 超时 / 断言失败都以非零码退出
  *   node tools/shot.ts --playtest      真实速度（动画开、1 倍速）、真实鼠标从标题页玩一副：每次轮到我先点"提示"再点"出牌"，
  *                                      压不过就点"不要"；进贡/还贡点牌再点按钮；报告用时和点击次数
+ *   node tools/shot.ts --gallery      三种尺寸（1280×720、1920×1080、844×390）× 全部画面的图集，美术改版前后对比用；走不到的画面记进说明
  *   node tools/shot.ts --look "<query>" [宽x高] [名字]   只开一个页面截一张（调试画面用），例如 --look "seed=a&debug=1" 844x390
  *
  * 特定局面（我要进贡 / 我要还贡）先在 node 里用核心推演找到种子，再用 URL 参数 jump=tribute 交给画面。
@@ -917,6 +918,146 @@ async function playtest(browser: Browser): Promise<void> {
   await page.context().close();
 }
 
+// ───────────────────────── 画面图集（美术改版前后对比） ─────────────────────────
+
+interface GallerySize {
+  prefix: string;
+  w: number;
+  h: number;
+  dpr: number;
+  touch: boolean;
+}
+
+/** 每个画面走不到就记一条说明、不卡住 */
+async function step(what: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    notes.push(`图集走不到：${what}（${String(err instanceof Error ? err.message : err).slice(0, 160)}）`);
+  }
+}
+
+async function gallerySize(browser: Browser, z: GallerySize): Promise<void> {
+  const { prefix: p, touch } = z;
+  const base = { w: z.w, h: z.h, dpr: z.dpr, touch };
+  const ck = (c: Ctx, k: string): Promise<void> => click(c, k, touch);
+  // 主流程：标题 → 模式 → 难度 → 牌桌 → 出牌 → 结算 → 设置 / 规则 / 战绩
+  const ctx = await open(browser, `图集${p}`, 'debug=1', { ...base, api: fakeApi() });
+  const { page } = ctx;
+  await until(ctx, '标题页', "g.scene === 'title'");
+  await page.waitForTimeout(1200);
+  await shot(ctx, `${p}-01-title`);
+  await step('选模式', async () => {
+    await ck(ctx, 'new');
+    await until(ctx, '选模式', "'fun' in g.controls() && 'stake' in g.controls()", 8000);
+    await page.waitForTimeout(400);
+    await shot(ctx, `${p}-02-mode`);
+    await ck(ctx, 'fun');
+  });
+  await step('选难度', async () => {
+    await until(ctx, '选难度', "'level:novice' in g.controls()", 8000);
+    await page.waitForTimeout(400);
+    await shot(ctx, `${p}-03-level`);
+    await ck(ctx, 'level:normal');
+  });
+  await step('牌桌', async () => {
+    await until(ctx, '轮到我', 'g.scene === \'table\' && g.idle && g.view().toAct.includes(0) && g.overlay === null', 120_000);
+    await page.waitForTimeout(500);
+    await shot(ctx, `${p}-04-table-myturn`);
+    await ck(ctx, 'hint');
+    await page.waitForTimeout(300);
+    if ((await page.evaluate(() => window.__game!.selected().length)) === 0) {
+      await ck(ctx, 'hint');
+      await page.waitForTimeout(300);
+    }
+    const before = await page.evaluate(() => window.__game!.view()!.hand.length);
+    await ck(ctx, 'play');
+    await until(ctx, '出牌生效', `g.view().hand.length < ${before}`, 10_000);
+    await page.waitForTimeout(600);
+    await shot(ctx, `${p}-05-table-played`);
+  });
+  await step('一副结算', async () => {
+    await page.evaluate(() => {
+      window.__game!.setInstant(true);
+      window.__game!.setAutoplay(true);
+    });
+    await until(ctx, '一副结束', "g.overlay === 'settle' || g.state().phase === 'gameOver'", 240_000);
+    await page.evaluate(() => window.__game!.setAutoplay(false));
+    await page.evaluate(() => window.__game!.setInstant(false));
+    await until(ctx, '结算框', "g.overlay === 'settle'", 10_000);
+    await page.waitForTimeout(1500);
+    await shot(ctx, `${p}-06-settle`);
+  });
+  await step('设置', async () => {
+    await page.evaluate(() => window.__game!.toTitle());
+    await until(ctx, '回标题', "g.scene === 'title'", 10_000);
+    await page.waitForTimeout(800);
+    // 标题页上 open() 不起作用，要点标题页自己的按钮
+    await ck(ctx, 'settings');
+    await page.waitForTimeout(600);
+    await shot(ctx, `${p}-09-settings`);
+    await page.keyboard.press('Escape');
+    await until(ctx, '关掉弹窗', 'g.overlay === null && g.hits().length > 5', 5000);
+    await page.waitForTimeout(500);
+  });
+  await step('规则', async () => {
+    await ck(ctx, 'rules');
+    await page.waitForTimeout(600);
+    await shot(ctx, `${p}-10-rules`);
+    await page.keyboard.press('Escape');
+    await until(ctx, '关掉弹窗', 'g.overlay === null && g.hits().length > 5', 5000);
+    await page.waitForTimeout(500);
+  });
+  await step('战绩', async () => {
+    await page.waitForTimeout(300);
+    await ck(ctx, 'stats');
+    await page.waitForTimeout(500);
+    await shot(ctx, `${p}-11-stats`);
+  });
+  await page.context().close();
+
+  // 整局结束 + 分享预览
+  const go = await open(browser, `图集打A${p}`, 'seed=ace1&jump=ace&debug=1&anim=0&autoplay=1', base);
+  await step('整局结束', async () => {
+    await until(go, '整局结束', "g.overlay === 'gameOver'", 400_000);
+    await go.page.evaluate(() => window.__game!.setInstant(false));
+    await go.page.waitForTimeout(1500);
+    await shot(go, `${p}-07-gameover`);
+    await ck(go, 'share');
+    await go.page.waitForSelector('#arcade-share-preview img', { timeout: 20_000 });
+    await go.page.waitForTimeout(800);
+    await shot(go, `${p}-08-share-preview`);
+  });
+  await go.page.context().close();
+
+  // 好友房面板
+  const on = await open(browser, `图集好友房${p}`, 'online=1&debug=1', { ...base, api: fakeApi() });
+  await step('好友房面板', async () => {
+    await on.page.waitForSelector('#online', { timeout: 10_000 });
+    await on.page.waitForTimeout(800);
+    await shot(on, `${p}-12-online`);
+  });
+  await on.page.context().close();
+}
+
+async function gallery(browser: Browser): Promise<void> {
+  const sizes: GallerySize[] = [
+    { prefix: '1280', w: 1280, h: 720, dpr: 1, touch: false },
+    { prefix: '1920', w: 1920, h: 1080, dpr: 1, touch: false },
+    { prefix: '844', w: 844, h: 390, dpr: 2, touch: true },
+  ];
+  for (const z of sizes) {
+    const t = Date.now();
+    await gallerySize(browser, z);
+    notes.push(`图集 ${z.prefix}：${Math.round((Date.now() - t) / 1000)} 秒`);
+  }
+  // 手机竖屏："请横过来"
+  const pt = await open(browser, '图集竖屏', 'debug=1', { w: 390, h: 844, dpr: 2, touch: true, noWait: true });
+  await pt.page.waitForTimeout(1500);
+  await shot(pt, '390-13-portrait');
+  await pt.page.context().close();
+}
+
 async function look(browser: Browser): Promise<void> {
   const i = process.argv.indexOf('--look');
   const query = process.argv[i + 1] ?? 'debug=1';
@@ -940,6 +1081,7 @@ async function main(): Promise<void> {
     browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu', '--autoplay-policy=no-user-gesture-required'] });
     if (process.argv.includes('--look')) await look(browser);
     else if (process.argv.includes('--playtest')) await playtest(browser);
+    else if (process.argv.includes('--gallery')) await gallery(browser);
     else {
       const only = process.argv.indexOf('--only');
       const parts: Record<string, (b: Browser) => Promise<void>> = {
