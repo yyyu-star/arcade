@@ -1,7 +1,7 @@
 {
   "name": "guandan",
   "private": true,
-  "version": "0.16.2",
+  "version": "0.16.3",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -37,7 +37,7 @@
     "wrangler": "^4.149.0"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.15.0",
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.15.1",
     "phaser": "^4.2.1"
   }
 }
