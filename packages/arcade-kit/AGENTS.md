@@ -32,5 +32,7 @@
 - 电脑短语（0.10.0）：`onStep` 是同步钩子（广播之后、不 await、不写存储、抛错只记日志），`botEmote` 只给电脑座位（`ai`、托管 `auto`），和真人共用座位令牌桶。
   真人的短语不交给规则、`onStep`，也不要加这样的入口（公平：电脑不读真人互动）。
   唯一的例外是 `onEmote`（0.10.1）：真人短语广播后调，不给牌局状态，只许用来调 `botEmote` 让电脑回一句；`botEmote` 不触发它。改的时候这几条测试（`test/emote.test.ts` 的 ChattyRoom）要守住。
+- 搭子战绩（0.13.0，`src/together.ts`，平台 15.19）：只在房间服务端经 `WALLET.together()` 报，不重试、不写房间状态（交给 `ctx.waitUntil`）；`reportMatch` 按 `owners` 认人，电脑座位不报。
+  假钱包的 `together` 照平台的 parseTogether 查形状，平台改了同步改 `src/testing.ts` 和 `test/together.test.ts`。
 - 分享卡和邀请（0.12.0，规范是仓库根 `docs/social.md`）：`share.ts`、`social.ts` 和 `table-fun.ts` 同样的规矩（import 时不碰 DOM、动画只动 transform、opacity）。
   `social.ts` 只在 `detectPlatform` 说有平台且已登录时挂，前台才发请求；接口形状以 `docs/platform-backend.md` 为准，改了同步改 `test/social.test.ts`。分享卡只画游戏给的数据，kit 不认识任何游戏（游戏名、图标、主题色都由游戏给）。

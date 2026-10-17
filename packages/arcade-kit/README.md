@@ -41,7 +41,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/meter` | 游戏 Worker（Durable Object） | 计量 `RoomMeter`（0.2.0）：每天的写入额度、按人和全站的开房名额，游戏原样导出、绑成 `METER` 就行；`meterReport` / `meterLevel`（0.3.0）给房间以外的 DO 记写入、问门槛 |
 | `arcade-kit/game` | 两边、规则测试 | 规则接口 `RoomGame`；`snapshotBytes`：算进房快照最大有多大，游戏在自己的测试里断言上限 |
 | `arcade-kit/client` | 浏览器 | `RoomClient`：退避加抖动重连、切回前台和网络恢复时马上连、认得出静默死掉的连接（0.11.1）、按 seq 去重、没确认的操作按原 moveId 和 baseSeq 重发、一直连不上就停下等用户点重试；`createRoom`、`createText`、`closeText`（0.8.0）：开房和给玩家看的默认文案；`detectPlatform`、`withNickname`（0.10.0）：独立部署时页面降级、带昵称 |
-| `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
+| `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包（0.8.0）：`WalletService`（0.13.0 起有搭子战绩的 `together`）、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 | `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
 | `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment`（0.12.5）等接口小函数；只在有平台且已登录时挂 |
@@ -405,6 +405,30 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   列好友（在线的在前，写在哪），每人一个"叫他来"，发出后 1 分钟内是灰的"已叫"，叫不了的写成大白话；底下"复制邀请链接"（能系统分享就分享）。
   样式和 table-fun 一样，z-index 默认 10600（0.12.4 起；游戏自己的弹窗更高时传 `zIndex`）；好友"在哪"先用平台给的 `where.gameName`，没有再用 `gameName` 回调，都没有说"在玩游戏"；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。
 - 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
+
+## 搭子战绩（reportTogether，0.13.0）
+
+好友房打完一场，房间的服务端把同桌真人和各自输赢报给平台（`docs/platform-backend.md` 15.19），平台给其中已经是好友的每一对累计"一起打了几场、谁赢了几场、做搭档几场"。
+只走钱包服务绑定 `WALLET` 的 `together()`，浏览器碰不到；娱乐、实盘都报，单机不报。
+
+```ts
+import { GameRoom } from 'arcade-kit/room';
+
+export class CardRoom extends GameRoom<State, Action, View, Env> {
+  protected override onStep(s: State): void {
+    // 一场刚分出输赢的那一步报一次；"一场"和 win 怎么算由游戏定，写进 DESIGN
+    if (justEnded(s)) this.reportMatch([0, 1, 2, 3].map((seat) => ({ seat, team: seat % 2, win: seat % 2 === s.winner })), s.matchNo);
+  }
+}
+```
+
+- `reportMatch(players, match)`（`GameRoom` 的 protected 方法）：players 按座位给，按开打后绑在座位上的人（`owners`）认 userId，没绑真人的座位（电脑）不报；
+  `match` 是这一场在房间里的序号，op 拼成 `<房间码>-<开房时刻>-<match>`（`togetherOp`）——房间码会被别的房间重用，带上开房时刻才不会撞；同一场重报给同一个 match，平台按 op 去重。
+  交给 `ctx.waitUntil` 去办、不 await：`onStep` 是同步的，不能卡住广播；也不走 `effects`/`perform`，那条路会退避重试、要写状态，而这件事平台忙（`busy`）时少记一场就算了。
+- `reportTogether(env, op, players)`：底下那个函数，自己拼 userId 时直接用。没有 `env.WALLET`（单独部署）或它没有 `together` 时跳过；去重后少于 2 人、多于 8 人、op 不是 8–64 位 `[A-Za-z0-9_-]` 时跳过；
+  回话原样返回（`{ ok: true, pairs }` 或 `{ ok: false, error }`），RPC 抛错吞掉、只记错误类型（不记 userId），都**不重试**。
+- `team` 只有分队的游戏带（同一个数字是一队，0–3）；`win` 由游戏定、写进游戏自己的 DESIGN（分队的按这一场赢的那队，按分算的按这一场分数为正，平台 15.19 列了几种）。
+- 测试：`arcade-kit/testing` 的假钱包有 `together`，形状照平台查、按 op 去重，每个人的 `FakeBank.together` 记一笔给测试核对（假钱包不管好友关系，两两都算一对）。
 
 ## 房间怎么守规矩
 

@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.13.0
+
+搭子战绩（平台 0.19.0，`docs/platform-backend.md` 15.19，主线派）。
+- **`reportTogether(env, op, players)`**（`arcade-kit/room`）：好友房打完一场，把同桌真人（`{ userId, team?, win }`）经钱包服务绑定的 `together()` 报给平台。
+  没有 `WALLET`（单独部署）或它没有 `together` 时跳过；去重后少于 2 人、多于 8 人、op 不合格时跳过；回话原样返回，抛错吞掉只记错误类型，不重试。
+- **`GameRoom.reportMatch(players, match)`**：按座位给，按开打后绑的人认 userId（电脑座位不报），op 用 `togetherOp(房间码, 开房时刻, match)`，交给 `ctx.waitUntil`，在同步的 `onStep` 里调就行。
+- **假钱包**（`arcade-kit/testing`）加 `together`：形状照平台的 parseTogether 查，记到每个人的 `FakeBank.together`，同一个 op 重报不加。
+- 测试：`test/together.test.ts` 8 条（跳过的几种情况、正常调用、异常吞掉、op 拼法、假钱包的形状和去重、房间按座位认人，反证过）。
+
 ## 0.12.5
 
 社交第二期的好友动态（平台 0.17.0，`docs/platform-backend.md` 15.17，主线派）。

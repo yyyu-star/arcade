@@ -9,6 +9,8 @@
  *   到期原样退回（`expired`）、client 模式每个游戏每天净赢最多 `WIN_UNITS` 份（`capped`）；
  * - 结回带的小结 `stats` 按 5.10 的上限检查（JSON ≤ 256 字节、必填字段、称号和自定义数的格式），不合格回 `statsIgnored`、钱照常结；
  *   收下的记在 `FakeBank.stats` 里给测试核对；
+ * - `together`（0.13.0，15.19 搭子战绩）：形状照平台的 parseTogether 查（op 格式、2–8 个人、userId 不重复、team 0–3 整数、win 布尔），
+ *   每个人的 `FakeBank.together` 记一笔给测试核对；同一个游戏的同一个 op 重报不加。假钱包不管好友关系（平台只记好友之间的对），报上来的两两都算一对；
  * - `walletHttp`：浏览器的 `GET /api/wallet`、`POST /api/wallet/relief`（15.9），认平台的会话 cookie，cookie 的值就当 userId。
  *
  * 平台改了钱包接口（参数、错误码、规则），平台 PR 的描述里写"影响 kit/testing"，由维护者安排 kit 跟上；一个 PR 只改一个模块。
@@ -19,6 +21,7 @@
  */
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { SESSION_COOKIE } from './internal.js';
+import { TOGETHER_MAX, type TogetherPlayer } from './together.js';
 
 /** 新号送多少、补给补到多少、client 模式每天净赢最多几份：平台的默认值（5.9，管理员可调的那几个数按默认算） */
 export const NEW_BALANCE = 10_000;
@@ -92,6 +95,16 @@ export class FakeBank extends DurableObject {
   writes = 0;
   /** 结回带上来的小结，按先后记在内存里；不合格的记 ignored */
   stats: { game: string; ref: string; stats: unknown; ignored?: StatsProblem }[] = [];
+  /** 搭子战绩（0.13.0）：报到这个人头上的每一场，按先后记在内存里（同一个游戏的同一个 op 只记一次） */
+  together: { game: string; op: string; players: TogetherPlayer[] }[] = [];
+
+  /** 记一场；这个人这个 op 记过了回 false */
+  async addTogether(game: string, op: string, players: TogetherPlayer[]): Promise<boolean> {
+    this.calls++;
+    if (this.together.some((t) => t.game === game && t.op === op)) return false;
+    this.together.push({ game, op, players });
+    return true;
+  }
 
   private async load(now: number): Promise<State> {
     const s =
@@ -240,6 +253,18 @@ export class WalletService extends WorkerEntrypoint<FakeEnv, { game?: string }> 
     return this.op('refund', req);
   }
 
+  /** 搭子战绩（15.19）{ op, players }：回记上了几对（假钱包里两两都算好友）；形状不对 bad_request，没绑游戏 bad_game */
+  async together(req: unknown): Promise<{ ok: true; pairs: number } | { ok: false; error: string }> {
+    const game = this.bound();
+    if (!game) return { ok: false, error: 'bad_game' };
+    const q = parseTogether(req);
+    if (!q) return { ok: false, error: 'bad_request' };
+    const fresh = await Promise.all(q.players.map((p) => bank(this.env, p.userId).addTogether(game, q.op, q.players)));
+    let pairs = 0;
+    for (let i = 0; i < fresh.length; i++) for (let j = i + 1; j < fresh.length; j++) if (fresh[i] && fresh[j]) pairs++;
+    return { ok: true, pairs };
+  }
+
   private bound(): string | null {
     const g = this.ctx.props?.game;
     return typeof g === 'string' && g !== '' ? g : null;
@@ -260,6 +285,25 @@ export class WalletService extends WorkerEntrypoint<FakeEnv, { game?: string }> 
     if (t === 'settle') Object.assign(cmd, { amount: q.amount as number, ...(q.stats !== undefined ? { stats: q.stats } : {}) });
     return bank(this.env, q.userId).run(cmd, Date.now());
   }
+}
+
+/** 平台 parseTogether 的同一套检查（15.19）：形状不对回 null */
+export function parseTogether(raw: unknown): { op: string; players: TogetherPlayer[] } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const b = raw as Record<string, unknown>;
+  if (typeof b.op !== 'string' || !ID.test(b.op)) return null;
+  if (!Array.isArray(b.players) || b.players.length < 2 || b.players.length > TOGETHER_MAX) return null;
+  const players: TogetherPlayer[] = [];
+  const seen = new Set<string>();
+  for (const p of b.players as unknown[]) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const { userId, team, win } = p as Record<string, unknown>;
+    if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(userId) || seen.has(userId) || typeof win !== 'boolean') return null;
+    if (team !== undefined && !(Number.isInteger(team) && (team as number) >= 0 && (team as number) <= 3)) return null;
+    seen.add(userId);
+    players.push(team === undefined ? { userId, win } : { userId, team: team as number, win });
+  }
+  return { op: b.op, players };
 }
 
 /** 5.10 的检查：JSON 后 ≤ 256 字节；rounds、wins、best 非负整数；称号最多 5 个、格式；max + sum 最多 3 个 key、值是安全整数 */

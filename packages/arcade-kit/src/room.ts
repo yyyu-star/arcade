@@ -35,8 +35,10 @@ import {
   type RoomStatus,
   type SeatInfo,
 } from './protocol.js';
+import { reportTogether, togetherOp, type TogetherPlayer } from './together.js';
 
 export type { RoomEffect, RoomGame, RoomSetup } from './game.js';
+export { TOGETHER_MAX, reportTogether, togetherOp, type TogetherPlayer, type TogetherReply } from './together.js';
 export type { Identity } from './internal.js';
 
 export interface RoomLimits {
@@ -265,6 +267,27 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
    * 只有电脑在出手的座位能发：kind 是 ai，或者真人掉线后由电脑托管（auto）。id、to 的校验和真人一样，走同一个座位的令牌桶
    * （emoteMs / emoteBurst），不写存储、不改 seq。发出去了回 true；座位是真人在打、空位、编号不对、目标不对、房间打完了、太快了，回 false 不广播
    */
+  /**
+   * 搭子战绩（0.13.0，平台 15.19）：一场打完时报一次同桌真人和各自输赢。players 按座位给（电脑座位直接放进来也行，这里按开打后绑的人认，
+   * 没绑真人的座位不报），match 是这一场在房间里的序号（同一场重报给同一个数，平台按 op 去重）。
+   * 交给 `ctx.waitUntil` 去办、不 await：一般在同步的 `onStep` 里看到一场结束时调，不能卡住广播和下一步；
+   * 也不走 `effects`/`perform`：那条路办不成会退避重试、要写状态，而这件事平台忙时少记一场就算了（不重试）。
+   * 单独部署没有 WALLET 时 reportTogether 自己跳过。返回报了几个人（0 = 没报）
+   */
+  protected reportMatch(players: readonly { seat: number; team?: number; win: boolean }[], match: number | string): number {
+    const st = this.st;
+    if (!st) return 0;
+    const list: TogetherPlayer[] = [];
+    for (const p of players) {
+      const userId = st.owners[p.seat];
+      if (typeof userId !== 'string' || userId === NOBODY) continue;
+      list.push(p.team === undefined ? { userId, win: p.win } : { userId, team: p.team, win: p.win });
+    }
+    if (list.length < 2) return 0;
+    this.ctx.waitUntil(reportTogether(this.env, togetherOp(st.code, st.createdAt, match), list));
+    return list.length;
+  }
+
   protected botEmote(seat: number, id: number, to?: number): boolean {
     const st = this.st;
     const n = this.game.emotes;
