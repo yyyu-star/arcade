@@ -1397,6 +1397,57 @@ async function adminOverview(browser: Browser): Promise<void> {
 }
 
 /** 0.10.6：管理页的钱包规则：不合格的数直接提示、不发请求；改一条要确认，发的只有改了的那条，改完显示记录。 */
+/** 0.21.2：管理页"邀请码"。宽屏、普通电脑、手机各截一张：行高紧凑、表格不撑破面板、完整的码能复制、状态小色块、已注销灰着 */
+async function adminInvites(browser: Browser): Promise<void> {
+  const at = (h: number, m = 0) => Date.UTC(2026, 9, 17, h - 8, m);
+  const p = (username: string, displayName: string) => ({ username, displayName });
+  const codes = [
+    { id: 'c1', hint: '…XCWJ', code: 'K7QM-2RTP-XCWJ', status: 'unused', owner: p('owner', '阿国'), createdAt: at(20), expiresAt: at(20) + 7 * 86_400_000 },
+    { id: 'c2', hint: '…1Y8K', status: 'used', owner: p('a_very_long_name_20', '名字有十二个字那么长的人'), createdAt: at(19, 39), expiresAt: 0, usedAt: at(19, 50), usedBy: p('pialfe2o3', 'pialfe2o3') },
+    { id: 'c3', hint: '…3J1F', status: 'used', owner: p('qatest01', 'QA测试一'), createdAt: at(19, 38), expiresAt: 0, usedAt: at(19, 40), usedBy: null },
+    { id: 'c4', hint: '…9PQR', status: 'expired', owner: null, createdAt: at(9, 5), expiresAt: at(9, 6) },
+    { id: 'c5', hint: '…HHMM', status: 'revoked', owner: p('xiaoming_2026', '小明'), createdAt: at(8, 1), expiresAt: at(8, 1) + 86_400_000 },
+  ];
+  const range = { userQuota: [0, 100], adminQuota: [0, 1_000], ttlDays: [1, 90], perDay: [1, 100] };
+  const rules = { userQuota: 3, adminQuota: 50, ttlDays: 7, perDay: 5 };
+  const screens = [
+    ['wide', 'desktop', { viewport: { width: 2000, height: 1000 } }],
+    ['desktop', 'desktop', {}],
+    ['portrait', 'portrait', {}],
+  ] as const;
+  for (const [name, screen, extra] of screens) {
+    console.log(`管理页·邀请码（${name}）：行高、表格不出框、复制完整的码`);
+    const { ctx, page } = await newPage(browser, `邀请码 ${name}`, screen, { ...extra, permissions: ['clipboard-read', 'clipboard-write'] });
+    await mockAdmin(page);
+    await page.route('**/api/admin/settings/invites', (r) => r.fulfill(json({ rules, defaults: rules, range })));
+    await page.route('**/api/admin/invite-codes?*', (r) => r.fulfill(json({ codes })));
+    await page.goto(`${BASE}/admin?s=invites`);
+    const table = page.getByTestId('invite-code-table');
+    await table.getByText('K7QM-2RTP-XCWJ').waitFor();
+    const rowH = await table.locator('tbody tr').first().evaluate((el) => el.getBoundingClientRect().height);
+    check(rowH < 60, `邀请码表一行不该被撑高：${rowH}px`);
+    const panel = page.locator('.panel', { has: table });
+    const [pb, sb, segW] = await Promise.all([panel.boundingBox(), page.locator('.table-scroll').boundingBox(), panel.locator('.seg').evaluate((el) => el.getBoundingClientRect().width - [...el.children].reduce((w, c) => w + c.getBoundingClientRect().width, 0))]);
+    check(!!pb && !!sb && sb.x + sb.width <= pb.x + pb.width + 1, '表格的框不该超出面板');
+    check(segW <= 8, `分段按钮该贴着内容宽：按钮后面空着 ${segW}px`);
+    if (name !== 'portrait') {
+      const scroll = await page.locator('.table-scroll').evaluate((el) => el.scrollWidth - el.clientWidth);
+      if (scroll > 1) await shot(page, `admin-invites-${name}-overflow`);
+      check(scroll <= 1, `电脑上表格该放得下，不用横着滑（${name}）：多出 ${scroll}px`);
+    }
+    check((await page.getByTestId('invite-quota').locator('select.field__input').count()) === 1, '"谁"的下拉框该和输入框一个样式');
+    check((await table.getByText('已注销').count()) === 2, '注销了的发码人和用码人都该写"已注销"');
+    await table.locator('tr', { hasText: 'K7QM' }).getByRole('button', { name: '复制' }).click();
+    await table.getByRole('button', { name: '已复制' }).waitFor();
+    check((await page.evaluate(() => navigator.clipboard.readText())) === 'K7QM-2RTP-XCWJ', '复制的该是完整的码');
+    // 点复制时手机上框滑到了右边：截图前滑回最左，看码那一列
+    await page.locator('.table-scroll').evaluate((el) => el.scrollTo({ left: 0 }));
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot(page, `admin-invites-${name}`);
+    await ctx.close();
+  }
+}
+
 async function walletRulesAdmin(browser: Browser): Promise<void> {
   console.log('管理页改钱包规则：补给额 2,000 → 3,000');
   const { ctx, page } = await newPage(browser, '钱包规则');
@@ -1920,6 +1971,7 @@ try {
     boards: boardsPage, // 排行榜
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则
+    invites: adminInvites, // 管理页的邀请码
     overview: adminOverview, // 管理页的今日概况和账号详情
     notice: lobbyNotice, // 大厅公告
     nudge: lobbyNudge, // 大厅提醒
@@ -1939,6 +1991,7 @@ try {
     await boardsPage(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);
+    await adminInvites(browser);
     await adminOverview(browser);
     await lobbyNotice(browser);
     await lobbyNudge(browser);
