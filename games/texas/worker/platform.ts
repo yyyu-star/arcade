@@ -29,3 +29,14 @@ export const GAME = 'texas' as const;
 
 /** ref、op 的格式（平台同样的检查，这里先挡掉，免得白调一次） */
 export const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * 单机带入、结回的 op（0.13.2，审计高危）：浏览器给的 id 原样交平台的话，能故意给成好友房的 op（`<ref>-b<n>`），借平台按 op 去重白拿那一笔。
+ * 一律由 Worker 加 solo- 前缀，好友房的 op 以房间号 r 开头（src/room/rules.ts 的 roomOp），永远撞不上。
+ * 旧页面存着的 op 不会带前缀；浏览器给的已经带前缀的不重复加（照样合格）。加上前缀超过 64 位的不收（回 null，按 bad_request）
+ */
+export function soloOp(op: string): string | null {
+  const out = op.startsWith(SOLO_OP) ? op : `${SOLO_OP}${op}`;
+  return WALLET_ID.test(out) ? out : null;
+}
+export const SOLO_OP = 'solo-';

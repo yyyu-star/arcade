@@ -760,14 +760,14 @@ function publicMoments(v: XzView, names: string[], local: boolean): void {
   for (const ev of funMoments(momentsOf(v.events), v.seats.map((x) => !x.won), v.round)) fun.moment(ev);
 }
 
-/** 好友房里离开：开打了先确认（实盘马上结回），座位交给电脑 */
+/** 好友房里离开：开打了先确认（实盘这一局由电脑替他打完再结回），座位交给电脑 */
 async function leaveRoom(): Promise<void> {
   const s = online!.state;
   const v = s.view;
   const playing = s.room?.status === 'playing' && v && !v.done && s.you?.seat !== null && s.you?.seat !== undefined;
   if (playing) {
     const wallet = stakesOf(v.stakes)?.wallet;
-    const ok = await confirmBox(stage, wallet ? '现在离开会马上把手上的筹码结回钱包，座位交给电脑接着打。离开吗？' : '离开后座位交给电脑接着打。离开吗？', '离开', '接着打');
+    const ok = await confirmBox(stage, wallet ? '现在离开，这一局由电脑替你打完（输赢照算），打完这一局把筹码结回钱包。离开吗？' : '离开后座位交给电脑接着打。离开吗？', '离开', '接着打');
     if (!ok) return;
     online!.leaveSeat();
     // 等房间收到离座再断开（结回由房间办，断开也不影响）

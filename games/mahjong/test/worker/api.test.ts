@@ -105,8 +105,18 @@ describe('单机带入、结回', () => {
     const res = await post('/api/stake/buyin', e, buy);
     expect(res.status).toBe(200);
     expect(e.WALLET.calls).toEqual([
-      expect.objectContaining({ t: 'buyin', userId: 'u1', game: 'mahjong', ref: 'session-0001', mode: 'client', op: 'op-000001', tier: 'small', amount: 2_000 }),
+      expect.objectContaining({ t: 'buyin', userId: 'u1', game: 'mahjong', ref: 'session-0001', mode: 'client', op: 'solo-op-000001', tier: 'small', amount: 2_000 }),
     ]);
+  });
+
+  it('操作 id 一律加 solo- 前缀交给钱包（已经带了不重复加）：浏览器给好友房那样的 id 也撞不上好友房的（审计高危）', async () => {
+    const e = env();
+    expect((await post('/api/stake/buyin', e, { ...buy, op: 'solo-op-000001' })).status).toBe(200);
+    expect((await post('/api/stake/buyin', e, { ...buy, op: 'r0123456789abcdefs0n1-b0' })).status).toBe(200);
+    expect((await post('/api/stake/settle', e, { op: 'r0123456789abcdefs1n1-c4', session: 'session-0001', amount: 9_000 })).status).toBe(200);
+    expect(e.WALLET.calls.map((c) => (c as { op: string }).op)).toEqual(['solo-op-000001', 'solo-r0123456789abcdefs0n1-b0', 'solo-r0123456789abcdefs1n1-c4']);
+    // 加了前缀超过 64 位的不收
+    expect((await post('/api/stake/buyin', e, { ...buy, op: 'x'.repeat(64) })).status).toBe(400);
   });
 
   it('钱包不够一份可以少带（数由平台判）；被拒按状态码回、带上钱包', async () => {

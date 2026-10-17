@@ -9,6 +9,7 @@ import type { XzState, XzView } from '../src/core/variants/sichuan-xuezhan/index
 import { STRONGEST } from '../src/ai/personas.ts';
 import { VENUES } from '../src/ai/venues.ts';
 import { EMOTES } from '../src/game/emotes.ts';
+import { roomOp, SOLO_OP, soloOp } from '../src/game/ops.ts';
 import { RoomTalk } from '../src/room/talk.ts';
 import { mahjongRoom as G, OPENING_MS, REMATCH_MS, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
 import { KEY } from './helpers.ts';
@@ -193,11 +194,14 @@ describe('实盘至少两个真人', () => {
     expect((begin(['human', 'ai', 'ai', 'ai'], 'lux').g as XzState).tunes![1]!.soft).toBe(VENUES['room:fun']!.soft);
   });
 
-  test('开打以后只剩一个真人在下注：这一场当场结束，所有人桌上的筹码按那一刻结回', () => {
+  test('开打以后只剩一个真人在下注：这一局打完时这一场结束，所有人桌上的筹码按那一刻结回（一局打到一半走的，这一局照算）', () => {
     let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
     s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
-    const chips = g(s, null).seats.map((x) => x.chips);
     s = G.seated!(s, 1, 'ai');
+    // 这一局还没完：他的筹码还在桌上、算下注的，电脑替他打，不结回、不提前收场
+    expect([s.cut, s.done, fx(s), s.own[1], s.leaving?.[1]]).toEqual([false, false, [], true, true]);
+    s = drive(s, 2_000, (x) => !!x.done);
+    const chips = g(s, null).seats.map((x) => x.chips);
     expect(s.cut).toBe(true);
     expect(s.done).toBe(true);
     expect(g(s, 0).phase).toBe('over');
@@ -220,12 +224,17 @@ describe('实盘至少两个真人', () => {
 });
 
 describe('离座和结回', () => {
-  test('离座：马上带着筹码和小结结回，座位交给电脑接着打；回来再坐开新的一份', () => {
+  test('离座：电脑替他打完这一局，这一局结束时带着筹码和小结结回，座位交给电脑接着打；回来再坐开新的一份', () => {
     // 三个真人：走一个还剩两个在下注，接着打
     let s = settleAll(begin(['human', 'human', 'human', 'ai']));
     s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
-    const chips = g(s, 0).seats[0]!.chips;
     s = G.seated!(s, 0, 'ai');
+    // 一局打到一半走的：这一局照算（不然眼看要输就走，能躲掉查叫和别人的自摸）
+    expect([fx(s), s.own[0], s.leaving?.[0]]).toEqual([[], true, true]);
+    s = drive(s, 2_000, (x) => fx(x).length > 0);
+    // 结回排在这一局的结算上（停在 end），不是离座那一刻
+    expect(g(s, null).phase).toBe('end');
+    const chips = g(s, null).seats[0]!.chips;
     const c = fx(s);
     expect(c.map(strip)).toEqual([{ id: 'c3', seat: 0, kind: 'credit', amount: Math.max(0, Math.min(chips, 4 * SHARE)) }]);
     expect(c[0]!.ref).toBe(`${s.ref}s0n1`);
@@ -241,11 +250,35 @@ describe('离座和结回', () => {
     expect(g(s, 0).seats[0]!.chips).toBe(SHARE);
   });
 
-  test('真人都走了：房间就算打完（结回排上，kit 办完再关）', () => {
+  test('一局打到一半离座、这一局没完又坐回来：筹码本来就是他的，接着打，不结回、不另开一份', () => {
+    let s = settleAll(begin(['human', 'human', 'human', 'ai']));
+    s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
+    const before = { share: s.share[0], chips: g(s, 0).seats[0]!.chips };
+    s = G.seated!(G.seated!(s, 0, 'ai'), 0, 'human');
+    expect([fx(s), s.own[0], s.leaving?.[0], s.share[0], g(s, 0).seats[0]!.chips]).toEqual([[], true, false, before.share, before.chips]);
+  });
+
+  test('娱乐房、一局打完停在结算时离座：照旧马上结束（娱乐不碰钱包；局间没有要躲的）', () => {
+    let s = settleAll(begin(['human', 'human', 'human', 'ai']));
+    s = drive(s, 2_000, (x) => g(x, null).phase === 'end');
+    s = G.seated!(s, 0, 'ai');
+    expect([fx(s).map(strip), s.own[0], !!s.leaving?.[0]]).toEqual([[{ id: 'c3', seat: 0, kind: 'credit', amount: expect.any(Number) }], false, false]);
+    let f = settleAll(begin(['human', 'human', 'ai', 'ai'], 'fun'));
+    f = drive(f, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
+    f = G.seated!(f, 0, 'ai');
+    expect([f.own[0], !!f.leaving?.[0]]).toEqual([false, false]);
+  });
+
+  test('真人都走了：房间就算打完，桌上的筹码按那一刻结回（含这一局里先走的）', () => {
     let s = settleAll(begin(['human', 'human', 'ai', 'ai']));
     s = G.seated!(G.seated!(s, 0, 'ai'), 1, 'ai');
+    // 一局打到一半两个人都走了：kit 桌上没真人时不推电脑，等不到这一局打完，两个人都按这一刻结回、马上收场
     expect(G.over(s)).toBe(true);
-    expect(fx(s)).toHaveLength(2);
+    expect(fx(s).map((e) => [e.seat, e.kind])).toEqual([
+      [0, 'credit'],
+      [1, 'credit'],
+    ]);
+    expect(s.leaving).toEqual([false, false, false, false]);
   });
 
   test('带入还在路上人就走了：到账后原样结回', () => {
@@ -452,5 +485,32 @@ describe('好友房里电脑的互动（src/room/talk.ts）', () => {
     expect(talk.reply(1, EMOTES - 4, 0, now + 200_000)).toEqual([]);
     expect(talk.reply(0, 0, undefined, now + 200_000)).toEqual([]);
     expect(acts).toBeGreaterThan(0);
+  });
+});
+
+describe('钱包操作 id（src/game/ops.ts，审计高危）', () => {
+  test('单机的一律带 solo- 前缀（已经带了不重复加）；好友房的永远不以 solo- 开头：浏览器造不出好友房的 id、借不到平台的去重', () => {
+    expect(soloOp('op-000001')).toBe('solo-op-000001');
+    expect(soloOp('solo-op-000001')).toBe('solo-op-000001');
+    expect(soloOp('r0123456789abcdef-b0')).toBe('solo-r0123456789abcdef-b0');
+    // 好友房里会出现的每一种：开局带入、少带重扣、离座结回、回来开新的一份、打完结回，几个房间号
+    const ops: string[] = [];
+    const record = (e: WalletEffect) => {
+      ops.push(roomOp(e));
+      return e.kind === 'debit' && e.seat === 2 && e.ref.endsWith('n1') ? { ok: false, error: 'no_funds', balance: 500 } : OK;
+    };
+    for (const k of [1, 2, 3]) {
+      let s = settleAll(begin(['human', 'human', 'human', 'ai'], 'small', KEY.map((x, i) => (i === 0 ? x + k : x))), record);
+      s = drive(s, 400, (x) => g(x, null).phase === 'turn' && x.n > 40);
+      s = settleAll(G.seated!(s, 0, 'ai'), record);
+      s = settleAll(drive(s, 2_000, (x) => !x.own[0]), record);
+      s = settleAll(G.seated!(s, 0, 'human'), record);
+      s = settleAll(drive(s), record);
+    }
+    expect(ops.length).toBeGreaterThan(12);
+    for (const op of ops) {
+      expect(op).toMatch(/^r[0-9a-f]{16}s[0-3]n\d+-[bc]\d+$/);
+      expect(op.startsWith(SOLO_OP)).toBe(false);
+    }
   });
 });

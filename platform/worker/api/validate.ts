@@ -38,7 +38,7 @@ const TRAD_TO_SIMP: Readonly<Record<string, string>> = {
   員: '员', 統: '统',
 };
 const foldTrad = (s: string): string => s.replace(/[^\x00-\x7f]/gu, (ch) => TRAD_TO_SIMP[ch] ?? ch);
-const PERSONA_NAMES = Object.values(RESERVED_PERSONAS).flat();
+const PERSONA_NAMES = new Set(Object.values(RESERVED_PERSONAS).flat());
 /** 昵称里出现就拒绝的词：冒充电脑、官方。 */
 const RESERVED_WORDS = ['电脑', '官方', '管理员', '系统', '客服'];
 /**
@@ -91,7 +91,8 @@ export function checkDisplayName(name: string): 'ok' | 'invalid_display_name' | 
   const bare = foldTrad(name.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''));
   if (SENSITIVE_WORDS.some((w) => bare.includes(w))) return 'invalid_display_name';
   if (RESERVED_WORDS.some((w) => bare.includes(w))) return 'reserved_display_name';
-  // 电脑人物名按"包含"查（0.12.2，和 kit 游客昵称一样）：'老张a'、'小美丽' 摆在牌桌上一样像那个电脑
-  if (PERSONA_NAMES.some((w) => bare.includes(w))) return 'reserved_display_name';
+  // 电脑人物名：去掉数字和拉丁字母后和电脑名整名相等才拦（0.13.0）。'老张a'、'老張1' 摆在牌桌上就是那个电脑；
+  // 0.12.2 按"包含"查太宽，'小美丽'、'小白兔'、'慢慢来' 这类正常名字也被拦了
+  if (PERSONA_NAMES.has(bare.replace(/[\p{N}\p{Script=Latin}]/gu, ''))) return 'reserved_display_name';
   return 'ok';
 }

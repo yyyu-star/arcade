@@ -154,6 +154,8 @@ async function mockSession(
 ): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill(json({ user, service: 'ok', saves: 'ok', registration: 'closed', ...me })));
   await page.route('**/api/wallet', (r) => r.fulfill(json(typeof wallet === 'function' ? wallet() : wallet)));
+  // 登录后的大厅会报在线（0.13.0）；模拟的人在真接口那边不认识，回 401
+  await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
   await fakeLoginHint(page);
 }
 
@@ -572,17 +574,30 @@ async function friendsFlow(a: Page, b: Page): Promise<void> {
   await a.getByText('已发送，等对方接受').waitFor();
   await shot(a, 'friend-link-sent');
 
-  console.log('朋友接受：两边都在好友列表里，"今天来过"');
+  console.log('朋友接受：两边都在好友列表里，都开着大厅，显示绿点和"在大厅"（社交 1.2）');
   await b.reload();
   const req = b.getByTestId('person-冒烟阿国');
   await req.getByText('想加你为好友').waitFor();
   await shot(b, 'friends-incoming');
   await req.getByRole('button', { name: '接受' }).click();
   await b.getByRole('heading', { name: '好友（1）' }).waitFor();
-  await b.getByTestId('person-冒烟阿国').getByText('今天来过').waitFor();
+  await b.getByTestId('person-冒烟阿国').getByText('在大厅').waitFor();
   await a.getByRole('link', { name: '好友', exact: true }).click();
-  await a.getByTestId('person-冒烟小王').getByText('今天来过').waitFor();
+  await a.getByTestId('person-冒烟小王').getByText('在大厅').waitFor();
+  check((await a.getByTestId('person-冒烟小王').locator('.people__online').count()) === 1, '在线的好友该有绿点');
   await shot(a, 'friends-list');
+
+  console.log('朋友在"我的"关掉"让好友看到我在哪"：管理员那边只剩"今天来过"，再打开恢复');
+  await b.goto(`${BASE}/me`);
+  await b.getByTestId('show-where').uncheck();
+  await b.getByText('好友只看到你几天前来过').waitFor();
+  await shot(b, 'me-show-where-off');
+  await a.reload();
+  await a.getByTestId('person-冒烟小王').getByText('今天来过').waitFor();
+  check((await a.getByTestId('person-冒烟小王').locator('.people__online').count()) === 0, '关了开关不该有绿点');
+  await b.getByTestId('show-where').check();
+  await b.getByText('好友在好友页能看到你').waitFor();
+  await b.goto(`${BASE}/friends`);
 
   console.log('朋友屏蔽管理员：要先勾确认；好友没了，屏蔽的人里有');
   const row = b.getByTestId('person-冒烟阿国');
@@ -675,10 +690,10 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
 
   console.log('改昵称；写接口的 429、503、断网提示（浏览器里模拟）');
   let d = await openFold(page, '改昵称');
-  await d.getByLabel('新昵称').fill('冒烟大刘');
+  await d.getByLabel('新昵称').fill('冒烟老王');
   await d.getByRole('button', { name: '保存' }).click();
   await d.getByText('改好了').waitFor();
-  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
   const patchOnly = (handle: (r: Route) => Promise<void>) => (r: Route) => (r.request().method() === 'PATCH' ? handle(r) : r.continue());
   for (const [what, handler, text, status] of [
     ['429', patchOnly((r) => r.fulfill(json({ error: 'rate_limited', message: '操作太频繁，过一会儿再试', retryAfter: 120 }, 429))), '操作太频繁，过一会儿再试（2 分钟后）', 429],
@@ -746,7 +761,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await page.waitForTimeout(300);
   check(logouts() === before, '点了"取消"却还是发了退出请求');
   await codeEl.waitFor();
-  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
   await shot(page, 'new-recovery-code');
   await d.getByLabel('我已经存好了').check();
   await d.getByRole('button', { name: '好了' }).click();
@@ -760,7 +775,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await d.getByLabel('现在的密码').fill(PW2);
   await d.getByRole('button', { name: '退出其他设备' }).click();
   await d.getByText('别的设备都已退出').waitFor();
-  await od.getByLabel('新昵称').fill('冒烟小刘');
+  await od.getByLabel('新昵称').fill('冒烟小李');
   expectHttp(401, '/api/me');
   await od.getByRole('button', { name: '保存' }).click();
   await other.page.getByRole('link', { name: '去登录' }).waitFor();
@@ -836,7 +851,7 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await shot(page, 'forgot-done');
   await page.getByLabel('我已经存好了').check();
   await page.getByRole('button', { name: '回首页' }).click();
-  await page.locator('.account__name', { hasText: '冒烟大刘' }).waitFor();
+  await page.locator('.account__name', { hasText: '冒烟老王' }).waitFor();
 
   console.log('注销：恢复码错时说"恢复码不对"；勾选前按钮不能点；注销后回首页，提示只出现一次');
   await page.getByTitle('我的账号').click();
@@ -1710,6 +1725,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.unroute('**/api/me');
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_USER, service: 'ok', saves: 'ok' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(FAKE_WALLET)));
+    await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();

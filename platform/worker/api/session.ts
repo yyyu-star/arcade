@@ -15,6 +15,10 @@ export interface UserRow {
   created_at: number;
   last_seen_at: number;
   role: 'user' | 'admin';
+  /** 最近一次报位置的时间（0.13.0），没报过是 0 */
+  presence_at: number;
+  /** 让好友看到我在不在线、在哪（0.13.0），1 开 0 关 */
+  show_where: number;
 }
 
 export interface Session {
@@ -39,13 +43,14 @@ export function userJson(u: UserRow) {
     avatar: avatarOf(u.avatar_json),
     catchphraseId: u.catchphrase_id,
     createdAt: u.created_at,
+    showWhere: u.show_where !== 0,
     // 只增不改（15.1）：普通用户没有这个字段，前端据此决定露不露"管理"入口；接口另有服务端检查
     ...(u.role === 'admin' ? { isAdmin: true as const } : {}),
   };
 }
 
 export const USER_COLUMNS =
-  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role';
+  'u.id, u.username, u.display_name, u.friend_code, u.avatar_json, u.catchphrase_id, u.created_at, u.last_seen_at, u.role, u.presence_at, u.show_where';
 
 /** 没带 cookie、cookie 格式不对、会话不存在或过期，都返回 null。 */
 export async function loadSession(request: Request, env: Env, db: Db, now: number): Promise<Session | null> {

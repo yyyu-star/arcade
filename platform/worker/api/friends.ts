@@ -14,6 +14,7 @@ import { meter } from './meter';
 import { hit } from './ratelimit';
 import { beijingDayNumber } from './time';
 import { avatarOf } from './session';
+import { presenceOf } from './presence';
 
 interface ProfileRow {
   id: string;
@@ -83,9 +84,9 @@ async function counts(c: Ctx, userId: string): Promise<{ friends: number; outgoi
 /** GET /api/friends：好友、收到的请求、发出的请求。只读，0 行。 */
 export async function listFriends(c: Ctx): Promise<Response> {
   const me = c.session!.user.id;
-  const rows = await c.db.all<ProfileRow & RelationRow & { last_seen_at: number; blocked: number }>(
+  const rows = await c.db.all<ProfileRow & RelationRow & { last_seen_at: number; blocked: number; presence_json: string | null; presence_at: number; show_where: number }>(
     c.db.stmt(
-      `SELECT u.id, u.display_name, u.avatar_json, u.last_seen_at, f.status, f.requested_by,
+      `SELECT u.id, u.display_name, u.avatar_json, u.last_seen_at, u.presence_json, u.presence_at, u.show_where, f.status, f.requested_by,
               EXISTS (SELECT 1 FROM blocks b WHERE b.blocker = ?1 AND b.blocked = u.id) AS blocked
        FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = ?1 THEN f.user_b ELSE f.user_a END
        WHERE f.user_a = ?1 OR f.user_b = ?1
@@ -97,13 +98,14 @@ export async function listFriends(c: Ctx): Promise<Response> {
   const incoming = [];
   const outgoing = [];
   for (const r of rows) {
-    if (r.status === 'accepted') friends.push({ ...publicProfile(r), lastSeenDaysAgo: daysAgo(r.last_seen_at, c.now) });
+    // 在线、在哪（0.13.0）：只给好友；对方关了开关就和离线一样
+    if (r.status === 'accepted') friends.push({ ...publicProfile(r), lastSeenDaysAgo: daysAgo(r.last_seen_at, c.now), ...presenceOf(r, c.now, c.limits) });
     // 请求不带时间：精确到毫秒的时间能看出对方几点在线，界面也用不上
     else if (r.requested_by === me) outgoing.push(publicProfile(r));
     else if (!r.blocked) incoming.push(publicProfile(r));
   }
-  // 好友按最近来过排在前面
-  friends.sort((x, y) => x.lastSeenDaysAgo - y.lastSeenDaysAgo);
+  // 在线的排前面，其余按最近来过
+  friends.sort((x, y) => Number(y.online) - Number(x.online) || x.lastSeenDaysAgo - y.lastSeenDaysAgo);
   return json(200, { friends, incoming, outgoing });
 }
 
