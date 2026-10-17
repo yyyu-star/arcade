@@ -20,14 +20,14 @@ Chips are play money only — they cannot be bought, cashed out or transferred. 
 - **好友房**：分享链接或房间号叫朋友，掉线托管、中途接管电脑、离座结回（实盘一局打到一半走的，电脑替你打完这一局再结）、打完"再来一场"；坐满了或开打了再进来就是旁观（看不到手牌，有空的电脑座位能坐下）。实盘好友房至少两个真人（一个人想玩实盘去单机）。
 - **手感和画面**：听牌提示（剩几张只按看得见的牌算）、点两下或往上拖出牌、飞牌、胡牌亮牌和番型。
 - **互动**（单机和好友房一样，用共用包的 `arcade-kit/table-fun`）：点头像扔道具、点名，点自己发表情，四川话短语；电脑按性格回敬、名场面起哄；名场面横幅；总开关和屏蔽。
-- **社交**：结算页"分享"出一张战绩图（不含任何一张牌）；登录后好友看得到你在哪个房间，好友叫你来会在顶上弹一条；房间里"叫朋友来"列出好友，点"叫他来"（共用包的 `arcade-kit/share`、`arcade-kit/social`）。
+- **社交**：结算页"分享"出一张战绩图（不含任何一张牌）；好友房一场打完颁奖（MVP、手气最背、杠王），能分享；登录后好友看得到你在哪个房间，好友叫你来会在顶上弹一条；房间里"叫朋友来"列出好友，点"叫他来"（共用包的 `arcade-kit/share`、`arcade-kit/social`）。
 - **手机**：横屏竖屏都能玩，小到 iPhone SE。
 
 设计和规则细节见 [DESIGN.md](DESIGN.md)，模块约定见 [AGENTS.md](AGENTS.md)，素材来源见 [ASSETS.md](ASSETS.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 本地开发
 
-需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.12.3"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
+需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.12.4"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
 
 ```bash
 npm ci

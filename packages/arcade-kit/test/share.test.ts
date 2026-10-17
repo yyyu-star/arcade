@@ -3,7 +3,9 @@
  * import share.ts 不碰 DOM 这一条也靠这个文件守着（workerd 里没有 document，碰了就报错）。
  */
 import { describe, expect, it } from 'vitest';
-import { CARD_H, CARD_W, MAX_STATS, accentOf, artRect, cardDate, clip, normalizeCard, prepareShare, shade, wrapLines } from '../src/share.ts';
+import {
+  CARD_H, CARD_W, MAX_STATS, QR_BOX, accentOf, artRect, cardDate, clip, isWeChat, normalizeCard, prepareShare, previewMode, qrLayout, shade, shareLink, shareText, wrapLines,
+} from '../src/share.ts';
 
 describe('分享卡的字', () => {
   it('尺寸是 1080×1350', () => {
@@ -137,5 +139,49 @@ describe('先画好的卡（prepareShare，0.12.3）', () => {
     const p = prepareShare({ game: 'g', title: 't', big: { value: '1', label: 'x' }, accent: '#123456' }, { url: 'https://game.example.com/' });
     await expect(p.ready).resolves.toBeUndefined();
     await expect(p.share()).rejects.toBeTruthy();
+  });
+});
+
+describe('链接和二维码（0.15.0）', () => {
+  const origin = 'https://site.example';
+
+  it('链接只认运行时的 origin：游戏给的绝对地址、相对路径都换成它，路径、查询、# 保留', () => {
+    expect(shareLink('https://other.example/games/demo/?room=123456#x', origin)).toBe('https://site.example/games/demo/?room=123456#x');
+    expect(shareLink('/games/demo/', origin)).toBe('https://site.example/games/demo/');
+    expect(shareLink('?room=1', origin)).toBe('https://site.example/?room=1');
+    expect(shareLink('', origin)).toBe('https://site.example/');
+  });
+
+  it('系统分享的文字末尾带链接，已经带了就不重复', () => {
+    expect(shareText('打了一场', 'https://site.example/g/')).toBe('打了一场 https://site.example/g/');
+    expect(shareText('来 https://site.example/g/ 玩', 'https://site.example/g/')).toBe('来 https://site.example/g/ 玩');
+  });
+
+  it('码的白框：每格整数像素，四周留白至少 4 格，放得进框', () => {
+    for (let v = 1; v <= 10; v++) {
+      const size = v * 4 + 17;
+      const { cell, pad } = qrLayout(size);
+      expect(Number.isInteger(cell) && cell >= 3).toBe(true);
+      expect(pad).toBeGreaterThanOrEqual(4 * cell);
+      expect(pad * 2 + cell * size).toBeLessThanOrEqual(QR_BOX);
+    }
+  });
+});
+
+describe('微信内置浏览器（0.15.0）', () => {
+  const wx = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50(0x1800322d) NetType/WIFI Language/zh_CN';
+  const android = 'Mozilla/5.0 (Linux; Android 14; V2309A) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0 Mobile Safari/537.36 XWEB/1220 MMWEBSDK/20240301 MMWEBID/1 MicroMessenger/8.0.48.2580(0x28003036) WeChat/arm64 Weixin';
+  const safari = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
+  it('认得出 iOS、安卓的微信，普通浏览器不算', () => {
+    expect(isWeChat(wx)).toBe(true);
+    expect(isWeChat(android)).toBe(true);
+    expect(isWeChat(safari)).toBe(false);
+    expect(isWeChat('')).toBe(false);
+  });
+
+  it('微信里：预览用 data: URL、提示长按、不给"保存图片"；别处照旧', () => {
+    expect(previewMode(wx)).toEqual({ dataUrl: true, tip: '长按图片 → 发送给朋友，或保存后发朋友圈', save: false });
+    expect(previewMode(safari)).toEqual({ dataUrl: false, tip: '手机上也可以长按图片保存', save: true });
   });
 });

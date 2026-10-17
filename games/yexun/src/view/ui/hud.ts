@@ -26,6 +26,17 @@ export interface HudState {
   slots: HudSlot[];
   /** 被动：只显示图标和等级，不点 */
   passives: { icon: string; level: number }[];
+  /** 夜探：顶上换成天亮倒计时（label 是"离天亮"或"天亮"，level 1 = 14:00 起醒目，2 = 最后 30 秒变红），右上多一个背包件数 */
+  raid?: { label: string; level: 0 | 1 | 2; bag: number };
+}
+
+/** 屏幕边上的撤离箭头（guide-hud.ts 的 EdgeArrow 里画面要用的几个字段） */
+export interface HudArrow {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  label: string;
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, text?: string): HTMLElementTagNameMap[K] => {
@@ -50,6 +61,14 @@ export class Hud {
   private lv: HTMLSpanElement;
   private xpFill: HTMLDivElement;
   private time: HTMLSpanElement;
+  private tlabel: HTMLSpanElement;
+  private timer: HTMLDivElement;
+  private bagBox: HTMLDivElement;
+  private bag: HTMLSpanElement;
+  private arrow: HTMLDivElement;
+  private arrowIcon: HTMLElement;
+  private arrowText: HTMLSpanElement;
+  private raidOn = false;
   private kills: HTMLSpanElement;
   private coins: HTMLSpanElement;
   private slotEls: { box: HTMLDivElement; cd: HTMLDivElement; lv: HTMLSpanElement }[] = [];
@@ -92,9 +111,10 @@ export class Hud {
     const xp = el('div', 'yx-xp', root);
     this.xpFill = el('div', 'yx-fill', xp);
     const timer = el('div', 'yx-timer', root);
+    this.timer = timer;
     el('span', 'yx-moon', timer);
     const tcol = el('div', 'yx-tcol', timer);
-    el('span', 'yx-tlabel', tcol, '离天亮');
+    this.tlabel = el('span', 'yx-tlabel', tcol, '离天亮');
     this.time = el('span', 'yx-time', tcol, '15:00');
     // 右上：击杀、铜钱、暂停
     const tr = el('div', 'yx-tr', root);
@@ -104,6 +124,11 @@ export class Hud {
     const c = el('div', 'yx-stat', tr);
     el('span', 'yx-ico yx-ico-coin', c);
     this.coins = el('span', '', c, '0');
+    // 夜探的背包件数（守夜不显示）
+    this.bagBox = el('div', 'yx-stat yx-bag', tr);
+    el('span', 'yx-ico yx-ico-bag', this.bagBox);
+    this.bag = el('span', '', this.bagBox, '0');
+    this.bagBox.style.display = 'none';
     const pause = el('button', 'yx-btn yx-pause', tr);
     this.pauseBtn = pause;
     pause.type = 'button';
@@ -115,6 +140,12 @@ export class Hud {
     this.slotsCol = el('div', 'yx-slots', side);
     this.passCol.style.display = 'none';
     this.slotsCol.style.display = 'none';
+    // 撤离指引：门在屏幕外时，贴着屏幕边的一个箭头 + "东门 · 12 秒"
+    this.arrow = el('div', 'yx-xa', root);
+    this.arrowIcon = el('i', 'yx-xa-ico', this.arrow);
+    this.arrowIcon.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 20h24M20 8l12 12-12 12" fill="none" stroke="#17131c" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 20h24M20 8l12 12-12 12" fill="none" stroke="#ffd23a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    this.arrowText = el('span', 'yx-xa-text', this.arrow);
+    this.arrow.style.display = 'none';
     // 连斩横幅
     this.combo = el('div', 'yx-combo', root);
     el('span', 'yx-ink yx-ink-a', this.combo);
@@ -133,6 +164,21 @@ export class Hud {
     this.xpFill.style.width = `${Math.round(s.xp * 100)}%`;
     const left = Math.max(0, Math.ceil(s.left));
     this.time.textContent = `${pad2(Math.floor(left / 60))}:${pad2(left % 60)}`;
+    if (s.raid) {
+      this.tlabel.textContent = s.raid.label;
+      this.timer.classList.toggle('warn', s.raid.level === 1);
+      this.timer.classList.toggle('red', s.raid.level === 2);
+      this.bag.textContent = String(s.raid.bag);
+    }
+    if (!!s.raid !== this.raidOn) {
+      this.raidOn = !!s.raid;
+      this.bagBox.style.display = this.raidOn ? '' : 'none';
+      if (!this.raidOn) {
+        this.tlabel.textContent = '离天亮';
+        this.timer.classList.remove('warn', 'red');
+        this.setArrow(null);
+      }
+    }
     this.kills.textContent = fmt(s.kills);
     this.coins.textContent = fmt(s.coins);
     const sig = s.slots.map((x) => x.icon).join();
@@ -168,6 +214,20 @@ export class Hud {
       e.lv.textContent = slot.level > 8 ? '进' : slot.level === 8 ? '满' : String(slot.level);
       e.box.classList.toggle('ready', slot.cd >= 1);
     });
+  }
+
+  /** 撤离箭头：null 收起；x、y 是屏幕边上的位置（CSS 像素），dx、dy 是朝向的单位向量 */
+  setArrow(a: HudArrow | null): void {
+    if (!a) {
+      this.arrow.style.display = 'none';
+      return;
+    }
+    this.arrow.style.display = '';
+    this.arrow.style.transform = `translate(${Math.round(a.x)}px, ${Math.round(a.y)}px)`;
+    this.arrowIcon.style.transform = `translate(-50%, -50%) rotate(${Math.atan2(a.dy, a.dx)}rad)`;
+    if (this.arrowText.textContent !== a.label) this.arrowText.textContent = a.label;
+    // 文字放在箭头靠屏幕中心的那一侧，不被边缘切掉
+    this.arrowText.style.transform = `translate(${a.dx > 0.3 ? '-100%' : a.dx < -0.3 ? '0%' : '-50%'}, ${a.dy > 0.3 ? '-170%' : a.dy < -0.3 ? '70%' : '-50%'})`;
   }
 
   /** 连斩：数字一变就弹一下；2 秒没杀到就收起 */

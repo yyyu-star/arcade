@@ -6,8 +6,22 @@
  * 局数：ROOM_GAMES / ROOM_GAMES_SOLO（默认各 4 局，npm run room-bulk 各 200 局）；故意不出等超时的比例 ROOM_IDLE_RATE（默认 0.02）。
  */
 import { describe, expect, inject, it } from 'vitest';
+import { env } from 'cloudflare:workers';
 import { dist, freezeClock } from './helpers.ts';
 import { Table, type TableStats } from './table.ts';
+import { bank } from './wallet.ts';
+
+/** 搭子战绩（0.16.0）：这个房间报上来的场（kit 交给 waitUntil，稍等一下再看） */
+async function togethersOf(code: string, want: number): Promise<{ op: string; players: { userId: string; team: number; win: boolean }[] }[]> {
+  let got: { op: string; players: { userId: string; team: number; win: boolean }[] }[] = [];
+  for (let i = 0; i < 40; i++) {
+    const all = ((await bank(env).snapshot()) as unknown as { togethers: typeof got }).togethers;
+    got = all.filter((x) => x.op.startsWith(`${code}-`));
+    if (got.length >= want) break;
+    await new Promise((ok) => setTimeout(ok, 10));
+  }
+  return got;
+}
 
 const HOUR = 3_600_000;
 
@@ -24,6 +38,18 @@ async function series(label: string, games: number, humans: 1 | 4): Promise<Tabl
       const st = await table.playToEnd();
       out.push(st);
       if (st.problems.length) throw new Error(`第 ${g} 局（房间 ${st.code}）：\n${st.problems.slice(0, 5).join('\n')}`);
+      // 打完一整局报一次搭子战绩：4 个真人都在、先过 A 的那队两个人赢；1 个真人不报
+      if (!st.closedEarly) {
+        const tg = await togethersOf(st.code, humans === 4 ? 1 : 0);
+        expect(tg.length, `房间 ${st.code} 报了几次`).toBe(humans === 4 ? 1 : 0);
+        if (humans === 4) {
+          const p = tg[0]!.players;
+          expect(p.map((x) => x.team)).toEqual([0, 1, 0, 1]);
+          const winners = p.filter((x) => x.win);
+          expect(winners).toHaveLength(2);
+          expect(winners[0]!.team).toBe(winners[1]!.team);
+        }
+      }
     } finally {
       table.close();
     }

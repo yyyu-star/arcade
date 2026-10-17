@@ -11,7 +11,7 @@ import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Se
 import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
-import { LIVE_TIERS, type LiveTier } from './content/live.ts';
+import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
@@ -22,13 +22,23 @@ import { ReplayList } from './replay/view/list.ts';
 import { ReplayBar } from './replay/view/bar.ts';
 import type { ReplayRecord } from './replay/format.ts';
 import { BoardsPanel } from './online/view/boards.ts';
+import { buildShareCard } from './online/share.ts';
+import { createSocial } from './online/social.ts';
+import { prepareShare } from 'arcade-kit/share';
+import { mountSocial } from 'arcade-kit/social';
 import { createSubmitter, outcomeText } from './online/submit.ts';
 import { scoresOfRun } from './online/score.ts';
 import { beijingDate, dailyPlan } from './online/daily.ts';
 import type { RunSummary } from './online/types.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
-import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
+import { buildAtlas, buildGround, buildRaidAtlas, type Atlas } from './view/art/atlas.ts';
+import { treasureIconKey } from './view/art/sprites8.ts';
+import { Vault } from './view/ui/vault.ts';
+import { settleRaid } from './explore/settle.ts';
+import { recordRaid, vaultProgress } from './explore/vault.ts';
+import { TREASURES } from './content/treasures.ts';
+import { RAID_TEMPLATES, type RaidTemplateId } from './content/explore.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
 import { GameScene } from './view/game/GameScene.ts';
@@ -119,27 +129,33 @@ async function boot(): Promise<void> {
   /** 菜单上开了"无尽"（再来一局沿用上一局的） */
   let wantEndless = false;
   const submitter = createSubmitter({ fetch: (u, i) => fetch(u, i) });
+  // 好友在线和邀请横条（kit 的 arcade-kit/social）：没平台、没登录就不挂。打到一半点"去"先确认
+  const social = createSocial({
+    mount: mountSocial,
+    confirmLeave: (go) => confirm.ask('这一局不会保存，确定离开吗？', '离开', '接着打', (ok) => ok && go()),
+  });
   /** 撑到了天亮：无尽局过了天亮再倒下也算（解锁、战绩按这个） */
   const dawned = (w: World): boolean => w.won || (!!w.setup.endless && w.tick >= DAWN_TICK);
   /** 一局的小结：交分、录像、分享卡都从它来 */
   const runSummary = (w: World, quit: boolean): RunSummary => ({
     runId: `${w.setup.seed.toString(36)}-${rec?.at.toString(36) ?? '0'}`,
     setup: w.setup,
-    won: dawned(w),
+    won: w.raid ? w.raid.outcome === 'escaped' : dawned(w),
     quit,
     bossKilled: w.bossKilled,
     seconds: Math.floor((w.setup.endless ? w.tick : Math.min(w.tick, DAWN_TICK)) / 30),
     kills: w.kills,
     level: w.level,
     coins: w.coins,
-    loot: 0,
+    // 夜探：撤出带出的宝物价值（夜探榜按它排）；没撤出是 0
+    loot: w.raid && w.raid.outcome === 'escaped' ? settleRaid(w.raid, w.coins).value : 0,
     live: liveRun !== null,
     reducedDamage: !!w.setup.assist,
     daily: dailyDate,
     build: w.weapons.map((o) => WEAPONS[o.id].name),
   });
   /** 结束时：存录像、交分（实盘、降低伤害、认输的不交总榜，规则在 online/score.ts） */
-  const archive = (w: World, quit: boolean): void => {
+  const archive = (w: World, quit: boolean): RunSummary => {
     const run = runSummary(w, quit);
     if (rec) {
       const today = beijingDate(Date.now());
@@ -149,6 +165,19 @@ async function boot(): Promise<void> {
     void submitter.submit(run).then((outs) => {
       if (outs.length) result.setNote(outs.map(outcomeText).join('；'));
     });
+    return run;
+  };
+  /**
+   * 分享卡（kit 的 arcade-kit/share）：结算页一出来就先画好，点"分享"时在点击里直接调系统分享（iOS 只认点击那一下）。
+   * 实盘局不给分享（onShare 置空）。卡上只有战绩和咒印，不放自由文字
+   */
+  const offerShare = (run: RunSummary | null): void => {
+    if (!run) {
+      result.onShare = null;
+      return;
+    }
+    const prepared = prepareShare(buildShareCard(run), { url: './', zIndex: 11000 });
+    result.onShare = () => void prepared.share();
   };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
   let lastLive: LiveTier | null = null;
@@ -206,6 +235,8 @@ async function boot(): Promise<void> {
   });
   const menuState = (firstTime = false) => ({
     firstTime,
+    raidFirst: !save.raidDone,
+    vault: { got: vaultProgress(save.vault).got, total: TREASURES.length },
     danger: save.danger,
     dangerOpen: dangerOpen(save),
     best: save.bestD,
@@ -216,7 +247,7 @@ async function boot(): Promise<void> {
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
     // 有平台登录、收到过 501（单独部署）就藏起来
-    live: { available: hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
+    live: { available: LIVE_OPEN && hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
   });
   const refreshPrep = (): void => {
     writeSave(save);
@@ -340,6 +371,36 @@ async function boot(): Promise<void> {
   });
   stage.addEventListener('pointerdown', () => banners.skipReveal());
 
+  /** 夜探结算：撤出全带走、换铜钱；倒下 / 迷失丢包，铜钱剩一半（教学镇不丢）；宝物记进藏宝阁 */
+  const finishRaid = (w: World, quit: boolean, seconds: number): void => {
+    const raid = w.raid!;
+    const st = settleRaid(raid, w.coins);
+    const rr = recordRaid(save.vault, st);
+    save.vault = rr.vault;
+    if (raid.teach) save.raidDone = true;
+    if (st.coins > 0) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
+    writeSave(save);
+    showPlay(false);
+    const view = (code: number) => {
+      const t = TREASURES[code]!;
+      return { icon: treasureIconKey(t.icon), name: t.name, tier: t.tier, value: t.value, fresh: rr.fresh.includes(t.id) };
+    };
+    const tpl = raid.setup.template as RaidTemplateId;
+    result.show({
+      won: st.outcome === 'escaped',
+      quit,
+      bossKilled: false,
+      seconds,
+      kills: w.kills,
+      level: w.level,
+      coins: st.coins,
+      coinsTotal: coins(save),
+      label: `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}`,
+      record: false,
+      build: buildRows(w),
+      raid: { outcome: st.outcome === 'escaped' || st.outcome === 'lost' ? st.outcome : 'dead', teach: raid.teach, kept: st.kept.map(view), lost: st.lost.map(view), value: st.value },
+    });
+  };
   const finish = (w: World, quit: boolean): void => {
     if (ended) return;
     ended = true;
@@ -348,7 +409,9 @@ async function boot(): Promise<void> {
     tips.hide();
     banners.clear();
     const seconds = (w.setup.endless ? w.tick : Math.min(w.tick, DAWN_TICK)) / 30;
-    archive(w, quit);
+    const run = archive(w, quit);
+    social.setWhere('menu');
+    offerShare(liveRun ? null : run);
     if (liveRun) {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
@@ -365,6 +428,7 @@ async function boot(): Promise<void> {
       });
       return;
     }
+    if (w.raid) return finishRaid(w, quit, seconds);
     // 认输的局算一局、铜钱照拿，但不算纪录
     const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: dawned(w), quit, ticks: Math.min(w.tick, DAWN_TICK), kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
     // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
@@ -408,6 +472,7 @@ async function boot(): Promise<void> {
     const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist, ...(wantEndless ? { endless: true } : {}) });
     world = w;
     autopilot = undefined;
+    social.setWhere(w.raid ? 'raid' : 'vigil');
     // 调试参数改过开局、快进过的局不录（录像要从第 0 拍逐拍记）
     rec = q.has('give') || q.has('warp') ? null : new Recorder(w.setup, Date.now());
     if (import.meta.env.DEV && q.has('give')) {
@@ -441,6 +506,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: w,
       atlas,
+      ...(w.raid ? { raidAtlas: buildRaidAtlas(res) } : {}),
       hud,
       cards,
       banners,
@@ -584,8 +650,26 @@ async function boot(): Promise<void> {
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
   menu.onLive = (tier) => void startLive(tier);
+  // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
+  menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
+    const ms = menuState();
+    const teach = template === 'teach';
+    const danger = (teach ? 0 : Math.min(picked, dangerOpen(save))) as Danger;
+    const seed = (Math.random() * 0x100000000) >>> 0;
+    void startRun(danger, save.map, false, { seed, mode: 'raid', danger, raid: { template }, character: ms.character, perks: save.perks, assist: save.assist });
+  };
+  const vault = new Vault(stage, (k) => icon(k), () => save.vault);
+  vault.onClose = () => {
+    vault.hide();
+    menu.show(menuState());
+  };
+  menu.onVault = () => {
+    menu.hide();
+    vault.show();
+  };
   result.onAgain = () => {
     if (lastLive) return void startLive(lastLive);
+    if (world?.setup.mode === 'raid') return menu.onRaid(world.setup.raid?.template ?? 'guzhen', world.setup.danger);
     if (dailyDate) return void startDaily();
     wantEndless = !!world?.setup.endless;
     void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
@@ -598,6 +682,8 @@ async function boot(): Promise<void> {
   game.events.once(Phaser.Core.Events.READY, () => {
     game.textures.addCanvas('ground', ground);
     document.getElementById('boot')?.remove();
+    // 冒烟、机器人代打不挂 social（它会去问平台）
+    if (hasLoginHint() && !q.has('auto')) void social.start();
     (window as unknown as { __yx: unknown }).__yx = { game, world: null, lowmem: LOW_MEMORY, res, zoom, r, music, save };
     // 调试参数直接开局（冒烟截图、机器人代打）；?diff 指定难度
     // ?danger=0–5（老的 ?diff=easy|normal|hard 照认：危险 0 / 2 / 4）
@@ -606,7 +692,10 @@ async function boot(): Promise<void> {
     const qd: Danger | null = dq && /^[0-5]$/.test(dq) ? (Number(dq) as Danger) : (legacy[q.get('diff') ?? ''] ?? null);
     // ?map=yizhuang 指定地图（冒烟截图用）
     const qm = q.get('map') === 'yizhuang' ? 'yizhuang' : q.has('map') ? 'snow' : null;
-    if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 2, qm ?? 'snow', true);
+    // ?raid=guzhen|dukou|shansi|teach 直接开一局夜探（冒烟截图用；可带 &auto 机器人代打）
+    const qr = q.get('raid');
+    if (qr && qr in RAID_TEMPLATES) menu.onRaid(qr as RaidTemplateId, qd ?? 2);
+    else if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 2, qm ?? 'snow', true);
     else {
       if (qd !== null) save.danger = qd;
       if (qm) save.map = qm;

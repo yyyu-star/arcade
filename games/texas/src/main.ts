@@ -5,6 +5,7 @@
  */
 import { detectPlatform } from 'arcade-kit/client';
 import { CLOSE } from 'arcade-kit/protocol';
+import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
 import { DIFFICULTY_NAME, difficultyOf, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
@@ -23,7 +24,7 @@ import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow, type SoloSummary } from './view/summary.ts';
 import { roomCard, soloCard } from './view/share.ts';
 import { prepareShare, type ShareCard } from 'arcade-kit/share';
-import { mountSocial, openInvite, type Presence, type SocialHandle } from 'arcade-kit/social';
+import { mountSocial, openInvite, postMoment, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
@@ -452,6 +453,7 @@ function enterTable(): void {
   const s = solo!;
   reads.clear();
   tally.clear();
+  feedSent.clear();
   stage.classList.add('at-table');
   tableView.setup(s.table.seats.length, ME);
   tableView.show(view(s.table, ME));
@@ -683,6 +685,7 @@ function handDone(prev: View, next: View, me: number | null): void {
   // 称号的数单机、好友房都记（0.3.0 实打后单机结算页也给称号）
   const key = who(prev);
   tally.observe(h.r, h.log, (i) => ({ key: key(i), name: i === me ? myName : nameAt(prev, i, null) }));
+  if (me !== null) reportMoment(feedMoment(h.r, h.log, me, stakesOf(prev.stakes).bb));
   if (funOff || !tf) return;
   if (me !== null) showHints(suggest(h.r, h.log, me));
   // 好友房的电脑由房间替它反应（worker/room.ts），这里只在单机报
@@ -1085,6 +1088,7 @@ function enterRoom(r: SavedRoom): void {
   saveRoom({ ...r, at: Date.now() });
   reads.clear();
   tally.clear();
+  feedSent.clear();
   // 存不上：标题页只是不给"回到房间"
   writeJson(KEYS.lastRoom, { ...r, at: Date.now() });
   online?.close();
@@ -1151,7 +1155,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   forgetRoom();
   // 还没结回的那一份由标题页按钱包说（drawLobby），这里不另记一句：记了会一直挂着，和钱包对不上
   exitRoom(null);
-  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.titles(rows), share);
+  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.awards(rows), share);
   if (goHome) {
     cloud.flush();
     location.href = hall();
@@ -1197,7 +1201,7 @@ function soloWhere(s: Solo): string {
 function roomShare(s: OnlineState, rows: RoomSummaryRow[], withRoom: boolean): (() => void) | undefined {
   const v = s.view;
   if (site.standalone || !v) return undefined;
-  const card = roomCard(rows, tally.titles(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
+  const card = roomCard(rows, tally.awards(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
   return card ? shareIt(card, withRoom ? s.code : null) : undefined;
 }
 
@@ -1305,7 +1309,7 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     // 房间关了：分享链接不带房间码（进不去了）
     const share = rows ? roomShare(o.state, rows, false) : undefined;
     exitRoom(null, code === CLOSE.replaced);
-    if (rows) void roomSummary(stage, '这一场', text, rows, tally.titles(rows), share);
+    if (rows) void roomSummary(stage, '这一场', text, rows, tally.awards(rows), share);
     else void dialog(stage, '好友房', text, [{ label: '好', value: 'ok', primary: true }]);
   },
   wait: (ms) => new Promise((ok) => window.setTimeout(ok, ms * pace())),
@@ -1534,6 +1538,19 @@ function invite(): void {
   const o = { game: 'texas', room: s.code, url: u.toString(), text: `来打德州，好友房 ${s.code}，点开就进` };
   if (social) social.openInvite(o);
   else openInvite({ ...o, friends: false });
+}
+
+/** 这一局（坐上一桌到离开，进一个房间到离开）已经报过的名场面 */
+const feedSent = new Set<FeedMoment>();
+
+/**
+ * 好友动态的名场面（0.16.0，平台 15.17 第 2 条）：只报编号和数字，文字由 public/moments.json 的模板拼。
+ * 只在有平台、已登录（social 挂上了）时报；单机、好友房都报；失败不管（平台每人每天也只收 10 条，超了静默丢）
+ */
+function reportMoment(m: { moment: FeedMoment; n: number } | null): void {
+  if (!m || !social || !shouldReport(feedSent, m.moment)) return;
+  feedSent.add(m.moment);
+  void postMoment('texas', m.moment, m.n).catch(() => {});
 }
 
 let toastTimer = 0;

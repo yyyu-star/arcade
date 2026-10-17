@@ -24,7 +24,11 @@ const MESSAGES: Record<string, string> = {
   internal: '服务器出错了，过一会儿再试',
   busy: '服务器今天有点忙，先只能看、不能改，明早恢复',
   unavailable: '服务器一时连不上数据库，过几秒再试',
-  registration_closed: '现在只对受邀的朋友开放，账号找邀请你的人要',
+  registration_closed: '现在是邀请制，找朋友要个邀请码就能注册',
+  // 邀请码（0.20.0）：码不对、用过、过期、撤回都是这一句，不说是哪种
+  invite_invalid: '邀请码不对或已经失效，找朋友要个新的',
+  invite_used: '这个邀请码刚被别人用掉了，找朋友要个新的',
+  quota_full: '邀请名额用完了：没用的码过期或撤回后会还回来',
   not_admin: '只有管理员能用',
   admin_protected: '管理员账号只能用管理命令行工具来建、改密码和删除',
   cannot_delete_self: '不能删自己的账号，要注销请去"我的账号"',

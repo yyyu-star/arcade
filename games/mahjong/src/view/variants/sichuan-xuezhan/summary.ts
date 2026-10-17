@@ -4,8 +4,9 @@
  */
 import type { XzView } from '../../../core/variants/sichuan-xuezhan/index.ts';
 import { el } from '../../dom.ts';
+import type { Award } from '../../../game/awards.ts';
 import type { Highlight } from '../../../game/banter.ts';
-import { FAN_NAME, HIGHLIGHT_NAME, PAY_KIND, signed, TITLE_NAME } from '../../text.ts';
+import { AWARD_NAME, awardLine, FAN_NAME, HIGHLIGHT_NAME, PAY_KIND, signed, TITLE_NAME } from '../../text.ts';
 
 export function roundSummary(v: XzView, names: string[], unit: string): HTMLElement {
   const box = el('div', 'summary');
@@ -59,6 +60,20 @@ export function matchSummary(v: XzView, names: string[], unit: string): HTMLElem
     const titles = el('div', 'titles', row);
     for (const t of x.stats.titles ?? []) el('span', 'title', titles, TITLE_NAME[t] ?? t);
   });
+  return box;
+}
+
+/** 好友房一场结束的颁奖（game/awards.ts）：奖名、得奖的人大字，下面一句话 */
+export function awardsSummary(list: readonly Award[], names: string[], unit: string): HTMLElement {
+  const box = el('div', 'summary awards');
+  el('h2', '', box, '颁奖');
+  const row = el('div', 'award-row', box);
+  for (const a of list) {
+    const card = el('div', `award ${a.id}`, row);
+    el('div', 'award-name', card, AWARD_NAME[a.id]);
+    el('div', 'award-who', card, names[a.seat] ?? '');
+    el('div', 'award-line', card, awardLine(a, names[a.seat] ?? '', unit));
+  }
   return box;
 }
 

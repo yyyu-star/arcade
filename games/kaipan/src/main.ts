@@ -10,6 +10,7 @@ import { fitViewport } from './platform/viewportFit.ts';
 import { getSettings, onSettingsChange } from './platform/settings.ts';
 import { loadProfile } from './platform/profile.ts';
 import { cloudUserId, onCloudChange, startCloudSync } from './view/cloudSync.ts';
+import { challengeParam, loadInvite } from './view/challenge.ts';
 import { goLobby, lobbyLabel } from './view/lobby.ts';
 import { live, lobbyConfirm, startLive } from './view/live.ts';
 import { clearLegacyKeys, hasSave, loadSave, type SaveNotice } from './platform/storage.ts';
@@ -111,6 +112,14 @@ const platformKnown = import.meta.env.DEV ? Promise.resolve('unknown' as const) 
 void platformKnown.then((m) => {
   if (params.debug || m === 'standalone') return;
   startCloudSync(() => session.sceneKey === 'title' && session.redraw());
+  // 0.13.0 好友挑战的链接（?challenge=<id>）：读这个挑战，开始菜单读到了弹卡片。读完就从地址里去掉，刷新不会再弹一次
+  const challenge = challengeParam(location.search);
+  if (challenge) {
+    loadInvite(challenge);
+    const u = new URL(location.href);
+    u.searchParams.delete('challenge');
+    history.replaceState(history.state, '', `${u.pathname}${u.search}${u.hash}`);
+  }
   // 0.12.0 社交（共用包 arcade-kit/social）：开着开盘时每 2 分钟报一次"在玩开盘"、收好友的邀请。
   // 等云存档问 /api/me 认出账号再挂（它只在有登录提示 cookie 时问），不为社交再问一次；没登录就一直不挂。
   // 点"去"走回大厅那条路（先补传云存档再跳）；这局照常存在这台设备上，点了"去"就不再问一次

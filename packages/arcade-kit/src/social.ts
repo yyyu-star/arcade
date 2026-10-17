@@ -209,6 +209,25 @@ export async function fetchFriends(opts: ApiOptions = {}): Promise<Friend[] | nu
   }
 }
 
+/** 名场面编号（平台 15.17）：字母开头、1–24 位 [a-z0-9_] */
+const MOMENT_ID = /^[a-z][a-z0-9_]{0,23}$/;
+
+/**
+ * 报一条娱乐名场面（社交第二期的好友动态，平台 0.17.0 的 `POST /api/feed`）：只报游戏 id、编号和最多 3 个整数，文字由游戏的 `public/moments.json` 按编号给模板。
+ * 平台超了每天 10 条、对方关了开关都静默回 204，所以返回值只说"送没送到"：HTTP 状态，0 = 没连上；编号、数字本地就不合格的不发，回 400。
+ * 数字按位置写：n2 有值时 n 也要有
+ */
+export async function postMoment(game: string, moment: string, n?: number, n2?: number, n3?: number, opts: ApiOptions = {}): Promise<number> {
+  const nums = [n, n2, n3];
+  while (nums.length && nums[nums.length - 1] === undefined) nums.pop();
+  if (!GAME_ID.test(game) || !MOMENT_ID.test(moment) || !nums.every((x) => Number.isSafeInteger(x))) return 400;
+  try {
+    return (await api(opts)('/api/feed', write('POST', { game, moment, ...(nums.length ? { n: nums } : {}) }))).status;
+  } catch {
+    return 0;
+  }
+}
+
 /** "让好友看到我在哪"的开关 */
 export async function setShowWhere(show: boolean, opts: ApiOptions = {}): Promise<boolean> {
   try {

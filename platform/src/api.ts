@@ -8,6 +8,10 @@ export interface User {
   createdAt: number;
   /** 让好友看到我在不在线、在哪（0.13.0）；旧的回话里没有，按开着算 */
   showWhere?: boolean;
+  /** 好友动态开关（0.17.0）；没有就是开着 */
+  showFeed?: boolean;
+  /** 搭子战绩开关（0.19.0）；没有就是开着 */
+  showMates?: boolean;
   /** 只有管理员有，值总是 true。 */
   isAdmin?: true;
 }
@@ -35,6 +39,18 @@ export interface Profile {
 }
 
 /** 在哪（0.13.0，15.13）：大厅、在玩某个游戏、在某个游戏的房间里（带房间码和人数） */
+/** 好友动态的一条（0.17.0，15.17）：data 是编号和数字，文字在 src/feed.tsx 里拼 */
+export interface FeedItem {
+  id: string;
+  user: Profile;
+  game: string;
+  kind: 'settle' | 'moment';
+  at: number;
+  data: { tier?: string; units?: number; titles?: string[]; m?: string; n?: number[] };
+  reactions: Record<string, number>;
+  mine?: string;
+}
+
 /** 给我的邀请（0.14.0，docs/social.md 1.3）：until 是过期时间（毫秒） */
 export interface Invite {
   id: string;
@@ -51,9 +67,64 @@ export interface Where {
   seats?: string;
 }
 
+/** 搭子战绩（0.19.0，15.19）：我和这个好友一起打的，wins 是我赢的、theirWins 是他赢的；teamN、teamWins 是做搭档（同一队）的 */
+export interface Together {
+  n: number;
+  wins: number;
+  theirWins: number;
+  teamN: number;
+  teamWins: number;
+}
+
+/** 我的邀请码（0.20.0，15.20）：quota 是额度，taken 是用掉的（已用 + 还有效的），todayLeft 是 24 小时内还能生成几个 */
+export interface InviteCodes {
+  quota: number;
+  taken: number;
+  left: number;
+  todayLeft: number;
+  ttlDays: number;
+  codes: {
+    id: string;
+    hint: string;
+    /** 只有没用的才有，ABCD-EFGH-JKMN */
+    code?: string;
+    createdAt: number;
+    expiresAt: number;
+    status: 'unused' | 'used' | 'expired' | 'revoked';
+    usedAt?: number;
+    /** null：用的人已经注销 */
+    usedBy?: Profile | null;
+  }[];
+}
+
+export interface InviteRules {
+  userQuota: number;
+  adminQuota: number;
+  ttlDays: number;
+  perDay: number;
+}
+
+export interface InviteRulesState {
+  rules: InviteRules;
+  defaults: InviteRules;
+  range: Record<keyof InviteRules, [number, number]>;
+  updatedAt: number | null;
+}
+
+export interface AdminInviteCode {
+  id: string;
+  hint: string;
+  status: 'unused' | 'used' | 'expired' | 'revoked';
+  owner: { username: string; displayName: string } | null;
+  createdAt: number;
+  expiresAt: number;
+  usedAt?: number;
+  usedBy?: { username: string; displayName: string } | null;
+}
+
 export interface FriendLists {
   /** online、where（0.13.0）：对方关了"让好友看到我在哪"时 online 是 false、没有 where */
-  friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where })[];
+  friends: (Profile & { lastSeenDaysAgo: number; online?: boolean; where?: Where; together?: Together })[];
   incoming: Profile[];
   outgoing: Profile[];
 }
@@ -95,6 +166,8 @@ export interface LeaderboardResponse {
 /** 好友这周的最好成绩超过了我的（0.15.0，读的时候比） */
 export interface Overtake {
   gameId: string;
+  /** 子榜（0.16.0）：一天几个每日榜的游戏才有 */
+  board?: string;
   by: { userId: string; displayName: string };
   score: number;
   mine: number;
@@ -110,6 +183,8 @@ export interface StatsResponse {
   relation: Relation;
   week: string;
   games: Record<string, CareerView>;
+  /** 搭子战绩（0.19.0）：是好友、两边都开着、一起打过才有，按游戏分开 */
+  together?: Record<string, Together>;
 }
 
 /** 管理员可调的钱包规则（0.10.6，15.7） */
@@ -322,11 +397,16 @@ export const api = {
   board: (game: string, board: string, scope: 'all' | 'friends') =>
     request<ScoreBoard>('GET', `/api/boards/${encodeURIComponent(game)}/${encodeURIComponent(board)}?scope=${scope}`),
   /** 我和好友这周在每日挑战上的最好成绩（0.15.0）；week 是这周一的日期 */
-  friendsWeek: (game: string) => request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}`),
+  friendsWeek: (game: string, board: string | null = null) =>
+    request<ScoreBoard & { week: string }>('GET', `/api/friends/week/${encodeURIComponent(game)}${board ? `?board=${encodeURIComponent(board)}` : ''}`),
   /** 这周哪个好友超过了我（0.15.0）：每个游戏最多一条 */
   overtakes: () => request<{ overtakes: Overtake[] }>('GET', '/api/friends/overtakes'),
-  register: (username: string, password: string, displayName: string) =>
-    request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName }),
+  register: (username: string, password: string, displayName: string, inviteCode?: string) =>
+    request<{ user: User; recoveryCode: string }>('POST', '/api/auth/register', { username, password, displayName, ...(inviteCode ? { inviteCode } : {}) }),
+  /** 邀请码（0.20.0，15.20） */
+  inviteCodes: () => request<InviteCodes>('GET', '/api/invite-codes'),
+  createInviteCode: () => request<{ id: string; code: string; link: string; expiresAt: number; left: number }>('POST', '/api/invite-codes', {}),
+  revokeInviteCode: (id: string) => request<void>('POST', `/api/invite-codes/${id}/revoke`, {}),
   login: (username: string, password: string) => request<{ user: User }>('POST', '/api/auth/login', { username, password }),
   logout: () => request<void>('POST', '/api/auth/logout'),
   recover: (username: string, recoveryCode: string, newPassword: string) =>
@@ -337,6 +417,11 @@ export const api = {
   presence: (where: Where) => request<void>('POST', '/api/presence', where),
   /** 邀请（0.14.0）：收是只读；"不了"只改自己收到的那条 */
   invites: () => request<{ invites: Invite[] }>('GET', '/api/invites'),
+  /** 好友动态（0.17.0）：我和好友最近 7 天的；赞或扔道具每条每人一次 */
+  feed: () => request<{ items: FeedItem[] }>('GET', '/api/feed'),
+  react: (id: string, kind: string) => request<void>('POST', `/api/feed/${encodeURIComponent(id)}/react`, { kind }),
+  setShowFeed: (showFeed: boolean) => request<{ user: User }>('PATCH', '/api/me', { showFeed }),
+  setShowMates: (showMates: boolean) => request<{ user: User }>('PATCH', '/api/me', { showMates }),
   dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),
@@ -391,6 +476,12 @@ export const api = {
     adjust: (username: string, amount: number, note: string) =>
       request<{ wallet: Wallet; credited: number }>('POST', '/api/admin/wallet/adjust', { username, amount, note }),
     recentAdjustments: () => request<{ recent: AdminAdjust[] }>('GET', '/api/admin/wallet-adjustments'),
+    inviteRules: () => request<InviteRulesState>('GET', '/api/admin/settings/invites'),
+    setInviteRules: (rules: Partial<InviteRules>) => request<InviteRulesState>('POST', '/api/admin/settings/invites', rules),
+    setInviteQuota: (userId: string, quota: number | null) =>
+      request<{ quota: number | null; custom: boolean }>('POST', `/api/admin/users/${userId}/invite-quota`, { quota }),
+    inviteCodes: (status: 'all' | 'unused' | 'used') => request<{ codes: AdminInviteCode[] }>('GET', `/api/admin/invite-codes?status=${status}`),
+    revokeInviteCode: (id: string) => request<void>('POST', `/api/admin/invite-codes/${id}/revoke`, {}),
   },
 };
 

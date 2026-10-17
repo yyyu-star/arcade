@@ -175,6 +175,10 @@ export class ChattyRoom extends ToyRoom {
   tryBotEmote(seat: number, id: number, to?: number): boolean {
     return this.botEmote(seat, id, to);
   }
+  /** 0.13.0 搭子战绩：测试直接调（runInDurableObject） */
+  tryReportMatch(players: { seat: number; team?: number; win: boolean }[], match: number): number {
+    return this.reportMatch(players, match);
+  }
 }
 
 /** 用 FlakyMeter、每 5 行报一次的房间：测分批报数、计量断线、在收场点关房。 */

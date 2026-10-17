@@ -27,8 +27,9 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] }],
   "vars": {
     // 德州每天的 DO 写入预算（DESIGN.md 第 7 节）：到 busy 不开新房，到 stop 收场。
-    // 每人开房（0.2.4 维护者定：不让玩家感到限制）：同时 5 个、每天 100 个；全站上限照 kit 默认（防账单的不放宽）。
+    // 每人开房：同时 5 个（0.2.4 维护者定：不让玩家感到限制）；每天 30 个（0.17.1 安全审计：从 100 调低，正常玩家一天开不了这么多，主要防脚本刷）。
+    // 全站上限照 kit 默认（防账单的不放宽）。
     // 嘲讽、表情、道具（0.3.0：玩家感觉不到，可以后台调）：每座位每秒补 1 个令牌、最多攒 3 个，客户端排队静默发
-    "KIT_QUOTA": { "busyWrites": 15000, "stopWrites": 20000, "roomsPerUser": 5, "dailyRoomsPerUser": 100, "emoteMs": 1000, "emoteBurst": 3 }
+    "KIT_QUOTA": { "busyWrites": 15000, "stopWrites": 20000, "roomsPerUser": 5, "dailyRoomsPerUser": 30, "emoteMs": 1000, "emoteBurst": 3 }
   }
 }

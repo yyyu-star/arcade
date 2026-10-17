@@ -6,6 +6,7 @@ import { categoryOf, QUADS, STRAIGHT_FLUSH } from '../core/eval.ts';
 import { bluffer, riverTurnaround } from '../core/fame.ts';
 import type { HandResult, LogEntry } from '../core/table.ts';
 import type { View } from '../core/view.ts';
+import { chips } from './text.ts';
 
 export type Moment = 'river' | 'quads' | 'allin';
 
@@ -37,6 +38,14 @@ export function showcaseText(s: Showcase, name: string, r: HandResult): string {
   if (s.kind === 'allin') return s.split ? '全下对决，平分秋色' : `全下对决，${name} 笑到最后`;
   const v = r.shown.find((x) => x.seat === s.seat)!.value;
   return `${name} 亮出${categoryOf(v) === STRAIGHT_FLUSH ? '同花顺' : '四条'}！`;
+}
+
+/** 好友房一场结束的一个奖：大字是 title 和 name，下面一句模板话 */
+export interface Award {
+  kind: 'mvp' | 'worst' | 'bluff' | 'river';
+  title: string;
+  name: string;
+  line: string;
 }
 
 interface Count {
@@ -87,6 +96,26 @@ export class Tally {
     if (win) out.push({ title: '大赢家', name: win.name, why: `赢了 ${win.net.toLocaleString('zh-CN')}` });
     const lose = rows.reduce<{ name: string; net: number } | null>((a, x) => (x.net < 0 && (!a || x.net < a.net) ? x : a), null);
     if (lose) out.push({ title: '送财童子', name: lose.name, why: `送出 ${(-lose.net).toLocaleString('zh-CN')}` });
+    return out;
+  }
+
+  /**
+   * 好友房一场结束的颁奖（0.15.0，总仓库 docs/social.md 第 2 节）：本场 MVP（赢得最多）、最惨的人（输得最多），
+   * 再加一个德州的"最会诈"（摊牌亮出来的诈唬，没亮的牌不算；这一场没人亮过诈唬就换成河牌逆转最多的"天选之人"）。
+   * 只用公开信息（rows 是桌上看得到的输赢），不挂筹码，图个乐；一个人可以拿两个奖。都没够格的不给，所以可能少于 2 个
+   */
+  awards(rows: readonly { name: string; net: number }[]): Award[] {
+    const out: Award[] = [];
+    const win = rows.reduce<{ name: string; net: number } | null>((a, x) => (x.net > 0 && (!a || x.net > a.net) ? x : a), null);
+    if (win) out.push({ kind: 'mvp', title: '本场 MVP', name: win.name, line: `${win.name} 这一场赢了 ${chips(win.net)}，全桌最多` });
+    const lose = rows.reduce<{ name: string; net: number } | null>((a, x) => (x.net < 0 && (!a || x.net < a.net) ? x : a), null);
+    if (lose) out.push({ kind: 'worst', title: '最惨的人', name: lose.name, line: `${lose.name} 这一场输了 ${chips(-lose.net)}，下一场翻本` });
+    const all = [...this.by.values()];
+    const top = (k: 'bluffs' | 'rivers'): Count | null => all.reduce<Count | null>((a, c) => (c[k] >= 1 && (!a || c[k] > a[k]) ? c : a), null);
+    const b = top('bluffs');
+    const r = b ? null : top('rivers');
+    if (b) out.push({ kind: 'bluff', title: '最会诈', name: b.name, line: `${b.name} 摊牌亮出 ${b.bluffs} 次诈唬，演技在线` });
+    else if (r) out.push({ kind: 'river', title: '天选之人', name: r.name, line: `${r.name} 河牌逆转 ${r.rivers} 次，最后一张总站这边` });
     return out;
   }
 

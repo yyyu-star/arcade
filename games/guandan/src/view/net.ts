@@ -568,6 +568,11 @@ export class NetSession implements TableSession {
     return (this.queue[this.queue.length - 1]?.nv ?? this.shown)?.again;
   }
 
+  /** 这一场的公开记录（0.14.0，结束颁奖用；画面座位）：看收到的最新一帧，结算页开着时帧不往下播。0.14.0 以前开的房间没有 */
+  get matchLog(): NetView['log'] {
+    return (this.queue[this.queue.length - 1]?.nv ?? this.shown)?.log;
+  }
+
   /** 实盘房间带入被拒以后再带一份（不轮流的操作，房间不看轮没轮到我；不占"上一手还在路上"） */
   rebuy(): void {
     this.client.act({ type: 'buyin' });

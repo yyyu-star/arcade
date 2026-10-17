@@ -6,10 +6,13 @@ import { useEffect, useState } from 'react';
 import { api, errorText, type CareerView, type Relation, type StatsResponse } from '../api.ts';
 import { dateText, gameName, num, signed, tone } from '../format.ts';
 import { GAMES } from '../games.ts';
+import { togetherText } from '../mates.ts';
 import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
 import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { friendLink, ShareButton, statsCard } from '../share.tsx';
+import { pickBadge } from '../share-pick.ts';
 
 /** 按大厅的顺序排，大厅里没有的放最后 */
 const order = (id: string) => {
@@ -99,6 +102,32 @@ function TitleShelf({ game, earned }: { game: string; earned: CareerView['titles
   );
 }
 
+/**
+ * 晒战绩卡上挂在昵称旁边的称号（0.21.1）：拿过称号的几个游戏的 titles.json 都读一遍，交给 pickBadge 排除自嘲的、挑最近的。
+ * 读不到的游戏当没有名字（不挂）
+ */
+function useBadge(data: StatsResponse | null): string | null {
+  const [badge, setBadge] = useState<string | null>(null);
+  const games = data?.relation === 'self' ? data.games : null;
+  const key = games ? Object.entries(games).map(([g, c]) => `${g}:${c.titles.map((t) => t.id).join(',')}`).join(';') : '';
+  useEffect(() => {
+    setBadge(null);
+    if (!games) return;
+    const ids = Object.keys(games).filter((g) => games[g]!.titles.length > 0);
+    let alive = true;
+    void Promise.all(ids.map((g) => loadTitles(g).then((c) => [g, c] as const))).then((pairs) => {
+      if (!alive) return;
+      const catalogs = Object.fromEntries(pairs);
+      setBadge(pickBadge(games, (g, id) => catalogs[g]?.[id]?.name));
+    });
+    return () => {
+      alive = false;
+    };
+    // 只在称号变了时重读：games 每次渲染都是新对象
+  }, [key]);
+  return badge;
+}
+
 /** 别人的战绩页上：加好友、接受请求，或者说明现在是什么关系（0.10.5） */
 function FriendAction({ userId, relation, onChange }: { userId: string; relation: Relation; onChange: (r: Relation) => void }) {
   const writable = useWritable();
@@ -143,6 +172,8 @@ export function StatsPage() {
     };
   }, [user, who]);
 
+  const badge = useBadge(data);
+
   if (loading) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
   if (!user) {
     return (
@@ -159,6 +190,7 @@ export function StatsPage() {
 
   const mine = data.relation === 'self';
   const games = Object.entries(data.games).sort(([a], [b]) => order(a) - order(b));
+  const shareable = mine && games.length > 0 && user.friendCode;
   const week = games.reduce((t, [, c]) => t + c.wnet, 0);
   const titles = games.reduce((t, [, c]) => t + c.titles.length, 0);
   return (
@@ -186,6 +218,8 @@ export function StatsPage() {
         )}
         {mine && (
           <div className="row">
+            {/* 晒一晒（0.21.0）：本人看自己、有战绩时才有；链接是自己的好友链接 */}
+            {shareable && <ShareButton card={statsCard(data.user.displayName, data.games, badge ?? undefined)} url={friendLink(user.friendCode)} label="晒一晒" testId="share-stats" />}
             <Link className="btn" href="/wallet">
               我的筹码
             </Link>
@@ -195,6 +229,20 @@ export function StatsPage() {
           </div>
         )}
       </Panel>
+      {data.together && (
+        // 搭子战绩（0.19.0）：只有好友、两边都开着、一起打过才有
+        <Panel icon="people" title="和我一起">
+          <ul className="careers" data-testid="together">
+            {Object.entries(data.together)
+              .sort(([a], [b]) => order(a) - order(b))
+              .map(([g, t]) => (
+                <li key={g}>
+                  <strong>{gameName(g)}</strong> {togetherText(t)}
+                </li>
+              ))}
+          </ul>
+        </Panel>
+      )}
       {games.length > 0 && (
         <Panel icon="trophy" title="称号墙">
           {games.map(([g, c]) => (

@@ -15,6 +15,7 @@ import { hit } from './ratelimit';
 import { beijingDayNumber } from './time';
 import { avatarOf } from './session';
 import { presenceOf } from './presence';
+import { deletePairStatement, togetherAll } from './mates';
 
 interface ProfileRow {
   id: string;
@@ -84,9 +85,11 @@ async function counts(c: Ctx, userId: string): Promise<{ friends: number; outgoi
 /** GET /api/friends：好友、收到的请求、发出的请求。只读，0 行。 */
 export async function listFriends(c: Ctx): Promise<Response> {
   const me = c.session!.user.id;
-  const rows = await c.db.all<ProfileRow & RelationRow & { last_seen_at: number; blocked: number; presence_json: string | null; presence_at: number; show_where: number }>(
+  const rows = await c.db.all<
+    ProfileRow & RelationRow & { last_seen_at: number; blocked: number; presence_json: string | null; presence_at: number; show_where: number; show_mates: number }
+  >(
     c.db.stmt(
-      `SELECT u.id, u.display_name, u.avatar_json, u.last_seen_at, u.presence_json, u.presence_at, u.show_where, f.status, f.requested_by,
+      `SELECT u.id, u.display_name, u.avatar_json, u.last_seen_at, u.presence_json, u.presence_at, u.show_where, u.show_mates, f.status, f.requested_by,
               EXISTS (SELECT 1 FROM blocks b WHERE b.blocker = ?1 AND b.blocked = u.id) AS blocked
        FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_a = ?1 THEN f.user_b ELSE f.user_a END
        WHERE f.user_a = ?1 OR f.user_b = ?1
@@ -94,12 +97,17 @@ export async function listFriends(c: Ctx): Promise<Response> {
       me,
     ),
   );
+  // 搭子战绩（0.19.0）：我关了开关就谁的都不给，省掉这次查询；没有好友也不查
+  const mates = c.session!.user.show_mates !== 0 && rows.some((r) => r.status === 'accepted') ? await togetherAll(c.db, me) : new Map();
   const friends = [];
   const incoming = [];
   const outgoing = [];
   for (const r of rows) {
     // 在线、在哪（0.13.0）：只给好友；对方关了开关就和离线一样
-    if (r.status === 'accepted') friends.push({ ...publicProfile(r), lastSeenDaysAgo: daysAgo(r.last_seen_at, c.now), ...presenceOf(r, c.now, c.limits) });
+    if (r.status === 'accepted') {
+      const together = r.show_mates !== 0 ? mates.get(r.id) : undefined;
+      friends.push({ ...publicProfile(r), lastSeenDaysAgo: daysAgo(r.last_seen_at, c.now), ...presenceOf(r, c.now, c.limits), ...(together ? { together } : {}) });
+    }
     // 请求不带时间：精确到毫秒的时间能看出对方几点在线，界面也用不上
     else if (r.requested_by === me) outgoing.push(publicProfile(r));
     else if (!r.blocked) incoming.push(publicProfile(r));
@@ -272,17 +280,20 @@ export async function declineRequest(c: Ctx): Promise<Response> {
   return noContent();
 }
 
-/** DELETE /api/friends/<userId>：删好友，或撤回自己发出的请求。1 行。 */
+/** DELETE /api/friends/<userId>：删好友，或撤回自己发出的请求。1 行，加上搭子战绩里这一对的行（一起打过几个游戏就几行，0.19.0）。 */
 export async function removeFriend(c: Ctx): Promise<Response> {
   const me = c.session!.user.id;
-  const [a, b] = pair(me, c.params.userId!);
-  const meta = await c.db.run(
+  const other = c.params.userId!;
+  const [a, b] = pair(me, other);
+  const [del] = await c.db.batch([
     c.db.stmt(
       "DELETE FROM friendships WHERE user_a = ?1 AND user_b = ?2 AND (status = 'accepted' OR requested_by = ?3)",
       a, b, me,
     ),
-  );
-  if (!meta.changes) throw new ApiError(404, 'not_found');
+    // 没删到好友关系时这一对不可能有行（只给好友记），这条删 0 行
+    deletePairStatement(c.db, me, other),
+  ]);
+  if (!del!.meta.changes) throw new ApiError(404, 'not_found');
   return noContent();
 }
 
@@ -307,8 +318,8 @@ async function takeBlock(c: Ctx, me: string): Promise<void> {
 }
 
 /**
- * POST /api/blocks {userId}：屏蔽，同时删掉双方之间的好友关系或请求。
- * 写入：计数 1 + blocks 1（+1 有关系要删时）；已经屏蔽过只读查一下，0 行。
+ * POST /api/blocks {userId}：屏蔽，同时删掉双方之间的好友关系或请求，和搭子战绩里这一对的行（0.19.0）。
+ * 写入：计数 1 + blocks 1（+1 有关系要删时，+一起打过几个游戏就几行）；已经屏蔽过只读查一下，0 行。
  */
 export async function block(c: Ctx): Promise<Response> {
   const { db } = c;
@@ -322,6 +333,7 @@ export async function block(c: Ctx): Promise<Response> {
   await db.batch([
     db.stmt('INSERT INTO blocks (blocker, blocked, created_at) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING', me, other, c.now),
     db.stmt('DELETE FROM friendships WHERE user_a = ?1 AND user_b = ?2', a, b),
+    deletePairStatement(db, me, other),
   ]);
   return noContent();
 }
