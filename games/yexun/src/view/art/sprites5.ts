@@ -443,6 +443,127 @@ function ice(c: Ctx): void {
   stroke(c, (k) => { k.moveTo(4, 10); k.lineTo(14, 10); }, 0.9, '#3b8fd0');
 }
 
+/** 纸钱：黄纸圆片，中间方孔（Boss 手里撒的和飘在身边的都用它） */
+function sheet(c: Ctx, x: number, y: number, r: number, rot: number): void {
+  c.save();
+  c.translate(x, y);
+  c.rotate(rot);
+  blob(c, circle(0, 0, r), '#f2c93a', '#d09a22', 1.8, r * 0.18);
+  blob(c, rrect(-r * 0.26, -r * 0.26, r * 0.52, r * 0.52, 0.6), INK, null, 0);
+  dab(c, rrect(-r * 0.15, -r * 0.15, r * 0.3, r * 0.3, 0.3), '#9aa3b5');
+  stroke(c, (k) => { k.moveTo(-r * 0.7, -r * 0.2); k.lineTo(-r * 0.3, -r * 0.62); }, 1, '#fff2b0');
+  c.restore();
+}
+
+/** 纸扎老爷：守夜中期的 Boss，白金。纸糊的白脸、圆红腮、八字胡，袍上有竹篾折痕，手里撒纸钱 */
+function lord(c: Ctx): void {
+  const p = '#f9f4e8';
+  const ps = '#c9bda5';
+  const gold = '#e8b83a';
+  const goldSh = '#b98a26';
+  // 地上的影子和金粉气
+  dab(c, ellipse(60, 124, 46, 8), '#2a2438', 0.22);
+  dab(c, ellipse(60, 100, 50, 26), '#f2d27a', 0.2);
+  // 脚：金边黑靴
+  blob(c, rrect(34, 117, 20, 10, 4), INK, null, 2.2);
+  blob(c, rrect(66, 117, 20, 10, 4), INK, null, 2.2);
+  dab(c, rrect(36, 118, 16, 2.4, 1), gold);
+  dab(c, rrect(68, 118, 16, 2.4, 1), gold);
+  // 左手（画面左）缩在袖里，按在腰带上
+  blob(c, (k) => { k.moveTo(34, 70); k.quadraticCurveTo(14, 78, 16, 98); k.lineTo(34, 100); k.lineTo(40, 80); }, p, ps, 2.4, 2.4);
+  blob(c, poly(14, 96, 36, 100, 36, 106, 15, 102), gold, goldSh, 2, 1);
+  blob(c, circle(24, 108, 5.4), '#fbf6ea', ps, 2, 1.4);
+  // 袍子：上窄下宽的大袍
+  blob(c, poly(30, 60, 90, 60, 102, 122, 18, 122), p, ps, 2.8, 3.6);
+  // 下摆金边与回纹
+  blob(c, poly(19.4, 110, 100.6, 110, 102, 122, 18, 122), gold, goldSh, 2.2, 1.4);
+  for (let i = 0; i < 8; i++) dab(c, rrect(24 + i * 10, 114, 5, 4, 1), '#fff0b0', 0.9);
+  // 竹篾折痕：直直的硬折线，带一两个篾节的小横
+  const crease = (x1: number, y1: number, x2: number, y2: number): void => {
+    stroke(c, (k) => { k.moveTo(x1, y1); k.lineTo(x2, y2); }, 1.3, ps);
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    stroke(c, (k) => { k.moveTo(mx - 2.4, my - 0.6); k.lineTo(mx + 2.4, my + 0.6); }, 1, ps);
+  };
+  crease(38, 70, 30, 108);
+  crease(48, 98, 42, 108);
+  crease(76, 98, 82, 108);
+  crease(84, 70, 91, 108);
+  stroke(c, (k) => { k.moveTo(30, 82); k.lineTo(38, 86); k.lineTo(34, 94); }, 1.3, ps);
+  // 袍上金纹：团花铜钱纹
+  for (const [x, y] of [[40, 80], [80, 80], [34, 102], [86, 102], [60, 104]] as const) {
+    blob(c, poly(x, y - 5.4, x + 4.4, y, x, y + 5.4, x - 4.4, y), gold, goldSh, 1.4, 0.8);
+    dab(c, circle(x, y, 1.5), '#d4433e');
+  }
+  // 腰带与金扣
+  blob(c, rrect(32, 90, 56, 7, 2.4), gold, goldSh, 2, 1.2);
+  blob(c, rrect(53, 87.6, 14, 12, 3), '#ffe28a', gold, 2, 1);
+  dab(c, circle(60, 93.6, 2.2), '#d4433e');
+  // 前襟：交领金边，一道垂线
+  blob(c, poly(44, 60, 60, 90, 76, 60, 69, 60, 60, 76, 51, 60), gold, goldSh, 2, 1);
+  stroke(c, (k) => { k.moveTo(60, 98); k.lineTo(60, 112); }, 1.3, ps);
+  // 右手（画面右）撒纸钱：宽袖向外抬起，袖口金边
+  blob(c, (k) => { k.moveTo(78, 66); k.quadraticCurveTo(100, 62, 108, 48); k.lineTo(120, 56); k.quadraticCurveTo(108, 82, 84, 88); }, p, ps, 2.6, 2.6);
+  blob(c, poly(106, 46, 121, 55, 116, 64, 101, 55), gold, goldSh, 2.2, 1.2);
+  stroke(c, (k) => { k.moveTo(86, 70); k.lineTo(100, 66); }, 1.3, ps);
+  stroke(c, (k) => { k.moveTo(90, 80); k.lineTo(102, 72); }, 1.3, ps);
+  // 手里的一叠纸钱（叠在手上，边缘错开）
+  sheet(c, 117, 42, 7, 0.4);
+  sheet(c, 113, 38, 7, -0.3);
+  blob(c, circle(111, 52, 5), '#fbf6ea', ps, 2, 1.2);
+  // 脸：圆润的纸糊大脸
+  blob(c, ellipse(60, 44, 24, 21), '#fcf8ee', '#d6cab2', 2.8, 3.2);
+  // 脸上糊纸的接缝
+  stroke(c, (k) => { k.moveTo(60, 24); k.lineTo(58, 31); }, 1, '#d6cab2');
+  // 两团圆红腮
+  dab(c, circle(44, 51, 5.6), '#e5453f');
+  dab(c, circle(76, 51, 5.6), '#e5453f');
+  dab(c, circle(42.6, 49.6, 1.4), '#ff9a8a', 0.9);
+  dab(c, circle(74.6, 49.6, 1.4), '#ff9a8a', 0.9);
+  // 细眯眼：上弯的弧线，眉毛细细一撇
+  stroke(c, (k) => { k.moveTo(42, 41); k.quadraticCurveTo(49, 36, 55, 41); }, 2.2);
+  stroke(c, (k) => { k.moveTo(65, 41); k.quadraticCurveTo(71, 36, 78, 41); }, 2.2);
+  stroke(c, (k) => { k.moveTo(42, 32); k.lineTo(55, 33.5); }, 1.5);
+  stroke(c, (k) => { k.moveTo(65, 33.5); k.lineTo(78, 32); }, 1.5);
+  // 鼻子：一点
+  dab(c, ellipse(60, 47, 2.4, 1.8), '#d6cab2');
+  // 八字胡：两撇向下翘
+  stroke(c, (k) => { k.moveTo(59, 52); k.quadraticCurveTo(51, 50, 44, 55); }, 2.6);
+  stroke(c, (k) => { k.moveTo(61, 52); k.quadraticCurveTo(69, 50, 76, 55); }, 2.6);
+  // 僵硬的小红嘴，嘴角两点
+  blob(c, (k) => { k.moveTo(54, 57); k.quadraticCurveTo(60, 63, 66, 57); k.quadraticCurveTo(60, 59, 54, 57); }, '#c0302c', null, 1.8);
+  dab(c, circle(52.6, 56.4, 0.9), INK);
+  dab(c, circle(67.4, 56.4, 0.9), INK);
+  // 员外帽：高高的白纸帽，金边金顶，两侧金边翅
+  blob(c, poly(36, 28, 40, 4, 80, 4, 84, 28), p, ps, 2.8, 3);
+  blob(c, poly(35, 30, 36, 22, 84, 22, 85, 30), gold, goldSh, 2.4, 1.4);
+  blob(c, poly(40, 5, 80, 5, 79, 10, 41, 10), gold, goldSh, 2, 1);
+  blob(c, poly(53, 5, 56, 0, 64, 0, 67, 5), gold, goldSh, 2, 1);
+  // 帽翅
+  blob(c, rrect(12, 17, 25, 7, 3), p, ps, 2.4, 1.4);
+  blob(c, rrect(83, 17, 25, 7, 3), p, ps, 2.4, 1.4);
+  dab(c, rrect(13, 17.6, 3, 5.8, 1.4), gold);
+  dab(c, rrect(104, 17.6, 3, 5.8, 1.4), gold);
+  // 帽上竹篾折痕和金纹
+  stroke(c, (k) => { k.moveTo(48, 12); k.lineTo(46, 20); }, 1.2, ps);
+  stroke(c, (k) => { k.moveTo(72, 12); k.lineTo(74, 20); }, 1.2, ps);
+  blob(c, circle(60, 16, 4.4), '#d4433e', '#a02a2c', 1.8, 1);
+  dab(c, circle(58.8, 14.8, 1.1), '#ffffff', 0.9);
+  // 飘在身边的纸钱
+  sheet(c, 96, 28, 6.5, 0.3);
+  sheet(c, 110, 74, 6, -0.5);
+  sheet(c, 100, 92, 5.5, 0.9);
+  sheet(c, 8, 60, 5.5, 0.2);
+}
+
+/** 纸钱弹：黄纸圆钱，方孔，深色粗边，一道折痕高光（雪地上要清楚） */
+function money(c: Ctx): void {
+  blob(c, circle(9, 9, 7.4), '#ffc928', '#d98f12', 2.4, 1.8);
+  blob(c, rrect(6.6, 6.6, 4.8, 4.8, 0.6), INK, null, 0);
+  dab(c, rrect(7.5, 7.5, 3, 3, 0.3), '#9aa3b5', 0.6);
+  stroke(c, (k) => { k.moveTo(4.2, 6.6); k.lineTo(6.6, 3.6); }, 1.2, '#fff6c0');
+}
+
 export const SPRITES5: SpriteDef[] = [
   { key: 'horse', w: 60, h: 52, ox: 0.5, oy: 0.95, draw: horse },
   { key: 'water', w: 44, h: 52, ox: 0.5, oy: 0.95, draw: water },
@@ -454,4 +575,6 @@ export const SPRITES5: SpriteDef[] = [
   { key: 'whitefox', w: 64, h: 56, ox: 0.5, oy: 0.95, draw: whitefox },
   { key: 'palanquin', w: 96, h: 88, ox: 0.5, oy: 0.95, draw: palanquin },
   { key: 'ice', w: 20, h: 20, ox: 0.5, oy: 0.5, draw: ice },
+  { key: 'lord', w: 124, h: 132, ox: 0.5, oy: 0.95, draw: lord },
+  { key: 'money', w: 18, h: 18, ox: 0.5, oy: 0.5, draw: money },
 ];

@@ -4,7 +4,7 @@
 
 export type EnemyKind =
   | 'paper' | 'wisp' | 'jiangshi' | 'lantern' | 'fox' | 'shishi' | 'general' | 'boss'
-  | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin';
+  | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin' | 'lord';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -22,6 +22,8 @@ export interface EnemyDef {
   steady: number;
   /** 精英：掉宝箱 */
   elite?: boolean;
+  /** Boss：血不随时间涨、顶上有血条、捆不住、不会被挪走或挤掉 */
+  boss?: boolean;
 }
 
 export const ENEMIES: readonly EnemyDef[] = [
@@ -32,7 +34,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'fox', code: 4, hp: 12, speed: 1.9, dmg: 8, r: 14, xp: 2, steady: 0.1 },
   { kind: 'shishi', code: 5, hp: 320, speed: 1.15, dmg: 15, r: 30, xp: 20, steady: 0.9, elite: true },
   { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true },
-  { kind: 'boss', code: 7, hp: 14000, speed: 1.55, dmg: 22, r: 44, xp: 0, steady: 0.97 },
+  { kind: 'boss', code: 7, hp: 14000, speed: 1.55, dmg: 22, r: 44, xp: 0, steady: 0.97, boss: true },
   // 第 4 步：编号接着往后排（存档、录像里存的是编号，已有的不挪）
   { kind: 'horse', code: 8, hp: 10, speed: 4, dmg: 7, r: 16, xp: 2, steady: 0.2 },
   { kind: 'water', code: 9, hp: 22, speed: 0.9, dmg: 6, r: 15, xp: 2, steady: 0.5 },
@@ -43,6 +45,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2 },
   { kind: 'whitefox', code: 15, hp: 500, speed: 1.7, dmg: 13, r: 26, xp: 25, steady: 0.85, elite: true },
   { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true },
+  { kind: 'lord', code: 17, hp: 5200, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
@@ -76,10 +79,15 @@ export const WEASEL = { scan: 15, range: 520, flee: 1.25, lose: 1000, payback: 2
 export const PALANQUIN = { every: 240, drop: 3, burst: 14 };
 /** 跳尸将军：隔一阵召一圈小跳尸 */
 export const GENERAL = { every: 260, count: 6, ring: 70 };
-/** 尸王：三段技能轮流放，血少于一半时更勤 */
+/**
+ * 尸王：按血分三段（DESIGN.md 2.2）。一段（满血到 2/3）只跳砸和召唤；二段加尸气、更勤；三段（1/3 以下）发怒：
+ * 跳砸的圈更大、尸气两圈、召唤更多。进新一段时吼一声（事件里 a = 4）。
+ */
 export const BOSS = {
-  every: 150,
-  everyEnraged: 105,
+  /** 每段两个技能之间隔几拍 */
+  every: [150, 120, 90],
+  /** 进入二段、三段的血线 */
+  phaseAt: [2 / 3, 1 / 3],
   /** 跳砸：先在地上画圈警告，跳到主角站的地方砸下来 */
   stompWarn: 30,
   stompRadius: 120,
@@ -90,4 +98,23 @@ export const BOSS = {
   breath: 14,
   breathSpeed: 2.6,
   breathDmg: 10,
+  /** 三段：跳砸的圈放大、召唤加量 */
+  ragedStomp: 1.35,
+  ragedSummon: 12,
+};
+
+/**
+ * 纸扎老爷（守夜中期 Boss，8:00）：两段。一段撒纸钱（一圈慢慢旋开的纸钱弹）；血少于一半进二段：纸钱撒两圈、更勤，
+ * 每第三个技能召一顶纸轿（场上最多 2 顶，召来的不掉宝箱）。打倒掉宝箱。
+ */
+export const LORD = {
+  every: [100, 75],
+  money: 16,
+  moneySpeed: 2.3,
+  moneyDmg: 8,
+  moneyLife: 260,
+  moneyR: 10,
+  /** 每拍纸钱的速度方向转一格（方向表 256 格），转成旋涡 */
+  moneyTurn: 1,
+  maxPalanquin: 2,
 };

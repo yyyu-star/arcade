@@ -15,6 +15,7 @@ import {
   HOP_PERIOD,
   HOP_SPEED_MUL,
   LANTERN,
+  LORD,
   PALANQUIN,
   PLAYER_SLOW,
   SCARECROW,
@@ -194,7 +195,8 @@ function freeEnemySlot(w: World): number {
   let far = -1;
   let fd = -1;
   for (let i = 0; i < MAX_ENEMIES; i++) {
-    if (ENEMIES[w.eKind[i]!]!.elite || w.eKind[i] === ENEMY_BY_KIND.boss.code) continue;
+    const def = ENEMIES[w.eKind[i]!]!;
+    if (def.elite || def.boss) continue;
     const dx = w.eX[i]! - w.x;
     const dy = w.eY[i]! - w.y;
     const d = dx * dx + dy * dy;
@@ -216,9 +218,9 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   const def = ENEMY_BY_KIND[kind];
   const diff = DIFFICULTIES[w.setup.difficulty];
   const min = minuteOf(w);
-  const big = def.elite || kind === 'boss';
+  const big = def.elite || def.boss;
   const size = big ? 1 : 0.88 + w.rSpawn.next() * 0.24;
-  const hp = kind === 'boss' ? def.hp * diff.hpMul : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
+  const hp = def.boss ? def.hp * diff.hpMul : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
   w.eAlive[i] = 1;
   w.eGen[i]!++;
   w.eKind[i] = def.code;
@@ -235,7 +237,8 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min);
   w.eR[i] = def.r * size;
   w.eSize[i] = size;
-  w.eT[i] = kind === 'boss' ? BOSS.every : w.rSpawn.int(HOP_PERIOD);
+  w.eT[i] = kind === 'boss' ? BOSS.every[0]! : kind === 'lord' ? LORD.every[0]! : w.rSpawn.int(HOP_PERIOD);
+  w.ePhase[i] = 0;
   w.eS[i] = 0;
   w.eAX[i] = 0;
   w.eAY[i] = 0;
@@ -247,7 +250,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eHitAt.fill(0, i * WEAPON_SLOTS, (i + 1) * WEAPON_SLOTS);
   w.eCount++;
   if (big) w.ev.push(Ev.Arrive, w.eX[i]!, w.eY[i]!, def.code);
-  if (kind === 'boss') w.bossSlot = i;
+  if (def.boss) w.bossSlot = i;
   return i;
 }
 
@@ -284,7 +287,7 @@ function spawnWaves(w: World): void {
     const e = EVENTS[w.nextEvent++]!;
     if (e.kind === 'boss') {
       const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N), 0.8);
-      spawnEnemy(w, 'boss', x, y);
+      spawnEnemy(w, e.enemy, x, y);
     } else if (e.kind === 'front') {
       for (let k = 0; k < e.count; k++) {
         const a = w.face + w.rSpawn.int(44) - 22;
@@ -363,7 +366,6 @@ function markSlow(w: World, g: Grid): void {
 }
 
 function moveEnemies(w: World): void {
-  const boss = ENEMY_BY_KIND.boss.code;
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;
     if (w.eBind[i]! > w.tick) {
@@ -387,7 +389,7 @@ function moveEnemies(w: World): void {
       w.eCount--;
       continue;
     }
-    if (d > 900 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite && !(kind === 'weasel' && w.eS[i] === 1)) {
+    if (d > 900 && !ENEMIES[w.eKind[i]!]!.boss && !ENEMIES[w.eKind[i]!]!.elite && !(kind === 'weasel' && w.eS[i] === 1)) {
       if (kind === 'horse') w.eS[i] = 0;
       const [x, y] = ringPoint(w, w.face + w.rAi.int(64) - 32);
       w.eX[i] = x;
@@ -528,6 +530,9 @@ function moveEnemies(w: World): void {
           for (let k = 0; k < PALANQUIN.drop; k++) spawnEnemy(w, 'paper', w.eX[i]! - dx * 50 + (k - 1) * 24, w.eY[i]! - dy * 50);
         }
         break;
+      case 'lord':
+        lordAct(w, i, dx, dy);
+        break;
       case 'boss':
         sp = bossAct(w, i, sp);
         if (w.eS[i] === 1) {
@@ -586,22 +591,25 @@ function weaselAct(w: World, i: number, d: number): void {
  * 跳砸：在主角站的地方画圈警告，boss 用 stompWarn 拍跳过去，落地一圈伤害。
  */
 function bossAct(w: World, i: number, sp: number): number {
-  const enraged = w.eHp[i]! < w.eHpMax[i]! / 2;
+  const phase = bossPhase(w, i, BOSS.phaseAt);
+  const raged = phase === 2;
+  const stompR = BOSS.stompRadius * (raged ? BOSS.ragedStomp : 1);
   if (w.eS[i] === 1) {
     // 跳砸中：直线飞向落点
     if (--w.eT[i]! <= 0) {
       w.eS[i] = 0;
-      w.eT[i] = enraged ? BOSS.everyEnraged : BOSS.every;
-      w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 1, BOSS.stompRadius);
+      w.eT[i] = BOSS.every[phase]!;
+      w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 1, stompR);
       const dx = w.x - w.eX[i]!;
       const dy = w.y - w.eY[i]!;
-      if (dx * dx + dy * dy < BOSS.stompRadius * BOSS.stompRadius) hurt(w, BOSS.stompDmg);
+      if (dx * dx + dy * dy < stompR * stompR) hurt(w, BOSS.stompDmg);
       return 0;
     }
     return w.eV[i]!;
   }
   if (--w.eT[i]! > 0) return sp;
-  const skill = w.rAi.int(3);
+  // 一段只有跳砸和召唤；二段起加尸气
+  const skill = w.rAi.int(phase === 0 ? 2 : 3);
   if (skill === 0) {
     // 落点：主角现在的位置；每拍走 (距离 / 拍数)，这一跳的速度记在 eV
     const tx = w.x;
@@ -614,27 +622,75 @@ function bossAct(w: World, i: number, sp: number): number {
     w.eAX[i] = dx / d;
     w.eAY[i] = dy / d;
     w.eV[i] = d / BOSS.stompWarn;
-    w.ev.push(Ev.Boss, tx, ty, 0, BOSS.stompRadius);
+    w.ev.push(Ev.Boss, tx, ty, 0, stompR);
     return 0;
   }
-  w.eT[i] = enraged ? BOSS.everyEnraged : BOSS.every;
+  w.eT[i] = BOSS.every[phase]!;
   if (skill === 1) {
     w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 2, 90);
-    for (let k = 0; k < BOSS.summon; k++) {
-      const a = (k * DIR_N) / BOSS.summon;
+    const n = raged ? BOSS.ragedSummon : BOSS.summon;
+    for (let k = 0; k < n; k++) {
+      const a = (k * DIR_N) / n;
       spawnEnemy(w, 'jiangshi', w.eX[i]! + dcos(a) * 90, w.eY[i]! + dsin(a) * 90);
     }
   } else {
     w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 3, 0);
-    const n = enraged ? BOSS.breath + 6 : BOSS.breath;
-    const off = w.rAi.int(DIR_N);
-    for (let k = 0; k < n; k++) {
-      const a = off + Math.floor((k * DIR_N) / n);
-      addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 30, dcos(a) * BOSS.breathSpeed, dsin(a) * BOSS.breathSpeed, 240, BOSS.breathDmg, 12, 0, -1, 0);
+    // 三段：两圈，第二圈错开半格、慢一点
+    for (let ring = 0; ring < (raged ? 2 : 1); ring++) {
+      const n = BOSS.breath + 6 * ring;
+      const off = w.rAi.int(DIR_N);
+      const v = BOSS.breathSpeed * (ring === 0 ? 1 : 0.7);
+      for (let k = 0; k < n; k++) {
+        const a = off + Math.floor((k * DIR_N) / n);
+        addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 30, dcos(a) * v, dsin(a) * v, 240, BOSS.breathDmg, 12, 0, -1, 0);
+      }
     }
   }
   return sp;
 }
+
+/** Boss 现在是第几段（血线 at 从高到低）；刚进新一段时发一个事件（a = 4，b = 段号），画面层吼一声、出横幅 */
+function bossPhase(w: World, i: number, at: readonly number[]): number {
+  const f = w.eHp[i]! / w.eHpMax[i]!;
+  let p = 0;
+  while (p < at.length && f < at[p]!) p++;
+  if (p > w.ePhase[i]!) {
+    w.ePhase[i] = p;
+    w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 4, p, w.eKind[i]!);
+  }
+  return w.ePhase[i]!;
+}
+
+/** 纸扎老爷：eT 倒数到下一个技能，eS 数放了几个技能（二段每第三个召纸轿），eAX 是纸钱圈转到的方向 */
+function lordAct(w: World, i: number, dx: number, dy: number): void {
+  const phase = bossPhase(w, i, [0.5]);
+  if (--w.eT[i]! > 0) return;
+  w.eT[i] = LORD.every[phase]!;
+  w.eS[i]!++;
+  if (phase === 1 && w.eS[i]! % 3 === 0) {
+    let have = 0;
+    for (let k = 0; k < MAX_ENEMIES; k++) if (w.eAlive[k] && w.eKind[k] === PALANQUIN_CODE) have++;
+    if (have < LORD.maxPalanquin) {
+      // 召来的纸轿不掉宝箱（eV = 1）
+      const j = spawnEnemy(w, 'palanquin', w.eX[i]! - dx * 90, w.eY[i]! - dy * 90);
+      if (j >= 0) w.eV[j] = 1;
+      w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 5, 0);
+      return;
+    }
+  }
+  // 撒纸钱：一圈（二段两圈，第二圈错开半格）慢慢旋开
+  w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 6, 0);
+  w.eAX[i] = (w.eAX[i]! + 5) & (DIR_N - 1);
+  for (let ring = 0; ring <= phase; ring++) {
+    const off = w.eAX[i]! + ring * (DIR_N / LORD.money / 2);
+    const v = LORD.moneySpeed * (ring === 0 ? 1 : 0.8);
+    for (let k = 0; k < LORD.money; k++) {
+      const a = off + Math.floor((k * DIR_N) / LORD.money);
+      addShot(w, Shot.Fireball, w.eX[i]!, w.eY[i]! - 40, dcos(a) * v, dsin(a) * v, LORD.moneyLife, LORD.moneyDmg, LORD.moneyR, 2, -1, ring);
+    }
+  }
+}
+const PALANQUIN_CODE = ENEMY_BY_KIND.palanquin.code;
 
 /** 怪与怪之间轻推挤：只和同格、邻格的比 */
 function separate(w: World, g: Grid): void {
@@ -735,10 +791,17 @@ function killEnemy(w: World, i: number): void {
       w.bellHealAt = w.tick + 6;
     }
   }
+  if (w.bossSlot === i) w.bossSlot = -1;
   if (def.kind === 'boss') {
     w.bossKilled = true;
-    w.bossSlot = -1;
     if (w.phase === 'play') end(w, true);
+    return;
+  }
+  if (def.kind === 'lord') {
+    // 中期 Boss：掉宝箱和一把魂珠，进收获期
+    w.calmUntil = Math.max(w.calmUntil, w.tick + CALM.afterElite);
+    addDrop(w, Drop.Chest, x, y, 1);
+    for (let k = 0; k < 10; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 90, y + (w.rDrop.next() - 0.5) * 60, def.xp / 10);
     return;
   }
   if (def.elite) {
@@ -749,7 +812,8 @@ function killEnemy(w: World, i: number): void {
         spawnEnemy(w, 'paper', x + dcos(a) * 40, y + dsin(a) * 32);
       }
     }
-    addDrop(w, Drop.Chest, x, y, 1);
+    // 纸扎老爷召来的纸轿（eV = 1）不掉宝箱
+    if (!(def.kind === 'palanquin' && w.eV[i] === 1)) addDrop(w, Drop.Chest, x, y, 1);
     for (let k = 0; k < 6; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 60, y + (w.rDrop.next() - 0.5) * 40, def.xp / 6);
     return;
   }
@@ -946,9 +1010,8 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
   w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.gourd);
 }
 
-/** 缚妖索：从最近的一只开始，一只接一只往外找最近的没捆的，捆住一串；尸王捆不住，精英只捆一半时间。没有怪返回 false */
+/** 缚妖索：从最近的一只开始，一只接一只往外找最近的没捆的，捆住一串；Boss 捆不住，精英只捆一半时间。没有怪返回 false */
 function rope(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): boolean {
-  const boss = ENEMY_BY_KIND.boss.code;
   let cx = w.x;
   let cy = w.y;
   let reach = 320;
@@ -959,7 +1022,7 @@ function rope(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; ar
     let bd = Infinity;
     for (let q = 0; q < n; q++) {
       const i = g.out[q]!;
-      if (w.eKind[i] === boss || w.eBind[i]! > w.tick) continue;
+      if (ENEMIES[w.eKind[i]!]!.boss || w.eBind[i]! > w.tick) continue;
       const dx = w.eX[i]! - cx;
       const dy = w.eY[i]! - cy;
       const d = dx * dx + dy * dy;
@@ -1311,6 +1374,9 @@ function blockedByCoin(w: World, i: number): boolean {
   return false;
 }
 
+const MONEY_COS = dcos(LORD.moneyTurn);
+const MONEY_SIN = dsin(LORD.moneyTurn);
+
 function moveShots(w: World, g: Grid): void {
   coinN = 0;
   for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Coin) coinList[coinN++] = i;
@@ -1318,6 +1384,14 @@ function moveShots(w: World, g: Grid): void {
     if (!w.sAlive[i]) continue;
     const kind = w.sKind[i] as Shot;
     if (kind === Shot.Fireball) {
+      if (w.sState[i] === 2) {
+        // 纸钱：速度方向每拍转一点，旋成涡（两圈反着转）
+        const c = MONEY_COS;
+        const sn = w.sIdx[i] === 0 ? MONEY_SIN : -MONEY_SIN;
+        const vx = w.sVX[i]!;
+        w.sVX[i] = vx * c - w.sVY[i]! * sn;
+        w.sVY[i] = vx * sn + w.sVY[i]! * c;
+      }
       w.sX[i]! += w.sVX[i]!;
       w.sY[i]! += w.sVY[i]!;
       // 铜钱剑挡弹：转着的铜钱碰到就消掉（远程清场时它也不是摆设）

@@ -33,12 +33,12 @@ const TICK_MS = 1000 / 30;
 const MOB_FRAME = ENEMIES.map((e) => e.kind as string);
 const MOB_FALLBACK: Record<string, string> = {
   fox: 'wisp', shishi: 'jiangshi_big', general: 'jiangshi_big', boss: 'jiangshi_big',
-  horse: 'paper', water: 'wisp', bone: 'paper', bat: 'wisp', scarecrow: 'jiangshi', weasel: 'fox', snow: 'wisp', whitefox: 'fox', palanquin: 'shishi', ice: 'fireball',
+  horse: 'paper', water: 'wisp', bone: 'paper', bat: 'wisp', scarecrow: 'jiangshi', weasel: 'fox', snow: 'wisp', whitefox: 'fox', palanquin: 'shishi', ice: 'fireball', lord: 'boss', money: 'coin',
 };
 /** 怪的主色（按编号）：没画好的怪借图时上这个色，死亡碎片也用它 */
 const MOB_TINT = [
   MOB_COLOR.paper, MOB_COLOR.wisp, MOB_COLOR.jiangshi, MOB_COLOR.lantern, MOB_COLOR.fox, 0x9aa0ad, 0x2f5a46, 0xb8902e,
-  0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e,
+  0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e, 0xf0e0b0,
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
@@ -48,6 +48,11 @@ const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
   palanquin: ['纸轿', '打碎会放出一群纸人'],
 };
 const WATER_CODE = ENEMIES.findIndex((e) => e.kind === 'water');
+/** Boss 进下一段的横幅（按种类、段号） */
+const PHASE_BANNER: Partial<Record<string, [string, string][]>> = {
+  boss: [['', ''], ['尸王发怒', '会吐尸气了'], ['尸王发狂', '跳砸更大，尸气两圈']],
+  lord: [['', ''], ['老爷翻脸', '纸钱两圈，会召纸轿']],
+};
 
 /** 子弹种类 → 图集帧（光波画在 Graphics 上，这里给个占位） */
 const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane', [Shot.Burn]: 'burn' };
@@ -394,7 +399,7 @@ export class GameScene extends Phaser.Scene {
           this.onArrive(ev.a[i]!);
           break;
         case Ev.Boss:
-          this.onBoss(x, y, ev.a[i]!, ev.b[i]!);
+          this.onBoss(x, y, ev.a[i]!, ev.b[i]!, ev.c[i]!);
           break;
         case Ev.End:
           sfx.play(ev.a[i] === 1 ? 'dawn' : 'death');
@@ -528,9 +533,10 @@ export class GameScene extends Phaser.Scene {
 
   private onArrive(code: number): void {
     const def = ENEMIES[code]!;
-    if (def.kind === 'boss') {
+    if (def.boss) {
       sfx.play('boss');
-      this.d.banners.say('尸王来了', 'warn', 2600, '天亮前打倒它，天就提前亮');
+      if (def.kind === 'lord') this.d.banners.say('纸扎老爷来了', 'warn', 2600, '撒纸钱、召纸轿，打倒掉宝箱');
+      else this.d.banners.say('尸王来了', 'warn', 2600, '天亮前打倒它，天就提前亮');
       this.shake(400, 0.006);
       music.start('boss');
       this.bossOn = true;
@@ -541,7 +547,17 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private onBoss(x: number, y: number, a: number, r: number): void {
+  private onBoss(x: number, y: number, a: number, r: number, c: number): void {
+    if (a === 4) {
+      // 进下一段：吼一声 + 横幅
+      const [title, sub] = PHASE_BANNER[ENEMIES[c]!.kind]?.[r] ?? ['', ''];
+      sfx.play('boss');
+      this.shake(360, 0.008);
+      if (title) this.d.banners.say(title, 'warn', 1800, sub);
+      return;
+    }
+    if (a === 5) return sfx.play('bossSummon');
+    if (a === 6) return sfx.play('bossBreath');
     if (a === 0) {
       // 跳砸警告：落点一个红圈，越收越紧
       this.telegraphs.push({ x, y, r, life: 0, max: 1000 });
@@ -747,14 +763,16 @@ export class GameScene extends Phaser.Scene {
       }
       const sf = this.frames.get('shadow')!;
       m.shadow.setPosition(x, y).setScale(((w.eR[i]! / 20) * (1 - Math.min(0.5, lift * 0.004))) / sf.res).setDepth(-400);
-      if (m.glow) m.glow.setPosition(x, y - lift - w.eR[i]! * 1.4).setDepth(y - 1).setAlpha(def.elite || def.kind === 'boss' ? 0.5 + Math.sin(this.now * 0.006) * 0.12 : 0.4);
+      if (m.glow) m.glow.setPosition(x, y - lift - w.eR[i]! * 1.4).setDepth(y - 1).setAlpha(def.elite || def.boss ? 0.5 + Math.sin(this.now * 0.006) * 0.12 : 0.4);
     }
     // Boss 血条
     const b = w.bossSlot;
-    if (b >= 0 && w.eAlive[b] && w.phase !== 'over') this.d.banners.setBoss('尸王', w.eHp[b]! / w.eHpMax[b]!);
+    if (b >= 0 && w.eAlive[b] && w.phase !== 'over') this.d.banners.setBoss(ENEMIES[w.eKind[b]!]!.kind === 'lord' ? '纸扎老爷' : '尸王', w.eHp[b]! / w.eHpMax[b]!);
     else if (this.bossOn) {
       this.d.banners.setBoss(null);
       this.bossOn = false;
+      // 纸扎老爷倒了：换回夜里的音乐
+      if (w.phase === 'play') music.start('night');
     }
   }
 
@@ -770,11 +788,11 @@ export class GameScene extends Phaser.Scene {
     const shadow = old?.shadow ?? this.img('shadow');
     shadow.setVisible(true).setAlpha(0.8);
     let glow = old?.glow ?? null;
-    const glowTint = def.elite || def.kind === 'boss' ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'wisp' ? 0x5fd3f0 : null;
+    const glowTint = def.elite || def.boss ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'wisp' ? 0x5fd3f0 : null;
     if (glowTint !== null) {
       glow ??= this.img('haze');
       const hf = this.frames.get('haze')!;
-      glow.setVisible(true).setTint(glowTint).setScale((def.elite || def.kind === 'boss' ? 2.6 : 1.1) / hf.res);
+      glow.setVisible(true).setTint(glowTint).setScale((def.elite || def.boss ? 2.6 : 1.1) / hf.res);
     } else glow?.setVisible(false);
     return { gen: this.w.eGen[i]!, img, shadow, glow, res: f.res, flash: 0, kind: code };
   }
@@ -788,7 +806,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const kind = w.sKind[i]!;
-      const key = kind === Shot.Fireball && w.sState[i] === 1 ? 'ice' : (SHOT_FRAME[kind] ?? 'fireball');
+      const key = kind === Shot.Fireball && w.sState[i] !== 0 ? (w.sState[i] === 1 ? 'ice' : 'money') : (SHOT_FRAME[kind] ?? 'fireball');
       if (!s || s.gen !== w.sGen[i]) {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
@@ -809,6 +827,7 @@ export class GameScene extends Phaser.Scene {
       }
       s.img.setPosition(x, y).setDepth(y + 40);
       if (kind === Shot.Fireball && w.sState[i] === 1) s.img.setRotation(Math.atan2(w.sVY[i]!, w.sVX[i]!));
+      else if (kind === Shot.Fireball && w.sState[i] === 2) s.img.rotation += 0.12;
       if (kind === Shot.Talisman) {
         s.img.rotation += 0.35;
         if (!LOW_MEMORY && ++s.trail % 2 === 0) this.fx.spawn({ frame: 'mote', x, y, life: 320, s0: 1.1, s1: 0.2, tint: 0xffb42e, rot: Math.random() * 3 });

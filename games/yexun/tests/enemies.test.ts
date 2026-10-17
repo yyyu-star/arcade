@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BONE, ENEMY_BY_KIND, PALANQUIN, WATER, WEASEL } from '../src/content/enemies.ts';
-import { CALM, DIFFICULTIES, OPEN_TICKS } from '../src/content/waves.ts';
+import { BONE, ENEMY_BY_KIND, LORD, PALANQUIN, WATER, WEASEL } from '../src/content/enemies.ts';
+import { CALM, DIFFICULTIES, EVENTS, OPEN_TICKS } from '../src/content/waves.ts';
 import { createWorld, Drop, Ev, grantWeapon, spawnNow, step, type World } from '../src/core/index.ts';
 
 /** 一个干净的场：没有法器（不会误伤），开场事件已经过了，不再按分钟补怪 */
@@ -174,3 +174,71 @@ describe('新手保护', () => {
   });
 });
 
+
+describe('Boss', () => {
+  /** 把第 i 只 Boss 的血压到 frac（血条比例），下一拍按段数行动 */
+  const setHp = (w: World, i: number, frac: number): void => {
+    w.eHp[i] = w.eHpMax[i]! * frac;
+  };
+  const bossEvents = (w: World, ticks: number, dir = 0): number[] => {
+    const seen: number[] = [];
+    for (let t = 0; t < ticks && w.phase !== 'over'; t++) {
+      w.hp = 100;
+      step(w, dir, 0);
+      for (let k = 0; k < w.ev.n; k++) if (w.ev.type[k] === Ev.Boss) seen.push(w.ev.a[k]!);
+    }
+    return seen;
+  };
+
+  it('尸王一段只跳砸和召唤，二段起吐尸气，进段有事件', () => {
+    const w = quiet(7);
+    const i = spawnNow(w, 'boss', w.x + 260, w.y);
+    expect(w.bossSlot).toBe(i);
+    const one = bossEvents(w, 1500);
+    expect(one).not.toContain(3);
+    expect(one).not.toContain(4);
+    setHp(w, i, 0.5);
+    const two = bossEvents(w, 2400);
+    expect(two).toContain(4);
+    expect(two).toContain(3);
+    expect(w.ePhase[i]).toBe(1);
+    setHp(w, i, 0.2);
+    bossEvents(w, 10);
+    expect(w.ePhase[i]).toBe(2);
+  });
+
+  it('纸扎老爷撒旋转的纸钱；二段召纸轿（最多两顶，召来的不掉宝箱）；打倒掉宝箱，天不亮', () => {
+    const w = quiet(8);
+    const i = spawnNow(w, 'lord', w.x + 260, w.y);
+    expect(w.bossSlot).toBe(i);
+    const one = bossEvents(w, 400);
+    expect(one).toContain(6);
+    expect(one).not.toContain(5);
+    let money = 0;
+    for (let s = 0; s < w.sAlive.length; s++) if (w.sAlive[s] && w.sState[s] === 2) money++;
+    expect(money).toBeGreaterThan(0);
+    setHp(w, i, 0.4);
+    const two = bossEvents(w, 2000);
+    expect(two).toContain(4);
+    expect(two).toContain(5);
+    expect(alive(w, 'palanquin')).toBeLessThanOrEqual(LORD.maxPalanquin);
+    // 召来的纸轿死了不掉宝箱
+    for (let j = 0; j < w.eAlive.length; j++) if (w.eAlive[j] && w.eKind[j] === ENEMY_BY_KIND.palanquin.code) expect(w.eV[j]).toBe(1);
+    w.eHp[i] = 0.5;
+    w.eX[i] = w.x + 20;
+    w.eY[i] = w.y;
+    grantWeapon(w, 'bell', 8);
+    for (let t = 0; t < 60 && w.eAlive[i]; t++) step(w, 0, 0);
+    expect(w.eAlive[i]).toBe(0);
+    expect(w.phase).not.toBe('over');
+    expect(w.bossKilled).toBe(false);
+    let chests = 0;
+    for (let d = 0; d < w.dAlive.length; d++) if (w.dAlive[d] && w.dKind[d] === Drop.Chest) chests++;
+    expect(chests + w.choices.length).toBeGreaterThan(0);
+  });
+
+  it('时间线：8:00 纸扎老爷、14:00 尸王', () => {
+    expect(EVENTS.find((e) => e.kind === 'boss' && e.enemy === 'lord')?.at).toBe(480 * 30);
+    expect(EVENTS.find((e) => e.kind === 'boss' && e.enemy === 'boss')?.at).toBe(840 * 30);
+  });
+});

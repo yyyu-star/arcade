@@ -9,7 +9,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 6;
+export const RULES_VERSION = 7;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -23,7 +23,7 @@ export const Shot = {
   Talisman: 1,
   Coin: 2,
   Fly: 3,
-  /** 敌人的：灯笼鬼的火球、尸王的尸气；sState 1 = 雪魅的冰锥（打中走路变慢） */
+  /** 敌人的：灯笼鬼的火球、尸王的尸气；sState 1 = 雪魅的冰锥（打中走路变慢），2 = 纸扎老爷的纸钱（旋着飞，sIdx 是第几圈） */
   Fireball: 4,
   /** 八卦镜的光波：sR 是当前半径（开始是负的 = 还没放出来），sDist 是推到多远 */
   Wave: 5,
@@ -206,6 +206,8 @@ export class World {
   readonly eLastBy = new Int8Array(MAX_ENEMIES);
   /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
   readonly eBind = new Int32Array(MAX_ENEMIES);
+  /** Boss 打到第几段（0 起） */
+  readonly ePhase = new Uint8Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
   readonly eSlow = new Uint8Array(MAX_ENEMIES);
   /** 同一件法器连着打同一只的冷却：[怪 × 法器槽] = 下次能打的拍数 */

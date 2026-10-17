@@ -36,7 +36,7 @@ export type WaveEvent =
   | { at: number; kind: 'ring'; enemy: EnemyKind; count: number; radius: number }
   | { at: number; kind: 'line'; enemy: EnemyKind; count: number }
   | { at: number; kind: 'elite'; enemy: EnemyKind; count: number }
-  | { at: number; kind: 'boss' };
+  | { at: number; kind: 'boss'; enemy: 'boss' | 'lord' };
 
 const S = 30;
 /**
@@ -52,12 +52,13 @@ export const EVENTS: readonly WaveEvent[] = [
   { at: 300 * S, kind: 'elite', enemy: 'whitefox', count: 1 },
   { at: 450 * S, kind: 'elite', enemy: 'palanquin', count: 1 },
   { at: 452 * S, kind: 'line', enemy: 'wisp', count: 34 },
+  { at: 480 * S, kind: 'boss', enemy: 'lord' },
   { at: 540 * S, kind: 'line', enemy: 'horse', count: 20 },
   { at: 600 * S, kind: 'elite', enemy: 'general', count: 2 },
   { at: 720 * S, kind: 'elite', enemy: 'shishi', count: 1 },
   { at: 721 * S, kind: 'elite', enemy: 'whitefox', count: 1 },
   { at: 750 * S, kind: 'ring', enemy: 'paper', count: 90, radius: 430 },
-  { at: 840 * S, kind: 'boss' },
+  { at: 840 * S, kind: 'boss', enemy: 'boss' },
 ];
 
 /**
