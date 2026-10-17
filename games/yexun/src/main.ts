@@ -17,7 +17,13 @@ import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
 import { Prep, type PrepState } from './view/ui/prep.ts';
 import type { MapId } from './content/maps.ts';
-import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
+import { buildAtlas, buildGround, buildRaidAtlas, type Atlas } from './view/art/atlas.ts';
+import { treasureIconKey } from './view/art/sprites8.ts';
+import { Vault } from './view/ui/vault.ts';
+import { settleRaid } from './explore/settle.ts';
+import { recordRaid, vaultProgress } from './explore/vault.ts';
+import { TREASURES } from './content/treasures.ts';
+import { RAID_TEMPLATES, type RaidTemplateId } from './content/explore.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
 import { GameScene } from './view/game/GameScene.ts';
@@ -158,6 +164,8 @@ async function boot(): Promise<void> {
   });
   const menuState = (firstTime = false) => ({
     firstTime,
+    raidFirst: !save.raidDone,
+    vault: { got: vaultProgress(save.vault).got, total: TREASURES.length },
     danger: save.danger,
     dangerOpen: dangerOpen(save),
     best: save.bestD,
@@ -292,6 +300,36 @@ async function boot(): Promise<void> {
   });
   stage.addEventListener('pointerdown', () => banners.skipReveal());
 
+  /** 夜探结算：撤出全带走、换铜钱；倒下 / 迷失丢包，铜钱剩一半（教学镇不丢）；宝物记进藏宝阁 */
+  const finishRaid = (w: World, quit: boolean, seconds: number): void => {
+    const raid = w.raid!;
+    const st = settleRaid(raid, w.coins);
+    const rr = recordRaid(save.vault, st);
+    save.vault = rr.vault;
+    if (raid.teach) save.raidDone = true;
+    if (st.coins > 0) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
+    writeSave(save);
+    showPlay(false);
+    const view = (code: number) => {
+      const t = TREASURES[code]!;
+      return { icon: treasureIconKey(t.icon), name: t.name, tier: t.tier, value: t.value, fresh: rr.fresh.includes(t.id) };
+    };
+    const tpl = raid.setup.template as RaidTemplateId;
+    result.show({
+      won: st.outcome === 'escaped',
+      quit,
+      bossKilled: false,
+      seconds,
+      kills: w.kills,
+      level: w.level,
+      coins: st.coins,
+      coinsTotal: coins(save),
+      label: `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}`,
+      record: false,
+      build: buildRows(w),
+      raid: { outcome: st.outcome === 'escaped' || st.outcome === 'lost' ? st.outcome : 'dead', teach: raid.teach, kept: st.kept.map(view), lost: st.lost.map(view), value: st.value },
+    });
+  };
   const finish = (w: World, quit: boolean): void => {
     if (ended) return;
     ended = true;
@@ -316,6 +354,7 @@ async function boot(): Promise<void> {
       });
       return;
     }
+    if (w.raid) return finishRaid(w, quit, seconds);
     // 认输的局算一局、铜钱照拿，但不算纪录
     const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: w.won, quit, ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
     // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
@@ -335,13 +374,16 @@ async function boot(): Promise<void> {
   };
 
   const startRun = async (picked: Danger, map: MapId = save.map, debug = false, fixed?: Setup): Promise<void> => {
-    liveRun = fixed ? { seed: fixed.seed } : null;
-    if (!fixed) lastLive = null;
+    // 夜探也走固定配置，但不是实盘
+    liveRun = fixed && fixed.mode !== 'raid' ? { seed: fixed.seed } : null;
+    if (!liveRun) lastLive = null;
     // 第一局锁危险 0；没解锁的档、角色不让选（存档被改过、链接参数）。调试参数直接开局的不卡
     const danger = (debug ? picked : Math.min(picked, dangerOpen(save))) as Danger;
-    save.danger = danger;
-    save.map = map;
-    writeSave(save);
+    if (!fixed) {
+      save.danger = danger;
+      save.map = map;
+      writeSave(save);
+    }
     menu.hide();
     result.hide();
     ended = false;
@@ -386,6 +428,7 @@ async function boot(): Promise<void> {
     game.scene.add('game', GameScene, true, {
       world: w,
       atlas,
+      ...(w.raid ? { raidAtlas: buildRaidAtlas(res) } : {}),
       hud,
       cards,
       banners,
@@ -460,8 +503,26 @@ async function boot(): Promise<void> {
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
   menu.onLive = (tier) => void startLive(tier);
+  // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
+  menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
+    const ms = menuState();
+    const teach = template === 'teach';
+    const danger = (teach ? 0 : Math.min(picked, dangerOpen(save))) as Danger;
+    const seed = (Math.random() * 0x100000000) >>> 0;
+    void startRun(danger, save.map, false, { seed, mode: 'raid', danger, raid: { template }, character: ms.character, perks: save.perks, assist: save.assist });
+  };
+  const vault = new Vault(stage, (k) => icon(k), () => save.vault);
+  vault.onClose = () => {
+    vault.hide();
+    menu.show(menuState());
+  };
+  menu.onVault = () => {
+    menu.hide();
+    vault.show();
+  };
   result.onAgain = () => {
     if (lastLive) return void startLive(lastLive);
+    if (world?.setup.mode === 'raid') return menu.onRaid(world.setup.raid?.template ?? 'guzhen', world.setup.danger);
     void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
   };
   result.onMenu = () => {
