@@ -1,9 +1,13 @@
 /**
  * 本机存档（localStorage `yexun.save`）和设置（`yexun.settings`，音效、音乐开关由 audio/ 读写，同一个 key 里各管各的字段）。
- * 存储不可用（隐私模式、满了）时照常能玩，只是不记得。云存档在第 8 步接平台，形状和这里一致。
+ * 存储不可用（隐私模式、满了）时照常能玩，只是不记得。云存档（`cloud.ts`）同步的就是这一份去掉本机字段后的样子，合并见 `mergeSave`。
+ *
+ * 局外成长（DESIGN.md 3.7、3.8）：铜钱只在游戏里，和筹码完全分开。铜钱不存一个总数，存"流水"（每局赚的、每次花的各一条，带 id）：
+ * 两台设备各玩各花，合并时按 id 取并集再加总，不会因为"取较大的那个总数"白送或者扣成负数（5.5）。
  */
-import type { Difficulty } from '../content/waves.ts';
+import { DANGER_IDS, type Danger, type Difficulty } from '../content/waves.ts';
 import type { MapId } from '../content/maps.ts';
+import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 
 const SAVE_KEY = 'yexun.save';
@@ -15,6 +19,9 @@ export interface Best {
   won: boolean;
 }
 
+/** 铜钱流水的一条：[id, 变化]；id 是局号或者"买了什么" */
+export type Entry = [string, number];
+
 export interface Save {
   v: 1;
   runs: number;
@@ -23,34 +30,136 @@ export interface Save {
   tips: string[];
   /** 玩家点了"不再提示" */
   tipsOff: boolean;
-  /** 上次选的难度、地图 */
+  /** 上次选的难度（菜单三档）、地图 */
   difficulty: Difficulty;
   map: MapId;
   best: Partial<Record<Difficulty, Best>>;
+  /** 上次选的危险档、角色、咒印 */
+  danger: Danger;
+  character: CharacterId;
+  curses: CurseId[];
+  /** 每个危险档的最好成绩（键是 0–5） */
+  bestD: Partial<Record<Danger, Best>>;
+  /** 撑到天亮过的最高危险档（−1 = 还没有）；下一档随之解锁 */
+  cleared: number;
+  /** 永久加成的等级 */
+  perks: Partial<Record<PerkId, number>>;
+  /** 花铜钱买下的角色（别的角色按成绩解锁，见 charOpen） */
+  bought: CharacterId[];
+  /** 铜钱流水，太长时最旧的并进 coinBase */
+  ledger: Entry[];
+  coinBase: number;
+  /** 单局最长撑了几秒、最多打死几只（解锁角色用） */
+  maxSeconds: number;
+  maxKills: number;
+  /** 藏宝阁收了哪些宝物（夜探，第 6 步填） */
+  vault: string[];
+  /** 连着倒下几局（赢了、认输都清零） */
+  streak: number;
+  /** "降低伤害"开着（成绩不进总榜）；问过了没有（问过不再追着问，设置里能随时开关） */
+  assist: boolean;
+  assistAsked: boolean;
 }
 
-const fresh = (): Save => ({ v: 1, runs: 0, wins: 0, tips: [], tipsOff: false, difficulty: 'easy', map: 'snow', best: {} });
+/** 流水超过这么多条，最旧的并成一个数（并过的流水在两台设备上可能各算一次，所以留得够长：几百局才会碰到） */
+const LEDGER_MAX = 400;
+
+export const fresh = (): Save => ({
+  v: 1,
+  runs: 0,
+  wins: 0,
+  tips: [],
+  tipsOff: false,
+  difficulty: 'easy',
+  map: 'snow',
+  best: {},
+  danger: 0,
+  character: 'xiaodao',
+  curses: [],
+  bestD: {},
+  cleared: -1,
+  perks: {},
+  bought: [],
+  ledger: [],
+  coinBase: 0,
+  maxSeconds: 0,
+  maxKills: 0,
+  vault: [],
+  streak: 0,
+  assist: false,
+  assistAsked: false,
+});
+
+const num = (v: unknown, min = 0, max = 1e12): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, Math.floor(v))) : null);
+const strs = (v: unknown, max = 500): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, max) : []);
+const best = (v: unknown): Best | null => {
+  if (!v || typeof v !== 'object') return null;
+  const b = v as Partial<Best>;
+  const ticks = num(b.ticks);
+  const kills = num(b.kills);
+  return ticks === null || kills === null ? null : { ticks, kills, won: !!b.won };
+};
+
+/** 不可信的数据（本机旧档、云端）→ 干净的存档；读不懂的字段用默认值 */
+export function reviveSave(o: unknown): Save | null {
+  if (!o || typeof o !== 'object') return null;
+  const r = o as Record<string, unknown>;
+  if (r.v !== 1) return null;
+  const s = fresh();
+  s.runs = num(r.runs) ?? 0;
+  s.wins = num(r.wins) ?? 0;
+  s.tips = strs(r.tips, 20);
+  s.tipsOff = r.tipsOff === true;
+  if (r.difficulty === 'easy' || r.difficulty === 'normal' || r.difficulty === 'hard') s.difficulty = r.difficulty;
+  if (r.map === 'snow' || r.map === 'yizhuang') s.map = r.map;
+  if (r.best && typeof r.best === 'object') {
+    for (const d of ['easy', 'normal', 'hard'] as const) {
+      const b = best((r.best as Record<string, unknown>)[d]);
+      if (b) s.best[d] = b;
+    }
+  }
+  const dg = num(r.danger, 0, 5);
+  if (dg !== null) s.danger = dg as Danger;
+  if (typeof r.character === 'string' && r.character in CHARACTERS) s.character = r.character as CharacterId;
+  s.curses = CURSE_IDS.filter((c) => strs(r.curses).includes(c)).slice(0, MAX_CURSES);
+  if (r.bestD && typeof r.bestD === 'object') {
+    for (const d of DANGER_IDS) {
+      const b = best((r.bestD as Record<string, unknown>)[d]);
+      if (b) s.bestD[d] = b;
+    }
+  }
+  s.cleared = num(r.cleared, -1, 5) ?? -1;
+  if (r.perks && typeof r.perks === 'object') {
+    for (const id of PERK_IDS) {
+      const lv = num((r.perks as Record<string, unknown>)[id], 0, PERKS[id].cost.length);
+      if (lv) s.perks[id] = lv;
+    }
+  }
+  s.bought = CHARACTER_IDS.filter((c) => strs(r.bought).includes(c));
+  if (Array.isArray(r.ledger)) {
+    const seen = new Set<string>();
+    for (const e of r.ledger) {
+      if (!Array.isArray(e) || typeof e[0] !== 'string' || e[0].length > 64 || seen.has(e[0])) continue;
+      const n = num(e[1], -1e9, 1e9);
+      if (n === null) continue;
+      seen.add(e[0]);
+      s.ledger.push([e[0], n]);
+    }
+  }
+  s.coinBase = num(r.coinBase, -1e9, 1e12) ?? 0;
+  s.maxSeconds = num(r.maxSeconds) ?? 0;
+  s.maxKills = num(r.maxKills) ?? 0;
+  s.vault = strs(r.vault, 200);
+  s.streak = num(r.streak, 0, 1000) ?? 0;
+  s.assist = r.assist === true;
+  s.assistAsked = r.assistAsked === true;
+  return s;
+}
 
 export function loadSave(): Save {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return fresh();
-    const o = JSON.parse(raw) as Partial<Save>;
-    if (!o || typeof o !== 'object' || o.v !== 1) return fresh();
-    const s = fresh();
-    if (typeof o.runs === 'number') s.runs = o.runs;
-    if (typeof o.wins === 'number') s.wins = o.wins;
-    if (Array.isArray(o.tips)) s.tips = o.tips.filter((x): x is string => typeof x === 'string');
-    if (typeof o.tipsOff === 'boolean') s.tipsOff = o.tipsOff;
-    if (o.difficulty === 'easy' || o.difficulty === 'normal' || o.difficulty === 'hard') s.difficulty = o.difficulty;
-    if (o.map === 'snow' || o.map === 'yizhuang') s.map = o.map;
-    if (o.best && typeof o.best === 'object') {
-      for (const d of ['easy', 'normal', 'hard'] as const) {
-        const b = o.best[d];
-        if (b && typeof b.ticks === 'number' && typeof b.kills === 'number') s.best[d] = { ticks: b.ticks, kills: b.kills, won: !!b.won };
-      }
-    }
-    return s;
+    return (raw && reviveSave(JSON.parse(raw))) || fresh();
   } catch {
     return fresh();
   }
@@ -64,7 +173,14 @@ export function writeSave(s: Save): void {
   }
 }
 
-/** 记一局；返回这局是不是这个难度的新纪录（先比赢没赢，再比撑的时间，再比击杀）；counts = false（认输）只记局数 */
+// ───────────────────────── 成绩 ─────────────────────────
+
+/** a 比 b 好：先比赢没赢，再比撑的时间，再比击杀 */
+function better(a: Best, b: Best | undefined): boolean {
+  return !b || (a.won ? !b.won || a.kills > b.kills : !b.won && (a.ticks > b.ticks || (a.ticks === b.ticks && a.kills > b.kills)));
+}
+
+/** 记一局；返回这局是不是这个难度的新纪录；counts = false（认输）只记局数 */
 export function recordRun(s: Save, d: Difficulty, run: Best, counts = true): boolean {
   s.runs++;
   if (run.won) s.wins++;
@@ -72,16 +188,198 @@ export function recordRun(s: Save, d: Difficulty, run: Best, counts = true): boo
     writeSave(s);
     return false;
   }
-  const b = s.best[d];
-  const better = !b || (run.won ? !b.won || run.kills > b.kills : !b.won && (run.ticks > b.ticks || (run.ticks === b.ticks && run.kills > b.kills)));
-  if (better) s.best[d] = run;
+  const b = better(run, s.best[d]);
+  if (b) s.best[d] = run;
   writeSave(s);
-  return better;
+  return b;
 }
 
-/** 义庄开了没有：普通档或高手档撑到过天亮（DESIGN.md 3.6；危险等级第 5 步做了以后改成"雪原危险 1"） */
+export interface RunEnd {
+  /** 这一局的 id（铜钱流水用；同一局在两台设备上不会重复） */
+  id: string;
+  danger: Danger;
+  won: boolean;
+  quit: boolean;
+  ticks: number;
+  kills: number;
+  /** 局里捡到的铜钱 */
+  coins: number;
+  curses: number;
+}
+
+export interface RunReward {
+  /** 这一局记进流水的铜钱（咒印加成、第一局保底以后） */
+  coins: number;
+  record: boolean;
+  /** 刚好这一局解锁了下一档危险 */
+  unlockedDanger: Danger | null;
+  /** 该问"要不要降低伤害"了 */
+  askAssist: boolean;
+}
+
+/**
+ * 一局结束（危险档那一套；菜单三档的 recordRun 另记）：铜钱进流水、危险档解锁、连死计数、解锁角色用的单局最好。
+ * 第一局（无论胜负）至少给 FIRST_RUN_COINS，正好够买一级最便宜的加成（3.8）。
+ */
+export function finishRun(s: Save, r: RunEnd): RunReward {
+  const first = s.ledger.every(([id]) => !id.startsWith('run:')) && s.coinBase === 0;
+  let coins = Math.floor(r.coins * (1 + CURSE_COIN_BONUS * r.curses));
+  if (first) coins = Math.max(coins, FIRST_RUN_COINS);
+  if (coins > 0) earn(s, `run:${r.id}`, coins);
+  const run: Best = { ticks: r.ticks, kills: r.kills, won: r.won };
+  const record = !r.quit && better(run, s.bestD[r.danger]);
+  if (record) s.bestD[r.danger] = run;
+  let unlockedDanger: Danger | null = null;
+  if (r.won && r.danger > s.cleared) {
+    s.cleared = r.danger;
+    if (r.danger < 5) unlockedDanger = (r.danger + 1) as Danger;
+  }
+  s.maxSeconds = Math.max(s.maxSeconds, Math.floor(r.ticks / 30));
+  s.maxKills = Math.max(s.maxKills, r.kills);
+  s.streak = !r.won && !r.quit ? s.streak + 1 : 0;
+  const askAssist = !s.assist && !s.assistAsked && s.streak >= ASSIST.deaths;
+  if (askAssist) s.assistAsked = true;
+  writeSave(s);
+  return { coins, record, unlockedDanger, askAssist };
+}
+
+// ───────────────────────── 解锁 ─────────────────────────
+
+/** 能选的最高危险档：撑到天亮过的下一档；第一局锁危险 0（13.2） */
+export function dangerOpen(s: Save): Danger {
+  return (s.runs === 0 ? 0 : Math.min(5, s.cleared + 1)) as Danger;
+}
+
+/** 义庄：雪原危险 1 撑到天亮（DESIGN.md 3.6）；老存档里普通、高手档赢过的也算 */
 export function yizhuangOpen(s: Save): boolean {
-  return !!(s.best.normal?.won || s.best.hard?.won);
+  return s.cleared >= 1 || !!(s.best.normal?.won || s.best.hard?.won);
+}
+
+/** 角色解锁（3.7） */
+export function charOpen(s: Save, c: CharacterId): boolean {
+  switch (c) {
+    case 'xiaodao':
+      return true;
+    case 'fushi':
+      return s.maxSeconds >= 600;
+    case 'jianxia':
+      return s.maxKills >= 1500;
+    case 'pang':
+      return s.bought.includes('pang');
+    case 'gengfu':
+      return s.cleared >= 2;
+    case 'caiyao':
+      return s.vault.length >= 20;
+  }
+}
+
+/** 花铜钱买的角色和价格 */
+export const CHAR_PRICE: Partial<Record<CharacterId, number>> = { pang: 600 };
+
+// ───────────────────────── 铜钱 ─────────────────────────
+
+export function coins(s: Save): number {
+  let n = s.coinBase;
+  for (const [, v] of s.ledger) n += v;
+  return n;
+}
+
+function earn(s: Save, id: string, n: number): void {
+  if (s.ledger.some(([x]) => x === id)) return;
+  s.ledger.push([id, n]);
+  if (s.ledger.length > LEDGER_MAX) {
+    const old = s.ledger.splice(0, s.ledger.length - LEDGER_MAX);
+    for (const [, v] of old) s.coinBase += v;
+  }
+}
+
+/** 流水 id 要在两台设备上都不撞：带上本机的随机后缀（画面层传进来，核心不碰随机） */
+function spend(s: Save, id: string, n: number): boolean {
+  if (n > coins(s)) return false;
+  earn(s, id, -n);
+  return true;
+}
+
+/** 下一级的价格；满级为 null */
+export function perkPrice(s: Save, id: PerkId): number | null {
+  return PERKS[id].cost[s.perks[id] ?? 0] ?? null;
+}
+
+/** 买一级加成；nonce 让流水 id 唯一（画面层给一个随机串） */
+export function buyPerk(s: Save, id: PerkId, nonce: string): boolean {
+  const price = perkPrice(s, id);
+  if (price === null || !spend(s, `perk:${id}:${(s.perks[id] ?? 0) + 1}:${nonce}`, price)) return false;
+  s.perks[id] = (s.perks[id] ?? 0) + 1;
+  writeSave(s);
+  return true;
+}
+
+/** 全退：加成清零，花掉的铜钱全数还回来（3.8"随时全退重配"） */
+export function refundPerks(s: Save, nonce: string): number {
+  let back = 0;
+  for (const id of PERK_IDS) for (let lv = 0; lv < (s.perks[id] ?? 0); lv++) back += PERKS[id].cost[lv]!;
+  if (back <= 0) return 0;
+  earn(s, `refund:${nonce}`, back);
+  s.perks = {};
+  writeSave(s);
+  return back;
+}
+
+export function buyChar(s: Save, c: CharacterId, nonce: string): boolean {
+  const price = CHAR_PRICE[c];
+  if (price === undefined || s.bought.includes(c) || !spend(s, `char:${c}:${nonce}`, price)) return false;
+  s.bought.push(c);
+  writeSave(s);
+  return true;
+}
+
+// ───────────────────────── 云存档合并 ─────────────────────────
+
+/**
+ * 两份存档合成一份（DESIGN.md 5.5）：集合取并集、计数和最好成绩取较好的、铜钱流水按 id 取并集。
+ * 加成等级取较高的：两台设备各买了一级同一项时等级只算一次而钱扣了两次，偏向玩家吃亏一点而不是白送；
+ * 全退一次（refund 流水）就能拿回来。本机才有意义的（上次选了什么、引导、连死、降低伤害）以本机为准。
+ */
+export function mergeSave(local: Save, cloud: Save): Save {
+  const m: Save = { ...local };
+  m.runs = Math.max(local.runs, cloud.runs);
+  m.wins = Math.max(local.wins, cloud.wins);
+  m.tips = [...new Set([...local.tips, ...cloud.tips])];
+  for (const d of ['easy', 'normal', 'hard'] as const) {
+    const c = cloud.best[d];
+    m.best = { ...m.best };
+    if (c && better(c, local.best[d])) m.best[d] = c;
+  }
+  m.bestD = { ...local.bestD };
+  for (const d of DANGER_IDS) {
+    const c = cloud.bestD[d];
+    if (c && better(c, local.bestD[d])) m.bestD[d] = c;
+  }
+  m.cleared = Math.max(local.cleared, cloud.cleared);
+  m.perks = { ...local.perks };
+  for (const id of PERK_IDS) {
+    const lv = Math.max(local.perks[id] ?? 0, cloud.perks[id] ?? 0);
+    if (lv) m.perks[id] = lv;
+  }
+  m.bought = CHARACTER_IDS.filter((c) => local.bought.includes(c) || cloud.bought.includes(c));
+  const seen = new Set(local.ledger.map(([id]) => id));
+  m.ledger = [...local.ledger, ...cloud.ledger.filter(([id]) => !seen.has(id))];
+  m.coinBase = Math.max(local.coinBase, cloud.coinBase);
+  m.maxSeconds = Math.max(local.maxSeconds, cloud.maxSeconds);
+  m.maxKills = Math.max(local.maxKills, cloud.maxKills);
+  m.vault = [...new Set([...local.vault, ...cloud.vault])];
+  m.assistAsked = local.assistAsked || cloud.assistAsked;
+  if (m.ledger.length > LEDGER_MAX) {
+    const old = m.ledger.splice(0, m.ledger.length - LEDGER_MAX);
+    for (const [, v] of old) m.coinBase += v;
+  }
+  return m;
+}
+
+/** 上云的内容：去掉只在本机有意义的字段 */
+export function savePayload(s: Save): Omit<Save, 'difficulty' | 'map' | 'danger' | 'character' | 'curses' | 'streak' | 'assist' | 'tipsOff'> {
+  const { difficulty: _d, map: _m, danger: _g, character: _c, curses: _u, streak: _s, assist: _a, tipsOff: _t, ...rest } = s;
+  return rest;
 }
 
 /** 设置里除了声音的几项（声音开关在 audio/ 里） */
