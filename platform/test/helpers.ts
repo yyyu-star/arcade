@@ -8,9 +8,10 @@ import { lastStats } from '../worker/api/router';
 import { resetSettingsCacheForTests } from '../worker/api/settings';
 import { resetLeaderboardCacheForTests } from '../worker/api/leaderboard';
 import { resetWalletRulesCacheForTests } from '../worker/api/wallet-store';
+import { resetInviteRulesCacheForTests } from '../worker/api/invite-codes';
 
 export const ORIGIN = 'https://game.test';
-const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats', 'invites', 'feed', 'feed_reactions', 'challenges', 'challenge_results', 'mates'];
+const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats', 'invites', 'feed', 'feed_reactions', 'challenges', 'challenge_results', 'mates', 'invite_codes'];
 
 /** 测试用的上限：PBKDF2 迭代降到 1,000 省时间；计量只在显式调用或本 isolate 第一次时上报，结果可预期。 */
 export const TEST_LIMITS: LimitsOverride = {
@@ -47,6 +48,7 @@ export async function resetAll(limits: LimitsOverride = {}): Promise<void> {
   resetSettingsCacheForTests();
   resetLeaderboardCacheForTests();
   resetWalletRulesCacheForTests();
+  resetInviteRulesCacheForTests();
   resetMeterForTests();
   resetRateLimitCacheForTests();
   setLimitsForTests({ ...TEST_LIMITS, ...limits });

@@ -5,6 +5,7 @@
  */
 import { timeIdPrefix } from './crypto';
 import { feedCleanupCutoff } from './feed';
+import { cleanupStatement as inviteCleanupStatement } from './invite-codes';
 import type { Env } from '../env';
 import { limitsOf } from './config';
 import { DAY } from './context';
@@ -115,6 +116,8 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
     await step('invites', () =>
       db.run(db.stmt('DELETE FROM invites WHERE id IN (SELECT id FROM invites WHERE created_at < ?1 LIMIT ?2)', now - 2 * DAY, budget())),
     );
+    // 邀请码：没用的过期或撤回满 30 天就删，已用的留着（额度要算）
+    await step('invite_codes', () => db.run(inviteCleanupStatement(db, now, budget())));
     await step('meter_hourly', () =>
       db.run(
         db.stmt('DELETE FROM meter_hourly WHERE hour IN (SELECT hour FROM meter_hourly WHERE hour < ?1 LIMIT ?2)', hourKey(now - 7 * DAY), budget()),

@@ -171,6 +171,8 @@ async function mockSession(
   // 好友动态（0.17.0）：大厅小条和好友页都读；赞和扔道具回 204
   await page.route('**/api/feed', (r) => r.fulfill(json({ items: feed })));
   await page.route('**/api/feed/*/react', (r) => r.fulfill({ status: 204 }));
+  // 邀请码（0.20.0）："我的"页会问一次
+  await page.route('**/api/invite-codes', (r) => r.fulfill(json({ quota: 3, taken: 0, left: 3, todayLeft: 5, ttlDays: 7, codes: [] })));
   await fakeLoginHint(page);
 }
 
@@ -288,10 +290,14 @@ async function anonymous(browser: Browser): Promise<void> {
   console.log('注册关着（wrangler.jsonc 默认）：登录页只有登录，没有"注册"两个字；直接调注册接口 403');
   await page.goto(`${BASE}/`);
   await Promise.all([page.waitForResponse(`${BASE}/api/me`), play.click()]);
-  await page.getByText('现在只对受邀的朋友开放，账号找邀请你的人要').waitFor();
+  // 从游戏过来（0.20.0）：顶上一句"朋友邀请你来"，下面有"用邀请码注册"
+  await page.getByText('朋友邀请你来街机厅。现在是邀请制，找 TA 要个邀请就能玩。').waitFor();
   await page.getByText('登录后回到「开盘」').waitFor();
+  await page.getByRole('link', { name: '用邀请码注册' }).waitFor();
   check(new URL(page.url()).search === '?from=kaipan', `点"登录后才能玩"应该带上 from：${page.url()}`);
-  check((await page.getByText('注册').count()) === 0, '注册关着时登录页不该出现"注册"');
+  // 0.20.0 起有一个"用邀请码注册"的链接；没有的是"注册"页签和注册表单
+  check((await page.getByRole('link', { name: '注册', exact: true }).count()) === 0, '注册关着时登录页不该有"注册"页签');
+  check((await page.getByRole('heading', { name: '注册' }).count()) === 0, '注册关着时登录页不该有注册表单');
   await shot(page, 'login-invite');
   await Promise.all([page.waitForResponse(`${BASE}/api/me`), page.goto(`${BASE}/login?tab=register`)]);
   await page.getByText('现在只对受邀的朋友开放').waitFor();
@@ -313,6 +319,15 @@ async function anonymous(browser: Browser): Promise<void> {
   check((await page.getByRole('link', { name: '去登录' }).getAttribute('href')) === '/login?from=f%2FABCD2345', '好友链接的"去登录"应该带上 from');
   await Promise.all([page.waitForResponse(`${BASE}/api/me`), page.getByRole('link', { name: '去登录' }).click()]);
   await page.getByText('登录后回到刚才那一页').waitFor();
+  // 0.20.0：从好友链接来、注册关着：顶上说是朋友叫你来的
+  await page.getByText('朋友邀请你来街机厅。现在是邀请制，找 TA 要个邀请就能玩。').waitFor();
+
+  console.log('邀请链接 /i/<码>：注册关着也给注册表单，码已经填好（0.20.0）');
+  await Promise.all([page.waitForResponse(`${BASE}/api/me`), page.goto(`${BASE}/i/ABCD2345EFGH`)]);
+  await page.getByRole('heading', { name: '注册' }).waitFor();
+  check((await page.locator('input[name="inviteCode"]').inputValue()) === 'ABCD2345EFGH', '邀请链接应该预填好码');
+  check(new URL(page.url()).pathname === '/login', `邀请链接应该换成注册页：${page.url()}`);
+  await shot(page, 'invite-link-register');
 
   console.log('没登录进 /admin：回首页');
   await page.goto(`${BASE}/admin`);
@@ -725,6 +740,17 @@ async function friendFlow(browser: Browser, ctx: BrowserContext, page: Page, pw1
   await page.getByTestId('saves-guandan').getByText('还没有存档').waitFor();
   await shot(page, 'me');
 
+  console.log('邀请朋友（0.20.0，真接口）：生成一个码、列表里有码和"分享/复制链接"，撤回后额度回来');
+  await page.getByTestId('invite-left').getByText('还能邀请 3 个').waitFor();
+  await page.getByTestId('invite-create').click();
+  const code = (await page.getByTestId('invite-code').locator('.code-mid').textContent()) ?? '';
+  check(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code), `邀请码的样子不对：${code}`);
+  await page.getByTestId('invite-left').getByText('还能邀请 2 个').waitFor();
+  await shot(page, 'me-invite');
+  await page.getByTestId('invite-code').getByRole('button', { name: '撤回' }).click();
+  await page.getByText('已撤回').waitFor();
+  await page.getByTestId('invite-left').getByText('还能邀请 3 个').waitFor();
+
   console.log('改昵称；写接口的 429、503、断网提示（浏览器里模拟）');
   let d = await openFold(page, '改昵称');
   await d.getByLabel('新昵称').fill('冒烟老王');
@@ -1055,7 +1081,7 @@ async function mobile(browser: Browser): Promise<void> {
   await page.getByText(/^排行榜：每个榜只留你最好的一次成绩/).waitFor();
   await page.getByText(/^我们用 Cloudflare 的网站统计，看有多少次访问/).waitFor();
   // 注册开着、关着都成立的说法；不再说"只对受邀的朋友开放"
-  await page.getByText('有账号、登录后才能玩。注册不一定一直开着，没开的时候，账号由管理员给朋友建。').waitFor();
+  await page.getByText('有账号、登录后才能玩。注册不一定一直开着，没开的时候，凭朋友给的邀请码注册，或者由管理员给朋友建账号。').waitFor();
   check((await page.getByText(/受邀/).count()) === 0, '隐私说明不该再说"受邀"');
   // 积分和筹码那段（维护者 2026-10-14 定）：免费没充值、没有现金价值、不涉及线下财物、可能清零、包括德州扑克
   await page.getByRole('heading', { name: '积分和筹码' }).waitFor();
@@ -1827,6 +1853,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.route('**/api/friends/overtakes', (r) => r.fulfill(json({ overtakes: [] })));
     await page.route('**/api/feed', (r) => r.fulfill(json({ items: [] })));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+    await page.route('**/api/invite-codes', (r) => r.fulfill(json({ quota: 3, taken: 0, left: 3, todayLeft: 5, ttlDays: 7, codes: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();
     await page.getByRole('heading', { name: '我的账号' }).waitFor();

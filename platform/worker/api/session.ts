@@ -109,11 +109,13 @@ export async function newSession(
   userId: string,
   limits: Limits,
   now: number,
+  /** 带邀请码注册（0.20.0）：和新号同一个 batch，users 里有这个 id 才插（码被别人先占了就不插） */
+  ifUserExists = false,
 ): Promise<{ stmt: D1PreparedStatement; cookies: string[] }> {
   const t = await newSessionToken(env);
   return {
     stmt: db.stmt(
-      'INSERT INTO sessions (token_hash, user_id, created_at, renewed_at, expires_at) VALUES (?1, ?2, ?3, ?3, ?4)',
+      `INSERT INTO sessions (token_hash, user_id, created_at, renewed_at, expires_at) SELECT ?1, ?2, ?3, ?3, ?4${ifUserExists ? ' WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2)' : ''}`,
       t.hash, userId, now, now + limits.sessionTtlMs,
     ),
     cookies: sessionCookies(t.cookie, limits.sessionTtlMs),
@@ -150,6 +152,10 @@ export function deleteUserStatements(db: Db, userId: string, username: string): 
     // 搭子战绩（迁移 0010）：本人在 lo 一边的走主键前缀，在 hi 一边的走 mates_hi 索引
     db.stmt('DELETE FROM mates WHERE lo = ?1', userId),
     db.stmt('DELETE FROM mates WHERE hi = ?1', userId),
+    // 邀请码（迁移 0011）：本人生成的全删（走 owner 索引）；本人用过的那个只清 used_by，used_at 留着，邀请人的额度不还（主线定）。
+    // used_by 没有索引，要扫全表——表只有"每人几个码"那么大、注销很少，接受
+    db.stmt('DELETE FROM invite_codes WHERE owner_id = ?1', userId),
+    db.stmt('UPDATE invite_codes SET used_by = NULL WHERE used_by = ?1', userId),
     db.stmt(`DELETE FROM rate_counters WHERE key IN (${counterKeys.map((_, i) => `?${i + 1}`).join(', ')})`, ...counterKeys),
     db.stmt('DELETE FROM users WHERE id = ?1', userId),
   ];

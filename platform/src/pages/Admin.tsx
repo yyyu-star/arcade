@@ -3,6 +3,7 @@
  * - 概览：顶上一排数字卡片、近 7 天趋势图、各游戏今天的情况、"管理筹码"入口；
  * - 用户：建号，左边账号列表、右边选中那个人的钱包、战绩、流水和操作（手机上点进去看）；
  * - 钱包统计：全站筹码每天一行；
+ * - 邀请码（0.20.0）：四个数、单独改额度、全站的码和撤回；
  * - 设置：大厅公告、开放注册、钱包规则。
  * 只有管理员看得到入口；接口另有服务端检查（worker/api/admin.ts），这里挡人只是不让普通用户看到空页面。
  * 管理员账号本身在这里动不了（接口也不许），要用管理命令行工具。
@@ -12,6 +13,7 @@ import { Link, navigate, useLeaveGuard, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Panel } from '../ui.tsx';
 import type { Credentials } from './admin/common.ts';
+import { InvitesSection } from './admin/Invites.tsx';
 import { Overview } from './admin/Overview.tsx';
 import { NoticePanel, RegistrationSwitch, WalletRulesPanel } from './admin/Settings.tsx';
 import { UserList } from './admin/Users.tsx';
@@ -22,6 +24,7 @@ const SECTIONS = [
   ['overview', '概览'],
   ['users', '用户'],
   ['stats', '钱包统计'],
+  ['invites', '邀请码'],
   ['settings', '设置'],
 ] as const;
 type Section = (typeof SECTIONS)[number][0];
@@ -70,6 +73,7 @@ export function AdminPage() {
           <UserList version={version} selfId={user!.id} onCard={setCard} onChanged={reload} />
         )}
         {section === 'stats' && <WalletStats />}
+        {section === 'invites' && <InvitesSection />}
         {section === 'settings' && (
           <div className="console__grid console__grid--2">
             <div className="console__col">
