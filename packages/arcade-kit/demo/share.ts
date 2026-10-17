@@ -1,5 +1,5 @@
 /** 分享卡的演示：图标是现画的 canvas，图集是一张 2×2 的 canvas 切右下那块，坏图是一个加载不了的 img。冒烟由脚本读 window.share */
-import { drawShareCard, shareCard, type ShareCard } from '../src/share.ts';
+import { drawShareCard, prepareShare, shareCard, type ShareCard } from '../src/share.ts';
 
 function icon(size: number, color: string, label: string): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -69,4 +69,11 @@ const log: string[] = [];
 document.getElementById('share')!.addEventListener('click', () => {
   void shareCard(cards[0]!, { url: `${location.origin}/games/demo/`, log: (l) => log.push(l) }).then((r) => log.push(`结果 ${r}`));
 });
-Object.assign(window, { share: { out, log, cards } });
+// 结算页一出现就先画好（0.12.3）：点的时候同步调系统分享，iOS 的用户激活还在
+const prepared = prepareShare(cards[0]!, { url: `${location.origin}/games/demo/`, log: (l) => log.push(l) });
+document.getElementById('prepared')!.addEventListener('click', () => {
+  (window as unknown as { inClick: boolean }).inClick = true;
+  void prepared.share().then((r) => log.push(`先画好 结果 ${r}`));
+  (window as unknown as { inClick: boolean }).inClick = false;
+});
+Object.assign(window, { share: { out, log, cards, prepared } });

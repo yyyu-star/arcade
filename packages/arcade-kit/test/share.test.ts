@@ -3,7 +3,7 @@
  * import share.ts 不碰 DOM 这一条也靠这个文件守着（workerd 里没有 document，碰了就报错）。
  */
 import { describe, expect, it } from 'vitest';
-import { CARD_H, CARD_W, MAX_STATS, accentOf, artRect, cardDate, clip, normalizeCard, shade, wrapLines } from '../src/share.ts';
+import { CARD_H, CARD_W, MAX_STATS, accentOf, artRect, cardDate, clip, normalizeCard, prepareShare, shade, wrapLines } from '../src/share.ts';
 
 describe('分享卡的字', () => {
   it('尺寸是 1080×1350', () => {
@@ -106,5 +106,36 @@ describe('折行：正好放得下', () => {
 
   it('最后剩的是空白不算截断', () => {
     expect(wrapLines('一二三四五六 ', 30, m, 2)).toEqual(['一二三', '四五六']);
+  });
+});
+
+describe('折行：收尾的引号、标点不单独成行（0.12.3）', () => {
+  const m = (s: string): number => [...s].length * 10;
+
+  it('名场面结尾的引号跟着最后一个字走', () => {
+    // 一行 6 个字：以前是 ['“一二三四五', '”']
+    expect(wrapLines('“一二三四五”', 60, m, 2)).toEqual(['“一二三四', '五”']);
+  });
+
+  it('中间的逗号、句号也不放行首', () => {
+    expect(wrapLines('一二三，四五六。', 30, m, 3)).toEqual(['一二', '三，四', '五六。']);
+  });
+
+  it('带下来的那一行正好是最后一行、后面还有字：照样截断补省略号', () => {
+    const out = wrapLines('“一二三四五”六七八', 60, m, 1);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.endsWith('…')).toBe(true);
+  });
+
+  it('行里只有一个字放不下标点：不硬拆，标点照常换行', () => {
+    expect(wrapLines('一”', 10, m, 2)).toEqual(['一', '”']);
+  });
+});
+
+describe('先画好的卡（prepareShare，0.12.3）', () => {
+  it('没有 DOM 画不了：ready 照样 resolve（不抛），点分享时才报错', async () => {
+    const p = prepareShare({ game: 'g', title: 't', big: { value: '1', label: 'x' }, accent: '#123456' }, { url: 'https://game.example.com/' });
+    await expect(p.ready).resolves.toBeUndefined();
+    await expect(p.share()).rejects.toBeTruthy();
   });
 });

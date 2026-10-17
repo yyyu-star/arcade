@@ -373,6 +373,8 @@ const r = await shareCard(
   是 img 时先 `await img.decode()`，没加载完、坏图、跨域画不上都**不画 art、照常出卡**。
 - 系统分享要 `navigator.canShare({ files })` 为真（手机浏览器）；不支持、或出错（用户取消除外）就出预览层：图 + "保存图片"（下载 `share.png`）+ "复制链接" + "关闭"。
   预览层 z-index 默认 2000，按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
+- **结算页一出现就先画好**（0.12.3，iOS 必须）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。结算页出来时 `const p = prepareShare(card, opts)`，
+  "分享"按钮的点击里直接 `void p.share()`（前面别 await）：画好了就同步调 `navigator.share`，没画好等画完再试、调不起来出预览。`shareCard` 是"点了才画"的简写。
 - 只要图不分享：`drawShareCard(card, canvas?)` 返回画好的 canvas，`shareCardBlob(card)` 返回 PNG。
 - **图上只有游戏给的数据**：别人没摊的牌、手牌这类隐藏信息游戏自己别放进来。
 

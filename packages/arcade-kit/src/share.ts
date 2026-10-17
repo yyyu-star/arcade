@@ -80,6 +80,9 @@ export function normalizeCard(card: ShareCard): Required<Omit<ShareCard, 'art' |
   };
 }
 
+/** 不放在行首的收尾标点：右引号、右括号、逗号句号这些 */
+const CLOSING = /^[”’」』）》〉】〕\]),.!?;:，。！？、；：…]+$/u;
+
 /**
  * 按宽度折行（中文逐字、英文按词），最多 maxLines 行，放不下的最后一行补省略号。measure 由调用方给（Canvas 的 measureText），测试给假的
  */
@@ -100,6 +103,20 @@ export function wrapLines(text: string, maxW: number, measure: (s: string) => nu
     if (measure(next) <= maxW || !cur) {
       cur = next;
       continue;
+    }
+    // 收尾的引号、标点不单独起一行：把上一行最后一个字一起带下来（0.12.3）
+    if (!space && CLOSING.test(t)) {
+      const cs = [...cur.trimEnd()];
+      if (cs.length >= 2) {
+        const last = cs.pop()!;
+        lines.push(cs.join('').trimEnd());
+        cur = last + t;
+        if (lines.length === maxLines) {
+          cut = true;
+          break;
+        }
+        continue;
+      }
     }
     lines.push(cur.trimEnd());
     cur = space ? '' : t;
@@ -342,31 +359,76 @@ export type ShareResult = 'shared' | 'preview' | 'cancelled';
 
 const PREVIEW_ID = 'arcade-share-preview';
 
+/** 先画好的卡（0.12.3）：ready 画完（失败也是 resolve，到时候 share 退回预览或报错）；share 在点击里调 */
+export interface PreparedShare {
+  ready: Promise<void>;
+  /**
+   * 在点击的处理函数里直接调（前面别 await）：卡已经画好就同步调 navigator.share，iOS 的"用户激活"还在；
+   * 没画好就等画完再试，调不起来（激活过期、不支持）退回预览
+   */
+  share(): Promise<ShareResult>;
+}
+
 /**
- * 点"分享"：画卡，能带文件调系统分享就调，不能就出预览（保存图片、复制链接）。
- * 系统分享出错（不是用户取消）也退回预览，总能拿到图。
+ * 结算页一出现就先画卡（0.12.3）：iOS 只允许在点击的那一下里调 navigator.share，点了才画（解码图标、toBlob 要几百毫秒）激活就过期了，
+ * 只能退到预览。游戏在结算页出来时调它，点"分享"时调返回的 share()
  */
-export async function shareCard(card: ShareCard, opts: ShareOptions): Promise<ShareResult> {
-  const blob = await shareCardBlob(card);
+export function prepareShare(card: ShareCard, opts: ShareOptions): PreparedShare {
   const name = opts.fileName ?? 'share.png';
   const text = opts.text ?? `${card.game} · ${card.big.label} ${card.big.value}`;
-  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-  if (typeof File === 'function' && typeof nav.share === 'function') {
-    const file = new File([blob], name, { type: 'image/png' });
-    const data: ShareData = { files: [file], title: card.game, text, url: opts.url };
-    if (nav.canShare?.(data)) {
-      try {
-        await nav.share(data);
-        opts.log?.('分享 系统');
-        return 'shared';
-      } catch (e) {
-        if ((e as { name?: string }).name === 'AbortError') return 'cancelled';
-        // 别的错（权限、不支持的类型）：退回预览
+  let blob: Blob | null = null;
+  let failed: unknown = null;
+  const ready = shareCardBlob(card).then(
+    (b) => {
+      blob = b;
+    },
+    (e: unknown) => {
+      failed = e ?? new Error('draw failed');
+    },
+  );
+  const attempt = (b: Blob): Promise<ShareResult> => {
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (typeof File === 'function' && typeof nav.share === 'function') {
+      const data: ShareData = { files: [new File([b], name, { type: 'image/png' })], title: card.game, text, url: opts.url };
+      if (nav.canShare?.(data)) {
+        // 同步调（这一行之前没有 await）：点击的激活还在
+        return nav.share(data).then(
+          () => {
+            opts.log?.('分享 系统');
+            return 'shared' as const;
+          },
+          (e: { name?: string }) => {
+            if (e?.name === 'AbortError') return 'cancelled' as const;
+            // 别的错（激活过期、权限、不支持的类型）：退回预览
+            showPreview(b, name, opts);
+            return 'preview' as const;
+          },
+        );
       }
     }
-  }
-  showPreview(blob, name, opts);
-  return 'preview';
+    showPreview(b, name, opts);
+    return Promise.resolve('preview');
+  };
+  return {
+    ready,
+    share(): Promise<ShareResult> {
+      if (blob) return attempt(blob);
+      return ready.then(() => {
+        if (!blob) throw failed;
+        return attempt(blob);
+      });
+    },
+  };
+}
+
+/**
+ * 点"分享"：画卡，能带文件调系统分享就调，不能就出预览（保存图片、复制链接）。
+ * 系统分享出错（不是用户取消）也退回预览，总能拿到图。iOS 上点了才画会错过用户激活，结算页能先画的用 prepareShare
+ */
+export async function shareCard(card: ShareCard, opts: ShareOptions): Promise<ShareResult> {
+  const p = prepareShare(card, opts);
+  await p.ready;
+  return p.share();
 }
 
 /** 不支持系统分享时：预览图 + "保存图片""复制链接"；点空白处或"关闭"收起 */
