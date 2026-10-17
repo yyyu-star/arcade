@@ -351,6 +351,53 @@ button {
   opacity: 0.8;
 }
 
+/* 横屏选桌页分两栏（0.16.1）：左边店名、开打、进房，右边选档和规则设置。横屏舞台只有 520 高，排成一列要在框里滚动；
+ * DOM 不动（竖屏照旧一列），按格子放。舞台随屏幕变宽（viewport.ts），两栏跟着撑开 */
+[data-orient='land'] .screen.lobby {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(560px, 1.7fr);
+  grid-template-areas:
+    'head pick'
+    'resume pick'
+    'go pick'
+    'nick pick'
+    'join note'
+    'link opts';
+  grid-template-rows: auto auto auto auto 1fr auto;
+  align-content: center;
+  justify-items: center;
+  column-gap: var(--sp-6);
+  row-gap: var(--sp-3);
+  /* 顶上让出竹帘（30 高） */
+  padding: 40px var(--sp-6) var(--sp-4);
+}
+[data-orient='land'] .screen.lobby > .lobby-head { grid-area: head; }
+[data-orient='land'] .screen.lobby > .resume { grid-area: resume; }
+[data-orient='land'] .screen.lobby > .go-row { grid-area: go; flex-direction: column; gap: var(--sp-3); }
+[data-orient='land'] .screen.lobby > .nick { grid-area: nick; }
+[data-orient='land'] .screen.lobby > .join { grid-area: join; align-self: start; }
+[data-orient='land'] .screen.lobby > .link { grid-area: link; }
+[data-orient='land'] .screen.lobby > .stakes-box { grid-area: pick; align-self: center; }
+[data-orient='land'] .screen.lobby > .wallet-note { grid-area: note; align-self: start; }
+[data-orient='land'] .screen.lobby > .rules-opts { grid-area: opts; }
+/* 左栏的店名在板壁上，放大一点；右栏的卡片宽一点，一排四张正好 */
+[data-orient='land'] .screen.lobby .lobby-head h1 { font-size: 64px; }
+[data-orient='land'] .stake { min-width: 128px; }
+/* 规则设置展开后两项一行，不把右栏撑出舞台 */
+[data-orient='land'] .rules-opts[open] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--sp-4);
+}
+[data-orient='land'] .rules-opts summary { grid-column: 1 / -1; }
+/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边是同一块呢子 */
+[data-orient='land'] .table {
+  inset: 0 auto 0 calc(50% - 500px);
+  width: 1000px;
+  /* 木框外面压暗，看得出桌子到哪为止（外阴影只画在框外，盖不到框和桌面） */
+  box-shadow: 0 0 0 400px #0000004d;
+}
+
 /* ---------- 好友房 ---------- */
 .screen.room {
   display: flex;

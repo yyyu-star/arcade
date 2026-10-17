@@ -1,6 +1,7 @@
 /**
  * 截图看画面（本地自查用）：起一个 vite 开发服务器（系统分配端口），无头浏览器打开单机，按几个时刻截图到 shots/。
- * 用法：node scripts/capture.ts [land|port|se-land|se-port] [步数]。控制台的报错打印出来。
+ * 用法：node scripts/capture.ts [land|desk|port|se-land|se-port] [步数]。控制台的报错打印出来。
+ * desk：1920 宽的电脑浏览器去掉标签栏、地址栏后看得见的区域（约 1920×911）。
  * se-*：iPhone SE（375×667）Safari 工具栏都展开时看得见的区域（横屏约 667×330、竖屏约 375×553），按手机模拟（触屏、2 倍）。
  */
 import { mkdirSync } from 'node:fs';
@@ -9,6 +10,7 @@ import { createServer } from 'vite';
 
 const SIZES = {
   land: { width: 1280, height: 720 },
+  desk: { width: 1920, height: 911 },
   port: { width: 390, height: 844 },
   'se-land': { width: 667, height: 330 },
   'se-port': { width: 375, height: 553 },
