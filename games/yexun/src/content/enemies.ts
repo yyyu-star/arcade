@@ -53,7 +53,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'scarecrow', code: 12, hp: 55, speed: 1.1, dmg: 10, r: 18, xp: 4, steady: 0.8, vs: { 剑: 0.6, 火: 1.25 } },
   { kind: 'weasel', code: 13, hp: 14, speed: 2.4, dmg: 3, r: 13, xp: 2, steady: 0.1 },
   { kind: 'snow', code: 14, hp: 16, speed: 1.3, dmg: 5, r: 14, xp: 2, steady: 0.2, vs: { 剑: 0.5, 火: 1.5, 镇: 1.3 } },
-  { kind: 'whitefox', code: 15, hp: 400, speed: 1.7, dmg: 11, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.15, 符: 1.4 } },
+  { kind: 'whitefox', code: 15, hp: 400, speed: 1.7, dmg: 9, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.15, 符: 1.4 } },
   { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.5 } },
   { kind: 'lord', code: 17, hp: 6000, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true, vs: { 火: 1.5 } },
   // 夜探的守卫（数值在 content/explore.ts，移动由 src/explore/guards.ts 算）
@@ -73,7 +73,7 @@ export const LANTERN = { range: 270, every: 120, speed: 3.2, dmg: 5, life: 160, 
 /** 狐妖：近了停一下再冲 */
 export const FOX = { trigger: 250, windup: 14, dash: 18, dashSpeed: 6.5, rest: 110 };
 /** 狐妖、白狐的冲刺；白狐一次连冲 chain 下，两下之间只蓄力 rewind 拍 */
-export const WHITEFOX = { chain: 3, rewind: 14 };
+export const WHITEFOX = { chain: 2, rewind: 18 };
 /** 雪魅：停在这个距离丢冰锥，打中主角走路变慢 slowTicks 拍 */
 export const SNOW = { range: 300, every: 180, speed: 3.6, dmg: 4, life: 150, r: 9, slowTicks: 45 };
 /** 主角被冰锥打中、被水鬼抓住时的走路速度倍数 */

@@ -122,7 +122,7 @@ export const DANGERS: Record<Danger, DangerDef> = {
   1: { id: 1, name: '危险 1', stars: 1, hpMul: 1.0, dmgMul: 1.0, countMul: 1.0, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '怪种按时出' },
   2: { id: 2, name: '危险 2', stars: 2, hpMul: 1.13, dmgMul: 1.13, countMul: 1.06, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '会躲会选就能撑到天亮' },
   3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.24, dmgMul: 1.24, countMul: 1.12, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '怪更硬、下手更重' },
-  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.36, dmgMul: 1.36, countMul: 1.14, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
+  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.4, dmgMul: 1.4, countMul: 1.14, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
   5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.46, dmgMul: 1.46, countMul: 1.2, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
 };
 /** 两只尸王时每只的血 */
