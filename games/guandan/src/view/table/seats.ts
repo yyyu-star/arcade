@@ -22,7 +22,7 @@ export class SeatView {
   private countText: Phaser.GameObjects.Text | null = null;
   private countBg: Phaser.GameObjects.Graphics | null = null;
   private countPulse: Phaser.Tweens.Tween | null = null;
-  private stamp: Phaser.GameObjects.Image | null = null;
+  private stamp: Phaser.GameObjects.Container | null = null;
   private talk: Phaser.GameObjects.Container | null = null;
   private moodTimer: Phaser.Time.TimerEvent | null = null;
   private thinking: Phaser.GameObjects.Container | null = null;
@@ -193,15 +193,18 @@ export class SeatView {
     this.stamp = null;
     if (place === null) return;
     const name = PLACE_NAMES[place - 1]!;
-    const s = this.scene.add.image(this.a.ax + this.a.size * 0.32, this.a.ay - this.a.size * 0.28, `stamp:${name}`).setDepth(60);
+    const s = this.scene.add.container(this.a.ax + this.a.size * 0.32, this.a.ay - this.a.size * 0.28).setDepth(60);
     const size = this.a.size * 0.78;
-    s.setDisplaySize(size, size).setAngle(-14);
+    // 印章底下垫一块米色实底（art-v3）：印泥是半透明的墨，直接压在头像上看不清；头游再加一圈金边
+    const back = this.scene.add.graphics();
+    back.fillStyle(0xfff3d6, 0.94).fillCircle(0, 0, size * 0.46);
+    if (place === 1) back.lineStyle(4, COLOR.gold, 1).strokeCircle(0, 0, size * 0.46);
+    s.add([back, this.scene.add.image(0, 0, `stamp:${name}`).setDisplaySize(size, size).setAngle(-14)]);
     this.stamp = s;
     if (!animate || dur(1) === 0) return;
-    const sx = s.scaleX;
-    s.setScale(sx * 3).setAlpha(0);
+    s.setScale(3).setAlpha(0);
     audio.sfx('stamp');
-    await tweenP(this.scene, { targets: s, scale: sx, alpha: 1, duration: 260, ease: 'Back.easeIn' });
+    await tweenP(this.scene, { targets: s, scale: 1, alpha: 1, duration: 260, ease: 'Back.easeIn' });
     this.scene.cameras.main.shake(dur(120), 0.004);
   }
 

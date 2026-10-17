@@ -76,3 +76,12 @@ export function highlightText(h: Highlight, name: (seat: number) => string): str
       return `${who} ${h.n} 手出完`;
   }
 }
+
+/**
+ * 炸弹的戏分三档（art-v3，docs/art-v3.md 第 5 节）：1 = 四炸；2 = 五、六炸；3 = 同花顺、七炸以上、天王炸。
+ * 档位只管画面和声音的大小（闪光、震屏、光圈、纸屑），不碰规则
+ */
+export function bombDrama(play: Pick<Play, 'type' | 'cards'>): 1 | 2 | 3 {
+  if (play.type === 'jokerBomb' || play.type === 'straightFlush' || play.cards.length >= 7) return 3;
+  return play.cards.length >= 5 ? 2 : 1;
+}
