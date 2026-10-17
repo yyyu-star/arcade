@@ -11,14 +11,14 @@ import { ENEMIES, HOP_AIR, HOP_PERIOD, WATER } from '../../content/enemies.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
-import { edgeArrow } from '../../explore/view/guide-hud.ts';
+import { edgeArrow, walkSecs } from '../../explore/view/guide-hud.ts';
 import { guide, newGuide } from '../../explore/guide.ts';
 import type { Raid } from '../../explore/raid.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
 import { COS, SIN } from '../../core/dirs.ts';
-import { RAID_TEX, type Atlas, type Frame } from '../art/atlas.ts';
+import { RAID_TEX, makeIcons, type Atlas, type Frame } from '../art/atlas.ts';
 import { artRng } from '../art/draw.ts';
 import { treasureIconKey } from '../art/sprites8.ts';
 import { MOB_COLOR } from '../art/sprites.ts';
@@ -27,24 +27,17 @@ import { sfx, type SfxName } from '../audio/sfx.ts';
 import type { Banners } from '../ui/banner.ts';
 import { Cards, describe } from '../ui/cards.ts';
 import type { Hud, HudSlot } from '../ui/hud.ts';
+import { RaidHud } from '../ui/raidhud.ts';
 import { LOW_MEMORY } from '../viewport.ts';
 import { DamageNumbers, Fx } from './fx.ts';
 import { Items } from './items.ts';
 import { weaponLook } from './look.ts';
+import { Town } from './town.ts';
 import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
 /** 只在 dev 构建里认 ?slowmo=N（截图预览用），正式构建恒为 1 */
 const SLOWMO = import.meta.env.DEV ? Math.max(1, Number(new URLSearchParams(location.search).get('slowmo') ?? 1) || 1) : 1;
-
-/** 夜探院子的铺地：颜色和透明度（盖在雪地上，深度在雪地和点缀之间） */
-const YARD_FLOOR: Record<string, [number, number]> = {
-  yard: [0xc9bfa8, 0.42],
-  plaza: [0xd4c8ae, 0.45],
-  ruin: [0xd8dde6, 0.22],
-  temple: [0xe0c27a, 0.45],
-  vault: [0x8d9bb5, 0.5],
-};
 
 /** 怪种类编号 → 图集帧（没画好的先借相近的） */
 const MOB_FRAME = ENEMIES.map((e) => e.kind as string);
@@ -152,6 +145,9 @@ export class GameScene extends Phaser.Scene {
   private telegraphs: { x: number; y: number; r: number; life: number; max: number; round?: boolean; color?: number }[] = [];
   // ───── 夜探 ─────
   private raid: Raid | null = null;
+  private town: Town | null = null;
+  private rhud: RaidHud | null = null;
+  private guardXY: number[] = [];
   private arenaW = ARENA.w;
   private arenaH = ARENA.h;
   /** 地面层的圈（门圈）：画在影子下面，站在圈里的主角和怪盖在它上面 */
@@ -227,9 +223,19 @@ export class GameScene extends Phaser.Scene {
 
     // 雪地：一张可平铺的贴图铺满场地，四周一圈压暗当边界
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
-    this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
+    // 夜探的街和院子全由 Town 铺满，不再多铺一层雪地（少一次全屏绘制，镇子外圈露出背景的雪色）
+    if (!this.raid) this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
     this.rg = this.add.graphics().setDepth(-500);
-    if (this.raid) this.setupRaid(this.raid);
+    if (this.raid) {
+      this.setupRaid(this.raid);
+      this.rhud = new RaidHud(this.d.hud.root, this.d.hud.bagBox, makeIcons(this.d.raidAtlas ?? this.d.atlas), this.raid.map);
+      this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+        this.rhud?.destroy();
+        this.town?.destroy();
+      });
+      // 第一次夜探（教学镇）：开局一句话说清要干什么，几秒后自己收起
+      if (this.raid.teach) setTimeout(() => this.d.banners.say('搜宝箱 · 躲巡夜将 · 天亮前走门撤离', 'gold', 8000, '没撤出去背包全丢（教学镇例外：不丢）'), 700);
+    }
     this.scatterDecor();
     this.drawBlocks();
 
@@ -308,6 +314,11 @@ export class GameScene extends Phaser.Scene {
 
   /** 地图上挡路的东西（义庄的墙、棺材、正堂）：墙按段拼，最后一段压缩到刚好对齐；深度按脚底 */
   private drawBlocks(): void {
+    // 夜探的院墙、房子、台阶墙、摊子由 Town 按样式画（town.ts）
+    if (this.town) {
+      this.town.drawBlocks();
+      return;
+    }
     for (const b of this.w.blocks) {
       if (b.look === 'wall_h') {
         const n = Math.max(1, Math.round(b.w / 80));
@@ -318,7 +329,6 @@ export class GameScene extends Phaser.Scene {
         const step = b.h / n;
         for (let k = 0; k < n; k++) this.img('wall_v', b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / this.frame('wall_v').res, step / 80 / this.frame('wall_v').res).setDepth(b.y + step * (k + 1));
       } else if (b.look === 'coffin') this.img('coffin', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
-      else if (b.look === 'house' || (b.look === 'hall' && this.raid)) this.drawHouse(b, b.look === 'hall');
       else if (b.look === 'stall') this.img('stall', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
       else if (b.look === 'terrace') {
         const n = Math.max(1, Math.round(b.w / 80));
@@ -330,33 +340,10 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 夜探的房子：长边上一段段拼（横的画正面，竖的画俯视的瓦顶）；庙和石兽院的正房换红墙青瓦，横的中间再立一座门楼 */
-  private drawHouse(b: { x: number; y: number; w: number; h: number }, hall: boolean): void {
-    if (b.w >= b.h) {
-      const n = Math.max(1, Math.round(b.w / 80));
-      const step = b.w / n;
-      const key = hall ? 'hall_h' : 'house_h';
-      const f = this.frame(key);
-      for (let k = 0; k < n; k++) this.img(key, b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
-      if (hall && b.w >= 300) this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h + 0.1);
-    } else {
-      const n = Math.max(1, Math.round(b.h / 80));
-      const step = b.h / n;
-      const key = hall ? 'hall_v' : 'house_v';
-      const f = this.frame(key);
-      for (let k = 0; k < n; k++) this.img(key, b.x + b.w / 2, b.y + step * (k + 1)).setScale(b.w / 110 / f.res, step / 80 / f.res).setDepth(b.y + step * (k + 1));
-    }
-  }
-
-  /** 夜探场地的地面：院子的铺地、河（含桥）、宝箱、门 */
+  /** 夜探场地的地面：街和院子的铺地、河、桥由 Town 分块预渲染；这里摆宝箱和门 */
   private setupRaid(raid: Raid): void {
-    const floor = this.add.graphics().setDepth(-980);
-    for (const y of raid.map.yards) {
-      const [color, a] = YARD_FLOOR[y.kind] ?? [0xc9bfa8, 0.4];
-      floor.fillStyle(color, a);
-      floor.fillRect(y.x, y.y, y.w, y.h);
-    }
-    this.drawRiver(raid);
+    this.town = new Town(this, raid, { img: (key, x, y, scale) => this.img(key, x, y, scale), res: (key) => this.frame(key).res, lowMem: LOW_MEMORY });
+    this.town.prepare(this.w.x, this.w.y);
     const sh = this.frame('shadow');
     for (const c of raid.map.chests) {
       this.add.image(c.x, c.y + 14, 'atlas', 'shadow').setScale(0.8 / sh.res).setDepth(-400).setAlpha(0.8);
@@ -377,66 +364,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 渡口的河：深蓝的水加浅色水纹和浮冰，上下两道雪岸；相邻两段河之间的空当是桥 */
-  private drawRiver(raid: Raid): void {
-    const rivers = raid.map.blocks.filter((b) => b.look === 'river').sort((a, b) => a.x - b.x);
-    if (rivers.length === 0) return;
-    const g = this.add.graphics().setDepth(-970);
-    const r = artRng(raid.setup.seed ^ 0x51ed);
-    const y0 = rivers[0]!.y;
-    const h = rivers[0]!.h;
-    for (const b of rivers) {
-      g.fillStyle(0x2f5f86, 1);
-      g.fillRect(b.x, b.y, b.w, b.h);
-      g.lineStyle(3, 0x8cc0e0, 0.55);
-      for (let i = 0, n = Math.round((b.w * b.h) / 9000); i < n; i++) {
-        const x = b.x + r() * b.w;
-        const y = b.y + 20 + r() * (b.h - 40);
-        const len = 40 + r() * 70;
-        g.lineBetween(x, y, x + len, y + (r() - 0.5) * 6);
-      }
-      g.fillStyle(0xe8f1fa, 0.92);
-      g.lineStyle(2.5, 0x17131c, 0.6);
-      for (let i = 0, n = Math.round((b.w * b.h) / 60000); i < n; i++) {
-        const x = b.x + 40 + r() * (b.w - 80);
-        const y = b.y + 40 + r() * (b.h - 80);
-        const ew = 60 + r() * 60;
-        const eh = 26 + r() * 20;
-        g.fillEllipse(x, y, ew, eh);
-        g.strokeEllipse(x, y, ew, eh);
-      }
-      for (const yy of [b.y, b.y + b.h - 12]) {
-        g.fillStyle(0xf6f9fd, 1);
-        g.fillRect(b.x, yy, b.w, 12);
-      }
-      g.lineStyle(4, 0x17131c, 0.85);
-      g.lineBetween(b.x, b.y + 12, b.x + b.w, b.y + 12);
-      g.lineBetween(b.x, b.y + b.h - 12, b.x + b.w, b.y + b.h - 12);
-    }
-    // 桥：相邻河段之间、最左和最右的空当
-    const gaps: [number, number][] = [];
-    if (rivers[0]!.x > 0) gaps.push([0, rivers[0]!.x]);
-    for (let i = 0; i + 1 < rivers.length; i++) gaps.push([rivers[i]!.x + rivers[i]!.w, rivers[i + 1]!.x]);
-    const last = rivers[rivers.length - 1]!;
-    if (last.x + last.w < raid.map.size) gaps.push([last.x + last.w, raid.map.size]);
-    const br = this.add.graphics().setDepth(-960);
-    for (const [x0, x1] of gaps) {
-      if (x1 - x0 < 20) continue;
-      br.fillStyle(0xa8743f, 1);
-      br.fillRect(x0, y0 - 6, x1 - x0, h + 12);
-      br.lineStyle(2, 0x5e3b20, 0.8);
-      for (let y = y0; y < y0 + h; y += 24) br.lineBetween(x0, y, x1, y);
-      for (const x of [x0, x1 - 12]) {
-        br.fillStyle(0x6a4a38, 1);
-        br.fillRect(x, y0 - 6, 12, h + 12);
-        br.lineStyle(3, 0x17131c, 0.9);
-        br.strokeRect(x, y0 - 6, 12, h + 12);
-        br.fillStyle(0xf6f9fd, 0.9);
-        br.fillRect(x + 2, y0 - 6, 8, h + 12);
-      }
-    }
-  }
-
   /** 点缀：按种子撒在整个场地上（只装饰，不挡路）；枯树、残碑、石灯、石头、青石板、冰面、雪堆、枯草；义庄另撒白灯笼、稻草 */
   private scatterDecor(): void {
     const r = artRng(this.w.setup.seed);
@@ -450,6 +377,8 @@ export class GameScene extends Phaser.Scene {
         const y = 100 + r() * (this.arenaH - 200);
         // 出生点附近留空，开场看得清（夜探的出生点在角上，不在中心）
         if (Math.abs(x - spawnX) < 220 && Math.abs(y - spawnY) < 160) continue;
+        // 夜探的街面是石板路：不撒枯树、石头、草，只留雪堆
+        if (this.town?.onStreet(x, y) && key !== 'drift') continue;
         // 不压在墙、棺材上（立着的东西离远一点）
         const pad = ground ? 10 : 50;
         if (blocks.some((b) => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad * 2)) continue;
@@ -463,9 +392,10 @@ export class GameScene extends Phaser.Scene {
     put('drift', Math.round(60 * dense), true);
     put('puddle', Math.round(26 * dense), true);
     put('slabs', Math.round(30 * dense), true);
-    put('grass', Math.round(220 * dense), true);
+    put('grass', Math.round(220 * (this.raid ? dense / 2 : dense)), true);
     const yz = !this.raid && blocks.length > 0;
-    put('tree', Math.round((yz ? 26 : 46) * dense), false);
+    // 山寺的树都是古松（Town 里摆），不再撒枯树
+    if (this.raid?.setup.template !== 'shansi') put('tree', Math.round((yz ? 26 : 46) * dense), false);
     put('rock', Math.round(60 * dense), false);
     put('stele', Math.round(18 * dense), false);
     put('stonelamp', Math.round(22 * dense), false);
@@ -1134,7 +1064,8 @@ export class GameScene extends Phaser.Scene {
     }
     // 镜头：紧跟主角（幸存者类的标准做法）。以前每帧追 15% 并朝面向方向前瞻 40px：追的快慢跟帧率有关，
     // 转向时前瞻点一跳镜头就荡一下；主角本身已经按拍插值，镜头直接钉在他身上，屏幕上主角就不会晃
-    this.cameras.main.centerOn(hx, hy - 20);
+    const cam = this.cameras.main;
+    cam.centerOn(hx, hy - 20);
 
     this.gfx.clear();
     this.waves.length = 0;
@@ -1143,7 +1074,10 @@ export class GameScene extends Phaser.Scene {
     this.drawShots(inter);
     this.drawDrops(inter);
     this.items.drawProps(w, dt);
-    if (this.raid) this.drawRaid(dt);
+    if (this.raid) {
+      this.drawRaid(dt);
+      this.town?.update(cam, this.renderX, this.renderY);
+    }
     this.drawGfx(dt);
     this.fx.update(dt);
     this.ground.update(dt);
@@ -1430,6 +1364,7 @@ export class GameScene extends Phaser.Scene {
       const gate = gd.gate >= 0 ? raid.map.gates[gd.gate]! : null;
       const arrow = gate ? edgeArrow(raid, gd, (gate.x - cam.midPoint.x) * k, (gate.y - cam.midPoint.y) * k, cssW, cssH, 84) : null;
       this.d.hud.setArrow(arrow && !arrow.onScreen ? arrow : null);
+      this.feedRaidHud(raid, gate ? { name: gate.name, secs: walkSecs(gd.dist) } : null);
     } else this.d.hud.setArrow(null);
     // 守卫头上的"!"
     for (const a of this.alerts) {
@@ -1459,6 +1394,35 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.floats = this.floats.filter((fl) => fl.life > 0);
+  }
+
+  /** 夜探 HUD 的数据：目标条（最近的门、下一批门）、背包、小地图 */
+  private feedRaidHud(raid: Raid, gate: { name: string; secs: number } | null): void {
+    if (!this.rhud) return;
+    const w = this.w;
+    let next: { names: string; secs: number } | null = null;
+    if (!gate) {
+      const win = raid.windows.find((x) => x.from > w.tick);
+      if (win) next = { names: win.gates.length > 2 ? `${win.gates.length} 座门` : win.gates.map((g) => raid.map.gates[g]!.name).join('、'), secs: Math.ceil((win.from - w.tick) / 30) };
+    }
+    const xy = this.guardXY;
+    xy.length = 0;
+    for (let g = 0; g < raid.gUsed; g++) {
+      const i = raid.gSlot[g]!;
+      if (i >= 0 && w.eAlive[i] && w.eGen[i] === raid.gGen[g]) xy.push(w.eX[i]!, w.eY[i]!);
+    }
+    this.rhud.update({
+      gate,
+      next,
+      level: w.tick >= DAWN_RED ? 2 : w.tick >= DAWN_WARN ? 1 : 0,
+      teach: raid.teach,
+      bag: raid.bag,
+      hx: this.renderX,
+      hy: this.renderY,
+      chestOpen: raid.chestOpen,
+      gateOpen: raid.gateOpen,
+      guards: xy,
+    });
   }
 
   /** 头上或箱子上的读条：深色边、金色（或档色）填充 */
@@ -1569,7 +1533,7 @@ export class GameScene extends Phaser.Scene {
       level: w.level,
       xp: w.xp / xpNeed(w.level),
       left: ((raid ? RAID_DAWN : DAWN_TICK) - w.tick) / 30,
-      raid: raid ? { label: w.tick >= DAWN_WARN ? '天亮' : '离天亮', level: w.tick >= DAWN_RED ? 2 : w.tick >= DAWN_WARN ? 1 : 0, bag: raid.bag.length } : undefined,
+      raid: raid ? { label: w.tick >= DAWN_WARN ? '天亮' : '离天亮', level: w.tick >= DAWN_RED ? 2 : w.tick >= DAWN_WARN ? 1 : 0, bag: raid.bag.length, value: raid.bag.reduce((a, id) => a + TREASURES[id]!.value, 0) } : undefined,
       kills: w.kills,
       coins: w.coins,
       slots,

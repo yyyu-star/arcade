@@ -27,7 +27,7 @@ export interface HudState {
   /** 被动：只显示图标和等级，不点 */
   passives: { icon: string; level: number }[];
   /** 夜探：顶上换成天亮倒计时（label 是"离天亮"或"天亮"，level 1 = 14:00 起醒目，2 = 最后 30 秒变红），右上多一个背包件数 */
-  raid?: { label: string; level: 0 | 1 | 2; bag: number };
+  raid?: { label: string; level: 0 | 1 | 2; bag: number; value: number };
 }
 
 /** 屏幕边上的撤离箭头（guide-hud.ts 的 EdgeArrow 里画面要用的几个字段） */
@@ -63,7 +63,8 @@ export class Hud {
   private time: HTMLSpanElement;
   private tlabel: HTMLSpanElement;
   private timer: HTMLDivElement;
-  private bagBox: HTMLDivElement;
+  /** 夜探的背包按钮（可点，点开背包面板，见 raidhud.ts） */
+  readonly bagBox: HTMLButtonElement;
   private bag: HTMLSpanElement;
   private arrow: HTMLDivElement;
   private arrowIcon: HTMLElement;
@@ -77,7 +78,7 @@ export class Hud {
   /** 法器格、被动格的组成（图标 + 顺序）变了才重建 DOM，平时只改冷却和等级 */
   private slotSig = '';
   private passSig = '';
-  private readonly icons: (key: string) => string;
+  readonly icons: (key: string) => string;
   private combo: HTMLDivElement;
   private comboNum: HTMLSpanElement;
   private comboTimer: ReturnType<typeof setTimeout> | null = null;
@@ -125,7 +126,9 @@ export class Hud {
     el('span', 'yx-ico yx-ico-coin', c);
     this.coins = el('span', '', c, '0');
     // 夜探的背包件数（守夜不显示）
-    this.bagBox = el('div', 'yx-stat yx-bag', tr);
+    this.bagBox = el('button', 'yx-stat yx-bag', tr);
+    this.bagBox.type = 'button';
+    this.bagBox.setAttribute('aria-label', '背包');
     el('span', 'yx-ico yx-ico-bag', this.bagBox);
     this.bag = el('span', '', this.bagBox, '0');
     this.bagBox.style.display = 'none';
@@ -168,7 +171,7 @@ export class Hud {
       this.tlabel.textContent = s.raid.label;
       this.timer.classList.toggle('warn', s.raid.level === 1);
       this.timer.classList.toggle('red', s.raid.level === 2);
-      this.bag.textContent = String(s.raid.bag);
+      this.bag.textContent = `${s.raid.bag} 件 · ${s.raid.value}`;
     }
     if (!!s.raid !== this.raidOn) {
       this.raidOn = !!s.raid;
