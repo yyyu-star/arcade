@@ -57,6 +57,17 @@ export const Ev = {
   Gong: 26,
   /** 复活：x, y, a = 还剩几次, b = 震开的半径 */
   Revive: 27,
+  // 40–49 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
+  GateOpen: 40,
+  GateClose: 41,
+  ChestOpen: 42,
+  Loot: 43,
+  Escape: 44,
+  Dawn: 45,
+  Lost: 46,
+  Alert: 47,
+  Beast: 48,
+  Roamer: 49,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

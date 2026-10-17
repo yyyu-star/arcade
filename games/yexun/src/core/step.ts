@@ -25,8 +25,11 @@ import {
   WHITEFOX,
   type EnemyKind,
 } from '../content/enemies.ts';
-import { ARENA, DROPS, MERCY, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
-import { MAPS, pushOut } from '../content/maps.ts';
+import { DROPS, MERCY, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
+import { MAPS, pushOut, type Block } from '../content/maps.ts';
+import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
+import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
+import type { Raid } from '../explore/raid.ts';
 import { CALM, DANGERS, DAWN_TICK, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
@@ -63,7 +66,7 @@ const grids = new WeakMap<World, Grid>();
 function gridOf(w: World): Grid {
   let g = grids.get(w);
   if (!g) {
-    g = new Grid();
+    g = new Grid(w.arenaW, w.arenaH);
     grids.set(w, g);
   }
   return g;
@@ -160,6 +163,21 @@ export function step(w: World, dir: number, choice = -1): void {
   movePickups(w);
   regen(w);
   if (w.phase !== 'play') return;
+  if (w.raid) {
+    // 夜探：撤出算赢，倒下、天亮还在镇里算输（DESIGN.md 2.3）
+    const raid = w.raid;
+    raid.tick(w);
+    while (raid.takeUpgrade()) openChest(w);
+    if (w.hp <= 0 && w.revives > 0) revive(w, g);
+    if (w.hp <= 0) {
+      raid.die(w.tick);
+      return end(w, false);
+    }
+    if (raid.outcome === 'escaped') return end(w, true);
+    if (raid.outcome === 'lost') return end(w, false);
+    if (w.pendingLevels > 0) openChoices(w);
+    return;
+  }
   if (w.hp <= 0 && w.revives > 0) revive(w, g);
   if (w.hp <= 0) return end(w, false);
   if (!w.setup.endless && w.tick >= DAWN_TICK) return end(w, true);
@@ -191,6 +209,11 @@ function revive(w: World, g: Grid): void {
   w.ev.push(Ev.Revive, w.x, w.y, w.revives, REVIVE.area);
 }
 
+/** 推出挡路的块：夜探的块几百个，走分桶的索引（推法和 maps.ts 的 pushOut 逐位一样） */
+function push(w: World, p: { x: number; y: number }, r: number): boolean {
+  return w.raid ? w.raid.map.index.pushOut(p, r) : pushOut(w.blocks as readonly Block[], p, r);
+}
+
 function end(w: World, won: boolean): void {
   w.phase = 'over';
   w.won = won;
@@ -204,9 +227,9 @@ function movePlayer(w: World, dir: number): void {
   if (dir !== 0) {
     w.face = ((dir - 1) * (DIR_N / 32)) & (DIR_N - 1);
     const sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
-    w.x = clamp(w.x + inputCos(dir) * sp, 20, ARENA.w - 20);
-    w.y = clamp(w.y + inputSin(dir) * sp, 20, ARENA.h - 20);
-    if (w.blocks.length) pushOut(w.blocks, w, PLAYER.r);
+    w.x = clamp(w.x + inputCos(dir) * sp, 20, w.arenaW - 20);
+    w.y = clamp(w.y + inputSin(dir) * sp, 20, w.arenaH - 20);
+    if (w.blocks.length) push(w, w, PLAYER.r);
   }
   if (w.invuln > 0) w.invuln--;
 }
@@ -282,12 +305,16 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   const big = def.elite || def.boss;
   const size = big ? 1 : 0.88 + w.rSpawn.next() * 0.24;
   const twin = kind === 'boss' && diff.twinBoss ? TWIN_BOSS_HP : 1;
-  const hp = def.boss ? def.hp * diff.hpMul * twin : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul;
+  // 夜探：离镇子中心越近，刷出来的怪越硬、下手越重
+  const zone = w.raid ? raidZoneMul(w.raid.map, x, y) : null;
+  const zHp = zone ? zone.hp : 1;
+  const zDmg = zone ? zone.dmg : 1;
+  const hp = (def.boss ? def.hp * diff.hpMul * twin : def.hp * (1 + SCALE.hpPerMin * min) * diff.hpMul) * zHp;
   w.eAlive[i] = 1;
   w.eGen[i]!++;
   w.eKind[i] = def.code;
-  w.eX[i] = clamp(x, 10, ARENA.w - 10);
-  w.eY[i] = clamp(y, 10, ARENA.h - 10);
+  w.eX[i] = clamp(x, 10, w.arenaW - 10);
+  w.eY[i] = clamp(y, 10, w.arenaH - 10);
   w.ePX[i] = w.eX[i]!;
   w.ePY[i] = w.eY[i]!;
   w.eKX[i] = 0;
@@ -296,10 +323,11 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   w.eHpMax[i] = hp;
   // 引魂灯：每级怪快 5%
   w.eSpeed[i] = def.speed * (big ? 1 : 0.9 + w.rSpawn.next() * 0.2) * (1 + 0.05 * w.stats.curse) * (has(w, 'fast') ? CURSE_FX.fastSpeed : 1);
-  w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min);
+  w.eDmg[i] = def.dmg * (1 + SCALE.dmgPerMin * min) * zDmg;
   w.eR[i] = def.r * size;
   w.eSize[i] = size;
-  w.eT[i] = kind === 'boss' ? BOSS.every[0]! : kind === 'lord' ? LORD.every[0]! : w.rSpawn.int(HOP_PERIOD);
+  // 石兽的技能计时由夜探绑定守卫时设
+  w.eT[i] = kind === 'boss' ? BOSS.every[0]! : kind === 'lord' ? LORD.every[0]! : kind === 'beast' ? 0 : w.rSpawn.int(HOP_PERIOD);
   w.ePhase[i] = 0;
   w.eS[i] = 0;
   w.eAX[i] = 0;
@@ -325,8 +353,8 @@ const RING_Y = 360;
 function ringPoint(w: World, a: number, scale = 1): [number, number] {
   let x = w.x + dcos(a) * RING_X * scale;
   let y = w.y + dsin(a) * RING_Y * scale;
-  if (x < 10 || x > ARENA.w - 10) x = w.x - dcos(a) * RING_X * scale;
-  if (y < 10 || y > ARENA.h - 10) y = w.y - dsin(a) * RING_Y * scale;
+  if (x < 10 || x > w.arenaW - 10) x = w.x - dcos(a) * RING_X * scale;
+  if (y < 10 || y > w.arenaH - 10) y = w.y - dsin(a) * RING_Y * scale;
   return [x, y];
 }
 
@@ -345,7 +373,35 @@ function pickKind(w: World, mix: Partial<Record<EnemyKind, number>>): EnemyKind 
   return last;
 }
 
+/** 夜探的刷怪：先刷排队的守卫（开局地图上的、6:00 和 11:00 游荡的巡夜将），再按夜探的刷怪表补怪；没有尸王、老爷和收获期 */
+function spawnRaid(w: World, raid: Raid): void {
+  for (let gi = raid.takeSpawn(); gi >= 0; gi = raid.takeSpawn()) {
+    const s = raid.guardSpawn(gi);
+    const i = spawnEnemy(w, s.kind, s.x, s.y);
+    if (i >= 0) raid.bindGuard(gi, i, w);
+  }
+  const m = raidMinute(w.tick);
+  const diff = DANGERS[w.setup.danger];
+  const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
+  // 离镇子中心越近怪越多（按主角站的地方）
+  const zone = raidZoneMul(raid.map, w.x, w.y).count;
+  const keep = m.keep * diff.countMul * curse * zone;
+  if (w.eCount >= keep) return;
+  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * zone) / 30;
+  while (w.spawnAcc >= 1) {
+    w.spawnAcc -= 1;
+    const kind = pickKind(w, m.mix);
+    const [x, y] = ringPoint(w, w.rSpawn.int(DIR_N));
+    spawnP.x = x;
+    spawnP.y = y;
+    // 刷在墙里的这只就不刷了（推三次还压着墙）
+    if (raidSpawnPoint(raid, spawnP)) spawnEnemy(w, kind, spawnP.x, spawnP.y);
+  }
+}
+const spawnP = { x: 0, y: 0 };
+
 function spawnWaves(w: World): void {
+  if (w.raid) return spawnRaid(w, w.raid);
   // 定点事件
   while (w.nextEvent < w.schedule.length && w.tick >= w.schedule[w.nextEvent]!.at) {
     const e = w.schedule[w.nextEvent++]!;
@@ -435,13 +491,21 @@ function markSlow(w: World, g: Grid): void {
   }
 }
 
+/** 守卫的技能打到主角走核心的 hurt；不在热路径上分配对象 */
+const guardFx = {
+  w: null as World | null,
+  hurt(d: number): void {
+    hurt(this.w!, d);
+  },
+};
+
 function moveEnemies(w: World): void {
   for (let i = 0; i < MAX_ENEMIES; i++) {
     if (!w.eAlive[i]) continue;
     if (w.eBind[i]! > w.tick) {
       // 被捆住：原地不动，只吃击退
-      w.eX[i] = clamp(w.eX[i]! + w.eKX[i]!, 10, ARENA.w - 10);
-      w.eY[i] = clamp(w.eY[i]! + w.eKY[i]!, 10, ARENA.h - 10);
+      w.eX[i] = clamp(w.eX[i]! + w.eKX[i]!, 10, w.arenaW - 10);
+      w.eY[i] = clamp(w.eY[i]! + w.eKY[i]!, 10, w.arenaH - 10);
       w.eKX[i]! *= 0.72;
       w.eKY[i]! *= 0.72;
       continue;
@@ -472,7 +536,21 @@ function moveEnemies(w: World): void {
     let sp = w.eSpeed[i]! * (slow === 2 ? 0.5 : slow === 1 ? 0.62 : slow === 3 ? 0.8 : 1) * (w.tick < OPEN_TICKS ? DANGERS[w.setup.danger].openSlow : 1);
     let vx = dx;
     let vy = dy;
-    switch (kind) {
+    // 夜探的守卫：守在原地、追人、回家由 explore/guards.ts 算；own 为真时照这种怪自己的行为走（比如守铜箱的白狐追人时照常连冲）
+    const gi = w.raid ? w.raid.guardAt(i, w.eGen[i]!) : -1;
+    let own = true;
+    if (gi >= 0) {
+      guardFx.w = w;
+      const gs = guardStep(w.raid!, gi, w, i, guardFx);
+      if (!GUARD_MOVE.own) {
+        own = false;
+        // 减速照样算（镇魂铃、镇 3 件对守卫也有用）
+        sp = w.eSpeed[i]! > 0 ? (gs * sp) / w.eSpeed[i]! : gs;
+        vx = GUARD_MOVE.vx;
+        vy = GUARD_MOVE.vy;
+      }
+    }
+    if (own) switch (kind) {
       case 'jiangshi':
       case 'general': {
         const t = (w.eT[i]! + 1) % HOP_PERIOD;
@@ -613,8 +691,8 @@ function moveEnemies(w: World): void {
       default:
         break;
     }
-    w.eX[i] = clamp(w.eX[i]! + vx * sp + w.eKX[i]!, 10, ARENA.w - 10);
-    w.eY[i] = clamp(w.eY[i]! + vy * sp + w.eKY[i]!, 10, ARENA.h - 10);
+    w.eX[i] = clamp(w.eX[i]! + vx * sp + w.eKX[i]!, 10, w.arenaW - 10);
+    w.eY[i] = clamp(w.eY[i]! + vy * sp + w.eKY[i]!, 10, w.arenaH - 10);
     w.eKX[i]! *= 0.72;
     w.eKY[i]! *= 0.72;
   }
@@ -628,7 +706,7 @@ function blockEnemies(w: World): void {
     if (!w.eAlive[i] || (w.eKind[i] === boss && w.eS[i] === 1)) continue;
     tmpP.x = w.eX[i]!;
     tmpP.y = w.eY[i]!;
-    if (pushOut(w.blocks, tmpP, w.eR[i]! * 0.7)) {
+    if (push(w, tmpP, w.eR[i]! * 0.7)) {
       w.eX[i] = tmpP.x;
       w.eY[i] = tmpP.y;
     }
@@ -1849,10 +1927,10 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
   w.dAlive[i] = 1;
   w.dGen[i]!++;
   w.dKind[i] = kind;
-  tmpP.x = clamp(x, 10, ARENA.w - 10);
-  tmpP.y = clamp(y, 10, ARENA.h - 10);
+  tmpP.x = clamp(x, 10, w.arenaW - 10);
+  tmpP.y = clamp(y, 10, w.arenaH - 10);
   // 掉在棺材、墙里的（宝箱、肉包要走过去捡）挪到边上
-  if (w.blocks.length) pushOut(w.blocks, tmpP, 16);
+  if (w.blocks.length) push(w, tmpP, 16);
   w.dX[i] = tmpP.x;
   w.dY[i] = tmpP.y;
   w.dPX[i] = w.dX[i]!;

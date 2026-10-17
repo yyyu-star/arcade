@@ -1,4 +1,5 @@
 import type { Element, WeaponType } from './weapons.ts';
+import { RAID_ENEMIES } from './explore.ts';
 
 /**
  * 怪物（DESIGN.md 3.4）。速度按每拍单位（主角 3.0），血量是第 0 分钟、"普通"难度的值，随时间和难度放大（waves.ts）。
@@ -6,7 +7,9 @@ import type { Element, WeaponType } from './weapons.ts';
 
 export type EnemyKind =
   | 'paper' | 'wisp' | 'jiangshi' | 'lantern' | 'fox' | 'shishi' | 'general' | 'boss'
-  | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin' | 'lord';
+  | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin' | 'lord'
+  | 'patrol'
+  | 'beast';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -53,6 +56,9 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'whitefox', code: 15, hp: 500, speed: 1.7, dmg: 11, r: 26, xp: 25, steady: 0.85, elite: true, vs: { 剑: 0.6, 镇: 1.3 } },
   { kind: 'palanquin', code: 16, hp: 760, speed: 1, dmg: 14, r: 36, xp: 30, steady: 0.9, elite: true, vs: { 剑: 0.7, 火: 1.5 } },
   { kind: 'lord', code: 17, hp: 6000, speed: 1.15, dmg: 18, r: 40, xp: 60, steady: 0.96, boss: true, vs: { 火: 1.3 } },
+  // 夜探的守卫（数值在 content/explore.ts，移动由 src/explore/guards.ts 算）
+  { kind: 'patrol', code: 18, ...RAID_ENEMIES.patrol },
+  { kind: 'beast', code: 19, ...RAID_ENEMIES.beast },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;

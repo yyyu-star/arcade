@@ -2,6 +2,7 @@
  * 状态指纹：把一局的全部状态哈希成一个 32 位数。重放测试逐拍比它（同种子 + 同输入 → 逐位相同，模块 AGENTS.md 第 3 节）。
  * 浮点按 IEEE 754 的位来哈希（Float64Array 的底层字节），差最后一位也看得出来。
  */
+import { raidFingerprint } from '../explore/raid.ts';
 import type { World } from './state.ts';
 
 function mix(h: number, v: number): number {
@@ -31,6 +32,7 @@ export function fingerprint(w: World): number {
   for (const o of w.weapons) for (const v of [o.level, o.evolved ? 1 : 0, o.timer, o.phase, o.angle]) h = num(h, v);
   for (const [k, v] of Object.entries(w.passives).sort()) h = num(h ^ k.charCodeAt(0), v ?? 0);
   for (const r of [w.rSpawn, w.rDrop, w.rUp, w.rChest, w.rAi, w.rHit, w.rWeapon]) for (const v of r.snapshot()) h = mix(h, v >>> 0);
+  if (w.raid) h = num(h, raidFingerprint(w.raid));
   for (const a of [w.eAlive, w.eKind, w.eX, w.eY, w.eKX, w.eKY, w.eHp, w.eT, w.eS, w.ePhase, w.eHitAt, w.sAlive, w.sKind, w.sX, w.sY, w.sVX, w.sVY, w.sLife, w.sState, w.dAlive, w.dKind, w.dX, w.dY, w.dVal, w.dPull]) h = arr(h, a);
   return h >>> 0;
 }

@@ -10,6 +10,9 @@ import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
+import { Raid } from '../explore/raid.ts';
+import type { RaidSetup } from '../explore/host.ts';
+import type { RaidBlock } from '../explore/blocks.ts';
 
 export const RULES_VERSION = 8;
 export const TICKS_PER_SECOND = 30;
@@ -109,7 +112,10 @@ export interface Choice {
 
 export interface Setup {
   seed: number;
-  mode: 'vigil';
+  /** 守夜 / 夜探 */
+  mode: 'vigil' | 'raid';
+  /** 夜探的模板和实盘档（mode 为 raid 时必有；种子和危险档以上面的为准） */
+  raid?: Omit<RaidSetup, 'seed' | 'danger'>;
   /** 危险档 0–5（DESIGN.md 13.2） */
   danger: Danger;
   /** 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2） */
@@ -144,6 +150,11 @@ export function normalizeSetup(s: Setup): Setup {
 
 export class World {
   readonly setup: Setup;
+  /** 夜探的状态（宝箱、门、背包、守卫）；守夜为 null */
+  readonly raid: Raid | null;
+  /** 场地大小：守夜 ARENA，夜探按镇子 */
+  readonly arenaW: number;
+  readonly arenaH: number;
   tick = 0;
   /** play：在打；choose：等升级三选一；over：结束 */
   phase: 'play' | 'choose' | 'over' = 'play';
@@ -196,7 +207,8 @@ export class World {
   /** 往生铃：光环半径（这一拍），光环里的怪死了回血；下次能回血的拍 */
   bellArea = 0;
   /** 挡路的东西（地图上的墙、棺材） */
-  readonly blocks: readonly Block[];
+  /** 挡路的块：守夜是地图的，夜探是镇子生成的（推挤走 raid.map.index，分桶） */
+  readonly blocks: readonly (Block | RaidBlock)[];
   /** 冰锥、水鬼：到这一拍之前主角走路变慢 */
   slowUntil = 0;
   /** 收获期：到这一拍之前少刷怪、多掉东西 */
@@ -307,7 +319,14 @@ export class World {
     this.rerolls = setup.curses?.includes('noreroll') ? 0 : 2 + perk('shuaxin') * PERK_FX.shuaxin;
     this.revives = perk('fuhuo') * PERK_FX.fuhuo;
     this.cardCount = 3 + perk('kapian') * PERK_FX.kapian;
-    this.blocks = MAPS[setup.map ?? 'snow'].blocks;
+    this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger }) : null;
+    this.arenaW = this.raid ? this.raid.map.size : ARENA.w;
+    this.arenaH = this.raid ? this.raid.map.size : ARENA.h;
+    this.blocks = this.raid ? this.raid.map.blocks : MAPS[setup.map ?? 'snow'].blocks;
+    if (this.raid) {
+      this.x = this.px = this.raid.map.spawn.x;
+      this.y = this.py = this.raid.map.spawn.y;
+    }
     const s = setup.seed;
     this.rSpawn = new Rng(s, 'spawn');
     this.rDrop = new Rng(s, 'drop');

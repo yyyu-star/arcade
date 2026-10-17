@@ -30,6 +30,8 @@ export const MONSTER_INFO: Record<EnemyKind, { name: string; tag: string; blurb:
   whitefox: { name: '白狐', tag: '精英', blurb: '一口气连冲三下' },
   palanquin: { name: '纸轿', tag: '精英', blurb: '四个纸人抬着，打碎放出一群纸人' },
   lord: { name: '纸扎老爷', tag: 'Boss', blurb: '撒纸钱，召纸轿；约 8 分钟现身' },
+  patrol: { name: '巡夜将', tag: '精英', blurb: '夜探里守着铜箱和院子，看见就追；6 分钟、11 分钟还有游荡的' },
+  beast: { name: '镇门石兽', tag: 'Boss', blurb: '夜探里守着金箱，会扑、会甩尾；血少一半连扑两下' },
   boss: { name: '尸王', tag: 'Boss', blurb: '跳砸、召唤、尸气，血越少越凶；14 分钟现身' },
 };
 
