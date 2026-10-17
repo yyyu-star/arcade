@@ -26,6 +26,7 @@
  * 特定局面（龙头带动、涨停、跌停、月底、通关）先在 node 里用 core 推进找到，再用调试桥 loadState 交给画面。
  * 任何 console error / pageerror / 等待超时 / 断言失败都会以非零码退出。
  */
+import { readFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContextOptions, type Page, type Route } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
 import { SAVE_FORMAT } from '../src/platform/storage.ts';
@@ -124,6 +125,14 @@ async function openPage(browser: Browser, name: string, query: string, opts: Ope
   }
   // __Host- cookie 只能在 https 下设，冒烟是 http：直接让页面读到提示 cookie
   if (opts.loginHint) await context.addInitScript(() => Object.defineProperty(Document.prototype, 'cookie', { configurable: true, get: () => '__Host-arcade_li=1', set: () => undefined }));
+  // 0.13.1：CSP 违规（含 Report-Only）一律记成报错，冒烟算失败。例外是没有来源文件的 eval：那是这个脚本让 Playwright
+  // 在页面里求值字符串条件（waitFor、state）造成的，游戏的包里没有 eval（正式构建下实测零违规）
+  await context.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => {
+      if (e.blockedURI === 'eval' && !e.sourceFile) return;
+      console.error(`CSP 违规：${e.effectiveDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`);
+    }),
+  );
   const page = await context.newPage();
   const reqs = opts.requests;
   if (reqs) page.on('request', (r) => {
@@ -3419,6 +3428,24 @@ async function visShots(browser: Browser): Promise<void> {
   for (const c of visCounts) notes.push(`${c.file}\t${c.han}`);
 }
 
+/**
+ * 0.13.1：public/_headers 里 /* 那一段的头（CSP、不许被嵌），开发服务器照同一份文件带上，不另抄一遍；正式环境由 Cloudflare 按 _headers 加。
+ * CSP 在这里改成 Report-Only：冒烟靠 Playwright 在页面里求值字符串条件（要 eval），生效的 CSP 会把它们拦掉、整个冒烟起不来。
+ * 违规照样报出来（openPage 里监听 securitypolicyviolation，记成控制台报错、冒烟算失败）；生效时游戏能不能跑，用正式构建另测（README 安全头一节）。
+ */
+function pageHeaders(): Record<string, string> {
+  const out: Record<string, string> = {};
+  let inBlock = false;
+  for (const line of readFileSync('public/_headers', 'utf8').split('\n')) {
+    if (!line.startsWith(' ')) inBlock = line.trim() === '/*';
+    else if (inBlock) {
+      const i = line.indexOf(':');
+      if (i > 0) out[line.slice(0, i).trim().replace(/^Content-Security-Policy$/, 'Content-Security-Policy-Report-Only')] = line.slice(i + 1).trim();
+    }
+  }
+  return out;
+}
+
 async function main(): Promise<void> {
   let server: ViteDevServer | null = null;
   let browser: Browser | null = null;
@@ -3426,7 +3453,7 @@ async function main(): Promise<void> {
     server = await createServer({
       root: process.cwd(),
       logLevel: 'warn',
-      server: { host: '127.0.0.1', port: PORT, strictPort: true, hmr: false },
+      server: { host: '127.0.0.1', port: PORT, strictPort: true, hmr: false, headers: pageHeaders() },
     });
     await server.listen();
     const addr = server.httpServer?.address();
