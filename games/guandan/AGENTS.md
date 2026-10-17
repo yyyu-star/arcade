@@ -11,7 +11,7 @@ src/net/    联机（房间和页面共用，纯函数）：rules 把规则核�
             stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）、emotes 互动编号表、fun-moments 短语表、电脑互动性格、名场面映射（接 kit 的 table-fun）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
-src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选模式选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
+src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
             share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
@@ -70,7 +70,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 两种部署（0.8.0，kit 0.10 的独立模式，由 env 决定）：`wrangler.jsonc` 是独立配置，不写 `ARCADE`、`WALLET`、`GATE`；本站部署时部署工具（`tools/deployer`）按 `tools/workers.json` 补上平台绑定和 `GATE=login`。
   没有 `ARCADE`、`GATE` 也不是 login 就是单独部署：`gate.ts` 先调 `standaloneRoot`（站点根转到 `/games/guandan/`），`loginGate`、`acceptCreate`、`acceptJoin` 传同一个 `GUEST`（昵称不许含三个电脑的名字，`tests/gate.test.ts` 和画面上的名字核对），
   没有 `WALLET` 时单机实盘接口和实盘房间回 409 `no_wallet`、房间的 `perform` 兜底拒绝。页面在 `src/view/platform.ts`：启动时 kit 的 `detectPlatform` 问一次 `/api/me`（`main.ts` 和 `BootScene` 等它），
-  回 `{ standalone: true }`（单独部署时 kit 0.10.2 的 `standaloneRoot` 接住 `/api/me`，所以 `run_worker_first` 里有它）或 404 是单独部署——不摆实盘和云存档、"开始"不选模式、"大厅"变"首页"回 `./`、`currentUserId` 回固定的游客（同一个浏览器就是同一个游客）、好友房面板填昵称（`guandan.nick`）并用 `withNickname` 带在开房、进房地址上；
+  回 `{ standalone: true }`（单独部署时 kit 0.10.2 的 `standaloneRoot` 接住 `/api/me`，所以 `run_worker_first` 里有它）或 404 是单独部署——不摆实盘和云存档（主页没有"实盘"卡）、"大厅"变"首页"回 `./`、`currentUserId` 回固定的游客（同一个浏览器就是同一个游客）、好友房面板填昵称（`guandan.nick`）并用 `withNickname` 带在开房、进房地址上；
   5xx、超时按有平台处理。本地：`npm run online-dev`（和 online/stake/quota 冒烟）写一份补了平台绑定的派生配置连假平台；`npm run standalone-smoke` 原样用 `wrangler.jsonc`。
 - 登录闸门（`worker/gate.ts`，0.1.4 起；0.6.5 起用 arcade-kit 的 `loginGate`）：线上只有三个首页路径（`wrangler.jsonc` 的 `assets.run_worker_first`）先进 Worker，js、图片照旧直接走静态资源。
   变量 `GATE`：`"off"` 原样放行；其他值（包括没配）都要登录：没带平台会话 cookie 的直接 302，带了的经服务绑定 `ARCADE` 问平台 `/api/me`（地址按请求的 origin 拼）。
@@ -96,6 +96,9 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   拉取也带预期账号：`GET /api/saves/guandan?userId=<user.id>`（平台 0.7.3），回 409 `wrong_user` 时走换号流程；GET 回来时本页账号已经变了就丢掉结果。
   多个标签页靠 `storage` 事件同步元数据：rev 取大；别的页传完、本页又没改过的槽，本页的待上传跟着清掉。
   本地联调：`npm run dev` 把 `/api` 代理到平台的 `npm run dev:api`（5181），浏览器先在 5181 登录。冒烟里 `/api` 由 `tools/shot.ts` 的假平台回答。
+- 主页（标题页，0.17.0 art-v3，设计见 `docs/art-v3.md` 第 4 节）：左边茶馆一角（背景 SVG + 单独烘焙的灯笼 `home:lantern`、四个人 `home:fig:<id>`），右边一块面板；排版是纯函数 `src/view/home-layout.ts`，背景和场景共用，宽屏一起铺开。
+  面板从上到下：标题、一句玩法、主按钮（有实盘存档 `resumeStake`，否则有存档 `continue`，否则 `quick` 快速开始娱乐）、三张卡 `fun` / `stake` / `online`、战绩条（点开战绩）；右上 `stats`、`settings`、`rules`、`cloud`。括号里是冒烟用的控件名。
+  灯笼晃、人物呼吸、火星只在 `LOW_MEMORY === 0` 且没关动画时开。
 - 回大厅（`src/view/lobby.ts`，0.1.9 起，所有游戏统一）：左上角"大厅"（小房子）指向平台首页 `/`；单独部署（0.8.0）叫"首页"、指向 `./`，标题页本身就是首页，不摆。标题页直接走；牌桌上打到一半先弹确认（这局会存着 / 调试开局不保存 / 好友房：头 60 秒轮到你时等 30 秒按"能不出就不出"代出，之后电脑替你打，回来接着打——回大厅不调 `leave()`，座位和 `guandan.room` 都留着）；
   手机竖屏时牌桌被"请横过来"盖住，提示层左上角也有一个（打到一半用浏览器自带的确认框）。离开前调一次 `cloud.flushOnHide()`（pagehide 时也会触发，同槽在途不重发）。
   小房子图标只用来表示"回大厅"；回掼蛋自己的首页用箭头。冒烟只断言跳到 `/`，不加载平台页面。
@@ -142,7 +145,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     业务上的拒绝走返回值（200 + `{ ok: false, error }`），HTTP 状态码只说"没到钱包"（400 / 401 / 403 / 503）。
   - 页面：`src/view/stake.ts`（存档 `guandan.stake`、`StakeSession`、结回和放弃）、`src/view/ui/stake.ts`（选模式、选档位）、`src/view/stake-text.ts`（说的话）。
     一场结束先把要结的数记进存档，再去结回；结回、放弃遇到 `busy` / `internal` / 连不上按同一个 op 重试，还不行留着存档下次再结；`no_stake`（结过）、`expired`（过期退回过）都算办完。
-    实盘不计战绩、不写 `guandan.save`、规则用默认；标题页"开始"先选娱乐 / 实盘。冒烟 `npm run stake-smoke`（本地栈的假平台带一个内存里的假钱包 RPC）。
+    实盘不计战绩、不写 `guandan.save`、规则用默认；主页（0.17.0）直接有"娱乐 / 实盘 / 好友房"三张卡，实盘卡进选档。冒烟 `npm run stake-smoke`（本地栈的假平台带一个内存里的假钱包 RPC）。
   - 好友房（0.5.0）：开房请求体 `{ stake: 档位 }` → kit 0.4.0 的开房选项（`RoomOpts`，规则的 `options` 校验）。桌在 `src/net/stake.ts`，状态里是 `NetState.stake`（娱乐房间没有这个字段，
     所有实盘的钩子对它原样返回）：`begin` 给每个真人记带入（真人不到 2 个整场不计输赢）、`seated` 管换人——
     接管开局时就是电脑的座位记一笔带入，点"离开"的人按当时的分马上结回（0.6.0），走了又回来用新的 ref `<ref>s<座位>n<第几份>` 再带入一份，
@@ -193,7 +196,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run typecheck` / `npm run typecheck:core` | 全量 / 只查核心与电脑 |
 | `npm run sim -- --deals 5000 --mode random` | 机器人对打验收 |
 | `npm run shot` / `npm run shot -- --playtest` | 无头冒烟截图 / 真实速度鼠标试玩一副 |
-| `npm run shot -- --gallery --out <目录>` | 美术图集：1280 / 1920 / 手机三种尺寸 × 全部画面（标题、选模式、选难度、牌桌、结算、整局结束、分享、设置、规则、战绩、好友房）+ 竖屏，改前改后对比用（`docs/art-v3.md`）；浏览器任务一律 `flock -w 3600 <仓库>/.local/locks/browser.lock` 排队 |
+| `npm run shot -- --gallery --out <目录>` | 美术图集：1280 / 1920 / 手机三种尺寸 × 全部画面（主页、选难度、牌桌、结算、整局结束、分享、设置、规则、战绩、好友房）+ 竖屏，改前改后对比用（`docs/art-v3.md`）；浏览器任务一律 `flock -w 3600 <仓库>/.local/locks/browser.lock` 排队 |
 | `node tools/mem.ts [--scales auto,1,2,3]` | 内存估算：模拟老 iPhone 横屏，列纹理/画布像素（MB）和 Chromium PSS，再模拟地址栏收放看会不会攒背景图 |
 | `node tools/replay-log.ts <log.jsonl>` | 试玩日志复盘：还原每一手，看现在的电脑和提示会怎么出 |
 | `npm run build:cf` / `npm run deploy` | 部署产物 / 拆成独立仓库后才用；在总仓库里正式部署只经 PR 合并进 main 后由 CI 完成 |

@@ -41,6 +41,9 @@ async function openPage(browser: Browser, stack: OnlineStack, user: string, wall
   await context.addCookies([{ name: '__Host-sid', value: user, domain: new URL(stack.origin).hostname, path: '/', secure: true }]);
   await context.route('**/api/me', (r) => r.fulfill({ json: { user: { id: user, displayName: `玩家${user}` } } }));
   await context.route('**/api/wallet', (r) => r.fulfill({ json: { wallet: { ...wallet, canRelief: false, writesLeft: 200, caps: {}, fresh: false }, tiers: {}, reliefTo: 2000 } }));
+  // 社交（kit 的 mountSocial）登录后会报位置、问邀请；假平台照样答，不然控制台有 404
+  await context.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
+  await context.route('**/api/invites', (r) => r.fulfill({ json: { invites: [] } }));
   await context.addInitScript(() => localStorage.setItem('guandan.tutorial', JSON.stringify({ v: 1, done: true })));
   const page = await context.newPage();
   page.on('console', (m) => {
@@ -77,8 +80,8 @@ async function shot(page: Page, file: string): Promise<void> {
 async function enterTier(page: Page, tier: string): Promise<string> {
   // 标题页的按钮有一段滑进来的动画
   await page.waitForTimeout(800);
-  await click(page, 'new');
-  await until(page, '选模式', "'stake' in g.controls()");
+  // 主页上直接点"实盘"模式卡（art-v3 起没有选模式那一层）
+  await until(page, '主页', "'stake' in g.controls()");
   await click(page, 'stake');
   await until(page, '选档位', `'tier:${tier}' in g.controls()`);
   await click(page, `tier:${tier}`);
@@ -120,7 +123,7 @@ async function inject(page: Page, n: number, deals: number[]): Promise<void> {
     },
     { state, deals },
   );
-  await until(page, '回到标题页', "g.scene === 'title' && 'stake' in g.controls()");
+  await until(page, '回到标题页', "g.scene === 'title' && 'resumeStake' in g.controls()");
   await page.waitForTimeout(800);
 }
 
@@ -172,8 +175,7 @@ async function main(): Promise<void> {
     // "capped" 开头的号：假钱包当它今天已经赢满了
     const page = await openPage(browser, stack, 'capped-main', { balance: 10_000, stakes: [] });
     await page.waitForTimeout(800);
-    await click(page, 'new');
-    await until(page, '选模式', "'fun' in g.controls() && 'stake' in g.controls()");
+    await until(page, '主页的模式卡', "'fun' in g.controls() && 'stake' in g.controls()");
     await shot(page, '10-mode');
     await click(page, 'stake');
     await until(page, '选档位', "'tier:small' in g.controls()");
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
     await shot(page, '21-refund-ask');
     await click(page, 'ok');
     await until(page, '退回后回标题', "g.scene === 'title' && g.stake()?.save === null");
-    assert(!(await page.evaluate(() => 'stake' in window.__game!.controls())), '退回后标题页不该再有"接着打实盘"');
+    assert(!(await page.evaluate(() => 'resumeStake' in window.__game!.controls())), '退回后标题页不该再有"接着打实盘"');
     notes.push('第一副没打完回标题：确认后原样退回，存档删掉');
 
     // ③ 再进一场，换成打了 7 副的局，接着打完最后一副、结算
@@ -202,7 +204,7 @@ async function main(): Promise<void> {
     assert(ref2 !== ref1, '每场一个新 ref');
     await inject(page, 7, [3, 2, 1, 3, -1, 2, 1]);
     await shot(page, '30-title-resume');
-    await click(page, 'stake');
+    await click(page, 'resumeStake');
     await until(page, '接着打：第 7 副的结算页', "g.scene === 'table' && g.overlay === 'settle'");
     await shot(page, '31-deal7');
     await page.evaluate(() => window.__game!.setAutoplay(true));
@@ -225,7 +227,7 @@ async function main(): Promise<void> {
 
     // ④ 打了 3 副后回标题："现在结算"
     await inject(page, 3, [2, -1, 1]);
-    await click(page, 'stake');
+    await click(page, 'resumeStake');
     await until(page, '接着打', "g.scene === 'table' && g.overlay === 'settle'");
     // 开第 4 副，打着打着回标题
     await click(page, 'next');
@@ -245,7 +247,7 @@ async function main(): Promise<void> {
     // ④b 打了几副，点右上那条"实盘 · …"（和左上"大厅"同一个框，0.11.2）："现在结算，回大厅"写明结回多少，结回后去大厅
     await enterTier(page, 'small');
     await inject(page, 2, [3, 3]);
-    await click(page, 'stake');
+    await click(page, 'resumeStake');
     await until(page, '接着打（2 副）', "g.scene === 'table' && g.overlay === 'settle'");
     await click(page, 'next');
     await until(page, '第 3 副', "g.overlay === null && g.view().dealNo === 3 && g.idle");
@@ -262,8 +264,7 @@ async function main(): Promise<void> {
     // ⑤ 钱包说不够：进不了场（手机横屏的尺寸，顺便看选档页排得下）
     const poor = await openPage(browser, stack, 'nofunds-1', { balance: 10_000, stakes: [] }, { width: 844, height: 390 });
     await poor.waitForTimeout(800);
-    await click(poor, 'new');
-    await until(poor, '选模式', "'stake' in g.controls()");
+    await until(poor, '主页', "'stake' in g.controls()");
     await click(poor, 'stake');
     await until(poor, '选档位', "'tier:small' in g.controls()");
     await click(poor, 'tier:small');
@@ -275,8 +276,7 @@ async function main(): Promise<void> {
     // 钱包里有一份本机没有的单机实盘：照样能开新的，另给"原样退回那一份"
     const stray = await openPage(browser, stack, 'stray-1', { balance: 10_000, stakes: [{ game: 'guandan', ref: `solo-${'e'.repeat(32)}`, tier: 'small', mode: 'client' }] });
     await stray.waitForTimeout(800);
-    await click(stray, 'new');
-    await until(stray, '选模式', "'stake' in g.controls()");
+    await until(stray, '主页', "'stake' in g.controls()");
     await click(stray, 'stake');
     await until(stray, '原样退回那一份', "'stray' in g.controls()");
     assert(await stray.evaluate(() => Object.keys(window.__game!.controls()).includes('tier:small')), '有一份不在本机时照样能开新的');

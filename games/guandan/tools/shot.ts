@@ -259,11 +259,9 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await page.waitForTimeout(900);
   await shot(ctx, '01-title');
   await checkHits(ctx, '标题页', true);
-  // "开始"先选娱乐 / 实盘（0.4.0）
-  await click(ctx, 'new');
-  await until(ctx, '选模式', "'fun' in g.controls() && 'stake' in g.controls()");
-  await page.waitForTimeout(300);
-  await shot(ctx, '01b-mode');
+  const ctl0 = await controls(ctx);
+  // 主页的模式卡（art-v3）：娱乐、实盘、好友房都在主页上；新账号的战绩条是空状态那句
+  assert(['quick', 'fun', 'stake', 'online', 'rules', 'settings', 'stats'].every((k) => k in (ctl0 ?? {})), '主页有快速开始、三张模式卡和右上角三个图标');
   await click(ctx, 'fun');
   // 娱乐再选难度（0.12.1：新手 / 普通 / 高手，第一次默认新手）
   await until(ctx, '选难度', "'level:novice' in g.controls() && 'level:pro' in g.controls()");
@@ -883,8 +881,6 @@ async function playtest(browser: Browser): Promise<void> {
   };
   await until(ctx, '标题页', "g.scene === 'title'");
   await page.waitForTimeout(800);
-  await press('new');
-  await until(ctx, '选模式', "'fun' in g.controls()");
   await page.waitForTimeout(300);
   await press('fun');
   await until(ctx, '选难度', "'level:normal' in g.controls()");
@@ -941,17 +937,15 @@ async function gallerySize(browser: Browser, z: GallerySize): Promise<void> {
   const { prefix: p, touch } = z;
   const base = { w: z.w, h: z.h, dpr: z.dpr, touch };
   const ck = (c: Ctx, k: string): Promise<void> => click(c, k, touch);
-  // 主流程：标题 → 模式 → 难度 → 牌桌 → 出牌 → 结算 → 设置 / 规则 / 战绩
+  // 主流程：标题 → 娱乐卡 → 难度 → 牌桌 → 出牌 → 结算 → 设置 / 规则 / 战绩
   const ctx = await open(browser, `图集${p}`, 'debug=1', { ...base, api: fakeApi() });
   const { page } = ctx;
   await until(ctx, '标题页', "g.scene === 'title'");
   await page.waitForTimeout(1200);
   await shot(ctx, `${p}-01-title`);
-  await step('选模式', async () => {
-    await ck(ctx, 'new');
-    await until(ctx, '选模式', "'fun' in g.controls() && 'stake' in g.controls()", 8000);
-    await page.waitForTimeout(400);
-    await shot(ctx, `${p}-02-mode`);
+  // art-v3 起没有"选模式"那一层：主页上直接点"娱乐"模式卡
+  await step('点娱乐卡', async () => {
+    await until(ctx, '模式卡', "'fun' in g.controls() && 'stake' in g.controls()", 8000);
     await ck(ctx, 'fun');
   });
   await step('选难度', async () => {

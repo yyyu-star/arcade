@@ -17,33 +17,6 @@ function reg(m: Modal, key: string, b: Button): Button {
   return b;
 }
 
-/** 娱乐 / 实盘。娱乐那边有存档时给"继续"和"开新局"；实盘那边点了去选档位 */
-export function openModePicker(
-  scene: Phaser.Scene,
-  o: { saved: string | null; onContinue: () => void; onNew: () => void; onStake: () => void },
-): Modal {
-  const m = modal(scene, 760, 420);
-  const card = (x: number, title: string, desc: string, color: number): void => {
-    const g = scene.add.graphics();
-    g.fillStyle(color, 0.12).fillRoundedRect(x - 165, -170, 330, 330, 16);
-    g.lineStyle(2, color, 0.6).strokeRoundedRect(x - 165, -170, 330, 330, 16);
-    m.body.add(g);
-    m.body.add(text(scene, x, -128, title, { size: TYPE.big, bold: true, color }));
-    m.body.add(text(scene, x, -66, desc, { size: TYPE.label, color: COLOR.ink, wrap: 290 }));
-  };
-  card(-180, '娱乐', '随便玩，不算筹码', COLOR.green);
-  card(180, '实盘', `带一份筹码进场，打 ${SOLO_DEALS} 副结算；输赢最多一份`, COLOR.red);
-  if (o.saved) {
-    reg(m, 'continue', new Button(scene, -180, 30, 260, 60, '继续', 'red', () => (m.close(), o.onContinue()), 'play'));
-    m.body.add(text(scene, -180, 74, o.saved, { size: TYPE.small, color: COLOR.muted }));
-    reg(m, 'fun', new Button(scene, -180, 122, 260, 56, '开新局', 'wood', () => (m.close(), o.onNew()), 'restart'));
-  } else {
-    reg(m, 'fun', new Button(scene, -180, 70, 260, 64, '开始', 'red', () => (m.close(), o.onNew()), 'play'));
-  }
-  reg(m, 'stake', new Button(scene, 180, 70, 260, 64, '选档位', 'gold', () => (m.close(), o.onStake()), 'cards'));
-  return m;
-}
-
 /** 娱乐选难度：新手 / 普通 / 高手，每档一行（电脑多强、一场多久、适合谁）；当前设置的那档描金边 */
 export function openLevelPicker(scene: Phaser.Scene, current: SoloLevel, onPick: (level: SoloLevel) => void): Modal {
   const m = modal(scene, 900, 430);

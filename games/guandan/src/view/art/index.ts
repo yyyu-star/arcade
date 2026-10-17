@@ -4,4 +4,4 @@
 export { cardFaceSvg, cardBackSvg, levelMarkSvg, wildMarkSvg } from './cards.ts';
 export { avatarSvg, PERSONAS, type AvatarId, type Mood } from './avatars.ts';
 export { iconSvg, type IconName } from './icons.ts';
-export { tableSvg, titleArtSvg, logoSvg, faviconSvg, stampSvg, particleSvg, seatPlateSvg } from './scene.ts';
+export { tableSvg, titleArtSvg, lanternArtSvg, homeFigureSvg, logoSvg, faviconSvg, stampSvg, particleSvg, seatPlateSvg } from './scene.ts';

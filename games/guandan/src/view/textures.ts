@@ -7,7 +7,9 @@ import {
   avatarSvg,
   cardBackSvg,
   cardFaceSvg,
+  homeFigureSvg,
   iconSvg,
+  lanternArtSvg,
   levelMarkSvg,
   logoSvg,
   particleSvg,
@@ -20,6 +22,7 @@ import {
   type Mood,
 } from './art/index.ts';
 import { app } from './app.ts';
+import { FIGURE_SIZE, LANTERN_SIZE } from './home-layout.ts';
 import { withSvgFont } from './fonts.ts';
 import { RENDER_SCALE } from './theme.ts';
 
@@ -29,6 +32,8 @@ export const CARD_H = 140;
 
 const AVATARS: AvatarId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
 const MOODS: Mood[] = ['normal', 'happy', 'sad', 'think', 'smug'];
+/** 主页上每个人的表情（和以前标题图里一样） */
+const HOME_MOOD: Record<AvatarId, Mood> = { laozhang: 'smug', xiaomei: 'normal', aqiang: 'happy', me: 'happy' };
 const ICONS: IconName[] = [
   'play', 'pass', 'hint', 'sort', 'undo', 'settings', 'rules', 'sound', 'mute', 'back',
   'stats', 'home', 'close', 'check', 'crown', 'bomb', 'cards', 'robot', 'speed', 'restart',
@@ -109,6 +114,9 @@ function jobsCore(): Job[] {
   for (const p of PARTICLES) jobs.push({ key: `particle:${p}`, svg: () => particleSvg(p), w: 32, h: 32 });
   // 0.3.0 起好友房一直露出，logo 上不再盖"单机版"的印章
   jobs.push({ key: 'logo', svg: () => logoSvg(false), w: 520, h: 220 });
+  // 主页（art-v3）：能动的灯笼和四个人，按显示尺寸烘焙（人物显示约 1.62 倍）
+  jobs.push({ key: 'home:lantern', svg: () => lanternArtSvg(), w: LANTERN_SIZE.w, h: LANTERN_SIZE.h });
+  for (const a of AVATARS) jobs.push({ key: `home:fig:${a}`, svg: () => homeFigureSvg(a, HOME_MOOD[a]), w: Math.round(FIGURE_SIZE.w * 1.62), h: Math.round(FIGURE_SIZE.h * 1.62) });
   return jobs;
 }
 

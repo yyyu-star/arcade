@@ -276,6 +276,59 @@ export class Button extends Phaser.GameObjects.Container {
   }
 }
 
+/**
+ * 主页的模式卡（art-v3 PR ①）：和按钮同一种立体面板，竖着排图标、名字、一两行说明。悬停、按下、键盘焦点和 Button 一样；
+ * 点按区域就是卡本身（卡比 minHit 大）
+ */
+export class ModeCard extends Phaser.GameObjects.Container {
+  private bg: Phaser.GameObjects.Graphics;
+  private hover = false;
+  private down = false;
+  readonly bw: number;
+  readonly bh: number;
+  private onClick: () => void;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, w: number, h: number, name: string, desc: string, style: ButtonStyle, iconKey: string, onClick: () => void) {
+    super(scene, x, y);
+    this.onClick = onClick;
+    this.bw = w;
+    this.bh = h;
+    const st = BUTTON[style];
+    this.bg = scene.add.graphics();
+    this.add(this.bg);
+    const icon = scene.add.image(0, -h / 2 + 34, `icon:${iconKey}`).setDisplaySize(40, 40).setTint(st.text);
+    const title = text(scene, 0, -h / 2 + 76, name, { size: TYPE.title, bold: true, color: st.text, stroke: shade(st.fill, 0.5), strokeWidth: 3 });
+    const sub = text(scene, 0, -h / 2 + 108, desc, { size: TYPE.small, color: st.text, wrap: w - 20, oy: 0 }).setAlpha(0.9);
+    this.add([icon, title, sub]);
+    this.setData('style', style);
+    this.paint();
+    setHit(this, w, h);
+    this.on('pointerover', () => ((this.hover = true), this.paint()));
+    this.on('pointerout', () => ((this.hover = false), (this.down = false), this.paint()));
+    this.on('pointerdown', () => ((this.down = true), this.paint()));
+    this.on('pointerup', () => {
+      const was = this.down;
+      this.down = false;
+      this.paint();
+      if (was) this.press();
+    });
+    focusable(this, w, h, () => this.press());
+    scene.add.existing(this);
+  }
+
+  private press(): void {
+    audio.sfx('click');
+    this.onClick();
+  }
+
+  private paint(): void {
+    const st = BUTTON[this.getData('style') as ButtonStyle];
+    const pressed = this.down;
+    drawPlate(this.bg, this.bw, this.bh, this.hover && !pressed ? shade(st.fill, 1.1) : st.fill, st.rim, RADIUS.xl, pressed);
+    this.setScale(pressed ? 0.98 : this.hover ? 1.02 : 1);
+  }
+}
+
 /** 圆形木质图标按钮（顶栏用）。点按区域默认至少 minHit() 见方，挨得近的调用方用 setHit 收窄到间距。 */
 export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: string, onClick: () => void, size = 48): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y);

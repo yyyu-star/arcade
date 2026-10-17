@@ -1,7 +1,8 @@
 /**
  * 场景类美术：牌桌、标题主视觉、logo、favicon、印章、粒子、名牌底板。
  */
-import { bustSvgBody as avatarSvgBodyScaled } from './avatars.ts';
+import { bustSvgBody as avatarSvgBodyScaled, type AvatarId, type Mood } from './avatars.ts';
+import { homeLayout } from '../home-layout.ts';
 import { cardBackSvg, cardFaceSvg } from './cards.ts';
 import { C, SERIF, cloudPath, esc, f, hashStr, hex, huiwenRow, prng, shade, suitShape, svg } from './common.ts';
 
@@ -119,95 +120,86 @@ function teacup(x: number, y: number, s: number): string {
     `<path d="M-6 -34C-12 -46 0 -52 -6 -64M8 -32C2 -44 14 -50 8 -62" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".35"/></g>`;
 }
 
-/** 标题页主视觉：茶馆一角，月洞窗、灯笼、八仙桌、四位牌友；右侧 40% 偏暗留给按钮 */
+/**
+ * 主页主视觉的背景层（art-v3 PR ①）：墙、月洞窗、灯光、八仙桌、散牌、茶杯，铺满整个宽度（以前右边 40% 是空墙，宽屏在桌子尽头硬切）。
+ * 四个人和灯笼是单独的纹理（homeFigureSvg、lanternArtSvg），在场景里摆、能动；位置都来自 home-layout.ts 的同一份排版
+ */
 export function titleArtSvg(w: number, h: number): string {
-  const sx = h / 720; // 竖向基准缩放（布局按 720 高设计）
-  const wx = Math.min(w * 0.3, 520 * sx);
-  const wy = 300 * sx;
-  const wr = 230 * sx;
-  // 月洞窗格子（方格 + 斜向冰裂纹简化成菱格）
+  const L = homeLayout(w);
+  const A = L.artW;
+  const { x: wx, y: wy, r: wr } = L.window;
   let lattice = '';
   for (let i = -6; i <= 6; i++) {
-    const o = i * 38 * sx;
+    const o = i * 38;
     lattice += `M${f(wx + o)} ${f(wy - wr)}V${f(wy + wr)}M${f(wx - wr)} ${f(wy + o)}H${f(wx + wr)}`;
   }
-  // 桌面四边形
-  const tl = -60 * sx, tr = w * 0.6;
-  const backY = 486 * sx, frontY = 640 * sx;
-  const table = `<path d="M${f(tl + 40)} ${f(backY)}L${f(tr - 30)} ${f(backY)}L${f(tr + 40)} ${f(frontY)}L${f(tl)} ${f(frontY)}Z" fill="url(#tbl)" stroke="#2a1206" stroke-width="3"/>` +
-    `<path d="M${f(tl + 40)} ${f(backY + 4)}L${f(tr - 30)} ${f(backY + 4)}" stroke="#d99a5a" stroke-width="2" opacity=".5"/>` +
-    // 桌面中间铺一块墨绿牌毯
-    `<path d="M${f(w * 0.08)} ${f(backY + 18 * sx)}L${f(w * 0.5)} ${f(backY + 18 * sx)}L${f(w * 0.54)} ${f(frontY - 22 * sx)}L${f(w * 0.04)} ${f(frontY - 22 * sx)}Z" fill="url(#mat)" stroke="${C.gold}" stroke-width="2"/>` +
-    // 桌沿（牙板）带回纹
-    `<path d="M${f(tl)} ${f(frontY)}L${f(tr + 40)} ${f(frontY)}L${f(tr + 40)} ${f(frontY + 46 * sx)}L${f(tl)} ${f(frontY + 46 * sx)}Z" fill="#4a1f0e" stroke="#2a1206" stroke-width="3"/>` +
-    `<path d="${huiwenRow(0, frontY + 12 * sx, 22 * sx, Math.floor((tr + 40) / (22 * sx)))}" fill="none" stroke="${C.gold}" stroke-width="2" opacity=".75"/>` +
-    `<rect x="${f(tl)}" y="${f(frontY + 46 * sx)}" width="${f(tr + 40 - tl)}" height="${f(h)}" fill="#2e1208"/>`;
-  // 人物（头肩，放大），先画在桌后
-  const people: Array<[string, number, number, number, number]> = [
-    // [svg, 中心 x, 底 y, 缩放, 旋转]
-    [avatarSvgBodyScaled('laozhang', 'smug'), w * 0.085, backY + 30 * sx, 1.75 * sx, -4],
-    [avatarSvgBodyScaled('xiaomei', 'normal'), w * 0.235, backY + 20 * sx, 1.6 * sx, 2],
-    [avatarSvgBodyScaled('aqiang', 'happy'), w * 0.385, backY + 26 * sx, 1.7 * sx, 5],
-    [avatarSvgBodyScaled('me', 'happy'), w * 0.525, backY + 34 * sx, 1.65 * sx, -3],
-  ];
-  let ppl = '';
-  for (const [body, x, by, s, r] of people) {
-    ppl += `<g transform="translate(${f(x)} ${f(by)}) rotate(${r}) scale(${f(s)}) translate(-80 -160)">` +
-      `<ellipse cx="80" cy="150" rx="70" ry="20" fill="#000" opacity=".25"/>${body}</g>`;
-  }
-  // 桌上散牌（嵌套 SVG，压扁一点表示平放）
-  const cw = 88 * sx, ch = 123 * sx;
+  const backY = L.table.back, frontY = L.table.front;
+  // 桌子横贯整个画面（右边伸到面板底下，不再半截断掉）；牌毯只铺在主视觉那一段
+  const table = `<path d="M-20 ${f(backY)}L${f(w + 20)} ${f(backY)}L${f(w + 20)} ${f(frontY)}L-20 ${f(frontY)}Z" fill="url(#tbl)" stroke="#2a1206" stroke-width="3"/>` +
+    `<path d="M-20 ${f(backY + 4)}L${f(w + 20)} ${f(backY + 4)}" stroke="#d99a5a" stroke-width="2" opacity=".5"/>` +
+    `<path d="M${f(A * 0.06)} ${f(backY + 18)}L${f(A * 0.94)} ${f(backY + 18)}L${f(A * 0.97)} ${f(frontY - 22)}L${f(A * 0.03)} ${f(frontY - 22)}Z" fill="url(#mat)" stroke="${C.gold}" stroke-width="2"/>` +
+    `<path d="M-20 ${f(frontY)}L${f(w + 20)} ${f(frontY)}L${f(w + 20)} ${f(frontY + 46)}L-20 ${f(frontY + 46)}Z" fill="#4a1f0e" stroke="#2a1206" stroke-width="3"/>` +
+    `<path d="${huiwenRow(0, frontY + 12, 22, Math.ceil(w / 22))}" fill="none" stroke="${C.gold}" stroke-width="2" opacity=".75"/>` +
+    `<rect x="-20" y="${f(frontY + 46)}" width="${f(w + 40)}" height="${f(h)}" fill="#2e1208"/>`;
+  // 桌上散牌（嵌套 SVG，压扁一点表示平放），按主视觉宽度排
+  const cw = 88, ch = 123;
   const lay: Array<[string, number, number, number]> = [
-    [cardFaceSvg(14, 0), w * 0.12, 520, -18],
-    [cardFaceSvg(13, 1), w * 0.16, 512, -6],
-    [cardFaceSvg(17, -1), w * 0.2, 508, 6],
-    [cardFaceSvg(12, 3), w * 0.24, 512, 18],
-    [cardBackSvg(0), w * 0.33, 520, -8],
-    [cardBackSvg(0), w * 0.35, 516, 4],
-    [cardFaceSvg(11, 2), w * 0.43, 524, 14],
-    [cardFaceSvg(10, 1), w * 0.47, 530, 26],
+    [cardFaceSvg(14, 0), 0.16, 520, -18],
+    [cardFaceSvg(13, 1), 0.22, 512, -6],
+    [cardFaceSvg(17, -1), 0.28, 508, 6],
+    [cardFaceSvg(12, 3), 0.34, 512, 18],
+    [cardBackSvg(0), 0.47, 520, -8],
+    [cardBackSvg(0), 0.5, 516, 4],
+    [cardFaceSvg(11, 2), 0.62, 524, 14],
+    [cardFaceSvg(10, 1), 0.68, 530, 26],
   ];
   let cards = '';
-  lay.forEach(([src, x, y, r], i) => {
-    cards += `<g transform="translate(${f(x)} ${f(y * sx)}) scale(1 .62) rotate(${r})"><rect x="${f(-cw / 2 + 3)}" y="${f(-ch / 2 + 5)}" width="${f(cw)}" height="${f(ch)}" rx="${f(6 * sx)}" fill="#000" opacity=".35"/>${inlineSvg(src, `c${i}`, -cw / 2, -ch / 2, cw, ch)}</g>`;
+  lay.forEach(([src, k, y, r], i) => {
+    cards += `<g transform="translate(${f(A * k)} ${f(y)}) scale(1 .62) rotate(${r})"><rect x="${f(-cw / 2 + 3)}" y="${f(-ch / 2 + 5)}" width="${f(cw)}" height="${f(ch)}" rx="6" fill="#000" opacity=".35"/>${inlineSvg(src, `c${i}`, -cw / 2, -ch / 2, cw, ch)}</g>`;
   });
-  // 筹码（铜钱）
   let coins = '';
-  for (let i = 0; i < 4; i++) coins += `<g transform="translate(${f(w * 0.075 + i * 6)} ${f(600 * sx - i * 6 * sx)}) scale(${f(sx)} ${f(sx * 0.5)})"><circle r="20" fill="${C.gold}" stroke="${C.ink}" stroke-width="3"/><rect x="-6" y="-6" width="12" height="12" fill="#2e1208"/></g>`;
+  for (let i = 0; i < 4; i++) coins += `<g transform="translate(${f(A * 0.1 + i * 6)} ${f(600 - i * 6)}) scale(1 .5)"><circle r="20" fill="${C.gold}" stroke="${C.ink}" stroke-width="3"/><rect x="-6" y="-6" width="12" height="12" fill="#2e1208"/></g>`;
+  // 灯笼的光晕画在背景里（静的），灯笼本身是能摆的纹理
+  const glows = L.lanterns.map((l) => `<circle cx="${f(l.x)}" cy="${f(l.y + 140 * l.s)}" r="${f(150 * l.s)}" fill="url(#lglow)"/>`).join('');
   return svg(w, h,
     `<defs>` +
-    `<linearGradient id="wall" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5a2a17"/><stop offset=".55" stop-color="#3c1a0f"/><stop offset="1" stop-color="#1c0c07"/></linearGradient>` +
+    `<linearGradient id="wall" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5a2a17"/><stop offset=".6" stop-color="#3c1a0f"/><stop offset="1" stop-color="#2a120a"/></linearGradient>` +
     `<radialGradient id="warm" cx="${f(wx / w)}" cy="${f(wy / h)}" r=".7"><stop offset="0" stop-color="#ffb35c" stop-opacity=".45"/><stop offset=".6" stop-color="#ff8a3c" stop-opacity=".08"/><stop offset="1" stop-color="#ff8a3c" stop-opacity="0"/></radialGradient>` +
     `<radialGradient id="win" cx=".45" cy=".4" r=".7"><stop offset="0" stop-color="#ffe3a8"/><stop offset=".6" stop-color="#f3a75a"/><stop offset="1" stop-color="#b8542a"/></radialGradient>` +
-    `<radialGradient id="lglow"><stop offset="0" stop-color="#ffb04a" stop-opacity=".5"/><stop offset="1" stop-color="#ff8030" stop-opacity="0"/></radialGradient>` +
-    `<radialGradient id="lred" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#ff6a4a"/><stop offset=".55" stop-color="#d0262c"/><stop offset="1" stop-color="#7d1218"/></radialGradient>` +
+    `<radialGradient id="lglow"><stop offset="0" stop-color="#ffb04a" stop-opacity=".45"/><stop offset="1" stop-color="#ff8030" stop-opacity="0"/></radialGradient>` +
     `<linearGradient id="tbl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a4424"/><stop offset="1" stop-color="#5a2412"/></linearGradient>` +
     `<linearGradient id="mat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a6e4c"/><stop offset="1" stop-color="#174a32"/></linearGradient>` +
-    `<linearGradient id="dark" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>` +
-    `<radialGradient id="vig" cx=".4" cy=".45" r=".85"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>` +
+    `<radialGradient id="vig" cx="${f(A / 2 / w)}" cy=".45" r=".9"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>` +
     `<clipPath id="wc"><circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr)}"/></clipPath>` +
     `</defs>` +
     `<rect width="${w}" height="${h}" fill="url(#wall)"/>` +
-    // 墙面竖向木板线
     `<g stroke="#000" stroke-opacity=".18" stroke-width="2">${Array.from({ length: Math.ceil(w / 90) }, (_, i) => `<path d="M${i * 90} 0V${h}"/>`).join('')}</g>` +
-    // 月洞窗
-    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr + 18 * sx)}" fill="#2a1206"/>` +
+    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr + 18)}" fill="#2a1206"/>` +
     `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr)}" fill="url(#win)"/>` +
     `<g clip-path="url(#wc)">` +
-    // 窗外：远山、竹影
-    `<path d="M${f(wx - wr)} ${f(wy + 60 * sx)}Q${f(wx - 120 * sx)} ${f(wy - 30 * sx)} ${f(wx - 30 * sx)} ${f(wy + 40 * sx)}T${f(wx + wr)} ${f(wy + 20 * sx)}V${f(wy + wr)}H${f(wx - wr)}Z" fill="#c9773f" opacity=".55"/>` +
-    `<g stroke="#7a3a1a" stroke-opacity=".35" stroke-width="${f(6 * sx)}" stroke-linecap="round"><path d="M${f(wx + 120 * sx)} ${f(wy + wr)}Q${f(wx + 110 * sx)} ${f(wy)} ${f(wx + 140 * sx)} ${f(wy - wr)}"/><path d="M${f(wx + 160 * sx)} ${f(wy + wr)}Q${f(wx + 170 * sx)} ${f(wy)} ${f(wx + 150 * sx)} ${f(wy - wr)}"/></g>` +
-    `<path d="${lattice}" stroke="#3b1d0c" stroke-width="${f(7 * sx)}" opacity=".85"/>` +
+    `<path d="M${f(wx - wr)} ${f(wy + 60)}Q${f(wx - 120)} ${f(wy - 30)} ${f(wx - 30)} ${f(wy + 40)}T${f(wx + wr)} ${f(wy + 20)}V${f(wy + wr)}H${f(wx - wr)}Z" fill="#c9773f" opacity=".55"/>` +
+    `<g stroke="#7a3a1a" stroke-opacity=".35" stroke-width="6" stroke-linecap="round"><path d="M${f(wx + 120)} ${f(wy + wr)}Q${f(wx + 110)} ${f(wy)} ${f(wx + 140)} ${f(wy - wr)}"/><path d="M${f(wx + 160)} ${f(wy + wr)}Q${f(wx + 170)} ${f(wy)} ${f(wx + 150)} ${f(wy - wr)}"/></g>` +
+    `<path d="${lattice}" stroke="#3b1d0c" stroke-width="7" opacity=".85"/>` +
     `</g>` +
-    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr)}" fill="none" stroke="#6b3a1e" stroke-width="${f(14 * sx)}"/>` +
-    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr + 9 * sx)}" fill="none" stroke="${C.gold}" stroke-width="${f(2 * sx)}" opacity=".7"/>` +
+    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr)}" fill="none" stroke="#6b3a1e" stroke-width="14"/>` +
+    `<circle cx="${f(wx)}" cy="${f(wy)}" r="${f(wr + 9)}" fill="none" stroke="${C.gold}" stroke-width="2" opacity=".7"/>` +
     `<rect width="${w}" height="${h}" fill="url(#warm)"/>` +
-    lantern(w * 0.035 + 30 * sx, 150 * sx, 0.95 * sx) +
-    lantern(w * 0.47, 120 * sx, 0.8 * sx) +
-    ppl +
-    table + cards + coins + teacup(w * 0.53, 560 * sx, 0.9 * sx) +
-    `<rect width="${w}" height="${h}" fill="url(#dark)"/>` +
+    glows +
+    table + cards + coins + teacup(A * 0.8, 560, 0.9) +
     `<rect width="${w}" height="${h}" fill="url(#vig)"/>`);
+}
+
+/** 主页的灯笼（单独一张，能摆）：宽 120、高 280，挂绳顶端在 (60, 10)，摆动的支点就在那里（LANTERN_PIVOT） */
+export function lanternArtSvg(): string {
+  return svg(120, 280,
+    `<defs><radialGradient id="lred" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#ff6a4a"/><stop offset=".55" stop-color="#d0262c"/><stop offset="1" stop-color="#7d1218"/></radialGradient>` +
+    `</defs>` +
+    lantern(60, 150, 1).replace('<circle r="120" fill="url(#lglow)"/>', ''));
+}
+
+/** 主页的一个人（单独一张，能动）：160×170，底边中点在 (80, 160)，带脚下的影子 */
+export function homeFigureSvg(id: AvatarId, mood: Mood): string {
+  return svg(160, 170, `<ellipse cx="80" cy="152" rx="70" ry="18" fill="#000" opacity=".25"/>${avatarSvgBodyScaled(id, mood)}`);
 }
 
 /** 标题字"掼蛋"：金边红字，透明底。seal 为真时右边加一枚竖排小印"单机版"（0.3.0 起好友房一直露出，不再用）；为假时不画小印，字挪到正中 */
