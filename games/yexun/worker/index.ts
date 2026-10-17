@@ -3,9 +3,10 @@
  * - 本站：部署工具按 tools/workers.json 补上平台绑定 ARCADE（认人）、WALLET（钱包）和 GATE=login；
  * - 单独部署（wrangler.jsonc 原样）：没有平台，谁打开都能玩，站点根 / 转到 /games/yexun/。
  * 首页三种写法过共用包的登录闸门 loginGate：登录了放行，没登录 302 到平台登录页，平台不可用回 503 页。
- * 实盘的带入、结回（/games/yexun/api/live/*）第 5 步加。入口模块只导出 default（具名导出会让单独部署的 Worker 起不来）。
+ * 实盘的带入、结回走 /games/yexun/api/live/*（./live.ts），不看 GATE、总要认人。入口模块只导出 default（具名导出会让单独部署的 Worker 起不来）。
  */
 import { loginGate, standaloneRoot, type GateEnv } from 'arcade-kit/worker';
+import { LIVE_PREFIX, handleLive, type LiveEnv } from './live.ts';
 
 const GAME = 'yexun';
 const BASE = `/games/${GAME}`;
@@ -17,12 +18,13 @@ const DOWN_PAGE = `<!doctype html>
 <body><main><h1>平台暂时连不上</h1><p>稍等一会儿再刷新试试。</p><p><a href="/">回大厅</a></p></main></body></html>`;
 
 export default {
-  async fetch(request: Request, env: GateEnv): Promise<Response> {
+  async fetch(request: Request, env: GateEnv & LiveEnv): Promise<Response> {
     const root = standaloneRoot(request, env, GAME);
     if (root) return root;
     const path = new URL(request.url).pathname;
+    if (path.startsWith(LIVE_PREFIX)) return handleLive(request, env);
     if (path === BASE) return Response.redirect(new URL(`${BASE}/`, request.url).toString(), 301);
     if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE });
     return env.ASSETS.fetch(request);
   },
-} satisfies ExportedHandler<GateEnv>;
+} satisfies ExportedHandler<GateEnv & LiveEnv>;
