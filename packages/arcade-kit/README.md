@@ -301,6 +301,7 @@ const fun = new TableFun({
   button: () => funButtonRect(),                 // "互动"按钮放哪；null 不画（没坐下）
   send: (id, to) => (online ? client.emote(id, to) : fun.receive(0, id, to)),
   canSend: () => seated,
+  hintSeat: () => (trickEmpty(1) ? 1 : null),     // 首次提示冒在哪家头像旁；null = 现在会挡住出牌，过 2 秒再问（0.17.0，不给就挑第一个电脑）
   enabled: () => settings.fun,                   // 设置里关掉：别人的一律不播，单机电脑也不反应
   scope: () => roomCode ?? 'solo',               // "屏蔽他""全部屏蔽"按房间分开
   localBots: !online,                            // 单机：电脑的反应由组件算、在本地播

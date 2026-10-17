@@ -6,7 +6,7 @@ import type { Animator } from '../fx/anim.ts';
 import { flameBurst, iceBurst } from '../fx/particles.ts';
 import type { Rect } from '../rect.ts';
 import { COLOR, FEEL_COLOR, PHONE, THEME_COLOR, TYPE, arrowOf, signColor, textOn } from '../theme.ts';
-import { addGlyph, addImage, addPaper, addPill, setArt } from '../ui/art.ts';
+import { addGlyph, addImage, addPaper, addPill, addWood, setArt } from '../ui/art.ts';
 import { addSpark, type Spark } from '../ui/spark.ts';
 import { openThemeDetail } from './detail.ts';
 import { preCount, themeHeat } from './tape.ts';
@@ -93,6 +93,8 @@ export class ThemeBoardView {
     this.root = scene.add.container(0, 0);
     // 手机上看板和群聊共用右边一块（标签页切换）：所有部件收进 root，切走时整块藏起来
     const before = scene.children.list.length;
+    // 0.18.0 木材质（art-v3：不会变的框架）：电脑上看板外面一圈木框；手机上看板在标签页里，不加
+    if (!PHONE) addWood(scene, BOARD.x - 6, BOARD.y - 6, BOARD.w + 12, BOARD.h + 12);
     addPaper(scene, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
     // 手机上标题和那句提醒在标签页上（标签「风口」，长按看说明），这里不重复
     if (!PHONE) addText(scene, BOARD.x + 18, BOARD.y + 16, '风口', { size: TYPE.title, bold: true });

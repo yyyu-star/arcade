@@ -79,6 +79,11 @@ export interface TableFunOptions {
   send(id: number, to?: number): void;
   /** 现在能不能发（好友房：坐下了才能），默认能 */
   canSend?(): boolean;
+  /**
+   * 首次提示"点头像扔道具"冒在哪个座位（0.17.0）：返回座位号，或 null = 现在不合适（比如那家的出牌区上有牌，气泡会挡住），
+   * 组件过 2 秒再问。不给就挑第一个电脑（没有就第一个别人），和以前一样
+   */
+  hintSeat?(): number | null;
   /** 设置里"互动：开 / 不看"，关了别人的一律不播，单机电脑也不反应；默认开 */
   enabled?(): boolean;
   /** 屏蔽名单按这个分开（房间码；单机一个固定值），默认 'solo' */
@@ -114,6 +119,20 @@ const DEFAULT_LINES: Record<FunMood, readonly string[]> = {
 };
 
 const HINT_TEXT = '点头像扔道具，长按连扔';
+
+/**
+ * 首次提示冒在哪个座位（纯函数，测试直接测）：游戏给了 pick 就听它的，它给的座位空着或不存在当作"现在不行"；
+ * 没给就挑第一个电脑，没有电脑挑第一个别人。null = 这会儿不提示，过一会儿再问
+ */
+export function hintSeatFor(seats: readonly (FunSeat | null)[], pick?: () => number | null): number | null {
+  if (pick) {
+    const at = pick();
+    return at !== null && Number.isInteger(at) && seats[at] ? at : null;
+  }
+  const i = seats.findIndex((s) => !!s?.bot);
+  const at = i >= 0 ? i : seats.findIndex((s) => !!s && !s.me);
+  return at >= 0 ? at : null;
+}
 const CSS_ID = 'arcade-table-fun-css';
 const CSS = `
 .atf-ui{position:fixed;inset:0;pointer-events:none;font-family:var(--ak-font,inherit);-webkit-tap-highlight-color:transparent}
@@ -689,10 +708,8 @@ export class TableFun {
     } catch {
       return;
     }
-    const seats = this.o.seats();
-    const i = seats.findIndex((s) => !!s?.bot);
-    const at = i >= 0 ? i : seats.findIndex((s) => !!s && !s.me);
-    if (at < 0 || !this.canSend() || !this.enabled() || this.open) return this.later(2000, () => this.hint());
+    const at = hintSeatFor(this.o.seats(), this.o.hintSeat);
+    if (at === null || !this.canSend() || !this.enabled() || this.open) return this.later(2000, () => this.hint());
     try {
       localStorage.setItem(key, '1');
     } catch {

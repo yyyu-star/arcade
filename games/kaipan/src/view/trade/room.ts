@@ -73,6 +73,8 @@ export class Room {
   private readonly tint: Record<RoomTime, Phaser.GameObjects.Rectangle>;
   private readonly lamp: Phaser.GameObjects.Image | null;
   private time: RoomTime = 'day';
+  /** 0.17.0 开盘时灯一亮 */
+  private readonly flashRect: Phaser.GameObjects.Rectangle;
   private readonly haze: Phaser.GameObjects.Image | null;
   private readonly rain: Phaser.GameObjects.TileSprite | null;
   private readonly lightning: Phaser.GameObjects.Image[] = [];
@@ -159,6 +161,7 @@ export class Room {
     this.ambient = { bull: layer('ambient_bull'), flat: wash(0x6a7690, 0.12), bear: wash(0x1c1f45, 0.34) };
     const tintOf = (t: RoomTime): Phaser.GameObjects.Rectangle => wash(TIME_LIGHT[t].color, TIME_LIGHT[t].alpha).setAlpha(t === this.time ? 1 : 0);
     this.tint = { morning: tintOf('morning'), day: tintOf('day'), dusk: tintOf('dusk'), night: tintOf('night') };
+    this.flashRect = wash(0xfff6dc, 0.45).setAlpha(0);
     const lamp = layer('lamp_light');
     this.lamp = lamp;
     const glow = layer('monitor_glow');
@@ -310,6 +313,14 @@ export class Room {
     };
     for (const t of TIMES) to(this.tint[t], t === time ? 1 : 0);
     if (this.lamp && !LOW_MEMORY) to(this.lamp, TIME_LIGHT[time].lamp);
+  }
+
+  /** 0.17.0 开盘：屋里灯一亮（一闪 0.3 秒，不占节拍）；减少动态效果时不闪。 */
+  flashLights(anim: Animator): void {
+    if (anim.calm || !this.opts.ambient) return;
+    const r = this.flashRect;
+    this.scene.tweens.killTweensOf(r);
+    anim.fx({ targets: r, alpha: { from: 0, to: 1 }, duration: 110, yoyo: true, hold: 60, ease: 'Quad.easeOut' }, () => r.setAlpha(0));
   }
 
   private tintClouds(mood: Mood): void {

@@ -125,16 +125,19 @@ interface ViewPrefs {
   hints: 'auto' | 'on' | 'off';
   /** 收盘小结：full = 总账 + 每只一行；brief = 只显示总账一句 */
   recap: 'full' | 'brief';
+  /** 0.17.0 月底账单：stage = 账单舞台（每月 ≤ 2 秒，点一下跳过）；quick = 直接出账单和章 */
+  bill: 'stage' | 'quick';
   /** 0.5：没什么事的日子自动快进（默认开） */
   autoQuiet: boolean;
 }
 
 export function loadViewPrefs(store: KeyValueStore | null = defaultStore()): ViewPrefs {
-  const out: ViewPrefs = { hints: 'auto', recap: 'full', autoQuiet: true };
+  const out: ViewPrefs = { hints: 'auto', recap: 'full', bill: 'stage', autoQuiet: true };
   try {
     const raw = JSON.parse(store?.getItem(VIEW_PREFS_KEY) ?? 'null') as Partial<ViewPrefs> | null;
     if (raw?.hints === 'on' || raw?.hints === 'off' || raw?.hints === 'auto') out.hints = raw.hints;
     if (raw?.recap === 'full' || raw?.recap === 'brief') out.recap = raw.recap;
+    if (raw?.bill === 'stage' || raw?.bill === 'quick') out.bill = raw.bill;
     if (typeof raw?.autoQuiet === 'boolean') out.autoQuiet = raw.autoQuiet;
   } catch {
     // 读坏了就用默认

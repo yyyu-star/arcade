@@ -1,12 +1,15 @@
 import type Phaser from 'phaser';
+import { difficultyView, personaView } from '../../core/index.ts';
 import type { ChallengeView } from '../../platform/challenge.ts';
 import { versionDiffers } from '../challenge.ts';
 import { boardScoreText } from '../labels.ts';
 import { COLOR, SPACE, TYPE } from '../theme.ts';
+import { addGlyph } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { Dialog } from '../ui/dialog.ts';
 import { addText, fitWidth } from '../ui/text.ts';
 import { phoneLayout } from '../viewport.ts';
+import { addBadge, addPortrait } from './setupPanel.ts';
 
 /** 电脑、手机横屏各一套（和每日排行面板同一个尺寸）：面板宽高、每页几行、行高、第一行的 y、"我"那一行和翻页键的 y */
 const DESK = { w: 600, h: 540, per: 10, rowH: 32, top: 84, meY: 418, pagerY: 540 - 66 } as const;
@@ -110,5 +113,44 @@ export class ChallengeLinkDialog extends Dialog {
           }
         : null,
     );
+  }
+}
+
+/**
+ * 0.18.0 打开好友挑战链接、还没打过时的卡：左边这局的人设立绘，右边发起人（头像圈写名字头一个字，平台不给头像）、
+ * 难度徽记和他的成绩。以前是普通对话框里三行字，看不出是谁、玩哪个人设。
+ */
+export class ChallengeInviteDialog extends Dialog {
+  constructor(scene: Phaser.Scene, v: ChallengeView, onAccept: () => void) {
+    const W = 600;
+    const H = 320;
+    super(scene, W, H, '好友挑战');
+    const p = v.payload.setup;
+    const pv = personaView(p.persona);
+    const lv = difficultyView(p.difficulty);
+    this.inner.add(addPortrait(scene, 112, 178, pv, false, 136));
+    const R = 216;
+    const head = Array.from(v.owner)[0] ?? '?';
+    this.inner.add([
+      scene.add.circle(R + 22, 98, 22, COLOR.accent).setStrokeStyle(3, COLOR.ink, 1),
+      addText(scene, R + 22, 98, head, { size: 20, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 }),
+    ]);
+    const who = addText(scene, R + 56, 98, `${v.owner} 挑战你`, { size: TYPE.title, bold: true, color: COLOR.ink, originY: 0.5 });
+    fitWidth(who, W - 32 - R - 56);
+    this.inner.add(who);
+    const len = p.short ? `短局 ${p.short.months} 个月` : '完整一年';
+    this.inner.add(addBadge(scene, R + 22, 152, lv.level, 40));
+    this.inner.add(addText(scene, R + 56, 152, `${pv.name} · ${lv.name} · ${len}`, { size: TYPE.label + 2, bold: true, color: COLOR.ink, originY: 0.5 }));
+    if (v.ownerScore !== null) {
+      this.inner.add(addGlyph(scene, R + 22, 196, 'trophy', 30));
+      this.inner.add(addText(scene, R + 56, 196, boardScoreText(v.ownerScore), { size: TYPE.title, bold: true, num: true, color: COLOR.ink, originY: 0.5 }));
+    }
+    const foot = versionDiffers(v.payload.v) ? '发起时的版本和你的不同，结果可能对不上。每人只算第一次。' : '同一个开局、同一段行情，每人只算第一次。';
+    this.inner.add(addText(scene, R, 226, foot, { size: TYPE.label, color: COLOR.muted, wrap: W - 32 - R }));
+    const go = (fn: () => void) => (): void => {
+      this.close();
+      fn();
+    };
+    this.actions({ label: '接受挑战', name: 'challenge:accept', onClick: go(onAccept) }, { label: '先不了', name: 'challenge:no', onClick: go(() => undefined) });
   }
 }

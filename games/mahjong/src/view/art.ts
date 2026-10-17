@@ -103,9 +103,9 @@ function curtain(): string {
 }
 
 /** 红灯笼：竹帘下挂着，胖椭圆加竖筋，金色顶盖和底座，下面一串穗子；字用系统字体 */
-function lantern(char: string, op = 1): string {
+function lantern(char: string): string {
   return (
-    `<svg ${NS} width='76' height='156' viewBox='0 0 76 156'><g opacity='${op}'><defs>` +
+    `<svg ${NS} width='76' height='156' viewBox='0 0 76 156'><g><defs>` +
     `<radialGradient id='b' cx='.4' cy='.4' r='.7'><stop offset='0' stop-color='#ff8a5c'/><stop offset='.45' stop-color='#d8321f'/><stop offset='1' stop-color='#7a0f0a'/></radialGradient>` +
     `<linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#9a6a1c'/><stop offset='.5' stop-color='#f7d488'/><stop offset='1' stop-color='#8a5a12'/></linearGradient>` +
     `<radialGradient id='h' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='#ffb24d' stop-opacity='.35'/><stop offset='1' stop-color='#ffb24d' stop-opacity='0'/></radialGradient></defs>` +
@@ -123,9 +123,9 @@ function lantern(char: string, op = 1): string {
 }
 
 /** 盖碗茶：茶托、碗、碗盖，冒两缕热气；白瓷描青花 */
-function cup(op = 1, steam = true): string {
+function cup(steam = true): string {
   return (
-    `<svg ${NS} width='128' height='120' viewBox='0 0 128 120'><g opacity='${op}'><defs>` +
+    `<svg ${NS} width='128' height='120' viewBox='0 0 128 120'><g><defs>` +
     `<linearGradient id='p' x1='0' x2='1'><stop offset='0' stop-color='#cfd6d8'/><stop offset='.35' stop-color='#fbfbf6'/><stop offset='1' stop-color='#b9c2c6'/></linearGradient></defs>` +
     (steam ? `<g fill='none' stroke='#fff' stroke-opacity='.35' stroke-width='2.4' stroke-linecap='round'><path d='M54 26c-6-8 6-12 0-22'/><path d='M70 28c-6-8 6-12 0-22'/></g>` : '') +
     `<ellipse cx='64' cy='106' rx='54' ry='11' fill='#000' fill-opacity='.35'/>` +
@@ -232,7 +232,7 @@ export function homeScene(): string {
     `<ellipse cx='284' cy='420' rx='110' ry='10' fill='#000' fill-opacity='.3'/>` +
     `<g transform='translate(0 -6)'>${hand}</g>` +
     `<g class='sc-bird'><g transform='translate(282 334)'>${sparrow()}</g></g>` +
-    `<svg x='426' y='312' width='118' height='110' viewBox='0 0 128 120'>${scoped(cup(1, false), 'sc-c')}</svg>` +
+    `<svg x='426' y='312' width='118' height='110' viewBox='0 0 128 120'>${scoped(cup(false), 'sc-c')}</svg>` +
     `<g fill='none' stroke='#fff' stroke-width='2.4' stroke-linecap='round'>` +
     `<path class='sc-steam' d='M478 338c-6-8 6-12 0-22'/><path class='sc-steam sc-steam2' d='M492 340c-6-8 6-12 0-22'/></g>` +
     `</svg>`
@@ -251,15 +251,11 @@ export function installArt(root: HTMLElement = document.documentElement): void {
     '--art-curtain': url(curtain()),
     '--art-lantern': url(lantern('茶')),
     '--art-cup': url(cup()),
-    // 牌桌角落的摆设：透明度画死在图里（CSS 没法单独调一层背景的透明度），淡到不抢牌的眼
-    '--art-lantern-dim': url(lantern('茶', 0.32)),
-    '--art-cup-dim': url(cup(0.3)),
     '--art-tiles': url(tiles()),
     '--art-lattice': url(lattice()),
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
   if (isLite()) root.dataset.lite = '1';
-  else watchTable();
 }
 
 /**
@@ -271,26 +267,6 @@ function isLite(): boolean {
   const nav = navigator as Navigator & { deviceMemory?: number };
   const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   return ios || mq('(pointer: coarse)') || mq('(prefers-reduced-motion: reduce)') || (nav.deviceMemory !== undefined && nav.deviceMemory <= 4);
-}
-
-/**
- * 牌桌是每局新建的，所以盯着页面，见到没挂摆设的 .table 就补两个小装饰：灯笼（轻摆）和茶杯（冒热气）。
- * 它们和静态的角落摆设（art.css 里 .table::after 的背景）画在同一个位置；挂上后 CSS 把背景里那两样去掉，换成这两个能动的。
- * 为什么用元素而不是伪元素：灯笼、茶杯在 ::after 里是同一张背景，没法单独动。
- */
-function watchTable(): void {
-  const attach = (): void => {
-    document.querySelectorAll<HTMLElement>('.table:not([data-decor])').forEach((t) => {
-      t.dataset.decor = '1';
-      const box = document.createElement('div');
-      box.className = 'art-decor';
-      box.setAttribute('aria-hidden', 'true');
-      box.innerHTML = "<i class='art-lantern'></i><i class='art-cup'><b></b><b></b><b></b></i>";
-      t.appendChild(box);
-    });
-  };
-  attach();
-  new MutationObserver(attach).observe(document.body, { childList: true, subtree: true });
 }
 
 /** 档位卡片上的小图标（32×32）：娱乐一碗茶 → 小档一枚铜钱 → 中档一摞铜钱 → 大档银元宝 → 豪华档金元宝 */

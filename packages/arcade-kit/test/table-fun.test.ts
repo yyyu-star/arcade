@@ -3,7 +3,7 @@
  * 组件本身要 DOM，在 demo/table-fun.html 里看；这里只测纯函数（import 时不碰 DOM，Node 里能直接引）
  */
 import { describe, expect, it } from 'vitest';
-import { checkStorageKey } from '../src/table-fun.ts';
+import { checkStorageKey, hintSeatFor, type FunSeat } from '../src/table-fun.ts';
 
 describe('checkStorageKey', () => {
   it('游戏 id 的写法：小写字母、数字、连字符，最多 32 位', () => {
@@ -15,5 +15,29 @@ describe('checkStorageKey', () => {
       expect(() => checkStorageKey(k), String(k)).toThrow(/storageKey/);
     }
     expect(() => checkStorageKey('cards.')).toThrow('"cards."');
+  });
+});
+
+describe('hintSeatFor（首次提示冒在哪个座位，0.17.0）', () => {
+  const r = { left: 0, top: 0, width: 10, height: 10 };
+  const me: FunSeat = { rect: r, name: '我', me: true };
+  const bot: FunSeat = { rect: r, name: '电脑', bot: true };
+  const man: FunSeat = { rect: r, name: '真人' };
+
+  it('不给 pick：第一个电脑，没电脑第一个别人，只有自己或没人时 null', () => {
+    expect(hintSeatFor([me, man, bot, man])).toBe(2);
+    expect(hintSeatFor([me, null, man])).toBe(2);
+    expect(hintSeatFor([me, null])).toBe(null);
+    expect(hintSeatFor([])).toBe(null);
+  });
+
+  it('给了 pick 就听它的：返回 null 是"现在不行"，空座位、不存在、不是整数也当 null', () => {
+    const seats = [me, bot, null, bot];
+    expect(hintSeatFor(seats, () => 3)).toBe(3);
+    expect(hintSeatFor(seats, () => 0)).toBe(0);
+    expect(hintSeatFor(seats, () => null)).toBe(null);
+    expect(hintSeatFor(seats, () => 2)).toBe(null);
+    expect(hintSeatFor(seats, () => 9)).toBe(null);
+    expect(hintSeatFor(seats, () => 1.5)).toBe(null);
   });
 });

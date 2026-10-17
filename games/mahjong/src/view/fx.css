@@ -96,3 +96,17 @@
     100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
   }
 }
+
+/* 结算里从输家飞到赢家的铜钱（fx.ts 的 settleFx） */
+.settle-coin {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    linear-gradient(#3a2008, #3a2008) 50% 50% / 6px 6px no-repeat,
+    radial-gradient(circle, #f7d488 0 45%, #c98a3a 60%, #7a4a14 100%);
+  box-shadow: 0 2px 4px #0008;
+}

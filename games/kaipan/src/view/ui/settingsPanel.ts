@@ -111,6 +111,25 @@ export class SettingsPanel extends Dialog {
     this.choice(col.ctrl, row('动画速度'), SPEEDS, (s) => s.animSpeed, (v) => updateSettings({ animSpeed: v }));
     if (opts.animLocked) note('现在由网址里的 anim / speed 控制，正常打开游戏时这里的设置才生效');
     this.choice(col.ctrl, row('涨跌配色'), SCHEMES, (s) => s.colorScheme, (v) => updateSettings({ colorScheme: v }));
+    // 0.17.0 月底账单：舞台（每月不到 2 秒，点一下跳过）/ 简短（直接出账单和章）
+    const billAt = row('月底账单');
+    const bb = (
+      [
+        ['stage', '完整'],
+        ['quick', '简短'],
+      ] as const
+    ).map(([mode, label], i) => {
+      const b = new Button(scene, col.ctrl + i * 108, billAt - this.btnH / 2, { width: 100, height: this.btnH, label, fontSize: 14, sound: 'select' });
+      b.setHandler(() => {
+        saveViewPrefs({ bill: mode });
+        for (const x of bb) x.b.setSelected(x.mode === mode);
+      });
+      this.box.add(b);
+      this.named[`settings:bill-${mode}`] = b;
+      return { mode, b };
+    });
+    for (const x of bb) x.b.setSelected(x.mode === loadViewPrefs().bill);
+    note('月底账单一张张算给你看（每月不到 2 秒，点一下就跳过）；简短就直接出结果');
 
     col = phone ? PHONE_UI : COLS[1]!;
     y = 96;

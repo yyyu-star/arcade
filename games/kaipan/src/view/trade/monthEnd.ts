@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { formatMoney, fx, itemView, rewardView, validate, type CalendarView, type EventView, type GameState, type RewardView } from '../../core/index.ts';
 import { avatarKey, hasArt, itemKey } from '../assets.ts';
+import { BILL_MS } from './billTiming.ts';
 import type { Animator } from '../fx/anim.ts';
 import { addBackdrop, shake } from '../fx/effects.ts';
 import { sparkles } from '../fx/particles.ts';
@@ -39,13 +40,16 @@ interface BillInfo {
   extras: { name: string; amount: number }[];
   /** 0.4 C：月供之外另付给银行的利息（没借钱为缺省） */
   interest?: number;
+  /** 0.17.0 有月度目标的月份：目标叫什么、达成没有（写在账单上，以前是窗户里一行小字） */
+  goal?: { name: string; done: boolean };
 }
 
+
 /**
- * 月底账单：账单卡滑入，盖「已还清」或「逾期」章；信用卡代还单独提示。
- * 返回浮层，由调用方决定停留多久后销毁。
+ * 月底账单：账单纸从桌面滑上来、各行依次出现、总数滚动砸下，盖「还上了」或「没还上」章；信用卡代还单独提示。
+ * quick（设置里「月底账单：简短」）：直接出完整的账单和章，不播舞台。返回浮层，由调用方决定停留多久后销毁。
  */
-export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo): Promise<Phaser.GameObjects.Container> {
+export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo, quick = false): Promise<Phaser.GameObjects.Container> {
   const c = overlay(scene);
   const W = 320;
   const H = 400;
@@ -57,16 +61,19 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   const card = scene.add.container(x, y);
   card.add(addImage(scene, W / 2, H / 2, 'ui:bill_card', W, H));
   card.add(addText(scene, 190, 42, `${b.month}月账单`, { size: 24, bold: true, originX: 0.5, originY: 0.5 }));
+  const stage = !quick && !anim.instant;
+  const rowNodes: (Phaser.GameObjects.Text | Phaser.GameObjects.Image)[][] = [];
   const row = (ty: number, k: string, v: string, color: number = COLOR.ink): void => {
-    const value = addText(scene, W - 30, ty, v, { size: 16, bold: true, color, originX: 1 });
+    const value = addText(scene, W - 30, ty, v, { size: 16, bold: true, num: true, color, originX: 1 });
     // 突发账单的名目可能很长：在金额左边折行，字号也小一号
     const room = W - 30 - value.width - 34 - 12;
-    const label = addText(scene, 34, ty, k, { size: 15, color: COLOR.muted });
+    let label = addText(scene, 34, ty, k, { size: 15, color: COLOR.muted });
     if (label.width > room) {
       label.destroy();
-      card.add(addText(scene, 34, ty - 2, k, { size: 13, color: COLOR.muted, wrap: room, lineSpacing: 1 }));
-    } else card.add(label);
-    card.add(value);
+      label = addText(scene, 34, ty - 2, k, { size: 13, color: COLOR.muted, wrap: room, lineSpacing: 1 });
+    }
+    card.add([label, value]);
+    rowNodes.push([label, value]);
   };
   const extra = b.extras.reduce((n, e) => n + e.amount, 0);
   const rows: [string, string, number?][] = [[b.name, formatMoney(b.amount - extra)]];
@@ -81,14 +88,40 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   const totalLabel = b.paid ? (b.credit ? `${itemView('credit').name}垫上了` : '剩下') : '还差';
   const totalValue = b.paid ? formatMoney(b.after) : formatMoney(b.amount - b.before);
   card.add(addText(scene, 40, 308, totalLabel, { size: 15, color: COLOR.muted, originY: 0.5 }));
-  card.add(addText(scene, W - 40, 308, totalValue, { size: 24, bold: true, color: b.paid ? COLOR.ink : COLOR.danger, originX: 1, originY: 0.5 }));
+  const total = addText(scene, W - 40, 308, totalValue, { size: 24, bold: true, num: true, color: b.paid ? COLOR.ink : COLOR.danger, originX: 1, originY: 0.5 });
+  card.add(total);
+  // 本月目标：写在账单上（靶心图标，达成绿字、没达成灰字）
+  if (b.goal) {
+    const g = addText(scene, W / 2 + 12, 350, `本月目标「${b.goal.name}」${b.goal.done ? '达成' : '没达成'}`, { size: 13, bold: true, color: b.goal.done ? COLOR.up : COLOR.muted, originX: 0.5, originY: 0.5 });
+    const icon = addGlyph(scene, g.x - g.width / 2 - 12, 350, 'target', 18);
+    if (!b.goal.done) icon.setTint(0xbbb0b6);
+    card.add([icon, g]);
+    rowNodes.push([icon, g]);
+  }
   c.add(card);
   sound.cue({ type: 'bill' });
-  if (!anim.instant) {
-    card.x = V.w + 20;
-    await anim.count(V.w + 20, x, 420, (v) => card.setX(v), 'Back.easeOut');
+  if (stage) {
+    // 纸从桌面（画面底下）滑上来；各行、总数先藏着，依次出现
+    for (const n of rowNodes.flat()) n.setAlpha(0);
+    total.setAlpha(0);
+    card.y = V.h + 40;
+    await anim.count(V.h + 40, y, BILL_MS.slide, (v) => card.setY(v), 'Back.easeOut');
+    const per = Math.min(BILL_MS.rowMax, Math.floor(BILL_MS.rows / Math.max(1, rowNodes.length)));
+    for (const [i, nodes] of rowNodes.entries()) {
+      anim.fx({ targets: nodes, alpha: 1, duration: 120 }, () => nodes.forEach((n) => n.setAlpha(1)));
+      // 一行一声，音调一行比一行高
+      if (!anim.instant) sound.cue({ type: 'countUp', progress: (i + 1) / rowNodes.length });
+      await anim.wait(per);
+    }
+    // 总数从还前的账户滚到剩下的（没还上：从 0 滚到差多少），落下时砸一下
+    total.setAlpha(1);
+    const to = b.paid ? b.after : b.amount - b.before;
+    await anim.count(b.paid ? b.before : 0, to, BILL_MS.count, (v) => total.setText(formatMoney(v)));
+    total.setText(totalValue);
+    anim.fx({ targets: total, scale: { from: 1.35, to: 1 }, duration: 160, ease: 'Quad.easeIn' }, () => total.setScale(1));
   }
-  await anim.wait(250);
+  for (const n of rowNodes.flat()) n.setAlpha(1);
+  total.setAlpha(1);
   // 印章
   // 印章盖在账单右边（压一点卡边，不压数字）
   const stamp = scene.add.container(x + W + (b.paid ? 64 : 100), y + 150).setAngle(-14);
@@ -101,9 +134,9 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   }
   c.add(stamp);
   sound.cue({ type: 'stamp', paid: b.paid, credit: b.credit });
-  if (!anim.instant) {
+  if (stage) {
     stamp.setScale(anim.calm ? 1.15 : 2.4).setAlpha(0);
-    await anim.count(0, 1, anim.calm ? 160 : 240, (t) => stamp.setScale((anim.calm ? 1.15 : 2.4) - t * (anim.calm ? 0.15 : 1.4)).setAlpha(t), 'Cubic.easeIn');
+    await anim.count(0, 1, anim.calm ? 160 : BILL_MS.stamp, (t) => stamp.setScale((anim.calm ? 1.15 : 2.4) - t * (anim.calm ? 0.15 : 1.4)).setAlpha(t), 'Cubic.easeIn');
     shake(scene, anim, 180, 0.006);
   }
   stamp.setScale(1).setAlpha(1);
