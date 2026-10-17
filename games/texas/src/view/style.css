@@ -859,9 +859,10 @@ body::before {
 .tile.diff span:not(.stars) { white-space: normal; text-align: center; }
 .sizes, .buyin { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
 .label { font-size: var(--fs-3); color: var(--muted); width: 52px; flex: none; }
+/* 2–9 八个人数键平分一行（不设最小宽：最小 40 时 430 宽的一栏放不下，"9" 顶出面板） */
 .size {
   flex: 1;
-  min-width: 40px; height: 40px;
+  min-width: 0; height: 40px;
   border-radius: var(--r-3);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, .04);
@@ -945,9 +946,9 @@ body::before {
 .p-back { height: 36px; padding: 0 var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--line); font-size: var(--fs-3); font-weight: 700; }
 .p-title { font-size: var(--fs-5); letter-spacing: 2px; }
 .p-balance { margin-left: auto; font-size: var(--fs-3); font-weight: 800; color: var(--gold); }
-/* 扇形牌在光锥下面轻轻浮着 */
+/* 扇形牌在光锥下面轻轻浮着（动 translate，不动 transform：竖屏和手机横屏用 transform 把扇形牌缩到 .85） */
 .fan { animation: fan-float 6s ease-in-out infinite alternate; }
-@keyframes fan-float { to { transform: translateY(-6px); } }
+@keyframes fan-float { to { translate: 0 -6px; } }
 
 /* 手机横屏（viewport.ts 加 .tight）：字和按钮按 --ui 放大了，面板加宽少折行、行距收紧，标题和扇形牌让出地方 */
 .stage.tight .lobby { gap: var(--s-5); padding: 56px var(--s-4) var(--s-2); }

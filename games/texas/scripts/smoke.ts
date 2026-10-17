@@ -330,6 +330,12 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await enter(page, '实盘');
   if ((await page.locator('.tile:not(.diff):visible').count()) !== 4) throw new Error('real mode should show four stakes cards');
   await shot(page, 'lobby-real');
+  // 主题房（0.18.1）：选中哪一档，背景和舞台就换成那一间；选回小桌回到默认
+  await page.locator('.tile', { hasText: '黑金' }).click();
+  if ((await page.locator('.stage[data-room="lux"]').count()) !== 1 || (await page.locator('.scene[data-room="lux"]').count()) !== 1) throw new Error('picking 豪华桌 should switch to the 黑金 room');
+  await shot(page, 'lobby-lux');
+  await page.locator('.tile', { hasText: '街角牌室' }).click();
+  if ((await page.locator('[data-room]').count()) !== 3) throw new Error('back to 小桌: only the three other stakes cards keep data-room');
   await page.locator('.lobby .start').click();
   await page.locator('.dialog').waitFor({ timeout: 10_000 }).catch(async (e: unknown) => {
     await shot(page, 'debug-start');

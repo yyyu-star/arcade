@@ -1,0 +1,96 @@
+/*
+ * 主题房（rooms.ts，docs/art-v3.md 第 3 节）：data-room 挂在舞台、背景和选桌的档位卡上，这里只换变量。
+ * 小桌"街角牌室"就是默认的（skin.css、scene.css 里的值）：墨绿毡、原木边、暖黄灯。往上一档比一档华丽，豪华桌要一眼看出来。
+ * 毡面：--felt-hi / --felt / --felt-lo（中心到边）、--felt-line（金线）、--felt-pattern（织纹上面再压一层）；
+ * 木边：--wood-hi / --wood / --wood-lo；背景：--sc-*（scene.css）。
+ */
+
+/* ---------- 中桌"湖畔会所"：深蓝毡、胡桃木、冷白灯 ---------- */
+[data-room='mid'] {
+  --felt-hi: #2a6f9c;
+  --felt: #1a4d72;
+  --felt-lo: #0a2238;
+  --felt-line: rgba(214, 228, 255, .45);
+  --wood-hi: #8a5a36;
+  --wood: #4f2e17;
+  --wood-lo: #1c0e05;
+}
+.scene[data-room='mid'] {
+  --sc-wall-hi: #16314a;
+  --sc-wall: #0a1828;
+  --sc-wall-lo: #03080f;
+  --sc-light: #e6eeff;
+  --sc-b0: rgba(200, 220, 255, .42);
+  --sc-b1: rgba(110, 190, 230, .34);
+  --sc-b2: rgba(255, 214, 150, .3);
+}
+
+/* ---------- 大桌"红厅"：酒红绒、黑木、金灯 ---------- */
+[data-room='big'] {
+  --felt-hi: #9c2a3a;
+  --felt: #6e1726;
+  --felt-lo: #2c060d;
+  --felt-line: rgba(246, 206, 120, .55);
+  /* 绒面：顺着一个方向的细光泽 */
+  --felt-pattern: repeating-linear-gradient(100deg, rgba(255, 255, 255, .025) 0 2px, transparent 2px 6px);
+  --wood-hi: #51403a;
+  --wood: #241914;
+  --wood-lo: #070403;
+}
+.scene[data-room='big'] {
+  --sc-wall-hi: #3d151b;
+  --sc-wall: #1c090c;
+  --sc-wall-lo: #070203;
+  --sc-light: #ffd27e;
+  --sc-b0: rgba(255, 196, 110, .52);
+  --sc-b1: rgba(230, 80, 90, .36);
+  --sc-b2: rgba(255, 150, 90, .38);
+}
+
+/* ---------- 豪华桌"黑金"：黑毡压金色菱格、黄铜边、金色聚光和金粉 ---------- */
+[data-room='lux'] {
+  --felt-hi: #4a3e26;
+  --felt: #1f1a10;
+  --felt-lo: #060503;
+  --felt-line: rgba(255, 220, 130, .8);
+  --felt-pattern:
+    repeating-linear-gradient(45deg, rgba(243, 200, 107, .075) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(-45deg, rgba(243, 200, 107, .075) 0 1px, transparent 1px 26px);
+  --wood-hi: #fbe39a;
+  --wood: #c08f33;
+  --wood-lo: #4a3108;
+}
+.scene[data-room='lux'] {
+  --sc-wall-hi: #2a2516;
+  --sc-wall: #100e08;
+  --sc-wall-lo: #020201;
+  --sc-light: #ffe39a;
+  --sc-b0: rgba(255, 214, 120, .62);
+  --sc-b1: rgba(255, 236, 170, .46);
+  --sc-b2: rgba(214, 160, 60, .5);
+}
+/* 黄铜边外面一圈金光；桌心的字是金的 */
+.stage[data-room='lux'] .felt::before {
+  box-shadow: inset 0 2px 1px rgba(255, 245, 210, .8), inset 0 -4px 7px rgba(60, 35, 0, .7), 0 0 0 2px #2a1a02, 0 14px 26px rgba(0, 0, 0, .7), 0 0 46px rgba(255, 210, 110, .28);
+}
+.stage[data-room='lux'] .felt::after { border-color: rgba(60, 38, 4, .7); }
+.stage[data-room='lux'] .felt-mark { color: rgba(243, 200, 107, .2); }
+/* 牌桌上也留一道金色的光打在桌上，金粉照样飘 */
+.scene.table[data-room='lux'] .sc-cone { opacity: .75; left: 50%; width: 120vmin; }
+.scene[data-room='lux'] .sc-dust i { background: rgba(255, 220, 120, .95); width: .6vmin; }
+.scene[data-room='lux'] .sc-lamps .shade { fill: #1a1408; stroke: rgba(255, 220, 130, .6); }
+.scene[data-room='lux'] .sc-bar .bottles path { stroke: rgba(255, 220, 130, .32); }
+
+/* ---------- 选桌的档位卡：上面一张这一间的小桌面 ---------- */
+.tile .mini {
+  width: 60px;
+  height: 28px;
+  margin-bottom: var(--s-1);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse closest-side, transparent 80%, var(--felt-line, rgba(243, 200, 107, .42)) 82% 88%, transparent 90%),
+    radial-gradient(ellipse at 50% 40%, var(--felt-hi, #238257), var(--felt, #16613f) 55%, var(--felt-lo, #0a3624));
+  box-shadow: 0 0 0 3px var(--wood, #6b3d1d), 0 0 0 4px var(--wood-lo, #2a1608), 0 3px 6px rgba(0, 0, 0, .55);
+}
+.tile[data-room='lux'] .mini { box-shadow: 0 0 0 3px var(--wood), 0 0 0 4px var(--wood-lo), 0 0 12px rgba(255, 210, 110, .45); }
+.tile em { font-style: normal; font-size: var(--fs-1); color: var(--gold); letter-spacing: 1px; }

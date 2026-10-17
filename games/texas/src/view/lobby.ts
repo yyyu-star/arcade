@@ -13,6 +13,7 @@ import type { Stake, WalletView } from '../net/wallet.ts';
 import { patchSettings, readSettings } from '../store.ts';
 import { makeCard, setCard } from './art.ts';
 import { el, setText, toggle } from './dom.ts';
+import { ROOM_NAME } from './rooms.ts';
 import { chips } from './text.ts';
 
 export interface LobbyState {
@@ -39,6 +40,8 @@ export interface LobbyHandlers {
   openRoom(stakes: StakesId, size: number): void;
   joinRoom(code: string): void;
   backToRoom(): void;
+  /** 选桌上选中的那一间（主题房，0.18.1）：背景先换成它，让人看到"往上走"；主页、娱乐是 null（小桌那一间） */
+  preview(id: StakesId | null): void;
 }
 
 type Mode = 'fun' | 'real' | 'room';
@@ -185,7 +188,8 @@ export class Lobby {
     const grid = (this.grid = el('div', 'stakes', panel));
     for (const st of STAKES) {
       const t = button(grid, 'tile', '', () => this.pick(st.id));
-      t.innerHTML = card(st.name, STARS[st.id], `盲注 ${chips(st.sb)}/${chips(st.bb)}`, [`最多输 ${short(st.max)}`, `赢很少过 ${short(3 * st.max)}`]);
+      if (st.id !== 'small') t.dataset.room = st.id;
+      t.innerHTML = `<i class="mini"></i><em>${ROOM_NAME[st.id]}</em>` + card(st.name, STARS[st.id], `盲注 ${chips(st.sb)}/${chips(st.bb)}`, [`最多输 ${short(st.max)}`, `赢很少过 ${short(3 * st.max)}`]);
       this.tiles.set(st.id, t);
     }
     for (const d of DIFFICULTIES) {
@@ -432,6 +436,8 @@ export class Lobby {
     this.openBtn.disabled = busy || (!this.alone && (!wallet || (bal ?? 0) < st.min));
     this.openBtn.title = this.alone ? '' : !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
     this.joinBtn.disabled = busy || this.codeIn.value.length !== 6;
+    // 选桌上选实盘、好友房的档位时，背景跟着换成那一间
+    this.h.preview(pick && !fun ? this.stakes : null);
     for (const b of [this.quickBtn, this.startBtn, this.openBtn, this.joinBtn, this.reliefBtn]) toggle(b, 'loading', busy && b === this.pending);
     toggle(this.roomBox, 'hidden', !back);
     if (back) {
@@ -448,7 +454,7 @@ function topBuyIn(st: { min: number; max: number; bb: number }, bal: number): nu
 
 /** 主页三张模式卡：名字和一句话（话里别带别的卡的名字，冒烟按名字找卡） */
 const MODE_CARDS: readonly (readonly [Mode, string, string])[] = [
-  ['fun', '娱乐', '练手，筹码不算数'],
+  ['fun', '娱乐', '练手，不算筹码'],
   ['real', '实盘', '带筹码上桌'],
   ['room', '好友房', '叫朋友一起打'],
 ];

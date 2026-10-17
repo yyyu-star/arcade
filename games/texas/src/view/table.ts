@@ -127,6 +127,7 @@ const KEEP_OUT = '.actions .buttons, .actions .raise-panel, .actions .quick, .ac
 export class TableView {
   readonly root: HTMLDivElement;
   private readonly feltEl: HTMLDivElement;
+  private readonly markEl: HTMLDivElement;
   private readonly potEl: HTMLDivElement;
   private readonly potMain: HTMLDivElement;
   private readonly potSides: HTMLDivElement;
@@ -153,7 +154,7 @@ export class TableView {
     this.opts = opts;
     this.root = el('div', 'table', parent);
     this.feltEl = el('div', 'felt', this.root);
-    el('div', 'felt-mark', this.feltEl, '德州扑克');
+    this.markEl = el('div', 'felt-mark', this.feltEl, '德州扑克');
     this.potEl = el('div', 'pot', this.root);
     this.potMain = el('div', 'pot-main', this.potEl);
     this.potSides = el('div', 'pot-sides', this.potEl);
@@ -173,6 +174,11 @@ export class TableView {
    * 都放不下就只留名牌（名字和筹码）塞到面板上方（.tucked，头像、底牌、动作签先藏起来）。挪过去不许压到别的座位、出舞台
    * （0.9.0 之前只往上挪，6 人桌右下的座位叠到右上那个上面）
    */
+  /** 桌心的字：主题房的名字（0.18.1，rooms.ts） */
+  setMark(text: string): void {
+    setText(this.markEl, text);
+  }
+
   avoid(r: DOMRect | null): void {
     const stage = this.root.getBoundingClientRect();
     // 屏幕像素换回舞台单位（舞台整体缩放过）
