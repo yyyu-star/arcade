@@ -119,10 +119,15 @@ describe('单机带入、结回', () => {
     expect((await post('/api/stake/buyin', e, { ...buy, op: 'x'.repeat(64) })).status).toBe(400);
   });
 
-  it('钱包不够一份可以少带（数由平台判）；被拒按状态码回、带上钱包', async () => {
+  it('只带整份：少带、多带都 400 bad_amount，不调平台（第三轮审计：底分和封顶按整份，少带的输得少、赢得一样多）；被拒按状态码回、带上钱包', async () => {
     const e = env();
-    expect((await post('/api/stake/buyin', e, { ...buy, amount: 500 })).status).toBe(200);
-    const res = await post('/api/stake/buyin', e, { ...buy, amount: 20_000 });
+    for (const [stakes, amount] of [['small', 1], ['small', 500], ['small', 2_001], ['lux', 1]] as const) {
+      const r = await post('/api/stake/buyin', e, { ...buy, stakes, amount });
+      expect([r.status, await r.json()]).toEqual([400, { error: 'bad_amount' }]);
+    }
+    expect(e.WALLET.calls).toEqual([]);
+    expect((await post('/api/stake/buyin', e, { ...buy, stakes: 'mid', amount: 10_000 })).status).toBe(200);
+    const res = await post('/api/stake/buyin', e, { ...buy, stakes: 'big', amount: 50_000 });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ ok: false, error: 'no_funds', wallet: { balance: 5 } });
   });

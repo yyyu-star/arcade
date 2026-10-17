@@ -148,6 +148,14 @@ export interface OpResult {
   statsIgnored?: StatsError;
 }
 
+/** 结回值得发的一条好友动态（0.17.0，15.17）：哪一档、净赢几份（乘 10 取整）、这一份里第一次拿到的称号 */
+export interface SettleFeed {
+  game: string;
+  tier: string;
+  units: number;
+  titles: string[];
+}
+
 /** 结回时可选带的这一份小结（0.10.0，5.10）。游戏那边照抄文档里的同名类型 */
 export interface SettleStats {
   rounds: number;
@@ -405,7 +413,7 @@ export function apply(
   cmd: Cmd,
   now: number,
   rules: WalletRules,
-): { state: WalletState; result: OpResult } | { dup: OpResult } | { error: WalletError } {
+): { state: WalletState; result: OpResult; feed?: SettleFeed } | { dup: OpResult } | { error: WalletError } {
   // 操作 id 按游戏分开记：两个游戏碰巧拼出同一个 op，不能拿到对方的结果当成重复
   const key = cmd.t === 'relief' || cmd.t === 'admin' ? '' : `${cmd.game}:${cmd.op}`;
   const print = cmd.t === 'relief' || cmd.t === 'admin' ? '' : opPrint(cmd);
@@ -424,8 +432,12 @@ export function apply(
   // 结回、放弃不受每天的次数管：桌上的筹码总要能回来（次数由带入那头管住）
   if ((cmd.t === 'buyin' || cmd.t === 'relief') && s.today.writes >= DAILY_WRITES) return { error: 'limit' };
   const before = s.balance;
+  // 结回前记下那一份和这个游戏已有的称号：结回成功后看值不值得生成一条好友动态（0.17.0）
+  const stake = cmd.t === 'settle' ? s.stakes[stakeKey(cmd.game, cmd.ref)] : undefined;
+  const hadTitles = cmd.t === 'settle' ? new Set(Object.keys(s.career?.[cmd.game]?.titles ?? {})) : undefined;
   const out = step(s, cmd, now, rules);
   if ('error' in out) return out;
+  const feed = cmd.t === 'settle' && stake && hadTitles && cmd.stats ? settleFeed(s, cmd.game, stake, out.credited ?? 0, hadTitles) : undefined;
   addLedger(s, {
     at: now,
     t: cmd.t,
@@ -436,7 +448,20 @@ export function apply(
   // 管理员调整不占这个人每天 DAILY_WRITES 次的写入
   if (cmd.t !== 'admin') s.today.writes++;
   if (key) s.ops = [...s.ops, { id: key, r: out, f: print }].slice(-RECENT_OPS);
-  return { state: s, result: out };
+  return feed ? { state: s, result: out, feed } : { state: s, result: out };
+}
+
+/**
+ * 结回值不值得发一条好友动态（docs/platform-backend.md 15.17，主线 2026-10-16 定）：净赢 ≥ 半份，或者第一次拿到某个称号；输了一律不发。
+ * 份按 stakeUnit 算（和每日上限同一个"一份"）。units 是净赢的份数乘 10 取整，titles 是这一份里第一次拿到的（最多 3 个）。
+ */
+function settleFeed(s: WalletState, game: string, st: Stake, credited: number, hadTitles: ReadonlySet<string>): SettleFeed | undefined {
+  const net = credited - st.amount;
+  if (net < 0) return undefined;
+  const unit = stakeUnit(st);
+  const titles = Object.keys(s.career?.[game]?.titles ?? {}).filter((t) => !hadTitles.has(t)).slice(0, 3);
+  if (net * 2 < unit && titles.length === 0) return undefined;
+  return { game, tier: st.tier, units: Math.floor((net * 10) / unit), titles };
 }
 
 /** 一份按多大算（每日净赢上限的单位）：档位的一份，但不超过这一份实际带上桌的（补码累计后） */

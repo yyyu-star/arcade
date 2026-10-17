@@ -1641,6 +1641,44 @@ button {
   font-size: var(--fs-sm);
   opacity: 0.8;
 }
+/* 好友房颁奖：每个奖一张小牌子，奖名金色小字、得奖的人大字、下面一句话；窄屏一行放不下就折行 */
+.summary.awards .award-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+.summary.awards .award {
+  flex: 1 1 0;
+  min-width: 140px;
+  max-width: 260px;
+  padding: var(--sp-3);
+  border: 1px solid var(--gold-lo);
+  border-radius: var(--r-md);
+  background: #00000048;
+  text-align: center;
+}
+.summary.awards .award.mvp {
+  border-color: var(--gold);
+  box-shadow: 0 0 12px #f3c86b55;
+}
+.summary.awards .award-name {
+  color: var(--gold);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.summary.awards .award-who {
+  margin: var(--sp-1) 0;
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.summary.awards .award-line {
+  font-size: var(--fs-sm);
+  opacity: 0.85;
+}
 .summary .rows {
   display: flex;
   flex-direction: column;

@@ -9,7 +9,7 @@
 - 正式环境只有这一个平台 Worker：不开 workers.dev（它绕过网关限速）、不建测试 Worker。测试全在本地：`npm test`（vitest 跑在本地 workerd 里）、
   `npm run dev:api`（wrangler dev + 本地 D1）。上线后由维护者在线上验证。
 - 测试期是邀请制：注册默认关着，管理员可在 `/admin` 随时开关（D1 `settings`；`vars.REGISTRATION` 是紧急总闸，见 `worker/api/settings.ts`），账号由管理员在 `/admin` 或用
-  `npm run admin` 建（维护者 2026-10-14 定）。没登录的访客在首页一个 `/api` 请求都不发，只有打开登录页时问一次 `/api/me`。
+  `npm run admin` 建（维护者 2026-10-14 定）；0.20.0 起老用户也能生成邀请码，注册关着时凭码注册（`worker/api/invite-codes.ts`，15.20）。没登录的访客在首页一个 `/api` 请求都不发，只有打开登录页时问一次 `/api/me`。
 - 管理接口 `/api/admin/*` 的两种认证（Bearer 令牌、管理员会话）和各自能做什么写在 `worker/api/admin.ts` 开头；改权限时同步改那里和测试。
 - 改界面后跑 `npm run smoke`（无头浏览器走建号和账号主流程，控制台零报错、没有意料外的 4xx/5xx），并亲自看 `shots/` 里的截图。
 - 命令：`npm run dev`（界面，5180）、`npm run dev:api`（接口，5181）、`npm test`、`npm run smoke`、`npm run build`、`npm run preview`（4180）、

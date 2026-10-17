@@ -31,17 +31,32 @@ export async function mountSocialOnce(session: () => NetSession | null): Promise
 }
 
 /**
+ * "叫朋友来"面板的层级（0.13.2）：要盖住房间弹窗 #online（8500，online.ts），不然面板在 DOM 里却看不见、点不到（0.13.1 线上补验）；
+ * 又要在"请横过来"（9000，orientation.ts）和出错面板（9500，errors.ts）之下。tests/share-card.test.ts 从源码里核对这几个数
+ */
+export const INVITE_Z = 8800;
+
+/**
  * 房间里的"叫朋友来"（0.13.1）：kit 的面板，列好友、"叫他来"、复制邀请链接。没挂上（单独部署、没登录）时只有复制链接。
  * 链接按现在的页面地址拼（单独部署时站点不一样），点开就进这个房间
  */
 export async function openInvitePanel(code: string): Promise<void> {
-  const inv = { game: 'guandan', room: code, url: `${location.origin}${location.pathname}?room=${code}`, text: `来打掼蛋！房间码 ${code}` };
+  const inv = { game: 'guandan', room: code, url: `${location.origin}${location.pathname}?room=${code}`, text: `来打掼蛋！房间码 ${code}`, zIndex: INVITE_Z };
   if (handle) {
     handle.openInvite(inv);
     return;
   }
   const { openInvite } = await import('arcade-kit/social');
   openInvite({ ...inv, friends: false });
+}
+
+/**
+ * 报一条名场面到好友动态（0.15.0，feed.ts 挑的）：只有挂上了 social（有平台、已登录）才报，不然一个请求都不发。
+ * 平台超了每天 10 条也静默 204，结果不用管
+ */
+export function postFeed(m: { moment: string; n?: number }): void {
+  if (!handle) return;
+  void import('arcade-kit/social').then(({ postMoment }) => postMoment('guandan', m.moment, m.n));
 }
 
 /** 位置变了（进房、离开房间、开打）：马上报一次 */

@@ -2,3 +2,6 @@
 .people__face { position: relative; display: inline-flex; flex: none; }
 .people__online { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border: 2px solid var(--surface); border-radius: 50%; background: #3fae5f; }
 .people__sub--online { color: #2f8a4b; font-weight: 700; }
+/* 搭子战绩（0.19.0）：昵称下面第二行小字；最佳搭档是一个小牌子 */
+.people__mates { display: block; font-size: 0.85em; color: var(--muted); }
+.people__best { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; background: #f6c445; color: #3a2a00; font-weight: 700; }

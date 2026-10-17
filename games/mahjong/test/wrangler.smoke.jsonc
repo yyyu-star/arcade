@@ -20,5 +20,5 @@
     { "binding": "ARCADE", "service": "arcade" },
     { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "mahjong" } }
   ],
-  "vars": { "GATE": "login", "SITE_ORIGIN": "http://localhost", "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 100 } }
+  "vars": { "GATE": "login", "SITE_ORIGIN": "http://localhost", "KIT_QUOTA": { "busyWrites": 8000, "stopWrites": 10000, "roomsPerUser": 5, "dailyRoomsPerUser": 30 } }
 }
