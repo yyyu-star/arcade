@@ -190,12 +190,17 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   return i;
 }
 
-/** 屏幕外的一圈（椭圆，横向宽）：出了场地就换到对面 */
+/**
+ * 刷怪的一圈：刚好在屏幕外（一屏约 1000 × 560 到 1080 × 500 单位，画面层 viewport.ts 的 worldZoom），
+ * 椭圆横向宽；出了场地就换到对面。
+ */
+const RING_X = 600;
+const RING_Y = 360;
 function ringPoint(w: World, a: number, scale = 1): [number, number] {
-  let x = w.x + dcos(a) * 760 * scale;
-  let y = w.y + dsin(a) * 470 * scale;
-  if (x < 10 || x > ARENA.w - 10) x = w.x - dcos(a) * 760 * scale;
-  if (y < 10 || y > ARENA.h - 10) y = w.y - dsin(a) * 470 * scale;
+  let x = w.x + dcos(a) * RING_X * scale;
+  let y = w.y + dsin(a) * RING_Y * scale;
+  if (x < 10 || x > ARENA.w - 10) x = w.x - dcos(a) * RING_X * scale;
+  if (y < 10 || y > ARENA.h - 10) y = w.y - dsin(a) * RING_Y * scale;
   return [x, y];
 }
 
@@ -222,7 +227,7 @@ function spawnWaves(w: World): void {
     } else if (e.kind === 'front') {
       for (let k = 0; k < e.count; k++) {
         const a = w.face + w.rSpawn.int(44) - 22;
-        const d = 360 + w.rSpawn.next() * 90;
+        const d = 260 + w.rSpawn.next() * 60;
         spawnEnemy(w, e.enemy, w.x + dcos(a) * d, w.y + dsin(a) * d);
       }
     } else if (e.kind === 'ring') {
@@ -275,7 +280,7 @@ function moveEnemies(w: World): void {
     dx /= d;
     dy /= d;
     // 离得太远的普通怪挪到主角前面的圈上（一直有压力，也不会被甩开）
-    if (d > 1150 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite) {
+    if (d > 900 && w.eKind[i] !== boss && !ENEMIES[w.eKind[i]!]!.elite) {
       const [x, y] = ringPoint(w, w.face + w.rAi.int(64) - 32);
       w.eX[i] = x;
       w.eY[i] = y;

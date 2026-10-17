@@ -15,7 +15,7 @@ const sin: string[] = [];
 for (let i = 0; i < N; i++) {
   const a = (i / N) * Math.PI * 2;
   // 正好落在轴上的几项写成精确值，免得 6.1e-17 这种尾巴
-  cos.push(i % 64 === 16 || i % 64 === 48 ? '0' : num(Math.cos(a)));
+  cos.push(i === N / 4 || i === (3 * N) / 4 ? '0' : num(Math.cos(a)));
   sin.push(i % 128 === 0 ? '0' : num(Math.sin(a)));
 }
 const out = `// 由 tools/gen-dirs.ts 生成，不要手改。

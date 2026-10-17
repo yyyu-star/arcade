@@ -24,8 +24,8 @@ export const ARENA = { w: 3200, h: 3200 };
 /** 从 level 升到 level + 1 要多少魂 */
 export function xpNeed(level: number): number {
   if (level < 20) return 5 + (level - 1) * 9;
-  if (level < 40) return 5 + 19 * 9 + (level - 20) * 13;
-  return 5 + 19 * 9 + 20 * 13 + (level - 40) * 16;
+  if (level < 40) return 5 + 19 * 9 + (level - 20) * 22;
+  return 5 + 19 * 9 + 20 * 22 + (level - 40) * 30;
 }
 
 /** 掉落：普通怪每只掉魂珠，另有小概率掉铜钱、肉包（回血）、符纸卷（吸全屏的魂珠） */

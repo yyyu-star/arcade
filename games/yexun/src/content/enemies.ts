@@ -23,14 +23,14 @@ export interface EnemyDef {
 }
 
 export const ENEMIES: readonly EnemyDef[] = [
-  { kind: 'paper', code: 0, hp: 5, speed: 1.5, dmg: 5, r: 13, xp: 1, steady: 0 },
+  { kind: 'paper', code: 0, hp: 5, speed: 1.7, dmg: 5, r: 13, xp: 1, steady: 0 },
   { kind: 'wisp', code: 1, hp: 4, speed: 2.5, dmg: 4, r: 11, xp: 1, steady: 0 },
   { kind: 'jiangshi', code: 2, hp: 18, speed: 1.45, dmg: 9, r: 17, xp: 2, steady: 0.3 },
   { kind: 'lantern', code: 3, hp: 14, speed: 1.2, dmg: 6, r: 15, xp: 2, steady: 0.1 },
   { kind: 'fox', code: 4, hp: 12, speed: 1.9, dmg: 8, r: 14, xp: 2, steady: 0.1 },
   { kind: 'shishi', code: 5, hp: 320, speed: 1.15, dmg: 15, r: 30, xp: 20, steady: 0.9, elite: true },
   { kind: 'general', code: 6, hp: 520, speed: 1.3, dmg: 16, r: 30, xp: 30, steady: 0.85, elite: true },
-  { kind: 'boss', code: 7, hp: 9000, speed: 1.55, dmg: 22, r: 44, xp: 0, steady: 0.97 },
+  { kind: 'boss', code: 7, hp: 14000, speed: 1.55, dmg: 22, r: 44, xp: 0, steady: 0.97 },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;

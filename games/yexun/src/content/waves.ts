@@ -40,8 +40,8 @@ export type WaveEvent =
 const S = 30;
 /** 定点事件，at 是拍数 */
 export const EVENTS: readonly WaveEvent[] = [
-  // 开场 5 秒：正面来一小群纸人，保证 10 秒内第一次升级（验收 ①）
-  { at: 5 * S, kind: 'front', enemy: 'paper', count: 12 },
+  // 开场 2 秒：正面近处来一小群纸人，保证 10 秒内第一次升级（验收 ①）
+  { at: 2 * S, kind: 'front', enemy: 'paper', count: 12 },
   { at: 150 * S, kind: 'ring', enemy: 'paper', count: 56, radius: 400 },
   { at: 300 * S, kind: 'elite', enemy: 'shishi', count: 1 },
   { at: 450 * S, kind: 'line', enemy: 'wisp', count: 30 },
@@ -56,7 +56,7 @@ export const EVENTS: readonly WaveEvent[] = [
 export const DAWN_TICK = 15 * 60 * S;
 
 /** 怪随时间变硬：血量 × (1 + 每分钟 hpPerMin)，伤害 × (1 + 每分钟 dmgPerMin) */
-export const SCALE = { hpPerMin: 0.13, dmgPerMin: 0.05 };
+export const SCALE = { hpPerMin: 0.22, dmgPerMin: 0.08 };
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
