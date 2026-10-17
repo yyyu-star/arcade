@@ -32,7 +32,7 @@ const MOODS: Mood[] = ['normal', 'happy', 'sad', 'think', 'smug'];
 const ICONS: IconName[] = [
   'play', 'pass', 'hint', 'sort', 'undo', 'settings', 'rules', 'sound', 'mute', 'back',
   'stats', 'home', 'close', 'check', 'crown', 'bomb', 'cards', 'robot', 'speed', 'restart',
-  'cloudOff', 'cloudCheck', 'cloudSync', 'cloudUp', 'cloudMerge', 'chat', 'invite', 'smile',
+  'cloudOff', 'cloudCheck', 'cloudSync', 'cloudUp', 'cloudMerge', 'chat', 'invite', 'smile', 'share',
 ];
 const STAMPS: Record<string, string> = {
   头游: '#c8202a',

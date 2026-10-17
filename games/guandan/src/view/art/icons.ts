@@ -4,7 +4,7 @@
 import { svg } from './common.ts';
 
 export type IconName = 'play' | 'pass' | 'hint' | 'sort' | 'undo' | 'settings' | 'rules' | 'sound' | 'mute' | 'back' | 'stats' | 'home' | 'close' | 'check' | 'crown' | 'bomb' | 'cards' | 'robot' | 'speed' | 'restart'
-  | 'cloudOff' | 'cloudCheck' | 'cloudSync' | 'cloudUp' | 'cloudMerge' | 'chat' | 'invite' | 'smile';
+  | 'cloudOff' | 'cloudCheck' | 'cloudSync' | 'cloudUp' | 'cloudMerge' | 'chat' | 'invite' | 'smile' | 'share';
 
 /** 齿轮路径：8 齿 */
 function gear(): string {
@@ -63,6 +63,9 @@ function body(name: IconName, c: string): string {
       return `<circle cx="32" cy="32" r="24" ${lite} ${s}/><circle cx="23" cy="27" r="3.5" fill="${c}"/><circle cx="41" cy="27" r="3.5" fill="${c}"/>` +
         `<path d="M20 37Q32 49 44 37" fill="none" ${s}/>`;
     // 叫朋友来：一个人加一个加号
+    case 'share':
+      // 分享：三个点连两条线
+      return `<path d="M22 32L42 18M22 32L42 46" fill="none" ${s}/><circle cx="18" cy="32" r="8" ${lite} ${s}/><circle cx="46" cy="16" r="8" ${lite} ${s}/><circle cx="46" cy="48" r="8" ${lite} ${s}/>`;
     case 'invite':
       return `<circle cx="24" cy="21" r="10" ${lite} ${s}/><path d="M7 54C7 43 14 36 24 36C34 36 41 43 41 54Z" ${lite} ${s}/>` +
         `<path d="M50 20V40M40 30H60" fill="none" ${s}/>`;

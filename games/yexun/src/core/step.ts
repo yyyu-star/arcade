@@ -448,7 +448,8 @@ function separate(w: World, g: Grid): void {
 // ───────────────────────── 打怪 ─────────────────────────
 
 /** 打一下。slot 是法器槽（同一件法器对同一只有冷却），-1 不算冷却。返回打没打到 */
-function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky: number, knock: number, rehit: number): boolean {
+/** slot：法器槽位（同一件法器对同一只怪 rehit 拍内只打一次；-1 不限）；credit：伤害记到哪件法器名下 */
+function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky: number, knock: number, rehit: number, credit = slot): boolean {
   if (!w.eAlive[i]) return false;
   if (slot >= 0) {
     const k = i * MAX_WEAPONS + slot;
@@ -458,6 +459,9 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   const crit = w.rHit.next() < PLAYER.crit;
   const d = Math.max(1, Math.round(dmg * w.stats.might * (crit ? PLAYER.critMul : 1)));
   w.eHp[i]! -= d;
+  // 结算页的"每件法器打了多少"：只记，不影响规则
+  const owned = credit >= 0 ? w.weapons[credit] : undefined;
+  if (owned) owned.dmg += d;
   const def = ENEMIES[w.eKind[i]!]!;
   const kd = fsqrt(kx * kx + ky * ky);
   if (kd > 0 && knock > 0) {
@@ -466,7 +470,10 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
     w.eKY[i]! += ky * k;
   }
   w.ev.push(Ev.Hit, w.eX[i]!, w.eY[i]!, d, crit ? 1 : 0, i);
-  if (w.eHp[i]! <= 0) killEnemy(w, i);
+  if (w.eHp[i]! <= 0) {
+    if (owned) owned.kills++;
+    killEnemy(w, i);
+  }
   return true;
 }
 
@@ -546,7 +553,7 @@ function fireWeapons(w: World, g: Grid): void {
       case 'thunder':
         if (--wp.timer <= 0) {
           wp.timer = e.cd;
-          thunder(w, g, s, e);
+          thunder(w, g, k, s, e);
         }
         break;
       case 'bell':
@@ -681,7 +688,7 @@ function flyTick(w: World, g: Grid, k: number, wp: { timer: number; phase: numbe
   wp.timer = 4;
 }
 
-function thunder(w: World, g: Grid, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
+function thunder(w: World, g: Grid, k: number, s: WeaponStats, e: { dmg: number; area: number; amount: number }): void {
   const n = g.query(w, w.x, w.y, s.duration);
   if (n === 0) return;
   for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
@@ -696,7 +703,7 @@ function thunder(w: World, g: Grid, s: WeaponStats, e: { dmg: number; area: numb
     for (let q = 0; q < m; q++) local[q] = g.out[q]!;
     for (let q = 0; q < m; q++) {
       const i = local[q]!;
-      hitEnemy(w, i, e.dmg, -1, w.eX[i]! - tx, w.eY[i]! - ty, s.knock, 0);
+      hitEnemy(w, i, e.dmg, -1, w.eX[i]! - tx, w.eY[i]! - ty, s.knock, 0, k);
     }
   }
 }
@@ -870,7 +877,32 @@ function touchPlayer(w: World, g: Grid): void {
 
 // ───────────────────────── 掉落 ─────────────────────────
 
+/** 离主角最远的一颗魂珠（没有就 -1） */
+function farthestSoul(w: World): number {
+  let far = -1;
+  let fd = -1;
+  for (let s = 0; s < MAX_DROPS; s++) {
+    if (!w.dAlive[s] || w.dKind[s] !== Drop.Soul) continue;
+    const dx = w.dX[s]! - w.x;
+    const dy = w.dY[s]! - w.y;
+    const d = dx * dx + dy * dy;
+    if (d > fd) {
+      fd = d;
+      far = s;
+    }
+  }
+  return far;
+}
+
 function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void {
+  // 地上的魂珠超过上限：新掉的经验并进离主角最远的那颗（变成大珠），满地珠子不抢怪和特效的眼（主线 2b 意见，VS 的做法）
+  if (kind === Drop.Soul && w.soulCount >= PICKUP.soulCap) {
+    const far = farthestSoul(w);
+    if (far >= 0) {
+      w.dVal[far]! += val;
+      return;
+    }
+  }
   let i = -1;
   for (let s = 0; s < MAX_DROPS; s++) {
     if (!w.dAlive[s]) {
@@ -880,18 +912,7 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
   }
   if (i < 0) {
     // 满了：魂珠加到离主角最远的那颗魂珠上（不丢经验）；别的东西挤掉最远的魂珠
-    let far = -1;
-    let fd = -1;
-    for (let s = 0; s < MAX_DROPS; s++) {
-      if (w.dKind[s] !== Drop.Soul) continue;
-      const dx = w.dX[s]! - w.x;
-      const dy = w.dY[s]! - w.y;
-      const d = dx * dx + dy * dy;
-      if (d > fd) {
-        fd = d;
-        far = s;
-      }
-    }
+    const far = farthestSoul(w);
     if (far < 0) return;
     if (kind === Drop.Soul) {
       w.dVal[far]! += val;
@@ -899,6 +920,7 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
     }
     i = far;
     w.dCount--;
+    w.soulCount--;
   }
   w.dAlive[i] = 1;
   w.dGen[i]!++;
@@ -910,10 +932,13 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
   w.dVal[i] = val;
   w.dPull[i] = 0;
   w.dCount++;
+  if (kind === Drop.Soul) w.soulCount++;
 }
 
 function movePickups(w: World): void {
-  const m2 = w.stats.magnet * w.stats.magnet;
+  // 磁吸半径随等级涨（每级 +1.5%，40 级封顶 +60%）：后期怪多、走位忙，不用一颗颗去碰
+  const m = w.stats.magnet * (1 + PICKUP.magnetPerLevel * (w.level < 41 ? w.level - 1 : 40));
+  const m2 = m * m;
   for (let i = 0; i < MAX_DROPS; i++) {
     if (!w.dAlive[i]) continue;
     const dx = w.x - w.dX[i]!;
@@ -942,6 +967,7 @@ function collect(w: World, i: number): void {
   const val = w.dVal[i]!;
   w.dAlive[i] = 0;
   w.dCount--;
+  if (kind === Drop.Soul) w.soulCount--;
   w.ev.push(Ev.Pickup, w.dX[i]!, w.dY[i]!, kind, val);
   switch (kind) {
     case Drop.Soul:
@@ -995,7 +1021,7 @@ function recompute(w: World): void {
 }
 
 function addWeapon(w: World, id: WeaponId): void {
-  w.weapons.push({ id, level: 1, evolved: false, timer: 8, phase: 0, angle: 0 });
+  w.weapons.push({ id, level: 1, evolved: false, timer: 8, phase: 0, angle: 0, dmg: 0, kills: 0 });
   recompute(w);
 }
 

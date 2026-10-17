@@ -78,6 +78,12 @@ async function serveApi(name: string, route: Route, api: FakeApi | undefined): P
     return reply({ error: 'unauthorized', message: '' }, 401);
   }
   const h = req.headers();
+  // 社交（0.13.0，kit 的 social）：登录了就每 2 分钟报位置、每 30 秒问邀请。不记进云存档的请求流水（那边核对先后顺序）
+  if (path === '/api/presence' && req.method() === 'POST') {
+    if (h['x-arcade'] !== '1') errors.push(`[${name}] 报位置没带 X-Arcade`);
+    return route.fulfill({ status: 204 });
+  }
+  if (path === '/api/invites' && req.method() === 'GET') return reply({ invites: [] });
   const body = req.method() === 'PUT' ? (JSON.parse(req.postData() ?? 'null') as { baseRev: number; data: unknown; userId?: unknown }) : null;
   api.log.push({ method: req.method(), path, xArcade: h['x-arcade'] ?? null, type: h['content-type'] ?? null, body });
   if (api.mode === 'hang') return;

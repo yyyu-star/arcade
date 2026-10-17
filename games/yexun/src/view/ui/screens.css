@@ -1,0 +1,171 @@
+/*
+ * 对局外的界面：开始菜单、暂停、结算、确认框、引导提示。宣纸卡片 + 墨边，和 HUD 一套（DESIGN.md 7.1）。
+ * 手机横屏（高度 < 500）整体收紧，可点的东西始终 ≥ 44 × 44。
+ */
+.yx-screen, .yx-tip {
+  --ink: #17131c;
+  --paper: #f6efdc;
+  --red: #c8402f;
+  --gold: #f2c94c;
+  font: 700 15px/1.3 system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  color: var(--ink);
+}
+.yx-screen {
+  position: absolute; inset: 0; z-index: 35;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  background: rgba(20, 24, 40, 0.55);
+}
+.yx-brush { font-family: 'YxBrush', serif; font-weight: 400; }
+
+.yx-big {
+  min-width: 132px; min-height: 48px; padding: 0 18px;
+  border: 3px solid var(--ink); border-radius: 12px;
+  background: var(--red); color: #fbf5e4; font: inherit; font-size: 18px;
+  box-shadow: 0 4px 0 var(--ink); cursor: pointer;
+}
+.yx-big.ghost { background: #fbf5e4; color: var(--ink); }
+.yx-big:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.yx-row2, .yx-row3 { display: flex; gap: 10px; justify-content: center; }
+
+.yx-panel {
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: min(760px, 100%); max-height: 100%; box-sizing: border-box; overflow: auto;
+  padding: 14px 18px 16px;
+  border: 3px solid var(--ink); border-radius: 16px;
+  background: linear-gradient(#fbf5e4, #ecdfbe); box-shadow: 0 6px 0 var(--ink);
+}
+.yx-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.yx-panel-head .yx-brush { font-size: 42px; line-height: 1; }
+.yx-panel-head em { font-style: normal; font-size: 14px; color: #5a4a3a; }
+.yx-panel-head strong { color: var(--red); }
+
+/* 开关 */
+.yx-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 12px;
+  border: 2.5px solid var(--ink); border-radius: 12px; background: #fbf5e4;
+  font: inherit; color: var(--ink); cursor: pointer;
+}
+.yx-toggle i { width: 30px; height: 18px; border-radius: 9px; background: #b9ad96; position: relative; flex: none; }
+.yx-toggle i::after { content: ''; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left 0.15s; }
+.yx-toggle.on i { background: #4a9a5a; }
+.yx-toggle.on i::after { left: 14px; }
+
+/* ── 开始菜单：夜空 + 雪地 ── */
+.yx-menu {
+  z-index: 50;
+  background:
+    radial-gradient(circle at 78% 22%, rgba(255, 246, 214, 0.9) 0 34px, rgba(255, 246, 214, 0.25) 35px 70px, transparent 140px),
+    linear-gradient(#1c2440 0%, #36406a 55%, #c9d2e6 56%, #e8ecf4 100%);
+}
+.yx-menu .yx-home { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
+.yx-menu .yx-gear { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); }
+.yx-menu .yx-btn { --ink: #17131c; --paper: #f6efdc; }
+.yx-settings {
+  position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: 64px;
+  display: none; flex-direction: column; gap: 8px; padding: 10px;
+  border: 3px solid var(--ink); border-radius: 14px; background: #fbf5e4; box-shadow: 0 4px 0 var(--ink); z-index: 2;
+}
+.yx-menu.show-settings .yx-settings { display: flex; }
+.yx-title { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.yx-title b {
+  font-family: 'YxBrush', serif; font-weight: 400; font-size: 96px; line-height: 1; letter-spacing: 12px; color: #f6efdc;
+  -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill;
+}
+.yx-title span { color: #e8ecf4; font-size: 15px; letter-spacing: 3px; text-shadow: 0 1px 2px #000; }
+.yx-go { min-width: 240px; min-height: 64px; font-size: 26px; margin-top: 8px; }
+.yx-hint { color: #3a3140; font-size: 14px; }
+.yx-modes { display: flex; gap: 16px; align-items: stretch; }
+.yx-mode {
+  width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 14px;
+  border: 3px solid var(--ink); border-radius: 16px; background: linear-gradient(#fbf5e4, #ecdfbe); box-shadow: 0 5px 0 var(--ink);
+}
+.yx-mode.off { opacity: 0.75; filter: grayscale(0.6); }
+.yx-mode-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.yx-mode-head b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 34px; line-height: 1; }
+.yx-mode-head em { font-style: normal; font-size: 13px; color: #5a4a3a; width: 100%; }
+.yx-moon, .yx-lamp { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--ink); flex: none; }
+.yx-moon { background: radial-gradient(circle at 65% 40%, transparent 45%, #f2c94c 47%); background-color: #2a3050; }
+.yx-lamp { background: radial-gradient(circle, #ffd57a 30%, #e2702a 70%); border-radius: 8px; }
+.yx-chips { display: flex; gap: 6px; }
+.yx-chip {
+  flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
+}
+.yx-chip small { font-size: 11px; color: #b8892a; letter-spacing: 1px; }
+.yx-chip.on { background: var(--ink); color: #fbf5e4; }
+.yx-best { font-size: 13px; color: #5a4a3a; min-height: 1.3em; }
+.yx-soon { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #5a4a3a; min-height: 120px; }
+
+/* ── 暂停 ── */
+.yx-pause-body { display: flex; gap: 16px; align-items: flex-start; }
+.yx-build { display: flex; flex-direction: column; gap: 4px; min-width: 260px; }
+.yx-brow { display: grid; grid-template-columns: 30px 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.yx-brow img { width: 30px; height: 30px; grid-row: span 2; }
+.yx-brow b { font-size: 14px; }
+.yx-brow em { font-style: normal; font-size: 12px; color: #7a4a20; }
+.yx-brow span { grid-column: 2 / span 2; font-size: 12px; font-weight: 600; color: #5a4a3a; }
+.yx-pause-side { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
+.yx-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+/* ── 确认框 ── */
+.yx-confirm { z-index: 60; }
+.yx-confirm-panel p { margin: 4px 6px 8px; font-size: 17px; text-align: center; }
+
+/* ── 结算 ── */
+.yx-result { z-index: 45; background: rgba(20, 24, 40, 0.68); }
+.yx-result-panel { min-width: 460px; }
+.yx-result-panel.won { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--gold); }
+.yx-rsub { font-size: 14px; color: #3a3140; margin-top: -4px; }
+.yx-rstats { display: flex; gap: 8px; }
+.yx-rstats > div { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: rgba(23, 19, 28, 0.07); }
+.yx-rstats b { font-size: 24px; line-height: 1.1; }
+.yx-rstats span { font-size: 12px; color: #5a4a3a; }
+.yx-rbuild { display: flex; flex-direction: column; gap: 4px; }
+.yx-rrow { display: grid; grid-template-columns: 26px 72px 1fr 72px; gap: 8px; align-items: center; font-size: 13px; }
+.yx-rrow img { width: 26px; height: 26px; }
+.yx-rrow span { text-align: right; font-weight: 600; }
+.yx-rbar { height: 10px; border-radius: 5px; background: rgba(23, 19, 28, 0.12); overflow: hidden; }
+.yx-rbar i { display: block; height: 100%; background: linear-gradient(90deg, #e2702a, var(--red)); }
+.yx-rpasses { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.yx-rpass { position: relative; width: 28px; height: 28px; }
+.yx-rpass img { width: 100%; height: 100%; }
+.yx-rpass em { position: absolute; right: -4px; bottom: -4px; font-style: normal; font-size: 10px; line-height: 13px; min-width: 13px; text-align: center; border-radius: 5px; background: var(--gold); border: 1.5px solid var(--ink); }
+
+/* ── 引导小提示：屏幕下方正中，不挡主角 ── */
+.yx-tip {
+  position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 22;
+  display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 16px;
+  border: 2.5px solid var(--ink); border-radius: 14px; background: rgba(251, 245, 228, 0.95); box-shadow: 0 4px 0 var(--ink);
+  white-space: nowrap; animation: yx-tip-in 0.25s ease-out;
+}
+.yx-tip span { font-size: 16px; }
+.yx-tip b { color: var(--red); }
+.yx-tip button {
+  min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-left: 2px solid rgba(23, 19, 28, 0.2);
+  background: none; font: inherit; font-size: 12px; color: #5a4a3a; cursor: pointer;
+}
+@keyframes yx-tip-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+@media (max-height: 500px) {
+  .yx-screen { gap: 8px; }
+  .yx-title b { font-size: 64px; letter-spacing: 8px; -webkit-text-stroke-width: 6px; }
+  .yx-title span { font-size: 13px; }
+  .yx-go { min-height: 56px; font-size: 22px; }
+  .yx-mode { width: 260px; padding: 10px; gap: 8px; }
+  .yx-mode-head b { font-size: 28px; }
+  .yx-soon { min-height: 80px; }
+  .yx-panel { padding: 10px 14px 12px; gap: 8px; }
+  .yx-panel-head .yx-brush { font-size: 32px; }
+  .yx-result-panel { min-width: 0; width: min(560px, 100%); }
+  .yx-rstats b { font-size: 19px; }
+  .yx-rbuild { gap: 2px; }
+  .yx-rrow { grid-template-columns: 22px 64px 1fr 64px; font-size: 12px; }
+  .yx-rrow img { width: 22px; height: 22px; }
+  .yx-big { min-height: 44px; font-size: 16px; min-width: 112px; }
+  .yx-build { min-width: 220px; }
+  .yx-pause-side { min-width: 200px; }
+  .yx-tip span { font-size: 14px; }
+}

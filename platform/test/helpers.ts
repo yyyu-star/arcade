@@ -10,7 +10,7 @@ import { resetLeaderboardCacheForTests } from '../worker/api/leaderboard';
 import { resetWalletRulesCacheForTests } from '../worker/api/wallet-store';
 
 export const ORIGIN = 'https://game.test';
-const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats'];
+const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats', 'invites'];
 
 /** 测试用的上限：PBKDF2 迭代降到 1,000 省时间；计量只在显式调用或本 isolate 第一次时上报，结果可预期。 */
 export const TEST_LIMITS: LimitsOverride = {

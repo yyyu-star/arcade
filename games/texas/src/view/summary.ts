@@ -26,6 +26,8 @@ export interface SoloSummary {
   busted: boolean;
   /** 这一场的称号（0.3.0 实打后单机也给；算法和好友房一样） */
   titles?: Title[];
+  /** "分享"按钮（0.14.0，kit 的分享卡）：不给就不出（单独部署、还没打完一手） */
+  share?: () => void;
 }
 
 export interface Title {
@@ -57,6 +59,7 @@ export function soloSummary(parent: HTMLElement, s: SoloSummary): Promise<unknow
   if (s.busted) notes.push(s.practice ? '这一桌的筹码打完了，想玩随时再开一桌。' : '这一桌打完了。歇一会儿吧：钱包快空了的话每天能领一次补给，娱乐模式随时能玩。');
   titleBox(body, s.titles ?? []);
   for (const n of notes) el('p', 'sum-note', body, n);
+  shareButton(body, s.share);
   return dialog(parent, s.practice ? '这一场（娱乐）' : '这一场', body, [{ label: '回标题', value: 'ok', primary: true }]);
 }
 
@@ -67,6 +70,7 @@ export function roomSummary(
   note: string | null,
   rows: RoomSummaryRow[],
   titles: Title[] = [],
+  share?: () => void,
 ): Promise<unknown> {
   const body = el('div', 'summary');
   if (note) el('p', 'sum-note', body, note);
@@ -75,7 +79,16 @@ export function roomSummary(
   for (const r of sorted) row(grid, r.me ? `${r.name}（你）` : r.name, signed(r.net), r.net > 0 ? 'plus' : r.net < 0 ? 'minus' : '');
   if (!rows.length) el('p', 'sum-note', body, '这一场没人带筹码上桌。');
   titleBox(body, titles);
+  shareButton(body, share);
   return dialog(parent, title, body, [{ label: '回标题', value: 'ok', primary: true }]);
+}
+
+/** 分享（docs/social.md 1.1）：放在结算页里面，点了不关结算页；kit 出系统分享或预览 */
+function shareButton(body: HTMLElement, share: (() => void) | undefined): void {
+  if (!share) return;
+  const b = el('button', 'pill sum-share', body, '分享这一场');
+  b.type = 'button';
+  b.addEventListener('click', share);
 }
 
 /** 称号（0.3.0）：这一场公开发生的事算的，图个乐 */

@@ -31,5 +31,5 @@ export function xpNeed(level: number): number {
 /** 掉落：普通怪每只掉魂珠，另有小概率掉铜钱、肉包（回血）、符纸卷（吸全屏的魂珠） */
 export const DROPS = { coin: 0.04, bun: 0.006, scroll: 0.0025, bunHeal: 30 };
 
-/** 魂珠：靠近被吸以后的速度（每拍，越吸越快） */
-export const PICKUP = { pull: 5, pullAccel: 0.5, grab: 18 };
+/** 魂珠：靠近被吸以后的速度（每拍，越吸越快）；地上最多 soulCap 颗（多的并成大珠）；磁吸半径每级加 magnetPerLevel */
+export const PICKUP = { pull: 5, pullAccel: 0.5, grab: 18, soulCap: 80, magnetPerLevel: 0.015 };

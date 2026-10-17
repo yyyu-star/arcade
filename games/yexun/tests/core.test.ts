@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld, Ev, fingerprint, step, type World } from '../src/core/index.ts';
+import { createWorld, Drop, Ev, fingerprint, step, type World } from '../src/core/index.ts';
+import { PICKUP } from '../src/content/player.ts';
 import { Bot } from '../tools/bots.ts';
 import { fsqrt } from '../src/core/fmath.ts';
 import { COS, SIN } from '../src/core/dirs.ts';
@@ -36,10 +37,10 @@ describe('确定性', () => {
     const w = play(20261016, 30 * 180);
     expect({ tick: w.tick, kills: w.kills, level: w.level, fp: fingerprint(w) }).toMatchInlineSnapshot(`
       {
-        "fp": 1307037363,
-        "kills": 723,
-        "level": 10,
-        "tick": 5391,
+        "fp": 520323973,
+        "kills": 446,
+        "level": 6,
+        "tick": 4173,
       }
     `);
   });
@@ -91,5 +92,28 @@ describe('一局', () => {
     }
     expect(first / n).toBeLessThanOrEqual(10);
     expect(three / n).toBeGreaterThanOrEqual(10);
+  }, 30_000);
+});
+
+describe('魂珠', () => {
+  it('地上的魂珠不超过上限，多出来的经验并进大珠，不丢', () => {
+    // 小白只顾躲，不专门去捡珠子，地上会越积越多
+    const w = createWorld({ seed: 11, mode: 'vigil', difficulty: 'easy' });
+    const bot = new Bot('novice', 'ward', 11);
+    let maxVal = 0;
+    while (w.tick < 30 * 240 && w.phase !== 'over') {
+      const a = bot.act(w);
+      step(w, a.dir, w.phase === 'choose' ? a.choice : -1);
+      let n = 0;
+      for (let i = 0; i < w.dAlive.length; i++) {
+        if (w.dAlive[i] && w.dKind[i] === Drop.Soul) {
+          n++;
+          maxVal = Math.max(maxVal, w.dVal[i]!);
+        }
+      }
+      expect(n).toBe(w.soulCount);
+      expect(n).toBeLessThanOrEqual(PICKUP.soulCap);
+    }
+    expect(maxVal).toBeGreaterThan(20);
   }, 30_000);
 });

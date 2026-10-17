@@ -20,7 +20,10 @@ import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
 import { momentOf, temperOf } from './fun/moments.ts';
 import { tauntId, TAUNTS } from './fun/taunts.ts';
 import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
-import { roomSummary, soloSummary, type RoomSummaryRow } from './view/summary.ts';
+import { roomSummary, soloSummary, type RoomSummaryRow, type SoloSummary } from './view/summary.ts';
+import { roomCard, soloCard } from './view/share.ts';
+import { shareCard, type ShareCard } from 'arcade-kit/share';
+import { mountSocial, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
 import { Lobby } from './view/lobby.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
@@ -125,7 +128,15 @@ sitBtn.type = 'button';
 // 好友房：离座以后回到自己的座位；没坐下的人看着时的提示
 const backSeatBtn = el('button', 'pill go hidden', hud, '回到我的座位');
 backSeatBtn.type = 'button';
-const spectate = el('span', 'spectate hidden', hud, '点亮着蓝圈的电脑座位接管它，下一手起用你自己的筹码');
+// 旁观（docs/social.md 1.4）：座位满了、已经开打时进来的人只看。有电脑座位能接管时给"坐下"（接第一个亮着蓝圈的，也可以直接点那个座位）
+const sitDownBtn = el('button', 'pill go hidden', hud, '坐下');
+sitDownBtn.type = 'button';
+sitDownBtn.addEventListener('click', () => {
+  const room = online?.state.room;
+  const i = room?.seats.findIndex((x) => x.kind === 'ai' && !x.reserved) ?? -1;
+  if (i >= 0) void takeSeat(i);
+});
+const spectate = el('span', 'spectate hidden', hud, '也可以点蓝圈的座位');
 // 互动（docs/table-fun.md 第 1 节）：左下角的"互动"按钮由 kit 画，这里只占个位置（funSlot 的屏幕矩形交给 TableFun 的 button）；
 // 一手打完按公开发生的事冒 1–2 句顺手提示，一点就发。都在左下，不挡底牌和操作区
 const funSlot = el('div', 'fun-slot hidden', hud);
@@ -267,6 +278,8 @@ async function boot(): Promise<void> {
   const u = p.platform === true ? (p.user as { displayName?: unknown } | null) : null;
   if (typeof u?.displayName === 'string' && u.displayName) myName = u.displayName;
   if (site.standalone) standaloneUi();
+  // 报位置、收邀请（docs/social.md 1.2、1.3，kit 的 social）：没平台、没登录 kit 回 null，一个请求都不发
+  void mountSocial({ platform: p, where: presence, gameName: (id) => (id === 'texas' ? '德州扑克' : undefined), onGo: (inv) => void goInvite(inv.game, inv.room) }).then((h) => (social = h));
   cloud = createCloud({
     fetch: (...a) => fetch(...a),
     storage: localStorage,
@@ -840,7 +853,9 @@ async function leave(): Promise<boolean> {
   await refreshWallet();
   // 这一场的结算页。今天德州 client 模式的净赢到了上限（docs/economy.md 第 4 节）：多赢的照常算在牌桌上，只是不进钱包
   const st = s.stats;
-  await soloSummary(stage, {
+  // 称号（0.3.0 实打后单机也给）：诈唬王、天选之人、跟注站按全桌；输赢只知道我的，赢了给"大赢家"，输了不点名（单机就一个真人）
+  const titles = tally.titles(s.left > st.buyin ? [{ name: myName, net: s.left - st.buyin }] : []);
+  const sum: SoloSummary = {
     practice: s.session.practice,
     buyin: st.buyin,
     out: s.closing || err ? null : s.left - s.capped,
@@ -853,9 +868,10 @@ async function leave(): Promise<boolean> {
     best: st.best,
     capped: s.capped,
     busted,
-    // 称号（0.3.0 实打后单机也给）：诈唬王、天选之人、跟注站按全桌；输赢只知道我的，赢了给"大赢家"，输了不点名（单机就一个真人）
-    titles: tally.titles(s.left > st.buyin ? [{ name: myName, net: s.left - st.buyin }] : []),
-  });
+    titles,
+  };
+  // 分享卡（docs/social.md 1.1）：单独部署没有，还没打完一手的也不给
+  await soloSummary(stage, site.standalone || !st.hands ? sum : { ...sum, share: () => shareIt(soloCard(sum, soloWhere(s), myName)) });
   if (err && s.closing) {
     walletNote = err === 'login' ? LOGIN_NOTE : '钱包暂时连不上：这一桌的筹码先记在本机，稍后会自动结回钱包';
     if (err !== 'login') retryTimer = window.setTimeout(() => void settlePending().then(drawLobby), RETRY_MS);
@@ -1081,6 +1097,7 @@ function enterRoom(r: SavedRoom): void {
   const o: Online = new Online(r, roomUi(() => online === o), { name: nickname() });
   online = o;
   openFun(`room:${r.code}`);
+  social?.presenceNow(true);
   drawRoom(o.state);
 }
 
@@ -1125,6 +1142,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   // 确认的这一会儿断了：按断线的说
   if (seated && o.state.status !== 'open') return leaveRoom(goHome);
   const rows = summaryRows(o.state, true);
+  const share = rows ? roomShare(o.state, rows, true) : undefined;
   if (seated) o.leaveSeat();
   // 离座的消息先发出去再断开
   await new Promise((done) => window.setTimeout(done, 300));
@@ -1132,7 +1150,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   forgetRoom();
   // 还没结回的那一份由标题页按钱包说（drawLobby），这里不另记一句：记了会一直挂着，和钱包对不上
   exitRoom(null);
-  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.titles(rows));
+  if (rows && !goHome) await roomSummary(stage, '这一场', null, rows, tally.titles(rows), share);
   if (goHome) {
     cloud.flush();
     location.href = hall();
@@ -1143,6 +1161,51 @@ async function leaveRoom(goHome: boolean): Promise<void> {
  * 好友房这一场每个人的输赢（房间按座位记的账，RoomView.net）。没人带过筹码时 null。
  * leaving：我正要离开，手里这一手会弃牌，已经下的注算输
  */
+/** 报位置、收邀请的部件（mountSocial 回来以后才有；没平台、没登录一直是 null） */
+let social: SocialHandle | null = null;
+
+/** 我在哪（kit 每次报之前现问）：在好友房里报房间码和"真人/座位数"，别的时候报在玩德州 */
+function presence(): Presence {
+  const s = online?.state;
+  if (!s?.room) return { place: 'game', game: 'texas' };
+  const humans = s.room.seats.filter((x) => x.kind === 'human').length;
+  const size = s.view?.size ?? s.opts?.size ?? s.room.seats.length;
+  return { place: 'room', game: 'texas', room: s.code, seats: `${humans}/${size}` };
+}
+
+/** 点了邀请横条的"去"：正在牌桌上的先问一句（单机这一桌留在本机，回来接着打；好友房的座位照旧，掉线算歇着） */
+async function goInvite(game: string, room: string): Promise<void> {
+  if (stage.classList.contains('at-table')) {
+    const ok = await dialog(stage, '去朋友的房间', '先离开这一桌？单机这一桌会留着，回来接着打。', [
+      { label: '留下', value: 'no' },
+      { label: '去', value: 'yes', primary: true },
+    ]);
+    if (ok !== 'yes') return;
+  }
+  cloud.flush();
+  location.assign(`/games/${game}/?room=${room}`);
+}
+
+/** 单机这一桌怎么称呼（分享卡的标题）：娱乐写难度，实盘写档位 */
+function soloWhere(s: Solo): string {
+  const diff = s.session.practice ? difficultyOf(s.table.level) : null;
+  return s.session.practice ? `娱乐 · ${diff ? DIFFICULTY_NAME[diff] : stakesOf(s.table.stakes).name}` : stakesOf(s.table.stakes).name;
+}
+
+/** 好友房结算页的"分享"：单独部署没有；withRoom 时链接带房间码（房间还开着，朋友点了能进来看） */
+function roomShare(s: OnlineState, rows: RoomSummaryRow[], withRoom: boolean): (() => void) | undefined {
+  const v = s.view;
+  if (site.standalone || !v) return undefined;
+  const card = roomCard(rows, tally.titles(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
+  return card ? () => shareIt(card, withRoom ? s.code : null) : undefined;
+}
+
+/** 分享卡交给 kit（系统分享或预览层）；链接是游戏首页，好友房带房间码 */
+function shareIt(card: ShareCard, room: string | null = null): void {
+  const url = `${location.origin}${location.pathname}${room ? `?room=${room}` : ''}`;
+  void shareCard(card, { url }).catch((e: unknown) => console.warn('texas: share failed', e));
+}
+
 function summaryRows(s: OnlineState, leaving: boolean): RoomSummaryRow[] | null {
   const v = s.view;
   const room = s.room;
@@ -1162,10 +1225,12 @@ function summaryRows(s: OnlineState, leaving: boolean): RoomSummaryRow[] | null 
 /** keep：被别的页面顶掉（4001）时不清本机记着的房间（0.3.5）：那条记录是另一个页面还在用的，清了它刷新后就不知道自己是房主 */
 function exitRoom(note: string | null, keep = false): void {
   online = null;
+  social?.presenceNow(true);
   if (!keep) saveRoom(null);
   stage.classList.remove('in-room', 'at-table');
   toggle(backSeatBtn, 'hidden', true);
   toggle(spectate, 'hidden', true);
+  toggle(sitDownBtn, 'hidden', true);
   tableView.setPeople(null);
   tableView.setClock(null, null, 1);
   drawRoomPause(null);
@@ -1232,8 +1297,10 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     if (code === CLOSE.noRoom || code === CLOSE.roomClosed) forgetRoom();
     // 房间关了是这一场打完了：给每个人的输赢；别的（被顶掉、连不上）只说一句
     const rows = code === CLOSE.roomClosed ? summaryRows(o.state, false) : null;
+    // 房间关了：分享链接不带房间码（进不去了）
+    const share = rows ? roomShare(o.state, rows, false) : undefined;
     exitRoom(null, code === CLOSE.replaced);
-    if (rows) void roomSummary(stage, '这一场', text, rows, tally.titles(rows));
+    if (rows) void roomSummary(stage, '这一场', text, rows, tally.titles(rows), share);
     else void dialog(stage, '好友房', text, [{ label: '好', value: 'ok', primary: true }]);
   },
   wait: (ms) => new Promise((ok) => window.setTimeout(ok, ms * pace())),
@@ -1305,6 +1372,7 @@ function drawRoom(s: OnlineState): void {
   syncFun();
   toggle(inviteBtn, 'hidden', false);
   toggle(spectate, 'hidden', !people.some((p) => p.takeable));
+  toggle(sitDownBtn, 'hidden', !people.some((p) => p.takeable));
 
   // 我的买入、补码办完了：钱包的数变了
   const buyingNow = me !== null && v.buying[me]!;
@@ -1402,7 +1470,10 @@ function drawRoomTop(s: OnlineState): void {
   const v = s.view;
   const o = v ? { stakes: v.stakes, size: v.size } : s.opts;
   const st = o ? stakesOf(o.stakes) : null;
-  setText(where, `好友房 ${s.code}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  // 旁观中（docs/social.md 1.4）：开打了、我没坐下也没绑着座位（离座回来的有"回到我的座位"）
+  const watching = s.room?.status === 'playing' && (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
+  setText(where, `${watching ? '旁观中 · ' : ''}好友房 ${s.code}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  toggle(where, 'watching', watching);
   setText(walletChip, wallet ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', false);
   setText(leaveBtn, '离开');
