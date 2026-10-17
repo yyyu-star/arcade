@@ -77,9 +77,12 @@ export function rankCard(name: string, board: string, rank: number, scoreText: s
   };
 }
 
-/** 本人的好友链接：扫码的人登录后直接加好友 */
+/**
+ * 本人的好友链接 /f/<码>（只给路径）：kit 0.15.0 拿运行时的 origin 拼成完整链接，画进卡右下角的二维码，也是系统分享的链接。
+ * 朋友圈里的图不能点，扫码是唯一入口；扫码的人登录后直接加好友
+ */
 export function friendLink(friendCode: string): string {
-  return `${location.origin}/f/${friendCode}`;
+  return `/f/${friendCode}`;
 }
 
 /**
