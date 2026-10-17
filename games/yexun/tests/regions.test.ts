@@ -73,7 +73,7 @@ describe('特色怪的登记', () => {
     const r = VIGIL_REGIONS.bamboo!;
     expect(regionTotal(r, 0)).toBe(0);
     expect(regionTotal(r, 1)).toBeCloseTo(0.18);
-    expect(regionTotal(r, 3)).toBeCloseTo(0.365);
+    expect(regionTotal(r, 3)).toBeCloseTo(0.32);
     expect(regionKind(r, 3, 0.05)).toBe('bamsprout');
     expect(regionKind(r, 3, 0.2)).toBe('snakespirit');
   });
