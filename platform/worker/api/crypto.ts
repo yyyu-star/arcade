@@ -36,6 +36,11 @@ export function newUserId(): string {
   return b64url(randomBytes(16));
 }
 
+/** 96 位随机的邀请 id（16 位 base64url）：知道 id 也只能对自己收到的点"不了"，不用更长。 */
+export function newInviteId(): string {
+  return b64url(randomBytes(12));
+}
+
 /** 20 位、约 100 bit 的恢复码，每 5 位一组给人看。 */
 export function newRecoveryCode(): string {
   return randomCrockford(20).replace(/(.{5})(?=.)/g, '$1-');

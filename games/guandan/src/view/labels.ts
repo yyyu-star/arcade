@@ -59,6 +59,20 @@ export interface SeatIdentity {
 }
 export const seatIdentity: (SeatIdentity | null)[] = [null, null, null, null];
 
+/**
+ * 旁观（0.13.0，docs/social.md 1.4）：好友房开打后没坐下的人看牌桌，画面座位 0 是真实的 0 号座位上的人，不是"你"。
+ * 由联机会话跟着座位更新；单机一直是 false
+ */
+let watching = false;
+
+export function setWatching(on: boolean): void {
+  watching = on;
+}
+
+export function isWatching(): boolean {
+  return watching;
+}
+
 export function setSeatIdentities(list: (SeatIdentity | null)[]): void {
   for (let i = 0; i < 4; i++) seatIdentity[i] = list[i] ?? null;
 }
@@ -81,7 +95,7 @@ export const NAME_MAX = 7;
 
 /** 不截短的名字：只给认人、取全名用，不往画面上放 */
 export function fullSeatName(seat: number): string {
-  if (seat === 0) return '你';
+  if (seat === 0 && !watching) return '你';
   const who = seatIdentity[seat];
   if (who?.human) return who.name;
   return PERSONAS[seatPerson(seat) as Exclude<SeatId, 'me'>].name;

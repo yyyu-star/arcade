@@ -6,6 +6,7 @@ import { onlineUrl, playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api } from './api.ts';
 import { useSession } from './session.tsx';
+import { InviteBar, useHasInvites, useInvitePolling } from './invites.tsx';
 import { useLobbyPresence } from './presence.ts';
 import { FormError, useSubmit, useWritable } from './ui.tsx';
 import { useWallet } from './wallet.tsx';
@@ -288,10 +289,7 @@ function AccountButton() {
         <TrophyIcon />
         排行
       </Link>
-      <Link className="account" href="/friends">
-        <PeopleIcon />
-        好友
-      </Link>
+      <FriendsLink />
       <WalletBadge />
       <Link className="account" href="/me" title="我的账号">
         <span className="account__avatar" aria-hidden="true">
@@ -300,6 +298,18 @@ function AccountButton() {
         <span className="account__name">{user.displayName}</span>
       </Link>
     </span>
+  );
+}
+
+/** 顶栏的"好友"：有还没过期的邀请时带红点（0.14.0，docs/social.md 1.3） */
+function FriendsLink() {
+  const dot = useHasInvites();
+  return (
+    <Link className="account" href="/friends" data-testid="friends-link">
+      <PeopleIcon />
+      好友
+      {dot && <span className="dot" role="img" aria-label="有人叫你" data-testid="invite-dot" />}
+    </Link>
   );
 }
 
@@ -329,6 +339,7 @@ export function App() {
   const loc = useLocation();
   const { service, refresh, loading, slow, user } = useSession();
   useLobbyPresence(!!user);
+  useInvitePolling(!!user);
   const Page = pageFor(loc.pathname);
   return (
     <div className={!Page ? 'page' : loc.pathname === '/admin' ? 'page page--wide' : 'page page--narrow'}>
@@ -342,6 +353,7 @@ export function App() {
         <p className="top__sub">挑一个，开一局。</p>
         <AccountButton />
       </header>
+      <InviteBar />
       {loading && slow && <p className="banner" data-testid="reconnecting">网络有点慢，正在重连…</p>}
       {service === 'off' && <p className="banner">账号服务暂时休息，游戏也要登录才能玩，过一会儿再来。</p>}
       {service === 'unreachable' && (

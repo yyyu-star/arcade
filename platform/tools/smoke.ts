@@ -150,12 +150,15 @@ const json = (body: unknown, status = 200) => ({ status, contentType: 'applicati
  */
 async function mockSession(
   page: Page,
-  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET }: { user?: object; me?: Record<string, unknown>; wallet?: object | (() => object) } = {},
+  { user = FAKE_USER, me = {}, wallet = FAKE_WALLET, invites = [] }: { user?: object; me?: Record<string, unknown>; wallet?: object | (() => object); invites?: object[] } = {},
 ): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill(json({ user, service: 'ok', saves: 'ok', registration: 'closed', ...me })));
   await page.route('**/api/wallet', (r) => r.fulfill(json(typeof wallet === 'function' ? wallet() : wallet)));
   // 登录后的大厅会报在线（0.13.0）；模拟的人在真接口那边不认识，回 401
   await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
+  // 登录后每 30 秒问一次有没有人叫（0.14.0）；"不了"回 204
+  await page.route('**/api/invites', (r) => r.fulfill(json({ invites })));
+  await page.route('**/api/invites/*/dismiss', (r) => r.fulfill({ status: 204 }));
   await fakeLoginHint(page);
 }
 
@@ -599,6 +602,23 @@ async function friendsFlow(a: Page, b: Page): Promise<void> {
   await b.getByText('好友在好友页能看到你').waitFor();
   await b.goto(`${BASE}/friends`);
 
+  console.log('管理员叫朋友来掼蛋房（真接口）：朋友顶上弹一条、"好友"带红点，点"不了"收起');
+  const friendId = await b.evaluate(async () => ((await (await fetch('/api/me')).json()) as { user: { id: string } }).user.id);
+  const sent = await a.evaluate(
+    async (to) => (await fetch('/api/invites', { method: 'POST', headers: { 'x-arcade': '1', 'content-type': 'application/json' }, body: JSON.stringify({ to, game: 'guandan', room: '123456' }) })).status,
+    friendId,
+  );
+  check(sent === 200, `发邀请该回 200（${sent}）`);
+  await b.reload();
+  await b.getByTestId('invite-bar').getByText('冒烟阿国').waitFor();
+  await b.getByTestId('invite-dot').waitFor();
+  await shot(b, 'invite-bar');
+  await b.getByTestId('invite-bar').getByRole('button', { name: '不了' }).click();
+  await b.getByTestId('invite-bar').waitFor({ state: 'detached' });
+  await b.reload();
+  await b.getByRole('heading', { name: '好友（1）' }).waitFor();
+  check((await b.getByTestId('invite-bar').count()) === 0, '点了"不了"刷新后不该再弹');
+
   console.log('朋友屏蔽管理员：要先勾确认；好友没了，屏蔽的人里有');
   const row = b.getByTestId('person-冒烟阿国');
   await row.getByRole('button', { name: '屏蔽' }).click();
@@ -962,8 +982,8 @@ async function fakeAdmin(page: Page): Promise<void> {
 
 const FAKE_FRIENDS = {
   friends: [
-    { userId: 'f1', displayName: '小明', avatar: null, lastSeenDaysAgo: 0 },
-    { userId: 'f2', displayName: '名字有十二个字那么长的人', avatar: null, lastSeenDaysAgo: 1 },
+    { userId: 'f1', displayName: '小明', avatar: null, lastSeenDaysAgo: 0, online: true, where: { place: 'room', game: 'guandan', room: '123456', seats: '3/4' } },
+    { userId: 'f2', displayName: '名字有十二个字那么长的人', avatar: null, lastSeenDaysAgo: 1, online: false },
     { userId: 'f3', displayName: '阿花', avatar: null, lastSeenDaysAgo: 23 },
   ],
   incoming: [{ userId: 'f4', displayName: '新朋友', avatar: null }],
@@ -971,8 +991,8 @@ const FAKE_FRIENDS = {
 };
 
 /** 用模拟的登录状态打开好友页（不占真实登录次数）。 */
-async function fakeFriends(page: Page): Promise<void> {
-  await mockSession(page);
+async function fakeFriends(page: Page, invites: object[] = []): Promise<void> {
+  await mockSession(page, { invites });
   await page.route('**/api/friends', (r) => r.fulfill(json(FAKE_FRIENDS)));
   await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [{ userId: 'f6', displayName: '烦人的人', avatar: null }] })));
   await page.route('**/api/friends/code/*', (r) => r.fulfill(json({ user: { userId: 'f7', displayName: '小红', avatar: null }, relation: 'pending_in' })));
@@ -1069,10 +1089,22 @@ async function mobile(browser: Browser): Promise<void> {
   await adm.ctx.close();
 
   const fr = await newPage(browser, '手机竖屏好友', 'portrait');
-  await fakeFriends(fr.page);
+  // 0.14.0：小明在掼蛋房里，有"加入"；有人叫我时顶上一条、顶栏"好友"带红点
+  await fakeFriends(fr.page, [{ id: 'inv-0000000000001', from: { id: 'f3', name: '阿花' }, game: 'guandan', room: '654321', until: Date.now() + 600_000 }]);
   await fr.page.getByText('23 天前来过').waitFor();
   await fr.page.getByText('昨天来过').waitFor();
+  await fr.page.getByTestId('person-小明').getByText('在掼蛋房里 · 3/4 人').waitFor();
+  check(
+    (await fr.page.getByTestId('person-小明').getByTestId('join-room').getAttribute('href')) === '/games/guandan/?room=123456',
+    '"加入"该指向好友的房间',
+  );
+  check((await fr.page.getByTestId('join-room').count()) === 1, '只有在房间里的好友才有"加入"');
+  await fr.page.getByTestId('invite-bar').getByText('叫你来掼蛋').waitFor();
+  await fr.page.getByTestId('invite-dot').waitFor();
   await shot(fr.page, 'mobile-friends');
+  await fr.page.getByTestId('invite-bar').getByRole('button', { name: '不了' }).click();
+  await fr.page.getByTestId('invite-bar').waitFor({ state: 'detached' });
+  check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
   for (const t of await fr.page.locator('.people .btn').all()) {
     const box = await t.boundingBox();
     check(box && box.height >= 44, `好友页的按钮不到 44 高：${await t.textContent()}（${box?.height ?? 0}）`);
@@ -1726,6 +1758,7 @@ async function serviceStates(browser: Browser): Promise<void> {
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_USER, service: 'ok', saves: 'ok' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(FAKE_WALLET)));
     await page.route('**/api/presence', (r) => r.fulfill({ status: 204 }));
+    await page.route('**/api/invites', (r) => r.fulfill(json({ invites: [] })));
     await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
     await page.getByRole('button', { name: '重试' }).click();
     await page.locator('.account__name', { hasText: '某人' }).waitFor();

@@ -35,6 +35,15 @@ export interface Profile {
 }
 
 /** 在哪（0.13.0，15.13）：大厅、在玩某个游戏、在某个游戏的房间里（带房间码和人数） */
+/** 给我的邀请（0.14.0，docs/social.md 1.3）：until 是过期时间（毫秒） */
+export interface Invite {
+  id: string;
+  from: { id: string; name: string };
+  game: string;
+  room: string;
+  until: number;
+}
+
 export interface Where {
   place: 'lobby' | 'game' | 'room';
   game?: string;
@@ -314,6 +323,9 @@ export const api = {
   setShowWhere: (showWhere: boolean) => request<{ user: User }>('PATCH', '/api/me', { showWhere }),
   /** 报位置（0.13.0）：平台每 2 分钟最多记一次，写不了时也回 204 */
   presence: (where: Where) => request<void>('POST', '/api/presence', where),
+  /** 邀请（0.14.0）：收是只读；"不了"只改自己收到的那条 */
+  invites: () => request<{ invites: Invite[] }>('GET', '/api/invites'),
+  dismissInvite: (id: string) => request<void>('POST', `/api/invites/${encodeURIComponent(id)}/dismiss`),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/api/account/password', { currentPassword, newPassword }),
   newRecoveryCode: (currentPassword: string) =>

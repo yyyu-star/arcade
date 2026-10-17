@@ -69,6 +69,12 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
         ),
       );
     }
+    // 邀请 10 分钟就过期；留 2 天是为了按"最近 24 小时"数每人发了几条（invites.ts），表小，按发出时间扫
+    if (budget() > 0) {
+      await db.run(
+        db.stmt('DELETE FROM invites WHERE id IN (SELECT id FROM invites WHERE created_at < ?1 LIMIT ?2)', now - 2 * DAY, budget()),
+      );
+    }
     if (budget() > 0) {
       const cutoff = hourKey(now - 7 * DAY);
       await db.run(

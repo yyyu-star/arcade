@@ -61,7 +61,9 @@ import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { TrickView } from '../table/trick.ts';
-import { lobbyName, standalone } from '../platform.ts';
+import { lobbyName, platformInfo, standalone } from '../platform.ts';
+import { presenceNow } from '../social.ts';
+import { shareCardOf, shareResult, type ShareKind } from '../share-card.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
 
@@ -79,6 +81,8 @@ export class TableScene extends Phaser.Scene {
   private btnPrev!: Button;
   /** 好友房里我走开了、房间在快速替我出时的"我回来了"（0.6.3） */
   private btnBack: Button | undefined;
+  /** 旁观时的"坐下"（0.13.0） */
+  private btnSit: Button | undefined;
   /** 记牌器（或收起后的小签）的中心，冒烟点它 */
   private counterAt: { x: number; y: number } | null = null;
   /** 牌桌互动（arcade-kit/table-fun，0.12.0）：头像菜单、面板、表情、道具、电脑反应；单机和好友房同一套 */
@@ -237,6 +241,13 @@ export class TableScene extends Phaser.Scene {
           this.btnBack?.setVisible(false);
         }).setDepth(401).setVisible(false)
       : undefined;
+    // 旁观（0.13.0，docs/social.md 1.4）：有能坐的座位时出"坐下"，坐下后会话换座位、牌桌整个重画
+    this.btnSit = net
+      ? new Button(this, cx, BUTTON_Y, 240, 60, '坐下', 'red', () => {
+          const seat = net.freeSeat();
+          if (seat !== null) net.sit(seat);
+        }).setDepth(401).setVisible(false)
+      : undefined;
     this.statusBg = this.add.graphics().setDepth(399);
     this.status = text(this, cx, BUTTON_Y - 50, '', { size: TYPE.label, color: 0xfff3d6, bold: true }).setDepth(400);
   }
@@ -267,7 +278,7 @@ export class TableScene extends Phaser.Scene {
       seats: () => this.seats.map((sv, v): FunSeat => {
         const id = net ? seatIdentity[v] : null;
         const persona = net ? id?.persona : this.ses.botStyle(v)?.persona;
-        return { rect: this.screenRect(sv.a), name: seatName(v), me: v === ME, bot: net ? !!id && !id.human : v !== ME, temper: persona ? TEMPER[persona] : 'normal' };
+        return { rect: this.screenRect(sv.a), name: seatName(v), me: this.isMe(v), bot: net ? !!id && !id.human : v !== ME, temper: persona ? TEMPER[persona] : 'normal' };
       }),
       avoid: () => [this.worldRect(0, BUTTON_Y - 40, W, worldH - BUTTON_Y + 40)],
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
@@ -397,8 +408,8 @@ export class TableScene extends Phaser.Scene {
     const barH = (x0: number, x1: number): number => (x1 <= pa.ax - pa.size / 2 - 4 || x0 >= pa.ax + pa.size / 2 + 4 ? deep : shallow);
     this.lobbyBtn.setHit(112, deep);
     c.add(this.lobbyBtn);
-    team(138, '我方', v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
-    team(280, '对方', v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
+    team(138, this.side(0), v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
+    team(280, this.side(1), v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
     // 云存档：放左边（右边四个按钮已经挤满），紧挨两队级数框（右边 412）。有地方就把间距拉到 44 CSS 像素，最少 56
     const lp = Math.max(56, Math.min(minHit(), (pa.ax - pa.size / 2 - 4 - 412) / (this.net ? 2 : 1)));
     this.cloudBtn = cloudButton(this, 412 + lp / 2, 29, 46);
@@ -422,7 +433,7 @@ export class TableScene extends Phaser.Scene {
     badge.lineStyle(3, COLOR.gold, 1).strokeRoundedRect(mx - 26, 5, 52, 48, 8);
     c.add(badge);
     c.add(text(this, mx, 30, levelName(v.level), { size: TYPE.big - 4, color: COLOR.red, bold: true, font: 'num' }));
-    const who = v.declarer < 0 ? '双方' : v.declarer === 0 ? '我方' : '对方';
+    const who = v.declarer < 0 ? '双方' : this.side(v.declarer);
     c.add(text(this, mx + 36, 29, `${who}的级 · 第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
 
     // 名次条：四个小格，出完的人依次填进去。16:9 的小手机上顶栏放不下它和够大的图标：让给图标（名次头像上也盖着印章）
@@ -471,8 +482,9 @@ export class TableScene extends Phaser.Scene {
     else if (ns) {
       // 好友房：我（视角里总是 0 号）这个座位的账
       const me = ns.seats[0]!;
-      const tail =
-        me.paid === 'yes'
+      const tail = this.watching
+        ? '旁观'
+        : me.paid === 'yes'
           ? `本场 ${signed(me.points)} 分（${signed(me.points * pointValue(ns.tier))}）`
           : me.paid === 'pending'
             ? ROOM_STAKE_TEXT.pending
@@ -603,6 +615,8 @@ export class TableScene extends Phaser.Scene {
     const st = this.stake;
     if (st && !st.over) return this.leaveStake(st, 'title');
     const net = this.net;
+    // 旁观的人没有座位，直接走
+    if (this.watching) return this.leaveRoom();
     if (net && net.room?.status === 'playing') {
       // 好友房：离开就把座位交给电脑（不判输），先问一句
       // 我是最后一个真人：房间就此结束（0.6.0），说清楚
@@ -672,11 +686,28 @@ export class TableScene extends Phaser.Scene {
     this.cancelBot();
     this.net?.leave();
     app.net = null;
+    presenceNow();
     this.scene.start('title');
   }
 
   private get net(): NetSession | null {
     return this.ses instanceof NetSession ? this.ses : null;
+  }
+
+  /** 旁观：好友房开打了、我没坐下（画面座位 0 是真实的 0 号座位上的人） */
+  private get watching(): boolean {
+    return !!this.net?.watching;
+  }
+
+  /** 画面座位 seat 是不是我自己（旁观时谁都不是） */
+  private isMe(seat: number): boolean {
+    return seat === ME && !this.watching;
+  }
+
+  /** 两队的叫法：我方 / 对方；旁观时没有"我"，叫一队（下、上两家）、二队 */
+  private side(team: number): string {
+    if (this.watching) return team === 0 ? '一队' : '二队';
+    return team === 0 ? '我方' : '对方';
   }
 
   private get stake(): StakeSession | null {
@@ -838,7 +869,7 @@ export class TableScene extends Phaser.Scene {
     }
     this.nudges?.tickTurn(this.overlay === null && t ? t.seat : null, t ? `${t.seat}:${t.deadline}` : '');
     // 我的最后 5 秒：每秒"嗒"一声，最后 2 秒每半秒一声、升调
-    const left = t && t.seat === ME && t.deadline !== null ? t.deadline - now : -1;
+    const left = t && this.isMe(t.seat) && t.deadline !== null ? t.deadline - now : -1;
     if (left > 0 && left <= 5000) {
       const slot = left > 2000 ? Math.ceil(left / 1000) : 10 + Math.ceil(left / 500);
       if (slot !== this.tickSlot) audio.sfx('tick', { pitch: left > 2000 ? 0 : 5 });
@@ -848,7 +879,8 @@ export class TableScene extends Phaser.Scene {
 
   /** 好友房刚轮到我：后台时标题闪，前台时手机振一下（叮的一声在播到"轮到"那一步时响）；不轮到我了就停闪 */
   private noticeNetTurn(): void {
-    const mine = this.net?.turnInfo()?.seat === ME;
+    const t0 = this.net?.turnInfo();
+    const mine = !!t0 && this.isMe(t0.seat);
     if (mine && !this.myNetTurn) {
       if (document.hidden) flashTitle();
       else vibrate();
@@ -949,6 +981,18 @@ export class TableScene extends Phaser.Scene {
     this.btnPrev.setVisible(v.phase === 'play').setEnabled(this.trick.prev.length > 0 && this.overlay === null);
     this.btnSort.setText(this.hand.mode === 'rank' ? '按牌型' : '按点数');
     this.btnBack?.setVisible(!!this.net?.afk && this.overlay === null);
+    if (this.net) {
+      // 旁观：没有手牌、不能出手；顶上那条写"旁观中"，有能坐的座位出"坐下"
+      const watch = this.watching;
+      const sit = watch ? this.net.freeSeat() : null;
+      this.btnSit?.setVisible(watch && sit !== null && this.overlay === null);
+      if (watch) {
+        for (const b of [this.btnPass, this.btnHint, this.btnPlay, this.btnSort, this.btnClear]) b.setVisible(false);
+        this.hand.enabled = false;
+        this.setStatus(sit === null ? '旁观中 · 看不到任何人的手牌' : '旁观中 · 看不到任何人的手牌，点"坐下"一起打');
+        return;
+      }
+    }
 
     if (v.myTribute && mine) {
       // 进贡 / 还贡
@@ -1309,7 +1353,7 @@ export class TableScene extends Phaser.Scene {
         break;
       case 'turn':
         for (let s = 0; s < 4; s++) this.seats[s]!.setTurn(s === e.seat);
-        if (e.seat === ME && !this.ses.autoplay) {
+        if (this.isMe(e.seat) && !this.ses.autoplay) {
           audio.sfx('turn');
           // 单机也振一下（好友房在收到房间消息时就振了，见 noticeNetTurn）
           if (!this.net) vibrate();
@@ -1360,7 +1404,7 @@ export class TableScene extends Phaser.Scene {
           burst(this, a.ax, a.ay, 'star', 26, { gravity: 120 });
           this.mood(e.seat, 'happy', 4000);
           this.talk(e.seat, 'first', true);
-          if (e.seat === ME) await bigWord(this, '头游！', { color: COLOR.goldLight, hold: 700 });
+          if (this.isMe(e.seat)) await bigWord(this, '头游！', { color: COLOR.goldLight, hold: 700 });
           else {
             this.talk(partnerOf(e.seat), 'partnerFirst');
             await banner(this, `${seatName(e.seat)} 头游`);
@@ -1385,7 +1429,7 @@ export class TableScene extends Phaser.Scene {
 
   private async animatePlay(seat: number, play: Play, left: number): Promise<void> {
     const from = this.seats[seat]!.center;
-    const views = seat === ME ? this.hand.take(play.cards) : null;
+    const views = this.isMe(seat) ? this.hand.take(play.cards) : null;
     const bomb = isBomb(play);
     const big = !bomb && (play.type === 'plate' || play.type === 'tube' || play.cards.length >= 5);
     const p = this.trick.showPlay(seat, play, views, from);
@@ -1396,7 +1440,7 @@ export class TableScene extends Phaser.Scene {
     this.seats[seat]!.setCount(left, left === 0);
     await p;
     if (bomb) await this.bombFx(seat, play);
-    else if (seat !== ME) {
+    else if (!this.isMe(seat)) {
       const last = this.ses.view().history;
       // 压过别人时才说"压一手"之类；领出时偶尔说一句
       const prev = last.length >= 2 ? last[last.length - 2] : null;
@@ -1404,11 +1448,11 @@ export class TableScene extends Phaser.Scene {
     }
     // 报牌：别家的张数刚跨过 10 张、3 张时弹一下
     const before = left + play.cards.length;
-    if (seat !== ME && left > 0 && ((before > 10 && left <= 10) || (before > 3 && left <= 3))) {
+    if (!this.isMe(seat) && left > 0 && ((before > 10 && left <= 10) || (before > 3 && left <= 3))) {
       this.seats[seat]!.callCount(left);
       audio.sfx('call', { pitch: left <= 3 ? 4 : 0 });
     }
-    if (left > 0 && left <= 6 && seat !== ME) {
+    if (left > 0 && left <= 6 && !this.isMe(seat)) {
       if (left <= 3) this.talk(seat, 'fewCards');
       audio.music('tense');
     }
@@ -1459,7 +1503,7 @@ export class TableScene extends Phaser.Scene {
     const a = this.seats[from]!.center;
     const b = this.seats[to]!.center;
     let v: CardView;
-    if (from === ME && card !== null) {
+    if (this.isMe(from) && card !== null) {
       v = this.hand.take([card])[0] ?? new CardView(this, a.x, a.y, card, this.ses.view().level);
     } else {
       v = new CardView(this, a.x, a.y, card ?? 0, this.ses.view().level, 92, card !== null);
@@ -1475,7 +1519,7 @@ export class TableScene extends Phaser.Scene {
     this.tweens.add({ targets: tag, alpha: 0, duration: dur(160), onComplete: () => tag.destroy() });
     await tweenP(this, { targets: v, x: b.x, y: b.y, scale: 0.4, alpha: 0.2, duration: 360, ease: 'Cubic.easeIn' });
     v.destroy();
-    if (to === ME) {
+    if (this.isMe(to)) {
       const view = this.ses.view();
       this.hand.setHand(view.hand, view.level, { animate: true, from: b });
     }
@@ -1518,7 +1562,7 @@ export class TableScene extends Phaser.Scene {
     const history = this.ses.view().history;
     const rc = dealRecap(r, history);
     const recap = [
-      `炸弹 我方 ${rc.bombs[0]} · 对方 ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
+      `炸弹 ${this.side(0)} ${rc.bombs[0]} · ${this.side(1)} ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
       rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
     ];
     // 名场面（0.7.1）：最精彩的两条
@@ -1544,13 +1588,13 @@ export class TableScene extends Phaser.Scene {
       b.add(this.add.image(-330, y, `stamp:${PLACE_NAMES[i]}`).setDisplaySize(56, 56).setAngle(-10));
       b.add(this.add.image(-262, y, `avatar:${seatPerson(seat)}:${teamOf(seat) === r.winnerTeam ? 'happy' : 'sad'}`).setDisplaySize(54, 54));
       b.add(text(this, -222, y, seatName(seat), { size: TYPE.body, bold: true, ox: 0 }));
-      b.add(text(this, -26, y, teamOf(seat) === 0 ? '我方' : '对方', { size: TYPE.small, color: teamOf(seat) === 0 ? COLOR.teamUs : COLOR.teamThem, bold: true, ox: 1 }));
+      b.add(text(this, -26, y, this.side(teamOf(seat)), { size: TYPE.small, color: teamOf(seat) === 0 ? COLOR.teamUs : COLOR.teamThem, bold: true, ox: 1 }));
     });
     // 右：升级
     const rx = 190;
     const before = r.levelsBefore[r.winnerTeam]!;
     const after = r.levelsAfter[r.winnerTeam]!;
-    b.add(text(this, rx, -176, mine ? '我方赢了这副' : '对方赢了这副', { size: TYPE.title, bold: true, color: mine ? COLOR.red : COLOR.teamThem, font: 'title' }));
+    b.add(text(this, rx, -176, `${this.side(r.winnerTeam)}赢了这副`, { size: TYPE.title, bold: true, color: mine ? COLOR.red : COLOR.teamThem, font: 'title' }));
     const lvText = text(this, rx - 70, -86, levelName(before), { size: 66, bold: true, font: 'num', color: COLOR.muted });
     b.add(lvText);
     b.add(text(this, rx, -86, '→', { size: 46, bold: true, color: COLOR.muted }));
@@ -1579,8 +1623,8 @@ export class TableScene extends Phaser.Scene {
     } else lvAfter.setText(levelName(after));
     // 打 A 的情况
     const notes: string[] = [];
-    if (r.aFailedTeam >= 0) notes.push(`${r.aFailedTeam === 0 ? '我方' : '对方'}打 A 没过`);
-    if (r.aResetTeam >= 0) notes.push(`${r.aResetTeam === 0 ? '我方' : '对方'}退回打 2`);
+    if (r.aFailedTeam >= 0) notes.push(`${this.side(r.aFailedTeam)}打 A 没过`);
+    if (r.aResetTeam >= 0) notes.push(`${this.side(r.aResetTeam)}退回打 2`);
     if (r.doubleDown) notes.push('双下！');
     b.add(text(this, rx, 40, notes.join(' · '), { size: TYPE.label, bold: true, color: COLOR.redDark }));
     // 下一副的进贡：核心推演下一副开头（联机时由房间算好随结算下发）
@@ -1653,16 +1697,17 @@ export class TableScene extends Phaser.Scene {
 
   private showGameOver(): void {
     const v = this.ses.view();
+    const watch = this.watching;
     const win = v.winner === 0;
     audio.music('off');
-    audio.sfx(win ? 'win' : 'lose');
+    audio.sfx(win || watch ? 'win' : 'lose');
     const W = worldW(this);
     const stop = win ? rain(this, 'confetti', 4900) : rain(this, 'smoke', 4900);
     if (win) {
       rays(this, W / 2, 200);
       burst(this, W / 2, 200, 'coin', 40, { speed: [200, 600], life: 1600, gravity: 600 });
     }
-    const m = modal(this, 760, 540, win ? '胜利！' : '惜败', { closeBtn: false, depth: 5000 });
+    const m = modal(this, 760, 540, watch ? '整局结束' : win ? '胜利！' : '惜败', { closeBtn: false, depth: 5000 });
     this.openOverlay('gameOver', m);
     m.root.once('destroy', stop);
     const b = m.body;
@@ -1675,11 +1720,17 @@ export class TableScene extends Phaser.Scene {
       if (teamOf(seat) === v.winner) this.tweens.add({ targets: img, y: -134, duration: dur(420), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       b.add(text(this, x, -48, seatName(seat), { size: TYPE.label, bold: true, color: teamOf(seat) === 0 ? COLOR.teamUs : COLOR.teamThem }));
     });
-    b.add(text(this, 0, 18, win ? '我方先过 A，赢下整局！' : '对方先过了 A，下局再来', { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
+    b.add(text(this, 0, 18, watch ? `${this.side(v.winner)}先过 A，赢下整局` : win ? '我方先过 A，赢下整局！' : '对方先过了 A，下局再来', { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
     // 整局的称号：一行排开，按钮上方
     this.logMatch();
     const titles = matchTitles(this.matchLog);
+    if (!watch) this.addShare(b, 330, -220, { kind: 'game', win, room: this.net?.code ?? null });
     if (titles.length) b.add(text(this, 0, 114, titles.map((t) => this.titleLine(t, false)).join('    '), { size: TYPE.small, bold: true, color: COLOR.redDark }));
+    if (this.net && watch) {
+      // 旁观的人：看完结果回首页（"再来一场"是这一桌的人一起换房间，不带旁观的）
+      b.add(new Button(this, 0, 170, 240, 64, '回首页', 'red', () => this.leaveRoom(), 'back'));
+      return;
+    }
     if (this.net) {
       // 好友房不计战绩。再来一场（0.6.2）：开个新房间，这一桌的人自动跟过去、坐回原来的座位
       const tip = text(this, 0, 74, '好友房不计战绩 · 点"再来一场"，这一桌一起换到新房间', { size: TYPE.label, color: COLOR.ink });
@@ -1700,6 +1751,26 @@ export class TableScene extends Phaser.Scene {
     b.add(text(this, 0, 74, `战绩 ${st.wins}/${st.games}  胜率 ${rate}%  连胜 ${st.streak}（最高 ${st.bestStreak}）`, { size: TYPE.label, color: COLOR.ink }));
     b.add(new Button(this, -140, 170, 220, 64, '回首页', 'wood', () => this.scene.start('title'), 'back'));
     b.add(new Button(this, 140, 170, 220, 64, '再来一局', 'red', () => this.newGame(), 'restart'));
+  }
+
+  /**
+   * 结算页右上角的"分享"（0.13.0，docs/social.md 1.1）：画一张战绩图，手机上调系统分享，不支持的出预览。只用公开的结果，不画手牌
+   */
+  private addShare(b: Phaser.GameObjects.Container, x: number, y: number, k: ShareKind): void {
+    this.logMatch();
+    const card = shareCardOf(k, this.matchLog, matchTitles(this.matchLog), this.myShareName());
+    const btn = iconButton(this, x, y, 'share', () => void shareResult(card, k.room), 56);
+    b.add(btn);
+    b.setData('share', btn);
+  }
+
+  /** 卡上写的名字：好友房用房间里的昵称，单机有平台时用账号的昵称，单独部署不写 */
+  private myShareName(): string | null {
+    const me = this.net ? seatIdentity[0] : null;
+    if (me?.human) return me.name;
+    const u = platformInfo().platform === true ? (platformInfo() as { user: unknown }).user : null;
+    const n = (u as { displayName?: unknown } | null)?.displayName;
+    return typeof n === 'string' && n ? n : null;
   }
 
   /** 把最近一副记进整局的称号统计（同一副只记一次） */
@@ -1746,6 +1817,7 @@ export class TableScene extends Phaser.Scene {
     const b = m.body;
     const head = done.points === 0 ? '这场打平，0 分' : `这场 ${signed(done.points)} 分，${signed(done.points * pv)}`;
     b.add(text(this, 0, -170, `实盘 · ${TIER_NAME[save.tier]}`, { size: TYPE.label, bold: true, color: COLOR.muted }));
+    this.addShare(b, 340, -200, { kind: 'stake', tier: save.tier, points: done.points, chips: done.points * pv, deals: done.deals, room: null });
     b.add(text(this, 0, -122, head, { size: TYPE.big, bold: true, color: done.points > 0 ? COLOR.red : COLOR.ink }));
     const why =
       v.phase === 'gameOver'
@@ -1801,6 +1873,7 @@ export class TableScene extends Phaser.Scene {
    */
   private showNetStakeResult(): void {
     const ns = this.netStake!;
+    const watch = this.watching;
     const me = ns.seats[0]!;
     const pv = pointValue(ns.tier);
     const v = this.ses.view();
@@ -1810,9 +1883,11 @@ export class TableScene extends Phaser.Scene {
     this.openOverlay('stake', m);
     const b = m.body;
     b.add(text(this, 0, -196, `好友房实盘 · ${TIER_NAME[ns.tier]}`, { size: TYPE.label, bold: true, color: COLOR.muted }));
-    const head = me.paid !== 'yes' ? '这一场不计输赢' : me.points === 0 ? '这场打平，0 分' : `这场 ${signed(me.points)} 分，${signed(me.points * pv)}`;
+    // 没带上的人（不计输赢）没有可分享的
+    if (!watch && me.paid === 'yes') this.addShare(b, 340, -210, { kind: 'stake', tier: ns.tier, points: me.points, chips: me.points * pv, deals: ns.deals, room: this.net?.code ?? null });
+    const head = watch ? '这一场打完了' : me.paid !== 'yes' ? '这一场不计输赢' : me.points === 0 ? '这场打平，0 分' : `这场 ${signed(me.points)} 分，${signed(me.points * pv)}`;
     b.add(text(this, 0, -148, head, { size: TYPE.big, bold: true, color: me.paid === 'yes' && me.points > 0 ? COLOR.red : COLOR.ink }));
-    const why = v.phase === 'gameOver' ? `${v.winner === 0 ? '我方' : '对方'}先过了 A，这一场提前结束` : ns.deals >= ROOM_DEALS ? `打满 ${ROOM_DEALS} 副` : '这一场提前结束';
+    const why = v.phase === 'gameOver' ? `${this.side(v.winner)}先过了 A，这一场提前结束` : ns.deals >= ROOM_DEALS ? `打满 ${ROOM_DEALS} 副` : '这一场提前结束';
     b.add(text(this, 0, -96, why, { size: TYPE.label, color: COLOR.ink }));
     // 每个人：到账的写分，别的写"不计输赢"（电脑是庄家的）
     [0, 1, 2, 3].forEach((seat, i) => {
@@ -1838,7 +1913,8 @@ export class TableScene extends Phaser.Scene {
     if (!t?.scene || !net) return;
     const ns = net.queue[net.queue.length - 1]?.nv.stake ?? net.shown?.stake;
     const me = ns?.seats[0];
-    if (!ns || !me) return;
+    // 旁观的人没有自己的账
+    if (!ns || !me || this.watching) return;
     if (me.paid === 'yes') t.setText(me.out ? '已经结回钱包' : '正在结回钱包…');
     else if (me.paid === 'pending') t.setText('带入还没到账，到账后原样结回一份');
     else t.setText(roomWhy(ns.why ?? ''));
@@ -1899,6 +1975,7 @@ export class TableScene extends Phaser.Scene {
     put('clear', this.btnClear);
     put('prev', this.btnPrev);
     put('imback', this.btnBack);
+    put('sit', this.btnSit);
     if (this.counterAt) out['counter'] = { ...this.counterAt, enabled: true, visible: true };
     // 互动（kit 的 DOM）：屏幕坐标换回世界坐标，冒烟和别的控件一样点
     const cr = this.game.canvas.getBoundingClientRect();
@@ -1916,9 +1993,9 @@ export class TableScene extends Phaser.Scene {
       const b = top?.body.getData(k) as Button | undefined;
       if (b) out[k] = { x: b.x + top!.body.x, y: b.y + top!.body.y, enabled: true, visible: true };
     }
-    for (const k of ['again', 'home', 'settleNow']) {
+    for (const k of ['again', 'home', 'settleNow', 'share']) {
       const b = this.overlayModal?.body.getData(k) as Button | undefined;
-      if (b?.scene) out[k] = { x: b.x + this.overlayModal!.body.x, y: b.y + this.overlayModal!.body.y, enabled: b.enabled, visible: true };
+      if (b?.scene) out[k] = { x: b.x + this.overlayModal!.body.x, y: b.y + this.overlayModal!.body.y, enabled: b.enabled ?? true, visible: true };
     }
     const next = this.overlayModal?.body.getData('next') as Button | undefined;
     if (next && this.overlay === 'settle') out['next'] = { x: next.x + this.overlayModal!.body.x, y: next.y + this.overlayModal!.body.y, enabled: true, visible: true };

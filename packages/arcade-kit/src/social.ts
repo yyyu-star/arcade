@@ -27,13 +27,27 @@ export interface Invite {
   until: number;
 }
 
-/** 好友列表的一项：平台的原样加 online、where（对方关了"让好友看到我在哪"就没有 where） */
+/**
+ * 好友列表的一项。平台每项是公开资料 `{ userId, displayName, avatar }`（docs/platform-backend.md 15.4，只增不改）加 online、where
+ * （对方关了"让好友看到我在哪"就没有 where）；kit 统一成 id、name（0.12.1），平台原样的字段也留着。发邀请的 `to` 用 id
+ */
 export interface Friend {
   id: string;
   name: string;
   online: boolean;
   where?: Presence;
+  avatar?: unknown;
   [k: string]: unknown;
+}
+
+/** 平台的一项 → Friend：认 userId / displayName（平台的形状），也认 id / name；没有 id 的丢掉 */
+export function parseFriend(x: unknown): Friend | null {
+  if (!x || typeof x !== 'object') return null;
+  const f = x as Record<string, unknown>;
+  const id = typeof f['userId'] === 'string' ? f['userId'] : typeof f['id'] === 'string' ? f['id'] : null;
+  if (!id) return null;
+  const name = typeof f['displayName'] === 'string' ? f['displayName'] : typeof f['name'] === 'string' ? f['name'] : '';
+  return { ...f, id, name, online: f['online'] === true };
 }
 
 export interface ApiOptions {
@@ -181,7 +195,7 @@ export async function fetchFriends(opts: ApiOptions = {}): Promise<Friend[] | nu
     if (res.status !== 200) return null;
     const body = (await res.json()) as { friends?: unknown };
     if (!Array.isArray(body?.friends)) return null;
-    return (body.friends as Friend[]).filter((f) => f && typeof f.id === 'string').map((f) => ({ ...f, online: f.online === true }));
+    return (body.friends as unknown[]).map(parseFriend).filter((f): f is Friend => f !== null);
   } catch {
     return null;
   }
