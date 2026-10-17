@@ -9,6 +9,7 @@ import { DANGER_IDS, type Danger, type Difficulty } from '../content/waves.ts';
 import type { MapId } from '../content/maps.ts';
 import { CHARACTER_IDS, CHARACTERS, CURSE_COIN_BONUS, CURSE_IDS, FIRST_RUN_COINS, MAX_CURSES, PERK_IDS, PERKS, ASSIST, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
+import { isLiveTier, type LiveTier } from '../content/live.ts';
 
 const SAVE_KEY = 'yexun.save';
 
@@ -59,6 +60,9 @@ export interface Save {
   /** "降低伤害"开着（成绩不进总榜）；问过了没有（问过不再追着问，设置里能随时开关） */
   assist: boolean;
   assistAsked: boolean;
+  /** 菜单上次停在实盘、选的哪一档（本机） */
+  liveOn: boolean;
+  liveTier: LiveTier;
 }
 
 /** 流水超过这么多条，最旧的并成一个数（并过的流水在两台设备上可能各算一次，所以留得够长：几百局才会碰到） */
@@ -88,6 +92,8 @@ export const fresh = (): Save => ({
   streak: 0,
   assist: false,
   assistAsked: false,
+  liveOn: false,
+  liveTier: 'small',
 });
 
 const num = (v: unknown, min = 0, max = 1e12): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, Math.floor(v))) : null);
@@ -153,6 +159,8 @@ export function reviveSave(o: unknown): Save | null {
   s.streak = num(r.streak, 0, 1000) ?? 0;
   s.assist = r.assist === true;
   s.assistAsked = r.assistAsked === true;
+  s.liveOn = r.liveOn === true;
+  if (isLiveTier(r.liveTier)) s.liveTier = r.liveTier;
   return s;
 }
 
@@ -390,8 +398,8 @@ export function mergeSave(local: Save, cloud: Save): Save {
 }
 
 /** 上云的内容：去掉只在本机有意义的字段 */
-export function savePayload(s: Save): Omit<Save, 'difficulty' | 'map' | 'danger' | 'character' | 'curses' | 'streak' | 'assist' | 'tipsOff'> {
-  const { difficulty: _d, map: _m, danger: _g, character: _c, curses: _u, streak: _s, assist: _a, tipsOff: _t, ...rest } = s;
+export function savePayload(s: Save): Omit<Save, 'difficulty' | 'map' | 'danger' | 'character' | 'curses' | 'streak' | 'assist' | 'tipsOff' | 'liveOn' | 'liveTier'> {
+  const { difficulty: _d, map: _m, danger: _g, character: _c, curses: _u, streak: _s, assist: _a, tipsOff: _t, liveOn: _l, liveTier: _lt, ...rest } = s;
   return rest;
 }
 

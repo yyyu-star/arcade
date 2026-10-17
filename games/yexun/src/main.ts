@@ -7,9 +7,11 @@ import Phaser from 'phaser';
 import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
 import { CHARACTER_IDS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
-import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type World } from './core/index.ts';
+import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Setup, type World } from './core/index.ts';
 import { buyChar, buyPerk, CHAR_PRICE, charOpen, coins, dangerOpen, finishRun, grantCoins, loadSave, refundPerks, saveHooks, settings, writeSave, yizhuangOpen } from './platform/save.ts';
-import { startCloud } from './platform/cloud.ts';
+import { hasLoginHint, startCloud } from './platform/cloud.ts';
+import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
+import { LIVE_TIERS, type LiveTier } from './content/live.ts';
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
@@ -94,6 +96,32 @@ async function boot(): Promise<void> {
     },
   });
   saveHooks.onWrite = () => cloud.touch('profile');
+  // 实盘（DESIGN.md 第 4 节）：进行中那一份记在 yexun.live；上次没结完的（中途关页面）开页时按输结回
+  const live = createLive();
+  void live.resume();
+  addEventListener('online', () => void live.resume());
+  /** 这一局是实盘时记下种子（每 10 秒报一次撑到哪，结束时结回） */
+  let liveRun: { seed: number } | null = null;
+  /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
+  let lastLive: LiveTier | null = null;
+  let liveTier: LiveTier = 'small';
+  /** 结回以后的那一份记录 → 结算页那一行 */
+  const recordText = (rec: Readonly<LiveRecord> | null): string => {
+    if (!rec) return '结回完成';
+    if (rec.step === 'done') return liveText({ kind: 'ok', credited: rec.credited ?? 0, capped: rec.capped ?? 0 });
+    if (rec.wait) return liveText({ kind: 'retry', why: rec.wait });
+    return liveText({ kind: 'bug', error: rec.error ?? rec.step });
+  };
+  const liveText = (o: Outcome): string =>
+    o.kind === 'ok'
+      ? `结回 ${o.credited.toLocaleString('zh-CN')} 筹码${o.capped > 0 ? `（今天的上限扣下 ${o.capped.toLocaleString('zh-CN')}）` : ''}`
+      : o.kind === 'retry'
+        ? o.why === 'login'
+          ? '登录以后自动结回'
+          : '连不上平台，联网以后自动结回'
+        : o.kind === 'unavailable'
+          ? '这里没有钱包，实盘不可用'
+          : `结回出了问题（${o.kind === 'reject' ? o.error : o.error}），筹码不会丢，过一会儿再打开看看`;
   const toggles: Toggle[] = [
     { key: 'sfx', label: '音效', get: () => sfx.enabled, set: (on) => sfx.setEnabled(on) },
     { key: 'music', label: '音乐', get: () => music.enabled, set: (on) => music.setEnabled(on) },
@@ -139,6 +167,8 @@ async function boot(): Promise<void> {
     character: charOpen(save, save.character) ? save.character : ('xiaodao' as CharacterId),
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
+    // 有平台登录、收到过 501（单独部署）就藏起来
+    live: { available: hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
   });
   const refreshPrep = (): void => {
     writeSave(save);
@@ -270,6 +300,22 @@ async function boot(): Promise<void> {
     tips.hide();
     banners.clear();
     const seconds = Math.min(w.tick, DAWN_TICK) / 30;
+    if (liveRun) {
+      // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
+      const seed = liveRun.seed;
+      liveRun = null;
+      showPlay(false);
+      result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: 0, label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
+      void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(() => {
+        const rec = live.record;
+        result.setLive(recordText(rec));
+        if (rec?.step === 'done') {
+          live.markTold();
+          live.clearFinished();
+        }
+      });
+      return;
+    }
     // 认输的局算一局、铜钱照拿，但不算纪录
     const got = finishRun(save, { id: `${w.setup.seed.toString(36)}-${nonce()}`, danger: w.setup.danger, won: w.won, quit, ticks: w.won ? DAWN_TICK : w.tick, kills: w.kills, coins: w.coins, curses: w.setup.curses?.length ?? 0 });
     // 成就：解锁的奖励铜钱另记一条流水（id 带成就 id，两台设备各解锁一次也只记一次）
@@ -288,7 +334,9 @@ async function boot(): Promise<void> {
       });
   };
 
-  const startRun = async (picked: Danger, map: MapId = save.map, debug = false): Promise<void> => {
+  const startRun = async (picked: Danger, map: MapId = save.map, debug = false, fixed?: Setup): Promise<void> => {
+    liveRun = fixed ? { seed: fixed.seed } : null;
+    if (!fixed) lastLive = null;
     // 第一局锁危险 0；没解锁的档、角色不让选（存档被改过、链接参数）。调试参数直接开局的不卡
     const danger = (debug ? picked : Math.min(picked, dangerOpen(save))) as Danger;
     save.danger = danger;
@@ -301,10 +349,10 @@ async function boot(): Promise<void> {
     if (scene) game.scene.remove('game');
     banners.clear();
     input.reset();
-    const seed = q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0;
-    // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）
+    const seed = fixed?.seed ?? (q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0);
+    // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）；实盘用固定配置
     const ms = menuState();
-    const w = createWorld({ seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist });
+    const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist });
     world = w;
     autopilot = undefined;
     if (import.meta.env.DEV && q.has('give')) {
@@ -354,7 +402,10 @@ async function boot(): Promise<void> {
         tips.show('法器<b>满级</b> + 对应的<b>被动</b>，宝箱里会开出<b>进化</b>', 6000);
       },
       onEnd: (x: World) => finish(x, false),
-      afterStep: (x: World) => tally.feed(x),
+      afterStep: (x: World) => {
+        tally.feed(x);
+        if (liveRun && x.tick % 300 === 0) live.progress(liveRun.seed, x.tick);
+      },
     });
     scene = game.scene.getScene('game') as unknown as GameScene;
     // 引导第 1 条：开局"拖动走位"，一动就收起（0–10 秒）
@@ -377,7 +428,42 @@ async function boot(): Promise<void> {
   };
 
   menu.onStart = (d, m) => void startRun(d, m);
-  result.onAgain = () => void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
+  menu.onLiveMode = (on, tier) => {
+    save.liveOn = on;
+    save.liveTier = tier;
+    writeSave(save);
+  };
+  const startLive = async (tier: LiveTier): Promise<void> => {
+    const seed = (Math.random() * 0x100000000) >>> 0;
+    const r = await live.buyin(tier, seed);
+    if (r.ok) {
+      lastLive = liveTier = tier;
+      return startRun(LIVE_TIERS[tier].danger, 'snow', true, liveSetup(tier, seed));
+    }
+    const o = r.outcome;
+    const why =
+      o.kind === 'reject'
+        ? o.error === 'no_funds'
+          ? '筹码不够带一份'
+          : o.error === 'at_table'
+            ? '上一份还没结完，等它结完再开'
+            : o.error === 'limit'
+              ? '今天的实盘次数用完了，明天再来'
+              : `带不进去（${o.error}）`
+        : o.kind === 'retry'
+          ? o.why === 'login'
+            ? '先登录再玩实盘'
+            : '连不上平台，过一会儿再试'
+          : o.kind === 'unavailable'
+            ? '这里没有钱包，实盘不可用'
+            : '带入出了问题，过一会儿再试';
+    confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
+  };
+  menu.onLive = (tier) => void startLive(tier);
+  result.onAgain = () => {
+    if (lastLive) return void startLive(lastLive);
+    void startRun(world?.setup.danger ?? save.danger, world?.setup.map ?? save.map);
+  };
   result.onMenu = () => {
     result.hide();
     menu.show(menuState());

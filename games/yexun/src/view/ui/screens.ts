@@ -6,6 +6,7 @@
 import { MAPS, type MapId } from '../../content/maps.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
+import { LIVE_TIER_IDS, LIVE_TIERS, type LiveTier } from '../../content/live.ts';
 import type { Best } from '../../platform/save.ts';
 import { drawFlakes, drawModeScene, drawTitleLive, drawTitleStill, makeFlakes, type Flake } from '../art/sprites7.ts';
 import './screens.css';
@@ -75,6 +76,8 @@ export interface MenuState {
   curses: CurseId[];
   /** 咒印开了没有（撑到过一次天亮） */
   cursesOpen: boolean;
+  /** 实盘能不能选（有平台钱包）、上次是不是在实盘、选的档位 */
+  live: { available: boolean; on: boolean; tier: LiveTier };
   /** 义庄开了没有（普通档以上撑到过天亮） */
   yizhuang: boolean;
 }
@@ -111,6 +114,12 @@ export class Menu {
   private map: MapId = 'snow';
   private readonly toggles: Toggle[];
   onStart: (d: Danger, map: MapId) => void = () => undefined;
+  /** 实盘开局（固定小道士、雪原，档位定危险档） */
+  onLive: (tier: LiveTier) => void = () => undefined;
+  /** 切娱乐 / 实盘、换档位（main 记进存档） */
+  onLiveMode: (on: boolean, tier: LiveTier) => void = () => undefined;
+  private live: MenuState['live'] = { available: false, on: false, tier: 'small' };
+  private lastState: MenuState | null = null;
   /** 打开开局准备（角色、咒印、加成） */
   onPrep: (tab: 'char' | 'curse' | 'perk') => void = () => undefined;
   onClick: () => void = () => undefined;
@@ -128,7 +137,17 @@ export class Menu {
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
-      start: () => this.onStart(this.diff, this.map),
+      start: () => (this.live.on && this.live.available ? this.onLive(this.live.tier) : this.onStart(this.diff, this.map)),
+      mode: (el) => {
+        this.live = { ...this.live, on: el.dataset.m === 'live' };
+        this.onLiveMode(this.live.on, this.live.tier);
+        if (this.lastState) this.show({ ...this.lastState, live: this.live });
+      },
+      tier: (el) => {
+        this.live = { ...this.live, tier: el.dataset.t as LiveTier };
+        this.onLiveMode(this.live.on, this.live.tier);
+        if (this.lastState) this.show({ ...this.lastState, live: this.live });
+      },
       map: (el) => {
         if (el.classList.contains('locked')) return;
         this.map = el.dataset.m as MapId;
@@ -161,6 +180,9 @@ export class Menu {
 
   show(s: MenuState): void {
     this.diff = Math.min(s.danger, s.dangerOpen) as Danger;
+    this.lastState = s;
+    this.live = s.live;
+    const live = s.live.available && s.live.on;
     this.map = s.yizhuang ? s.map : 'snow';
     this.best = s.best;
     const top =
@@ -180,6 +202,12 @@ export class Menu {
         const locked = d > s.dangerOpen;
         return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? '🔒' : '★'.repeat(DANGERS[d].stars)}</small></button>`;
       }).join('');
+      const modeChips = s.live.available
+        ? `<div class="yx-chips yx-modesw"><button type="button" class="yx-chip${live ? '' : ' on'}" data-a="mode" data-m="fun"><b>娱乐</b><small>不花筹码</small></button><button type="button" class="yx-chip${live ? ' on' : ''}" data-a="mode" data-m="live"><b>实盘</b><small>带一份筹码</small></button></div>`
+        : '';
+      const liveHtml =
+        `<div class="yx-chips yx-tiers">${LIVE_TIER_IDS.map((t) => `<button type="button" class="yx-chip${t === s.live.tier ? ' on' : ''}" data-a="tier" data-t="${t}"><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('')}</div>` +
+        `<div class="yx-livenote">危险 ${LIVE_TIERS[s.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>撑过 3 分钟开始回本，10 分钟保本，天亮 1.8 份，打倒尸王 3 份；最多输这一份</div>`;
       const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
       const prep =
         `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="char"><b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
@@ -195,7 +223,7 @@ export class Menu {
         top +
         title +
         '<div class="yx-modes">' +
-        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-chips">${prep}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
+        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div>${modeChips}${live ? liveHtml : `<div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-chips">${prep}</div><div class="yx-best"></div>`}<button type="button" class="yx-big" data-a="start">开始</button></div>` +
         `<div class="yx-mode off"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>` +
         '</div>';
       this.renderBest();
@@ -383,6 +411,8 @@ export interface ResultView {
   coins: number;
   /** 档位那一行写什么（比如"危险 2"） */
   label: string;
+  /** 实盘：结回的那一行（结回还没回来时先写"正在结回"，回来了用 setLive 换） */
+  live?: string;
   record: boolean;
   build: BuildRow[];
   /** 可选：结算后铜钱总数（本局的 coins 已加进去）。有就画"飞进总数"的动画，没有就只显示本局收获 */
@@ -409,6 +439,12 @@ export class Result {
     });
   }
 
+  /** 实盘结回的结果回来了：换掉那一行 */
+  setLive(text: string): void {
+    const el = this.root.querySelector('.yx-rlive');
+    if (el) el.textContent = text;
+  }
+
   show(r: ResultView): void {
     const title = r.won ? (r.bossKilled ? '尸王伏诛' : '天亮了') : r.quit ? '收工' : '倒下了';
     const dawn = r.dawnSeconds ?? 900;
@@ -429,8 +465,9 @@ export class Result {
       .join('');
     const total = r.coinsTotal;
     const coinImg = this.icons('coin');
-    const coinRow =
-      total !== undefined
+    const coinRow = r.live !== undefined
+      ? `<div class="yx-rlive">${esc(r.live)}</div>`
+      : total !== undefined
         ? `<div class="yx-rcoins"><span class="yx-gain"><img alt="" src="${coinImg}">+${fmt(r.coins)}</span><span class="yx-arrow">→</span><span class="yx-tot"><img alt="" src="${coinImg}"><b data-from="${Math.max(0, total - r.coins)}" data-to="${total}">${fmt(Math.max(0, total - r.coins))}</b><small>铜钱</small></span>${Array.from({ length: 6 }, (_, i) => `<img class="yx-fly" alt="" src="${coinImg}" style="--i:${i}">`).join('')}</div>`
         : '';
     this.root.innerHTML =
