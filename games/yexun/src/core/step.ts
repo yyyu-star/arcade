@@ -43,7 +43,7 @@ import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
-import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
+import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
   MAX_PASSIVES,
@@ -544,7 +544,17 @@ function spawnWaves(w: World): void {
   const m = MINUTES[mi]!;
   const diff = dangerDef(w.setup.mode, w.setup.danger);
   // 危险 0：怪种比例晚一分钟（更难的常规怪晚出）
-  const mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
+  let mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
+  // 提灯鬼：危险 3 起第 6 分钟后占一成多（原来的比例整体让出这一份）；其余情形 mix 原样不动
+  const lamp = lampShare(w.setup.mode, w.setup.danger, minuteOf(w));
+  if (lamp > 0) {
+    const next: Partial<Record<EnemyKind, number>> = {};
+    let sum = 0;
+    for (const k in mix) sum += mix[k as EnemyKind]!;
+    for (const k in mix) next[k as EnemyKind] = (mix[k as EnemyKind]! / sum) * (1 - lamp);
+    next.lampghost = lamp;
+    mix = next;
+  }
   // 引魂灯：每级怪多 10%；咒印"众"：多 25%
   const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
   const calm = w.tick < w.calmUntil ? CALM.keepMul : 1;

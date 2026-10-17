@@ -15,7 +15,9 @@ export type EnemyKind =
   | 'bamsprout' | 'snakespirit' | 'bambooking'
   | 'drown' | 'crab' | 'hebo'
   | 'icegolem' | 'icicle' | 'frostsoul'
-  | 'nightwatch' | 'stonemonk';
+  | 'nightwatch' | 'stonemonk'
+  // 守夜危险 3 起的常规怪：提灯鬼（不怕火）
+  | 'lampghost';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -82,6 +84,8 @@ export const ENEMIES: readonly EnemyDef[] = [
   // 夜探：古镇的更夫鬼、山寺的石僧（渡口用溺鬼）
   { kind: 'nightwatch', code: 30, hp: 26, speed: 1.3, dmg: 7, r: 15, xp: 3, steady: 0.3, vs: { 火: 1.3, 镇: 1.3, 剑: 0.8 } },
   { kind: 'stonemonk', code: 31, hp: 60, speed: 0.9, dmg: 11, r: 19, xp: 4, steady: 0.8, vs: { 剑: 0.5, 火: 0.85, 水: 1.3, 镇: 1.4 } },
+  // 守夜危险 3 起的常规怪（waves.ts LAMP 决定谁在几分钟出）：提灯鬼，近战直走，不怕火，给火流派一个对手；怕符怕铃。数值按同期的河蟹、冰傀
+  { kind: 'lampghost', code: 32, hp: 26, speed: 1.35, dmg: 8, r: 15, xp: 3, steady: 0.2, vs: { 火: 0.6, 符: 1.2, 镇: 1.15 } },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
