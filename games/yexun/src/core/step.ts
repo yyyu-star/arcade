@@ -25,8 +25,9 @@ import {
   WHITEFOX,
   type EnemyKind,
 } from '../content/enemies.ts';
-import { ARENA, DROPS, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
-import { CALM, DAWN_TICK, DIFFICULTIES, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE } from '../content/waves.ts';
+import { ARENA, DROPS, MERCY, PICKUP, PLAYER, xpNeed } from '../content/player.ts';
+import { MAPS, pushOut } from '../content/maps.ts';
+import { CALM, DAWN_TICK, DIFFICULTIES, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE } from '../content/waves.ts';
 import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
@@ -123,6 +124,7 @@ export function step(w: World, dir: number, choice = -1): void {
   moveEnemies(w);
   g.build(w);
   separate(w, g);
+  if (w.blocks.length) blockEnemies(w);
   fireWeapons(w, g);
   moveShots(w, g);
   touchPlayer(w, g);
@@ -149,6 +151,7 @@ function movePlayer(w: World, dir: number): void {
     const sp = w.stats.speed * (w.tick < w.slowUntil ? PLAYER_SLOW : 1);
     w.x = clamp(w.x + inputCos(dir) * sp, 20, ARENA.w - 20);
     w.y = clamp(w.y + inputSin(dir) * sp, 20, ARENA.h - 20);
+    if (w.blocks.length) pushOut(w.blocks, w, PLAYER.r);
   }
   if (w.invuln > 0) w.invuln--;
 }
@@ -175,7 +178,8 @@ function hurt(w: World, dmg: number): void {
     w.invuln = PLAYER.invuln;
     return;
   }
-  const d = Math.max(1, Math.round(dmg * DIFFICULTIES[w.setup.difficulty].dmgMul - w.stats.armor));
+  const diff = DIFFICULTIES[w.setup.difficulty];
+  const d = Math.max(1, Math.round(dmg * diff.dmgMul * (w.tick < EARLY_TICKS ? diff.earlyDmg : 1) - w.stats.armor));
   w.hp -= d;
   // 第一局 3 分钟前不会死：血最少留 1
   if (w.setup.firstRun && w.tick < FIRST_RUN_GUARD && w.hp < 1) w.hp = 1;
@@ -269,13 +273,15 @@ function ringPoint(w: World, a: number, scale = 1): [number, number] {
 }
 
 function pickKind(w: World, mix: Partial<Record<EnemyKind, number>>): EnemyKind {
+  // 地图偏好（义庄尸类多）乘在比例上
+  const bias = MAPS[w.setup.map ?? 'snow'].mix;
   let total = 0;
-  for (const k in mix) total += mix[k as EnemyKind]!;
+  for (const k in mix) total += mix[k as EnemyKind]! * (bias?.[k as EnemyKind] ?? 1);
   let r = w.rSpawn.next() * total;
   let last: EnemyKind = 'paper';
   for (const k in mix) {
     last = k as EnemyKind;
-    r -= mix[last]!;
+    r -= mix[last]! * (bias?.[last] ?? 1);
     if (r < 0) return last;
   }
   return last;
@@ -549,6 +555,21 @@ function moveEnemies(w: World): void {
     w.eKY[i]! *= 0.72;
   }
 }
+const tmpP = { x: 0, y: 0 };
+
+/** 墙和棺材挡路：怪挪完、互相挤完以后再推出来（Boss 跳砸在空中，不挡） */
+function blockEnemies(w: World): void {
+  const boss = ENEMY_BY_KIND.boss.code;
+  for (let i = 0; i < MAX_ENEMIES; i++) {
+    if (!w.eAlive[i] || (w.eKind[i] === boss && w.eS[i] === 1)) continue;
+    tmpP.x = w.eX[i]!;
+    tmpP.y = w.eY[i]!;
+    if (pushOut(w.blocks, tmpP, w.eR[i]! * 0.7)) {
+      w.eX[i] = tmpP.x;
+      w.eY[i] = tmpP.y;
+    }
+  }
+}
 
 /**
  * 黄鼠狼：eAX 是盯上的那枚铜钱（掉落数组下标，-1 = 没盯上），eS 1 = 叼到了在跑，eV 是叼走了几枚。
@@ -737,10 +758,13 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
   // 镇 3 件：被减速（近身、镇魂铃光环）的怪挨打 +25%
   const pinned = w.stats.nearSlow && w.eSlow[i] !== 0 ? 1.25 : 1;
-  const d = Math.max(1, Math.round(dmg * bound * pinned * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
+  // 怪对这件法器的克制（类型、五行）
+  const owner = credit >= 0 ? w.weapons[credit] : undefined;
+  const vs = owner ? VS[w.eKind[i]! * WEAPON_IDS.length + WEAPON_CODE[owner.id]]! : 1;
+  const d = Math.max(1, Math.round(dmg * bound * pinned * vs * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
   w.eHp[i]! -= d;
   // 结算页的"每件法器打了多少"：只记，不影响规则
-  const owned = credit >= 0 ? w.weapons[credit] : undefined;
+  const owned = owner;
   if (owned) owned.dmg += d;
   const def = ENEMIES[w.eKind[i]!]!;
   const kd = fsqrt(kx * kx + ky * ky);
@@ -751,7 +775,8 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   }
   w.eLastHit[i] = w.tick;
   w.eLastBy[i] = credit;
-  w.ev.push(Ev.Hit, w.eX[i]!, w.eY[i]!, d, crit ? 1 : 0, i);
+  // b：1 暴击，2 打在怕的地方，4 被扛住（画面层换数字颜色）
+  w.ev.push(Ev.Hit, w.eX[i]!, w.eY[i]!, d, (crit ? 1 : 0) | (vs > 1 ? 2 : vs < 1 ? 4 : 0), i);
   if (w.eHp[i]! <= 0) {
     if (owned) owned.kills++;
     const x = w.eX[i]!;
@@ -762,6 +787,19 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   }
   return true;
 }
+
+/** 克制表：怪种类 × 法器 → 伤害倍数（类型和五行连乘），开局算一次，命中时查表 */
+const VS = (() => {
+  const t = new Float64Array(ENEMIES.length * WEAPON_IDS.length).fill(1);
+  for (const e of ENEMIES) {
+    if (!e.vs) continue;
+    WEAPON_IDS.forEach((id, k) => {
+      const def = WEAPONS[id];
+      t[e.code * WEAPON_IDS.length + k] = (e.vs![def.type] ?? 1) * (e.vs![def.el] ?? 1);
+    });
+  }
+  return t;
+})();
 
 function spawnMiniCrane(w: World, k: number, x: number, y: number): void {
   let n = 0;
@@ -834,9 +872,14 @@ function killEnemy(w: World, i: number): void {
   addDrop(w, Drop.Soul, x, y, def.xp);
   const r = w.rDrop.next();
   const more = w.tick < w.calmUntil ? CALM.dropMul : 1;
+  // 受伤补偿：血低时肉包多掉，补出来的那部分有冷却
+  const mercy = w.hp < w.stats.hpMax * MERCY.hp && w.tick >= w.mercyAt ? MERCY.bun : 1;
   if (r < DROPS.scroll) addDrop(w, Drop.Scroll, x + 8, y, 1);
-  else if (r < DROPS.scroll + DROPS.bun * more) addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
-  else if (r < DROPS.scroll + (DROPS.bun + DROPS.coin) * more) addDrop(w, Drop.Coin, x + 8, y, 1);
+  else if (r < DROPS.scroll + DROPS.bun * more * mercy) {
+    if (r >= DROPS.scroll + DROPS.bun * more) w.mercyAt = w.tick + MERCY.gap;
+    addDrop(w, Drop.Bun, x + 8, y, DROPS.bunHeal);
+  }
+  else if (r < DROPS.scroll + DROPS.bun * more * mercy + DROPS.coin * more) addDrop(w, Drop.Coin, x + 8, y, 1);
 }
 
 function eff(w: World, s: WeaponStats): { dmg: number; cd: number; area: number; amount: number } {
@@ -923,6 +966,10 @@ function fireWeapons(w: World, g: Grid): void {
         break;
       case 'rope':
         if (--wp.timer <= 0) wp.timer = rope(w, g, k, s, e) ? e.cd : 10;
+        // 捆住的怪被勒着：每半秒挨一半的伤害（只捆不打的话镇守流派杀不动人）
+        if (w.tick % 15 === 0) {
+          for (let i = 0; i < MAX_ENEMIES; i++) if (w.eAlive[i] && w.eBind[i]! > w.tick) hitEnemy(w, i, e.dmg * 0.5, -1, 0, 0, 0, 0, k);
+        }
         break;
       case 'petals':
         if (--wp.timer <= 0) {
@@ -995,6 +1042,18 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
       const dot = dx * ux + dy * uy;
       if (dot <= 0 || dot * dot < c2 * (dx * dx + dy * dy)) continue;
       hitEnemy(w, i, e.dmg, k, ux, uy, s.knock, s.rehit);
+    }
+    // 火舌把扇面里飞来的冰锥、纸钱、火球都烧掉（火流派没有飞剑和铜钱，靠这个顶远程怪）
+    const r2 = e.area * e.area;
+    for (let q = 0; q < MAX_SHOTS; q++) {
+      if (!w.sAlive[q] || w.sKind[q] !== Shot.Fireball) continue;
+      const dx = w.sX[q]! - w.x;
+      const dy = w.sY[q]! + 16 - w.y;
+      const d2 = dx * dx + dy * dy;
+      const dot = dx * ux + dy * uy;
+      if (d2 > r2 || dot <= 0 || dot * dot < c2 * d2) continue;
+      w.ev.push(Ev.Block, w.sX[q]!, w.sY[q]!);
+      killShot(w, q);
     }
     return;
   }
@@ -1717,8 +1776,12 @@ function addDrop(w: World, kind: Drop, x: number, y: number, val: number): void 
   w.dAlive[i] = 1;
   w.dGen[i]!++;
   w.dKind[i] = kind;
-  w.dX[i] = clamp(x, 10, ARENA.w - 10);
-  w.dY[i] = clamp(y, 10, ARENA.h - 10);
+  tmpP.x = clamp(x, 10, ARENA.w - 10);
+  tmpP.y = clamp(y, 10, ARENA.h - 10);
+  // 掉在棺材、墙里的（宝箱、肉包要走过去捡）挪到边上
+  if (w.blocks.length) pushOut(w.blocks, tmpP, 16);
+  w.dX[i] = tmpP.x;
+  w.dY[i] = tmpP.y;
   w.dPX[i] = w.dX[i]!;
   w.dPY[i] = w.dY[i]!;
   w.dVal[i] = val;
@@ -1801,8 +1864,9 @@ function recompute(w: World): void {
   s.might = 1 + 0.1 * p('zhusha');
   s.cdMul = 1 - 0.08 * p('xianglu');
   s.speed = PLAYER.speed * (1 + 0.1 * p('caoxie'));
-  s.hpMax = PLAYER.hp + 20 * p('xiantao');
-  s.regen = 0.3 * p('xiantao');
+  // 仙桃每级血上限 +15、每秒回 0.25（原来 +20、0.3：满级血翻倍还每秒回 1.5，是最强的一件被动，DESIGN 第 12 节 4c）
+  s.hpMax = PLAYER.hp + 15 * p('xiantao');
+  s.regen = 0.25 * p('xiantao');
   s.magnet = PLAYER.magnet * (1 + 0.3 * p('luopan'));
   s.armor = p('daopao');
   s.areaMul = 1 + 0.1 * p('nianzhu');

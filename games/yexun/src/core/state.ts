@@ -4,6 +4,7 @@
  */
 import { ENEMIES } from '../content/enemies.ts';
 import type { Difficulty } from '../content/waves.ts';
+import { MAPS, type Block, type MapId } from '../content/maps.ts';
 import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
@@ -111,6 +112,8 @@ export interface Setup {
   difficulty: Difficulty;
   /** 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2） */
   firstRun?: boolean;
+  /** 地图（缺省雪原） */
+  map?: MapId;
 }
 
 export class World {
@@ -166,10 +169,14 @@ export class World {
   merges: MergeDef['id'][] = [];
   /** 往生铃：光环半径（这一拍），光环里的怪死了回血；下次能回血的拍 */
   bellArea = 0;
+  /** 挡路的东西（地图上的墙、棺材） */
+  readonly blocks: readonly Block[];
   /** 冰锥、水鬼：到这一拍之前主角走路变慢 */
   slowUntil = 0;
   /** 收获期：到这一拍之前少刷怪、多掉东西 */
   calmUntil = 0;
+  /** 受伤补偿：下一个补偿肉包最早在这一拍 */
+  mercyAt = 0;
   bellHealAt = 0;
   /** 回血的零头（每拍加一点，满 1 才加到血上，免得血量出现很长的小数） */
   regenAcc = 0;
@@ -260,6 +267,7 @@ export class World {
 
   constructor(setup: Setup) {
     this.setup = setup;
+    this.blocks = MAPS[setup.map ?? 'snow'].blocks;
     const s = setup.seed;
     this.rSpawn = new Rng(s, 'spawn');
     this.rDrop = new Rng(s, 'drop');

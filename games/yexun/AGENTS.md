@@ -45,9 +45,9 @@ tests/         vitest
 | `npm run dev` / `npm run preview` | 开发 0.0.0.0:5178 / 预览 0.0.0.0:4178 |
 | `npm test` | 类型检查（页面 + Worker）+ vitest |
 | `npm run build:cf` | 部署用构建到 `dist-cf/games/yexun/` |
-| `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward` | 机器人模拟，出胜率和节奏表 |
+| `npm run sim -- --n 200 --diff normal --skill novice,normal --build sword,talisman,ward,wood,fire` | 机器人模拟，出胜率和节奏表（`--map yizhuang` 跑义庄）；`tests/pace.test.ts` 是 13.3 的节奏验收 |
 | `npm run bench -- <种子> <难度>` | 核心每拍耗时 |
-| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--query "auto&give=mirror:8,crane:8e&merge"` 开局换成这几件法器（带 e 直接进化，&merge 当场合成），`--tag` 加文件名前缀；`--pause` 停在暂停面板上；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时 |
+| `npm run shot -- --out <目录>` | 冒烟截图（临时端口，不占 5178/4178）；`--frames N`、`--video`、`--lowmem`；`--query "auto&warp=9000"` 机器人代打并快进到第 9000 拍，`--query "warp=2700&choose"` 停在选卡上，`--query "auto&give=mirror:8,crane:8e&merge"` 开局换成这几件法器（带 e 直接进化，&merge 当场合成），`&map=yizhuang` 换义庄，`--tag` 加文件名前缀；`--pause` 停在暂停面板上；`--flow` 走一遍菜单 → 开打 → 暂停 → 认输 → 结算 → 菜单 → 设置，每屏截图并检查；每次打印帧率和场景脚本耗时 |
 
 ## 6. 浏览器存储 key（全部 `yexun.` 前缀）
 

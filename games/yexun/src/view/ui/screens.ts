@@ -3,6 +3,7 @@
  * 第一次打开只有一个大按钮（DESIGN.md 13.7：打开到开打 ≤ 30 秒）；玩过一局以后才出模式卡和难度。
  * 所有按钮 ≥ 44×44（tools/shot.ts 检查）；左上角常驻"大厅"，任何界面两步内回到大厅。
  */
+import { MAPS, type MapId } from '../../content/maps.ts';
 import { DIFFICULTIES, type Difficulty } from '../../content/waves.ts';
 import type { Best } from '../../platform/save.ts';
 import './screens.css';
@@ -63,13 +64,17 @@ export interface MenuState {
   firstTime: boolean;
   difficulty: Difficulty;
   best: Partial<Record<Difficulty, Best>>;
+  map: MapId;
+  /** 义庄开了没有（普通档以上撑到过天亮） */
+  yizhuang: boolean;
 }
 
 export class Menu {
   readonly root: HTMLDivElement;
   private diff: Difficulty = 'easy';
+  private map: MapId = 'snow';
   private readonly toggles: Toggle[];
-  onStart: (d: Difficulty) => void = () => undefined;
+  onStart: (d: Difficulty, map: MapId) => void = () => undefined;
   onClick: () => void = () => undefined;
 
   constructor(parent: HTMLElement, toggles: Toggle[]) {
@@ -77,7 +82,12 @@ export class Menu {
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
-      start: () => this.onStart(this.diff),
+      start: () => this.onStart(this.diff, this.map),
+      map: (el) => {
+        if (el.classList.contains('locked')) return;
+        this.map = el.dataset.m as MapId;
+        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="map"]')) b.classList.toggle('on', b.dataset.m === this.map);
+      },
       diff: (el) => {
         this.diff = el.dataset.d as Difficulty;
         for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="diff"]')) b.classList.toggle('on', b.dataset.d === this.diff);
@@ -102,6 +112,7 @@ export class Menu {
 
   show(s: MenuState): void {
     this.diff = s.difficulty;
+    this.map = s.yizhuang ? s.map : 'snow';
     this.best = s.best;
     const top =
       `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>` +
@@ -118,11 +129,17 @@ export class Menu {
       const chips = (['easy', 'normal', 'hard'] as const)
         .map((d) => `<button type="button" class="yx-chip${d === this.diff ? ' on' : ''}" data-a="diff" data-d="${d}"><b>${DIFFICULTIES[d].name}</b><small>${'★'.repeat(DIFFICULTIES[d].stars)}</small></button>`)
         .join('');
+      const maps = (['snow', 'yizhuang'] as const)
+        .map((m) => {
+          const locked = m === 'yizhuang' && !s.yizhuang;
+          return `<button type="button" class="yx-chip yx-map${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ' aria-disabled="true"' : ''}><b>${MAPS[m].name}</b><small>${locked ? '普通档撑到天亮开' : MAPS[m].blurb}</small></button>`;
+        })
+        .join('');
       this.root.innerHTML =
         top +
         title +
         '<div class="yx-modes">' +
-        `<div class="yx-mode"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips">${chips}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
+        `<div class="yx-mode"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div><div class="yx-chips">${chips}</div><div class="yx-chips">${maps}</div><div class="yx-best"></div><button type="button" class="yx-big" data-a="start">开始</button></div>` +
         '<div class="yx-mode off"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div><div class="yx-soon">还在做，很快开放</div></div>' +
         '</div>';
       this.renderBest();

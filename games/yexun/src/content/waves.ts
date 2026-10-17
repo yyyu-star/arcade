@@ -22,13 +22,13 @@ export const MINUTES: readonly Minute[] = [
   { keep: 115, rate: 7.5, mix: { paper: 0.15, jiangshi: 0.4, lantern: 0.08, bone: 0.25 } },
   { keep: 130, rate: 8, mix: { jiangshi: 0.35, lantern: 0.08, bone: 0.3, horse: 0.15 } },
   { keep: 150, rate: 9, mix: { jiangshi: 0.3, lantern: 0.08, bone: 0.3, bat: 0.2 } },
-  { keep: 165, rate: 10, mix: { paper: 0.15, jiangshi: 0.25, fox: 0.3, water: 0.2, scarecrow: 0.1 } },
-  { keep: 185, rate: 11, mix: { jiangshi: 0.3, fox: 0.3, water: 0.2, scarecrow: 0.1, bone: 0.1 } },
+  { keep: 165, rate: 10, mix: { paper: 0.15, jiangshi: 0.2, fox: 0.25, water: 0.2, scarecrow: 0.2 } },
+  { keep: 185, rate: 11, mix: { jiangshi: 0.25, fox: 0.25, water: 0.15, scarecrow: 0.15, bone: 0.2 } },
   { keep: 210, rate: 12, mix: { jiangshi: 0.25, lantern: 0.08, fox: 0.2, snow: 0.07, weasel: 0.1, bone: 0.15 } },
   { keep: 230, rate: 13, mix: { jiangshi: 0.25, fox: 0.2, snow: 0.07, weasel: 0.1, bone: 0.15, bat: 0.1 } },
-  { keep: 250, rate: 14, mix: { jiangshi: 0.3, fox: 0.2, snow: 0.07, water: 0.1, bone: 0.15, horse: 0.1 } },
-  { keep: 265, rate: 15, mix: { jiangshi: 0.35, lantern: 0.08, fox: 0.2, snow: 0.07, bone: 0.15, scarecrow: 0.05 } },
-  { keep: 240, rate: 13, mix: { paper: 0.2, jiangshi: 0.4, fox: 0.2, bone: 0.2 } },
+  { keep: 285, rate: 16, mix: { jiangshi: 0.3, fox: 0.2, snow: 0.07, water: 0.1, bone: 0.15, horse: 0.1 } },
+  { keep: 300, rate: 17, mix: { jiangshi: 0.35, lantern: 0.08, fox: 0.2, snow: 0.07, bone: 0.2, scarecrow: 0.1 } },
+  { keep: 280, rate: 15, mix: { paper: 0.2, jiangshi: 0.4, fox: 0.2, bone: 0.2 } },
 ];
 
 export type WaveEvent =
@@ -71,7 +71,7 @@ export const CALM = { afterElite: 25 * S, afterSpike: 30 * S, keepMul: 0.5, drop
 export const DAWN_TICK = 15 * 60 * S;
 
 /** 怪随时间变硬：血量 × (1 + 每分钟 hpPerMin)，伤害 × (1 + 每分钟 dmgPerMin) */
-export const SCALE = { hpPerMin: 0.3, dmgPerMin: 0.08 };
+export const SCALE = { hpPerMin: 0.34, dmgPerMin: 0.09 };
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -88,19 +88,23 @@ export interface DifficultyDef {
   openSlow: number;
   /** 吸魂珠的范围倍数（新手档：剑砍死的怪掉的珠子站着也吸得到） */
   magnetMul: number;
+  /** 前 EARLY_TICKS 拍挨打的伤害倍数（受伤补偿：开局手忙脚乱时少掉点血） */
+  earlyDmg: number;
   /** 前几次升级保证至少两张是法器（新手档：先给能打的） */
   armsFirst: number;
   /** 一句话 */
   blurb: string;
 }
 
+/** 受伤打折的前几分钟：5 分钟 */
+export const EARLY_TICKS = 300 * S;
 /** 开场保护多长：30 秒 */
 export const OPEN_TICKS = 30 * S;
 /** 第一局：3 分钟前血最少留 1（DESIGN.md 13.2 新手保护） */
 export const FIRST_RUN_GUARD = 180 * S;
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
-  easy: { id: 'easy', name: '新手', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, armsFirst: 4, blurb: '第一次玩选这个' },
-  normal: { id: 'normal', name: '普通', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, armsFirst: 0, blurb: '会躲会选就能撑到天亮' },
-  hard: { id: 'hard', name: '高手', stars: 3, hpMul: 1.4, dmgMul: 1.35, countMul: 1.15, openSlow: 1, magnetMul: 1, armsFirst: 0, blurb: '怪更多更硬' },
+  easy: { id: 'easy', name: '新手', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, blurb: '第一次玩选这个' },
+  normal: { id: 'normal', name: '普通', stars: 2, hpMul: 1, dmgMul: 1, countMul: 1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, blurb: '会躲会选就能撑到天亮' },
+  hard: { id: 'hard', name: '高手', stars: 3, hpMul: 1.4, dmgMul: 1.35, countMul: 1.15, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, blurb: '怪更多更硬' },
 };

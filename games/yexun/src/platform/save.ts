@@ -3,6 +3,7 @@
  * 存储不可用（隐私模式、满了）时照常能玩，只是不记得。云存档在第 8 步接平台，形状和这里一致。
  */
 import type { Difficulty } from '../content/waves.ts';
+import type { MapId } from '../content/maps.ts';
 import { readFlag, writeFlag } from '../view/audio/sfx.ts';
 
 const SAVE_KEY = 'yexun.save';
@@ -22,12 +23,13 @@ export interface Save {
   tips: string[];
   /** 玩家点了"不再提示" */
   tipsOff: boolean;
-  /** 上次选的难度 */
+  /** 上次选的难度、地图 */
   difficulty: Difficulty;
+  map: MapId;
   best: Partial<Record<Difficulty, Best>>;
 }
 
-const fresh = (): Save => ({ v: 1, runs: 0, wins: 0, tips: [], tipsOff: false, difficulty: 'easy', best: {} });
+const fresh = (): Save => ({ v: 1, runs: 0, wins: 0, tips: [], tipsOff: false, difficulty: 'easy', map: 'snow', best: {} });
 
 export function loadSave(): Save {
   try {
@@ -41,6 +43,7 @@ export function loadSave(): Save {
     if (Array.isArray(o.tips)) s.tips = o.tips.filter((x): x is string => typeof x === 'string');
     if (typeof o.tipsOff === 'boolean') s.tipsOff = o.tipsOff;
     if (o.difficulty === 'easy' || o.difficulty === 'normal' || o.difficulty === 'hard') s.difficulty = o.difficulty;
+    if (o.map === 'snow' || o.map === 'yizhuang') s.map = o.map;
     if (o.best && typeof o.best === 'object') {
       for (const d of ['easy', 'normal', 'hard'] as const) {
         const b = o.best[d];
@@ -74,6 +77,11 @@ export function recordRun(s: Save, d: Difficulty, run: Best, counts = true): boo
   if (better) s.best[d] = run;
   writeSave(s);
   return better;
+}
+
+/** 义庄开了没有：普通档或高手档撑到过天亮（DESIGN.md 3.6；危险等级第 5 步做了以后改成"雪原危险 1"） */
+export function yizhuangOpen(s: Save): boolean {
+  return !!(s.best.normal?.won || s.best.hard?.won);
 }
 
 /** 设置里除了声音的几项（声音开关在 audio/ 里） */

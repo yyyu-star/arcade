@@ -96,6 +96,8 @@
 }
 .yx-chip small { font-size: 11px; color: #b8892a; letter-spacing: 1px; }
 .yx-chip.on { background: var(--ink); color: #fbf5e4; }
+.yx-chip.yx-map small { letter-spacing: 0; font-size: 10px; padding: 0 4px; text-align: center; }
+.yx-chip.locked { opacity: 0.5; cursor: default; }
 .yx-best { font-size: 13px; color: #5a4a3a; min-height: 1.3em; }
 .yx-soon { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #5a4a3a; min-height: 120px; }
 

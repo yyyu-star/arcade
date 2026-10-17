@@ -7,7 +7,8 @@ import Phaser from 'phaser';
 import { DAWN_TICK, DIFFICULTIES, type Difficulty } from './content/waves.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type World } from './core/index.ts';
-import { loadSave, recordRun, settings, writeSave } from './platform/save.ts';
+import { loadSave, recordRun, settings, writeSave, yizhuangOpen } from './platform/save.ts';
+import type { MapId } from './content/maps.ts';
 import { buildAtlas, buildGround, type Atlas } from './view/art/atlas.ts';
 import { music } from './view/audio/music.ts';
 import { sfx } from './view/audio/sfx.ts';
@@ -194,8 +195,9 @@ async function boot(): Promise<void> {
     result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: w.coins, difficulty: w.setup.difficulty, record, build: buildRows(w) });
   };
 
-  const startRun = async (difficulty: Difficulty): Promise<void> => {
+  const startRun = async (difficulty: Difficulty, map: MapId = save.map): Promise<void> => {
     save.difficulty = difficulty;
+    save.map = map;
     writeSave(save);
     menu.hide();
     result.hide();
@@ -205,7 +207,7 @@ async function boot(): Promise<void> {
     input.reset();
     const seed = q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0;
     // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）
-    const w = createWorld({ seed, mode: 'vigil', difficulty, firstRun: save.runs === 0 });
+    const w = createWorld({ seed, mode: 'vigil', difficulty, map, firstRun: save.runs === 0 });
     world = w;
     autopilot = undefined;
     if (import.meta.env.DEV && q.has('give')) {
@@ -275,11 +277,11 @@ async function boot(): Promise<void> {
     if (first) markTip('cards');
   };
 
-  menu.onStart = (d) => void startRun(d);
-  result.onAgain = () => void startRun(world?.setup.difficulty ?? save.difficulty);
+  menu.onStart = (d, m) => void startRun(d, m);
+  result.onAgain = () => void startRun(world?.setup.difficulty ?? save.difficulty, world?.setup.map ?? save.map);
   result.onMenu = () => {
     result.hide();
-    menu.show({ firstTime: false, difficulty: save.difficulty, best: save.best });
+    menu.show({ firstTime: false, difficulty: save.difficulty, best: save.best, map: save.map, yizhuang: yizhuangOpen(save) });
   };
 
   game.events.once(Phaser.Core.Events.READY, () => {
@@ -289,8 +291,10 @@ async function boot(): Promise<void> {
     // 调试参数直接开局（冒烟截图、机器人代打）；?diff 指定难度
     const diffQ = q.get('diff');
     const qd = diffQ && diffQ in DIFFICULTIES ? (diffQ as Difficulty) : null;
-    if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 'normal');
-    else menu.show({ firstTime: save.runs === 0, difficulty: qd ?? save.difficulty, best: save.best });
+    // ?map=yizhuang 指定地图（冒烟截图用）
+    const qm = q.get('map') === 'yizhuang' ? 'yizhuang' : q.has('map') ? 'snow' : null;
+    if (q.has('auto') || q.has('warp') || q.has('play') || q.has('give')) void startRun(qd ?? 'normal', qm ?? 'snow');
+    else menu.show({ firstTime: save.runs === 0, difficulty: qd ?? save.difficulty, best: save.best, map: qm ?? save.map, yizhuang: yizhuangOpen(save) });
   });
   fitViewport(() => {
     const s = css();

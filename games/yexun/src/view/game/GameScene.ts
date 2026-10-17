@@ -42,7 +42,7 @@ const MOB_TINT = [
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
-  shishi: ['石狮怪', '打倒掉宝箱'],
+  shishi: ['石狮怪', '刀剑砍不动，用符和铃'],
   general: ['跳尸将军', '会召小跳尸，打倒掉宝箱'],
   whitefox: ['白狐', '连冲三下，看准了躲'],
   palanquin: ['纸轿', '打碎会放出一群纸人'],
@@ -171,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
     this.add.tileSprite(ARENA.w / 2, ARENA.h / 2, ARENA.w + 400, ARENA.h + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(0xd6e0f6);
     this.scatterDecor();
+    this.drawBlocks();
 
     this.ground = new Fx(this, this.d.atlas, LOW_MEMORY ? 60 : 140);
     this.fx = new Fx(this, this.d.atlas, LOW_MEMORY ? 180 : 420);
@@ -194,9 +195,26 @@ export class GameScene extends Phaser.Scene {
     music.setIntensity(0);
   }
 
-  /** 点缀：按种子撒在整个场地上（只装饰，不挡路）；枯树、残碑、石灯、石头、青石板、冰面、雪堆、枯草 */
+  /** 地图上挡路的东西（义庄的墙、棺材、正堂）：墙按段拼，最后一段压缩到刚好对齐；深度按脚底 */
+  private drawBlocks(): void {
+    for (const b of this.w.blocks) {
+      if (b.look === 'wall_h') {
+        const n = Math.max(1, Math.round(b.w / 80));
+        const step = b.w / n;
+        for (let k = 0; k < n; k++) this.img('wall_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / this.frame('wall_h').res, 1 / this.frame('wall_h').res).setDepth(b.y + b.h);
+      } else if (b.look === 'wall_v') {
+        const n = Math.max(1, Math.round(b.h / 80));
+        const step = b.h / n;
+        for (let k = 0; k < n; k++) this.img('wall_v', b.x + b.w / 2, b.y + step * (k + 1)).setScale(1 / this.frame('wall_v').res, step / 80 / this.frame('wall_v').res).setDepth(b.y + step * (k + 1));
+      } else if (b.look === 'coffin') this.img('coffin', b.x + b.w / 2, b.y + b.h + 4).setDepth(b.y + b.h);
+      else this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h);
+    }
+  }
+
+  /** 点缀：按种子撒在整个场地上（只装饰，不挡路）；枯树、残碑、石灯、石头、青石板、冰面、雪堆、枯草；义庄另撒白灯笼、稻草 */
   private scatterDecor(): void {
     const r = artRng(this.w.setup.seed);
+    const blocks = this.w.blocks;
     const put = (key: string, n: number, ground: boolean): void => {
       if (!this.frames.has(key)) return;
       for (let i = 0; i < n; i++) {
@@ -204,6 +222,9 @@ export class GameScene extends Phaser.Scene {
         const y = 100 + r() * (ARENA.h - 200);
         // 出生点附近留空，开场看得清
         if (Math.abs(x - ARENA.w / 2) < 220 && Math.abs(y - ARENA.h / 2) < 160) continue;
+        // 不压在墙、棺材上（立着的东西离远一点）
+        const pad = ground ? 10 : 50;
+        if (blocks.some((b) => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad * 2)) continue;
         const o = this.img(key, x, y, 0.85 + r() * 0.35);
         if (r() < 0.5) o.setFlipX(true);
         o.setDepth(ground ? -900 + r() : y);
@@ -214,10 +235,15 @@ export class GameScene extends Phaser.Scene {
     put('puddle', Math.round(26 * dense), true);
     put('slabs', Math.round(30 * dense), true);
     put('grass', Math.round(220 * dense), true);
-    put('tree', Math.round(46 * dense), false);
+    const yz = blocks.length > 0;
+    put('tree', Math.round((yz ? 26 : 46) * dense), false);
     put('rock', Math.round(60 * dense), false);
     put('stele', Math.round(18 * dense), false);
     put('stonelamp', Math.round(22 * dense), false);
+    if (yz) {
+      put('white_lantern', Math.round(30 * dense), false);
+      put('straw', Math.round(30 * dense), true);
+    }
   }
 
   setPaused(p: boolean): void {
@@ -304,11 +330,14 @@ export class GameScene extends Phaser.Scene {
       const y = ev.y[i]!;
       switch (ev.type[i]) {
         case Ev.Hit: {
-          const crit = ev.b[i] === 1;
+          const b = ev.b[i]!;
+          const crit = (b & 1) === 1;
           const slot = ev.c[i]!;
           const m = this.mobs[slot];
           if (m) m.flash = 70;
-          this.nums.show(x, y - 30 * (this.w.eSize[slot] ?? 1) - 14, ev.a[i]!, crit);
+          // 克制：打在怕的地方数字发橙红，被扛住发灰（不用读说明也看得出这怪吃不吃这一套）
+          const tint = b & 2 ? 0xff6a2a : b & 4 ? 0x9a9aa8 : undefined;
+          this.nums.show(x, y - 30 * (this.w.eSize[slot] ?? 1) - 14, ev.a[i]!, crit, tint);
           if (crit) this.spark(x, y - 20, 0xffcf2e, 0.8);
           hits++;
           break;

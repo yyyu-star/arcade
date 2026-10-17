@@ -14,18 +14,18 @@ export type Skill = 'novice' | 'normal';
 export type Build = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire';
 export const BUILD_IDS: Build[] = ['sword', 'talisman', 'ward', 'wood', 'fire'];
 
-/** 各流派想要的法器（按先后）和被动（进化要的放前面） */
-const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] }> = {
+/** 各流派想要的法器（按先后）和被动（进化要的放前面；仙桃谁都会拿，排第三） */
+export const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] }> = {
   // 剑阵：剑类三件（剑 3 件暴击伤害），金 2 件
   sword: { weapons: ['sword', 'flysword', 'coins', 'thunder', 'bell'], passives: ['zhusha', 'caoxie', 'lingpai', 'xianglu', 'nianzhu', 'xiantao'] },
   // 符箓：符类三件（符 3 件多发一张）
-  talisman: { weapons: ['talisman', 'thunder', 'crane', 'sword', 'flysword'], passives: ['xianglu', 'nianzhu', 'yinhun', 'zhusha', 'lingpai', 'caoxie'] },
+  talisman: { weapons: ['talisman', 'thunder', 'crane', 'sword', 'flysword'], passives: ['xianglu', 'nianzhu', 'xiantao', 'yinhun', 'zhusha', 'lingpai'] },
   // 镇守：镇类四件（镇 3 件近身减速），靠光环和光波
   ward: { weapons: ['bell', 'mirror', 'shield', 'rope', 'sword'], passives: ['xiantao', 'daopao', 'huangli', 'modou', 'nianzhu', 'zhusha'] },
   // 木（五雷）：雷符、桃木剑、桃花雨，木 3 件（相生到火）
-  wood: { weapons: ['thunder', 'sword', 'petals', 'talisman', 'gourd'], passives: ['nianzhu', 'zhusha', 'lingzhi', 'xianglu', 'luopan', 'xiantao'] },
+  wood: { weapons: ['thunder', 'sword', 'petals', 'talisman', 'gourd'], passives: ['nianzhu', 'zhusha', 'xiantao', 'lingzhi', 'xianglu', 'luopan'] },
   // 火：符咒、火葫芦，火 2 件
-  fire: { weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'], passives: ['xianglu', 'luopan', 'zhusha', 'nianzhu', 'lingpai', 'caoxie'] },
+  fire: { weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'], passives: ['xianglu', 'luopan', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'] },
 };
 
 const VIEW = 560;
@@ -128,6 +128,17 @@ export class Bot {
     const wall = (p: number, size: number): number => (p < 300 ? (300 - p) / 300 : p > size - 300 ? -(p - (size - 300)) / 300 : 0);
     let vx = fx + gx + wall(w.x, ARENA.w) * 1.5;
     let vy = fy + gy + wall(w.y, ARENA.h) * 1.5;
+    // 地图上的墙和棺材（义庄）：离得近就往外推，免得顶着墙走不动
+    for (const b of w.blocks) {
+      const nx = Math.max(b.x, Math.min(w.x, b.x + b.w));
+      const ny = Math.max(b.y, Math.min(w.y, b.y + b.h));
+      const dx = w.x - nx;
+      const dy = w.y - ny;
+      const d = Math.hypot(dx, dy);
+      if (d > 70 || d < 1e-6) continue;
+      vx += (dx / d) * (70 - d) / 35;
+      vy += (dy / d) * (70 - d) / 35;
+    }
     // 没什么事：绕着场地中心慢慢兜圈（站着不动会被围死）
     if (Math.hypot(vx, vy) < 0.2) {
       const cx = ARENA.w / 2 - w.x;
