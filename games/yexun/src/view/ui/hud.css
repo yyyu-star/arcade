@@ -134,7 +134,22 @@
 }
 
 /* 右侧：法器格，冷却用一圈扇形遮罩 */
-.yx-slots { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: calc(8px * var(--s)); }
+.yx-side {
+  position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: calc(6px * var(--s)); pointer-events: none;
+}
+.yx-slots, .yx-passives {
+  display: flex; flex-direction: column; gap: calc(8px * var(--s));
+  padding: calc(8px * var(--s)) calc(7px * var(--s)) calc(10px * var(--s));
+  border-radius: 14px; background: rgba(23, 19, 28, 0.32); box-shadow: inset 0 0 0 1.5px rgba(246, 239, 220, 0.25);
+}
+.yx-passives { gap: calc(5px * var(--s)); padding: calc(6px * var(--s)); }
+.yx-pass {
+  position: relative; width: calc(28px * var(--s)); height: calc(28px * var(--s));
+  border: 2px solid var(--ink); border-radius: 7px; background: linear-gradient(#fbf5e6, #e9dcbc);
+}
+.yx-pass img { position: absolute; inset: 6%; width: 88%; height: 88%; }
+.yx-pass .yx-slot-lv { left: -5px; bottom: -5px; font-size: 9px; line-height: 11px; min-width: 12px; }
 .yx-slot {
   position: relative;
   width: calc(46px * var(--s)); height: calc(46px * var(--s));
@@ -191,3 +206,25 @@
   position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse 75% 70% at 50% 52%, transparent 55%, rgba(40, 48, 84, 0.28) 85%, rgba(22, 26, 48, 0.5) 100%);
 }
+
+/* 摇杆层：铺满全屏、在 HUD 下面，按哪儿摇杆就出现在哪儿；HUD 的按钮在上层，点按钮不算走路 */
+.yx-touch { position: absolute; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* 暂停层（2b 临时版；完整的暂停界面在 2c） */
+.yx-pause-layer {
+  position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  background: rgba(20, 24, 40, 0.55);
+  font: 700 16px/1.3 system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+}
+.yx-pause-box {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 240px; padding: 18px 22px;
+  border: 3px solid #17131c; border-radius: 16px; background: linear-gradient(#fbf5e4, #ecdfbe); box-shadow: 0 5px 0 #17131c;
+}
+.yx-pause-title { font-family: 'YxBrush', serif; font-weight: 400; font-size: 40px; color: #17131c; }
+.yx-big {
+  min-width: 180px; min-height: 48px; border: 3px solid #17131c; border-radius: 12px;
+  background: #c8402f; color: #fbf5e4; font: inherit; font-size: 18px; box-shadow: 0 4px 0 #17131c; cursor: pointer;
+}
+.yx-big.ghost { background: #fbf5e4; color: #17131c; }
+.yx-big:active { transform: translateY(3px); box-shadow: 0 1px 0 #17131c; }
+.yx-pause-note { font-size: 13px; color: #7a4a20; min-height: 1em; }

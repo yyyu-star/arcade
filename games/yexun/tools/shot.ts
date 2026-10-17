@@ -21,6 +21,10 @@ const OUT = opt('--out') ?? join(tmpdir(), 'yexun-shots');
 const FRAMES = Number(opt('--frames') ?? 0);
 const VIDEO = argv.includes('--video');
 const LOWMEM = argv.includes('--lowmem');
+/** 附加的查询串，比如 auto&warp=9000（机器人代打并快进） */
+const QUERY = opt('--query');
+/** 截图文件名前缀 */
+const TAG = opt('--tag') ?? '';
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -49,7 +53,7 @@ const server = await createServer({ logLevel: 'warn', server: { host: '127.0.0.1
 await server.listen();
 const addr = server.httpServer?.address();
 if (!addr || typeof addr === 'string') throw new Error('vite 没有监听端口');
-const BASE = `http://127.0.0.1:${addr.port}/${LOWMEM ? '?lowmem' : ''}`;
+const BASE = `http://127.0.0.1:${addr.port}/?${[LOWMEM ? 'lowmem' : '', QUERY ?? ''].filter(Boolean).join('&')}`;
 
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
 const problems: string[] = [];
@@ -65,11 +69,32 @@ try {
     await page.goto(BASE);
     await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
     await page.waitForTimeout(3500);
-    await page.screenshot({ path: join(OUT, `${v.name}.png`) });
+    await page.screenshot({ path: join(OUT, `${TAG}${v.name}.png`) });
     for (let i = 0; i < FRAMES; i++) {
-      await page.screenshot({ path: join(OUT, `${v.name}-${String(i).padStart(3, '0')}.png`) });
+      await page.screenshot({ path: join(OUT, `${TAG}${v.name}-${String(i).padStart(3, '0')}.png`) });
       await page.waitForTimeout(100);
     }
+    // 帧率：数 3 秒里的 requestAnimationFrame，顺带记同屏怪数（无头 SwiftShader 是 CPU 软渲染，数字只能当下限看）
+    const perf = await page.evaluate(
+      () =>
+        new Promise<{ fps: number; worst: number; mobs: number; cost: number }>((resolve) => {
+          const yx = (window as unknown as { __yx: { world: { eAlive: Uint8Array } } }).__yx;
+          let n = 0;
+          let worst = 0;
+          let last = performance.now();
+          const t0 = last;
+          const f = (): void => {
+            const now = performance.now();
+            worst = Math.max(worst, now - last);
+            last = now;
+            n++;
+            if (now - t0 < 3000) requestAnimationFrame(f);
+            else resolve({ fps: Math.round((n * 1000) / (now - t0)), worst: Math.round(worst), mobs: yx.world.eAlive.reduce((a, b) => a + b, 0), cost: Math.round(((window as unknown as { __yx: { game: { scene: { getScene: (k: string) => { cost: number } } } } }).__yx.game.scene.getScene('game').cost) * 10) / 10 });
+          };
+          requestAnimationFrame(f);
+        }),
+    );
+    console.log(`${TAG}${v.name}：${perf.fps} 帧/秒，最长一帧 ${perf.worst} ms，同屏怪 ${perf.mobs}，场景脚本每帧 ${perf.cost} ms`);
     for (const p of await layoutProblems(page)) problems.push(`${v.name} ${p}`);
     await ctx.close();
   }

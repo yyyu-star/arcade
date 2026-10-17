@@ -24,6 +24,8 @@ export interface HudState {
   kills: number;
   coins: number;
   slots: HudSlot[];
+  /** 被动：只显示图标和等级，不点 */
+  passives: { icon: string; level: number }[];
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, text?: string): HTMLElementTagNameMap[K] => {
@@ -39,25 +41,36 @@ const fmt = (n: number): string => n.toLocaleString('zh-CN');
 
 export class Hud {
   readonly root: HTMLDivElement;
+  readonly homeBtn: HTMLButtonElement;
+  readonly pauseBtn: HTMLButtonElement;
   private hpFill: HTMLDivElement;
   private hpText: HTMLSpanElement;
   private shFill: HTMLDivElement;
+  private shBar: HTMLDivElement;
   private lv: HTMLSpanElement;
   private xpFill: HTMLDivElement;
   private time: HTMLSpanElement;
   private kills: HTMLSpanElement;
   private coins: HTMLSpanElement;
   private slotEls: { box: HTMLDivElement; cd: HTMLDivElement; lv: HTMLSpanElement }[] = [];
+  private slotsCol: HTMLDivElement;
+  private passCol: HTMLDivElement;
+  /** 法器格、被动格的组成（图标 + 顺序）变了才重建 DOM，平时只改冷却和等级 */
+  private slotSig = '';
+  private passSig = '';
+  private readonly icons: (key: string) => string;
   private combo: HTMLDivElement;
   private comboNum: HTMLSpanElement;
   private comboTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(parent: HTMLElement, icons: Record<string, string>, face: string, slots: HudSlot[]) {
+  constructor(parent: HTMLElement, icons: (key: string) => string, face: string) {
+    this.icons = icons;
     const root = el('div', 'yx-hud', parent);
     this.root = root;
     // 左上：回大厅 + 头像 + 血条护盾
     const tl = el('div', 'yx-tl', root);
     const home = el('button', 'yx-btn yx-home', tl);
+    this.homeBtn = home;
     home.type = 'button';
     home.setAttribute('aria-label', '回大厅');
     home.innerHTML =
@@ -74,6 +87,7 @@ export class Hud {
     this.hpText = el('span', 'yx-bar-text', hp);
     const sh = el('div', 'yx-bar yx-sh', bars);
     this.shFill = el('div', 'yx-fill', sh);
+    this.shBar = sh;
     // 顶部：经验条 + 计时
     const xp = el('div', 'yx-xp', root);
     this.xpFill = el('div', 'yx-fill', xp);
@@ -91,20 +105,16 @@ export class Hud {
     el('span', 'yx-ico yx-ico-coin', c);
     this.coins = el('span', '', c, '0');
     const pause = el('button', 'yx-btn yx-pause', tr);
+    this.pauseBtn = pause;
     pause.type = 'button';
     pause.setAttribute('aria-label', '暂停');
     pause.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
-    // 右侧：法器格
-    const col = el('div', 'yx-slots', root);
-    for (const s of slots) {
-      const box = el('div', 'yx-slot', col);
-      const i = el('img', '', box);
-      i.src = icons[s.icon] ?? '';
-      i.alt = '';
-      const cd = el('div', 'yx-cd', box);
-      const lv = el('span', 'yx-slot-lv', box);
-      this.slotEls.push({ box, cd, lv });
-    }
+    // 右侧：法器格（一列，底下垫半透明的板子，雪地上也看得清），被动在它左边一列小格
+    const side = el('div', 'yx-side', root);
+    this.passCol = el('div', 'yx-passives', side);
+    this.slotsCol = el('div', 'yx-slots', side);
+    this.passCol.style.display = 'none';
+    this.slotsCol.style.display = 'none';
     // 连斩横幅
     this.combo = el('div', 'yx-combo', root);
     el('span', 'yx-ink yx-ink-a', this.combo);
@@ -116,18 +126,46 @@ export class Hud {
   update(s: HudState): void {
     this.hpFill.style.width = `${(100 * s.hp) / s.hpMax}%`;
     this.hpText.textContent = `${Math.ceil(s.hp)}/${s.hpMax}`;
-    this.shFill.style.width = `${(100 * s.shield) / s.shieldMax}%`;
+    // 没有护盾的时候整条不显示（空着的深色条像是坏了）
+    this.shBar.style.visibility = s.shieldMax > 0 ? '' : 'hidden';
+    if (s.shieldMax > 0) this.shFill.style.width = `${(100 * s.shield) / s.shieldMax}%`;
     this.lv.textContent = String(s.level);
     this.xpFill.style.width = `${Math.round(s.xp * 100)}%`;
     const left = Math.max(0, Math.ceil(s.left));
     this.time.textContent = `${pad2(Math.floor(left / 60))}:${pad2(left % 60)}`;
     this.kills.textContent = fmt(s.kills);
     this.coins.textContent = fmt(s.coins);
+    const sig = s.slots.map((x) => x.icon).join();
+    if (sig !== this.slotSig) {
+      this.slotSig = sig;
+      this.slotsCol.innerHTML = '';
+      this.slotEls = s.slots.map((x) => {
+        const box = el('div', 'yx-slot', this.slotsCol);
+        const i = el('img', '', box);
+        i.src = this.icons(x.icon);
+        i.alt = '';
+        return { box, cd: el('div', 'yx-cd', box), lv: el('span', 'yx-slot-lv', box) };
+      });
+      this.slotsCol.style.display = s.slots.length ? '' : 'none';
+    }
+    const psig = s.passives.map((x) => `${x.icon}${x.level}`).join();
+    if (psig !== this.passSig) {
+      this.passSig = psig;
+      this.passCol.innerHTML = '';
+      for (const x of s.passives) {
+        const box = el('div', 'yx-pass', this.passCol);
+        const i = el('img', '', box);
+        i.src = this.icons(x.icon);
+        i.alt = '';
+        el('span', 'yx-slot-lv', box, String(x.level));
+      }
+      this.passCol.style.display = s.passives.length ? '' : 'none';
+    }
     s.slots.forEach((slot, i) => {
       const e = this.slotEls[i];
       if (!e) return;
       e.cd.style.setProperty('--cd', `${Math.round((1 - slot.cd) * 360)}deg`);
-      e.lv.textContent = slot.level >= 8 ? '满' : String(slot.level);
+      e.lv.textContent = slot.level > 8 ? '进' : slot.level === 8 ? '满' : String(slot.level);
       e.box.classList.toggle('ready', slot.cd >= 1);
     });
   }

@@ -1,0 +1,60 @@
+.yx-banners { position: absolute; inset: 0; pointer-events: none; z-index: 20; display: flex; flex-direction: column; align-items: center; padding-top: 18vh; gap: 8px; }
+.yx-banner {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 28px; border: 3px solid #17131c; border-radius: 12px;
+  background: rgba(246, 239, 220, 0.95); box-shadow: 0 4px 0 #17131c;
+  animation: yx-ban-in 0.25s ease-out both;
+  font: 700 15px/1.3 system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #17131c;
+}
+.yx-banner .t { font-family: 'YxBrush', serif; font-weight: 400; font-size: 34px; }
+.yx-banner .s { font-size: 13px; opacity: 0.8; }
+.yx-banner.warn { background: linear-gradient(#5a1a24, #2a0c14); color: #ffe0d0; border-color: #17131c; }
+.yx-banner.warn .t { color: #ff7a5a; -webkit-text-stroke: 4px #17131c; paint-order: stroke fill; }
+.yx-banner.gold .t { color: #c8402f; }
+.yx-banner.out { animation: yx-ban-out 0.35s ease-in both; }
+@keyframes yx-ban-in { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
+@keyframes yx-ban-out { to { opacity: 0; transform: translateY(-20px); } }
+
+/* 宝箱 / 进化演出 */
+.yx-reveal {
+  position: absolute; inset: 0; pointer-events: auto; z-index: 25;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: radial-gradient(circle at 50% 46%, rgba(255, 220, 120, 0.35), rgba(20, 24, 40, 0.55) 60%);
+  font: 700 16px/1.3 system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #f6efdc;
+  animation: yx-ban-in 0.2s ease-out both;
+}
+.yx-reveal img { width: 96px; height: 96px; filter: drop-shadow(0 4px 0 #17131c); animation: yx-pop-up 0.5s ease-out both; }
+.yx-reveal .t { font-family: 'YxBrush', serif; font-weight: 400; font-size: 48px; -webkit-text-stroke: 6px #17131c; paint-order: stroke fill; }
+.yx-reveal.evolve .t { color: #ffd23a; font-size: 64px; }
+.yx-reveal .s { text-shadow: 0 1px 2px #000; }
+.yx-reveal .k { margin-top: 10px; font-size: 12px; opacity: 0.7; }
+.yx-reveal .rays {
+  position: absolute; left: 50%; top: 46%; width: 520px; height: 520px; margin: -260px 0 0 -260px;
+  background: repeating-conic-gradient(rgba(255, 220, 120, 0.25) 0 10deg, transparent 10deg 20deg);
+  border-radius: 50%; mask: radial-gradient(circle, #000 20%, transparent 70%); -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: yx-spin 6s linear infinite;
+}
+.yx-reveal.out { animation: yx-ban-out 0.2s ease-in both; }
+@keyframes yx-pop-up { 0% { transform: scale(0.2) translateY(60px); } 70% { transform: scale(1.2); } 100% { transform: none; } }
+@keyframes yx-spin { to { transform: rotate(360deg); } }
+
+/* 全屏白闪（进化） */
+.yx-flash { position: absolute; inset: 0; pointer-events: none; z-index: 26; background: #fff; opacity: 0; }
+.yx-flash.on { animation: yx-flash 0.35s ease-out; }
+@keyframes yx-flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+/* 低血：屏幕边一圈红，跟着心跳 */
+.yx-lowhp { position: absolute; inset: 0; pointer-events: none; z-index: 15; opacity: 0; box-shadow: inset 0 0 90px 30px rgba(200, 30, 30, 0.6); transition: opacity 0.3s; }
+.yx-lowhp.on { opacity: 1; animation: yx-beat 1s ease-in-out infinite; }
+@keyframes yx-beat { 0%, 100% { opacity: 0.55; } 15% { opacity: 1; } 30% { opacity: 0.65; } 45% { opacity: 0.95; } }
+
+/* Boss 血条 */
+.yx-bossbar {
+  position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 12; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font: 700 14px/1 system-ui, 'PingFang SC', sans-serif; color: #f6efdc; text-shadow: 0 1px 2px #000;
+}
+.yx-bossbar span { font-family: 'YxBrush', serif; font-weight: 400; font-size: 26px; -webkit-text-stroke: 4px #17131c; paint-order: stroke fill; }
+.yx-bossbar div { width: min(52vw, 520px); height: 14px; border: 3px solid #17131c; border-radius: 7px; background: #2a2030; overflow: hidden; }
+.yx-bossbar b { display: block; height: 100%; background: linear-gradient(#e7c86a, #b8861e); transition: width 0.2s; }
+@media (max-height: 500px) { .yx-bossbar { top: 58px; } .yx-banners { padding-top: 14vh; } .yx-banner .t { font-size: 26px; } }

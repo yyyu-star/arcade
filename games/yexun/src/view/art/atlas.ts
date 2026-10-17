@@ -4,6 +4,7 @@
  * 雪地是单独的一张可平铺贴图，按 1 倍画（整屏大图按 1 倍光栅化，AGENTS.md 第 4 节）。
  */
 import { SPRITES, type SpriteDef } from './sprites.ts';
+import { SPRITES2 } from './sprites2.ts';
 import { INK, artRng } from './draw.ts';
 
 export interface Frame {
@@ -52,7 +53,7 @@ function digitDefs(): SpriteDef[] {
 
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  const defs = [...SPRITES, ...digitDefs()];
+  const defs = [...SPRITES, ...SPRITES2, ...digitDefs()];
   const items = defs.map((d) => {
     const r = res * (d.scale ?? 1);
     return { d, r, pw: Math.ceil(d.w * r) + PAD * 2, ph: Math.ceil(d.h * r) + PAD * 2 };
