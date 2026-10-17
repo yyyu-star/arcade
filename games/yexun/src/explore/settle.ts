@@ -5,7 +5,7 @@
  * - 教学镇：死了（或迷失）也不丢包，按撤出算宝物和铜钱；教学镇不开实盘。
  * 倍数 = clamp(带出的价值 ÷ 这一档的基准价值, 0, 封顶)；结回 = 带入 × 倍数 向下取整，倍数按万分之一（bp）传，同开盘。
  */
-import { RAID_EXCHANGE, RAID_LIVE, type RaidLiveTier } from '../content/explore.ts';
+import { RAID_EXCHANGE, RAID_LIVE, type RaidLiveTemplate, type RaidLiveTier } from '../content/explore.ts';
 import { bagValue } from './loot.ts';
 import type { Raid, RaidOutcome } from './raid.ts';
 
@@ -32,19 +32,20 @@ export function settleRaid(raid: Raid, pickedCoins: number): RaidResult {
   let coins: number;
   if (keep) coins = pickedCoins + (live ? 0 : Math.floor(value * RAID_EXCHANGE.rate));
   else coins = Math.floor(pickedCoins * RAID_EXCHANGE.deathCoinShare);
-  const bp = live && out === 'escaped' ? liveBp(value, live) : 0;
+  const bp = live && out === 'escaped' && raid.setup.template !== 'teach' ? liveBp(value, live, raid.setup.template) : 0;
   return { outcome: out, kept, lost, value, coins, bp };
 }
 
 /** 实盘倍数（浮点，显示用） */
-export function liveMultiplier(value: number, tier: RaidLiveTier): number {
-  const m = value / RAID_LIVE.base[tier];
-  return m < 0 ? 0 : m > RAID_LIVE.cap ? RAID_LIVE.cap : m;
+export function liveMultiplier(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen'): number {
+  // 撤出了才会调到这里：至少保底，最多封顶
+  const m = value / RAID_LIVE.base[tier][template];
+  return m < RAID_LIVE.floor ? RAID_LIVE.floor : m > RAID_LIVE.cap ? RAID_LIVE.cap : m;
 }
 
 /** 实盘倍数的万分之一（向下取整） */
-export function liveBp(value: number, tier: RaidLiveTier): number {
-  return Math.floor(liveMultiplier(value, tier) * 10000);
+export function liveBp(value: number, tier: RaidLiveTier, template: RaidLiveTemplate = 'guzhen'): number {
+  return Math.floor(liveMultiplier(value, tier, template) * 10000);
 }
 
 /** 结回：带入 × bp ÷ 10000 向下取整 */

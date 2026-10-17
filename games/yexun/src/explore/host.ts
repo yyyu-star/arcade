@@ -31,6 +31,8 @@ export interface RaidPlayerView {
   readonly x: number;
   readonly y: number;
   readonly ev: EvSink;
+  /** 身上的铜钱（鬼市花） */
+  coins: number;
 }
 
 /** 守卫移动要读写的怪数组（World 结构上满足；下标 i 是怪的槽位） */
@@ -84,6 +86,16 @@ export const RaidEv = {
   Beast: 48,
   /** 游荡的巡夜将出来了：x, y */
   Roamer: 49,
+  /** 补刷：x, y, a = 宝箱下标（这个箱子重新封上了）；a = −1 时是这一波的汇总，b = 封上了几个 */
+  Restock: 50,
+  /** 宝妖：x, y, a = 0 出来了 1 钻地跑了 2 被打倒（宝物另发 Loot） */
+  Goblin: 51,
+  /** 鬼市：x, y, a = 0 开市 1 收市 2 买下一件（b = 摊子） */
+  Market: 52,
+  /** 拿到宝库钥匙：x, y */
+  Key: 53,
+  /** 宝库开封的时刻到了：x, y, a = 宝库下标, b = 有没有钥匙 */
+  Vault: 54,
 } as const;
 
 /*

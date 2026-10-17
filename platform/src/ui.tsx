@@ -155,7 +155,7 @@ const PANEL_ICONS = { key: KeyIcon, user: UserIcon, lock: LockIcon, people: Peop
 
 /** 页面外框：标题（前面一个小图标，按这一块讲的是什么选）+ 卡片。 */
 /** action：放在标题行右边的按钮（管理页概览的"管理筹码"） */
-export function Panel({ title, icon, action, children }: { title: string; icon?: keyof typeof PANEL_ICONS; action?: ReactNode; children: ReactNode }) {
+export function Panel({ title, icon, action, className, children }: { title: string; icon?: keyof typeof PANEL_ICONS; action?: ReactNode; className?: string; children: ReactNode }) {
   const Icon = icon && PANEL_ICONS[icon];
   const heading = (
     <h2 className="panel__title">
@@ -168,7 +168,7 @@ export function Panel({ title, icon, action, children }: { title: string; icon?:
     </h2>
   );
   return (
-    <section className="panel">
+    <section className={className ? `panel ${className}` : 'panel'}>
       {action ? (
         <div className="panel__head">
           {heading}
@@ -183,6 +183,17 @@ export function Panel({ title, icon, action, children }: { title: string; icon?:
 }
 
 /** 空列表：一张小插画加一句话（排行榜、好友、战绩、流水还没有东西时） */
+/** 读取中：几条灰色的占位条（0.23.0），代替"正在读取…"那一行字，读完换成内容时不跳不闪 */
+export function Skeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="skeleton" aria-busy="true" aria-label="正在读取" data-testid="skeleton">
+      {Array.from({ length: rows }, (_, i) => (
+        <span key={i} className="skeleton__row" />
+      ))}
+    </div>
+  );
+}
+
 export function Empty({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
     <div className="empty" data-testid={testId}>

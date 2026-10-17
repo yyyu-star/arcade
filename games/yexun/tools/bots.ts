@@ -7,6 +7,7 @@
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
 import { WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
+import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
 import { Rng } from '../src/core/rng.ts';
 
@@ -43,6 +44,11 @@ export class Bot {
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
   }
 
+  /** 夜探：要去的方向（RaidBot 给的 1–32），有就代替"捡掉落"的拉力；-1 = 站着搜箱子（不往哪拉）；0 = 守夜照旧。躲怪照旧 */
+  goal = 0;
+  /** 夜探：顺路捡附近的魂珠和掉落（要撤的时候关掉，不然捡个没完走不到门） */
+  detour = true;
+
   /** 复用同一个结果对象（每拍一个新对象会让模拟器多花几个百分点在垃圾回收上）：调用方当拍用完，不要留着 */
   private readonly res = { dir: 0, choice: -1 };
 
@@ -73,17 +79,28 @@ export class Bot {
     const danger = normal ? 75 : 45;
     const aware = normal ? 170 : 90;
     let threat = 0;
+    // 夜探的守卫（巡夜将、石兽）单算：不封顶、看得更远（危险 2 起机器人多半死在它们手里）
+    let hx = 0;
+    let hy = 0;
     for (let i = 0; i < MAX_ENEMIES; i++) {
       if (!w.eAlive[i]) continue;
       const dx = w.x - w.eX[i]!;
       const dy = w.y - w.eY[i]!;
       const d = Math.hypot(dx, dy) - w.eR[i]!;
-      if (d > aware) continue;
+      const kind = ENEMIES[w.eKind[i]!]!.kind;
+      const guard = w.raid !== null && (kind === 'patrol' || kind === 'beast');
+      const far = guard && normal ? 280 : aware;
+      if (d > far) continue;
       const dmg = ENEMIES[w.eKind[i]!]!.dmg + 4;
-      const k = d < danger ? (dmg * 3) / Math.max(4, d) : dmg / (aware * 2);
+      const k = d < danger ? (dmg * 3) / Math.max(4, d) : dmg / (far * 2);
       const n = Math.max(1, Math.hypot(dx, dy));
-      fx += (dx / n) * k;
-      fy += (dy / n) * k;
+      if (guard) {
+        hx += (dx / n) * k * 2;
+        hy += (dy / n) * k * 2;
+      } else {
+        fx += (dx / n) * k;
+        fy += (dy / n) * k;
+      }
       if (d < danger) threat++;
     }
     // 火球、蓄力要冲的狐狸（小白不看）：狐狸蹲下蓄力时往它冲的方向的侧面躲
@@ -142,9 +159,34 @@ export class Bot {
         ty = w.pY[i]!;
       }
     }
+    // 夜探：隔着墙的魂珠不去捡（按直线距离挑最近的，魂珠在墙那边就一直往墙上顶）
+    if (best >= 0 && w.raid && blockedBy(w, w.x, w.y, tx, ty)) best = -1;
     let gx = 0;
     let gy = 0;
-    if (best >= 0) {
+    // 夜探沿路走：怪的推力封顶。窄街里怪成群，不封顶就被推来推去原地打转（10 分钟开不了一个箱子）；
+    // 玩家在夜探里是顶着怪沿路走、边走边打
+    if (this.goal > 0 && w.raid) {
+      const f = Math.hypot(fx, fy);
+      const cap = 1.1;
+      if (f > cap) {
+        fx *= cap / f;
+        fy *= cap / f;
+      }
+    }
+    fx += hx;
+    fy += hy;
+    // 夜探：沿 RaidBot 的路走时墙由它绕；离开路去捡东西时照守夜的办法推开墙。
+    // 身边有怪也捡贴脚的魂珠：危险 2 起身边几乎一直有怪，只在没怪时捡的话杀了几百只还是 3 级
+    let following = this.goal < 0;
+    if (this.goal < 0) {
+      // 站着搜箱子：不加拉力，只躲怪
+    } else if (this.goal > 0 && !(this.detour && best >= 0 && bd < (threat === 0 ? 300 * 300 : 170 * 170))) {
+      following = true;
+      // 夜探的路绕着墙走：拉力太弱时怪的推力会把人钉在墙上（10 分钟原地不动）
+      const pull = threat > 0 ? 0.8 : 1;
+      gx = inputCos(this.goal) * pull;
+      gy = inputSin(this.goal) * pull;
+    } else if (best >= 0) {
       const dx = tx - w.x;
       const dy = ty - w.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -154,23 +196,27 @@ export class Bot {
     }
     // 墙：离边 300 以内往里推
     const wall = (p: number, size: number): number => (p < 300 ? (300 - p) / 300 : p > size - 300 ? -(p - (size - 300)) / 300 : 0);
-    let vx = fx + gx + wall(w.x, ARENA.w) * 1.5;
-    let vy = fy + gy + wall(w.y, ARENA.h) * 1.5;
+    const AW = w.raid ? w.arenaW : ARENA.w;
+    const AH = w.raid ? w.arenaH : ARENA.h;
+    let vx = fx + gx + wall(w.x, AW) * 1.5;
+    let vy = fy + gy + wall(w.y, AH) * 1.5;
     // 地图上的墙和棺材（义庄）：离得近就往外推，免得顶着墙走不动
+    // 沿路走时只推贴得很近的（再远就和路抢方向，来回抖）
+    const reach = following ? 28 : 70;
     for (const b of w.blocks) {
       const nx = Math.max(b.x, Math.min(w.x, b.x + b.w));
       const ny = Math.max(b.y, Math.min(w.y, b.y + b.h));
       const dx = w.x - nx;
       const dy = w.y - ny;
       const d = Math.hypot(dx, dy);
-      if (d > 70 || d < 1e-6) continue;
+      if (d > reach || d < 1e-6) continue;
       vx += (dx / d) * (70 - d) / 35;
       vy += (dy / d) * (70 - d) / 35;
     }
     // 没什么事：绕着场地中心慢慢兜圈（站着不动会被围死）
-    if (Math.hypot(vx, vy) < 0.2) {
-      const cx = ARENA.w / 2 - w.x;
-      const cy = ARENA.h / 2 - w.y;
+    if (Math.hypot(vx, vy) < 0.2 && this.goal === 0) {
+      const cx = AW / 2 - w.x;
+      const cy = AH / 2 - w.y;
       vx += -cy * 0.002 + cx * 0.0005;
       vy += cx * 0.002 + cy * 0.0005;
     }
@@ -180,7 +226,7 @@ export class Bot {
       vx += (this.rng.next() - 0.5) * 0.8;
       vy += (this.rng.next() - 0.5) * 0.8;
     }
-    if (Math.hypot(vx, vy) < 1e-6) return 0;
+    if (Math.hypot(vx, vy) < (this.goal < 0 ? 0.2 : 1e-6)) return 0;
     // 量化成 32 向（工具里可以用 Math.atan2：机器人不在规则核心里，只要自己确定）
     const a = Math.atan2(vy, vx);
     return 1 + (((Math.round((a / (Math.PI * 2)) * 32) % 32) + 32) % 32);
@@ -242,4 +288,20 @@ function looksStrong(w: World, c: Choice): number {
   if (c.kind === 'coins') return 0;
   if (c.kind === 'weapon') return w.weapons.some((x) => x.id === c.id) ? 20 : 24;
   return LOOKS_STRONG[c.id as PassiveId] ?? 2;
+}
+
+/** 线段 (x0,y0)–(x1,y1) 穿不穿过某块墙（按 8 单位一步取点，墙最薄 26） */
+function blockedBy(w: World, x0: number, y0: number, x1: number, y1: number): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 8));
+  for (const b of w.blocks) {
+    if (Math.max(x0, x1) < b.x || Math.min(x0, x1) > b.x + b.w || Math.max(y0, y1) < b.y || Math.min(y0, y1) > b.y + b.h) continue;
+    for (let s = 0; s <= steps; s++) {
+      const x = x0 + (dx * s) / steps;
+      const y = y0 + (dy * s) / steps;
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return true;
+    }
+  }
+  return false;
 }

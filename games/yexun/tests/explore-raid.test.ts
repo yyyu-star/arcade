@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHEST_OPEN, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN, RAID_ENEMIES, RAID_EXCHANGE, RAID_LIVE, type RaidTemplateId } from '../src/content/explore.ts';
+import { CHEST_OPEN, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN, RAID_ENEMIES, RAID_EXCHANGE, RAID_LATE, RAID_LIVE, type RaidTemplateId } from '../src/content/explore.ts';
 import { ENEMY_BY_KIND, type EnemyKind } from '../src/content/enemies.ts';
 import { TREASURES } from '../src/content/treasures.ts';
 import { inputCos, inputSin } from '../src/core/fmath.ts';
@@ -9,7 +9,7 @@ import { gateField, guide, newGuide } from '../src/explore/guide.ts';
 import { NAV_CELL, NAV_INF } from '../src/explore/nav.ts';
 import { RaidEv, type GuardHost } from '../src/explore/host.ts';
 import { bagValue } from '../src/explore/loot.ts';
-import { Raid, raidFingerprint } from '../src/explore/raid.ts';
+import { Raid, raidFingerprint, Role } from '../src/explore/raid.ts';
 import { liveBp, livePayout, settleRaid } from '../src/explore/settle.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../src/explore/spawn.ts';
 import { emptyVault, herbalistUnlocked, normalizeVault, recordRaid, vaultProgress } from '../src/explore/vault.ts';
@@ -17,7 +17,7 @@ import { emptyVault, herbalistUnlocked, normalizeVault, recordRaid, vaultProgres
 const M = 1800;
 
 /** 假的核心：主角位置、事件、怪数组（核心接好以后由 World 本身满足这些接口） */
-type FakeHost = GuardHost & { tick: number; x: number; y: number; evs: number[][] };
+type FakeHost = GuardHost & { tick: number; x: number; y: number; coins: number; evs: number[][] };
 function fakeHost(x: number, y: number): FakeHost {
   const N = 300;
   const evs: number[][] = [];
@@ -25,6 +25,7 @@ function fakeHost(x: number, y: number): FakeHost {
     tick: 0,
     x,
     y,
+    coins: 0,
     evs,
     ev: { push: (t: number, ex: number, ey: number, a = 0, b = 0, c = 0) => void evs.push([t, ex, ey, a, b, c]) },
     eAlive: new Uint8Array(N),
@@ -252,12 +253,13 @@ describe('夜探：结算、实盘倍数、藏宝阁', () => {
     expect(() => new Raid({ seed: 1, template: 'teach', danger: 0, live: 'small' })).toThrow();
   });
 
-  it('实盘：倍数 = 价值 ÷ 基准，封顶，万分之一向下取整；结回向下取整（4.2）', () => {
-    const base = RAID_LIVE.base.small;
-    expect(liveBp(0, 'small')).toBe(0);
-    expect(liveBp(base, 'small')).toBe(10000);
+  it('实盘：撤出时倍数 = 价值 ÷ 基准，至少保底、最多封顶，万分之一向下取整；结回向下取整（4.2）', () => {
+    const base = RAID_LIVE.base.small.guzhen;
+    expect(liveBp(0, 'small')).toBe(RAID_LIVE.floor * 10000);
+    expect(liveBp(base * 2, 'small')).toBe(20000);
     expect(liveBp(base * 100, 'small')).toBe(RAID_LIVE.cap * 10000);
-    expect(liveBp(1, 'small')).toBe(Math.floor((1 / base) * 10000));
+    expect(liveBp(Math.ceil(base * 1.5), 'small', 'guzhen')).toBe(Math.floor((Math.ceil(base * 1.5) / base) * 10000));
+    expect(liveBp(base * 2, 'small', 'dukou')).toBe(Math.floor(((base * 2) / RAID_LIVE.base.small.dukou) * 10000));
     let prev = -1;
     for (let v = 0; v < base * 4; v += 7) {
       const bp = liveBp(v, 'small');
@@ -392,4 +394,101 @@ describe('夜探：撤离指引和只看指引的机器人', () => {
     }
     expect(late).toBeGreaterThan(early);
   }, 120000);
+});
+
+describe('夜探后半段（RAID_LATE：补刷、宝妖、鬼市、宝库和钥匙）', () => {
+  const L = RAID_LATE;
+
+  it('补刷：6:00 起每 90 秒把开过的箱子重新封上、换一批；同种子两次完全一样', () => {
+    const run = (): { raid: Raid; h: FakeHost } => {
+      const raid = new Raid({ seed: 11, template: 'guzhen', danger: 2 });
+      const h = fakeHost(raid.map.spawn.x, raid.map.spawn.y);
+      for (let c = 0; c < raid.map.chests.length; c++) if (c !== raid.vault) raid.chestOpen[c] = 1;
+      runTo(raid, h, L.restock.from + L.restock.every + 1);
+      return { raid, h };
+    };
+    const a = run();
+    const per = evOf(a.h, RaidEv.Restock).filter((e) => e[3]! >= 0);
+    expect(per.length).toBe(L.restock.n * 2);
+    for (const e of per) expect(a.raid.chestOpen[e[3]!]).toBe(0);
+    const b = run();
+    expect(raidFingerprint(b.raid)).toBe(raidFingerprint(a.raid));
+    expect(per.map((e) => a.raid.map.chests[e[3]!]!.items.join())).toEqual(evOf(b.h, RaidEv.Restock).filter((e) => e[3]! >= 0).map((e) => b.raid.map.chests[e[3]!]!.items.join()));
+  });
+
+  it('宝妖：5:00 出在远处的路口，到点钻地；打倒直接进背包两件，不算钥匙', () => {
+    const raid = new Raid({ seed: 5, template: 'guzhen', danger: 2 });
+    const h = fakeHost(raid.map.spawn.x, raid.map.spawn.y);
+    runTo(raid, h, L.goblin.at[0]!);
+    const ev = evOf(h, RaidEv.Goblin)[0]!;
+    expect(ev[3]).toBe(0);
+    const d = Math.hypot(ev[1]! - h.x, ev[2]! - h.y);
+    expect(d).toBeGreaterThanOrEqual(L.goblin.minD - 1);
+    let g = -1;
+    for (let s; (s = raid.takeSpawn()) >= 0; ) if (raid.gRole[s] === Role.goblin) g = s;
+    expect(g).toBeGreaterThanOrEqual(0);
+    raid.bindGuard(g, 7, h);
+    expect(raid.goblinGone(g, h.tick + L.goblin.life - 1)).toBe(false);
+    expect(raid.goblinGone(g, h.tick + L.goblin.life)).toBe(true);
+    const bag0 = raid.bag.length;
+    expect(raid.onKill(7, h.eGen[7]!, true, 100, 100, h)).toBe(true);
+    expect(raid.bag.length).toBe(bag0 + L.goblin.items);
+    expect(raid.hasKey).toBe(0);
+  });
+
+  it('宝库：开局封着搜不了；钥匙从 5:00 以后第一只精英或守卫掉；8:00 有钥匙才能搜，开出 5 件', () => {
+    const raid = new Raid({ seed: 3, template: 'guzhen', danger: 2 });
+    expect(raid.vault).toBeGreaterThanOrEqual(0);
+    const v = raid.map.chests[raid.vault]!;
+    const h = fakeHost(v.x, v.y);
+    runTo(raid, h, CHEST_OPEN.hold + 5);
+    expect(raid.chestOpen[raid.vault]).toBe(0);
+    expect(raid.onKill(9, 0, true, 0, 0, h)).toBe(false);
+    expect(raid.hasKey).toBe(0);
+    h.x = h.y = 0;
+    runTo(raid, h, L.vault.keyFrom);
+    raid.onKill(9, 0, true, 0, 0, h);
+    expect(raid.hasKey).toBe(1);
+    expect(evOf(h, RaidEv.Key).length).toBe(1);
+    runTo(raid, h, L.vault.at);
+    expect(evOf(h, RaidEv.Vault)[0]![4]).toBe(1);
+    expect(v.items.length).toBe(L.vault.items);
+    h.x = v.x;
+    h.y = v.y;
+    const bag0 = raid.bag.length;
+    runTo(raid, h, L.vault.at + CHEST_OPEN.hold + 2);
+    expect(raid.chestOpen[raid.vault]).toBe(1);
+    expect(raid.bag.length).toBe(bag0 + L.vault.items);
+  });
+
+  it('鬼市：7:00 开市三摊，站摊前读条、钱够才买（扣钱、进背包），8:00 收市', () => {
+    const raid = new Raid({ seed: 8, template: 'dukou', danger: 2 });
+    const h = fakeHost(raid.map.spawn.x, raid.map.spawn.y);
+    runTo(raid, h, L.market.from);
+    expect(raid.marketOpen).toBe(1);
+    expect(raid.stallX.length).toBe(L.market.stalls);
+    const k = 0;
+    const price = raid.stallPrice[k]!;
+    expect(price).toBe(Math.ceil(TREASURES[raid.stallItem[k]!]!.value * L.market.rate));
+    h.x = raid.stallX[k]!;
+    h.y = raid.stallY[k]!;
+    h.coins = price - 1;
+    runTo(raid, h, h.tick + L.market.hold + 2);
+    expect(raid.stallSold[k]).toBe(0);
+    h.coins = price + 5;
+    runTo(raid, h, h.tick + L.market.hold + 2);
+    expect(raid.stallSold[k]).toBe(1);
+    expect(h.coins).toBe(5);
+    expect(raid.bag).toContain(raid.stallItem[k]);
+    runTo(raid, h, L.market.to);
+    expect(raid.marketOpen).toBe(2);
+  });
+
+  it('教学镇没有后半段', () => {
+    const raid = new Raid({ seed: 1, template: 'teach', danger: 0 });
+    const h = fakeHost(raid.map.spawn.x, raid.map.spawn.y);
+    runTo(raid, h, 9 * M);
+    expect(raid.vault).toBe(-1);
+    expect(evOf(h, RaidEv.Restock).length + evOf(h, RaidEv.Goblin).length + evOf(h, RaidEv.Market).length).toBe(0);
+  });
 });

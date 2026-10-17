@@ -1,27 +1,46 @@
 /**
- * /boards 排行榜（0.10.4，docs/platform-backend.md 15.12）：本周净赢（总榜 + 每个游戏）、各游戏的每日挑战（现有的每日榜，15.5；games.ts 登记了 daily 的才有）、称号收集。
+ * /boards 排行榜（0.10.4，docs/platform-backend.md 15.12）：本周净赢（总榜 + 每个游戏）、各游戏的每日挑战（现有的每日榜，15.5；games.ts 登记了 daily 的才有）、
+ * 各游戏总榜（0.23.0，games.ts 登记的固定榜，比如夜巡守夜）、称号收集。
  * "全部 / 只看好友"一键切换；点名字进那个人的战绩页。数据最多晚 5 分钟（服务端每个 isolate 的缓存）。
+ * 电脑上（≥960）左边一列竖排的榜单分组、右边是榜；手机上分组一排排摆在上面。
  */
 import { useEffect, useState } from 'react';
 import { api, errorText, type LeaderboardResponse, type ScoreBoard } from '../api.ts';
-import { type DailyFormat, loadDailyFormat } from '../daily.ts';
+import { loadDailyFormat, loadScoreFormat, type ScoreFormat } from '../scores.ts';
 import { signed, tone } from '../format.ts';
-import { type DailyTab, dailyTabs, GAMES, WALLET_GAMES } from '../games.ts';
+import { type DailyTab, dailyTabs, fixedBoards, type GameEntry, GAMES, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
-import { Empty, Panel } from '../ui.tsx';
+import { Empty, Panel, Skeleton } from '../ui.tsx';
 import { friendLink, rankCard, ShareButton } from '../share.tsx';
 import './boards.css';
 
 type Scope = 'all' | 'friends';
-/** 'week'、'titles'，或者有每日榜的游戏 id */
+/** 'week'、'titles'、每日榜的 DailyTab.key，或者总榜的 'fixed:<游戏>:<榜>' */
 type Tab = string;
 
 const PLAYABLE = GAMES.filter((g) => g.status === 'playable');
 const WEEK_BOARDS = [{ id: 'total', name: '总榜' }, ...WALLET_GAMES.filter((g) => g.status === 'playable').map((g) => ({ id: g.id, name: g.name }))];
 /** 每日挑战：每个游戏一个标签，一天几个每日榜的每个子榜一个（0.16.0，"夜巡每日·守夜"） */
 const DAILY_TABS = dailyTabs(PLAYABLE);
-const TABS: (readonly [Tab, string])[] = [['week', '本周净赢'], ...DAILY_TABS.map((t) => [t.key, t.label] as const), ['titles', '称号收集']];
+/** 各游戏总榜（0.23.0）：登记了固定榜的游戏每个榜一个标签 */
+interface FixedTab {
+  key: string;
+  game: GameEntry;
+  id: string;
+  label: string;
+}
+const FIXED_TABS: FixedTab[] = PLAYABLE.flatMap((g) => fixedBoards(g).map((b) => ({ key: `fixed:${g.id}:${b.id}`, game: g, id: b.id, label: b.name })));
+interface Group {
+  name: string;
+  tabs: (readonly [Tab, string])[];
+}
+const GROUPS: Group[] = ([
+  { name: '周榜', tabs: [['week', '本周净赢']] },
+  { name: '每日挑战', tabs: DAILY_TABS.map((t) => [t.key, t.label] as const) },
+  { name: '各游戏总榜', tabs: FIXED_TABS.map((t) => [t.key, t.label] as const) },
+  { name: '称号', tabs: [['titles', '称号收集']] },
+] satisfies Group[]).filter((g) => g.tabs.length > 0);
 
 interface Row {
   rank: number | null;
@@ -107,7 +126,7 @@ function DailyBoard({ tab, board, scope }: { tab: DailyTab; board: string | null
   const { game } = tab;
   const sub = tab.sub?.id ?? null;
   const title = tab.sub ? `${game.name}·${tab.sub.name}` : game.name;
-  const [data, setData] = useState<{ board: ScoreBoard; format: DailyFormat } | null>(null);
+  const [data, setData] = useState<{ board: ScoreBoard; format: ScoreFormat } | null>(null);
   const [error, setError] = useState<unknown>(null);
   // 只看好友时比的是这周（北京时间周一 0 点起）每人最好的一天（0.15.0，docs/social.md 1.5），今天没人打也有榜
   const week = scope === 'friends';
@@ -127,7 +146,7 @@ function DailyBoard({ tab, board, scope }: { tab: DailyTab; board: string | null
   const empty = week ? `这周你和好友都还没打${title}的每日挑战，去当第一个！` : `今天还没人打${title}的每日挑战，去当第一个！`;
   if (!board && !week) return <Empty testId="board-empty">{empty}</Empty>;
   if (error) return <p className="note">{errorText(error)}</p>;
-  if (!data) return <p className="note">正在读取…</p>;
+  if (!data) return <Skeleton rows={5} />;
   const { board: b, format } = data;
   const rows = b.entries.map((e) => ({ ...e, text: format.score(e.score) }));
   const me = b.me ? { rank: b.me.rank, userId: '', displayName: '', isMe: true, text: format.score(b.me.score) } : null;
@@ -136,6 +155,42 @@ function DailyBoard({ tab, board, scope }: { tab: DailyTab; board: string | null
       <RankList rows={rows} me={me} empty={empty} share={{ board: `${title}每日挑战${week ? '（本周）' : ''}`, friends: week }} />
       {week && <p className="note">只看好友时比的是这周每人最好的一天，北京时间每周一 0 点清零。</p>}
       {format.note && <p className="note">{title}的每日挑战：{format.note}</p>}
+    </>
+  );
+}
+
+/** 各游戏总榜（0.23.0）：读现有的 GET /api/boards/<游戏>/<榜>，分数写法读游戏的 boards.json */
+function FixedBoardView({ tab, scope }: { tab: FixedTab; scope: Scope }) {
+  const [data, setData] = useState<{ board: ScoreBoard; format: ScoreFormat } | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    setError(null);
+    Promise.all([api.board(tab.game.id, tab.id, scope), loadScoreFormat(tab.game.id, 'boards.json', tab.id)]).then(
+      ([board, format]) => alive && setData({ board, format }),
+      (e: unknown) => alive && setError(e),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [tab.game.id, tab.id, scope]);
+  if (error) return <p className="note">{errorText(error)}</p>;
+  if (!data) return <Skeleton rows={5} />;
+  const { board: b, format } = data;
+  const rows = b.entries.map((e) => ({ ...e, text: format.score(e.score) }));
+  const me = b.me ? { rank: b.me.rank, userId: '', displayName: '', isMe: true, text: format.score(b.me.score) } : null;
+  const empty = scope === 'friends' ? `你和好友都还没上${tab.label}，去当第一个！` : `还没人上${tab.label}，去当第一个！`;
+  return (
+    <>
+      <RankList rows={rows} me={me} empty={empty} share={{ board: tab.label, friends: scope === 'friends' }} />
+      <p className="note">
+        {format.note ? `${tab.label}：${format.note}` : `${tab.label}：每人只留最好的一次，一直累计、不清零。`}
+{' '}
+        <a className="inline-link" href={tab.game.path}>
+          去{tab.game.name}
+        </a>
+      </p>
     </>
   );
 }
@@ -160,7 +215,7 @@ export function BoardsPage() {
     };
   }, [user, scope]);
 
-  if (loading) return <Panel icon="trophy" title="排行榜"><p className="note">正在读取…</p></Panel>;
+  if (loading) return <Panel icon="trophy" title="排行榜"><Skeleton rows={6} /></Panel>;
   if (!user) {
     return (
       <Panel icon="trophy" title="排行榜">
@@ -182,28 +237,38 @@ export function BoardsPage() {
     </div>
   );
   const tabs = (
-    <nav className="tabs" aria-label="哪个榜">
-      {TABS.map(([t, label]) => (
-        <a
-          key={t}
-          href={`#${t}`}
-          className={tab === t ? 'tabs__on' : ''}
-          aria-current={tab === t ? 'page' : undefined}
-          onClick={(e) => {
-            e.preventDefault();
-            setTab(t);
-          }}
-        >
-          {label}
-        </a>
+    <nav className="board-nav" aria-label="哪个榜">
+      {GROUPS.map((g) => (
+        <section key={g.name} className="board-nav__group">
+          <h3 className="board-nav__name">{g.name}</h3>
+          <div className="tabs">
+            {g.tabs.map(([t, label]) => (
+              <a
+                key={t}
+                href={`#${t}`}
+                className={tab === t ? 'tabs__on' : ''}
+                aria-current={tab === t ? 'page' : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTab(t);
+                }}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+        </section>
       ))}
     </nav>
   );
 
   const daily = DAILY_TABS.find((t) => t.key === tab);
+  const fixed = FIXED_TABS.find((t) => t.key === tab);
   let body;
-  if (error) body = <p className="note">{errorText(error)}</p>;
-  else if (!data) body = <p className="note">正在读取…</p>;
+  // 总榜不读 /api/leaderboard，不用等它
+  if (fixed) body = <FixedBoardView tab={fixed} scope={scope} />;
+  else if (error) body = <p className="note">{errorText(error)}</p>;
+  else if (!data) body = <Skeleton rows={6} />;
   else if (daily) body = <DailyBoard tab={daily} board={data.daily[daily.key] ?? null} scope={scope} />;
   else {
     const b = data.boards[tab === 'week' ? weekBoard : 'titles'] ?? { entries: [], me: null };
@@ -242,8 +307,12 @@ export function BoardsPage() {
   return (
     <Panel icon="trophy" title="排行榜">
       {toggle}
-      {tabs}
-      {body}
+      <div className="boards">
+        {tabs}
+        <div className="boards__body" data-testid="board-body">
+          {body}
+        </div>
+      </div>
     </Panel>
   );
 }

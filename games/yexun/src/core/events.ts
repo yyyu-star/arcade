@@ -63,7 +63,7 @@ export const Ev = {
   Prop: 29,
   /** 符咒炸弹炸开：x, y, b = 半径 */
   Bomb: 30,
-  // 40–49 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
+  // 40–54 是夜探的（含义见 src/explore/host.ts 的 RaidEv，编号两边一致，测试锁住）
   GateOpen: 40,
   GateClose: 41,
   ChestOpen: 42,
@@ -74,6 +74,11 @@ export const Ev = {
   Alert: 47,
   Beast: 48,
   Roamer: 49,
+  Restock: 50,
+  Goblin: 51,
+  Market: 52,
+  Key: 53,
+  Vault: 54,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

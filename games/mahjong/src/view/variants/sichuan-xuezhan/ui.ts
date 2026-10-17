@@ -6,7 +6,7 @@ import { byTile, kindOf, suitOf, type Suit, type Tile } from '../../../core/tile
 import type { XzAction, XzEvent, XzView } from '../../../core/variants/sichuan-xuezhan/index.ts';
 import { button, el } from '../../dom.ts';
 import { play } from '../../sound.ts';
-import type { VariantUi } from '../../table.ts';
+import { landAt, type VariantUi } from '../../table.ts';
 import { FAN_NAME, SUIT_NAME, SWAP_DIR } from '../../text.ts';
 import { backUrl, tileName, tileUrl } from '../../tiles.ts';
 import { tingOf } from './ting.ts';
@@ -89,8 +89,8 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
           break;
         case 'discard':
           play('discard');
-          // 牌飞进河里约 200 毫秒，落到毡面那一刻再补一声闷响
-          window.setTimeout(() => play('land'), 200);
+          // 落到毡面那一刻再补一声闷响（和牌桌的飞行动画对上）
+          window.setTimeout(() => play('land'), landAt(e.seat === v.me?.seat));
           break;
         case 'pon':
           fx.banner(e.seat, '碰！', 'pon');

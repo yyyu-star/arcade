@@ -26,10 +26,10 @@ export interface LiveTierDef {
 }
 
 export const LIVE_TIERS: Record<LiveTier, LiveTierDef> = {
-  small: { id: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 11_000 },
-  medium: { id: 'medium', name: '中', stake: 10_000, danger: 2, dawnBp: 15_200 },
-  large: { id: 'large', name: '大', stake: 50_000, danger: 3, dawnBp: 15_200 },
-  luxe: { id: 'luxe', name: '豪华', stake: 200_000, danger: 4, dawnBp: 17_400 },
+  small: { id: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 12_700 },
+  medium: { id: 'medium', name: '中', stake: 10_000, danger: 2, dawnBp: 17_900 },
+  large: { id: 'large', name: '大', stake: 50_000, danger: 3, dawnBp: 17_900 },
+  luxe: { id: 'luxe', name: '豪华', stake: 200_000, danger: 4, dawnBp: 19_300 },
 };
 
 export function isLiveTier(v: unknown): v is LiveTier {
