@@ -1,0 +1,7 @@
+{
+  "royal_flush": { "text": "{name}在德州亮出皇家同花顺，赢下 {n} 筹码" },
+  "straight_flush": { "text": "{name}在德州亮出同花顺，赢下 {n} 筹码" },
+  "quads": { "text": "{name}在德州亮出四条，赢下 {n} 筹码" },
+  "allin_comeback": { "text": "{name}在德州全下，河牌一张逆转，赢下 {n} 筹码" },
+  "big_pot": { "text": "{name}在德州一手赢下 {n} 筹码的大锅" }
+}

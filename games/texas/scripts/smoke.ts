@@ -77,8 +77,8 @@ async function fakePlatform(ctx: BrowserContext, userId: string): Promise<void> 
   let data: unknown = null;
   // 回大厅跳到的平台首页
   await ctx.route((u) => u.pathname === '/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>大厅</title>大厅' }));
-  // 报位置、收邀请、叫人（kit 的 social，docs/social.md 1.2、1.3）：位置收下，邀请一条都没有，好友一个、叫他就成
-  await ctx.route(/\/api\/(presence|invites|friends)/, (route) => {
+  // 报位置、收邀请、叫人、报名场面（kit 的 social，docs/social.md 1.2、1.3，平台 15.17）：位置、名场面收下，邀请一条都没有，好友一个、叫他就成
+  await ctx.route(/\/api\/(presence|invites|friends|feed)/, (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     if (path.startsWith('/games/')) return route.continue();
