@@ -10,7 +10,7 @@ import Phaser from 'phaser';
 import { DROWN, ENEMIES, HOP_AIR, HOP_PERIOD, SPROUT, WATER } from '../../content/enemies.ts';
 import { CHARACTERS } from '../../content/meta.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
-import { inRects, MAPS } from '../../content/maps.ts';
+import { inRects, MAPS, type MapDef } from '../../content/maps.ts';
 import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
 import { edgeArrow, walkSecs } from '../../explore/view/guide-hud.ts';
@@ -270,8 +270,11 @@ export class GameScene extends Phaser.Scene {
     const gtex = this.textures.get('ground').getSourceImage() as HTMLCanvasElement;
     // 夜探的街和院子全由 Town 铺满，不再多铺一层雪地（少一次全屏绘制，镇子外圈露出背景的雪色）
     const mapDef = MAPS[this.w.setup.map ?? 'snow'];
-    if (!this.raid) this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(GROUND_TINT[mapDef.tone ?? 'snow']);
-    if (!this.raid) this.paintTerrainLayer();
+    // 省内存设备（手机 GPU 弱）上有地形的图：雪地和地形先合成一张不透明的图，整屏只画一遍；其余照旧平铺雪地 + 地形叠层
+    if (!this.raid && !(LOW_MEMORY && this.paintBakedGround(gtex, mapDef))) {
+      this.add.tileSprite(this.arenaW / 2, this.arenaH / 2, this.arenaW + 400, this.arenaH + 400, 'ground').setTileScale(512 / gtex.width).setDepth(-1000).setTint(GROUND_TINT[mapDef.tone ?? 'snow']);
+      this.paintTerrainLayer();
+    }
     this.rg = this.add.graphics().setDepth(-500);
     if (this.raid) {
       this.setupRaid(this.raid);
@@ -404,6 +407,37 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** 河、冰、桥、落叶这类整张场地的地形叠层：一张 canvas，缩小存（省内存设备更小） */
+  /**
+   * 省内存设备：雪地平铺 + 底色调 + 地形画进同一张图（场地四周各多 200，和平铺的范围一样），代替"平铺雪地 + 地形叠层"两遍全屏绘制。
+   * 按 0.34 倍画（3,600 见方 → 1,224 像素，图集上限 2,048 以内），雪地纹理细节糊一点，换手机上少一遍全屏绘制。没有地形的图返回 false。
+   */
+  private paintBakedGround(gtex: HTMLCanvasElement, def: MapDef): boolean {
+    const scale = 0.34;
+    const terr = paintTerrain(def, this.w.setup.seed, scale);
+    if (!terr) return false;
+    const pad = 200;
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil((this.arenaW + pad * 2) * scale);
+    cv.height = Math.ceil((this.arenaH + pad * 2) * scale);
+    const c = cv.getContext('2d')!;
+    // 雪地：一块 512 世界单位，按画布倍数缩小平铺
+    const pat = c.createPattern(gtex, 'repeat')!;
+    pat.setTransform(new DOMMatrix().scale((512 / gtex.width) * scale));
+    c.fillStyle = pat;
+    c.fillRect(0, 0, cv.width, cv.height);
+    // 底色调：和 setTint 一样是相乘
+    c.globalCompositeOperation = 'multiply';
+    c.fillStyle = `#${GROUND_TINT[def.tone ?? 'snow'].toString(16).padStart(6, '0')}`;
+    c.fillRect(0, 0, cv.width, cv.height);
+    c.globalCompositeOperation = 'source-over';
+    c.drawImage(terr, pad * scale, pad * scale);
+    const key = `ground_${def.id}`;
+    if (this.textures.exists(key)) this.textures.remove(key);
+    this.textures.addCanvas(key, cv);
+    this.add.image(this.arenaW / 2, this.arenaH / 2, key).setScale(1 / scale).setDepth(-1000);
+    return true;
+  }
+
   private paintTerrainLayer(): void {
     const def = MAPS[this.w.setup.map ?? 'snow'];
     const scale = LOW_MEMORY ? 0.34 : 0.5;
