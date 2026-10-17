@@ -3,6 +3,7 @@
  */
 import { bustSvgBody as avatarSvgBodyScaled, type AvatarId, type Mood } from './avatars.ts';
 import { homeLayout } from '../home-layout.ts';
+import { tableSide } from '../table/layout.ts';
 import { cardBackSvg, cardFaceSvg } from './cards.ts';
 import { C, SERIF, cloudPath, esc, f, hashStr, hex, huiwenRow, prng, shade, suitShape, svg } from './common.ts';
 
@@ -18,39 +19,53 @@ function inlineSvg(src: string, prefix: string, x: number, y: number, w: number,
  *  不再手画几十条木纹路径：一个 feTurbulence 滤镜就够，字符串小，手机按世界宽度栅格化一次也省。顶上约 58px 会被顶栏盖住，所以那里只放木色，不放细节 */
 export function tableSvg(w: number, h: number): string {
   const B = 28;
+  // 远景（art-v3）：世界比 1280 宽时桌子不跟着拉满，两边让出一截暗室和灯笼的光，像桌子摆在屋里
+  const side = tableSide(w);
+  const tw = w - 2 * side;
   const cx = w / 2, cy = h / 2;
-  const R = h * 0.3;
-  const iw = w - 2 * B, ih = h - 2 * B;
+  const R = h * 0.25;
+  const x0 = side + B;
+  const iw = tw - 2 * B, ih = h - 2 * B;
+  const glow = side > 0
+    ? [side * 0.5, w - side * 0.5].map((x) => `<circle cx="${f(x)}" cy="150" r="${f(side * 0.9 + 60)}" fill="url(#lg)"/>`).join('')
+    : '';
   return svg(w, h,
     `<defs>` +
+    `<linearGradient id="room" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a170d"/><stop offset="1" stop-color="#120804"/></linearGradient>` +
+    `<radialGradient id="lg"><stop offset="0" stop-color="#ffb060" stop-opacity=".32"/><stop offset="1" stop-color="#ff9040" stop-opacity="0"/></radialGradient>` +
     `<linearGradient id="wdh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a2e1c"/><stop offset=".5" stop-color="#58210f"/><stop offset="1" stop-color="#34120a"/></linearGradient>` +
     // 木纹：横向很稀、纵向很密的噪声 = 沿边长方向的细长纹；着成褐色，alpha 由噪声决定
     `<filter id="wgr" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".008 .18" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 .13  0 0 0 0 .04  0 0 0 0 .02  0 0 0 1.5 -.45"/></filter>` +
     `<linearGradient id="gil" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${C.goldLight}"/><stop offset=".3" stop-color="${C.gold}"/><stop offset=".5" stop-color="#f6e29a"/><stop offset=".75" stop-color="${C.goldDeep}"/><stop offset="1" stop-color="${C.gold}"/></linearGradient>` +
-    `<radialGradient id="fl" cx=".5" cy=".46" r=".72"><stop offset="0" stop-color="#35885f"/><stop offset=".5" stop-color="#206044"/><stop offset="1" stop-color="#082419"/></radialGradient>` +
-    `<radialGradient id="lit" cx=".5" cy=".46" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>` +
+    // 绒面：正上方一盏灯，光圈中心偏上、四周压暗
+    `<radialGradient id="fl" cx=".5" cy=".42" r=".7"><stop offset="0" stop-color="#3a9165"/><stop offset=".42" stop-color="#226647"/><stop offset=".8" stop-color="#0f3a28"/><stop offset="1" stop-color="#061810"/></radialGradient>` +
+    `<radialGradient id="lit" cx=".5" cy=".4" r=".38"><stop offset="0" stop-color="#fff2c0" stop-opacity=".16"/><stop offset=".6" stop-color="#fff2c0" stop-opacity=".05"/><stop offset="1" stop-color="#fff2c0" stop-opacity="0"/></radialGradient>` +
     `<filter id="nz" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter>` +
-    `<clipPath id="fc"><rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16"/></clipPath>` +
+    `<clipPath id="wc"><rect x="${side}" y="0" width="${tw}" height="${h}" rx="${side > 0 ? 24 : 0}"/></clipPath>` +
+    `<clipPath id="fc"><rect x="${x0}" y="${B}" width="${iw}" height="${ih}" rx="16"/></clipPath>` +
     `</defs>` +
-    `<rect width="${w}" height="${h}" fill="url(#wdh)"/>` +
-    `<rect width="${w}" height="${h}" filter="url(#wgr)"/>` +
+    // 远景：暗室 + 两侧灯笼的暖光（1280 宽时被桌子整个盖住）
+    `<rect width="${w}" height="${h}" fill="url(#room)"/>` + glow +
+    // 桌沿木框
+    `<g clip-path="url(#wc)"><rect x="${side}" width="${tw}" height="${h}" fill="url(#wdh)"/>` +
+    `<rect x="${side}" width="${tw}" height="${h}" filter="url(#wgr)"/>` +
     // 漆面反光：边框上缘一道淡亮
-    `<rect x="3" y="3" width="${w - 6}" height="${f(B * 0.5)}" rx="6" fill="#fff" opacity=".07"/>` +
-    `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" fill="none" stroke="#1c0a05" stroke-width="3" opacity=".7"/>` +
+    `<rect x="${side + 3}" y="3" width="${tw - 6}" height="${f(B * 0.5)}" rx="6" fill="#fff" opacity=".07"/></g>` +
+    `<rect x="${side + 1.5}" y="1.5" width="${tw - 3}" height="${h - 3}" rx="${side > 0 ? 23 : 0}" fill="none" stroke="#1c0a05" stroke-width="3" opacity=".7"/>` +
     // 漆金嵌线：外细内粗两道
-    `<rect x="${B - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="#1c0a05" stroke-width="4.2" opacity=".6"/>` +
-    `<rect x="${B - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="url(#gil)" stroke-width="2.4"/>` +
-    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="url(#fl)"/>` +
+    `<rect x="${x0 - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="#1c0a05" stroke-width="4.2" opacity=".6"/>` +
+    `<rect x="${x0 - 9}" y="${B - 9}" width="${iw + 18}" height="${ih + 18}" rx="22" fill="none" stroke="url(#gil)" stroke-width="2.4"/>` +
+    `<rect x="${x0}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="url(#fl)"/>` +
     `<g clip-path="url(#fc)">` +
-    `<rect width="${w}" height="${h}" fill="url(#lit)"/>` +
+    `<rect x="${x0}" width="${iw}" height="${h}" fill="url(#lit)"/>` +
     `<rect width="${w}" height="${h}" filter="url(#nz)" opacity=".2"/>` +
-    // 桌心的主装饰：回纹圆章（tableEmblem）
-    tableEmblem(cx, cy, R) +
+    // 桌上的水印：回纹圆章（tableEmblem），比以前小一圈、更淡，不和出的牌抢眼
+    `<g opacity=".7">${tableEmblem(cx, cy, R)}</g>` +
     // 内侧阴影（木沿投在绒面上）
-    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="14"/>` +
-    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="30"/>` +
+    `<rect x="${x0}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="14"/>` +
+    `<rect x="${x0}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="30"/>` +
     `</g>` +
-    `<rect x="${B}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="${C.goldDeep}" stroke-width="2"/>`);
+    `<rect x="${x0}" y="${B}" width="${iw}" height="${ih}" rx="16" fill="none" stroke="${C.goldDeep}" stroke-width="2"/>`);
 }
 
 /**

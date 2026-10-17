@@ -186,6 +186,9 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距，不许互相压着。
   调试桥 `hits()` 列出现在点得到的矩形，冒烟的 `checkHits` 用它查；新加能点的东西后跑一遍 `npm run shot`。画面上的人名用 `seatName`（最多 `NAME_MAX` 个字），认人用 `fullSeatName`。
 - 改了画面后跑 `npm run shot`，并亲自看 `shots/` 里 1280×720、844×390、1920×1080 的截图。
+- 截图里精灵随机缺一块方的（沿精灵中线整块透明，每次位置不同）：是无头 Chrome 的软件渲染（SwiftShader）下 Phaser 多纹理合批取错了纹理单元，
+  不是素材或烘焙的问题（0.17.0 查过：画布 `toDataURL` 完整、GL 只上传一次、帧缓冲快照也缺）。`src/main.ts` 在自动化浏览器（`navigator.webdriver`）里设
+  `render.maxTextures: 1` 绕开，真机照常合批。别的 Phaser 游戏碰到同样的现象，照这个改。
 
 ## 4. 常用命令（在本目录运行）
 

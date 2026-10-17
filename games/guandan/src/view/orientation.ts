@@ -2,6 +2,7 @@
  * 手机竖屏时盖一层"请横过来"的提示（纯 CSS 媒体查询控制显隐，转过来自动消失）。
  * 左上角留一个"大厅"按钮：竖屏时牌桌整个被盖住，不放这里就回不去平台首页。
  */
+import { titleArtSvg } from './art/index.ts';
 import { mountThemeCss } from './theme.ts';
 
 const QUERY = '(orientation: portrait) and (max-width: 820px)';
@@ -27,9 +28,9 @@ export function mountRotateHint(onLobby: () => void): void {
   const style = document.createElement('style');
   style.textContent = `
 #rotate-hint { position: fixed; inset: 0; z-index: 9000; display: none; align-items: center; justify-content: center;
-  flex-direction: column; gap: var(--gd-s4); background: radial-gradient(circle at 50% 40%, #2a6a50 0, var(--gd-felt-dark) 75%); color: var(--gd-gold-light);
+  flex-direction: column; gap: var(--gd-s4); background: linear-gradient(rgba(20,10,4,.55), rgba(20,10,4,.78)), var(--rh-art) 30% center / cover no-repeat, #2a1a10; color: var(--gd-gold-light);
   font: bold 22px/1.5 var(--gd-font); text-align: center; }
-#rotate-hint span { font-size: 15px; font-weight: normal; color: #d8e8dc; }
+#rotate-hint span { font-size: 15px; font-weight: normal; color: #f0dcc0; }
 #rotate-hint .rh-phone { transform-origin: 80px 64px; animation: rh-turn 2.4s ease-in-out infinite; }
 @keyframes rh-turn { 0%, 18% { transform: rotate(0deg); } 52%, 80% { transform: rotate(90deg); } 100% { transform: rotate(0deg); } }
 #rh-lobby { position: absolute; top: max(var(--gd-s3), env(safe-area-inset-top, 0px)); left: max(var(--gd-s3), env(safe-area-inset-left, 0px));
@@ -38,6 +39,9 @@ export function mountRotateHint(onLobby: () => void): void {
   document.head.appendChild(style);
   const el = document.createElement('div');
   el.id = 'rotate-hint';
+  // 和主页同一张背景（art-v3，人物和灯笼是单独的精灵、不在图里）。竖屏按高铺满后横向取 30%，正好把月洞窗留在中间；
+  // CSS 背景图只在竖屏真显示出来时才栅格化
+  el.style.setProperty('--rh-art', `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(titleArtSvg(1280, 720))}")`);
   el.innerHTML = `<button id="rh-lobby" class="gd-btn" type="button">${HOUSE}大厅</button>${ICON}<div>把手机横过来</div><span>牌桌是横的，横屏才排得下 27 张牌</span>`;
   el.querySelector('#rh-lobby')!.addEventListener('click', onLobby);
   document.body.appendChild(el);

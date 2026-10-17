@@ -29,7 +29,7 @@ export class SeatView {
   private lastCount = -1;
   private plate: Phaser.GameObjects.Graphics;
   private nameText: Phaser.GameObjects.Text;
-  /** 联机：电脑头像右下角的小芯片角标（形状区分，不只靠颜色） */
+  /** 联机：电脑头像左下角的小芯片角标（形状区分，不只靠颜色；右下角是剩余张数） */
   private badge: Phaser.GameObjects.Container;
   /** 联机：掉线/代打的小字、这一手的倒计时 */
   private netTag: Phaser.GameObjects.Text;
@@ -60,7 +60,7 @@ export class SeatView {
       this.plate.setVisible(false);
       this.nameText.setVisible(false);
     }
-    this.badge = scene.add.container(r * 0.72, r * 0.72);
+    this.badge = scene.add.container(-r * 0.72, r * 0.72);
     const bg = scene.add.graphics();
     bg.fillStyle(0x2b1d14, 1).fillRoundedRect(-15, -13, 30, 26, 7);
     bg.lineStyle(2, 0x9fe0ff, 1).strokeRoundedRect(-15, -13, 30, 26, 7);
@@ -74,11 +74,9 @@ export class SeatView {
     this.refreshIdentity();
 
     if (!this.self) {
-      // 剩余张数：小牌背 + 数字；≤10 张变红并跳动
-      const cx = seat === 1 ? -r - 26 : seat === 3 ? r + 26 : r + 30;
-      const cy = seat === 2 ? 4 : 6;
-      const box = scene.add.container(cx, cy);
-      const back = scene.add.image(0, 0, 'back:0').setDisplaySize(40, 56).setAngle(seat === 1 ? -8 : 8);
+      // 剩余张数：三家一个样，头像右下角压一张小牌背 + 数字（art-v3）；≤10 张变红并跳动
+      const box = scene.add.container(r * 0.8, r * 0.62);
+      const back = scene.add.image(-4, -6, 'back:0').setDisplaySize(30, 42).setAngle(10);
       this.countBg = scene.add.graphics();
       this.countText = text(scene, 0, 2, '27', { size: TYPE.body, color: 0xffffff, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 4 });
       box.add([back, this.countBg, this.countText]);
