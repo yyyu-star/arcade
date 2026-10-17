@@ -148,6 +148,10 @@ export class WalletService extends WorkerEntrypoint<FakeEnv> {
 export default {
   fetch(request: Request): Response {
     const url = new URL(request.url);
+    // 社交（0.13.0 起页面挂 kit 的 social）：报位置收下、没有邀请、没有好友，不然每个冒烟页面都有 404
+    if (url.pathname === '/api/presence') return new Response(null, { status: 204 });
+    if (url.pathname === '/api/invites' && request.method === 'GET') return Response.json({ invites: [] });
+    if (url.pathname === '/api/friends') return Response.json({ friends: [] });
     if (url.pathname !== '/api/me') return new Response('not found', { status: 404 });
     const id = /(?:^|;\s*)__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];
     if (id === 'down') return new Response('down', { status: 503 });

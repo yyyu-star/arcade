@@ -6,6 +6,7 @@
 import type { PreparedShare, ShareCard } from 'arcade-kit/share';
 import { TITLE_INFO, type MatchLog, type Title } from '../stake/titles.ts';
 import { TIER_NAME, signed } from './stake-text.ts';
+import { AWARD_NAME, type Award } from '../net/awards.ts';
 
 /** 掼蛋的主题色（和封面、图标的红一样） */
 export const SHARE_ACCENT = '#b3202a';
@@ -30,11 +31,27 @@ function lineOf(k: ShareKind, log: MatchLog, title: Title | null): string {
   return k.points > 0 ? '赢了一场实盘' : k.points < 0 ? '这场手气差了点' : '不输不赢，打了个平手';
 }
 
+/** 好友房一场的颁奖（0.14.0）：奖（画面座位）和按座位取名字 */
+export interface ShareAwards {
+  awards: readonly Award[];
+  name: (seat: number) => string;
+}
+
+/** 有颁奖时那句话：我拿了奖写我的奖和那句话，没拿写这一场都颁给了谁 */
+function awardLine(a: ShareAwards): { line: string; badge?: string } {
+  const mine = a.awards.find((x) => x.seat === 0);
+  if (mine) return { line: `${AWARD_NAME[mine.id]}：${mine.line}`, badge: AWARD_NAME[mine.id] };
+  return { line: a.awards.map((x) => `${AWARD_NAME[x.id]} ${a.name(x.seat)}`).join(' · ') };
+}
+
 /**
- * 卡上的数据。log 是这一局攒的数（座位按画面：0 是我）；name 是我的昵称（好友房、有平台时），单机不写名字
+ * 卡上的数据。log 是这一局攒的数（座位按画面：0 是我）；name 是我的昵称（好友房、有平台时），单机不写名字。
+ * 好友房一场打完有颁奖时（awards），那句话和我的称号换成奖
  */
-export function shareCardOf(k: ShareKind, log: MatchLog, titles: readonly Title[], name: string | null): ShareCard {
+export function shareCardOf(k: ShareKind, log: MatchLog, titles: readonly Title[], name: string | null, awards?: ShareAwards): ShareCard {
   const title = myTitle(titles);
+  const aw = awards?.awards.length ? awardLine(awards) : null;
+  const badge = aw ? aw.badge : title ? TITLE_INFO[title.id].name : undefined;
   const where = k.room ? `好友房 ${k.room}` : '单机';
   const stats = [
     { label: '打了', value: `${k.kind === 'stake' ? k.deals : log.deals} 副` },
@@ -50,9 +67,9 @@ export function shareCardOf(k: ShareKind, log: MatchLog, titles: readonly Title[
     title: k.kind === 'game' ? `${where} · 打到 A` : `${where} · 实盘${TIER_NAME[k.tier]}`,
     big,
     stats,
-    line: lineOf(k, log, title),
+    line: aw ? aw.line : lineOf(k, log, title),
     accent: SHARE_ACCENT,
-    ...(name ? { player: { name, ...(title ? { badge: TITLE_INFO[title.id].name } : {}) } } : {}),
+    ...(name ? { player: { name, ...(badge ? { badge } : {}) } } : {}),
   };
 }
 

@@ -68,9 +68,11 @@ export interface MatchLog {
   bombs: number[];
   /** 每队赢了几副 */
   wins: number[];
+  /** 每个座位按名次攒的分：头游 3、二游 2、三游 1、末游 0（0.14.0，结束颁奖的 MVP 用）；之前开的好友房没有 */
+  places?: number[];
 }
 
-export const emptyMatchLog = (): MatchLog => ({ deals: 0, firsts: [0, 0, 0, 0], lasts: [0, 0, 0, 0], bombs: [0, 0, 0, 0], wins: [0, 0] });
+export const emptyMatchLog = (): MatchLog => ({ deals: 0, firsts: [0, 0, 0, 0], lasts: [0, 0, 0, 0], bombs: [0, 0, 0, 0], wins: [0, 0], places: [0, 0, 0, 0] });
 
 export function logDeal(m: MatchLog, r: DealResult, history: readonly PlayRecord[]): MatchLog {
   const bombs = bombsBy(history);
@@ -80,6 +82,7 @@ export function logDeal(m: MatchLog, r: DealResult, history: readonly PlayRecord
     lasts: m.lasts.map((v, i) => v + (r.order[3] === i ? 1 : 0)),
     bombs: m.bombs.map((v, i) => v + bombs[i]!),
     wins: m.wins.map((v, t) => v + (r.winnerTeam === t ? 1 : 0)),
+    places: (m.places ?? [0, 0, 0, 0]).map((v, i) => v + 3 - r.order.indexOf(i)),
   };
 }
 
