@@ -1,7 +1,7 @@
 /**
  * 法器、被动、进化（DESIGN.md 3.1–3.3）。改数值只改这里，改完跑模拟器（DESIGN.md 第 8 节）。
  * 单位：时间按拍（每秒 30 拍），距离按世界单位（主角宽约 40），速度按每拍多少单位。
- * 12 件法器（3a 起齐了）；进化先有斩妖剑、天师符雨两个，其余的 3b 加。
+ * 12 件法器、12 个被动、12 个进化、3 个合成（3b 起齐了）。
  */
 
 // 顺序决定法器编号（事件、宝箱里用），只往后加
@@ -10,7 +10,7 @@ export type WeaponId = 'sword' | 'talisman' | 'coins' | 'flysword' | 'thunder' |
 /** 五行和类型标签（DESIGN.md 3.1、3.4：同标签凑件数有套装加成） */
 export type Element = '金' | '木' | '水' | '火' | '土';
 export type WeaponType = '剑' | '符' | '镇' | '灵';
-export type PassiveId = 'zhusha' | 'xianglu' | 'caoxie' | 'xiantao' | 'luopan' | 'daopao' | 'nianzhu' | 'lingpai';
+export type PassiveId = 'zhusha' | 'xianglu' | 'caoxie' | 'xiantao' | 'luopan' | 'daopao' | 'nianzhu' | 'lingpai' | 'huangli' | 'lingzhi' | 'modou' | 'yinhun';
 
 /** 一件法器在某一级的数值 */
 export interface WeaponStats {
@@ -126,6 +126,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '转得更久、歇得更短', delta: { duration: 30, cd: -20 } },
       { text: '伤害 +6、多一枚', delta: { dmg: 6, amount: 1 } },
     ],
+    evolve: {
+      with: 'lingpai',
+      name: '金钱阵',
+      icon: 'i_coins_evo',
+      desc: '两圈铜钱常驻绕身，不再歇',
+      stats: { dmg: 30, cd: 30, area: 96, amount: 8, speed: 8, duration: 0, knock: 10, rehit: 10 },
+    },
   },
   flysword: {
     id: 'flysword',
@@ -144,6 +151,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '伤害 +8', delta: { dmg: 8 } },
       { text: '多一把飞剑', delta: { amount: 1 } },
     ],
+    evolve: {
+      with: 'caoxie',
+      name: '万剑归宗',
+      icon: 'i_fly_evo',
+      desc: '一出手就是一扇面，飞回来再打一遍',
+      stats: { dmg: 40, cd: 40, area: 0, amount: 8, speed: 28, duration: 460, knock: 8, rehit: 10 },
+    },
   },
   thunder: {
     id: 'thunder',
@@ -162,6 +176,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '伤害 +14', delta: { dmg: 14 } },
       { text: '再多劈两道', delta: { amount: 2 } },
     ],
+    evolve: {
+      with: 'nianzhu',
+      name: '五雷正法',
+      icon: 'i_thunder_evo',
+      desc: '每道雷连着劈五只',
+      stats: { dmg: 70, cd: 54, area: 70, amount: 2, speed: 0, duration: 460, knock: 6, rehit: 1 },
+    },
   },
   bell: {
     id: 'bell',
@@ -180,6 +201,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '光环变大', delta: { area: 14 } },
       { text: '伤害 +3', delta: { dmg: 3 } },
     ],
+    evolve: {
+      with: 'xiantao',
+      name: '往生铃',
+      icon: 'i_bell_evo',
+      desc: '光环更大，光环里的怪死了给你回血',
+      stats: { dmg: 18, cd: 12, area: 150, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+    },
   },
   mirror: {
     id: 'mirror',
@@ -199,6 +227,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '伤害 +8', delta: { dmg: 8 } },
       { text: '放得更勤', delta: { cd: -14 } },
     ],
+    evolve: {
+      with: 'daopao',
+      name: '太极镜',
+      icon: 'i_mirror_evo',
+      desc: '一黑一白两道光波，扫掉怪的火球',
+      stats: { dmg: 40, cd: 60, area: 230, amount: 2, speed: 10, duration: 0, knock: 40, rehit: 6 },
+    },
   },
   gourd: {
     id: 'gourd',
@@ -218,6 +253,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '喷得更勤', delta: { cd: -14 } },
       { text: '扇面更宽、伤害 +3', delta: { amount: 1, dmg: 3 } },
     ],
+    evolve: {
+      with: 'luopan',
+      name: '三昧真火',
+      icon: 'i_gourd_evo',
+      desc: '喷过的地方留一摊火，烧一阵',
+      stats: { dmg: 20, cd: 60, area: 170, amount: 3, speed: 0, duration: 54, knock: 2, rehit: 6 },
+    },
   },
   rope: {
     id: 'rope',
@@ -238,6 +280,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '捆得更久', delta: { duration: 20 } },
       { text: '多捆三只', delta: { amount: 3 } },
     ],
+    evolve: {
+      with: 'modou',
+      name: '捆仙绳',
+      icon: 'i_rope_evo',
+      desc: '一次捆一大片，捆住的挨打加倍',
+      stats: { dmg: 10, cd: 90, area: 200, amount: 18, speed: 0, duration: 130, knock: 0, rehit: 1 },
+    },
   },
   petals: {
     id: 'petals',
@@ -257,6 +306,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '伤害 +5', delta: { dmg: 5 } },
       { text: '多落三片', delta: { amount: 3 } },
     ],
+    evolve: {
+      with: 'lingzhi',
+      name: '十里桃林',
+      icon: 'i_petal_evo',
+      desc: '花瓣铺满一圈，回血更多',
+      stats: { dmg: 26, cd: 40, area: 200, amount: 18, speed: 0, duration: 14, knock: 3, rehit: 1 },
+    },
   },
   shield: {
     id: 'shield',
@@ -276,6 +332,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '震得更疼', delta: { dmg: 16 } },
       { text: '多挡一下', delta: { amount: 1 } },
     ],
+    evolve: {
+      with: 'huangli',
+      name: '不坏金身',
+      icon: 'i_shield_evo',
+      desc: '护盾一回就回满，碎的时候震开全屏',
+      stats: { dmg: 70, cd: 90, area: 600, amount: 3, speed: 0, duration: 0, knock: 40, rehit: 1 },
+    },
   },
   crane: {
     id: 'crane',
@@ -295,6 +358,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '多一只纸鹤', delta: { amount: 1 } },
       { text: '伤害 +8', delta: { dmg: 8 } },
     ],
+    evolve: {
+      with: 'yinhun',
+      name: '千鹤引魂',
+      icon: 'i_crane_evo',
+      desc: '一群纸鹤，啄死的怪变成小纸鹤',
+      stats: { dmg: 36, cd: 40, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
+    },
   },
 };
 
@@ -330,6 +400,26 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   daopao: { id: 'daopao', name: '道袍', icon: 'p_daopao', text: '每次挨打少掉 1 点血', max: 5 },
   nianzhu: { id: 'nianzhu', name: '念珠', icon: 'p_nianzhu', text: '法器范围 +10%', max: 5 },
   lingpai: { id: 'lingpai', name: '令牌', icon: 'p_lingpai', text: '法器数量 +1', max: 2 },
+  huangli: { id: 'huangli', name: '黄历', icon: 'p_huangli', text: '幸运 +10%：暴击、宝箱多给、好卡', max: 5 },
+  lingzhi: { id: 'lingzhi', name: '灵芝', icon: 'p_lingzhi', text: '魂珠经验 +8%', max: 5 },
+  modou: { id: 'modou', name: '墨斗', icon: 'p_modou', text: '持续 +10%：火、绳、铜钱、护盾', max: 5 },
+  yinhun: { id: 'yinhun', name: '引魂灯', icon: 'p_yinhun', text: '怪多 10%、快 5%，经验和铜钱 +12%', max: 5 },
 };
+
+/** 合成（DESIGN.md 3.3）：两件都进化了，宝箱里合成一件，空出一个法器格；a 留在原来的格子里，b 也照常出手 */
+export interface MergeDef {
+  id: 'zhuxie' | 'leihuo' | 'yinyang';
+  name: string;
+  icon: string;
+  desc: string;
+  a: WeaponId;
+  b: WeaponId;
+}
+
+export const MERGES: readonly MergeDef[] = [
+  { id: 'zhuxie', name: '诛邪剑阵', icon: 'm_sword', desc: '每次挥剑，待命的飞剑一起射出去', a: 'sword', b: 'flysword' },
+  { id: 'leihuo', name: '雷火符箓', icon: 'm_talisman', desc: '每张符爆开时落一道雷', a: 'talisman', b: 'thunder' },
+  { id: 'yinyang', name: '阴阳镇魂', icon: 'm_mirror', desc: '光环里的怪减速一半，光波从光环边上再放一圈', a: 'mirror', b: 'bell' },
+];
 
 export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];
