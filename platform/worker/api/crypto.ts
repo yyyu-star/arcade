@@ -156,6 +156,15 @@ export async function verifyPassword(
   return { ok, rehash: ok && (iter !== iterations || pepper.kid !== cur.kid) };
 }
 
+/** 用户名不存在时白算一次（0.19.2，第三轮审计）：步骤和 verifyPassword 一样（取 pepper、PBKDF2、HMAC），
+ *  不然存在的用户名多算一次 PBKDF2，看响应快慢就知道用户名存不存在。盐是固定的，结果扔掉。 */
+const BURN_SALT = new Uint8Array(16);
+export async function burnPasswordHash(env: Env, password: string, iterations: number): Promise<void> {
+  const pepper = await currentPepper(env, 'PEPPER_PW');
+  safeEqual(b64url(await hmac(pepper.key, await pbkdf2(password, BURN_SALT, iterations))), '');
+  await currentPepper(env, 'PEPPER_PW');
+}
+
 // ---------- 恢复码 ----------
 
 /** 存成 <kid>$<HMAC(用户 id:归一化的码)>。code 须已归一化。 */

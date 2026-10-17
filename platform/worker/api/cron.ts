@@ -33,84 +33,93 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
       console.error('wallet stats failed', e instanceof Error ? e.name : 'unknown');
     }
 
+    /**
+     * 每一段单独兜住（0.19.2，第三轮审计）：原来中间一条 DELETE 抛错（D1 一时出错、某张表的语句写错），后面的全跳过，
+     * 当天什么都没清。现在出错只记段名和错误类型，接着清下一段；删不完的第二天再删。
+     */
+    const step = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+      if (budget() <= 0) return;
+      try {
+        await fn();
+      } catch (e) {
+        console.error(`cleanup ${name} failed`, e instanceof Error ? e.name : 'unknown');
+      }
+    };
+
     // 1 年没登录的账号：每个人的行数不定，按人删，删一个算一个。管理员不清：清掉最后一个就没人能建号了
-    const inactive = await db.all<{ id: string; username: string }>(
-      db.stmt("SELECT id, username FROM users WHERE last_seen_at < ?1 AND role = 'user' LIMIT ?2", now - limits.inactiveUserMs, limits.inactiveUsersPerRun),
-    );
-    for (const u of inactive) {
-      if (budget() <= 0) break;
-      await db.batch(deleteUserStatements(db, u.id, u.username));
-    }
+    await step('inactive', async () => {
+      const inactive = await db.all<{ id: string; username: string }>(
+        db.stmt("SELECT id, username FROM users WHERE last_seen_at < ?1 AND role = 'user' LIMIT ?2", now - limits.inactiveUserMs, limits.inactiveUsersPerRun),
+      );
+      for (const u of inactive) {
+        if (budget() <= 0) break;
+        await db.batch(deleteUserStatements(db, u.id, u.username));
+      }
+    });
     // 会话删一行实测写 1 行；限流计数的窗口最长 24 小时、锁最长 1 小时，留 2 天足够
-    if (budget() > 0) {
-      await db.run(
+    await step('sessions', () =>
+      db.run(
         db.stmt(
           'DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE expires_at < ?1 LIMIT ?2)',
           now, budget(),
         ),
-      );
-    }
-    if (budget() > 0) {
-      await db.run(
+      ),
+    );
+    await step('rate_counters', () =>
+      db.run(
         db.stmt(
           `DELETE FROM rate_counters WHERE key IN
              (SELECT key FROM rate_counters WHERE window_start < ?1 AND blocked_until < ?2 LIMIT ?3)`,
           now - 2 * DAY, now, budget(),
         ),
-      );
-    }
+      ),
+    );
     // 旧的每日榜：board_id 是 daily-YYYY-MM-DD 或 daily-YYYY-MM-DD-v<n>（交分时已经卡住形式，boards.ts），
     // 按字典序 [daily-, daily-<截止日>) 正好是截止日以前的每日榜；每个游戏沿排名索引按范围取，只读要删的行
     for (const gameId of GAME_IDS) {
-      if (budget() <= 0) break;
-      await db.run(
-        db.stmt(
-          `DELETE FROM boards WHERE (user_id, game_id, board_id) IN
-             (SELECT user_id, game_id, board_id FROM boards WHERE game_id = ?1 AND board_id >= 'daily-' AND board_id < ?2 LIMIT ?3)`,
-          gameId, `daily-${beijingDate(now - limits.dailyBoardKeepDays * DAY)}`, budget(),
+      await step(`boards:${gameId}`, () =>
+        db.run(
+          db.stmt(
+            `DELETE FROM boards WHERE (user_id, game_id, board_id) IN
+               (SELECT user_id, game_id, board_id FROM boards WHERE game_id = ?1 AND board_id >= 'daily-' AND board_id < ?2 LIMIT ?3)`,
+            gameId, `daily-${beijingDate(now - limits.dailyBoardKeepDays * DAY)}`, budget(),
+          ),
         ),
       );
     }
     // 好友动态留 feedKeepMs：id 带时间前缀，动态和赞都按主键范围删
-    if (budget() > 0) {
-      const cutoff = feedCleanupCutoff(now, limits);
-      await db.run(db.stmt('DELETE FROM feed WHERE id IN (SELECT id FROM feed WHERE id < ?1 LIMIT ?2)', cutoff, budget()));
-    }
-    if (budget() > 0) {
-      const cutoff = feedCleanupCutoff(now, limits);
-      await db.run(
+    const feedCutoff = feedCleanupCutoff(now, limits);
+    await step('feed', () => db.run(db.stmt('DELETE FROM feed WHERE id IN (SELECT id FROM feed WHERE id < ?1 LIMIT ?2)', feedCutoff, budget())));
+    await step('feed_reactions', () =>
+      db.run(
         db.stmt(
           'DELETE FROM feed_reactions WHERE (item_id, user_id) IN (SELECT item_id, user_id FROM feed_reactions WHERE item_id < ?1 LIMIT ?2)',
-          cutoff, budget(),
+          feedCutoff, budget(),
         ),
-      );
-    }
+      ),
+    );
     // 异步挑战：按创建时间过期（challengeTtlMs）；id 带时间前缀，挑战和结果都按主键范围删
-    if (budget() > 0) {
-      const cutoff = timeIdPrefix(now - limits.challengeTtlMs);
-      await db.run(db.stmt('DELETE FROM challenges WHERE id IN (SELECT id FROM challenges WHERE id < ?1 LIMIT ?2)', cutoff, budget()));
-    }
-    if (budget() > 0) {
-      const cutoff = timeIdPrefix(now - limits.challengeTtlMs);
-      await db.run(
+    const chalCutoff = timeIdPrefix(now - limits.challengeTtlMs);
+    await step('challenges', () =>
+      db.run(db.stmt('DELETE FROM challenges WHERE id IN (SELECT id FROM challenges WHERE id < ?1 LIMIT ?2)', chalCutoff, budget())),
+    );
+    await step('challenge_results', () =>
+      db.run(
         db.stmt(
           'DELETE FROM challenge_results WHERE (challenge_id, user_id) IN (SELECT challenge_id, user_id FROM challenge_results WHERE challenge_id < ?1 LIMIT ?2)',
-          cutoff, budget(),
+          chalCutoff, budget(),
         ),
-      );
-    }
+      ),
+    );
     // 邀请 10 分钟就过期；留 2 天是为了按"最近 24 小时"数每人发了几条（invites.ts），表小，按发出时间扫
-    if (budget() > 0) {
-      await db.run(
-        db.stmt('DELETE FROM invites WHERE id IN (SELECT id FROM invites WHERE created_at < ?1 LIMIT ?2)', now - 2 * DAY, budget()),
-      );
-    }
-    if (budget() > 0) {
-      const cutoff = hourKey(now - 7 * DAY);
-      await db.run(
-        db.stmt('DELETE FROM meter_hourly WHERE hour IN (SELECT hour FROM meter_hourly WHERE hour < ?1 LIMIT ?2)', cutoff, budget()),
-      );
-    }
+    await step('invites', () =>
+      db.run(db.stmt('DELETE FROM invites WHERE id IN (SELECT id FROM invites WHERE created_at < ?1 LIMIT ?2)', now - 2 * DAY, budget())),
+    );
+    await step('meter_hourly', () =>
+      db.run(
+        db.stmt('DELETE FROM meter_hourly WHERE hour IN (SELECT hour FROM meter_hourly WHERE hour < ?1 LIMIT ?2)', hourKey(now - 7 * DAY), budget()),
+      ),
+    );
     return { rowsWritten: stats.rowsWritten, rowsRead: stats.rowsRead };
   } finally {
     await meter.flush(env.DB, limits, now);
