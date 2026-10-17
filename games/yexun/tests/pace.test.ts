@@ -31,8 +31,8 @@ function pace(seed: number, build: (typeof BUILD_IDS)[number]): Pace {
   while (w.phase !== 'over') {
     const a = bot.act(w);
     step(w, a.dir, a.choice);
-    if (w.phase === 'choose') continue;
-    count[w.tick] = w.eCount;
+    // 升级那一拍就进选卡，事件要先数完再跳过
+    if (w.phase !== 'choose') count[w.tick] = w.eCount;
     for (let i = 0; i < w.ev.n; i++) {
       if (w.ev.type[i] === Ev.LevelUp) {
         if (first < 0) first = w.tick / S;
