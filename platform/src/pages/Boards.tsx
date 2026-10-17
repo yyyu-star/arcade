@@ -10,6 +10,7 @@ import { type DailyTab, dailyTabs, GAMES, WALLET_GAMES } from '../games.ts';
 import { Link } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { Empty, Panel } from '../ui.tsx';
+import { friendLink, rankCard, ShareButton } from '../share.tsx';
 import './boards.css';
 
 type Scope = 'all' | 'friends';
@@ -31,11 +32,27 @@ interface Row {
   tone?: 'up' | 'down';
 }
 
+/** 晒名次（0.21.0）：全站前 10 名，或者只看好友时第一名，自己那行旁边给一个按钮 */
+const SHARE_TOP = 10;
+
+function MyShare({ r, share }: { r: Row; share?: { board: string; friends: boolean } }) {
+  const { user } = useSession();
+  if (!share || !user || r.rank === null || r.rank > (share.friends ? 1 : SHARE_TOP)) return null;
+  return (
+    <ShareButton
+      card={rankCard(user.displayName, share.board, r.rank, r.text, share.friends)}
+      url={friendLink(user.friendCode)}
+      label="晒名次"
+      testId="share-rank"
+    />
+  );
+}
+
 /**
  * 排行：前三名站上领奖台（第二、第一、第三从左到右，第一最高），后面的一行一个；自己那行高亮。
  * 并列时名次一样，领奖台按名单顺序取前三个名次在 3 以内的人。
  */
-function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: string }) {
+function RankList({ rows, me, empty, share }: { rows: Row[]; me: Row | null; empty: string; share?: { board: string; friends: boolean } }) {
   if (!rows.length) return <Empty testId="board-empty">{empty}</Empty>;
   const top = rows.slice(0, 3).filter((r) => r.rank !== null && r.rank <= 3);
   const rest = rows.slice(top.length);
@@ -56,6 +73,7 @@ function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: str
                 {r.isMe && <span className="rank__me">我</span>}
               </Link>
               <span className={`rank__value${r.tone ? ` ${r.tone}` : ''}`}>{r.text}</span>
+              {r.isMe && <MyShare r={r} share={share} />}
               <span className="podium__step" aria-hidden="true" />
             </li>
           ))}
@@ -71,6 +89,7 @@ function RankList({ rows, me, empty }: { rows: Row[]; me: Row | null; empty: str
                 {r.isMe && <span className="rank__me">我</span>}
               </Link>
               <span className={`rank__value${r.tone ? ` ${r.tone}` : ''}`}>{r.text}</span>
+              {r.isMe && <MyShare r={r} share={share} />}
             </li>
           ))}
         </ol>
@@ -114,7 +133,7 @@ function DailyBoard({ tab, board, scope }: { tab: DailyTab; board: string | null
   const me = b.me ? { rank: b.me.rank, userId: '', displayName: '', isMe: true, text: format.score(b.me.score) } : null;
   return (
     <>
-      <RankList rows={rows} me={me} empty={empty} />
+      <RankList rows={rows} me={me} empty={empty} share={{ board: `${title}每日挑战${week ? '（本周）' : ''}`, friends: week }} />
       {week && <p className="note">只看好友时比的是这周每人最好的一天，北京时间每周一 0 点清零。</p>}
       {format.note && <p className="note">{title}的每日挑战：{format.note}</p>}
     </>
@@ -202,7 +221,15 @@ export function BoardsPage() {
             ))}
           </div>
         )}
-        <RankList rows={rows} me={me} empty={tab === 'week' ? '这周还没人上榜，去玩一局带筹码的！' : '还没人拿到称号。'} />
+        <RankList
+          rows={rows}
+          me={me}
+          empty={tab === 'week' ? '这周还没人上榜，去玩一局带筹码的！' : '还没人拿到称号。'}
+          share={{
+            board: tab === 'week' ? `本周净赢·${WEEK_BOARDS.find((w) => w.id === weekBoard)?.name ?? '总榜'}` : '称号收集',
+            friends: scope === 'friends',
+          }}
+        />
         <p className="note">
           {tab === 'week'
             ? '比的是这周带筹码的局（单机实盘、好友房）赢了多少，北京时间每周一 0 点清零。不比谁的筹码多。'

@@ -11,6 +11,7 @@ import { Link, useLocation } from '../router.tsx';
 import { useSession } from '../session.tsx';
 import { loadTitles, type TitleCatalog } from '../titles.ts';
 import { Empty, FormError, Panel, useSubmit, useWritable } from '../ui.tsx';
+import { friendLink, ShareButton, statsCard } from '../share.tsx';
 
 /** 按大厅的顺序排，大厅里没有的放最后 */
 const order = (id: string) => {
@@ -100,6 +101,27 @@ function TitleShelf({ game, earned }: { game: string; earned: CareerView['titles
   );
 }
 
+/** 晒战绩卡上挂在昵称旁边的称号：最近拿到的那个（名字从游戏的 titles.json 读，读不到就不挂） */
+function useLatestTitle(data: StatsResponse | null): string | null {
+  const [name, setName] = useState<string | null>(null);
+  let latest: { game: string; id: string; at: number } | null = null;
+  for (const [game, c] of Object.entries(data?.relation === 'self' ? data.games : {})) {
+    for (const t of c.titles) if (!latest || t.at > latest.at) latest = { game, id: t.id, at: t.at };
+  }
+  const key = latest ? `${latest.game}:${latest.id}` : '';
+  useEffect(() => {
+    setName(null);
+    if (!key) return;
+    const [game, id] = key.split(':') as [string, string];
+    let alive = true;
+    void loadTitles(game).then((c) => alive && setName(c[id]?.name ?? null));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return name;
+}
+
 /** 别人的战绩页上：加好友、接受请求，或者说明现在是什么关系（0.10.5） */
 function FriendAction({ userId, relation, onChange }: { userId: string; relation: Relation; onChange: (r: Relation) => void }) {
   const writable = useWritable();
@@ -144,6 +166,8 @@ export function StatsPage() {
     };
   }, [user, who]);
 
+  const badge = useLatestTitle(data);
+
   if (loading) return <Panel icon="trophy" title="战绩"><p className="note">正在读取…</p></Panel>;
   if (!user) {
     return (
@@ -160,6 +184,7 @@ export function StatsPage() {
 
   const mine = data.relation === 'self';
   const games = Object.entries(data.games).sort(([a], [b]) => order(a) - order(b));
+  const shareable = mine && games.length > 0 && user.friendCode;
   const week = games.reduce((t, [, c]) => t + c.wnet, 0);
   const titles = games.reduce((t, [, c]) => t + c.titles.length, 0);
   return (
@@ -187,6 +212,8 @@ export function StatsPage() {
         )}
         {mine && (
           <div className="row">
+            {/* 晒一晒（0.21.0）：本人看自己、有战绩时才有；链接是自己的好友链接 */}
+            {shareable && <ShareButton card={statsCard(data.user.displayName, data.games, badge ?? undefined)} url={friendLink(user.friendCode)} label="晒一晒" testId="share-stats" />}
             <Link className="btn" href="/wallet">
               我的筹码
             </Link>

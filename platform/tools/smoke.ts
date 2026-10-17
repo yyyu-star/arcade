@@ -1487,6 +1487,17 @@ async function friendsUx(browser: Browser): Promise<void> {
 }
 
 /** 0.10.4：排行榜页。本周净赢（总榜、各游戏）、开盘每日挑战（0.10.18 起分数写法读游戏的 daily.json）、称号收集，全部 / 只看好友；我不在前 50 时单独一行。 */
+/** 0.21.0：点一下分享按钮。桌面无头浏览器不支持带文件的系统分享，应该出 kit 的预览层；关掉后日志里有"分享 预览" */
+async function clickShare(page: Page, testId: string, shotName: string): Promise<void> {
+  await page.getByTestId(testId).click();
+  await page.locator('#arcade-share-preview').waitFor();
+  await shot(page, shotName);
+  const log = await page.evaluate(() => (window as Window & { __arcadeShareLog?: string[] }).__arcadeShareLog ?? []);
+  check(log.some((l) => l.includes('分享 预览')), `分享日志里该有"分享 预览"：${log.join(' | ')}`);
+  await page.locator('#arcade-share-preview [data-key="share:close"]').click();
+  await page.locator('#arcade-share-preview').waitFor({ state: 'detached' });
+}
+
 async function boardsPage(browser: Browser): Promise<void> {
   const u = (i: number) => String.fromCharCode(65 + i).repeat(22);
   const row = (i: number, name: string, value: number, rank = i + 1, isMe = false) => ({ rank, userId: u(i), displayName: name, avatar: null, value, isMe });
@@ -1523,6 +1534,7 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.getByTestId('ranks').getByText('+48,000').waitFor();
     await page.getByTestId('ranks').locator('.rank--me').getByText('某人').waitFor();
     await shot(page, `boards-${screen}`);
+    await clickShare(page, 'share-rank', `boards-share-${screen}`);
     await page.getByRole('button', { name: '只看好友' }).click();
     // 好友榜里只有我：等全部榜的第二行消失
     await page.locator('.rank').nth(1).waitFor({ state: 'detached' });
@@ -1579,6 +1591,7 @@ async function statsPage(browser: Browser): Promise<void> {
     const order = await page.locator('.career').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
     check(order.join() === 'career-kaipan,career-texas', `战绩应该按大厅顺序排：${order}`);
     await shot(page, `stats-${screen}`);
+    await clickShare(page, 'share-stats', `stats-share-${screen}`);
     await ctx.close();
   }
   console.log('别人的战绩：/u/<id>，没战绩时说"还没有战绩"');
