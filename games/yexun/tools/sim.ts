@@ -20,6 +20,7 @@ import { Bot, type Build, type Skill } from './bots.ts';
 import { RaidBot } from '../src/explore/bot.ts';
 import { settleRaid } from '../src/explore/settle.ts';
 import type { RaidTemplateId } from '../src/content/explore.ts';
+import { MERGES } from '../src/content/weapons.ts';
 
 export interface RunResult {
   won: boolean;
@@ -37,7 +38,10 @@ export interface RunResult {
   ticks: number;
   /** 夜探：撤出时背包的价值（没撤出是 0）；守夜是 0 */
   value: number;
+  /** 合成了几件双修（1.1 验收：普通机器人每 20 局至少 5 次） */
+  duals: number;
 }
+const dualsOf = (w: { merges: readonly string[] }): number => w.merges.filter((id) => MERGES.find((m) => m.id === id)?.dual).length;
 
 /** 夜探的玩家模型：小白门一开就走；普通搜到 10 分钟再走；贪心搜到 13 分钟（DESIGN.md 2.3、4.2） */
 export const RAID_LEAVE: Record<string, number> = { novice: 0, normal: 600 * 30, greedy: 780 * 30 };
@@ -59,7 +63,7 @@ export function runRaid(seed: number, danger: Danger, who: string, build: Build,
     step(w, a.dir, a.choice);
   }
   const won = w.raid!.outcome === 'escaped';
-  return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0 };
+  return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0, duals: dualsOf(w) };
 }
 
 export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow', character: CharacterId = 'xiaodao'): RunResult {
@@ -85,7 +89,7 @@ export function runOne(seed: number, danger: Danger, skill: Skill, build: Build,
       } else if (t === Ev.Kill && ev.b[i] === 1) elites++;
     }
   }
-  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick, value: 0 };
+  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick, value: 0, duals: dualsOf(w) };
 }
 
 interface Cell {
@@ -240,10 +244,10 @@ if (!isMainThread) {
   });
   const total = cells.length * n;
   if (jsonOut) {
-    // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍]；夜探每局 [撤没撤出, 带出价值, 待了几拍]（mode 字段区分）
+    // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍, 双修几件]；夜探每局 [撤没撤出, 带出价值, 待了几拍, 双修几件]（mode 字段区分）
     writeFileSync(
       jsonOut,
-      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks]) }))),
+      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals]) }))),
     );
     console.log(`每局结局写到 ${jsonOut}`);
   }
