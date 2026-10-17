@@ -69,6 +69,10 @@ export class Hud {
   private arrow: HTMLDivElement;
   private arrowIcon: HTMLElement;
   private arrowText: HTMLSpanElement;
+  /** 宝妖的箭头（橙色，和撤离箭头同一套摆法） */
+  private gbArrow: HTMLDivElement;
+  private gbIcon: HTMLElement;
+  private gbText: HTMLSpanElement;
   private raidOn = false;
   private kills: HTMLSpanElement;
   private coins: HTMLSpanElement;
@@ -149,6 +153,11 @@ export class Hud {
     this.arrowIcon.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 20h24M20 8l12 12-12 12" fill="none" stroke="#17131c" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 20h24M20 8l12 12-12 12" fill="none" stroke="#ffd23a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     this.arrowText = el('span', 'yx-xa-text', this.arrow);
     this.arrow.style.display = 'none';
+    this.gbArrow = el('div', 'yx-xa gb', root);
+    this.gbIcon = el('i', 'yx-xa-ico', this.gbArrow);
+    this.gbIcon.innerHTML = this.arrowIcon.innerHTML.replace(/#ffd23a/g, '#ff8a2a');
+    this.gbText = el('span', 'yx-xa-text', this.gbArrow);
+    this.gbArrow.style.display = 'none';
     // 连斩横幅
     this.combo = el('div', 'yx-combo', root);
     el('span', 'yx-ink yx-ink-a', this.combo);
@@ -180,6 +189,7 @@ export class Hud {
         this.tlabel.textContent = '离天亮';
         this.timer.classList.remove('warn', 'red');
         this.setArrow(null);
+        this.setGoblinArrow(null);
       }
     }
     this.kills.textContent = fmt(s.kills);
@@ -221,16 +231,25 @@ export class Hud {
 
   /** 撤离箭头：null 收起；x、y 是屏幕边上的位置（CSS 像素），dx、dy 是朝向的单位向量 */
   setArrow(a: HudArrow | null): void {
+    this.place(this.arrow, this.arrowIcon, this.arrowText, a);
+  }
+
+  /** 宝妖的箭头：同 setArrow，橙色 */
+  setGoblinArrow(a: HudArrow | null): void {
+    this.place(this.gbArrow, this.gbIcon, this.gbText, a);
+  }
+
+  private place(box: HTMLDivElement, icon: HTMLElement, text: HTMLSpanElement, a: HudArrow | null): void {
     if (!a) {
-      this.arrow.style.display = 'none';
+      box.style.display = 'none';
       return;
     }
-    this.arrow.style.display = '';
-    this.arrow.style.transform = `translate(${Math.round(a.x)}px, ${Math.round(a.y)}px)`;
-    this.arrowIcon.style.transform = `translate(-50%, -50%) rotate(${Math.atan2(a.dy, a.dx)}rad)`;
-    if (this.arrowText.textContent !== a.label) this.arrowText.textContent = a.label;
+    box.style.display = '';
+    box.style.transform = `translate(${Math.round(a.x)}px, ${Math.round(a.y)}px)`;
+    icon.style.transform = `translate(-50%, -50%) rotate(${Math.atan2(a.dy, a.dx)}rad)`;
+    if (text.textContent !== a.label) text.textContent = a.label;
     // 文字放在箭头靠屏幕中心的那一侧，不被边缘切掉
-    this.arrowText.style.transform = `translate(${a.dx > 0.3 ? '-100%' : a.dx < -0.3 ? '0%' : '-50%'}, ${a.dy > 0.3 ? '-170%' : a.dy < -0.3 ? '70%' : '-50%'})`;
+    text.style.transform = `translate(${a.dx > 0.3 ? '-100%' : a.dx < -0.3 ? '0%' : '-50%'}, ${a.dy > 0.3 ? '-170%' : a.dy < -0.3 ? '70%' : '-50%'})`;
   }
 
   /** 连斩：数字一变就弹一下；2 秒没杀到就收起 */

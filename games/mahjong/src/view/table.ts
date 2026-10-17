@@ -97,6 +97,13 @@ const CLAIM_TEXT: Record<string, string> = { ron: '胡', kan: '杠', pon: '碰',
 const DRAG_OUT = 40;
 /** 手指动了这么多才算拖，不然还是点 */
 const DRAG_START = 8;
+/**
+ * 打出的牌飞进河里多久（0.16.2，所有者嫌手感慢）：自己的 120 毫秒（以前 300），别人的 200（以前 340），牌在 72% 处落桌。
+ * 落桌声按它们算（玩法的 ui.ts），只是画面，不改计时和规则
+ */
+export const FLY_MS = { me: 120, other: 200 } as const;
+/** 落到桌上的那一刻（飞行动画 72% 处）：玩法在这时补一声落桌 */
+export const landAt = (mine: boolean): number => Math.round((mine ? FLY_MS.me : FLY_MS.other) * 0.72);
 const calm = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export class TableUi<V extends TableView, A> {
@@ -143,7 +150,48 @@ export class TableUi<V extends TableView, A> {
     this.bar = el('div', 'bar', this.root);
     this.slot = el('div', 'fun-slot', this.root);
     this.fxLayer = el('div', 'fx', this.root);
+    document.addEventListener('keydown', this.onKey);
   }
+
+  /**
+   * 电脑上用键盘打（0.16.2）：← → 选牌，回车、空格、↑ 打出，Esc 放下；碰杠胡过：H 胡（自摸）、P 碰、G 杠、X 过。
+   * 只在牌桌还在页面上、没有弹窗、焦点不在输入框时管；牌桌换掉了就自己摘掉
+   */
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (!this.root.isConnected) {
+      document.removeEventListener('keydown', this.onKey);
+      return;
+    }
+    if (e.altKey || e.ctrlKey || e.metaKey || document.querySelector('.mask')) return;
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const v = this.frame?.v;
+    if (!v?.prompt) return;
+    const key = e.key.toLowerCase();
+    const hot: Record<string, string> = { h: '.bar .act.ron', p: '.bar .act.pon', g: '.bar .act.kan', x: '.bar .act.pass' };
+    const hit = hot[key] ? this.bar.querySelector<HTMLElement>(hot[key]) : null;
+    if (hit) {
+      e.preventDefault();
+      hit.click();
+      return;
+    }
+    if (!v.prompt.discard || this.ui.multi(v) > 0) return;
+    const can = [...this.myHand.querySelectorAll<HTMLElement>('.tile:not(.off)')];
+    if (!can.length) return;
+    const at = can.findIndex((x) => x.classList.contains('up'));
+    if (key === 'arrowleft' || key === 'arrowright') {
+      e.preventDefault();
+      const next = at < 0 ? (key === 'arrowleft' ? can.length - 1 : 0) : (at + (key === 'arrowleft' ? can.length - 1 : 1)) % can.length;
+      can[next]!.click();
+    } else if ((key === 'enter' || key === ' ' || key === 'arrowup') && at >= 0) {
+      e.preventDefault();
+      can[at]!.click();
+    } else if (key === 'escape' && this.selected.length) {
+      this.selected = [];
+      this.drawHand();
+      this.drawBar();
+    }
+  };
 
   get me(): number {
     return this.frame?.v.me?.seat ?? 0;
@@ -337,7 +385,7 @@ export class TableUi<V extends TableView, A> {
         { transform: 'translateY(-3px) scale(1.04)', offset: 0.86, easing: 'ease-in' },
         { transform: 'none' },
       ],
-      { duration: r === 0 ? 300 : 340 },
+      { duration: r === 0 ? FLY_MS.me : FLY_MS.other },
     );
     return true;
   }
@@ -383,6 +431,8 @@ export class TableUi<V extends TableView, A> {
     }
     const multi = this.ui.multi(v);
     const discard = v.prompt?.discard;
+    // 轮到我打牌：手牌底下亮一道金边（中控盘的方向灯离手牌远，低头看手牌时看不到）
+    box.classList.toggle('turn', !!discard && multi === 0);
     let tiles = me.hand.slice();
     let drawn: Tile | null = null;
     if (me.drawn !== null && tiles.includes(me.drawn)) {

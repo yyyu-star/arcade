@@ -9,7 +9,8 @@ export type EnemyKind =
   | 'paper' | 'wisp' | 'jiangshi' | 'lantern' | 'fox' | 'shishi' | 'general' | 'boss'
   | 'horse' | 'water' | 'bone' | 'bat' | 'scarecrow' | 'weasel' | 'snow' | 'whitefox' | 'palanquin' | 'lord'
   | 'patrol'
-  | 'beast';
+  | 'beast'
+  | 'goblin';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -59,6 +60,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   // 夜探的守卫（数值在 content/explore.ts，移动由 src/explore/guards.ts 算）
   { kind: 'patrol', code: 18, ...RAID_ENEMIES.patrol },
   { kind: 'beast', code: 19, ...RAID_ENEMIES.beast },
+  { kind: 'goblin', code: 20, ...RAID_ENEMIES.goblin },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;

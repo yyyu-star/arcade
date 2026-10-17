@@ -4,11 +4,15 @@
  * 小白：门一开就沿脚印走（不贪）；普通：搜到 leaveAt 拍以后再走。怪由核心的机器人另外躲（这里只管去哪）。
  * 输出核心的输入方向：0 不动，1–32 是 32 向。
  */
-import { CHEST_OPEN } from '../content/explore.ts';
+import { CHEST_OPEN, RAID_LATE } from '../content/explore.ts';
 import { dirIndex, dist } from '../core/fmath.ts';
 import { gateField, guide, newGuide, type Guide } from './guide.ts';
 import { NAV_INF } from './nav.ts';
 import type { Raid } from './raid.ts';
+
+/** 盯一个箱子多久没靠近就放下（拍）、放下后多久再考虑它 */
+const GIVE_UP = 600;
+const RETRY = 3600;
 
 export class RaidBot {
   private readonly raid: Raid;
@@ -16,19 +20,53 @@ export class RaidBot {
   private readonly leaveAt: number;
   private target = -1;
   private field: Int32Array | null = null;
+  /** 盯着同一个箱子时：这段里离它最近到过多少、从哪一拍开始算 */
+  private bestD = Infinity;
+  private since = 0;
+  /** 放弃过的箱子：到这一拍之前不再挑（石兽守着的宝库、被怪堵住的院子，玩家也会先去别处） */
+  private skipUntil: Int32Array;
+  /** 鬼市：要去的摊子和到它的最短路场 */
+  private stall = -1;
+  private stallField: Int32Array | null = null;
   readonly g: Guide = newGuide();
 
   constructor(raid: Raid, leaveAt = 0) {
     this.raid = raid;
     this.leaveAt = leaveAt;
+    this.skipUntil = new Int32Array(raid.map.chests.length);
   }
 
-  /** 这一拍往哪走 */
-  dir(x: number, y: number, tick: number): number {
+  /** 这一拍往哪走；coins = 身上的铜钱（鬼市买东西用） */
+  dir(x: number, y: number, tick: number, coins = 0): number {
     const raid = this.raid;
     const chests = raid.map.chests;
     let left = 0;
-    for (let c = 0; c < chests.length; c++) if (!raid.chestOpen[c]) left++;
+    for (let c = 0; c < chests.length; c++) if (this.openable(c, tick)) left++;
+    // 鬼市开着、还不走：去买买得起的（主线：普通玩家会逛鬼市）
+    if (raid.marketOpen === 1 && tick < this.leaveAt) {
+      let best = -1;
+      let bd = Infinity;
+      for (let k = 0; k < raid.stallX.length; k++) {
+        if (raid.stallSold[k] || raid.stallPrice[k]! > coins) continue;
+        const d = dist(raid.stallX[k]! - x, raid.stallY[k]! - y);
+        if (d < bd) {
+          bd = d;
+          best = k;
+        }
+      }
+      if (best >= 0) {
+        const sx = raid.stallX[best]!;
+        const sy = raid.stallY[best]!;
+        if (bd <= RAID_LATE.market.r * 0.6) return 0;
+        if (bd < 80) return toward(sx - x, sy - y);
+        if (this.stall !== best || !this.stallField) {
+          this.stall = best;
+          const c = raid.map.nav.nearestFree(sx, sy);
+          this.stallField = c < 0 ? null : raid.map.nav.field([c]);
+        }
+        if (this.stallField) return this.step(x, y, this.stallField);
+      }
+    }
     if (raid.gateMask !== 0 && (tick >= this.leaveAt || left === 0) && guide(raid, x, y, this.g)) {
       // 沿脚印走：脚印就是这张最短路场的下坡
       const field = gateField(raid)!;
@@ -36,11 +74,22 @@ export class RaidBot {
     }
     // 旁边就有没开的箱子：站着搜
     for (let c = 0; c < chests.length; c++) {
-      if (!raid.chestOpen[c] && dist(chests[c]!.x - x, chests[c]!.y - y) <= CHEST_OPEN.range * 0.8) return 0;
+      if (this.openable(c, tick) && dist(chests[c]!.x - x, chests[c]!.y - y) <= CHEST_OPEN.range * 0.8) return 0;
     }
-    if (this.target < 0 || raid.chestOpen[this.target]) this.pick(x, y);
+    if (this.target < 0 || !this.openable(this.target, tick)) this.pick(x, y, tick);
     if (this.target < 0 || !this.field) return 0;
-    const ch = chests[this.target]!;
+    let ch = chests[this.target]!;
+    // 20 秒没往它靠近 40 以上：先放下，2 分钟内不再挑
+    const d = dist(ch.x - x, ch.y - y);
+    if (d < this.bestD - 40) {
+      this.bestD = d;
+      this.since = tick;
+    } else if (tick - this.since > GIVE_UP) {
+      this.skipUntil[this.target] = tick + RETRY;
+      this.pick(x, y, tick);
+      if (this.target < 0 || !this.field) return 0;
+      ch = chests[this.target]!;
+    }
     if (dist(ch.x - x, ch.y - y) < 60) return toward(ch.x - x, ch.y - y);
     return this.step(x, y, this.field);
   }
@@ -93,12 +142,19 @@ export class RaidBot {
   }
 
   /** 挑直线最近的没开的箱子，算一张到它的最短路场 */
-  private pick(x: number, y: number): void {
+  /** 能搜的箱子：没开过；宝库要等开封、有钥匙 */
+  private openable(c: number, tick: number): boolean {
+    return !this.raid.chestOpen[c] && (c !== this.raid.vault || this.raid.vaultReady(tick));
+  }
+
+  private pick(x: number, y: number, tick: number): void {
     const chests = this.raid.map.chests;
     let best = -1;
     let bd = Infinity;
+    this.bestD = Infinity;
+    this.since = tick;
     for (let c = 0; c < chests.length; c++) {
-      if (this.raid.chestOpen[c]) continue;
+      if (!this.openable(c, tick) || this.skipUntil[c]! > tick) continue;
       const d = dist(chests[c]!.x - x, chests[c]!.y - y);
       if (d < bd) {
         bd = d;

@@ -5,12 +5,12 @@ import { GUARD_MOVE, guardStep } from '../src/explore/guards.ts';
 import { RaidEv, type GuardHost } from '../src/explore/host.ts';
 import { Raid, Role } from '../src/explore/raid.ts';
 
-type Host = GuardHost & { tick: number; x: number; y: number; evs: number[][] };
+type Host = GuardHost & { tick: number; x: number; y: number; coins: number; evs: number[][] };
 function fakeHost(): Host {
   const N = 300;
   const evs: number[][] = [];
   return {
-    tick: 0, x: 0, y: 0, evs,
+    tick: 0, x: 0, y: 0, coins: 0, evs,
     ev: { push: (t: number, x: number, y: number, a = 0, b = 0, c = 0) => void evs.push([t, x, y, a, b, c]) },
     eAlive: new Uint8Array(N), eGen: new Uint32Array(N), eX: new Float64Array(N), eY: new Float64Array(N),
     eHp: new Float64Array(N), eHpMax: new Float64Array(N), eSpeed: new Float64Array(N), eT: new Int32Array(N),
@@ -28,7 +28,7 @@ function setup(seed = 3) {
   const spawnAll = (): void => {
     for (let g; (g = raid.takeSpawn()) >= 0; ) {
       const s = raid.guardSpawn(g);
-      const def = s.kind === 'patrol' || s.kind === 'beast' ? RAID_ENEMIES[s.kind] : ENEMY_BY_KIND[s.kind as EnemyKind];
+      const def = s.kind === 'patrol' || s.kind === 'beast' || s.kind === 'goblin' ? RAID_ENEMIES[s.kind] : ENEMY_BY_KIND[s.kind as EnemyKind];
       const i = slots++;
       h.eAlive[i] = 1;
       h.eGen[i]!++;
@@ -194,10 +194,12 @@ describe('夜探守卫', () => {
     // 主角躲在出生点（离守卫都远）
     const n0 = slots();
     tick(6 * 1800);
-    expect(slots()).toBe(n0 + 1);
+    // 5:00 还出了一只宝妖（RAID_LATE.goblin）
+    expect(slots()).toBe(n0 + 2);
     const ev = h.evs.find((e) => e[0] === RaidEv.Roamer)!;
     expect(Math.hypot(ev[1]! - h.x, ev[2]! - h.y)).toBeGreaterThanOrEqual(1200);
-    const i = n0;
+    // n0 是 5:00 的宝妖，游荡的巡夜将在它后面
+    const i = n0 + 1;
     const g = raid.guardAt(i, h.eGen[i]!);
     expect(raid.gRole[g]).toBe(Role.roamer);
     const x0 = h.eX[i]!;

@@ -13,7 +13,7 @@ import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explo
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
 import { edgeArrow, walkSecs } from '../../explore/view/guide-hud.ts';
 import { guide, newGuide } from '../../explore/guide.ts';
-import type { Raid } from '../../explore/raid.ts';
+import { Role, type Raid } from '../../explore/raid.ts';
 import { DAWN_TICK } from '../../content/waves.ts';
 import { MERGES, PASSIVE_IDS, PASSIVES, WEAPON_IDS, WEAPONS } from '../../content/weapons.ts';
 import { Drop, Ev, MAX_DROPS, MAX_ENEMIES, MAX_SHOTS, MERGE_CODE, Shot, step, type World } from '../../core/index.ts';
@@ -51,6 +51,8 @@ const MOB_TINT = [
   0xf4f1ea, 0x3f9a8a, 0xe8e2d0, 0x5a3a78, 0xc9a04a, 0xb9853a, 0x8fd0f0, 0xf6f8ff, 0xd0362e, 0xf0e0b0,
   // 夜探的守卫：巡夜将（黑甲）、镇门石兽（青石）
   0x343a4a, 0x7f8da0,
+  // 宝妖（金黄）
+  0xf2b930,
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
@@ -155,6 +157,10 @@ export class GameScene extends Phaser.Scene {
   private chestViews: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image | null; open: boolean }[] = [];
   private gateViews: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; open: boolean }[] = [];
   private gd = newGuide();
+  /** 鬼市的三个摊子（开市时建，收市时拆）：棚、货的图标、价钱、灯笼光 */
+  private stallViews: { img: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image; price: Phaser.GameObjects.Text; glow: Phaser.GameObjects.Image; sig: string }[] = [];
+  /** 宝库的封条（金箱上的交叉符纸） */
+  private sealImg: Phaser.GameObjects.Image | null = null;
   private gdAt = -99;
   private gdMask = -1;
   private trailG: Phaser.GameObjects.Graphics | null = null;
@@ -356,6 +362,10 @@ export class GameScene extends Phaser.Scene {
       const img = this.img(`chest_${c.tier}`, c.x, c.y + 14).setDepth(c.y + 14);
       const glow = c.tier === 'wood' ? null : this.img('haze', c.x, c.y - 4, c.tier === 'gold' ? 2 : 1.4).setTint(c.tier === 'gold' ? 0xffd860 : 0xffa860).setDepth(c.y + 13);
       this.chestViews.push({ img, glow, open: false });
+    }
+    if (raid.vault >= 0) {
+      const c = raid.map.chests[raid.vault]!;
+      this.sealImg = this.img('seal', c.x, c.y + 4).setDepth(c.y + 16);
     }
     for (const g of raid.map.gates) {
       const foot = g.y - 50;
@@ -648,6 +658,26 @@ export class GameScene extends Phaser.Scene {
         case Ev.Beast:
           this.onBeast(x, y, ev.a[i]!, ev.b[i]!);
           break;
+        case Ev.Restock:
+          this.onRestock(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Goblin:
+          this.onGoblin(x, y, ev.a[i]!);
+          break;
+        case Ev.Market:
+          this.onMarket(x, y, ev.a[i]!, ev.b[i]!);
+          break;
+        case Ev.Key:
+          sfx.play('pickup');
+          this.burst(this.w.x, this.w.y - 40, 0xffd23a, 1.4);
+          this.d.banners.say('拿到宝库钥匙', 'gold', 2600, '8:00 以后去开封着的金箱');
+          break;
+        case Ev.Vault:
+          sfx.play('gateOpen', { volume: 0.8 });
+          this.fx.spawn({ frame: 'ring', x, y, life: 900, s0: 0.5, s1: 3, a0: 1, a1: 0, tint: 0xffd23a, depth: 60 });
+          if (ev.b[i] === 1) this.d.banners.say('宝库开封了', 'gold', 2600);
+          else this.d.banners.say('宝库开封了', 'warn', 3000, '要钥匙：打倒精英或守卫掉');
+          break;
         case Ev.Roamer:
           this.onRoamer(x, y);
           break;
@@ -927,6 +957,54 @@ export class GameScene extends Phaser.Scene {
     sfx.play('coin', { pitch: 1 + tierIdx * 0.18 });
     this.burst(x, y + oy, info.color, 0.7 + tierIdx * 0.3);
     if (tierIdx === 3) this.d.banners.say(`绝品 · ${t.name}`, 'gold', 2200, t.blurb);
+  }
+
+  private onRestock(x: number, y: number, c: number, n: number): void {
+    if (c < 0) {
+      sfx.play('chest', { volume: 0.5 });
+      this.d.banners.say(`补货了：${n} 个箱子又满了`, 'gold', 2400);
+      return;
+    }
+    this.burst(x, y - 10, 0xffd860, 1);
+    this.fx.spawn({ frame: 'ring', x, y, life: 500, s0: 0.3, s1: 1.6, a0: 1, a1: 0, tint: 0xffd860, depth: 60 });
+  }
+
+  private onGoblin(x: number, y: number, a: number): void {
+    if (a === 0) {
+      sfx.play('elite');
+      this.d.banners.say('宝妖出来了', 'gold', 2600, '背着宝袋，追上打倒掉两件好宝物');
+      this.fx.spawn({ frame: 'ring', x, y, life: 800, s0: 0.4, s1: 2.4, a0: 1, a1: 0, tint: 0xffc83a, depth: 60 });
+    } else if (a === 1) {
+      this.d.banners.say('宝妖钻地跑了', 'ink', 2000);
+      this.burst(x, y, 0xb57d12, 1.4);
+    } else {
+      sfx.play('chestGold');
+      this.burst(x, y - 10, 0xffc83a, 1.8);
+      this.fx.spawn({ frame: 'ring', x, y, life: 600, s0: 0.3, s1: 2.2, a0: 1, a1: 0, tint: 0xffc83a, depth: 60 });
+      this.d.banners.say('打倒宝妖！', 'gold', 2000);
+    }
+  }
+
+  private onMarket(x: number, y: number, a: number, stall: number): void {
+    if (a === 0) {
+      sfx.play('bell');
+      this.d.banners.say('鬼市开了（到 8:00）', 'gold', 3000, '镇中心，拿身上的铜钱买宝物');
+    } else if (a === 1) {
+      this.d.banners.say('鬼市收了', 'ink', 2000);
+    } else {
+      sfx.play('purse');
+      const price = this.raid!.stallPrice[stall] ?? 0;
+      const n = this.floats.length;
+      const oy = -64 - n * 30;
+      const f = this.frame('coin');
+      const img = this.add.image(x - 4, y + oy, f.tex ?? 'atlas', f.key).setScale(1.3 / f.res).setDepth(9200);
+      const text = this.add
+        .text(x + 8, y + oy, `-${price}`, { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '20px', fontStyle: 'bold', color: '#ff7a5a', stroke: '#17131c', strokeThickness: 5 })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+        .setDepth(9200);
+      this.floats.push({ img, text, x, y: y + oy, life: 1600 });
+    }
   }
 
   private onAlert(role: number, slot: number): void {
@@ -1241,7 +1319,7 @@ export class GameScene extends Phaser.Scene {
     const shadow = old?.shadow ?? this.img('shadow');
     shadow.setVisible(true).setAlpha(0.8);
     let glow = old?.glow ?? null;
-    const glowTint = def.elite || def.boss ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'wisp' ? 0x5fd3f0 : null;
+    const glowTint = def.kind === 'goblin' ? 0xffc83a : def.elite || def.boss ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'wisp' ? 0x5fd3f0 : null;
     if (glowTint !== null) {
       glow ??= this.img('haze');
       const hf = this.frames.get('haze')!;
@@ -1367,7 +1445,7 @@ export class GameScene extends Phaser.Scene {
       if (open !== v.open) {
         v.open = open;
         v.img.setFrame(`chest_${c.tier}${open ? '_open' : ''}`);
-        v.glow?.setVisible(false);
+        v.glow?.setVisible(!open);
       } else if (!open && v.glow) v.glow.setAlpha(0.45 + Math.sin(this.now * 0.004 + i) * 0.15);
     });
     // 门：开着的门发光，圈里站着读条
@@ -1417,6 +1495,7 @@ export class GameScene extends Phaser.Scene {
       const c = raid.map.chests[raid.searchChest]!;
       this.progressBar(c.x, c.y - 56, sp, c.tier === 'gold' ? 0xffd23a : c.tier === 'copper' ? 0xff9a3a : 0xf0e0b0);
     }
+    this.drawLate(raid);
     // 撤离指引：每 4 帧重算一次（最短路场按开着的门缓存），脚印画在地上，门在屏幕外时边上一个箭头
     if (raid.outcome === 'none') {
       if (this.gdMask !== raid.gateMask || this.now - this.gdAt > 120) {
@@ -1465,6 +1544,91 @@ export class GameScene extends Phaser.Scene {
     this.floats = this.floats.filter((fl) => fl.life > 0);
   }
 
+  /** 宝妖在场上的槽位（没有是 −1） */
+  private goblinSlot(raid: Raid): number {
+    const w = this.w;
+    for (let g = 0; g < raid.gUsed; g++) {
+      const i = raid.gSlot[g]!;
+      if (raid.gRole[g] === Role.goblin && i >= 0 && w.eAlive[i] && w.eGen[i] === raid.gGen[g]) return i;
+    }
+    return -1;
+  }
+
+  /** 后半段规则的画面：鬼市摊子、宝库封条、宝妖的屏幕边箭头 */
+  private drawLate(raid: Raid): void {
+    const w = this.w;
+    // 鬼市：开市期间三个摊子，价钱不够标红，卖掉的空着，站在摊前买的读条画在摊子上方
+    if (raid.marketOpen === 1 && this.stallViews.length === 0) {
+      for (let k = 0; k < raid.stallX.length; k++) {
+        const x = raid.stallX[k]!, y = raid.stallY[k]!;
+        const glow = this.img('haze', x, y - 52, 3).setTint(0xff9a4a).setDepth(y - 1).setAlpha(0.5);
+        const img = this.img('mstall', x, y).setDepth(y);
+        const icon = this.img('shadow', x, y - 46).setDepth(y + 1).setVisible(false);
+        const price = this.add
+          .text(x, y + 10, '', { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#ffe08a', stroke: '#17131c', strokeThickness: 6 })
+          .setOrigin(0.5, 0)
+          .setResolution(2)
+          .setDepth(y + 2);
+        this.stallViews.push({ img, icon, price, glow, sig: '' });
+      }
+    } else if (raid.marketOpen !== 1 && this.stallViews.length > 0) {
+      for (const v of this.stallViews) {
+        v.img.destroy();
+        v.icon.destroy();
+        v.price.destroy();
+        v.glow.destroy();
+      }
+      this.stallViews.length = 0;
+    }
+    this.stallViews.forEach((v, k) => {
+      const sold = raid.stallSold[k] === 1;
+      const afford = w.coins >= raid.stallPrice[k]!;
+      const sig = `${sold ? 1 : 0}${afford ? 1 : 0}`;
+      if (sig !== v.sig) {
+        v.sig = sig;
+        if (sold) {
+          v.icon.setVisible(false);
+          v.price.setText('售罄').setColor('#9aa0b0');
+        } else {
+          const t = TREASURES[raid.stallItem[k]!]!;
+          const f = this.frame(treasureIconKey(t.icon));
+          v.icon.setTexture(f.tex ?? 'atlas', f.key).setOrigin(f.ox, f.oy).setScale(1.5 / f.res).setVisible(true);
+          v.price.setText(`${raid.stallPrice[k]} 钱`).setColor(afford ? '#ffe08a' : '#ff5a4a');
+        }
+      }
+      v.glow.setAlpha(0.42 + Math.sin(this.now * 0.005 + k * 1.7) * 0.12);
+    });
+    if (raid.marketOpen === 1 && raid.buyStall >= 0) {
+      const bp = raid.buyProgress();
+      if (bp > 0) this.progressBar(raid.stallX[raid.buyStall]!, raid.stallY[raid.buyStall]! - 108, bp, 0xffd23a);
+    }
+    // 宝库：没开封（时辰没到或没钥匙）且没开过，金箱上贴着封条
+    if (this.sealImg) {
+      const sealed = raid.chestOpen[raid.vault] !== 1 && !raid.vaultReady(w.tick);
+      this.sealImg.setVisible(sealed);
+    }
+    // 宝妖在屏幕外：屏幕边上一个橙色箭头
+    const gi = raid.outcome === 'none' ? this.goblinSlot(raid) : -1;
+    let ga: { x: number; y: number; dx: number; dy: number; label: string } | null = null;
+    if (gi >= 0) {
+      const cam = this.cameras.main;
+      const cssW = this.scale.displaySize.width;
+      const cssH = this.scale.displaySize.height;
+      const k = cssW / (cam.width / cam.zoom);
+      const gx = (w.eX[gi]! - cam.midPoint.x) * k, gy = (w.eY[gi]! - cam.midPoint.y) * k;
+      const margin = 84;
+      const hw = cssW / 2 - margin, hh = cssH / 2 - margin;
+      if (!(gx > -hw && gx < hw && gy > -hh && gy < hh)) {
+        const len = Math.hypot(gx, gy) || 1;
+        const dx = gx / len, dy = gy / len;
+        const t = Math.min(dx === 0 ? Infinity : hw / Math.abs(dx), dy === 0 ? Infinity : hh / Math.abs(dy));
+        // 箭头和撤离箭头撞在一起时错开一点
+        ga = { x: cssW / 2 + dx * t, y: cssH / 2 + dy * t, dx, dy, label: `宝妖 · ${walkSecs(Math.hypot(w.eX[gi]! - w.x, w.eY[gi]! - w.y))} 秒` };
+      }
+    }
+    this.d.hud.setGoblinArrow(ga);
+  }
+
   /** 夜探 HUD 的数据：目标条（最近的门、下一批门）、背包、小地图 */
   private feedRaidHud(raid: Raid, gate: { name: string; secs: number } | null): void {
     if (!this.rhud) return;
@@ -1476,9 +1640,12 @@ export class GameScene extends Phaser.Scene {
     }
     const xy = this.guardXY;
     xy.length = 0;
+    let gob: [number, number] | null = null;
     for (let g = 0; g < raid.gUsed; g++) {
       const i = raid.gSlot[g]!;
-      if (i >= 0 && w.eAlive[i] && w.eGen[i] === raid.gGen[g]) xy.push(w.eX[i]!, w.eY[i]!);
+      if (i < 0 || !w.eAlive[i] || w.eGen[i] !== raid.gGen[g]) continue;
+      if (raid.gRole[g] === Role.goblin) gob = [w.eX[i]!, w.eY[i]!];
+      else xy.push(w.eX[i]!, w.eY[i]!);
     }
     this.rhud.update({
       gate,
@@ -1491,6 +1658,10 @@ export class GameScene extends Phaser.Scene {
       chestOpen: raid.chestOpen,
       gateOpen: raid.gateOpen,
       guards: xy,
+      goblin: gob,
+      market: raid.marketOpen === 1 && raid.stallX.length > 0 ? [raid.stallX[1] ?? raid.stallX[0]!, raid.stallY[1] ?? raid.stallY[0]!] : null,
+      vault: raid.vault >= 0 && raid.chestOpen[raid.vault] !== 1 && !raid.vaultReady(w.tick) ? raid.vault : -1,
+      hasKey: raid.hasKey === 1,
     });
   }
 

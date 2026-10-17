@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { askUser, cleanName, readBoard, submitScoreAs, type BoardDeps } from '../src/online/api.ts';
 import { beijingDate, dailyBoardId, dailyDateOpen, dailyPlan, isDailySetup, shiftDate } from '../src/online/daily.ts';
@@ -56,6 +57,23 @@ describe('分数公式', () => {
     expect(formatScore('vigil', vigilScore({ danger: 2, seconds: 65, kills: 8, bossKilled: false }))).toBe('危险2 · 1:05 · 斩8');
     expect(formatScore('daily-vigil', 1_000_123)).toBe('天亮 · 斩123');
     expect(formatScore('daily-vigil', 345)).toBe('撑了 5:45');
+  });
+});
+
+describe('public/boards.json（平台排行页按它写总榜的分数）', () => {
+  const boards = JSON.parse(readFileSync(new URL('../public/boards.json', import.meta.url), 'utf8')).boards as Record<string, { score: { fields?: Record<string, [number, number | null]>; text: string }[] }>;
+  // 照平台的规则拆字段：floor(分数 / 除数) % 取模
+  const field = (score: number, [div, mod]: [number, number | null]): number => (mod === null ? Math.floor(score / div) : Math.floor(score / div) % mod);
+  it('守夜、无尽的字段和 score.ts 的编码一致', () => {
+    const v = vigilScore({ danger: 3, seconds: 754, kills: 1234, bossKilled: false });
+    const vf = boards.vigil!.score[0]!.fields!;
+    expect({ danger: field(v, vf.d!), seconds: field(v, vf.s!), kills: field(v, vf.k!) }).toEqual(decodeVigil(v));
+    const boss = vigilScore({ danger: 5, seconds: 600, kills: 9999, bossKilled: true });
+    expect(field(boss, vf.s!)).toBe(1000);
+    const e = endlessScore({ seconds: 4321, kills: 77 });
+    const ef = boards.endless!.score[0]!.fields!;
+    expect({ seconds: field(e, ef.s!), kills: field(e, ef.k!) }).toEqual(decodeEndless(e));
+    expect(boards.raid!.score[0]!.text).toContain('{n}');
   });
 });
 

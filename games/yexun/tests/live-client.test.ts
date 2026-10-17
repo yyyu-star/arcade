@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LIVE_KEY, LiveClient, classify, liveSetup, reviveLive } from '../src/platform/live.ts';
 import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, vigilBp } from '../src/content/live.ts';
 import { normalizeSetup } from '../src/core/state.ts';
+import { RAID_LIVE } from '../src/content/explore.ts';
 
 const res = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const OK = { ok: true, wallet: { balance: 1 }, credited: 0, capped: 0, user: 'u1' };
@@ -322,5 +323,40 @@ describe('classify', () => {
     expect(classify(200, { ok: false, error: 'at_table' })).toEqual({ kind: 'reject', error: 'at_table' });
     expect(classify(200, { ok: false, error: 'weird' })).toEqual({ kind: 'bug', error: 'weird' });
     expect(classify(403, { error: 'csrf' })).toEqual({ kind: 'bug', error: 'csrf' });
+  });
+});
+
+describe('夜探实盘（记录里有 raid）', () => {
+  it('开局配置：夜探、危险按夜探的表、带上实盘档；守夜那套照旧', () => {
+    expect(liveSetup('medium', 9, 'dukou')).toMatchObject({ mode: 'raid', danger: RAID_LIVE.danger.medium, raid: { template: 'dukou', live: 'medium' }, character: 'xiaodao', perks: {}, assist: false });
+    expect(liveSetup('medium', 9).mode).toBe('vigil');
+  });
+
+  it('带入记下镇子；守夜的 finish 不管夜探的一份，finishRaid 按传进来的倍数结（封顶）', async () => {
+    const { c, calls, store } = rig();
+    await c.buyin('large', 4, 'shansi');
+    expect(saved(store)).toMatchObject({ tier: 'large', raid: 'shansi', step: 'playing' });
+    // 浏览器仍然只报 ref 和档位
+    expect(Object.keys(calls[0]!.body).sort()).toEqual(['ref', 'tier']);
+    await c.finish(4, { ticks: 27000, won: true, bossKilled: true });
+    expect(calls).toHaveLength(1);
+    await c.finishRaid(4, 99_999);
+    expect(calls.at(-1)!.body).toMatchObject({ tier: 'large', bp: LIVE_MAX_BP });
+    expect(saved(store).step).toBe('done');
+  });
+
+  it('夜探打到一半关页面：按丢包算，bp 为 0（不按撑的时间折算）', async () => {
+    const store = mem();
+    const a = rig(undefined, store);
+    await a.c.buyin('small', 5, 'guzhen');
+    a.c.progress(5, 20_000);
+    const b = rig(undefined, store);
+    await b.c.resume();
+    expect(b.calls[0]!.body.bp).toBe(0);
+  });
+
+  it('坏记录：豪华档不能是夜探', () => {
+    expect(reviveLive({ ref: 'yexun-abcdef12', tier: 'luxe', stake: 1, seed: 1, at: 1, until: 1, step: 'playing', raid: 'guzhen' })).toBeNull();
+    expect(reviveLive({ ref: 'yexun-abcdef12', tier: 'small', stake: 1, seed: 1, at: 1, until: 1, step: 'playing', raid: 'teach' })?.raid).toBeUndefined();
   });
 });

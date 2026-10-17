@@ -16,6 +16,9 @@ import { DIFFICULTIES, type Danger } from '../src/content/waves.ts';
 import { tierOfDanger, vigilBp } from '../src/content/live.ts';
 import type { MapId } from '../src/content/maps.ts';
 import { Bot, type Build, type Skill } from './bots.ts';
+import { RaidBot } from '../src/explore/bot.ts';
+import { settleRaid } from '../src/explore/settle.ts';
+import type { RaidTemplateId } from '../src/content/explore.ts';
 
 export interface RunResult {
   won: boolean;
@@ -31,6 +34,31 @@ export interface RunResult {
   elites: number;
   /** 撑了几拍（实盘倍数按它算） */
   ticks: number;
+  /** 夜探：撤出时背包的价值（没撤出是 0）；守夜是 0 */
+  value: number;
+}
+
+/** 夜探的玩家模型：小白门一开就走；普通搜到 10 分钟再走；贪心搜到 13 分钟（DESIGN.md 2.3、4.2） */
+export const RAID_LEAVE: Record<string, number> = { novice: 0, normal: 600 * 30, greedy: 780 * 30 };
+
+/** 夜探一局：RaidBot 指路（去哪），守夜的机器人躲怪、选卡；返回结局和带出价值 */
+export function runRaid(seed: number, danger: Danger, who: string, build: Build, template: RaidTemplateId): RunResult {
+  const w = createWorld({ seed, mode: 'raid', danger, raid: { template } });
+  const bot = new Bot(who === 'novice' ? 'novice' : 'normal', build, seed);
+  const leave = RAID_LEAVE[who] ?? 0;
+  const guide = new RaidBot(w.raid!, leave);
+  let guard = 0;
+  while (w.phase !== 'over' && guard++ < 200_000) {
+    if (w.phase !== 'choose') {
+      const d = guide.dir(w.x, w.y, w.tick, w.coins);
+      bot.goal = d === 0 ? -1 : d;
+      bot.detour = !(w.raid!.gateMask !== 0 && w.tick >= leave);
+    }
+    const a = bot.act(w);
+    step(w, a.dir, a.choice);
+  }
+  const won = w.raid!.outcome === 'escaped';
+  return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0 };
 }
 
 export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow'): RunResult {
@@ -56,12 +84,13 @@ export function runOne(seed: number, danger: Danger, skill: Skill, build: Build,
       } else if (t === Ev.Kill && ev.b[i] === 1) elites++;
     }
   }
-  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick };
+  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick, value: 0 };
 }
 
 interface Cell {
   diff: Danger;
-  skill: Skill;
+  /** 守夜：novice / normal；夜探另有 greedy（见 RAID_LEAVE） */
+  skill: string;
   build: Build;
 }
 
@@ -69,14 +98,16 @@ interface Cell {
 interface Task {
   id: number;
   cell: Cell;
-  map: MapId;
+  /** 守夜的地图，或夜探的镇子模板（raid 为真时） */
+  map: string;
+  raid: boolean;
   seeds: number[];
 }
 
 if (!isMainThread) {
   // 常驻工作线程：每个进程只启动一次（导入核心和内容表要几百毫秒），一直接活到被关掉
   parentPort!.on('message', (t: Task) => {
-    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => runOne(s, t.cell.diff, t.cell.skill, t.cell.build, t.map)) });
+    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId))) });
   });
 } else if (process.argv[1]?.endsWith('sim.ts')) {
   const arg = (name: string, def: string): string => {
@@ -90,14 +121,18 @@ if (!isMainThread) {
     ? arg('--danger', '2').split(',').map((d) => Number(d) as Danger)
     : arg('--diff', 'easy,normal,hard').split(',').map((d) => DIFFICULTIES[d as keyof typeof DIFFICULTIES].danger);
   const jsonOut = arg('--json', '');
-  const skills = arg('--skill', 'novice,normal').split(',') as Skill[];
+  // --mode raid：夜探（--map 是镇子模板，--skill 可以带 greedy）；默认守夜
+  const raid = arg('--mode', 'vigil') === 'raid';
+  const skills = arg('--skill', raid ? 'novice,normal,greedy' : 'novice,normal').split(',');
   const builds = arg('--build', 'sword').split(',') as Build[];
   const threads = Math.max(1, Number(arg('--threads', String(availableParallelism()))));
   const chunk = Math.max(1, Number(arg('--chunk', '4')));
-  const map = arg('--map', 'snow') as MapId;
+  const maps = arg('--map', raid ? 'guzhen,dukou,shansi' : 'snow').split(',');
+  const map = maps[0]!;
 
-  const cells: Cell[] = [];
-  for (const diff of diffs) for (const skill of skills) for (const build of skill === 'novice' ? builds.slice(0, 1) : builds) cells.push({ diff, skill, build });
+  const cells: (Cell & { map: string })[] = [];
+  for (const m of raid ? maps : [map])
+    for (const diff of diffs) for (const skill of skills) for (const build of skill === 'novice' ? builds.slice(0, 1) : builds) cells.push({ diff, skill, build, map: m });
 
   // 任务按格子顺序排队；结果按种子填回，和线程数、分块无关
   const results: RunResult[][] = cells.map(() => new Array<RunResult>(n));
@@ -110,7 +145,7 @@ if (!isMainThread) {
       const seeds: number[] = [];
       for (let s = from; s < Math.min(n, from + chunk); s++) seeds.push(seedFrom + s + 1);
       owner.push({ cell: ci, from });
-      tasks.push({ id: tid++, cell, map, seeds });
+      tasks.push({ id: tid++, cell, map: cell.map, raid, seeds });
     }
   });
 
@@ -125,8 +160,12 @@ if (!isMainThread) {
     return `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(Math.max(1, xs.length))).toFixed(2)}`;
   };
   const se2 = (p: number, m: number): number => 2 * Math.sqrt((p * (1 - p)) / Math.max(1, m));
-  console.log(`${map === 'snow' ? '雪原' : '义庄'}，每格 ${n} 局（种子 ${seedFrom + 1}..${seedFrom + n}），${threads} 线程`);
-  console.log('危险 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英 | 实盘期望 ±2SE（份）');
+  console.log(`${raid ? '夜探' : map === 'snow' ? '雪原' : '义庄'}，每格 ${n} 局（种子 ${seedFrom + 1}..${seedFrom + n}），${threads} 线程`);
+  console.log(
+    raid
+      ? '镇子 | 危险 | 玩家 | 流派 | 撤出 ±2SE | 带出价值（撤出的局） | 平均待了 | 击杀'
+      : '危险 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英 | 实盘期望 ±2SE（份）',
+  );
   const lines: string[] = [];
   let printed = 0;
   let tPrev = Date.now();
@@ -136,6 +175,16 @@ if (!isMainThread) {
       const rs = results[printed]!;
       const win = mean(rs.map((r) => (r.won ? 1 : 0)));
       const now = Date.now();
+      if (raid) {
+        lines.push(
+          [cells[printed]!.map, diff, skill, skill === 'novice' ? '-' : build, `${(win * 100).toFixed(0)}% ±${(se2(win, n) * 100).toFixed(0)}`, mean(rs.filter((r) => r.won).map((r) => r.value)).toFixed(0), `${(mean(rs.map((r) => r.seconds)) / 60).toFixed(1)} 分`, mean(rs.map((r) => r.kills)).toFixed(0)].join(' | ') +
+            `   (${((now - tPrev) / 1000).toFixed(1)} s)`,
+        );
+        console.log(lines[lines.length - 1]);
+        tPrev = now;
+        printed++;
+        continue;
+      }
       lines.push(
         [
           diff,
@@ -187,7 +236,11 @@ if (!isMainThread) {
   });
   const total = cells.length * n;
   if (jsonOut) {
-    writeFileSync(jsonOut, JSON.stringify(cells.map((c, i) => ({ ...c, map, from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, r.boss ? 1 : 0, r.ticks]) }))));
+    // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍]；夜探每局 [撤没撤出, 带出价值, 待了几拍]（mode 字段区分）
+    writeFileSync(
+      jsonOut,
+      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks]) }))),
+    );
     console.log(`每局结局写到 ${jsonOut}`);
   }
   console.log(`共 ${total} 局，${((Date.now() - t0) / 1000).toFixed(1)} 秒，${(total / ((Date.now() - t0) / 1000)).toFixed(2)} 局/秒`);

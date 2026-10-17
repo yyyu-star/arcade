@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHEST, GATE_WINDOWS, GATE_WINDOWS_EARLY, RAID_DAWN, RAID_ENEMIES, RAID_LIVE, RAID_MINUTES, RAID_PACE_MODEL, RAID_TEMPLATES } from '../src/content/explore.ts';
+import { CHEST, GATE_WINDOWS, GATE_WINDOWS_EARLY, RAID_DAWN, RAID_ENEMIES, RAID_LIVE, RAID_MINUTES, RAID_TEMPLATES } from '../src/content/explore.ts';
 import { ENEMY_BY_KIND } from '../src/content/enemies.ts';
 import { TIERS, TREASURES, TREASURES_BY_TIER } from '../src/content/treasures.ts';
 import { expectedChestValue, tierWeights } from '../src/explore/loot.ts';
@@ -70,17 +70,11 @@ describe('夜探内容表', () => {
     expect(RAID_ENEMIES.patrol.speed).toBeLessThan(3);
   });
 
-  it('结回倍数形状（4.2）：估算节奏下 5 分钟约 0.5、10 分钟约 1.3、15 分钟约 2，单调涨，不超过封顶', () => {
-    let prev = 0;
-    for (const p of RAID_PACE_MODEL) {
-      let v = 0;
-      for (const [k, n] of Object.entries(p.chests)) v += expectedChestValue(k as 'wood', p.depth) * n;
-      const m = v / RAID_LIVE.base.small;
-      expect(Math.abs(m - p.target)).toBeLessThan(0.1);
-      expect(m).toBeGreaterThan(prev);
-      expect(m).toBeLessThanOrEqual(RAID_LIVE.cap);
-      prev = m;
-    }
-    expect(RAID_LIVE.danger).toEqual({ small: 0, mid: 2, large: 3 });
+  it('夜探实盘（4.2、balance.md 4.4）：档位放低一档（小 0、中 1、大 2），基准按档位 × 镇子，保底 < 封顶，0.1.0 只开小档', () => {
+    expect(RAID_LIVE.danger).toEqual({ small: 0, medium: 1, large: 2 });
+    expect(RAID_LIVE.floor).toBeGreaterThan(1);
+    expect(RAID_LIVE.floor).toBeLessThan(RAID_LIVE.cap);
+    for (const t of Object.values(RAID_LIVE.base)) for (const v of Object.values(t)) expect(v).toBeGreaterThan(0);
+    expect(RAID_LIVE.open).toContain('small');
   });
 });
