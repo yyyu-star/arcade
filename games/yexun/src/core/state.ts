@@ -9,7 +9,7 @@ import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
 import { Rng } from './rng.ts';
 
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 7;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -23,7 +23,7 @@ export const Shot = {
   Talisman: 1,
   Coin: 2,
   Fly: 3,
-  /** 敌人的：灯笼鬼的火球、尸王的尸气 */
+  /** 敌人的：灯笼鬼的火球、尸王的尸气；sState 1 = 雪魅的冰锥（打中走路变慢），2 = 纸扎老爷的纸钱（旋着飞，sIdx 是第几圈） */
   Fireball: 4,
   /** 八卦镜的光波：sR 是当前半径（开始是负的 = 还没放出来），sDist 是推到多远 */
   Wave: 5,
@@ -109,6 +109,8 @@ export interface Setup {
   seed: number;
   mode: 'vigil';
   difficulty: Difficulty;
+  /** 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2） */
+  firstRun?: boolean;
 }
 
 export class World {
@@ -164,6 +166,10 @@ export class World {
   merges: MergeDef['id'][] = [];
   /** 往生铃：光环半径（这一拍），光环里的怪死了回血；下次能回血的拍 */
   bellArea = 0;
+  /** 冰锥、水鬼：到这一拍之前主角走路变慢 */
+  slowUntil = 0;
+  /** 收获期：到这一拍之前少刷怪、多掉东西 */
+  calmUntil = 0;
   bellHealAt = 0;
   /** 回血的零头（每拍加一点，满 1 才加到血上，免得血量出现很长的小数） */
   regenAcc = 0;
@@ -200,6 +206,8 @@ export class World {
   readonly eLastBy = new Int8Array(MAX_ENEMIES);
   /** 被缚妖索捆到第几拍（大于当前拍就走不动） */
   readonly eBind = new Int32Array(MAX_ENEMIES);
+  /** Boss 打到第几段（0 起） */
+  readonly ePhase = new Uint8Array(MAX_ENEMIES);
   /** 在镇魂铃光环里：这一拍减速 */
   readonly eSlow = new Uint8Array(MAX_ENEMIES);
   /** 同一件法器连着打同一只的冷却：[怪 × 法器槽] = 下次能打的拍数 */

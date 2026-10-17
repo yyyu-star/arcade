@@ -372,7 +372,7 @@ const r = await shareCard(
 - `art` 可以直接给一个 `CanvasImageSource`（img、canvas、ImageBitmap），或者 `{ image, crop?, fit? }` 从图集里切一块（`crop` 是源图像素，`fit` 默认 `contain`，`cover` 铺满裁中间）。
   是 img 时先 `await img.decode()`，没加载完、坏图、跨域画不上都**不画 art、照常出卡**。
 - 系统分享要 `navigator.canShare({ files })` 为真（手机浏览器）；不支持、或出错（用户取消除外）就出预览层：图 + "保存图片"（下载 `share.png`）+ "复制链接" + "关闭"。
-  预览层 z-index 默认 2000，按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
+  预览层 z-index 默认 11000（0.12.4 起），按钮的 `data-key` 是 `share:save`、`share:copy`、`share:close`，冒烟点这些；`log` 给 `分享 系统`、`分享 预览`、`分享 保存`、`分享 复制`。
 - **结算页一出现就先画好**（0.12.3，iOS 必须）：iOS 只许在点击的那一下里调系统分享，点了再画就过期了、只能出预览。结算页出来时 `const p = prepareShare(card, opts)`，
   "分享"按钮的点击里直接 `void p.share()`（前面别 await）：画好了就同步调 `navigator.share`，没画好等画完再试、调不起来出预览。`shareCard` 是"点了才画"的简写。
 - 只要图不分享：`drawShareCard(card, canvas?)` 返回画好的 canvas，`shareCardBlob(card)` 返回 PNG。
@@ -400,7 +400,7 @@ social?.presenceNow(true);                          // 进房、换房时马上�
   `fetchFriends()` 把平台每项的公开资料 `{ userId, displayName, avatar }` 统一成 `id`、`name`（原样字段留着），带 `online`、`where`（对方关了开关就没有），`setShowWhere(bool)` 改"让好友看到我在哪"。都带同源 cookie，写的请求带 `x-arcade: 1`。
 - **"叫朋友来"面板**（0.12.2）：`social.openInvite({ game, room })`（`social` 是 `mountSocial` 的返回值；没挂上时用导出的 `openInvite({ game, room, friends: false })`，只有"复制邀请链接"）。
   列好友（在线的在前，写在哪），每人一个"叫他来"，发出后 1 分钟内是灰的"已叫"，叫不了的写成大白话；底下"复制邀请链接"（能系统分享就分享）。
-  样式和 table-fun 一样，z-index 默认 1600；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。
+  样式和 table-fun 一样，z-index 默认 10600（0.12.4 起；游戏自己的弹窗更高时传 `zIndex`）；好友"在哪"先用平台给的 `where.gameName`，没有再用 `gameName` 回调，都没有说"在玩游戏"；按钮的 `data-key` 是 `invite:call:<好友 id>`、`invite:copy`、`invite:close`，`log` 给 `叫人 打开 <n>`、`叫人 <id> ok|limit|blocked|…`、`叫人 复制`、`叫人 关闭`。
 - 演示页 `demo/share.html`、`demo/social.html`（`npx vite` 后打开；社交用假 fetch，一进来就有几条邀请）。
 
 ## 房间怎么守规矩

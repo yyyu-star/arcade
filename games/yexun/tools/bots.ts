@@ -1,6 +1,6 @@
 /**
  * 配平用的玩家模型（DESIGN.md 第 8 节，docs/balance.md 第 1 节）：确定性（带种子），只看主角周围一屏以内的东西。
- * - 小白：每 10 拍才重新决定方向，躲得粗、带噪声，见什么捡什么；升级随便挑。
+ * - 小白：每 10 拍才重新决定方向，躲得粗、带噪声，见什么捡什么；升级挑"看起来最强"的（不看配方）。
  * - 普通：每 3 拍决定一次，按"怪的推力 + 魂珠的拉力 + 离墙的推力"走（势场），会躲火球；升级按流派挑，奔着进化去。
  * 流派（普通玩家选卡的偏好）：剑阵、符箓、镇守、木（五雷）、火，见 DESIGN.md 3.4；普通玩家三张都不想要时先刷新，刷新用完再跳过。
  */
@@ -73,8 +73,23 @@ export class Bot {
       fy += (dy / n) * k;
       if (d < danger) threat++;
     }
-    // 火球（小白不看）
+    // 火球、蓄力要冲的狐狸（小白不看）：狐狸蹲下蓄力时往它冲的方向的侧面躲
     if (normal) {
+      for (let i = 0; i < MAX_ENEMIES; i++) {
+        if (!w.eAlive[i] || w.eS[i] !== 1) continue;
+        const kind = ENEMIES[w.eKind[i]!]!.kind;
+        if (kind !== 'fox' && kind !== 'whitefox') continue;
+        const dx = w.x - w.eX[i]!;
+        const dy = w.y - w.eY[i]!;
+        const d = Math.hypot(dx, dy);
+        if (d > 300 || d < 1) continue;
+        // 冲的方向是 (eAX, eAY)；往垂直方向推，选离自己现在更近的那一侧
+        const px = -w.eAY[i]!;
+        const py = w.eAX[i]!;
+        const side = dx * px + dy * py >= 0 ? 1 : -1;
+        fx += px * side * 6;
+        fy += py * side * 6;
+      }
       for (let i = 0; i < MAX_SHOTS; i++) {
         if (!w.sAlive[i] || w.sKind[i] !== Shot.Fireball) continue;
         const dx = w.x - w.sX[i]!;
@@ -135,9 +150,16 @@ export class Bot {
   private choose(w: World): number {
     const cs = w.choices;
     if (this.skill === 'novice') {
-      // 小白：偏爱新东西，不看配方
-      let k = this.rng.int(cs.length);
-      for (let i = 0; i < cs.length; i++) if (!owned(w, cs[i]!) && this.rng.chance(0.5)) k = i;
+      // 小白：只挑"看起来最强"的——法器先于被动，被动里挑字面上加伤害、加数量的；不看配方，带点随手（主线 #144）
+      let k = 0;
+      let ks = -Infinity;
+      cs.forEach((c, i) => {
+        const s = looksStrong(w, c) + this.rng.next() * 12;
+        if (s > ks) {
+          ks = s;
+          k = i;
+        }
+      });
       return k;
     }
     const plan = BUILDS[this.build];
@@ -175,8 +197,10 @@ export class Bot {
   }
 }
 
-function owned(w: World, c: Choice): boolean {
-  if (c.kind === 'weapon') return w.weapons.some((x) => x.id === c.id);
-  if (c.kind === 'passive') return w.passives[c.id as PassiveId] !== undefined;
-  return true;
+/** 小白眼里的"强"：新法器 > 升级手上的法器 > 写着伤害、数量、冷却的被动 > 其余被动 */
+const LOOKS_STRONG: Partial<Record<PassiveId, number>> = { zhusha: 16, lingpai: 16, xianglu: 12, nianzhu: 10, xiantao: 8, daopao: 6 };
+function looksStrong(w: World, c: Choice): number {
+  if (c.kind === 'coins') return 0;
+  if (c.kind === 'weapon') return w.weapons.some((x) => x.id === c.id) ? 20 : 24;
+  return LOOKS_STRONG[c.id as PassiveId] ?? 2;
 }

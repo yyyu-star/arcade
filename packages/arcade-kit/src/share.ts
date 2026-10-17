@@ -348,7 +348,7 @@ export interface ShareOptions {
   text?: string;
   /** 存图的文件名，默认 share.png */
   fileName?: string;
-  /** 预览层的 z-index，默认 2000（要比游戏的弹窗高） */
+  /** 预览层的 z-index，默认 11000（0.12.4 起；要比游戏的弹窗和 social 的横条、面板都高） */
   zIndex?: number;
   /** 冒烟、调试看的流水：`分享 系统`、`分享 预览`、`分享 保存`、`分享 复制` */
   log?(line: string): void;
@@ -438,7 +438,7 @@ function showPreview(blob: Blob, name: string, opts: ShareOptions): void {
   const root = document.createElement('div');
   root.id = PREVIEW_ID;
   root.setAttribute('role', 'dialog');
-  root.style.cssText = `position:fixed;inset:0;z-index:${opts.zIndex ?? 2000};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;box-sizing:border-box;background:rgba(0,0,0,.72);font:600 16px ${FONT};color:#fff`;
+  root.style.cssText = `position:fixed;inset:0;z-index:${opts.zIndex ?? 11000};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;box-sizing:border-box;background:rgba(0,0,0,.72);font:600 16px ${FONT};color:#fff`;
   const close = (): void => {
     root.remove();
     URL.revokeObjectURL(url);

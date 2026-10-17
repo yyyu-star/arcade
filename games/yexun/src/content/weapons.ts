@@ -113,7 +113,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'coins',
     name: '铜钱剑',
     icon: 'i_coins',
-    desc: '一串铜钱绕着身子转',
+    desc: '铜钱绕身转，还能挡下飞来的火球和冰锥',
     el: '金',
     type: '剑',
     base: { dmg: 9, cd: 150, area: 76, amount: 3, speed: 7, duration: 90, knock: 8, rehit: 12 },
@@ -174,7 +174,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { text: '多劈一道', delta: { amount: 1 } },
       { text: '劈得更勤', delta: { cd: -14 } },
       { text: '伤害 +14', delta: { dmg: 14 } },
-      { text: '再多劈两道', delta: { amount: 2 } },
+      { text: '再多劈一道', delta: { amount: 1 } },
     ],
     evolve: {
       with: 'nianzhu',
@@ -191,22 +191,22 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '身边一圈光环，里面的怪持续挨打、走得慢',
     el: '金',
     type: '镇',
-    base: { dmg: 5, cd: 18, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+    base: { dmg: 7, cd: 15, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
     ups: [
       { text: '光环变大', delta: { area: 12 } },
-      { text: '伤害 +2', delta: { dmg: 2 } },
+      { text: '伤害 +4', delta: { dmg: 4 } },
       { text: '光环变大', delta: { area: 12 } },
       { text: '响得更勤', delta: { cd: -3 } },
       { text: '伤害 +3', delta: { dmg: 3 } },
       { text: '光环变大', delta: { area: 14 } },
-      { text: '伤害 +3', delta: { dmg: 3 } },
+      { text: '伤害 +4', delta: { dmg: 4 } },
     ],
     evolve: {
       with: 'xiantao',
       name: '往生铃',
       icon: 'i_bell_evo',
       desc: '光环更大，光环里的怪死了给你回血',
-      stats: { dmg: 18, cd: 12, area: 150, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+      stats: { dmg: 24, cd: 12, area: 150, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
     },
   },
   mirror: {
@@ -243,22 +243,22 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '火',
     type: '灵',
     // area：火舌多长；duration：一次喷几拍；amount：扇面宽（每多 1 宽 6°，基础 ±22°）
-    base: { dmg: 6, cd: 84, area: 130, amount: 1, speed: 0, duration: 36, knock: 2, rehit: 6 },
+    base: { dmg: 9, cd: 84, area: 130, amount: 1, speed: 0, duration: 36, knock: 2, rehit: 6 },
     ups: [
-      { text: '伤害 +2', delta: { dmg: 2 } },
+      { text: '伤害 +4', delta: { dmg: 4 } },
       { text: '火舌更长', delta: { area: 20 } },
       { text: '喷得更久', delta: { duration: 12 } },
       { text: '扇面更宽', delta: { amount: 1 } },
       { text: '伤害 +3', delta: { dmg: 3 } },
       { text: '喷得更勤', delta: { cd: -14 } },
-      { text: '扇面更宽、伤害 +3', delta: { amount: 1, dmg: 3 } },
+      { text: '扇面更宽、伤害 +4', delta: { amount: 1, dmg: 4 } },
     ],
     evolve: {
       with: 'luopan',
       name: '三昧真火',
       icon: 'i_gourd_evo',
       desc: '喷过的地方留一摊火，烧一阵',
-      stats: { dmg: 20, cd: 60, area: 170, amount: 3, speed: 0, duration: 54, knock: 2, rehit: 6 },
+      stats: { dmg: 28, cd: 60, area: 170, amount: 3, speed: 0, duration: 54, knock: 2, rehit: 6 },
     },
   },
   rope: {
@@ -270,11 +270,11 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     type: '镇',
     // amount：一次捆几只；area：从第一只往外找下一只的距离；duration：捆几拍
     // 主要是控场：伤害低，捆住的怪不会马上死，拖住才有用
-    base: { dmg: 3, cd: 120, area: 140, amount: 3, speed: 0, duration: 75, knock: 0, rehit: 1 },
+    base: { dmg: 6, cd: 120, area: 140, amount: 3, speed: 0, duration: 75, knock: 0, rehit: 1 },
     ups: [
       { text: '多捆两只', delta: { amount: 2 } },
       { text: '捆得更久', delta: { duration: 15 } },
-      { text: '伤害 +4', delta: { dmg: 4 } },
+      { text: '伤害 +6', delta: { dmg: 6 } },
       { text: '多捆两只', delta: { amount: 2 } },
       { text: '甩得更勤', delta: { cd: -20 } },
       { text: '捆得更久', delta: { duration: 20 } },
@@ -285,7 +285,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '捆仙绳',
       icon: 'i_rope_evo',
       desc: '一次捆一大片，捆住的挨打加倍',
-      stats: { dmg: 10, cd: 90, area: 200, amount: 18, speed: 0, duration: 130, knock: 0, rehit: 1 },
+      stats: { dmg: 16, cd: 90, area: 200, amount: 18, speed: 0, duration: 130, knock: 0, rehit: 1 },
     },
   },
   petals: {
@@ -296,14 +296,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '木',
     type: '灵',
     // amount：一次落几片；area：落在身边多大一圈；duration：花瓣落地要几拍
-    base: { dmg: 9, cd: 60, area: 150, amount: 4, speed: 0, duration: 14, knock: 3, rehit: 1 },
+    base: { dmg: 14, cd: 60, area: 150, amount: 4, speed: 0, duration: 14, knock: 3, rehit: 1 },
     ups: [
       { text: '多落两片', delta: { amount: 2 } },
-      { text: '伤害 +4', delta: { dmg: 4 } },
+      { text: '伤害 +6', delta: { dmg: 6 } },
       { text: '落得更开', delta: { area: 20 } },
       { text: '多落两片', delta: { amount: 2 } },
       { text: '落得更勤', delta: { cd: -10 } },
-      { text: '伤害 +5', delta: { dmg: 5 } },
+      { text: '伤害 +7', delta: { dmg: 7 } },
       { text: '多落三片', delta: { amount: 3 } },
     ],
     evolve: {
@@ -311,7 +311,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '十里桃林',
       icon: 'i_petal_evo',
       desc: '花瓣铺满一圈，回血更多',
-      stats: { dmg: 26, cd: 40, area: 200, amount: 18, speed: 0, duration: 14, knock: 3, rehit: 1 },
+      stats: { dmg: 36, cd: 40, area: 200, amount: 18, speed: 0, duration: 14, knock: 3, rehit: 1 },
     },
   },
   shield: {
@@ -322,14 +322,14 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '土',
     type: '镇',
     // amount：最多挡几下；cd：回一层要几拍；area、dmg：碎的时候震多大、打多少
-    base: { dmg: 20, cd: 360, area: 110, amount: 1, speed: 0, duration: 0, knock: 30, rehit: 1 },
+    base: { dmg: 36, cd: 360, area: 110, amount: 1, speed: 0, duration: 0, knock: 30, rehit: 1 },
     ups: [
       { text: '回得更快', delta: { cd: -60 } },
-      { text: '震得更疼', delta: { dmg: 12 } },
+      { text: '震得更疼', delta: { dmg: 20 } },
       { text: '多挡一下', delta: { amount: 1 } },
       { text: '震得更远', delta: { area: 20 } },
       { text: '回得更快', delta: { cd: -60 } },
-      { text: '震得更疼', delta: { dmg: 16 } },
+      { text: '震得更疼', delta: { dmg: 24 } },
       { text: '多挡一下', delta: { amount: 1 } },
     ],
     evolve: {
@@ -337,7 +337,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       name: '不坏金身',
       icon: 'i_shield_evo',
       desc: '护盾一回就回满，碎的时候震开全屏',
-      stats: { dmg: 70, cd: 90, area: 600, amount: 3, speed: 0, duration: 0, knock: 40, rehit: 1 },
+      stats: { dmg: 100, cd: 90, area: 600, amount: 3, speed: 0, duration: 0, knock: 40, rehit: 1 },
     },
   },
   crane: {
@@ -348,22 +348,22 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '水',
     type: '符',
     // amount：几只纸鹤；area：看多远的怪；speed：俯冲多快；cd：一轮俯冲的间隔（几只轮流）
-    base: { dmg: 13, cd: 70, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
+    base: { dmg: 18, cd: 60, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
     ups: [
       { text: '多一只纸鹤', delta: { amount: 1 } },
-      { text: '伤害 +5', delta: { dmg: 5 } },
+      { text: '伤害 +6', delta: { dmg: 6 } },
       { text: '啄得更勤', delta: { cd: -12 } },
       { text: '多一只纸鹤', delta: { amount: 1 } },
-      { text: '飞得更快、伤害 +5', delta: { speed: 4, dmg: 5 } },
+      { text: '飞得更快、伤害 +6', delta: { speed: 4, dmg: 6 } },
       { text: '多一只纸鹤', delta: { amount: 1 } },
-      { text: '伤害 +8', delta: { dmg: 8 } },
+      { text: '伤害 +10', delta: { dmg: 10 } },
     ],
     evolve: {
       with: 'yinhun',
       name: '千鹤引魂',
       icon: 'i_crane_evo',
       desc: '一群纸鹤，啄死的怪变成小纸鹤',
-      stats: { dmg: 36, cd: 40, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
+      stats: { dmg: 46, cd: 36, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
     },
   },
 };
@@ -374,7 +374,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 export const TYPE_SETS: Record<WeaponType, [string, string]> = {
   剑: ['暴击 +8%', '暴击伤害 +50%'],
   符: ['冷却 −8%', '符类每次多发一张'],
-  镇: ['范围 +12%', '靠近你的怪减速 20%'],
+  镇: ['范围 +12%', '身边的怪减速 20%，被减速的挨打 +25%'],
   灵: ['持续 +15%', '灵类伤害 +25%'],
 };
 /** 五行相生：木生火、火生土、土生金、金生水、水生木 */

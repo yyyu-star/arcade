@@ -3,7 +3,7 @@
  * 平台记在用户行上（presence_json、presence_at，跟 last_seen_at 一起写，不另开表）；好友列表据此显示在线、在哪。
  * 只给好友看；本人关了 show_where，好友那边既看不到在线也看不到在哪，只剩"几天前来过"。
  */
-import { GAME_IDS } from '../../src/games';
+import { GAME_IDS, GAMES } from '../../src/games';
 import type { Limits } from './config';
 import type { Ctx } from './context';
 import { ApiError, noContent } from './http';
@@ -68,9 +68,20 @@ export async function postPresence(c: Ctx): Promise<Response> {
   return noContent();
 }
 
-/** 好友列表里这个人的在线、在哪：关了开关的一律 online: false、没有 where（和离线看起来一样） */
-export function presenceOf(row: { presence_json: string | null; presence_at: number; show_where: number }, now: number, limits: Limits): { online: boolean; where?: Where } {
+const GAME_NAMES: ReadonlyMap<string, string> = new Map(GAMES.map((g) => [g.id, g.name]));
+
+/**
+ * 好友列表里这个人的在线、在哪：关了开关的一律 online: false、没有 where（和离线看起来一样）。
+ * 有游戏的多给 gameName（games.ts 登记的名字，0.15.1）：kit 不认识各游戏的名字，好友面板要写"在玩掼蛋"。读的时候加，不存。
+ */
+export function presenceOf(
+  row: { presence_json: string | null; presence_at: number; show_where: number },
+  now: number,
+  limits: Limits,
+): { online: boolean; where?: Where & { gameName?: string } } {
   if (!row.show_where || now - row.presence_at >= limits.presenceOnlineMs) return { online: false };
   const where = row.presence_json ? (JSON.parse(row.presence_json) as Where) : undefined;
-  return where ? { online: true, where } : { online: true };
+  if (!where) return { online: true };
+  const gameName = where.game ? GAME_NAMES.get(where.game) : undefined;
+  return { online: true, where: gameName ? { ...where, gameName } : where };
 }

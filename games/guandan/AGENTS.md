@@ -131,6 +131,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 报位置、收邀请（0.13.0，`src/view/social.ts`）：kit 的 `mountSocial`，`main.ts` 在 `detectOnce` 之后挂，没平台、没登录不挂；`where()` 在好友房里报 `place: room`、房间码和真人几个（"3/4"），
     别的时候报 `place: game`；进房（第一次连上）、离开房间时 `presenceNow()` 补报一次。邀请横条和"去"（跳 `/games/<id>/?room=<码>`）都是 kit 的。
     房间大厅的"叫朋友来"（`ol-share`）和牌桌顶上的邀请图标（控件 `invite`）都调 `openInvitePanel`（0.13.1）：kit 的"叫朋友来"面板，没挂上 social 时 `friends: false` 只有复制链接；链接按当前页面地址拼。
+    面板传 `zIndex: INVITE_Z`（8800，0.13.2）：要盖住房间弹窗 `#online`（8500），在"请横过来"（9000）、出错面板（9500）之下；改这几个 DOM 层级时 `tests/share-card.test.ts` 会核对。
   - 改了房间和页面之间的约定（动作、视图形状）就加 `src/net/version.ts` 的 `CLIENT_VERSION`：旧页面进房会被 4005 请去刷新。改规则加 `RULES_VERSION`，打到一半的房间按旧规则打完。
   - 验收：`npm run test:room`（真房间机器人对打、写入行数、断线、让位、座位绑人、结算等人）、`npm run room-sim`（规则层大批量）、`npm run online-smoke`（四个浏览器端到端，约 5 分钟，`--quick` 跳过 70 秒托管那项）。
 - 实盘（0.4.0 起单机；设计和数字在 `docs/stake.md`，钱包接口是仓库 `docs/platform-backend.md` 5.9）：
