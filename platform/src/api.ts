@@ -114,6 +114,8 @@ export interface InviteRulesState {
 export interface AdminInviteCode {
   id: string;
   hint: string;
+  /** 完整的码（ABCD-EFGH-JKMN），只有没用的才给 */
+  code?: string;
   status: 'unused' | 'used' | 'expired' | 'revoked';
   owner: { username: string; displayName: string } | null;
   createdAt: number;

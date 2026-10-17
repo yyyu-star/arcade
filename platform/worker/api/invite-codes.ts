@@ -290,6 +290,8 @@ export async function adminCodes(c: Ctx): Promise<Response> {
       return {
         id: r.id,
         hint: hint(r.code),
+        // 没用的码给全（0.21.2，管理员要复制给人）：和本人列表一样只给还能用的，用过、过期、撤回的只给末四位
+        ...(st === 'unused' ? { code: formatInviteCode(r.code) } : {}),
         status: st,
         owner: r.owner_name ? { username: r.owner_name, displayName: r.owner_display } : null,
         createdAt: r.created_at,

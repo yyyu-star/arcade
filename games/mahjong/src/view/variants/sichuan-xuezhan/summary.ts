@@ -2,8 +2,10 @@
  * 结算（DESIGN.md 第 6 节）：一局打完列每家胡了什么番、钱怎么走的（点炮、自摸、杠钱、呼叫转移、退税、查花猪、查大叫）；
  * 一场打完再列总输赢和称号。只用公开信息。
  */
+import { kindOf } from '../../../core/tiles/index.ts';
 import type { XzView } from '../../../core/variants/sichuan-xuezhan/index.ts';
 import { el } from '../../dom.ts';
+import { backUrl, tileName, tileUrl } from '../../tiles.ts';
 import type { Award } from '../../../game/awards.ts';
 import type { Highlight } from '../../../game/banter.ts';
 import { AWARD_NAME, awardLine, FAN_NAME, HIGHLIGHT_NAME, PAY_KIND, signed, TITLE_NAME } from '../../text.ts';
@@ -13,6 +15,8 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
   const h = v.history.at(-1);
   if (!h) return box;
   el('h2', '', box, `第 ${h.round + 1} 局${h.end === 'wall' ? '：牌摸完了' : ''}`);
+  // 电脑不看牌对玩家是看不见的（DESIGN.md 5.4），一局打完把所有人的牌摆出来，自己对得上
+  el('p', 'fair', box, '一局打完所有人的牌都亮在这里。电脑和你一样，看不到别人手里的牌和牌墙。');
   const rows = el('div', 'rows', box);
   for (let seat = 0; seat < 4; seat++) {
     const row = el('div', `row${seat === v.me?.seat ? ' me' : ''}`, rows);
@@ -23,8 +27,12 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
       const items = w.items.filter((x) => x.id !== 'ping' || w.items.length === 1);
       what.textContent = `${w.from === null ? '自摸' : `胡（${names[w.from]} 点炮）`} ${items.map((x) => FAN_NAME[x.id] + (x.n && x.n > 1 ? `×${x.n}` : '')).join(' · ')} ${w.fan} 番`;
     } else what.textContent = h.end === 'wall' ? '没胡' : '—';
+    // 点炮给谁：输给谁一眼看得出来（血战里点过炮的人后面也可能胡）
+    const fed = h.wins.filter((x) => x.from === seat).map((x) => names[x.seat]!);
+    if (fed.length) what.textContent += ` · 点炮给 ${fed.join('、')}`;
     const n = h.net[seat]!;
     el('span', `net ${n > 0 ? 'up' : n < 0 ? 'down' : ''}`, row, `${signed(n)}${unit}`);
+    handLine(v, seat, row);
   }
   // 钱的流水：按种类合起来，一行一种
   const flows = new Map<string, number>();
@@ -40,6 +48,33 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
     }
   }
   return box;
+}
+
+/** 这一家最后的牌：碰杠在前，手牌按牌面排好，胡的那张单放在最后描金。视图在一局结束时本来就亮出所有人的手牌 */
+function handLine(v: XzView, seat: number, row: HTMLElement): void {
+  const s = v.seats[seat]!;
+  if (!s.hand) return;
+  const line = el('div', 'hand-line', row);
+  const tile = (t: number, parent: HTMLElement): HTMLElement => {
+    const e = el('span', 'mini', parent);
+    e.style.backgroundImage = `url("${t < 0 ? backUrl() : tileUrl(kindOf(t))}")`;
+    if (t >= 0) e.title = tileName(kindOf(t));
+    return e;
+  };
+  for (const m of s.melds) {
+    const g = el('span', 'group', line);
+    for (const t of m.tiles) tile(t, g);
+  }
+  const hand = s.hand.slice().sort((a, b) => kindOf(a) - kindOf(b) || a - b);
+  const won = s.won?.tile;
+  if (won !== undefined && hand.includes(won)) hand.splice(hand.indexOf(won), 1);
+  const g = el('span', 'group', line);
+  for (const t of hand) tile(t, g);
+  if (won !== undefined) {
+    const w = tile(won, line);
+    w.classList.add('won');
+    w.title = `${tileName(kindOf(won))}：${s.won!.from === null ? '自摸' : '胡的这张'}`;
+  }
 }
 
 export function matchSummary(v: XzView, names: string[], unit: string): HTMLElement {

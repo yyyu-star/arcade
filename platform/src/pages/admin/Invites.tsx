@@ -108,7 +108,7 @@ function UserQuotaPanel() {
       <form className="form" onSubmit={(e) => void onSubmit(e)} data-testid="invite-quota">
         <label className="field">
           <span className="field__label">谁</span>
-          <select required value={userId} onChange={(e) => setUserId(e.target.value)}>
+          <select className="field__input" required value={userId} onChange={(e) => setUserId(e.target.value)}>
             <option value="">选一个账号</option>
             {(users ?? []).map((u) => (
               <option key={u.id} value={u.id}>
@@ -129,6 +129,35 @@ function UserQuotaPanel() {
 }
 
 const STATUS_TEXT: Record<AdminInviteCode['status'], string> = { unused: '没用', used: '已用', expired: '过期', revoked: '撤回' };
+
+type Person = { username: string; displayName: string } | null | undefined;
+
+/** 昵称一行、用户名灰着一行（长名字不把表格撑宽）；账号注销了灰着写"已注销" */
+function Who({ who }: { who: Person }) {
+  return who ? (
+    <>
+      {who.displayName}
+      <small className="invite-table__user muted">{who.username}</small>
+    </>
+  ) : (
+    <span className="muted">已注销</span>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
+  const copy = () =>
+    navigator.clipboard.writeText(text).then(
+      () => setState('done'),
+      // 剪贴板不让用（权限、老浏览器）：码就在旁边，手动选中复制
+      () => setState('failed'),
+    );
+  return (
+    <button className="btn btn--small" type="button" onClick={() => void copy()}>
+      {state === 'done' ? '已复制' : state === 'failed' ? '手动复制' : '复制'}
+    </button>
+  );
+}
 
 function CodesPanel() {
   const [status, setStatus] = useState<'all' | 'unused' | 'used'>('all');
@@ -159,30 +188,38 @@ function CodesPanel() {
       {!codes && !error && <p className="note">正在读取…</p>}
       {codes && codes.length === 0 && <p className="note">还没有。</p>}
       {codes && codes.length > 0 && (
-        <table className="stats-table cards-on-phone" data-testid="invite-code-table">
-          <thead>
-            <tr>
-              <th>码</th>
-              <th>谁发的</th>
-              <th>状态</th>
-              <th>谁用的</th>
-              <th>生成于</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {codes.map((c) => (
-              <tr key={c.id}>
-                <td data-label="码" className="mono">{c.hint}</td>
-                <td data-label="谁发的">{c.owner ? `${c.owner.displayName}（${c.owner.username}）` : '已注销'}</td>
-                <td data-label="状态">{STATUS_TEXT[c.status]}</td>
-                <td data-label="谁用的">{c.status === 'used' ? (c.usedBy ? `${c.usedBy.displayName}（${c.usedBy.username}）` : '已注销') : ''}</td>
-                <td data-label="生成于">{timeText(c.createdAt)}</td>
-                <td>{c.status === 'unused' && <RevokeButton id={c.id} onDone={() => setVersion((v) => v + 1)} />}</td>
+        // 表格放在能横着滑的框里：窄屏不撑破面板；框撑满面板剩下的高度，表格本身按内容高
+        <div className="table-scroll">
+          <table className="stats-table invite-table" data-testid="invite-code-table">
+            <thead>
+              <tr>
+                <th>码</th>
+                <th>状态</th>
+                <th>谁发的</th>
+                <th>谁用的</th>
+                <th>生成于</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {codes.map((c) => (
+                <tr key={c.id} className={c.status === 'unused' ? '' : 'invite-table__spent'}>
+                  <td className="mono">{c.code ?? c.hint}</td>
+                  <td>
+                    <span className={`code-status code-status--${c.status}`}>{STATUS_TEXT[c.status]}</span>
+                  </td>
+                  <td><Who who={c.owner} /></td>
+                  <td>{c.status === 'used' ? <Who who={c.usedBy} /> : ''}</td>
+                  <td className="tnum">{timeText(c.createdAt)}</td>
+                  <td className="invite-table__acts">
+                    {c.code && <CopyButton text={c.code} />}
+                    {c.status === 'unused' && <RevokeButton id={c.id} onDone={() => setVersion((v) => v + 1)} />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Panel>
   );
@@ -206,11 +243,9 @@ function RevokeButton({ id, onDone }: { id: string; onDone: () => void }) {
 
 export function InvitesSection() {
   return (
-    <div className="console__grid console__grid--2">
-      <div className="console__col">
-        <RulesPanel />
-        <UserQuotaPanel />
-      </div>
+    <div className="invites-grid">
+      <RulesPanel />
+      <UserQuotaPanel />
       <CodesPanel />
     </div>
   );
