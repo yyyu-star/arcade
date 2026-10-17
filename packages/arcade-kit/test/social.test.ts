@@ -211,6 +211,10 @@ describe('"叫朋友来"面板的字（0.12.2）', () => {
     expect(whereText({ online: true, where: { place: 'room', game: 'other', room: 'ABC123' } }, names)).toBe('在好友房');
     expect(whereText({ online: true, where: { place: 'game', game: 'cards' } }, names)).toBe('在打牌');
     expect(whereText({ online: true, where: { place: 'game', game: 'other' } }, names)).toBe('在玩游戏');
+    // 平台给的显示名优先（0.12.4），回调不认识的游戏也写得出名字
+    expect(whereText({ online: true, where: { place: 'game', game: 'other', gameName: '别的牌' } }, names)).toBe('在别的牌');
+    expect(whereText({ online: true, where: { place: 'room', game: 'cards', gameName: '平台叫法', seats: '2/4' } }, names)).toBe('在平台叫法的好友房 · 2/4');
+    expect(whereText({ online: true, where: { place: 'game', game: 'cards', gameName: '' } }, names)).toBe('在打牌');
     expect(whereText({ online: true, where: { place: 'lobby' } })).toBe('在大厅');
     expect(whereText({ online: true })).toBe('在线');
     expect(whereText({ online: false, lastSeenDaysAgo: 0 })).toBe('今天来过');
