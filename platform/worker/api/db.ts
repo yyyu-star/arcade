@@ -24,11 +24,13 @@ const WRITE_BACKOFF_MS = 40;
 export interface RequestStats {
   rowsWritten: number;
   rowsRead: number;
+  /** 跑了几条语句（批量里的逐条算）；测试断言"一次一条查询"用 */
+  queries: number;
   byCategory: Record<Category, number>;
 }
 
 export function newStats(): RequestStats {
-  return { rowsWritten: 0, rowsRead: 0, byCategory: Object.fromEntries(CATEGORIES.map((k) => [k, 0])) as Record<Category, number> };
+  return { rowsWritten: 0, rowsRead: 0, queries: 0, byCategory: Object.fromEntries(CATEGORIES.map((k) => [k, 0])) as Record<Category, number> };
 }
 
 export class Db {
@@ -87,6 +89,7 @@ export class Db {
     const n = meta.rows_written ?? 0;
     this.stats.rowsWritten += n;
     this.stats.rowsRead += meta.rows_read ?? 0;
+    this.stats.queries++;
     this.stats.byCategory[this.cat] += n;
   }
 }

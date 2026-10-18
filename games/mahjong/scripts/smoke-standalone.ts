@@ -112,8 +112,11 @@ try {
 
   // 选桌页：只有娱乐，没有钱包，"首页"
   await a.goto(`${base}/?turbo`);
-  await a.waitForSelector('.lobby-head');
+  await a.waitForSelector('.home-main');
   check(new URL(a.url()).pathname === '/games/mahjong/', '打开站点根落到游戏首页');
+  check(!(await a.$('.mode.real')), '主页没有实盘卡');
+  await a.click('.mode.fun');
+  await a.waitForSelector('.lobby-head');
   const labels = await a.$$eval('.stakes-label', (xs) => xs.map((x) => x.textContent ?? ''));
   const stakes = await a.$$eval('.stakes .stake', (xs) => xs.length);
   check(labels.length === 1 && /娱乐/.test(labels[0] ?? '') && stakes === 3, `选桌页只有娱乐的三个难度（${labels.join(' / ')}，${stakes} 张卡）`);
@@ -131,6 +134,8 @@ try {
   check(!!(await a.$('text=下一局')), '单机打完第一局');
   // 回首页（本地存档留着，选桌页会有"接着打上一场"）
   await a.goto(`${base}/games/mahjong/`);
+  await a.waitForSelector('.home-main');
+  await a.click('.mode.room');
   await a.waitForSelector('.lobby-head');
 
   // 好友房：两个游客，各填昵称
@@ -140,6 +145,8 @@ try {
   const code = ((await a.textContent('.room-code')) ?? '').trim();
   check(/^\d{6}$/.test(code), `游客开好友房 ${code}`);
   await b.goto(`${base}/games/mahjong/`);
+  await b.waitForSelector('.home-main');
+  await b.click('.mode.room');
   await b.waitForSelector('.lobby-head');
   await nickname(b, '小王');
   await b.goto(`${base}/games/mahjong/?room=${code}`);

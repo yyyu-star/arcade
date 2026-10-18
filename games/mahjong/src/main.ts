@@ -20,8 +20,10 @@ import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { createFun, funOff, setFunOff } from './view/fun.ts';
 import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
+import { settleFx } from './view/fx.ts';
+import { renderHome, type HomeMode } from './view/home.ts';
 import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
-import { play, setSound, setVolume, unlockAudio } from './view/sound.ts';
+import { play, setAmbience, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { awardsCard, cardOf, prepareCard } from './view/share.ts';
 import { cheerLine, easierLevel, GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, nextStreak, num, STAKES_NAME, VARIANT_NAME, walletError, type Streak } from './view/text.ts';
@@ -42,6 +44,8 @@ interface Prefs {
   /** 总音量 0–1（静音另算：sound 关着时一点声音都不出） */
   volume: number;
   fast: boolean;
+  /** 茶馆底噪（0.17.4）：默认开、很轻，跟着静音和音量走，声音面板里能单独关 */
+  ambience: boolean;
   stakes: StakesId;
   /** 单机娱乐的难度：第一次玩默认新手 */
   level: Level;
@@ -53,9 +57,9 @@ function loadPrefs(): Prefs {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
     const vol = typeof p.volume === 'number' && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8;
     const level = LEVELS.includes(p.level as Level) ? (p.level as Level) : 'easy';
-    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
+    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, ambience: p.ambience !== false, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
   } catch {
-    return { sound: true, volume: 0.8, fast: false, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
+    return { sound: true, volume: 0.8, fast: false, ambience: true, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
   }
 }
 const prefs = loadPrefs();
@@ -68,6 +72,7 @@ function savePrefs(): void {
 }
 setSound(prefs.sound);
 setVolume(prefs.volume);
+setAmbience(prefs.ambience);
 // 牌桌、选桌页的画（art.css 用的 --art-* 变量）
 installArt();
 // 牌墙的立体牌背：只生成一次，写成变量给 style.css 的 .opp-hand .back 用
@@ -122,6 +127,12 @@ const muteBtn = button('act soft', volBox, '', () => {
   savePrefs();
   paintTop();
 });
+const ambBtn = button('act soft', volBox, '', () => {
+  prefs.ambience = !prefs.ambience;
+  setAmbience(prefs.ambience);
+  savePrefs();
+  paintTop();
+});
 // 互动的总开关也放这儿（docs/table-fun.md 第 5 节）：关了别人的一律不播，单机电脑也不反应
 const funBtn = button('act soft', volBox, '', () => {
   setFunOff(!funOff());
@@ -144,6 +155,7 @@ function paintTop(): void {
   soundBtn.textContent = prefs.sound && prefs.volume > 0 ? '声' : '静';
   muteBtn.textContent = prefs.sound ? '静音' : '开声';
   funBtn.textContent = funOff() ? '互动：不看' : '互动：开';
+  ambBtn.textContent = prefs.ambience ? '茶馆声：开' : '茶馆声：关';
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -249,7 +261,8 @@ function showError(text: string, fix?: string): void {
 let solo: Solo | null = null;
 let table: TableUi<XzView, XzAction> | null = null;
 
-function lobby(friends = false): void {
+/** 离开牌桌、房间回到主页或选桌页：停单机、断房间、拆牌桌 */
+function teardown(): void {
   // 从房间回来：马上告诉好友我不在房里了
   if (reported !== null) {
     reported = null;
@@ -267,11 +280,48 @@ function lobby(friends = false): void {
   table = null;
   title.textContent = `${GAME_NAME} · ${VARIANT_NAME['sichuan-xuezhan']}`;
   paintTop();
+}
+
+/** 游戏主页（0.17.0，docs/art-v3.md 第 4 节）：主视觉、快速开始 / 继续上局、模式卡、战绩 */
+function homePage(): void {
+  teardown();
+  screen.className = 'screen front';
+  const save = loadSolo();
+  const st = stakesOf(prefs.stakes);
+  const kind = (stakes: StakesId, level: Level | undefined): string =>
+    stakesOf(stakes)?.wallet ? `实盘 · ${STAKES_NAME[stakes]}档` : `娱乐 · ${LEVEL_NAME[level ?? 'easy']}`;
+  renderHome(screen, {
+    quick: kind(st ? prefs.stakes : 'fun', prefs.level),
+    resume: save ? `${kind(save.stakes, save.level)} · 第 ${Math.min(save.state.round + 1, save.state.opts.rounds)}/${save.state.opts.rounds} 局` : null,
+    realOff: wallet ? (wallet.balance <= 0 ? '钱包没有筹码了' : null) : (walletNote ?? '钱包连不上'),
+    standalone,
+    record: readRecord(),
+    onQuick: () => startSolo(st ? prefs.stakes : 'fun', prefs.opts),
+    onResume: () => void resumeSolo(),
+    onMode: (m) => lobby(false, m),
+    onRules: () => showRules(stage),
+  });
+}
+
+/**
+ * 选桌页（主页点模式卡进来）：mode 是从哪张模式卡进来的，实盘卡进来先选中小档；从平台大厅的"好友房"来（friends）开房、进房亮一下。
+ * 从牌桌"回选桌"、离开时没带 mode：按上次打的是娱乐还是实盘回到那一页
+ */
+/** 选桌页现在摆的是哪个模式（钱包刷新后重画时不换页） */
+let lobbyMode: HomeMode = 'fun';
+
+function lobby(friends = false, mode: HomeMode | null = null): void {
+  teardown();
   screen.className = 'screen lobby';
+  let stakes = prefs.stakes;
+  const m: HomeMode = standalone && mode === 'real' ? 'fun' : (mode ?? (friends ? 'room' : stakesOf(stakes)?.wallet && !standalone ? 'real' : 'fun'));
+  if (m === 'real' && !stakesOf(stakes)?.wallet) stakes = 'small';
+  if (m === 'fun') stakes = 'fun';
+  lobbyMode = m;
   renderLobby(screen, {
     wallet,
     walletNote,
-    stakes: prefs.stakes,
+    stakes,
     level: prefs.level,
     opts: prefs.opts,
     canResume: loadSolo() !== null,
@@ -282,6 +332,8 @@ function lobby(friends = false): void {
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
     friends,
     ...(standalone ? { standalone: { nick: nick(), onNick: setNick } } : {}),
+    onBack: homePage,
+    mode: m,
   });
 }
 
@@ -343,7 +395,8 @@ async function resumeSolo(): Promise<void> {
 /** 上一场已经离开、结回没成：再结一次，成了说一声 */
 async function settleLeftover(s: Solo): Promise<void> {
   const r = await s.finish();
-  if (screen.classList.contains('lobby')) lobby();
+  if (screen.classList.contains('lobby')) lobby(false, lobbyMode);
+  else if (screen.classList.contains('front')) homePage();
   if (r?.ok) toast('上一场的筹码已经结回钱包');
   else if (r) toast(`上一场的筹码还没结上：${walletError(r.error).text}`);
 }
@@ -449,7 +502,7 @@ const onlineUi = {
       el('p', '', box, text);
       button('act go', box, '回选桌', () => {
         closeDialog();
-        lobby();
+        lobby(false, 'room');
       });
     }, false);
   },
@@ -471,7 +524,7 @@ function drawWaiting(s: OnlineState): void {
     // 等人页离开：先离座再断开（只断开的话 kit 只记掉线、座位还占着，房主开打会照样从他钱包带一份，自审 C4）
     onLeave: () => {
       if (s.you?.seat !== null && s.you?.seat !== undefined) online?.leaveSeat();
-      lobby();
+      lobby(false, 'room');
     },
   });
 }
@@ -561,7 +614,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
       const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
         if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
-        box.appendChild(roundSummary(g, names, unit));
+        settle(box, roundSummary(g, names, unit));
         box.appendChild(matchSummary(g, names, unit));
         if (fame.length) box.appendChild(fameSummary(fame, names));
         if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
@@ -570,7 +623,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
         const row = el('div', 'row end-acts', box);
         button('act soft', row, '回选桌', () => {
           closeDialog();
-          lobby();
+          lobby(false, 'room');
         });
         // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页
         const title = `好友房 · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`;
@@ -605,7 +658,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
   if (g.phase === 'end') {
     if (replay && document.querySelector('.mask.end')) return;
     dialog(stage, 'end', (box) => {
-      box.appendChild(roundSummary(g, names, unit));
+      settle(box, roundSummary(g, names, unit));
       el('p', 'room-hint', box, '几秒后自动开下一局');
     });
     return;
@@ -678,7 +731,7 @@ const soloUi = {
       if (!solo || solo !== mine) return;
       if (v.phase === 'over') {
         dialog(stage, 'end', (box) => {
-          box.appendChild(roundSummary(v, names, unit));
+          settle(box, roundSummary(v, names, unit));
           box.appendChild(matchSummary(v, names, unit));
           if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
@@ -700,7 +753,7 @@ const soloUi = {
         return;
       }
       dialog(stage, 'end', (box) => {
-        box.appendChild(roundSummary(v, names, unit));
+        settle(box, roundSummary(v, names, unit));
         button('act go', el('div', 'row end-acts', box), '下一局', () => {
           closeDialog();
           solo?.next();
@@ -719,13 +772,44 @@ const soloUi = {
   },
 };
 
+/** 结算弹窗里放一局的结算，分从 0 数上去、铜钱飞，飞了就响一声筹码 */
+function settle(box: HTMLElement, summary: HTMLElement): void {
+  box.appendChild(summary);
+  if (settleFx(summary)) play('chips');
+}
+
 const STREAK_KEY = 'mahjong.streak';
+/** 单机打完了几场、赢了几场（主页的战绩卡）；last 同 mahjong.streak，刷新后结算页再弹一遍不重复记 */
+const RECORD_KEY = 'mahjong.record';
+
+function readRecord(): { played: number; won: number; lost: number } | null {
+  try {
+    const r = JSON.parse(localStorage.getItem(RECORD_KEY) ?? 'null') as { played?: unknown; won?: unknown } | null;
+    if (!r || typeof r.played !== 'number' || typeof r.won !== 'number' || r.played <= 0) return null;
+    const st = JSON.parse(localStorage.getItem(STREAK_KEY) ?? 'null') as Streak | null;
+    return { played: r.played, won: r.won, lost: typeof st?.n === 'number' ? st.n : 0 };
+  } catch {
+    return null;
+  }
+}
+
+function bumpRecord(id: string, net: number): void {
+  try {
+    const r = JSON.parse(localStorage.getItem(RECORD_KEY) ?? 'null') as { played: number; won: number; last: string } | null;
+    const prev = r && typeof r.played === 'number' && typeof r.won === 'number' ? r : { played: 0, won: 0, last: '' };
+    if (prev.last === id) return;
+    localStorage.setItem(RECORD_KEY, JSON.stringify({ played: prev.played + 1, won: prev.won + (net > 0 ? 1 : 0), last: id }));
+  } catch {
+    // 存不了（隐私模式满了）就不记，战绩卡显示"还没打过"
+  }
+}
 
 /**
  * 单机连输时结算页说一句（不嘲讽），娱乐局再给"换到轻松一档"（DESIGN.md 第 7 节）。只换难度，不改牌、不放水：
  * 每一档的电脑本来就是那么强，公平底线不动
  */
 function cheer(box: HTMLElement, s: Solo, net: number): void {
+  bumpRecord(s.save.id ?? '', net);
   let streak: Streak;
   try {
     const prev = JSON.parse(localStorage.getItem(STREAK_KEY) ?? 'null') as Streak | null;
@@ -830,6 +914,19 @@ function newFun(t: TableUi<XzView, XzAction>, me: () => number | null, temper: (
     canSend: () => me() !== null,
     scope: () => scope,
     localBots,
+    // 首次提示冒在对家头像上（离手牌和操作条最远），对家空着就上家（左上）；右下那家贴着碰杠胡过的按钮，不挑。
+    // 换三张、定缺、轮到我打、碰杠胡过的按钮在（v.prompt）时先不冒——以前 kit 挑第一个电脑，常是右下那家，
+    // 气泡压住"缺条""过"和那家的名字（docs/art-v3.md 审计、#249 截图）
+    hintSeat: () => {
+      const v = t.view();
+      const m = me();
+      if (!v || m === null || v.phase !== 'turn' || v.turn === m || v.prompt) return null;
+      for (const s of [(m + 2) % 4, (m + 3) % 4]) {
+        const meta = t.seatMeta(s);
+        if (meta && !meta.empty) return s;
+      }
+      return null;
+    },
   });
   dialogHooks({ open: () => f.hide(), close: () => f.show() });
   // 冒烟按 kit 的 controls() 点（开发服务器上才挂）
@@ -890,7 +987,7 @@ async function leaveRoom(): Promise<void> {
     // 等房间收到离座再断开（结回由房间办，断开也不影响）
     await new Promise((r) => window.setTimeout(r, 300));
   }
-  lobby();
+  lobby(false, 'room');
 }
 
 async function leave(): Promise<void> {
@@ -983,7 +1080,9 @@ void (async () => {
     history.replaceState(null, '', u);
   }
   if (code && /^\d{6}$/.test(code)) return enterRoom(code, false);
-  lobby(friends);
+  // 平台大厅的"好友房"按钮直接到开房、进房那一页；平常进主页
+  if (friends) lobby(true, 'room');
+  else homePage();
   // 上一场单机实盘离开时没结上：打开就自动再结一次（自审 C2）
   const left = loadSolo();
   if (left?.settle && !left.done) void settleLeftover(new Solo(left, quietUi));

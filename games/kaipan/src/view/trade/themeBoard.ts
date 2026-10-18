@@ -6,7 +6,7 @@ import type { Animator } from '../fx/anim.ts';
 import { flameBurst, iceBurst } from '../fx/particles.ts';
 import type { Rect } from '../rect.ts';
 import { COLOR, FEEL_COLOR, PHONE, THEME_COLOR, TYPE, arrowOf, signColor, textOn } from '../theme.ts';
-import { addGlyph, addImage, addPaper, addPill, setArt } from '../ui/art.ts';
+import { addGlyph, addImage, addPaper, addPill, addWood, setArt } from '../ui/art.ts';
 import { addSpark, type Spark } from '../ui/spark.ts';
 import { openThemeDetail } from './detail.ts';
 import { preCount, themeHeat } from './tape.ts';
@@ -18,9 +18,20 @@ import { BOARD } from './layout.ts';
  * 一行里各部件相对行顶的位置。电脑上每行 98 高；手机横屏（0.5.5）看板在右边的标签页里，6 行挤进 348 高，
  * 每行两排：名字 + 小脸 + 状态签；热度条 + 5 天折线（有备注时换成备注）+ 昨天变化 + 大号热度。
  */
+/**
+ * 0.19.0 手机世界高 404、宽 718–960：看板高 300、宽 256–338。行高按看板高分（约 49），
+ * 第二排（热度条、折线、变化、大号热度）整体往上收；看板窄时热度条和折线变短。
+ */
+function phoneRows(w: number, h: number) {
+  const rh = Math.min(56, Math.floor((h - 6) / 6));
+  const up = 56 - rh;
+  const narrow = w < 300;
+  return { y0: 3, h: rh, barX: 50, barW: narrow ? 72 : 104, barH: 12, right: 10, badge: { y: 28 - Math.round(up / 2), s: up > 4 ? 30 : 32 }, nameY: 3, nameSize: 15, faceY: 13, pillY: 3, pillH: 22, feelY: 14,
+    barY: 36 - up, heatY: 40 - up, heatSize: 21, flameY: 46 - up, noteY: 31 - up, calY: -1, sparkX: narrow ? 80 : 112, sparkY: 30 - up, sparkW: narrow ? 44 : 64, sparkH: 18, deltaX: 44, deltaY: 40 - up, deltaSize: 13 };
+}
+
 const G = PHONE
-  ? { y0: 3, h: 56, barX: 50, barW: 104, barH: 12, right: 10, badge: { y: 28, s: 32 }, nameY: 3, nameSize: 15, faceY: 13, pillY: 3, pillH: 22, feelY: 14,
-      barY: 36, heatY: 40, heatSize: 21, flameY: 46, noteY: 31, calY: -1, sparkX: 112, sparkY: 30, sparkW: 64, sparkH: 18, deltaX: 44, deltaY: 40, deltaSize: 13 }
+  ? phoneRows(BOARD.w, BOARD.h)
   : { y0: 50, h: 98, barX: 52, barW: 128, barH: 14, right: 14, badge: { y: 26, s: 38 }, nameY: 6, nameSize: 16, faceY: 16, pillY: 6, pillH: 22, feelY: 17,
       barY: 48, heatY: 55, heatSize: 24, flameY: 61, noteY: 30, calY: 79, sparkX: 36, sparkY: 70, sparkW: 96, sparkH: 18, deltaX: 0, deltaY: 80, deltaSize: 14 };
 const ROW_Y0 = BOARD.y + G.y0;
@@ -93,6 +104,8 @@ export class ThemeBoardView {
     this.root = scene.add.container(0, 0);
     // 手机上看板和群聊共用右边一块（标签页切换）：所有部件收进 root，切走时整块藏起来
     const before = scene.children.list.length;
+    // 0.18.0 木材质（art-v3：不会变的框架）：电脑上看板外面一圈木框；手机上看板在标签页里，不加
+    if (!PHONE) addWood(scene, BOARD.x - 6, BOARD.y - 6, BOARD.w + 12, BOARD.h + 12);
     addPaper(scene, BOARD.x, BOARD.y, BOARD.w, BOARD.h);
     // 手机上标题和那句提醒在标签页上（标签「风口」，长按看说明），这里不重复
     if (!PHONE) addText(scene, BOARD.x + 18, BOARD.y + 16, '风口', { size: TYPE.title, bold: true });

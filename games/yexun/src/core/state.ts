@@ -14,7 +14,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 16;
+export const RULES_VERSION = 18;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -195,6 +195,8 @@ export class World {
   face = 0;
   moving = false;
   invuln = 0;
+  /** 最后一下是谁打的（模拟器死因统计用，不进指纹） */
+  hurtBy = -1;
   level = 1;
   xp = 0;
   /** 攒着还没选的升级次数 */

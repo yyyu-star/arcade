@@ -29,10 +29,9 @@ import { hasLoginHint } from '../../platform/cloud.ts';
 import { standalone } from '../../platform/mode.ts';
 import { showBanner } from '../segments.ts';
 import { ChoiceDialog } from '../ui/noticeDialog.ts';
-import { acceptInvite, onChallengeChange, takeInvite, versionDiffers } from '../challenge.ts';
-import { ChallengePanel } from '../meta/challengePanel.ts';
+import { acceptInvite, onChallengeChange, takeInvite } from '../challenge.ts';
+import { ChallengeInviteDialog, ChallengePanel } from '../meta/challengePanel.ts';
 import type { ChallengeFail, ChallengeView } from '../../platform/challenge.ts';
-import { boardScoreText } from '../labels.ts';
 import { hideHomeTip, showHomeTip } from '../../platform/viewportFit.ts';
 import { Room } from '../trade/room.ts';
 import { bleedOf, coverOf, phoneLayout, viewOf } from '../viewport.ts';
@@ -81,7 +80,8 @@ const CLOUDS: readonly [number, number, number][] = [[192, 376, 1], [1104, 336, 
 type Item = { key: string; label: string; fn: () => void };
 
 export class TitleScene extends BaseScene {
-  protected override readonly phoneReady = PHONE;
+  // 0.19.0 手机世界改成 718–960×404，主页还没重排（0.19.1）：先按旧的 960×444 整体缩放进来
+  protected override readonly phoneReady = PHONE ? ('legacy' as const) : false;
   private buttons: Record<string, Button> = {};
   private room: Room | null = null;
   private profile: Profile = emptyProfile();
@@ -710,14 +710,7 @@ export class TitleScene extends BaseScene {
       this.trackDialog(new ChallengePanel(this, v));
       return;
     }
-    const p = v.payload.setup;
-    const len = p.short ? `短局 ${p.short.months} 个月` : '完整一年';
-    const lines = [`${v.owner} 挑战你：${personaView(p.persona).name} · ${difficultyView(p.difficulty).name} · ${len}`];
-    if (v.ownerScore !== null) lines.push(`他的成绩：${boardScoreText(v.ownerScore)}`);
-    lines.push(versionDiffers(v.payload.v) ? '发起时的版本和你的不同，结果可能对不上。每人只算第一次。' : '同一个开局、同一段行情，每人只算第一次。');
-    this.trackDialog(
-      new ChoiceDialog(this, '好友挑战', lines.join('\n'), { label: '接受挑战', name: 'challenge:accept', onClick: () => this.acceptChallenge(v) }, { label: '先不了', name: 'challenge:no', onClick: () => undefined }),
-    );
+    this.trackDialog(new ChallengeInviteDialog(this, v, () => this.acceptChallenge(v)));
   }
 
   private acceptChallenge(v: ChallengeView): void {

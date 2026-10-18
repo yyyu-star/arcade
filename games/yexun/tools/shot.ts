@@ -31,8 +31,8 @@ const FLOW = argv.includes('--flow');
 const PAUSE = argv.includes('--pause');
 /** CPU 降速倍数（CDP Emulation.setCPUThrottlingRate），模拟低端手机 */
 const CPU = Number(opt('--cpu') ?? 1);
-/** 只跑某个视口（desktop | phone | phonep 手机竖屏） */
-const ONLY = opt('--view');
+/** 只跑这几个视口，逗号分隔（desktop | phone | phonep 手机竖屏 | wide 1920 大屏）；不给就跑 desktop、phone */
+const ONLY = opt('--view')?.split(',') ?? null;
 mkdirSync(OUT, { recursive: true });
 
 const VIEWS = [
@@ -40,7 +40,11 @@ const VIEWS = [
   { name: 'phone', viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
   // 手机竖屏（角色页、菜单要放得下）：只在 --view phonep 时跑
   { name: 'phonep', viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  // 电脑大屏 1920×1080：卡片和字号要跟着放大，不能缩在中间一小块
+  { name: 'wide', viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
 ];
+/** 不点名时只跑这两个（竖屏、大屏按需 --view 点名） */
+const DEFAULT_VIEWS = ['desktop', 'phone'];
 
 /** 页面里检查：可点的东西 ≥ 44×44、文字没有溢出自己的框 */
 async function layoutProblems(page: Page): Promise<string[]> {
@@ -67,17 +71,18 @@ const BASE = `http://127.0.0.1:${addr.port}/?${[LOWMEM ? 'lowmem' : '', QUERY ??
 
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
 const problems: string[] = [];
+let quiet = false;
 try {
   for (const v of VIEWS) {
-    if (ONLY ? v.name !== ONLY : v.name === 'phonep') continue;
+    if (!(ONLY ?? DEFAULT_VIEWS).includes(v.name)) continue;
     const ctx = await browser.newContext({ ...v, ...(VIDEO ? { recordVideo: { dir: OUT, size: v.viewport } } : {}) });
     const page = await ctx.newPage();
     if (CPU > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: CPU });
     page.on('console', (m) => {
       // SwiftShader 截图时的 GPU 驱动提示（ReadPixels）不是页面的问题
-      if (m.type() === 'error' && !/GL Driver Message/.test(m.text())) problems.push(`${v.name} 控制台报错：${m.text()}`);
+      if (m.type() === 'error' && !quiet && !/GL Driver Message/.test(m.text())) problems.push(`${v.name} 控制台报错：${m.text()}`);
     });
-    page.on('pageerror', (e) => problems.push(`${v.name} 未捕获异常：${e.message}`));
+    page.on('pageerror', (e) => !quiet && problems.push(`${v.name} 未捕获异常：${e.message}`));
     await page.goto(BASE, { timeout: 30_000 * Math.max(1, CPU) * 2 });
     await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 * Math.max(1, CPU) * 2 });
     if (FLOW) {
@@ -114,8 +119,37 @@ try {
       }
       await click('[data-a="menu"]');
       await snap('menu');
+      // 主页 → 选模式/地图（守夜、夜探各一张）→ 返回主页
+      await click('[data-a="select"]');
+      await snap('select');
+      await click('[data-a="kind"][data-k="raid"]');
+      await snap('select-raid');
+      await click('[data-a="back"]');
       await page.locator('.yx-gear').click();
       await snap('settings');
+      // 实盘：要有登录提示 cookie 才出"娱乐 | 实盘"；接口一律回空 JSON，这一段的控制台报错不计（只为看版面）
+      quiet = true;
+      // http 的本地地址种不了 __Host- cookie，直接让页面读到它
+      await page.addInitScript(() => Object.defineProperty(document, 'cookie', { get: () => '__Host-arcade_li=1', set: () => undefined }));
+      await page.route('**/api/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+      // 把进度放开（地图、危险档、夜探镇子都解锁），看带特色怪头像的大卡和实盘里灰掉的档位
+      await page.evaluate(() => {
+        const o = JSON.parse(localStorage.getItem('yexun.save') ?? '{}');
+        localStorage.setItem('yexun.save', JSON.stringify({ ...o, maxSeconds: 9999, cleared: 3, raidDone: true, extracts: 1 }));
+      });
+      await page.reload();
+      await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
+      await click('[data-a="select"]');
+      await snap('select-open');
+      await click('[data-a="kind"][data-k="raid"]');
+      await snap('select-towns');
+      if (await page.locator('[data-a="lv"][data-m="live"]').count()) {
+        await click('[data-a="lv"][data-m="live"]');
+        await snap('select-live-raid');
+        await click('[data-a="kind"][data-k="vigil"]');
+        await snap('select-live');
+      } else console.log(`${v.name}：没出实盘开关（登录提示没被认）`);
+      quiet = false;
       await ctx.close();
       continue;
     }

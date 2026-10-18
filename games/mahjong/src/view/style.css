@@ -46,6 +46,18 @@
   /* 点按区域最小边长：屏幕上 44 像素折成设计像素，viewport.ts 按缩放写 */
   --tap: 44px;
   --app-h: 100vh;
+  /* kit 的面板（分享预览、叫朋友、互动菜单）跟着茶馆的样子走（kit 0.16.0 的 --ak-*，靠继承，不用每个组件传 theme） */
+  --ak-bg: #2a160c;
+  --ak-fg: #f6efdc;
+  --ak-accent: #f3c86b;
+  --ak-accent-fg: #3a2300;
+  --ak-border: #f3c86b40;
+  --ak-radius: 16px;
+  --ak-radius-btn: 12px;
+  --ak-font: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --ak-overlay: #0c1220b3;
+  --ak-soft: #ffffff14;
+  --ak-title: #f3c86b;
   font-family: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
@@ -186,11 +198,12 @@ button {
   opacity: 0.45;
 }
 .screen.lobby {
+  --lobby-pad: var(--sp-5);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-5);
+  padding: var(--sp-5) var(--lobby-pad) 0;
   overflow-y: auto;
 }
 .lobby-head {
@@ -279,7 +292,8 @@ button {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin: var(--sp-2) 0;
+  /* 一行至少一个点按区高（--tap）：手机上缩放后 --tap 比 chip 高很多，行挨得近时下一行 chip 的隐形点按区会盖住上一行，点"4 局"选中的是"3 番"（0.17.2） */
+  min-height: max(44px, var(--tap));
 }
 .opt .label {
   width: 72px;
@@ -301,7 +315,18 @@ button {
 }
 .go-row {
   display: flex;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  /* 贴在底部：上面的档位、展开的规则设置再长，开打的按钮也一直看得见 */
+  position: sticky;
+  bottom: 0;
+  margin: auto calc(-1 * var(--lobby-pad)) 0;
+  align-self: stretch;
+  padding: var(--sp-4) var(--lobby-pad);
+  background: linear-gradient(#1a0a0400, #1a0a04f0 30%);
+  z-index: 2;
 }
 .join {
   display: flex;
@@ -351,37 +376,148 @@ button {
   opacity: 0.8;
 }
 
-/* 横屏选桌页分两栏（0.16.1）：左边店名、开打、进房，右边选档和规则设置。横屏舞台只有 520 高，排成一列要在框里滚动；
- * DOM 不动（竖屏照旧一列），按格子放。舞台随屏幕变宽（viewport.ts），两栏跟着撑开 */
-[data-orient='land'] .screen.lobby {
+/* ---------- 游戏主页（0.17.0，docs/art-v3.md 第 4 节） ----------
+ * 横屏左边主视觉、右边店名和按钮；竖屏上面主视觉、下面按钮。一屏放下不滚动，8px 网格 */
+.screen.front {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(560px, 1.7fr);
-  grid-template-areas:
-    'head pick'
-    'resume pick'
-    'go pick'
-    'nick pick'
-    'join note'
-    'link opts';
-  grid-template-rows: auto auto auto auto 1fr auto;
-  align-content: center;
-  justify-items: center;
-  column-gap: var(--sp-6);
-  row-gap: var(--sp-3);
-  /* 顶上让出竹帘（30 高） */
-  padding: 40px var(--sp-6) var(--sp-4);
+  overflow: hidden;
 }
-[data-orient='land'] .screen.lobby > .lobby-head { grid-area: head; }
-[data-orient='land'] .screen.lobby > .resume { grid-area: resume; }
-[data-orient='land'] .screen.lobby > .go-row { grid-area: go; flex-direction: column; gap: var(--sp-3); }
-[data-orient='land'] .screen.lobby > .nick { grid-area: nick; }
-[data-orient='land'] .screen.lobby > .join { grid-area: join; align-self: start; }
-[data-orient='land'] .screen.lobby > .link { grid-area: link; }
-[data-orient='land'] .screen.lobby > .stakes-box { grid-area: pick; align-self: center; }
-[data-orient='land'] .screen.lobby > .wallet-note { grid-area: note; align-self: start; }
-[data-orient='land'] .screen.lobby > .rules-opts { grid-area: opts; }
-/* 左栏的店名在板壁上，放大一点；右栏的卡片宽一点，一排四张正好 */
-[data-orient='land'] .screen.lobby .lobby-head h1 { font-size: 64px; }
+[data-orient='land'] .screen.front {
+  grid-template-columns: 1.15fr 1fr;
+}
+[data-orient='port'] .screen.front {
+  grid-template-rows: 48% 1fr;
+}
+.home-art {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.home-art .scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* 画的边缘渐隐进板壁：横屏往右、竖屏往下，不和按钮那一栏硬切 */
+[data-orient='land'] .home-art .scene {
+  -webkit-mask-image: linear-gradient(to right, #000 80%, transparent);
+  mask-image: linear-gradient(to right, #000 80%, transparent);
+}
+[data-orient='port'] .home-art .scene {
+  -webkit-mask-image: linear-gradient(#000 82%, transparent);
+  mask-image: linear-gradient(#000 82%, transparent);
+}
+.home-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-5) var(--sp-6);
+  min-height: 0;
+}
+[data-orient='port'] .home-main {
+  padding-top: 0;
+}
+.home-head {
+  text-align: center;
+}
+.home-head .brand {
+  margin: 0;
+  font-size: 72px;
+  line-height: 1.1;
+  letter-spacing: 12px;
+  /* 字距加在每个字后面，最后一个字后面那截让回去，才真正居中 */
+  margin-right: -12px;
+}
+[data-orient='port'] .home-head .brand {
+  font-size: 56px;
+}
+.home-head .variant {
+  font-size: var(--fs-lg);
+  opacity: 0.85;
+}
+.pitch {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.act.quick {
+  flex-direction: column;
+  min-width: 288px;
+  height: auto;
+  padding: var(--sp-2) var(--sp-6);
+  line-height: 1.3;
+}
+.act.quick small {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  opacity: 0.8;
+}
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: var(--sp-3);
+  width: min(100%, 480px);
+}
+.mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-2);
+  border: 2px solid #f3c86b33;
+  border-radius: var(--r-md);
+}
+.mode b {
+  font-size: var(--fs-xl);
+}
+.mode small {
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}
+.mode.off {
+  opacity: 0.45;
+}
+.record {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-pill);
+  background: #0000004d;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.record .down {
+  color: var(--red-hi);
+}
+.screen.front .ver {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: var(--sp-3);
+  font-size: var(--fs-xs);
+  opacity: 0.45;
+}
+/* 选桌页左上角回主页 */
+.screen.lobby > .back {
+  position: absolute;
+  left: var(--sp-4);
+  top: 40px;
+  z-index: 1;
+  background: #00000059;
+}
+
+/* 选桌页（0.17.2）：只摆一个模式，一列居中；横屏也一列（档位最多两排），开打的按钮贴在底部 */
+[data-orient='land'] .screen.lobby {
+  --lobby-pad: var(--sp-6);
+  padding-top: 40px;
+  gap: var(--sp-3);
+}
+/* 选桌页的标题是模式名（娱乐 / 实盘 / 好友房），比主页的店名小一号 */
+.screen.lobby .lobby-head h1 {
+  font-size: 44px;
+}
 [data-orient='land'] .stake { min-width: 128px; }
 /* 规则设置展开后两项一行，不把右栏撑出舞台 */
 [data-orient='land'] .rules-opts[open] {
@@ -390,12 +526,16 @@ button {
   column-gap: var(--sp-4);
 }
 [data-orient='land'] .rules-opts summary { grid-column: 1 / -1; }
-/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边是同一块呢子 */
+/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边露出茶馆的板壁（art.css，0.17.1） */
 [data-orient='land'] .table {
   inset: 0 auto 0 calc(50% - 500px);
   width: 1000px;
-  /* 木框外面压暗，看得出桌子到哪为止（外阴影只画在框外，盖不到框和桌面） */
-  box-shadow: 0 0 0 400px #0000004d;
+  /* 木框的倒角高光（同 art.css 的 .table）加一圈落在板壁上的投影，桌子像是摆在屋里 */
+  box-shadow:
+    inset 0 1px 0 #ffd9a040,
+    inset 0 0 0 1px #1a0a04,
+    0 10px 28px #000000b3,
+    0 0 0 1px #00000080;
 }
 
 /* ---------- 好友房 ---------- */
@@ -659,25 +799,39 @@ button {
   font-weight: 400;
   text-shadow: none;
 }
+/* 碰杠胡过按紧急程度分级（0.17.3，docs/art-v3.md 第 5 节）：胡 = 灯笼红底金字、最大；杠、碰 = 暖金（杠深一点）；过 = 半透明、最小。
+ * 定缺三个按钮是茶馆木色，和碰杠胡一眼分开 */
 .act.ron {
-  border-color: #ffc2b8;
-  background: linear-gradient(#ff7a6b, #d63a2f);
+  border-color: var(--gold);
+  background: linear-gradient(#e8503f, #a8231a);
+  color: #ffe9a8;
+  text-shadow: 0 2px 0 #5a0a06;
   font-size: var(--fs-2xl);
 }
 .act.kan {
-  border-color: #ffd9a8;
-  background: linear-gradient(#ffb357, #e07b1a);
+  border-color: #ffe2a0;
+  background: linear-gradient(#f2b54a, #c47a12);
+  color: var(--on-gold);
+  text-shadow: 0 1px 0 #ffffff59;
 }
 .act.pon {
-  border-color: #bfe6ff;
-  background: linear-gradient(#6fc7ff, #2f86d6);
+  border-color: #fff0c4;
+  background: linear-gradient(var(--gold-hi), var(--gold-lo));
+  color: var(--on-gold);
+  text-shadow: 0 1px 0 #ffffff59;
 }
 .act.pass {
-  background: linear-gradient(#ffffff2e, #ffffff14);
+  background: linear-gradient(#ffffff26, #ffffff0f);
+  border-color: #ffffff33;
+  box-shadow: none;
 }
 .act.que {
   flex-direction: column;
   gap: 0;
+  border-color: #f3c86b4d;
+  background:
+    linear-gradient(#ffffff14, transparent 45%),
+    linear-gradient(#5a2d18, #3a1a0c);
 }
 .act.que small {
   font-size: var(--fs-xs);
@@ -1232,10 +1386,14 @@ button {
   gap: var(--sp-3);
   justify-content: flex-end;
 }
+/* "再点一下打出"这类提示：一个小签贴在操作条上，不是一行飘在桌面上的灰字（0.17.3） */
 .bar .hint {
-  font-size: var(--fs-md);
-  opacity: 0.85;
+  font-size: var(--fs-sm);
   white-space: nowrap;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill);
+  background: #0000005c;
+  border: 1px solid #ffffff1a;
 }
 .bar .claim-tile {
   display: flex;
@@ -1273,8 +1431,14 @@ html .atf-btn svg {
   box-shadow: 0 4px 0 #0006, 0 8px 18px #000a;
 }
 .bar .act.ron {
-  min-width: 96px;
+  min-width: 104px;
+  min-height: 68px;
   font-size: var(--fs-3xl);
+}
+.bar .act.pass {
+  min-width: 64px;
+  min-height: 48px;
+  font-size: var(--fs-lg);
 }
 /* 听牌提示：打了能听的牌头上一个小"听"，操作条上摆听哪些、各剩几张 */
 .my-hand .tile.ting::before {
@@ -1355,11 +1519,9 @@ html .atf-btn svg {
   color: #ffd1a1;
 }
 .banner.pon {
-  color: #bfe6ff;
-  -webkit-text-stroke-color: #0b3b66;
-  text-shadow: 0 4px 0 #0b3b66, 0 0 20px #6fc7ff;
+  color: #fff0c4;
 }
-.banner.center {
+.banner.swap {
   font-size: 40px;
 }
 @keyframes pop {
@@ -1607,7 +1769,8 @@ html .atf-btn svg {
 [data-orient='land'] .banner.r1 { left: 80%; top: 46%; }
 [data-orient='land'] .banner.r2 { left: 50%; top: 20%; }
 [data-orient='land'] .banner.r3 { left: 20%; top: 46%; }
-[data-orient='land'] .banner.center { left: 50%; top: 46%; }
+/* 换三张的方向写在中控盘上方，不压盘，也不压底下的定缺按钮（0.17.3） */
+[data-orient='land'] .banner.swap { left: 50%; top: 30%; }
 
 /* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
  * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
@@ -1648,8 +1811,7 @@ html .atf-btn svg {
 [data-orient='port'] .banner.r1 { left: 78%; top: 40%; }
 [data-orient='port'] .banner.r2 { left: 50%; top: 18%; }
 [data-orient='port'] .banner.r3 { left: 22%; top: 40%; }
-[data-orient='port'] .banner.center { left: 50%; top: 46%; }
-[data-orient='port'] .lobby-head h1 { font-size: 46px; }
+[data-orient='port'] .banner.swap { left: 50%; top: 34%; }
 
 /* ---------- 弹窗 ---------- */
 .mask {
@@ -1707,14 +1869,103 @@ html .atf-btn svg {
   font-size: var(--fs-xs);
   opacity: 0.6;
 }
+/* 规则小册子和新手引导是宣纸卡片（docs/art-v3.md 第 7 节 ⑤b）：米色纸、茶褐字、朱红小标题，和牌桌上的深色玻璃面板分开，一看就是"说明书" */
+.mask:is(.rules, .guide) .dialog {
+  --ink: #3b2414;
+  color: var(--ink);
+  background:
+    radial-gradient(120% 80% at 50% 0%, #fffaf0 0%, #0000 70%),
+    linear-gradient(#f3e6c8, #e9d7b0);
+  border: 1px solid #b08a54;
+  box-shadow: inset 0 0 0 4px #f8eed6, inset 0 0 0 5px #c8a46c88, var(--sh-3);
+}
+.mask:is(.rules, .guide) .dialog h2 {
+  color: #9a2a1a;
+  font-family: 'Quehall Title', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+}
+.mask:is(.rules, .guide) .dialog .x {
+  color: var(--ink);
+}
+.mask:is(.rules, .guide) .dialog .act.soft {
+  color: var(--ink);
+  border-color: #8a643a88;
+  background: #fff6;
+}
+.guide .ex {
+  margin: var(--sp-2) 0 var(--sp-3);
+  justify-content: center;
+}
+.guide .ex .mini {
+  width: 28px;
+  height: 39px;
+}
+/* 换三张那一屏：三张同门的牌盖一个"缺"字印，说清"这一门打干净" */
+.guide .ex.swap {
+  position: relative;
+}
+.guide .ex.swap::after {
+  content: '缺';
+  position: absolute;
+  left: calc(50% + 34px);
+  top: -6px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #b8321e;
+  border-radius: 4px;
+  color: #b8321e;
+  font: 900 18px/1 'Quehall Title', serif;
+  transform: rotate(-12deg);
+  opacity: 0.85;
+}
+.ex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ex .group {
+  display: flex;
+}
+.ex .mini {
+  width: 18px;
+  height: 25px;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 1px 0 #0003);
+}
+.rules .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0 var(--sp-6) var(--sp-3) 0;
+  border-bottom: 1px solid #8a643a55;
+}
+.rules .tab {
+  position: relative;
+  min-height: max(36px, var(--tap));
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: 3px solid #0000;
+  background: none;
+  color: var(--ink);
+  opacity: 0.7;
+  font-size: var(--fs-sm);
+}
+.rules .tab.on {
+  opacity: 1;
+  font-weight: 700;
+  border-bottom-color: #9a2a1a;
+}
 .rules table {
   border-collapse: collapse;
   width: 100%;
   font-size: var(--fs-sm);
 }
 .rules td {
-  padding: var(--sp-1) var(--sp-2);
-  border-bottom: 1px solid #ffffff14;
+  padding: var(--sp-2);
+  border-bottom: 1px dashed #8a643a55;
+  vertical-align: top;
 }
 .rules td.n {
   white-space: nowrap;
@@ -1722,7 +1973,11 @@ html .atf-btn svg {
 }
 .rules td.f {
   white-space: nowrap;
-  color: var(--gold);
+  color: #9a2a1a;
+  font-weight: 700;
+}
+.rules td .ex {
+  margin-top: var(--sp-1);
 }
 .rules .note {
   font-size: var(--fs-sm);

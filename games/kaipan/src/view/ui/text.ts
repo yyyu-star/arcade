@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLOR, FONT, FONT_NUM, PHONE, RENDER_SCALE, css } from '../theme.ts';
+import { phoneNew } from '../viewport.ts';
 
 interface TextOpts {
   size?: number;
@@ -65,11 +66,18 @@ function cjkWrap(text: string, obj: Phaser.GameObjects.Text, width: number): str
  * 手机横屏（0.5.5）：960×444 的世界在 844×390 的屏幕上约 0.88 倍，13 号字显示出来约 11.4 像素，和电脑上的 11 号相当。
  */
 export const MIN_TEXT_SIZE = PHONE ? 13 : 11;
+/**
+ * 0.19.0 手机上数字的最小字号：清单要数字 ≥ 14 像素，新手机世界在最小的 SE 上是 0.928 倍，16 号约 14.8px。
+ * 只对按新世界布局的场景生效（phoneNew），还没重排的场景照旧，免得挤。
+ */
+export const MIN_NUM_SIZE_PHONE = 16;
+/** 只有数字、金额、涨跌符号的文字（没标 num 的也按数字算最小字号） */
+const NUMERIC = /^[\s¥+\-−↑↓%.,0-9万亿×/:]*[0-9][\s¥+\-−↑↓%.,0-9万亿×/:]*$/;
 
 export function addText(scene: Phaser.Scene, x: number, y: number, content: string, opts: TextOpts = {}): Phaser.GameObjects.Text {
   const style: Phaser.Types.GameObjects.Text.TextStyle = {
     fontFamily: opts.num ? FONT_NUM : FONT,
-    fontSize: `${Math.max(MIN_TEXT_SIZE, opts.size ?? 14)}px`,
+    fontSize: `${Math.max((opts.num || NUMERIC.test(content)) && phoneNew(scene) ? MIN_NUM_SIZE_PHONE : MIN_TEXT_SIZE, opts.size ?? 14)}px`,
     fontStyle: opts.bold ? 'bold' : 'normal',
     color: css(opts.color ?? COLOR.ink),
     align: opts.align ?? 'left',

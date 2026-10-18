@@ -59,6 +59,8 @@ const MOB_TINT = [
   0xf2b930,
   // 各地区的特色怪（编号 21 起）：竹精、蛇精、竹王、溺鬼、河蟹、河伯、冰傀、冰凌、冰魄、更夫鬼、石僧
   0x7fc45a, 0x5faa3e, 0x4a8f3a, 0x8c8676, 0xa48c6c, 0x7c9488, 0xbfe6fa, 0xeaf8ff, 0xdff3ff, 0x46598c, 0xb4b8bf,
+  // 提灯鬼（淡青白，半透明的身子）
+  0xcfe4e0,
 ];
 /** 精英出场的横幅：名字 + 一句怎么打 */
 const ELITE_BANNER: Partial<Record<string, [string, string]>> = {
@@ -1567,7 +1569,7 @@ export class GameScene extends Phaser.Scene {
       if (def.kind === 'jiangshi' || def.kind === 'general') {
         const t = w.eT[i]! % HOP_PERIOD;
         lift = t < HOP_AIR ? Math.sin((t / HOP_AIR) * Math.PI) * (def.kind === 'general' ? 16 : 11) : 0;
-      } else if (def.kind === 'wisp' || def.kind === 'lantern') lift = 8 + Math.sin(this.now * 0.005 + i) * 4;
+      } else if (def.kind === 'wisp' || def.kind === 'lantern' || def.kind === 'lampghost') lift = 8 + Math.sin(this.now * 0.005 + i) * 4;
       else if (def.kind === 'bat') lift = 14 + Math.sin(this.now * 0.02 + i * 2.3) * 5;
       else if (def.kind === 'boss' && w.eS[i] === 1) lift = Math.sin((1 - w.eT[i]! / 30) * Math.PI) * 120;
       // 水鬼从地里冒出来：先沉在地下，慢慢升上来
@@ -1627,7 +1629,7 @@ export class GameScene extends Phaser.Scene {
     const shadow = old?.shadow ?? this.img('shadow');
     shadow.setVisible(true).setAlpha(0.8);
     let glow = old?.glow ?? null;
-    const glowTint = def.kind === 'goblin' ? 0xffc83a : def.elite || def.boss ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'wisp' ? 0x5fd3f0 : null;
+    const glowTint = def.kind === 'goblin' ? 0xffc83a : def.elite || def.boss ? 0xa050ff : def.kind === 'lantern' ? 0xff8a3a : def.kind === 'lampghost' ? 0xffc24a : def.kind === 'wisp' ? 0x5fd3f0 : null;
     if (glowTint !== null) {
       glow ??= this.img('haze');
       const hf = this.frames.get('haze')!;

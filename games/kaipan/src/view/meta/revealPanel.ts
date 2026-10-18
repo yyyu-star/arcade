@@ -41,6 +41,15 @@ interface StoryPanelData {
   marks?: readonly Mark[];
 }
 
+/** 0.18.0 这段日子的心情图：天气 + 一张脸（以前只有市况签上的小箭头，整块面板看不出是牛是熊） */
+const REGIME_MOOD: Record<Regime, [Glyph, Glyph]> = {
+  bull: ['sun', 'face_happy'],
+  bubble: ['rocket', 'face_hot'],
+  flat: ['cloud', 'face_calm'],
+  bear: ['rain', 'face_sad'],
+  crash: ['storm', 'face_cold'],
+};
+
 const UP_REGIME = new Set<Regime>(['bull', 'bubble']);
 const DOWN_REGIME = new Set<Regime>(['bear', 'crash']);
 
@@ -65,6 +74,14 @@ export class RevealPanel extends Dialog {
     const rg: Glyph = UP_REGIME.has(v.regime) ? 'arrow_up' : DOWN_REGIME.has(v.regime) ? 'arrow_down' : 'hourglass';
     this.inner.add(addGlyph(s, pill.x + 18, py, rg, 22, rg === 'hourglass' ? undefined : COLOR.white));
     this.inner.add(addText(s, pill.x + 52, py, v.regimeWord, { size: TYPE.label + 2, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 }));
+    // 电脑放右上角的空处，大一点；手机标题行右边有翻页键，放在市况签后面
+    const [sky, face] = REGIME_MOOD[v.regime];
+    const mx = phone ? pill.x + 84 + 30 : W - L - 70;
+    const my = phone ? py : 84;
+    const ms = phone ? 36 : 64;
+    this.inner.add(s.add.circle(mx, my, ms * 0.62, REGIME_COLOR[v.regime], 0.16));
+    this.inner.add(addGlyph(s, mx, my, sky, ms));
+    this.inner.add(addGlyph(s, mx + ms * 0.42, my + ms * 0.3, face, ms * 0.5));
     const marks = v.lines.map((_, i) => v.marks?.[i] ?? this.guess(i, v.lines.length));
     if (phone) {
       this.phoneBody(v, marks);

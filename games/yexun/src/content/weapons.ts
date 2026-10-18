@@ -191,9 +191,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: '身边一圈光环，里面的怪持续挨打、走得慢',
     el: '金',
     type: '镇',
-    base: { dmg: 12, cd: 15, area: 66, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
+    // 1.1：镇流派中、大档最弱（前期清怪慢），1、2 级光环 66 → 73，3 级起和原来一样（第一次变大只 +5）
+    base: { dmg: 12, cd: 15, area: 70, amount: 1, speed: 0, duration: 0, knock: 1, rehit: 1 },
     ups: [
-      { text: '光环变大', delta: { area: 12 } },
+      { text: '光环变大', delta: { area: 5 } },
       { text: '伤害 +5', delta: { dmg: 5 } },
       { text: '光环变大', delta: { area: 12 } },
       { text: '响得更勤', delta: { cd: -3 } },
@@ -296,7 +297,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '木',
     type: '灵',
     // amount：一次落几片；area：落在身边多大一圈；duration：花瓣落地要几拍
-    base: { dmg: 14, cd: 60, area: 150, amount: 4, speed: 0, duration: 14, knock: 3, rehit: 1 },
+    base: { dmg: 16, cd: 60, area: 150, amount: 4, speed: 0, duration: 14, knock: 3, rehit: 1 },
     ups: [
       { text: '多落两片', delta: { amount: 2 } },
       { text: '伤害 +6', delta: { dmg: 6 } },
@@ -348,7 +349,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     el: '水',
     type: '符',
     // amount：几只纸鹤；area：看多远的怪；speed：俯冲多快；cd：一轮俯冲的间隔（几只轮流）
-    base: { dmg: 24, cd: 48, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
+    base: { dmg: 28, cd: 48, area: 300, amount: 1, speed: 15, duration: 0, knock: 6, rehit: 10 },
     ups: [
       { text: '多一只纸鹤', delta: { amount: 1 } },
       { text: '伤害 +8', delta: { dmg: 8 } },

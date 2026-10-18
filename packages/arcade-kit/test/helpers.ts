@@ -2,7 +2,7 @@
 import { runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
-import type { DownMsg, EmotedMsg, StateMsg, WelcomeMsg } from '../src/protocol.ts';
+import type { ChattedMsg, DownMsg, EmotedMsg, StateMsg, WelcomeMsg } from '../src/protocol.ts';
 import { meterStub, roomStub, SESSION_COOKIE } from '../src/internal.ts';
 import type { RoomMeter } from '../src/meter.ts';
 import { SITE, type ToyRoom, type ToyView } from './worker.ts';
@@ -57,11 +57,11 @@ export async function openRoom(userId: string, prefix = '', opts?: unknown): Pro
 export function upgrade(
   code: string,
   userId: string | null,
-  opts: { origin?: string | null; cv?: number | string; headers?: Record<string, string>; prefix?: string } = {},
+  opts: { origin?: string | null; cv?: number | string; headers?: Record<string, string>; prefix?: string; chat?: boolean } = {},
 ): Promise<Response> {
   const headers: Record<string, string> = { upgrade: 'websocket', cookie: cookie(userId), ...opts.headers };
   if (opts.origin !== null) headers.origin = opts.origin ?? SITE;
-  return exports.default.fetch(`${SITE}${opts.prefix ?? ''}/rooms/${code}/ws?cv=${opts.cv ?? 1}`, { headers });
+  return exports.default.fetch(`${SITE}${opts.prefix ?? ''}/rooms/${code}/ws?cv=${opts.cv ?? 1}${opts.chat ? '&chat=1' : ''}`, { headers });
 }
 
 /** 升级请求被接受后马上关掉的那种：返回关闭码。 */
@@ -70,7 +70,7 @@ export async function refusedWith(res: Response): Promise<number> {
   return new Conn(res.webSocket, 'refused').closedWith();
 }
 
-type Msg = DownMsg<ToyView> | EmotedMsg;
+type Msg = DownMsg<ToyView> | EmotedMsg | ChattedMsg;
 
 /** 一条测试连接：收到的消息排队，next/until 按顺序取。 */
 export class Conn {
@@ -171,8 +171,8 @@ export class Conn {
   }
 }
 
-export async function join(code: string, userId: string, prefix = ''): Promise<{ conn: Conn; welcome: WelcomeMsg<ToyView> }> {
-  const res = await upgrade(code, userId, { prefix });
+export async function join(code: string, userId: string, prefix = '', chat = false): Promise<{ conn: Conn; welcome: WelcomeMsg<ToyView> }> {
+  const res = await upgrade(code, userId, { prefix, chat });
   if (res.status !== 101 || !res.webSocket) throw new Error(`upgrade failed: ${res.status}`);
   const conn = new Conn(res.webSocket, userId);
   const welcome = (await conn.next()) as WelcomeMsg<ToyView>;

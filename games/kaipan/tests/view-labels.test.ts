@@ -12,11 +12,13 @@ import {
   dayLabel,
   endSubtitle,
   holdText,
+  ledgerRows,
   sellKey,
   shortItemName,
   stText,
   summaryRows,
   todayText,
+  tradeWord,
 } from '../src/view/labels.ts';
 
 describe('画面文案：顶栏', () => {
@@ -83,6 +85,18 @@ describe('画面文案：结束页与关于', () => {
     expect(endSubtitle({ ...sum, won: false, month: 4 })).toContain('4 月');
     // 旧存档没有合计：退回旧说法
     expect(endSubtitle({ ...sum, won: true, tradeMoney: null, billMoney: null })).toContain('12 个月的钱全还上了');
+  });
+
+  it('0.18.1 炒股亏了叫「净亏」，账本、副标题说法一致；每笔都亏时不说「最赚」', () => {
+    let s = createRun('labels-1').state;
+    while (s.phase === 'premarket') s = dispatch(s, { type: 'open' }).state;
+    const sum = { ...runSummary(s), tradeMoney: -3_254_200, billMoney: 219_100, otherMoney: 0 };
+    expect(tradeWord(-1)).toBe('炒股净亏');
+    expect(tradeWord(0)).toBe('炒股净赚');
+    expect(ledgerRows(sum).map((r) => r[0])).toContain('炒股净亏');
+    expect(endSubtitle({ ...sum, won: true })).toContain('炒股净亏');
+    const lossBest = summaryRows({ ...sum, bestTrade: { stockId: 'ai_leader', name: 'x', ret: -3 } });
+    expect(lossBest.at(-1)![0]).toBe('亏得最少的一笔');
   });
 
   it('通关称号按炒股净赚是本钱的几倍评，不按最后剩多少', () => {

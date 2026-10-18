@@ -26,15 +26,15 @@ describe('选卡合成提示', () => {
     expect(h?.dual).toBe(false);
   });
 
-  it('差一个被动：被动卡写"再拿 X"，别的卡没有', () => {
+  it('双修只要另一件满级（1.1）：差一级时那件法器卡写"凑成"，被动卡没有', () => {
     const w = world();
     grantWeapon(w, 'flysword', 8, true);
-    grantWeapon(w, 'talisman', 8);
-    const h = mergeHint(w, { kind: 'passive', id: 'xianglu' });
+    grantWeapon(w, 'talisman', 7);
+    const h = mergeHint(w, { kind: 'weapon', id: 'talisman' });
     expect(h?.ready).toBe(true);
     expect(h?.id).toBe('fujian');
     expect(h?.dual).toBe(true);
-    expect(mergeHint(w, { kind: 'passive', id: 'zhusha' })).toBeNull();
+    expect(mergeHint(w, { kind: 'passive', id: 'xianglu' })).toBeNull();
   });
 
   it('新法器：partner 在手，拿了只差一步就提示', () => {

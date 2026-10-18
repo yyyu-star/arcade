@@ -1,4 +1,5 @@
 /** 牌桌互动组件的演示：单机接法（send 直接回给 receive，电脑由组件按性格反应）。冒烟由脚本调 window.fun。 */
+import { checkChat } from '../src/chat.ts';
 import { playFunSound } from '../src/fun.ts';
 import { demoTheme } from './theme.ts';
 import { TableFun, type FunSeat, type FunTemper } from '../src/table-fun.ts';
@@ -38,6 +39,14 @@ const fun = new TableFun({
     el.classList.add('hit');
   },
   log: (line) => log.push(line),
+  // 聊天（0.18.0）：真游戏只在好友房接（client.chat），演示页在本地过一遍过滤就自己收下，右家隔一秒回一句，看气泡和记录的样子
+  chat: (text) => {
+    const c = checkChat(text);
+    if (!c.ok) return c;
+    fun.chat(0, c.text, c.masked);
+    setTimeout(() => fun.chat(1, '收到收到，这把稳了'), 1000);
+    return { ok: true };
+  },
 });
 
 $('moment').onclick = () => {

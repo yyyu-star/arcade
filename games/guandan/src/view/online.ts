@@ -33,9 +33,12 @@ function style(): void {
   font: 16px/1.5 var(--gd-font); color: var(--gd-ink); font-variant-numeric: tabular-nums;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); box-sizing: border-box; }
 #online .ol-card { width: min(560px, calc(100vw - var(--gd-s6))); max-height: calc(100% - var(--gd-s4)); overflow: auto; box-sizing: border-box; padding: var(--gd-s4) var(--gd-s6);
-  border-radius: var(--gd-r-lg); background: var(--gd-paper); border: 5px solid var(--gd-wood); box-shadow: 0 0 0 2px var(--gd-gold) inset, 0 12px 32px rgba(0, 0, 0, 0.45);
+  border-radius: var(--gd-r-lg); background: var(--gd-paper); border: 6px solid var(--gd-wood);
+  box-shadow: 0 0 0 2px var(--gd-gold) inset, 0 0 0 7px var(--gd-paper) inset, 0 0 0 8px #d8c39a inset, 0 12px 32px rgba(0, 0, 0, 0.45);
   display: flex; flex-direction: column; gap: var(--gd-s3); }
-#online h2 { margin: 0; font-size: 22px; line-height: 1.3; color: var(--gd-red); }
+/* 标题做成和画布里弹窗一样的红飘带（art-v3） */
+#online h2 { align-self: center; margin: 0 0 var(--gd-s1); padding: var(--gd-s1) var(--gd-s8); font-size: 22px; line-height: 1.3; color: #ffe9c2;
+  background: linear-gradient(#c8323a, #8a1a20); border: 2px solid var(--gd-gold); border-radius: var(--gd-r-sm); box-shadow: var(--gd-shadow); letter-spacing: 2px; }
 #online .ol-code { font: bold 34px/1.1 var(--gd-font-num); letter-spacing: 6px; color: var(--gd-red); }
 #online .ol-row { display: flex; gap: var(--gd-s2); flex-wrap: wrap; align-items: center; }
 #online input { flex: 1; min-width: 120px; min-height: var(--gd-hit); box-sizing: border-box; padding: 0 var(--gd-s3); border: 2px solid #c8a878; border-radius: var(--gd-r-md);

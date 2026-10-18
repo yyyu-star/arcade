@@ -45,6 +45,8 @@ interface GameBridge {
    * 只列看得见、开着输入的；整屏挡点击的遮罩（和画面一样大）不算。
    */
   hits(): { x: number; y: number; w: number; h: number; kind: string }[];
+  /** 看得见的文字和它在页面上的字号（CSS 像素，按字号的竖直跨度折算）：手机审计查"字 ≥ 12px"用 */
+  texts(): { s: string; px: number; x: number; y: number }[];
   /** 键盘焦点停在哪（页面 CSS 坐标的中心），没在用键盘时是 null（0.9.0） */
   focused(): Pt | null;
   /** 手牌某张牌露出部分的中心（页面 CSS 坐标） */
@@ -182,6 +184,34 @@ export function mountBridge(game: Phaser.Game): void {
         const p1 = toScreen({ x: x0 + w, y: y0 + h });
         out.push({ x: p0.x, y: p0.y, w: p1.x - p0.x, h: p1.y - p0.y, kind: o.type });
       }
+      return out;
+    },
+    texts: () => {
+      const out: { s: string; px: number; x: number; y: number }[] = [];
+      const shown = (o: Phaser.GameObjects.GameObject): boolean => {
+        for (let p: Phaser.GameObjects.GameObject | null = o; p; p = p.parentContainer) {
+          const v = p as unknown as { visible?: boolean; alpha?: number; active: boolean };
+          if (!v.active || v.visible === false || (v.alpha !== undefined && v.alpha < 0.05)) return false;
+        }
+        return true;
+      };
+      const walk = (list: Phaser.GameObjects.GameObject[]): void => {
+        for (const o of list) {
+          const sub = (o as Partial<Phaser.GameObjects.Container>).list;
+          if (Array.isArray(sub)) walk(sub);
+          if (o.type !== 'Text' || !shown(o)) continue;
+          const t = o as Phaser.GameObjects.Text;
+          if (!t.text.trim()) continue;
+          const fs = parseFloat(String(t.style.fontSize)) || 0;
+          const m = t.getWorldTransformMatrix();
+          const a = toScreen(m.transformPoint(0, 0));
+          const b = toScreen(m.transformPoint(0, fs));
+          const c = toScreen(m.transformPoint(t.width / 2, t.height / 2));
+          out.push({ s: t.text.replace(/\s+/g, ' ').slice(0, 24), px: Math.round(Math.hypot(b.x - a.x, b.y - a.y) * 10) / 10, x: Math.round(c.x), y: Math.round(c.y) });
+        }
+      };
+      const s = active();
+      if (s) walk(s.children.list);
       return out;
     },
     focused: () => {

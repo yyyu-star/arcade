@@ -111,7 +111,15 @@ export interface EmoteMsg {
   /** 冲着哪个座位（0.7.0，可选）：扔道具、点名嘲讽。得是有人的别的座位，不然回 bad_target；不带就和 0.6.0 一样 */
   to?: number;
 }
-export type UpMsg<A = unknown> = SitMsg | LeaveMsg | StartMsg | ActMsg<A> | EmoteMsg;
+/**
+ * 好友房聊天（0.18.0，docs/chat.md）：自由文字，一条 ≤ 30 个字（chat.ts 的 CHAT_MAX）。只有入座的人能发、游戏开了（RoomGame.chat）才收；
+ * 房间过一遍 checkChat（导流整条拒发、脏话打码）、按座位限速，然后只转发，不进状态、不写存储、不进快照。被拒回 error（见 CHAT_ERRORS）
+ */
+export interface ChatMsg {
+  t: 'chat';
+  text: string;
+}
+export type UpMsg<A = unknown> = SitMsg | LeaveMsg | StartMsg | ActMsg<A> | EmoteMsg | ChatMsg;
 
 // ---------- 下行（房间 → 浏览器） ----------
 
@@ -195,6 +203,11 @@ export interface WelcomeMsg<V = unknown> {
    * 用户感觉不到限速；运维在 KIT_QUOTA 里改，不用发版
    */
   emote?: { ms: number; burst: number };
+  /**
+   * 聊天的节奏和字数（0.18.0，游戏开了聊天才带）：同一个座位两条至少隔 ms 毫秒、一分钟最多 perMin 条，一条最多 max 个字。
+   * RoomClient 按它在本地先挡一遍（按钮置灰、倒计时），不靠被拒
+   */
+  chat?: { ms: number; perMin: number; max: number };
 }
 
 /** 每一步之后的状态。ack 只发给做这一步的那条连接：对应它的 moveId。 */
@@ -246,5 +259,24 @@ export interface EmotedMsg {
  * bad_target（0.7.0）带的 to 不是有人的别的座位
  */
 export const EMOTE_ERRORS = ['no_emotes', 'bad_emote', 'not_seated', 'room_over', 'emote_too_fast', 'bad_target'] as const;
+
+/**
+ * 有人说了一句（0.18.0）：seat 是房间的座位号，text 是过滤、打码以后的字，masked 表示打过码。
+ * 只发给连接时带了 chat=1 的连接（新版 RoomClient 传了 onChat 才带；旧页面不认识这条消息，不发给它），含发的人自己。
+ * 和短语一样不在 DownMsg 里，RoomClient 交给 onChat；不带 seq，断线时错过的不补发
+ */
+export interface ChattedMsg {
+  t: 'chat';
+  seat: number;
+  text: string;
+  masked?: true;
+}
+
+/**
+ * 聊天被拒时 error 的 code（0.18.0，只回发的人）：chat_off 这个游戏没开聊天；not_seated 没入座；room_over 房间打完了；
+ * chat_empty 去掉空白后是空的；chat_too_long 超过 30 个字；chat_too_fast 这个座位太快了（两条间隔、每分钟条数）；
+ * chat_blocked 像链接、号码、微信 QQ 号（chat.ts 的 blockReason）
+ */
+export const CHAT_ERRORS = ['chat_off', 'not_seated', 'room_over', 'chat_empty', 'chat_too_long', 'chat_too_fast', 'chat_blocked'] as const;
 
 export type DownMsg<V = unknown> = WelcomeMsg<V> | StateMsg<V> | ErrorMsg;

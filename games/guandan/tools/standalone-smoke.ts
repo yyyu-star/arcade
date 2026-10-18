@@ -77,16 +77,16 @@ async function main(): Promise<void> {
     const solo = await open(browser, '单机', `${origin}/games/guandan/?debug=1&anim=0&autoplay=1`);
     await until(solo, "g.ready && g.scene === 'title'");
     const t = await ctl(solo);
-    assert(!t['cloud'] && !t['lobby'] && t['online'], `标题页不该有云存档和大厅，要有好友房（${Object.keys(t).join(',')}）`);
+    assert(!t['cloud'] && !t['lobby'] && !t['stake'] && t['online'] && t['fun'], `主页不该有云存档、大厅、实盘，要有娱乐和好友房（${Object.keys(t).join(',')}）`);
     await shot(solo, 's1-title');
-    await click(solo, 'new');
-    // 不选娱乐 / 实盘，直接选难度（0.12.1）
+    await click(solo, 'fun');
+    // 单独部署没有实盘卡：点"娱乐"直接选难度（0.12.1；art-v3 起是主页的模式卡）
     await until(solo, "!!g.controls()['level:novice']", 10_000);
     await click(solo, 'level:novice');
     await until(solo, "g.scene === 'table' && g.view()?.dealNo >= 1", 30_000);
     assert(!(await ctl(solo))['cloud'], '牌桌上不该有云存档');
     await shot(solo, 's2-solo-table');
-    notes.push('标题页没有云存档和大厅；"开始"直接选难度开局（不选娱乐 / 实盘）');
+    notes.push('主页没有云存档、大厅和实盘卡；点"娱乐"选难度开局');
     await click(solo, 'lobby');
     await until(solo, "!!g.controls()['ok']", 10_000);
     await shot(solo, 's3-leave-confirm');

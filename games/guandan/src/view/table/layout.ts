@@ -15,7 +15,12 @@ export interface SeatAnchor {
   bdir: 'left' | 'right' | 'up' | 'down';
 }
 
-export const TOPBAR_H = 58;
+export const TOPBAR_H = 56;
+
+/** 世界比 1280 宽时桌子两边各让出多少（art-v3：露出远景的暗室）；背景和左右两家的座位共用 */
+export function tableSide(W: number): number {
+  return Math.max(0, Math.round((W - 1280) * 0.3));
+}
 export const BUTTON_Y = 412;
 
 /**
@@ -25,11 +30,13 @@ export const BUTTON_Y = 412;
  */
 export function seatAnchors(W: number, partnerMinX = 0): SeatAnchor[] {
   const p = Math.max(W / 2 - 250, partnerMinX);
+  // 左右两家坐在桌沿以内（宽屏时桌子往里让了）
+  const d = tableSide(W);
   const shifted = p > W / 2 - 250;
   return [
     { ax: 60, ay: 396, size: 72, px: W / 2, py: 294, align: 'center', bx: 132, by: 330, bdir: 'down' },
-    { ax: W - 86, ay: 262, size: 96, px: W - 200, py: 262, align: 'right', bx: W - 150, by: 176, bdir: 'down' },
+    { ax: W - d - 86, ay: 262, size: 96, px: W - d - 200, py: 262, align: 'right', bx: W - d - 150, by: 176, bdir: 'down' },
     { ax: p, ay: 112, size: 90, px: shifted ? p + 64 : W / 2, py: 196, align: shifted ? 'left' : 'center', bx: p - 64, by: 104, bdir: 'right' },
-    { ax: 86, ay: 262, size: 96, px: 200, py: 262, align: 'left', bx: 150, by: 176, bdir: 'down' },
+    { ax: d + 86, ay: 262, size: 96, px: d + 200, py: 262, align: 'left', bx: d + 150, by: 176, bdir: 'down' },
   ];
 }

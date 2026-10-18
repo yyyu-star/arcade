@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import { dur, tweenP, wait } from '../anim.ts';
 import { COLOR, GAME_HEIGHT, TYPE } from '../theme.ts';
+import { LOW_MEMORY } from '../device.ts';
 import { text, worldW } from '../ui/kit.ts';
 
 /** 叠圆模拟径向渐变：Canvas 渲染下没有 fillGradientStyle，用由大到小的低透明度圆层叠出暖光。 */
@@ -123,7 +124,8 @@ export function burst(
   count: number,
   opts: { speed?: [number, number]; life?: number; gravity?: number; scale?: [number, number]; tint?: number[] } = {},
 ): void {
-  if (dur(1) === 0) return;
+  // 省内存设备不放装饰粒子（art-v3）：闪光、震屏、大字照常，戏还在
+  if (dur(1) === 0 || LOW_MEMORY) return;
   const em = scene.add.particles(x, y, `particle:${kind}`, {
     speed: { min: opts.speed?.[0] ?? 150, max: opts.speed?.[1] ?? 420 },
     angle: { min: 0, max: 360 },
@@ -159,6 +161,7 @@ export function rays(scene: Phaser.Scene, x: number, y: number, color = 0xffd25a
 
 /** 持续的彩带/花瓣雨（胜利页），返回停止函数。 */
 export function rain(scene: Phaser.Scene, kind: 'confetti' | 'petal' | 'coin' | 'smoke', depth: number, tint?: number[]): () => void {
+  if (LOW_MEMORY) return () => undefined;
   const W = worldW(scene);
   const em = scene.add.particles(0, -20, `particle:${kind}`, {
     x: { min: 0, max: W },

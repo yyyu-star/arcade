@@ -4,12 +4,14 @@ import { artRef, glyphKey } from '../assets.ts';
 import type { Animator } from '../fx/anim.ts';
 import { sound } from '../sound.ts';
 import { COLOR, GAME_HEIGHT, GAME_WIDTH, LOW_MEMORY, PHONE, RENDER_SCALE } from '../theme.ts';
+import { viewOf } from '../viewport.ts';
 
 /** 猫整体左移，让它从手机后面露出来，睡在开盘按钮右边的桌面上 */
 const CAT_DX = -112;
 /** 手机横屏：房间画缩放倍数和上移量（1280×720 → 960×540，裁掉上下各一截） */
 const PHONE_K = 0.75;
 const PHONE_OY = -40;
+
 
 /** 小屋场景的选项 */
 interface RoomOpts {
@@ -73,6 +75,8 @@ export class Room {
   private readonly tint: Record<RoomTime, Phaser.GameObjects.Rectangle>;
   private readonly lamp: Phaser.GameObjects.Image | null;
   private time: RoomTime = 'day';
+  /** 0.17.0 开盘时灯一亮 */
+  private readonly flashRect: Phaser.GameObjects.Rectangle;
   private readonly haze: Phaser.GameObjects.Image | null;
   private readonly rain: Phaser.GameObjects.TileSprite | null;
   private readonly lightning: Phaser.GameObjects.Image[] = [];
@@ -159,6 +163,7 @@ export class Room {
     this.ambient = { bull: layer('ambient_bull'), flat: wash(0x6a7690, 0.12), bear: wash(0x1c1f45, 0.34) };
     const tintOf = (t: RoomTime): Phaser.GameObjects.Rectangle => wash(TIME_LIGHT[t].color, TIME_LIGHT[t].alpha).setAlpha(t === this.time ? 1 : 0);
     this.tint = { morning: tintOf('morning'), day: tintOf('day'), dusk: tintOf('dusk'), night: tintOf('night') };
+    this.flashRect = wash(0xfff6dc, 0.45).setAlpha(0);
     const lamp = layer('lamp_light');
     this.lamp = lamp;
     const glow = layer('monitor_glow');
@@ -169,7 +174,7 @@ export class Room {
     // 手机横屏：房间是装饰（没有字），整张 1280×720 的画缩到 0.75 铺满 960×444，窗户留在画面里
     if (PHONE) {
       const made = scene.children.list.slice(first);
-      this.layer = scene.add.container(0, PHONE_OY, made).setScale(PHONE_K).setDepth(0);
+      this.layer = scene.add.container(this.ox, PHONE_OY, made).setScale(PHONE_K).setDepth(0);
       scene.children.sendToBack(this.layer);
     }
 
@@ -207,10 +212,14 @@ export class Room {
   private rainbow: Phaser.GameObjects.Image | null = null;
   /** 手机横屏时房间的所有图层装在这里整体缩放 */
   private layer: Phaser.GameObjects.Container | null = null;
+  /** 0.19.0 手机世界宽 718–960：缩小后 960 宽的房间左右居中（窗户、台灯留在中间）；还没重排的场景是 960 宽，不挪 */
+  private get ox(): number {
+    return Math.round((viewOf(this.scene).w - 960) / 2);
+  }
 
   /** 房间坐标（1280×720）换成世界坐标：手机上房间整体缩小、上移。 */
   private wx(x: number): number {
-    return PHONE ? x * PHONE_K : x;
+    return PHONE ? x * PHONE_K + this.ox : x;
   }
   private wy(y: number): number {
     return PHONE ? y * PHONE_K + PHONE_OY : y;
@@ -310,6 +319,14 @@ export class Room {
     };
     for (const t of TIMES) to(this.tint[t], t === time ? 1 : 0);
     if (this.lamp && !LOW_MEMORY) to(this.lamp, TIME_LIGHT[time].lamp);
+  }
+
+  /** 0.17.0 开盘：屋里灯一亮（一闪 0.3 秒，不占节拍）；减少动态效果时不闪。 */
+  flashLights(anim: Animator): void {
+    if (anim.calm || !this.opts.ambient) return;
+    const r = this.flashRect;
+    this.scene.tweens.killTweensOf(r);
+    anim.fx({ targets: r, alpha: { from: 0, to: 1 }, duration: 110, yoyo: true, hold: 60, ease: 'Quad.easeOut' }, () => r.setAlpha(0));
   }
 
   private tintClouds(mood: Mood): void {

@@ -34,9 +34,9 @@ await page.addInitScript(() => {
   localStorage.setItem('mahjong.prefs', JSON.stringify({ fast: true }));
 });
 await page.goto(`http://127.0.0.1:${port}/games/mahjong/`);
-await page.waitForSelector('.lobby-head');
+await page.waitForSelector('.home-main');
 await page.screenshot({ path: `${root}shots/${orient}-0-lobby.png` });
-await page.click('text=单机开打');
+await page.click('text=快速开始');
 for (let i = 1; i <= steps; i++) {
   await page.waitForTimeout(1200);
   // 换三张：帮我选 + 换出；定缺：点推荐的；轮到打牌：点两下最右边那张能打的

@@ -75,10 +75,12 @@ export const xuezhanUi: VariantUi<XzView, XzAction> = {
     for (const e of v.events) {
       switch (e.e) {
         case 'deal':
+          fx.deal();
           play('deal');
           break;
         case 'swapped':
-          fx.banner(v.me?.seat ?? 0, SWAP_DIR[e.dir]!, 'center');
+          // 类名不能叫 center：会撞上中控盘的 .center 样式，画出第二个盘子（0.17.3 以前就是这样）
+          fx.banner(v.me?.seat ?? 0, SWAP_DIR[e.dir]!, 'swap');
           play('swap');
           break;
         case 'que':

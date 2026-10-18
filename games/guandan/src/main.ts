@@ -124,8 +124,10 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: '#123a2b',
   banner: false,
   fps: { panicMax: 12 },
+  // 自动化浏览器（冒烟、截图，无头 Chrome 用 SwiftShader 软件渲染）只用一个纹理单元：SwiftShader 下多纹理合批会让
+  // 一些精灵整块取错纹理、显示成透明的方块（主页的人物复现过，GL 只上传过一次，画布本身是完整的）。真机不受影响，照常合批
   // 多重采样的缓冲按画布像素 ×4 份算；iOS 2 倍渲染时边缘锯齿本来就看不出，省下这块内存
-  render: { antialiasGL: LOW_MEMORY === 0 && !(isIOS() && RENDER_SCALE >= 2) },
+  render: { maxTextures: navigator.webdriver ? 1 : -1, antialiasGL: LOW_MEMORY === 0 && !(isIOS() && RENDER_SCALE >= 2) },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, TitleScene, TableScene],
 };

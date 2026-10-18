@@ -25,6 +25,8 @@ export interface FunWiring {
   /** 单机：电脑的反应在页面上算 */
   localBots: boolean;
   onHit?(seat: number): void;
+  /** 首次"点头像扔道具"的提示冒在哪个座位；null = 现在别冒（kit 0.17.0，过 2 秒再问） */
+  hintSeat?(): number | null;
 }
 
 export function createFun(w: FunWiring): TableFun {
@@ -46,6 +48,7 @@ export function createFun(w: FunWiring): TableFun {
       if (a) playFunSound(a.ctx, a.out, prop, phase);
     },
     ...(w.onHit ? { onHit: w.onHit } : {}),
+    ...(w.hintSeat ? { hintSeat: w.hintSeat } : {}),
     // 冒烟看流水（开发服务器上才挂到 window）
     ...(import.meta.env.DEV ? { log: (line: string) => ((window as { __funLog?: string[] }).__funLog ??= []).push(line) } : {}),
   });

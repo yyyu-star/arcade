@@ -4,6 +4,8 @@
  */
 import { ELEMENT_SET, PASSIVES, TYPE_SETS, WEAPONS, MAX_WEAPON_LEVEL, type PassiveId, type WeaponId } from '../../content/weapons.ts';
 import { Pick, type Choice, type World } from '../../core/index.ts';
+import { MONSTER_INFO } from './codex.ts';
+import { counterLine } from './counters.ts';
 import { mergeHint, type MergeHint } from './mergeHint.ts';
 import './cards.css';
 
@@ -17,6 +19,8 @@ export interface CardView {
   hint: string | null;
   /** 法器的五行·类型 */
   tags?: string;
+  /** 克制小字（克 X · 怕 Y，从怪的 vs 表派生） */
+  counter?: string;
   /** 拿了以后凑成的套装："剑 2 件：暴击 +8%" */
   set?: string;
   /** 拿了离合成 / 双修只差一步或正好凑成 */
@@ -36,6 +40,7 @@ function describeBase(w: World, c: Choice): CardView {
     const evo = def.evolve;
     const hint = evo ? `满级 + ${PASSIVES[evo.with].name} → ${evo.name}${(w.passives[evo.with] ?? 0) > 0 ? '（已有）' : ''}` : null;
     const tags = `${def.el}·${def.type}`;
+    const counter = counterLine(def.type, def.el, (k) => MONSTER_INFO[k].name) ?? undefined;
     if (!o) {
       // 新法器：拿了以后能凑成哪个套装
       const sameType = w.weapons.filter((x) => WEAPONS[x.id].type === def.type).length + 1;
@@ -43,9 +48,9 @@ function describeBase(w: World, c: Choice): CardView {
       let set: string | undefined;
       if (sameType === 2 || sameType === 3) set = `${def.type} ${sameType} 件：${TYPE_SETS[def.type][sameType - 2]}`;
       else if (sameEl === 2 || sameEl === 3) set = `${def.el} ${sameEl} 件：${ELEMENT_SET[sameEl - 2]}`;
-      return { icon: def.icon, name: def.name, tag: '新', text: def.desc, hint, tags, set };
+      return { icon: def.icon, name: def.name, tag: '新', text: def.desc, hint, tags, set, counter };
     }
-    return { icon: def.icon, name: def.name, tag: o.level + 1 >= MAX_WEAPON_LEVEL ? `Lv ${o.level} → 满` : `Lv ${o.level} → ${o.level + 1}`, text: def.ups[o.level - 1]?.text ?? '', hint, tags };
+    return { icon: def.icon, name: def.name, tag: o.level + 1 >= MAX_WEAPON_LEVEL ? `Lv ${o.level} → 满` : `Lv ${o.level} → ${o.level + 1}`, text: def.ups[o.level - 1]?.text ?? '', hint, tags, counter };
   }
   if (c.kind === 'passive') {
     const def = PASSIVES[c.id as PassiveId];
@@ -125,6 +130,7 @@ export class Cards {
         `<span class="yx-pick-name">${c.name}${c.tag ? `<em${c.tag === '新' ? ' class="new"' : ''}>${c.tag}</em>` : ''}</span>` +
         (c.tags ? `<span class="yx-pick-tags">${c.tags}</span>` : '') +
         `<span class="yx-pick-text">${c.text}</span>` +
+        (c.counter ? `<span class="yx-pick-counter">${c.counter}</span>` : '') +
         (c.set ? `<span class="yx-pick-set">${c.set}</span>` : '') +
         (c.merge ? `<span class="yx-pick-merge${c.merge.ready ? ' ready' : ''}" style="--mc:${c.merge.color}"><b>${c.merge.dual ? '双' : '合'}</b>${c.merge.text}</span>` : '') +
         (c.hint ? `<span class="yx-pick-hint">${c.hint}</span>` : '');

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { formatMoney, fx, itemView, rewardView, validate, type CalendarView, type EventView, type GameState, type RewardView } from '../../core/index.ts';
 import { avatarKey, hasArt, itemKey } from '../assets.ts';
+import { BILL_MS } from './billTiming.ts';
 import type { Animator } from '../fx/anim.ts';
 import { addBackdrop, shake } from '../fx/effects.ts';
 import { sparkles } from '../fx/particles.ts';
@@ -39,13 +40,16 @@ interface BillInfo {
   extras: { name: string; amount: number }[];
   /** 0.4 C：月供之外另付给银行的利息（没借钱为缺省） */
   interest?: number;
+  /** 0.17.0 有月度目标的月份：目标叫什么、达成没有（写在账单上，以前是窗户里一行小字） */
+  goal?: { name: string; done: boolean };
 }
 
+
 /**
- * 月底账单：账单卡滑入，盖「已还清」或「逾期」章；信用卡代还单独提示。
- * 返回浮层，由调用方决定停留多久后销毁。
+ * 月底账单：账单纸从桌面滑上来、各行依次出现、总数滚动砸下，盖「还上了」或「没还上」章；信用卡代还单独提示。
+ * quick（设置里「月底账单：简短」）：直接出完整的账单和章，不播舞台。返回浮层，由调用方决定停留多久后销毁。
  */
-export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo): Promise<Phaser.GameObjects.Container> {
+export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo, quick = false): Promise<Phaser.GameObjects.Container> {
   const c = overlay(scene);
   const W = 320;
   const H = 400;
@@ -57,16 +61,19 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   const card = scene.add.container(x, y);
   card.add(addImage(scene, W / 2, H / 2, 'ui:bill_card', W, H));
   card.add(addText(scene, 190, 42, `${b.month}月账单`, { size: 24, bold: true, originX: 0.5, originY: 0.5 }));
+  const stage = !quick && !anim.instant;
+  const rowNodes: (Phaser.GameObjects.Text | Phaser.GameObjects.Image)[][] = [];
   const row = (ty: number, k: string, v: string, color: number = COLOR.ink): void => {
-    const value = addText(scene, W - 30, ty, v, { size: 16, bold: true, color, originX: 1 });
+    const value = addText(scene, W - 30, ty, v, { size: 16, bold: true, num: true, color, originX: 1 });
     // 突发账单的名目可能很长：在金额左边折行，字号也小一号
     const room = W - 30 - value.width - 34 - 12;
-    const label = addText(scene, 34, ty, k, { size: 15, color: COLOR.muted });
+    let label = addText(scene, 34, ty, k, { size: 15, color: COLOR.muted });
     if (label.width > room) {
       label.destroy();
-      card.add(addText(scene, 34, ty - 2, k, { size: 13, color: COLOR.muted, wrap: room, lineSpacing: 1 }));
-    } else card.add(label);
-    card.add(value);
+      label = addText(scene, 34, ty - 2, k, { size: 13, color: COLOR.muted, wrap: room, lineSpacing: 1 });
+    }
+    card.add([label, value]);
+    rowNodes.push([label, value]);
   };
   const extra = b.extras.reduce((n, e) => n + e.amount, 0);
   const rows: [string, string, number?][] = [[b.name, formatMoney(b.amount - extra)]];
@@ -81,14 +88,40 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   const totalLabel = b.paid ? (b.credit ? `${itemView('credit').name}垫上了` : '剩下') : '还差';
   const totalValue = b.paid ? formatMoney(b.after) : formatMoney(b.amount - b.before);
   card.add(addText(scene, 40, 308, totalLabel, { size: 15, color: COLOR.muted, originY: 0.5 }));
-  card.add(addText(scene, W - 40, 308, totalValue, { size: 24, bold: true, color: b.paid ? COLOR.ink : COLOR.danger, originX: 1, originY: 0.5 }));
+  const total = addText(scene, W - 40, 308, totalValue, { size: 24, bold: true, num: true, color: b.paid ? COLOR.ink : COLOR.danger, originX: 1, originY: 0.5 });
+  card.add(total);
+  // 本月目标：写在账单上（靶心图标，达成绿字、没达成灰字）
+  if (b.goal) {
+    const g = addText(scene, W / 2 + 12, 350, `本月目标「${b.goal.name}」${b.goal.done ? '达成' : '没达成'}`, { size: 13, bold: true, color: b.goal.done ? COLOR.up : COLOR.muted, originX: 0.5, originY: 0.5 });
+    const icon = addGlyph(scene, g.x - g.width / 2 - 12, 350, 'target', 18);
+    if (!b.goal.done) icon.setTint(0xbbb0b6);
+    card.add([icon, g]);
+    rowNodes.push([icon, g]);
+  }
   c.add(card);
   sound.cue({ type: 'bill' });
-  if (!anim.instant) {
-    card.x = V.w + 20;
-    await anim.count(V.w + 20, x, 420, (v) => card.setX(v), 'Back.easeOut');
+  if (stage) {
+    // 纸从桌面（画面底下）滑上来；各行、总数先藏着，依次出现
+    for (const n of rowNodes.flat()) n.setAlpha(0);
+    total.setAlpha(0);
+    card.y = V.h + 40;
+    await anim.count(V.h + 40, y, BILL_MS.slide, (v) => card.setY(v), 'Back.easeOut');
+    const per = Math.min(BILL_MS.rowMax, Math.floor(BILL_MS.rows / Math.max(1, rowNodes.length)));
+    for (const [i, nodes] of rowNodes.entries()) {
+      anim.fx({ targets: nodes, alpha: 1, duration: 120 }, () => nodes.forEach((n) => n.setAlpha(1)));
+      // 一行一声，音调一行比一行高
+      if (!anim.instant) sound.cue({ type: 'countUp', progress: (i + 1) / rowNodes.length });
+      await anim.wait(per);
+    }
+    // 总数从还前的账户滚到剩下的（没还上：从 0 滚到差多少），落下时砸一下
+    total.setAlpha(1);
+    const to = b.paid ? b.after : b.amount - b.before;
+    await anim.count(b.paid ? b.before : 0, to, BILL_MS.count, (v) => total.setText(formatMoney(v)));
+    total.setText(totalValue);
+    anim.fx({ targets: total, scale: { from: 1.35, to: 1 }, duration: 160, ease: 'Quad.easeIn' }, () => total.setScale(1));
   }
-  await anim.wait(250);
+  for (const n of rowNodes.flat()) n.setAlpha(1);
+  total.setAlpha(1);
   // 印章
   // 印章盖在账单右边（压一点卡边，不压数字）
   const stamp = scene.add.container(x + W + (b.paid ? 64 : 100), y + 150).setAngle(-14);
@@ -101,9 +134,9 @@ export async function playBill(scene: Phaser.Scene, anim: Animator, b: BillInfo)
   }
   c.add(stamp);
   sound.cue({ type: 'stamp', paid: b.paid, credit: b.credit });
-  if (!anim.instant) {
+  if (stage) {
     stamp.setScale(anim.calm ? 1.15 : 2.4).setAlpha(0);
-    await anim.count(0, 1, anim.calm ? 160 : 240, (t) => stamp.setScale((anim.calm ? 1.15 : 2.4) - t * (anim.calm ? 0.15 : 1.4)).setAlpha(t), 'Cubic.easeIn');
+    await anim.count(0, 1, anim.calm ? 160 : BILL_MS.stamp, (t) => stamp.setScale((anim.calm ? 1.15 : 2.4) - t * (anim.calm ? 0.15 : 1.4)).setAlpha(t), 'Cubic.easeIn');
     shake(scene, anim, 180, 0.006);
   }
   stamp.setScale(1).setAlpha(1);
@@ -126,7 +159,8 @@ const RARITY_STARS: Record<string, number> = { common: 1, uncommon: 2, rare: 3 }
 /** 奖励卡卡面上各行的纵坐标（相对卡顶）：手机上卡矮 42，图标小一号、各行往上收 */
 const CARD_LAYOUT = {
   desktop: { icon: 98, iconS: 96, name: 160, big: 208 },
-  phone: { icon: 84, iconS: 80, name: 136, big: 180 },
+  // 0.19.0 手机世界高 404，卡片矮到 286：图标、名字、大数字再往上收
+  phone: { icon: 74, iconS: 70, name: 120, big: 160 },
 } as const;
 
 /** 三选一奖励卡（phase = reward 时常驻，直到选择）：稀有度色框 + 大图标 + 名字 + 大数字 + 一行；详情悬停。 */
@@ -147,7 +181,8 @@ export class RewardPanel {
     this.root.add([addGlyph(scene, V.w / 2 - title.width / 2 - 14, ty, 'gift', ph ? 44 : 52), title]);
     const gap = ph ? 20 : 30;
     const CW = Math.min(236, Math.floor((V.w - 24 - gap * (cards.length - 1)) / cards.length));
-    const CH = ph ? 308 : 350;
+    // 0.19.0 手机世界高 404：卡片高按剩下的算（标题 58 起，下面还要放「都不要」）
+    const CH = ph ? Math.min(308, V.h - 58 - 60) : 350;
     const top = ph ? 58 : 146;
     const x0 = V.w / 2 - (CW * cards.length + gap * (cards.length - 1)) / 2;
     cards.forEach((r, i) => {
@@ -212,6 +247,16 @@ export class RewardPanel {
     // 0.5.1：说明短（≤34 字）就整句写出来，长的用短句；分类标签放在顶部色带左边
     const descShort = r.desc && [...r.desc].length <= 34 ? r.desc : r.brief.line;
     const desc = addText(scene, ax, big || r.stock ? y + L.big + 26 : y + L.big + 4, descShort, { size: TYPE.label, color: COLOR.muted, originX: 0.5, align: 'center', wrap: w - 28, lineSpacing: 2 });
+    // 0.19.0 手机上卡矮：整句放不下就换短句，还放不下就截短（全文在悬停里），不压「就要它」
+    const room = y + h - 66 - desc.y;
+    if (desc.height > room && desc.text !== r.brief.line) desc.setText(r.brief.line);
+    if (desc.height > room) {
+      let cut = Array.from(desc.text);
+      while (desc.height > room && cut.length > 4) {
+        cut = cut.slice(0, -2);
+        desc.setText(`${cut.join('')}…`);
+      }
+    }
     c.add(desc);
     if (r.tag) {
       const tg = addText(scene, x + 16, y + 22, r.tag, { size: 11, bold: true, color: textOn(rc), originY: 0.5 });
@@ -290,7 +335,7 @@ export class EventPanel {
     const L = ph
       ? { W: 720, headH: 104, storyY: 100, storyMax: 44, storyPad: 20, bottom: 16, bigY: 44, textY: 72, btnH: 46, btnUp: 58, optMin: 170, optBase: 138 }
       : { W: 560, headH: 124, storyY: 118, storyMax: 66, storyPad: 26, bottom: 32, bigY: 52, textY: 84, btnH: 54, btnUp: 70, optMin: 196, optBase: 166 };
-    const W = L.W;
+    const W = ph ? Math.min(L.W, V.w - 12) : L.W;
     // 0.5.1：情景原文放回卡面（一个引号框），选项下写原句；高度按内容算
     const story = ev.text && ev.text !== ev.brief ? addText(scene, 0, 0, ev.text, { size: TYPE.label, color: COLOR.ink, wrap: W - 120, lineSpacing: 3 }) : null;
     const storyH = story ? Math.min(L.storyMax, story.height) + L.storyPad : 0;

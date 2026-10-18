@@ -60,7 +60,7 @@ import { TableFun, funItem, type FunSeat } from 'arcade-kit/table-fun';
 import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
 import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
-import { bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
+import { bombDrama, bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';
 import { feedPick } from '../feed.ts';
 import { postFeed } from '../social.ts';
 import { TrickView } from '../table/trick.ts';
@@ -70,6 +70,10 @@ import { prepareResult, shareCardOf, type ShareKind } from '../share-card.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'stake' | 'choose' | 'menu' | 'tutorial' | null;
 
+
+/** 记牌器的纸签（art-v3）：米黄纸、深褐字 */
+const PAPER = 0xf3e4c4;
+const PAPER_INK = 0x3a2414;
 
 export class TableScene extends Phaser.Scene {
   private ses!: TableSession;
@@ -199,9 +203,8 @@ export class TableScene extends Phaser.Scene {
     const W = worldW(this);
     this.add.image(0, 0, `table:${W}`).setOrigin(0, 0).setDisplaySize(W, worldH);
 
-    // 手机上（minHit 大）顶栏左边的云朵、邀请按钮要 44 CSS 像素宽，对家头像往右让：412 是两队级数框的右边，49 是头像半径加空隙
-    const mh = minHit();
-    const anchors = seatAnchors(W, mh > 60 ? 412 + mh * (this.net ? 2 : 1) + 49 : 0);
+    // 顶栏左边只有"大厅"（右边 126）和好友房的邀请按钮（minHit 宽）；对家头像不压着它们（49 是头像半径加空隙）
+    const anchors = seatAnchors(W, this.net ? 126 + minHit() + 49 : 0);
     for (let s = 0; s < 4; s++) this.seats.push(new SeatView(this, s, anchors[s]!));
     this.trick = new TrickView(this, anchors);
     this.hand = new HandView(this);
@@ -289,6 +292,8 @@ export class TableScene extends Phaser.Scene {
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
       send,
       canSend: () => seated() && free(),
+      // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒
+      hintSeat: () => [1, 3].find((v) => !this.isMe(v) && !this.trick.occupied(v)) ?? null,
       enabled: () => getSettings().taunts,
       scope: () => net?.code ?? 'solo',
       localBots: !net,
@@ -393,73 +398,44 @@ export class TableScene extends Phaser.Scene {
     g.lineStyle(1, COLOR.goldLight, 0.35).lineBetween(0, TOPBAR_H - 4, W, TOPBAR_H - 4);
     c.add(g);
     const v = this.ses.view();
-    // 左：两队级数
+    // 三组（art-v3）：左"大厅"（好友房加邀请）；中 我方的级 · 本副打几 · 第几副 · 对方的级；右 图标。名次不另摆，头像上盖着印章
     const team = (x: number, label: string, lv: number, color: number, active: boolean, fails: number): void => {
       const tg = this.add.graphics();
-      tg.fillStyle(color, active ? 1 : 0.55).fillRoundedRect(x, 9, 132, 40, 20);
-      if (active) tg.lineStyle(2.5, COLOR.goldLight, 1).strokeRoundedRect(x, 9, 132, 40, 20);
+      tg.fillStyle(color, active ? 1 : 0.55).fillRoundedRect(x, 8, 132, 40, 20);
+      if (active) tg.lineStyle(2.5, COLOR.goldLight, 1).strokeRoundedRect(x, 8, 132, 40, 20);
       c.add(tg);
-      c.add(text(this, x + 16, 29, label, { size: TYPE.label, color: 0xffffff, bold: true, ox: 0 }));
-      c.add(text(this, x + 106, 29, levelName(lv), { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 3 }));
-      if (fails > 0) c.add(text(this, x + 132, 10, `A×${fails}`, { size: 14, color: 0xffd0c0, bold: true, ox: 1, oy: 0 }));
+      c.add(text(this, x + 16, 28, label, { size: TYPE.label, color: 0xffffff, bold: true, ox: 0 }));
+      c.add(text(this, x + 106, 28, levelName(lv), { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 3 }));
+      if (fails > 0) c.add(text(this, x + 132, 9, `A×${fails}`, { size: 14, color: 0xffd0c0, bold: true, ox: 1, oy: 0 }));
     };
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
-    this.lobbyBtn = new Button(this, 70, 29, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
-    // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）：下面没有能点的就伸到底（deep），
-    // 搭档头像（顶 67、左右 ax ± 45）正上方的只到 67（shallow），不压着头像。手机上头像已经往右让开了（create 里的 seatAnchors）
-    const deep = Math.max(54, 2 * (minHit() - 29));
-    const shallow = Math.min(deep, 2 * (67 - 29));
-    const pa = this.seats[2]!.a;
-    const barH = (x0: number, x1: number): number => (x1 <= pa.ax - pa.size / 2 - 4 || x0 >= pa.ax + pa.size / 2 + 4 ? deep : shallow);
+    this.lobbyBtn = new Button(this, 70, 28, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
+    // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）
+    const deep = Math.max(54, 2 * (minHit() - 28));
     this.lobbyBtn.setHit(112, deep);
     c.add(this.lobbyBtn);
-    team(138, this.side(0), v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
-    team(280, this.side(1), v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
-    // 云存档：放左边（右边四个按钮已经挤满），紧挨两队级数框（右边 412）。有地方就把间距拉到 44 CSS 像素，最少 56
-    const lp = Math.max(56, Math.min(minHit(), (pa.ax - pa.size / 2 - 4 - 412) / (this.net ? 2 : 1)));
-    this.cloudBtn = cloudButton(this, 412 + lp / 2, 29, 46);
-    setHit(this.cloudBtn, lp, barH(412, 412 + lp));
-    // 单独部署没有账号，不摆云存档
-    if (standalone()) this.cloudBtn.setVisible(false);
-    c.add(this.cloudBtn);
-    // 好友房开打以后也能叫朋友（0.6.1）：云朵右边，中途进来的人接管电脑的座位。右边的图标和名次条已经排满了
+    // 好友房开打以后也能叫朋友（0.6.1）：紧挨"大厅"，中途进来的人接管电脑的座位
     const net = this.net;
-    this.inviteBtn = net ? iconButton(this, 412 + lp * 1.5, 29, 'invite', () => void openInvitePanel(net.code), 46) : null;
+    const lp = Math.max(56, minHit());
+    this.inviteBtn = net ? iconButton(this, 126 + lp / 2 + 8, 28, 'invite', () => void openInvitePanel(net.code), 46) : null;
     if (this.inviteBtn) {
-      setHit(this.inviteBtn, lp, barH(412 + lp, 412 + lp * 2));
+      setHit(this.inviteBtn, lp, deep);
       c.add(this.inviteBtn);
     }
 
-    // 中：本副打几（级牌放大成一张小牌）
+    // 中：两队的级夹着"本副打几"（级牌放大成一张小牌），坐庄的一队描金边
     const mx = W / 2;
-    c.add(text(this, mx - 46, 29, '本副打', { size: TYPE.label, color: 0xf0dfc0, ox: 1 }));
+    team(mx - 238, this.side(0), v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
+    team(mx + 106, this.side(1), v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
+    c.add(text(this, mx - 34, 28, '本副打', { size: TYPE.label, color: 0xf0dfc0, ox: 1 }));
     const badge = this.add.graphics();
-    badge.fillStyle(COLOR.ivory, 1).fillRoundedRect(mx - 26, 5, 52, 48, 8);
-    badge.lineStyle(3, COLOR.gold, 1).strokeRoundedRect(mx - 26, 5, 52, 48, 8);
+    badge.fillStyle(COLOR.ivory, 1).fillRoundedRect(mx - 26, 4, 52, 48, 8);
+    badge.lineStyle(3, COLOR.gold, 1).strokeRoundedRect(mx - 26, 4, 52, 48, 8);
     c.add(badge);
-    c.add(text(this, mx, 30, levelName(v.level), { size: TYPE.big - 4, color: COLOR.red, bold: true, font: 'num' }));
-    const who = v.declarer < 0 ? '双方' : this.side(v.declarer);
-    c.add(text(this, mx + 36, 29, `${who}的级 · 第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
+    c.add(text(this, mx, 29, levelName(v.level), { size: TYPE.big - 4, color: COLOR.red, bold: true, font: 'num' }));
+    c.add(text(this, mx + 36, 28, `第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
 
-    // 名次条：四个小格，出完的人依次填进去。16:9 的小手机上顶栏放不下它和够大的图标：让给图标（名次头像上也盖着印章）
-    const px = mx + 250;
-    const stripFits = (W - 34 - (px + 3 * 48 + 21)) / 3.5 >= minHit();
-    for (let i = 0; i < 4 && stripFits; i++) {
-      const seat = v.finished[i];
-      const x = px + i * 48;
-      const pg = this.add.graphics();
-      pg.fillStyle(0x000000, 0.35).fillRoundedRect(x - 21, 8, 42, 42, 10);
-      pg.lineStyle(1.5, i === 0 ? COLOR.gold : 0x8a7050, 0.9).strokeRoundedRect(x - 21, 8, 42, 42, 10);
-      c.add(pg);
-      if (seat !== undefined) {
-        c.add(this.add.image(x, 27, `avatar:${seatPerson(seat)}:normal`).setDisplaySize(36, 36));
-        c.add(text(this, x, 45, PLACE_NAMES[i]!, { size: 12, color: i === 0 ? COLOR.goldLight : 0xe0d0b0, bold: true, stroke: 0x1a0e07, strokeWidth: 3 }));
-      } else {
-        c.add(text(this, x, 29, String(i + 1), { size: TYPE.label, color: 0x8a7050, bold: true, font: 'num' }));
-      }
-    }
-
-    // 右：规则、设置、音量、返回
+    // 右：规则、设置、音量、返回，加云存档（它的红点提示没同步上，收进设置就看不见了，所以留在顶栏）
     const icons: [string, () => void][] = [
       // 回掼蛋自己的首页用箭头；小房子留给"回大厅"
       ['back', () => this.onHome()],
@@ -467,17 +443,24 @@ export class TableScene extends Phaser.Scene {
       ['settings', () => this.openOverlay('menu', openSettings(this, { onTutorial: () => this.startTutorial(), onClose: () => this.closeOverlay() }))],
       ['rules', () => this.openOverlay('menu', openRules(this, () => this.closeOverlay(), this.ses.view().level))],
     ];
-    // 间距：有地方就拉到 44 CSS 像素（minHit），最少 56；最左一个的点按区域不越过名次条（没摆名次条时不越过中间那行字，约 mx + 260）
-    const room = (W - 34 - (stripFits ? px + 3 * 48 + 21 : mx + 260)) / 3.5;
+    const cloudOn = !standalone();
+    // 间距：有地方就拉到 44 CSS 像素（minHit），最少 56；最左一个的点按区域不越过中间那组（右边 mx + 238）
+    const n = icons.length + (cloudOn ? 1 : 0);
+    const room = (W - 34 - (mx + 238 + 8)) / (n - 0.5);
     const pitch = Math.max(56, Math.min(minHit(), room));
     icons.forEach(([icon, fn], i) => {
-      const b = iconButton(this, W - 34 - i * pitch, 29, icon, fn, 46);
+      const b = iconButton(this, W - 34 - i * pitch, 28, icon, fn, 46);
       setHit(b, pitch, deep);
-      this.iconsLeft = W - 34 - 3.5 * pitch;
       c.add(b);
       this.topIcons[i] = b;
       if (icon === 'mute' || icon === 'sound') this.soundIcon = b;
     });
+    this.cloudBtn = cloudButton(this, W - 34 - icons.length * pitch, 28, 46);
+    setHit(this.cloudBtn, pitch, deep);
+    // 单独部署没有账号，不摆云存档
+    this.cloudBtn.setVisible(cloudOn);
+    c.add(this.cloudBtn);
+    this.iconsLeft = W - 34 - (n - 0.5) * pitch;
 
     // 实盘：顶栏下面靠右一条（左边是搭档的头像），本场到目前的分和筹码一直显示着
     const st = this.stake;
@@ -548,10 +531,11 @@ export class TableScene extends Phaser.Scene {
       this.buildTopBar(worldW(this));
     };
     if (!getSettings().counter) {
-      const t = text(this, x0 + 14, y0 + 17, '记牌', { size: TYPE.small, bold: true, color: COLOR.goldLight, ox: 0 });
+      const t = text(this, x0 + 14, y0 + 17, '记牌', { size: TYPE.small, bold: true, color: PAPER_INK, ox: 0 });
       const g = this.add.graphics();
-      g.fillStyle(0x1a0e07, 0.6).fillRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
-      g.lineStyle(1.5, COLOR.gold, 0.6).strokeRoundedRect(x0, y0 + 2, t.width + 28, 30, 15);
+      g.fillStyle(0x000000, 0.3).fillRoundedRect(x0 + 2, y0 + 5, t.width + 28, 30, 6);
+      g.fillStyle(PAPER, 0.96).fillRoundedRect(x0, y0 + 2, t.width + 28, 30, 6);
+      g.lineStyle(1.5, COLOR.goldDark, 0.8).strokeRoundedRect(x0, y0 + 2, t.width + 28, 30, 6);
       const z = this.add.zone(x0, y0, t.width + 28, 34).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       hitDown(z, Math.max(t.width + 28, minHit()), 34);
       z.on('pointerdown', toggle);
@@ -563,17 +547,20 @@ export class TableScene extends Phaser.Scene {
     const w = cells.length * cw + 16;
     const h = 50;
     const g = this.add.graphics();
-    g.fillStyle(0x1a0e07, 0.62).fillRoundedRect(x0, y0, w, h, 12);
-    g.lineStyle(1.5, COLOR.gold, 0.55).strokeRoundedRect(x0, y0, w, h, 12);
+    // 纸签（art-v3）：米黄纸、深褐字，压在绒布上带一点投影
+    g.fillStyle(0x000000, 0.3).fillRoundedRect(x0 + 3, y0 + 4, w, h, 6);
+    g.fillStyle(PAPER, 0.96).fillRoundedRect(x0, y0, w, h, 6);
+    g.lineStyle(1.5, COLOR.goldDark, 0.8).strokeRoundedRect(x0, y0, w, h, 6);
     c.add(g);
     cells.forEach((cell, i) => {
       const x = x0 + 8 + cw * i + cw / 2;
       const lv = cell.rank === v.level;
-      if (lv) g.fillStyle(COLOR.red, 0.55).fillRoundedRect(x - cw / 2 + 2, y0 + 4, cw - 4, h - 8, 7);
+      if (lv) g.fillStyle(COLOR.red, 0.16).fillRoundedRect(x - cw / 2 + 2, y0 + 4, cw - 4, h - 8, 5);
       const name = cell.rank === 17 ? '大' : cell.rank === 16 ? '小' : levelName(cell.rank);
-      const a = cell.left === 0 ? 0.32 : 1;
-      c.add(text(this, x, y0 + 14, name, { size: 14, bold: true, color: lv || cell.rank >= 16 ? COLOR.goldLight : 0xe8d8b8 }).setAlpha(a));
-      c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: 0xffffff }).setAlpha(a));
+      const a = cell.left === 0 ? 0.3 : 1;
+      // 点数 16、张数 19：iPad 横屏（缩到 ×0.92）都到 14 CSS 像素；手机上更小的由手机字号档管
+      c.add(text(this, x, y0 + 14, name, { size: 16, bold: true, color: lv || cell.rank >= 16 ? COLOR.red : 0x6a4a2a }).setAlpha(a));
+      c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: lv ? COLOR.red : PAPER_INK }).setAlpha(a));
     });
     const z = this.add.zone(x0, y0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     hitDown(z, w, h);
@@ -1326,6 +1313,7 @@ export class TableScene extends Phaser.Scene {
         await bigWord(this, `第 ${e.dealNo} 副`, { sub: `打 ${levelName(e.level)}${e.level === 14 ? ' · 过 A 就赢' : ''}`, size: TYPE.huge, hold: 500 });
         const v = this.ses.view();
         this.hand.setHand(v.hand, v.level, { animate: false });
+        this.dealToOthers(W / 2, 250);
         await this.hand.dealIn(W / 2, 250);
         this.dealTalk(e.dealNo);
         if (!tutorialDone() && !this.ses.autoplay && !this.ses.online && app.params?.seed === null) {
@@ -1494,12 +1482,46 @@ export class TableScene extends Phaser.Scene {
       burst(this, W / 2, 330, 'coin', 30, { speed: [200, 520], life: 1400, gravity: 500 });
       await bigWord(this, '天王炸！', { size: 96, color: COLOR.goldLight, stroke: COLOR.redDark, hold: 1100, depth: 190 });
     } else {
-      flash(this, 0xffffff, play.cards.length >= 6 || play.type === 'straightFlush' ? 0.55 : 0.4);
-      shake(this, 360, play.cards.length >= 6 ? 0.014 : 0.009);
-      burst(this, a.px, a.py, 'spark', 36, { speed: [160, 480] });
+      // 三档（bombDrama）：四炸、五六炸、同花顺和七炸以上；越大闪得越亮、震得越久，三档加光圈和纸屑
+      const tier = bombDrama(play);
+      flash(this, 0xffffff, [0.35, 0.5, 0.65][tier - 1]!);
+      shake(this, [300, 420, 560][tier - 1]!, [0.008, 0.013, 0.018][tier - 1]!);
+      burst(this, a.px, a.py, 'spark', [28, 44, 64][tier - 1]!, { speed: [160, 480 + tier * 60] });
       burst(this, a.px, a.py, 'smoke', 8, { speed: [40, 120], life: 900, gravity: -40, scale: [1.4, 2.4] });
+      if (tier === 3) {
+        rays(this, a.px, a.py, 0xffb040);
+        burst(this, a.px, a.py, 'confetti', 36, { speed: [220, 560], life: 1400, gravity: 420 });
+      }
       // 垫在出牌下面（出牌区 depth 200+）：大字一闪，刚炸出来的牌不被挡住
-      await bigWord(this, label, { size: play.cards.length >= 6 || play.type === 'straightFlush' ? 84 : 72, color: 0xfff0c8, stroke: COLOR.red, hold: 750, depth: 190 });
+      await bigWord(this, label, { size: [68, 80, 92][tier - 1]!, color: 0xfff0c8, stroke: COLOR.red, hold: 650 + tier * 100, depth: 190 });
+    }
+  }
+
+  /**
+   * 发牌时另外三家也"收到牌"（art-v3）：从桌心往三家头像各飞 6 张牌背，和我的手牌同一个节奏，到了就消失。
+   * 纯画面，不等它（我的手牌发完就往下走）；关了动画不飞
+   */
+  private dealToOthers(x: number, y: number): void {
+    if (dur(1) === 0) return;
+    const key = `back:${getSettings().back}`;
+    const step = dur(26) * 4;
+    for (let k = 0; k < 6; k++) {
+      this.seats.forEach((sv) => {
+        if (this.isMe(sv.seat)) return;
+        const to = sv.center;
+        const img = this.add.image(x, y, key).setDisplaySize(46, 64).setAngle(-12).setDepth(180);
+        this.tweens.add({
+          targets: img,
+          x: to.x,
+          y: to.y,
+          angle: sv.seat === 1 ? 20 : sv.seat === 3 ? -20 : 0,
+          scale: img.scale * 0.7,
+          delay: k * step + sv.seat * dur(20),
+          duration: dur(300),
+          ease: 'Cubic.easeOut',
+          onComplete: () => img.destroy(),
+        });
+      });
     }
   }
 
@@ -1576,8 +1598,12 @@ export class TableScene extends Phaser.Scene {
     const hl = dealHighlights(r, history).slice(0, 2);
     if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
     const titles = dealTitles(r, history);
-    const titleY = 116 + recap.length * 30 + 6;
-    const lastY = titles.length ? titleY + (titles.length - 1) * 30 : 116 + (recap.length - 1) * 30;
+    // 左下分两框（art-v3）：上面是数据（炸弹、最大一炸），下面是故事（名场面、称号），不再红黑混排一长串
+    // 数据框从名次第四行下面留出一点开始（第四行下沿 96），行距 28
+    const dataY = 124;
+    const storyY = dataY + 28 + 16 + 12 + 16;
+    const story = recap.length - 2 + titles.length;
+    const lastY = story > 0 ? storyY + (story - 1) * 28 : dataY + 28;
     const m = modal(this, 820, Math.max(560, 2 * (lastY + 16 + 30)), `第 ${r.dealNo} 副 结束`, { closeBtn: false });
     this.openOverlay('settle', m);
     const b = m.body;
@@ -1657,10 +1683,13 @@ export class TableScene extends Phaser.Scene {
     const net = this.net;
     // 左下：这一副的复盘和称号（0.6.1，只看公开的出牌、名次和播过的接风）
     this.logMatch();
-    recap.forEach((line, i) => b.add(text(this, -370, 116 + i * 30, line, { size: TYPE.small, color: i === 2 ? COLOR.redDark : COLOR.ink, bold: i === 2, ox: 0 })));
-    titles.forEach((t, i) => {
-      b.add(text(this, -370, titleY + i * 30, this.titleLine(t, true), { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 }));
-    });
+    const boxes = this.add.graphics();
+    boxes.fillStyle(0xf3e6c9, 1).fillRoundedRect(-378, dataY - 16, 368, 28 + 32, 10);
+    if (story > 0) boxes.fillStyle(0xfbe3d8, 1).fillRoundedRect(-378, storyY - 16, 368, (story - 1) * 28 + 32, 10);
+    b.add(boxes);
+    recap.slice(0, 2).forEach((line, i) => b.add(text(this, -366, dataY + i * 28, line, { size: TYPE.small, color: COLOR.ink, ox: 0 })));
+    const storyLines = [...recap.slice(2), ...titles.map((t) => this.titleLine(t, true))];
+    storyLines.forEach((line, i) => b.add(text(this, -366, storyY + i * 28, line, { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 })));
     // 主按钮右挪，左边放"回大厅"：结算弹窗盖着顶栏的大厅按钮，任何界面两步内要能回大厅（仓库 AGENTS 第 2 节）
     const by = stakeLine ? 200 : 190;
     const lobby = new Button(this, rx - 126, by, 132, 56, lobbyName(), 'wood', () => this.lobbyFromSettle(), 'home');
@@ -1734,7 +1763,8 @@ export class TableScene extends Phaser.Scene {
     // 整局的称号：一行排开，按钮上方
     this.logMatch();
     const titles = matchTitles(this.matchLog);
-    if (!watch) this.addShare(b, 330, -220, { kind: 'game', win, room: this.net?.code ?? null }, awards);
+    // 分享（art-v3）：按钮行正中带字的"晒战绩"，不再是右上角一个小图标
+    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null }, awards, 200);
     if (titles.length && !awards) b.add(text(this, 0, 114, titles.map((t) => this.titleLine(t, false)).join('    '), { size: TYPE.small, bold: true, color: COLOR.redDark }));
     if (this.net && watch) {
       // 旁观的人：看完结果回首页（"再来一场"是这一桌的人一起换房间，不带旁观的）
@@ -1746,8 +1776,8 @@ export class TableScene extends Phaser.Scene {
       const tip = text(this, 0, 74, '好友房不计战绩 · 点"再来一场"，这一桌一起换到新房间', { size: TYPE.label, color: COLOR.ink });
       b.add(tip);
       b.setData('againTip', tip);
-      const home = new Button(this, -140, 170, 220, 64, '回首页', 'wood', () => this.leaveRoom(), 'back');
-      const again = new Button(this, 140, 170, 220, 64, '再来一场', 'red', () => void this.again(again), 'restart');
+      const home = new Button(this, -230, 170, 200, 64, '回首页', 'wood', () => this.leaveRoom(), 'back');
+      const again = new Button(this, 230, 170, 200, 64, '再来一场', 'red', () => void this.again(again), 'restart');
       b.add([home, again]);
       b.setData('again', again);
       b.setData('home', home);
@@ -1756,24 +1786,28 @@ export class TableScene extends Phaser.Scene {
       if (a) this.followAgain(a);
       return;
     }
+    // 战绩一行只在真有战绩时写（URL 开的局、实盘不计战绩，新账号写"0/0 胜率 0%"没意思）
     const st = getStats();
-    const rate = st.games > 0 ? Math.round((st.wins / st.games) * 100) : 0;
-    b.add(text(this, 0, 74, `战绩 ${st.wins}/${st.games}  胜率 ${rate}%  连胜 ${st.streak}（最高 ${st.bestStreak}）`, { size: TYPE.label, color: COLOR.ink }));
-    b.add(new Button(this, -140, 170, 220, 64, '回首页', 'wood', () => this.scene.start('title'), 'back'));
-    b.add(new Button(this, 140, 170, 220, 64, '再来一局', 'red', () => this.newGame(), 'restart'));
+    if (st.games > 0) {
+      const rate = Math.round((st.wins / st.games) * 100);
+      b.add(text(this, 0, 74, `战绩 ${st.wins}/${st.games}  胜率 ${rate}%  连胜 ${st.streak}（最高 ${st.bestStreak}）`, { size: TYPE.label, color: COLOR.ink }));
+    }
+    b.add(new Button(this, -230, 170, 200, 64, '回首页', 'wood', () => this.scene.start('title'), 'back'));
+    b.add(new Button(this, 230, 170, 200, 64, '再来一局', 'red', () => this.newGame(), 'restart'));
   }
 
   /**
    * 结算页右上角的"分享"（0.13.0，docs/social.md 1.1）：画一张战绩图，手机上调系统分享，不支持的出预览。只用公开的结果，不画手牌
    */
-  private addShare(b: Phaser.GameObjects.Container, x: number, y: number, k: ShareKind, awards: readonly Award[] | null = null): void {
+  private addShare(b: Phaser.GameObjects.Container, x: number, y: number, k: ShareKind, awards: readonly Award[] | null = null, labelW = 0): void {
     this.logMatch();
     // 好友房用房间攒的记录（中途进来、刷新过的人本地记的不全），颁奖写进卡里
     const log = (awards && this.net?.matchLog) || this.matchLog;
     const card = shareCardOf(k, log, matchTitles(log), this.myShareName(), awards ? { awards, name: seatName } : undefined);
     // 结算页一出来就先画好卡，点的时候在同一个点击里调系统分享（iOS 要这样）
     const share = prepareResult(card, k.room);
-    const btn = iconButton(this, x, y, 'share', share, 56);
+    // labelW > 0：按钮行里带字的"晒战绩"（整局结束页）；否则角上一个图标（实盘结算）
+    const btn = labelW > 0 ? new Button(this, x, y, labelW, 64, '晒战绩', 'gold', share, 'share') : iconButton(this, x, y, 'share', share, 56);
     b.add(btn);
     b.setData('share', btn);
   }

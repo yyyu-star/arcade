@@ -377,6 +377,45 @@ function stonemonk(c: Ctx): void {
   stroke(c, (k) => { k.moveTo(23, 24); k.quadraticCurveTo(26, 25.6, 29, 24); }, 1.5);
 }
 
+/** 提灯鬼：半透明的青白小鬼，尖尖的身子飘着，没有脚；一手提着暖黄的纸灯笼，灯笼光把周围染暖 */
+function lampghost(c: Ctx): void {
+  const BODY = '#cfe4e0';
+  const BODY_SH = '#8fb4b0';
+  dab(c, ellipse(26, 60, 13, 3), INK, 0.16);
+  // 灯笼的光晕
+  dab(c, circle(40, 40, 16), '#ffc24a', 0.3);
+  dab(c, circle(40, 40, 9), '#ffe38a', 0.35);
+  // 身子：半透明，下摆拖成三缕
+  c.save();
+  c.globalAlpha = 0.72;
+  blob(c, (k) => { k.moveTo(14, 26); k.quadraticCurveTo(6, 46, 8, 58); k.lineTo(14, 52); k.lineTo(20, 60); k.lineTo(26, 52); k.lineTo(32, 60); k.lineTo(36, 52); k.quadraticCurveTo(38, 42, 34, 26); k.closePath(); }, BODY, BODY_SH, 2.2, 3);
+  c.restore();
+  dab(c, ellipse(22, 44, 6, 9), '#ffffff', 0.25);
+  // 提灯的手臂
+  stroke(c, (k) => { k.moveTo(32, 32); k.lineTo(40, 30); }, 4, INK);
+  stroke(c, (k) => { k.moveTo(32, 32); k.lineTo(40, 30); }, 2, BODY);
+  // 灯杆和纸灯笼
+  stroke(c, (k) => { k.moveTo(40, 30); k.lineTo(40, 34); }, 1.6);
+  blob(c, rrect(36, 33, 8, 3, 1), '#3a2a1c', null, 1.4);
+  blob(c, ellipse(40, 41, 7, 8), '#f6b43a', '#d6821e', 2, 1.6);
+  dab(c, ellipse(40, 41, 4, 5.4), '#fff0a8');
+  stroke(c, (k) => { k.moveTo(34, 41); k.quadraticCurveTo(40, 43.4, 46, 41); }, 0.9, '#c3701a');
+  blob(c, rrect(36, 48, 8, 2.6, 1), '#3a2a1c', null, 1.4);
+  // 头：大圆脑袋，空洞的眼睛，一点微笑
+  c.save();
+  c.globalAlpha = 0.85;
+  blob(c, circle(22, 20, 11), '#e6f3f0', BODY_SH, 2.2, 2);
+  c.restore();
+  dab(c, ellipse(18, 21, 2, 3), INK);
+  dab(c, ellipse(26, 21, 2, 3), INK);
+  dab(c, circle(18.4, 20.4, 0.8), '#ffe38a');
+  dab(c, circle(26.4, 20.4, 0.8), '#ffe38a');
+  stroke(c, (k) => { k.moveTo(19, 27); k.quadraticCurveTo(22, 29, 25, 27); }, 1.3);
+  // 额头一张小黄符
+  blob(c, rrect(19.6, 10, 5.6, 8, 1), '#f2d46a', '#b8962e', 1.2, 0.8);
+  stroke(c, (k) => { k.moveTo(22.4, 11.6); k.lineTo(22.4, 16.4); }, 0.8, '#c43a2a');
+}
+
 export const SPRITES12: SpriteDef[] = [
   { key: 'bamsprout', w: 44, h: 58, ox: 0.5, oy: 0.95, draw: bamsprout },
   { key: 'snakespirit', w: 62, h: 44, ox: 0.5, oy: 0.9, draw: snakespirit },
@@ -389,4 +428,5 @@ export const SPRITES12: SpriteDef[] = [
   { key: 'frostsoul', w: 78, h: 92, ox: 0.5, oy: 0.95, draw: frostsoul },
   { key: 'nightwatch', w: 54, h: 62, ox: 0.5, oy: 0.92, draw: nightwatch },
   { key: 'stonemonk', w: 52, h: 68, ox: 0.5, oy: 0.95, draw: stonemonk },
+  { key: 'lampghost', w: 56, h: 66, ox: 0.5, oy: 0.92, draw: lampghost },
 ];

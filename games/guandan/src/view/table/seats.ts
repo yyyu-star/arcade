@@ -22,14 +22,14 @@ export class SeatView {
   private countText: Phaser.GameObjects.Text | null = null;
   private countBg: Phaser.GameObjects.Graphics | null = null;
   private countPulse: Phaser.Tweens.Tween | null = null;
-  private stamp: Phaser.GameObjects.Image | null = null;
+  private stamp: Phaser.GameObjects.Container | null = null;
   private talk: Phaser.GameObjects.Container | null = null;
   private moodTimer: Phaser.Time.TimerEvent | null = null;
   private thinking: Phaser.GameObjects.Container | null = null;
   private lastCount = -1;
   private plate: Phaser.GameObjects.Graphics;
   private nameText: Phaser.GameObjects.Text;
-  /** 联机：电脑头像右下角的小芯片角标（形状区分，不只靠颜色） */
+  /** 联机：电脑头像左下角的小芯片角标（形状区分，不只靠颜色；右下角是剩余张数） */
   private badge: Phaser.GameObjects.Container;
   /** 联机：掉线/代打的小字、这一手的倒计时 */
   private netTag: Phaser.GameObjects.Text;
@@ -60,7 +60,7 @@ export class SeatView {
       this.plate.setVisible(false);
       this.nameText.setVisible(false);
     }
-    this.badge = scene.add.container(r * 0.72, r * 0.72);
+    this.badge = scene.add.container(-r * 0.72, r * 0.72);
     const bg = scene.add.graphics();
     bg.fillStyle(0x2b1d14, 1).fillRoundedRect(-15, -13, 30, 26, 7);
     bg.lineStyle(2, 0x9fe0ff, 1).strokeRoundedRect(-15, -13, 30, 26, 7);
@@ -74,11 +74,9 @@ export class SeatView {
     this.refreshIdentity();
 
     if (!this.self) {
-      // 剩余张数：小牌背 + 数字；≤10 张变红并跳动
-      const cx = seat === 1 ? -r - 26 : seat === 3 ? r + 26 : r + 30;
-      const cy = seat === 2 ? 4 : 6;
-      const box = scene.add.container(cx, cy);
-      const back = scene.add.image(0, 0, 'back:0').setDisplaySize(40, 56).setAngle(seat === 1 ? -8 : 8);
+      // 剩余张数：三家一个样，头像右下角压一张小牌背 + 数字（art-v3）；≤10 张变红并跳动
+      const box = scene.add.container(r * 0.8, r * 0.62);
+      const back = scene.add.image(-4, -6, 'back:0').setDisplaySize(30, 42).setAngle(10);
       this.countBg = scene.add.graphics();
       this.countText = text(scene, 0, 2, '27', { size: TYPE.body, color: 0xffffff, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 4 });
       box.add([back, this.countBg, this.countText]);
@@ -195,15 +193,18 @@ export class SeatView {
     this.stamp = null;
     if (place === null) return;
     const name = PLACE_NAMES[place - 1]!;
-    const s = this.scene.add.image(this.a.ax + this.a.size * 0.32, this.a.ay - this.a.size * 0.28, `stamp:${name}`).setDepth(60);
+    const s = this.scene.add.container(this.a.ax + this.a.size * 0.32, this.a.ay - this.a.size * 0.28).setDepth(60);
     const size = this.a.size * 0.78;
-    s.setDisplaySize(size, size).setAngle(-14);
+    // 印章底下垫一块米色实底（art-v3）：印泥是半透明的墨，直接压在头像上看不清；头游再加一圈金边
+    const back = this.scene.add.graphics();
+    back.fillStyle(0xfff3d6, 0.94).fillCircle(0, 0, size * 0.46);
+    if (place === 1) back.lineStyle(4, COLOR.gold, 1).strokeCircle(0, 0, size * 0.46);
+    s.add([back, this.scene.add.image(0, 0, `stamp:${name}`).setDisplaySize(size, size).setAngle(-14)]);
     this.stamp = s;
     if (!animate || dur(1) === 0) return;
-    const sx = s.scaleX;
-    s.setScale(sx * 3).setAlpha(0);
+    s.setScale(3).setAlpha(0);
     audio.sfx('stamp');
-    await tweenP(this.scene, { targets: s, scale: sx, alpha: 1, duration: 260, ease: 'Back.easeIn' });
+    await tweenP(this.scene, { targets: s, scale: 1, alpha: 1, duration: 260, ease: 'Back.easeIn' });
     this.scene.cameras.main.shake(dur(120), 0.004);
   }
 

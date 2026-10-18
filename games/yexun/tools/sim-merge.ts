@@ -17,7 +17,7 @@ interface Part {
   /** sim.ts 的 --mode：raid 时每局是 [撤没撤出, 带出价值, 待了几拍] */
   mode?: string;
   from?: number;
-  runs: [number, number, number][];
+  runs: [number, number, number, ...number[]][];
 }
 
 const args = process.argv.slice(2);

@@ -39,6 +39,11 @@ export class TrickView {
     return Array.from({ length: n }, (_, i) => ({ x: x0 + i * STEP, y: a.py }));
   }
 
+  /** 这家的出牌区上现在有没有东西（牌或"不要"）：牌桌互动的首次提示不冒在有牌的那家旁边 */
+  occupied(seat: number): boolean {
+    return !!this.slots[seat];
+  }
+
   clearSeat(seat: number): void {
     const s = this.slots[seat];
     if (s) s.destroy();

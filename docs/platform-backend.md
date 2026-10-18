@@ -1154,6 +1154,7 @@ PR ③ 起每个接口还都用 `meta.rows_written` 写断言，和下表对得�
 | 带邀请码注册（0.20.0） | 13；码不对 1 | 注册的 9 + `inv:ip` 1 + 占码 1（`used_by`、`used_at` 不带索引）+ 和邀请人的好友关系 2（表 + 索引）；邀请人好友满了少这 2 行 | 注册 |
 | 改邀请额度 `POST /api/admin/settings/invites`、单人额度、管理员撤回码（0.20.0） | 2；没变化 0 | settings / users / invite_codes 1 + `admin` 每日计数 1 | 账号安全 |
 | 搭子战绩 `together()`（钱包绑定的 RPC，0.19.0） | 每对好友：新的 2，已有的 1；同一个 op 再报、不是好友 0 | mates 1（+ `hi` 索引 1，只在新插入时） | 排行榜 |
+| 同桌的屏蔽关系 `ARCADE.blockedAmong()`（认人绑定的 RPC，0.25.0） | 0（只读：一条查询，最多读 81 行；不同步计量，冷启动也不写计量行） | — | 好友与资料（只记读） |
 | 发邀请 `POST /api/invites`（0.14.0） | 3 | invites 表 1 + 两个索引 2；不是好友、超限、格式不对 0（次数直接数这张表，不另记限流计数） | 在线 |
 | 邀请"不了" `POST /api/invites/<id>/dismiss`（0.14.0） | 1；已经点过、不是给我的 0 | 只改 `dismissed`（没有索引） | 在线 |
 | 报位置 `POST /api/presence`（0.13.0） | 位置没变每人每 2 分钟 ≤ 1；位置变了马上 1，但每人每 10 秒 ≤ 1；节流内 0 | users 1（`presence_json`、`presence_at`、`last_seen_at` 同一行，都没有索引）；格式不对、只读档、"在线"预算用完都是 0 | 在线 |
@@ -1780,6 +1781,13 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 - 平台 `/api/me` 续期或清失效会话时下发的 `Set-Cookie`，闸门在放行（200）和跳登录（302）时原样带回浏览器，平台不可用（503）时不带；否则只玩游戏、不回平台页的人 cookie 到期不续（开盘 0.5.6 起，掼蛋随后补）。
 - **联机房间进房也走这个约定**（`arcade-kit` 的 `acceptJoin` / `acceptCreate`，5.3）：同样只转发两个头、3 秒超时、fail-closed，但把"平台不可用"和"没登录"分开报
   （进房 1013 / 4401，开房 503 / 401），平台抖一下不会把正在打牌的人踢走。每次进房算平台 1 次调用。
+- **同一个绑定上的 RPC**（0.25.0，好友房聊天用，`packages/arcade-kit/docs/chat.md` 第 6 节）：平台的默认入口从 0.25.0 起是 `WorkerEntrypoint`，`ARCADE` 绑定除了 `fetch` 还能调
+  `blockedAmong(userIds)`：回这几个人之间的屏蔽关系 `[[屏蔽的人, 被屏蔽的人], …]`。`userIds` 去重、不像用户编号的忽略，最多 9 个（超过回 `[]`、不查）；
+  只读，一条查询，一行不写；停服（`API_MODE=off`）或出错回 `[]`、不抛异常，房间退回只用本地屏蔽。`/api` 里没有这条路（浏览器拿到了就能试出谁屏蔽了自己）。
+  旧平台、单独部署的游戏没有这个方法，游戏要当它可能不存在（调用抛错时同样退回本地屏蔽）。测试：`platform/test/blocked-among.test.ts`。
+  入口改成类以后，RPC 能调到类原型上的每个公开方法（Cloudflare 文档的保留名里没有 `scheduled`）。所以定时清理 `scheduled` 写成实例字段：RPC 只认原型上的方法（实测调实例字段报
+  "The RPC receiver's prototype does not implement"），cron 照常找得到它（`wrangler dev --test-scheduled` 实测）。清理用的时间再兜一层，取调用方给的时间和现在里早的那个。
+  经 RPC 只露出 `fetch` 和 `blockedAmong`，测试锁住了原型上的方法名。
 - 测试：`platform/test/admin.test.ts`「游戏登录闸门」模拟了服务绑定请求（登录着回 user，没登录或会话无效回 null，Host 不对 404，计量正好 +1，停服 503）。
 
 ### 15.9 钱包（0.9.0，5.9）

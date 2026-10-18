@@ -57,10 +57,86 @@ export function unlockAudio(): void {
       master.connect(clip).connect(ctx.destination);
     }
     if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
+    syncAmbience();
   } catch {
     ctx = null;
     master = null;
   }
+}
+
+// ---------- 茶馆底噪（docs/art-v3.md 第 5 节，0.17.4） ----------
+// 很轻的一层：低处是屋里嗡嗡的人声（两层滤波噪声，一层慢慢起伏），隔十来秒一声盖碗碰茶托。
+// 走总音量（master），所以跟着"静音"和音量滑块走；设置里还能单独关（prefs.ambience）。页面切到后台就停，回来再起。
+
+/** 底噪在总音量里占多少：比打牌声轻得多，听得见但不抢 */
+const AMB_VOL = 0.05;
+let ambOn = true;
+let amb: { nodes: AudioScheduledSourceNode[]; g: GainNode; timer: number } | null = null;
+
+export function setAmbience(on: boolean): void {
+  ambOn = on;
+  syncAmbience();
+}
+
+function syncAmbience(): void {
+  const want = ambOn && !!ctx && !!master && document.visibilityState === 'visible';
+  if (want && !amb) startAmbience();
+  else if (!want && amb) stopAmbience();
+}
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', syncAmbience);
+
+function startAmbience(): void {
+  const c = ctx!;
+  const t = c.currentTime;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(AMB_VOL, t + 1.5);
+  g.connect(master!);
+  const layer = (type: BiquadFilterType, freq: number, q: number, vol: number): { s: AudioBufferSourceNode; v: GainNode } => {
+    const s = c.createBufferSource();
+    s.buffer = noise(c);
+    s.loop = true;
+    const f = c.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const v = c.createGain();
+    v.gain.value = vol;
+    s.connect(f).connect(v).connect(g);
+    s.start(t, Math.random() * 0.5);
+    return { s, v };
+  };
+  const low = layer('lowpass', 320, 0.5, 1);
+  const talk = layer('bandpass', 650, 0.8, 0.5);
+  // 人声的起伏：一个 0.13 赫兹的慢波推着中频那层的音量（0.5 ± 0.35）
+  const lfo = c.createOscillator();
+  lfo.frequency.value = 0.13;
+  const depth = c.createGain();
+  depth.gain.value = 0.35;
+  lfo.connect(depth).connect(talk.v.gain);
+  lfo.start(t);
+  const clink = (): void => {
+    if (!amb || !ctx) return;
+    const e = { c: ctx, out: amb.g };
+    const at = ctx.currentTime + 0.05;
+    const f = 2300 * jit(0.08);
+    tone(e, at, 0.25, 0.5, 'sine', f, f, 0.001);
+    tone(e, at, 0.12, 0.25, 'sine', f * 2.7, f * 2.7, 0.001);
+    amb.timer = window.setTimeout(clink, 7_000 + Math.random() * 9_000);
+  };
+  amb = { nodes: [low.s, talk.s, lfo], g, timer: window.setTimeout(clink, 4_000) };
+}
+
+function stopAmbience(): void {
+  if (!amb || !ctx) return;
+  const { nodes, g, timer } = amb;
+  amb = null;
+  window.clearTimeout(timer);
+  const t = ctx.currentTime;
+  g.gain.cancelScheduledValues(t);
+  g.gain.setValueAtTime(g.gain.value, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  for (const n of nodes) n.stop(t + 0.35);
 }
 
 export function setSound(on: boolean): void {

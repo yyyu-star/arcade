@@ -43,7 +43,7 @@ import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
-import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
+import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import {
   MAX_PASSIVES,
@@ -315,8 +315,10 @@ function heal(w: World, n: number): void {
   w.hp = Math.min(w.stats.hpMax, w.hp + n);
 }
 
-function hurt(w: World, dmg: number): void {
+/** by：谁打的（怪的编号；远程弹 = SHOT_BY + 弹种），只记给模拟器的死因统计，不进指纹、不影响结算 */
+function hurt(w: World, dmg: number, by = -1): void {
   if (w.invuln > 0 || w.phase !== 'play') return;
+  w.hurtBy = by;
   if (w.shield > 0) {
     // 金钟罩挡下这一下，碎的时候震开身边（下一拍出手时结算，那时有格子）
     w.shield--;
@@ -544,7 +546,17 @@ function spawnWaves(w: World): void {
   const m = MINUTES[mi]!;
   const diff = dangerDef(w.setup.mode, w.setup.danger);
   // 危险 0：怪种比例晚一分钟（更难的常规怪晚出）
-  const mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
+  let mix = MINUTES[Math.max(0, Math.min(MINUTES.length - 1, mi + diff.mixShift))]!.mix;
+  // 提灯鬼：危险 3 起第 5 分钟后占一成半到两成半（原来的比例整体让出这一份）；其余情形 mix 原样不动
+  const lamp = lampShare(w.setup.mode, w.setup.danger, minuteOf(w));
+  if (lamp > 0) {
+    const next: Partial<Record<EnemyKind, number>> = {};
+    let sum = 0;
+    for (const k in mix) sum += mix[k as EnemyKind]!;
+    for (const k in mix) next[k as EnemyKind] = (mix[k as EnemyKind]! / sum) * (1 - lamp);
+    next.lampghost = lamp;
+    mix = next;
+  }
   // 引魂灯：每级怪多 10%；咒印"众"：多 25%
   const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
   const calm = w.tick < w.calmUntil ? CALM.keepMul : 1;
@@ -883,11 +895,11 @@ function nearPlayer(w: World, i: number, r: number): boolean {
 }
 
 /** 在 (x, y) 半径 r 里的主角挨 dmg（走 hurt，吃无敌帧和危险档倍数） */
-function areaHurt(w: World, x: number, y: number, r: number, dmg: number): boolean {
+function areaHurt(w: World, x: number, y: number, r: number, dmg: number, by: number): boolean {
   const dx = w.x - x;
   const dy = w.y - y;
   if (dx * dx + dy * dy >= r * r) return false;
-  hurt(w, dmg);
+  hurt(w, dmg, by);
   return true;
 }
 
@@ -920,7 +932,7 @@ function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy:
         mv.sp = 0;
         if (--w.eT[i]! === 0) {
           w.ev.push(Ev.Mob, x, y, 1, SPROUT.r);
-          areaHurt(w, x, y, SPROUT.r, SPROUT.dmg);
+          areaHurt(w, x, y, SPROUT.r, SPROUT.dmg, w.eKind[i]!);
         }
       }
       break;
@@ -1015,7 +1027,7 @@ function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy:
       if (w.eS[i]! > 0) {
         if (--w.eS[i]! === 0) {
           w.ev.push(Ev.Mob, w.eAX[i]!, w.eAY[i]!, 5, ICICLE.r);
-          areaHurt(w, w.eAX[i]!, w.eAY[i]!, ICICLE.r, ICICLE.dmg);
+          areaHurt(w, w.eAX[i]!, w.eAY[i]!, ICICLE.r, ICICLE.dmg, w.eKind[i]!);
         }
       } else if (--w.eT[i]! <= 0 && d < ICICLE.range + 80) {
         w.eT[i] = ICICLE.every;
@@ -1030,7 +1042,7 @@ function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy:
         mv.sp = 0;
         if (--w.eS[i]! === 0) {
           w.ev.push(Ev.Mob, x, y, 9, FROSTSOUL.r);
-          if (areaHurt(w, x, y, FROSTSOUL.r, FROSTSOUL.dmg)) w.slowUntil = Math.max(w.slowUntil, w.tick + FROSTSOUL.slowTicks);
+          if (areaHurt(w, x, y, FROSTSOUL.r, FROSTSOUL.dmg, w.eKind[i]!)) w.slowUntil = Math.max(w.slowUntil, w.tick + FROSTSOUL.slowTicks);
           if (++w.eV[i]! % 2 === 0) {
             for (let k = 0; k < FROSTSOUL.golems; k++) spawnEnemy(w, 'icegolem', x + (k === 0 ? -50 : 50), y + 20);
           }
@@ -1053,7 +1065,7 @@ function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy:
         mv.sp = 0;
         if (--w.eS[i]! === 0) {
           w.ev.push(Ev.Mob, x, y, 12, MONK.r);
-          areaHurt(w, x, y, MONK.r, MONK.dmg);
+          areaHurt(w, x, y, MONK.r, MONK.dmg, w.eKind[i]!);
         }
       } else if (--w.eT[i]! <= 0) {
         w.eT[i] = MONK.every;
@@ -1151,7 +1163,7 @@ function bossAct(w: World, i: number, sp: number): number {
       w.ev.push(Ev.Boss, w.eX[i]!, w.eY[i]!, 1, stompR);
       const dx = w.x - w.eX[i]!;
       const dy = w.y - w.eY[i]!;
-      if (dx * dx + dy * dy < stompR * stompR) hurt(w, BOSS.stompDmg);
+      if (dx * dx + dy * dy < stompR * stompR) hurt(w, BOSS.stompDmg, w.eKind[i]!);
       return 0;
     }
     return w.eV[i]!;
@@ -2067,7 +2079,7 @@ function moveShots(w: World, g: Grid): void {
       const dy = w.sY[i]! + 16 - w.y;
       const rr = w.sR[i]! + PLAYER.r;
       if (dx * dx + dy * dy < rr * rr && w.invuln === 0) {
-        hurt(w, w.sDmg[i]!);
+        hurt(w, w.sDmg[i]!, SHOT_BY + w.sKind[i]!);
         if (w.sState[i] === 1) w.slowUntil = w.tick + SNOW.slowTicks;
         killShot(w, i);
         continue;
@@ -2316,6 +2328,8 @@ function moveShots(w: World, g: Grid): void {
 
 // ───────────────────────── 挨打 ─────────────────────────
 
+/** hurtBy 里远程弹的编号从这里起（加弹种），和怪的编号分开 */
+export const SHOT_BY = 1000;
 const WATER_CODE = ENEMY_BY_KIND.water.code;
 const SPROUT_CODE = ENEMY_BY_KIND.bamsprout.code;
 const DROWN_CODE = ENEMY_BY_KIND.drown.code;
@@ -2323,6 +2337,7 @@ function touchPlayer(w: World, g: Grid): void {
   if (w.invuln > 0) return;
   const n = g.query(w, w.x, w.y, PLAYER.r);
   let worst = 0;
+  let by = -1;
   for (let j = 0; j < n; j++) {
     const i = g.out[j]!;
     if (w.eKind[i] === WATER_CODE) {
@@ -2330,9 +2345,12 @@ function touchPlayer(w: World, g: Grid): void {
       if (w.eT[i]! > 0) continue;
       w.slowUntil = w.tick + WATER.grabTicks;
     } else if ((w.eKind[i] === SPROUT_CODE || w.eKind[i] === DROWN_CODE) && w.eT[i]! > 0) continue; // 还没钻出来的不伤人
-    if (w.eDmg[i]! > worst) worst = w.eDmg[i]!;
+    if (w.eDmg[i]! > worst) {
+      worst = w.eDmg[i]!;
+      by = w.eKind[i]!;
+    }
   }
-  if (worst > 0) hurt(w, worst);
+  if (worst > 0) hurt(w, worst, by);
 }
 
 // ───────────────────────── 掉落 ─────────────────────────
@@ -2861,7 +2879,11 @@ function openChest(w: World): void {
     if (w.merges.includes(def.id)) continue;
     const a = w.weapons.find((o) => o.id === def.a);
     const b = w.weapons.find((o) => o.id === def.b);
-    if (a?.evolved && b?.evolved) {
+    // 老的三个合成要两件都进化；双修（1.1）门槛低一点：一件进化、另一件满级就行（机器人每 20 局只合成 1–2 次，玩家更难见到）
+    const ok = def.dual
+      ? !!a && !!b && ((a.evolved && (b.evolved || b.level >= MAX_WEAPON_LEVEL)) || (b.evolved && a.level >= MAX_WEAPON_LEVEL))
+      : !!a?.evolved && !!b?.evolved;
+    if (ok) {
       w.merges.push(def.id);
       recompute(w);
       w.ev.push(Ev.Merge, w.x, w.y, m);

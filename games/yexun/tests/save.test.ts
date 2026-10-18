@@ -115,3 +115,25 @@ describe('局外成长（第 5 步）', () => {
     expect(reviveSave('junk')).toBe(null);
   });
 });
+
+describe('上次的模式和镇子（主页一步开始用）', () => {
+  it('老存档没有这两项：用默认（守夜、古镇）', async () => {
+    const { reviveSave } = await import('../src/platform/save.ts');
+    const s = reviveSave({ v: 1, runs: 3 })!;
+    expect(s.lastMode).toBe('vigil');
+    expect(s.raidTpl).toBe('guzhen');
+  });
+  it('读得懂就保留，读不懂（含教学镇）回默认', async () => {
+    const { reviveSave } = await import('../src/platform/save.ts');
+    const a = reviveSave({ v: 1, lastMode: 'raid', raidTpl: 'shansi' })!;
+    expect([a.lastMode, a.raidTpl]).toEqual(['raid', 'shansi']);
+    const b = reviveSave({ v: 1, lastMode: 'x', raidTpl: 'teach' })!;
+    expect([b.lastMode, b.raidTpl]).toEqual(['vigil', 'guzhen']);
+  });
+  it('只是本机偏好，不进云存档', async () => {
+    const { fresh, savePayload } = await import('../src/platform/save.ts');
+    const p = savePayload(fresh()) as Record<string, unknown>;
+    expect('lastMode' in p).toBe(false);
+    expect('raidTpl' in p).toBe(false);
+  });
+});

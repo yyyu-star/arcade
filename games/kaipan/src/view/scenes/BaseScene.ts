@@ -3,7 +3,7 @@ import { liveValue, type GameEvent, type GameState } from '../../core/index.ts';
 import { Animator } from '../fx/anim.ts';
 import type { Rect } from '../rect.ts';
 import { randomSeed, type Presenter, type SceneKey, type Session } from '../session.ts';
-import { applyCamera } from '../viewport.ts';
+import { applyCamera, type PhoneReady } from '../viewport.ts';
 import { AboutPanel } from '../ui/aboutPanel.ts';
 import { OVERLAY_FLAG, type Dialog } from '../ui/dialog.ts';
 import { ConfirmDialog, NoticeDialog } from '../ui/noticeDialog.ts';
@@ -25,7 +25,7 @@ const FADE_MS = 180;
  * 手机横屏时世界是 960×444：适配过手机的场景（phoneReady）直接按这个尺寸布局；
  * 还按 1280×720 布局的场景整体缩小、居中放进来（和以前在手机上看到的一样大）。
  */
-export function setupCamera(scene: Phaser.Scene, phoneReady = false): void {
+export function setupCamera(scene: Phaser.Scene, phoneReady: PhoneReady = false): void {
   applyCamera(scene, phoneReady);
 }
 
@@ -33,7 +33,7 @@ export function setupCamera(scene: Phaser.Scene, phoneReady = false): void {
 export abstract class BaseScene extends Phaser.Scene implements Presenter {
   readonly viewKey: SceneKey;
   /** 这个场景有没有手机横屏的布局（没有时整体缩小放进手机的世界里） */
-  protected readonly phoneReady: boolean = false;
+  protected readonly phoneReady: PhoneReady = false;
   protected readonly session: Session;
   protected anim!: Animator;
   private resume: (() => void) | null = null;

@@ -57,7 +57,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   fushi: { id: 'fushi', name: '符师', start: 'talisman', perkName: '连环符', perk: '符类冷却 −10%，每第 4 次出符多飞一张', unlock: '一开始就有', look: '紫袍高冠，腰上挂满黄符', line: '符纸管够，今晚谁来都是一张。' },
   jianxia: { id: 'jianxia', name: '剑侠', start: 'flysword', perkName: '剑不停步', perk: '走动时暴击 +12%，暴击更疼 +30%', unlock: '一开始就有', look: '青衣红围巾，背着一把长剑', line: '剑在鞘里闷得慌，边走边打。' },
   pang: { id: 'pang', name: '胖师叔', start: 'bell', perkName: '皮糙肉厚', perk: '血量 +50，走得慢一点（−8%），挨打时震开身边的怪', unlock: '花 300 铜钱请他', look: '橙袍大圆脸，手里摇着小铃', line: '吃饱了才有力气，挨两下不算啥。' },
-  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perkName: '三更锣', perk: '每 20 秒敲一声锣：全屏的怪被震退并受伤，金钟罩补一层', unlock: '守夜撑过 8 分钟', look: '灰袄毡帽，一手锣一手灯笼', line: '天干物燥——小心火烛——咣！' },
+  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perkName: '三更锣', perk: '每 24 秒敲一声锣：全屏的怪被震退并受伤，金钟罩补一层', unlock: '守夜撑过 8 分钟', look: '灰袄毡帽，一手锣一手灯笼', line: '天干物燥——小心火烛——咣！' },
   caiyao: { id: 'caiyao', name: '采药女', start: 'petals', perkName: '百草香', perk: '每秒回 0.7 血，肉包回血加倍，经验 +20%', unlock: '夜探成功撤出 1 次', look: '青裙双髻，背着药篓采药', line: '药篓里什么都有，也有给你的。' },
 };
 
@@ -76,10 +76,11 @@ export const CHAR_FX = {
   pangArea: 130,
   pangKnock: 40,
   /** 更夫的锣：隔几拍一次、多远的怪被震、退多远，伤害 = 底 + 每级 × 等级 */
-  gongEvery: 20 * 30,
+  // 1.1：0.2.0 模拟里更夫胜率约 60%（六个角色最高），锣 20 → 24 秒一声、伤害 20 → 15
+  gongEvery: 24 * 30,
   gongArea: 720,
   gongKnock: 40,
-  gongDmg: 20,
+  gongDmg: 15,
   gongPerLevel: 3,
   caiyaoBun: 2,
   caiyaoXp: 0.2,
