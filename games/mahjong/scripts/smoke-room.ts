@@ -279,6 +279,17 @@ try {
   check(!(await pb.waitForSelector('.atf-bubble:has-text("安逸！")', { timeout: 2_000 }).catch(() => null)), 'B 屏蔽了 A，A 说的 B 看不到');
   await hot(pb, 0);
   await key(pb, 'fun:block');
+  // 好友房聊天（kit 0.18.0，0.19.0）：A 在"互动"面板的聊天页说一句，B 头像旁看到气泡
+  await pa.click('.atf-btn');
+  await key(pa, 'fun:tab:chat');
+  await pa.fill('[data-key="fun:chatInput"]', '这把稳了');
+  await key(pa, 'fun:chatSend');
+  check(!!(await pb.waitForSelector('.atf-say:has-text("这把稳了")', { timeout: 4_000 }).catch(() => null)), 'A 在聊天页说的话 B 看得到');
+  await pa.screenshot({ path: join(SHOTS, 'room-chat-a.png') });
+  await pb.screenshot({ path: join(SHOTS, 'room-chat-b.png') });
+  // 聊天页发完不会自己收起：点一下面板外面（kit 铺的 .atf-away）收起来，后面点头像热区才不被挡住
+  await pa.click('.atf-away', { position: { x: 5, y: 5 } });
+  await pa.waitForSelector('[data-kind="panel"]', { state: 'detached', timeout: 2_000 }).catch(() => null);
   // 冲两个电脑轮流扔几下：房间里的电脑按 kit 的 botReact 回（60%，再乘性格），回的东西两边都看得到
   for (let i = 0; i < 8; i++) {
     await sleep(1_700);

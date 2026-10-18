@@ -1,6 +1,6 @@
 /**
  * 好友房跑在本地 workerd 里（DESIGN.md 第 6 节）：真的房间 DO（kit + 麻将的房间规则）、真的（假平台的）钱包 DO。
- * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时不少带、一场打完报搭子战绩。
+ * 覆盖开房、实盘开局的带入、隐藏信息不下发、每步写入 ≤ 2 行、离座马上结回、钱包不够一份时不少带、一场打完报搭子战绩、好友房聊天的转发和过滤。
  * 不打整场（牌局本身在 node 单测里）；不等真实计时，只停在开局后的换三张阶段。
  */
 import { runInDurableObject } from 'cloudflare:test';
@@ -85,8 +85,9 @@ class Conn {
   }
 }
 
-async function join(code: string, sid: string): Promise<Conn> {
-  const res = await exports.default.fetch(`${BASE}/rooms/${code}/ws?cv=1`, { headers: { upgrade: 'websocket', origin: SITE, cookie: `__Host-sid=${sid}` } });
+/** chat：带不带 chat=1（新版页面传了 onChat 才带；旧页面不带，房间就不给它发聊天，kit 0.18.0） */
+async function join(code: string, sid: string, chat = false): Promise<Conn> {
+  const res = await exports.default.fetch(`${BASE}/rooms/${code}/ws?cv=1${chat ? '&chat=1' : ''}`, { headers: { upgrade: 'websocket', origin: SITE, cookie: `__Host-sid=${sid}` } });
   expect(res.status).toBe(101);
   const c = new Conn(res.webSocket!);
   await c.until((m) => m.t === 'welcome');
@@ -214,5 +215,51 @@ describe('搭子战绩', () => {
     });
     await sleep(100);
     expect(await together(ids[0]!)).toEqual(got);
+  });
+});
+
+describe('好友房聊天（kit 0.18.0，0.19.0）', () => {
+  type Said = { t: 'chat'; seat: number; text: string; masked?: true };
+  const said = (c: Conn): Said[] => c.raw.map((r) => JSON.parse(r) as { t: string }).filter((m): m is Said => m.t === 'chat');
+
+  /** 走真实的开房、进房路由：房主坐 0 号、客人坐 1 号，不开打（聊天在等人页就能说） */
+  async function seated(hostChat: boolean, guestChat: boolean) {
+    const ids = [user(), user()];
+    const code = await openRoom(ids[0]!);
+    const host = await join(code, ids[0]!, hostChat);
+    const guest = await join(code, ids[1]!, guestChat);
+    guest.send({ t: 'sit', seat: 1 });
+    await guest.until((m) => m.t === 'state' && m.you.seat === 1);
+    return { code, host, guest };
+  }
+
+  it('入座的人说一句：房间按座位号转发给这一桌带 chat=1 的连接（含自己），不写存储', async () => {
+    const { code, host, guest } = await seated(true, true);
+    const before = await inspect(code);
+    guest.send({ t: 'chat', text: '碰一个' });
+    await host.until((m) => (m as { t: string }).t === 'chat');
+    await guest.until((m) => (m as { t: string }).t === 'chat');
+    expect(said(host)).toEqual([{ t: 'chat', seat: 1, text: '碰一个' }]);
+    expect(said(guest)).toEqual([{ t: 'chat', seat: 1, text: '碰一个' }]);
+    expect((await inspect(code)).total).toBe(before.total);
+  });
+
+  it('发手机号整条拒发：只回发的人 chat_blocked，别人什么都收不到', async () => {
+    const { host, guest } = await seated(true, true);
+    guest.send({ t: 'chat', text: '加我 13800138000' });
+    const err = await guest.until((m) => m.t === 'error');
+    expect(err).toMatchObject({ t: 'error', code: 'chat_blocked' });
+    await sleep(200);
+    expect(said(host)).toEqual([]);
+    expect(said(guest)).toEqual([]);
+  });
+
+  it('旧页面（连接没带 chat=1）收不到聊天，新页面照常收', async () => {
+    const { host, guest } = await seated(false, true);
+    guest.send({ t: 'chat', text: '快点嘛' });
+    await guest.until((m) => (m as { t: string }).t === 'chat');
+    await sleep(200);
+    expect(said(host)).toEqual([]);
+    expect(said(guest)).toEqual([{ t: 'chat', seat: 1, text: '快点嘛' }]);
   });
 });

@@ -501,6 +501,9 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
     输的是点炮的人，自摸和杠是还在打的其他人。别人点炮的普通小胡不算。单机交给 `TableFun.moment`，好友房由房间（`src/room/talk.ts`，kit 的 `onStep`）
     对比公开统计认出来、每个电脑座位问一次 `botReact`、用 `botEmote` 发；真人冲电脑扔的由 kit 的 `onEmote` 交给房间。电脑的反应只在房间内存里记，不写存储。
   - 横幅：一炮双响 / 三响、杠上开花、抢杠胡、天胡、地胡、海底捞月、龙七对、金钩钓、清一色、封顶，胡牌的牌面放完后挂一条（kit 的 `banner`），记进一场的总结算。
+  - 好友房聊天（0.19.0，kit 0.18.0，`docs/chat.md`）：房间 `chat: true`，kit 过滤（链接、号码、微信 QQ 整条拒发，脏话打码）、按座位限速后只转发给带 `chat=1` 的连接，不写存储、不进快照，电脑不读；
+    页面 `Online` 把 onChat / onChatError 交给 TableFun 的 `chat` / `chatError`（房间座位号就是牌桌座位号，不用换算）；声音面板"聊天：开 / 不看"（`mahjong.chatOff`，只在好友房出现），不看只挡别人说的。
+    房间测试走真实进房路由测转发、拒发手机号、没带 chat=1 的旧页面收不到。
   - 设置：总开关"互动：开 / 不看"在顶栏"声"的小面板里（`mahjong.comms`）；"屏蔽他""全部屏蔽"在 kit 的菜单和面板里，按房间分开（sessionStorage）。只是自己不看，牌局照常。
   - 0.10.1 去掉了自己那套（菜单、面板、冷却、连击回敬、电脑反应、按性格的台词 `VOICES`、催促炸弹）：kit 里没有催促炸弹，规范也没有，不另做。
 - **动作字和音效**：碰用大字"碰！"；杠、胡、自摸（0.9.0）在那家的牌河上弹出金色大字加一圈粒子（`view/fx.ts`，只动 transform/opacity，减少动态效果时只淡入淡出）；
@@ -598,6 +601,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | `mahjong.solo` | 单机打到一半的一场（状态 + 钱包 ref 和 op），回来接着打 |
 | `mahjong.prefs` | 声音、茶馆底噪（0.17.4）、振动、速度、上次选的档位、娱乐难度和玩法 |
 | `mahjong.comms` | 互动的总开关关着（"不看"） |
+| `mahjong.chatOff` | 好友房聊天关着（"聊天：不看"，0.19.0） |
 | `mahjong.nick` | 单独部署时好友房里的昵称 |
 | `mahjong.guide` | 新手引导看过没有 |
 | `mahjong.hint.rotate` | 竖屏"横过来玩更舒服"的提示出过没有 |
@@ -715,3 +719,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.17.6 | 手机热修：字号按舞台缩放补回（`--fs-k`）、几处点按区补到 44 |
 | 0.18.0 | 手机专项：手牌点按区往上撑、竖屏舞台高 920–1240 宽 560–700（去黑边）、选档页排版、smoke 加省内存一段 |
 | 0.18.1 | 竖屏选档页空白处挂主页的茶馆画（`.lobby-art`，容器高不到 260 不画） |
+| 0.19.0 | 好友房聊天（kit 0.18.0）：房间 `chat: true`，页面 onChat 交给 TableFun，设置"聊天：开 / 不看" |

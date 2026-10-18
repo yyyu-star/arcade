@@ -157,6 +157,8 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
   seats: SEATS,
   rulesVersion: ROOM_RULES,
   emotes: EMOTES,
+  // 好友房聊天（kit 0.18.0，docs/chat.md）：kit 过滤、限速、只转发，不进状态和存储；电脑不读真人说的话
+  chat: true,
 
   options(raw) {
     if (raw === undefined || raw === null) return DEFAULT_OPTS;

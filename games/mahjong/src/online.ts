@@ -5,7 +5,7 @@
  * 电脑接着出的几手是几帧，按顺序一帧一帧播（每帧带房间给的停顿）；落下太多（切回前台、重连）就不播了，直接摆最新的。
  * 房间码只在地址栏（?room=123456）：刷新原样回到房间，不另存（平台 0.10.1：登录跳转靠 next 带回来）。
  */
-import { closeText, createText, RoomClient, type ClientStatus } from 'arcade-kit/client';
+import { closeText, createText, RoomClient, type ChatSendResult, type ClientStatus } from 'arcade-kit/client';
 import type { DownMsg, RoomInfo, You } from 'arcade-kit/protocol';
 import type { RoomAction, RoomOpts, RoomView } from './room/rules.ts';
 import { ROOM_TEXTS } from './view/text.ts';
@@ -32,6 +32,10 @@ export interface OnlineUi {
   toast(text: string): void;
   /** 有人发了短语、表情包、道具（seat 是房间的座位号） */
   emote(seat: number, id: number, to?: number): void;
+  /** 有人说了一句（kit 0.18.0；seat 是房间的座位号，和牌桌、互动用的座位号是同一套） */
+  chat(seat: number, text: string, masked: boolean): void;
+  /** 房间拒了我说的一句（被本地挡下的不走这里，chat() 直接返回原因） */
+  chatError(code: string): void;
   /** 房间停了（关了、被顶掉、连不上），不会再连 */
   ended(text: string, code: number): void;
 }
@@ -58,6 +62,9 @@ export class Online {
       clientVersion: CLIENT_VERSION,
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, c, reason) => this.onStatus(st, c, reason),
+      // 传了 onChat 连接才带 chat=1，房间才给这个页面发聊天
+      onChat: (seat, text, masked) => this.ui.chat(seat, text, masked),
+      onChatError: (code) => this.ui.chatError(code),
       onEmote: (seat, id, to, bot) => {
         if (!bot || (!this.playing && !this.queue.length)) return this.ui.emote(seat, id, to);
         if (this.later.length < 6) this.later.push({ seat, id, ...(to !== undefined ? { to } : {}) });
@@ -89,6 +96,9 @@ export class Online {
   }
   emote(id: number, to?: number): void {
     this.client.emote(id, to);
+  }
+  chat(text: string): ChatSendResult {
+    return this.client.chat(text);
   }
   /** 离座：电脑接着替这个座位打；实盘手上的筹码在这一局打完时结回钱包 */
   leaveSeat(): void {

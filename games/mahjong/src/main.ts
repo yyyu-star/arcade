@@ -17,8 +17,8 @@ import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
-import { createFun, funOff, setFunOff } from './view/fun.ts';
-import type { FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
+import { chatOff, createFun, funOff, setChatOff, setFunOff } from './view/fun.ts';
+import type { ChatResultLike, FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
 import { settleFx } from './view/fx.ts';
 import { renderHome, type HomeMode } from './view/home.ts';
@@ -139,6 +139,11 @@ const funBtn = button('act soft', volBox, '', () => {
   if (funOff()) fun?.closeAll();
   paintTop();
 });
+// 好友房聊天的开关（0.19.0）：只在好友房里出现；不看了别人说的就不显示，自己还能说
+const chatBtn = button('act soft', volBox, '', () => {
+  setChatOff(!chatOff());
+  paintTop();
+});
 document.addEventListener('pointerdown', (e) => {
   if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
@@ -156,6 +161,8 @@ function paintTop(): void {
   muteBtn.textContent = prefs.sound ? '静音' : '开声';
   funBtn.textContent = funOff() ? '互动：不看' : '互动：开';
   ambBtn.textContent = prefs.ambience ? '茶馆声：开' : '茶馆声：关';
+  chatBtn.textContent = chatOff() ? '聊天：不看' : '聊天：开';
+  chatBtn.hidden = !online;
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -496,6 +503,13 @@ const onlineUi = {
   emote(seat: number, id: number, to?: number): void {
     fun?.receive(seat, id, to);
   },
+  // 房间的座位号就是牌桌和互动用的座位号（seatMetas、newFun 都按 0–3 的房间座位），不用换算
+  chat(seat: number, text: string, masked: boolean): void {
+    fun?.chat(seat, text, masked);
+  },
+  chatError(code: string): void {
+    fun?.chatError(code);
+  },
   ended(text: string): void {
     void refreshWallet();
     dialog(stage, 'error', (box) => {
@@ -560,6 +574,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
       (id, to) => online?.emote(id, to),
       s.code,
       false,
+      (text) => online?.chat(text) ?? { ok: false, code: 'chat_offline' },
     );
   }
   // 同一步重画：事件已经放过了
@@ -902,8 +917,17 @@ const funTimers = new Set<number>();
  * 接上牌桌：头像矩形、名字、谁是电脑和互动性格每次现问牌桌；temper 给电脑座位的性格（真人 null）。
  * 自己的弹窗打开时把互动藏起来（菜单、热区盖在弹窗上面会挡点击）
  */
-function newFun(t: TableUi<XzView, XzAction>, me: () => number | null, temper: (seat: number) => FunTemper | null, send: (id: number, to?: number) => void, scope: string, localBots: boolean): TableFun {
+function newFun(
+  t: TableUi<XzView, XzAction>,
+  me: () => number | null,
+  temper: (seat: number) => FunTemper | null,
+  send: (id: number, to?: number) => void,
+  scope: string,
+  localBots: boolean,
+  chat?: (text: string) => ChatResultLike,
+): TableFun {
   const f = createFun({
+    ...(chat ? { chat } : {}),
     seats: () =>
       [0, 1, 2, 3].map((seat): FunSeat | null => {
         const m = t.seatMeta(seat);
