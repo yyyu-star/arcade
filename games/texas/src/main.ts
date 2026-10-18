@@ -6,6 +6,7 @@
 import { detectPlatform, MATCH_TEXT, MatchClient } from 'arcade-kit/client';
 import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
+import { chatMode as chatLayout } from 'arcade-kit/fun-logic';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
 import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
@@ -160,6 +161,10 @@ const spectate = el('span', 'spectate hidden', hud, '也可以点蓝圈的座位
 const funSlot = el('div', 'fun-slot hidden', hud);
 // 放在这一行最前面：后面的"补码""歇一手"一显一隐，这个位置也不挪（kit 的按钮按矩形摆，挪了会压到别的按钮）
 hud.prepend(funSlot);
+// 手机横屏的"聊天"按钮（kit 0.19 的 chatButton）也在这一行占个位，挨着"互动"：不给的话 kit 把它摆在互动右边，压住"第几手""歇一手"（10-18 手机横屏截图）。
+// 电脑是聊天框、竖屏 kit 摆在互动下面，都不占这个位
+const chatSlot = el('div', 'fun-slot chat-slot hidden', hud);
+funSlot.after(chatSlot);
 // 开打以后也能叫人（0.3.0）：朋友点开链接看着，点亮着的电脑座位就能接管
 const inviteBtn = el('button', 'pill invite-btn hidden', hud, '叫朋友来');
 inviteBtn.type = 'button';
@@ -214,7 +219,7 @@ const roomPanel = new RoomPanel(stage, {
 
 const getFit = watchViewport(app, stage, (f) => {
   tableView.layout(f);
-  tf?.refresh();
+  syncFun();
 });
 tableView.layout(getFit());
 
@@ -708,7 +713,8 @@ function openFun(scope: string): void {
     // 聊天（kit 0.18）：好友房经房间转发；单机（0.19.3，所有者要求）用 kit 的 localChat 在本机过一遍和房间一样的过滤、限速，
     // 只冒在我自己头上。电脑不读聊天（公平：说什么都不影响电脑怎么打、怎么起哄）
     chat: online ? (text: string) => online!.chat(text) : localChat((text, masked) => tf?.chat(ME, text, masked)),
-    chatEnabled: () => !chatOff && (!online?.match || (online.chatOn && strangerChat)),
+    chatEnabled: chatOn,
+    chatButton: () => (chatSlot.classList.contains('hidden') ? null : chatSlot.getBoundingClientRect()),
     scope: () => scope,
     localBots: !online,
     sound: (prop, phase) => funSound(prop, phase),
@@ -771,6 +777,7 @@ chatBtn.addEventListener('click', () => {
   strangerChat = next === 'on';
   patchSettings({ chatOff, strangerChat });
   drawChatBtn();
+  syncFun();
   // kit 每次开面板、每收到一句都现问 chatEnabled，不用重建组件（重建会丢掉内存里的聊天记录）。
   // 匹配桌上从"不和陌生人"换回"开"：这次连接没带 chat=1，下回进桌才收得到
   toast(CHAT_MODE[next].tip);
@@ -785,6 +792,11 @@ function closeFun(): void {
   document.body.classList.remove('texas-fun-idle');
 }
 
+/** 这会儿有没有聊天（kit 每次开面板、每收到一句都现问） */
+function chatOn(): boolean {
+  return !chatOff && (!online?.match || (online.chatOn && strangerChat));
+}
+
 /** 我坐着、没关互动：头像点开的是 kit 的菜单；不然（旁观、关了）头像的点按穿过去给牌桌（看对手、接管座位） */
 function funReady(): boolean {
   return mySeat() !== null && !funOff;
@@ -794,6 +806,8 @@ function funReady(): boolean {
 function syncFun(): void {
   if (!tf) return;
   toggle(funSlot, 'hidden', !funReady());
+  const phoneRow = chatLayout({ width: window.innerWidth, height: window.innerHeight }) === 'phone' && !stage.classList.contains('tall');
+  toggle(chatSlot, 'hidden', !(funReady() && chatOn() && phoneRow));
   document.body.classList.toggle('texas-fun-idle', !funReady());
   tf.refresh();
 }
