@@ -16,8 +16,13 @@ export const LIVE_OPEN = true;
 export type LiveTier = 'small' | 'medium' | 'large' | 'luxe';
 export const LIVE_TIER_IDS: readonly LiveTier[] = ['small', 'medium', 'large', 'luxe'];
 
+/** 平台钱包的档位名（docs/economy.md：small / mid / big / lux）。夜巡自己叫 medium / large / luxe，带入时要换成钱包的名字，
+ *  不换钱包回 bad_request（0.3.8 修：0.3.0 起中、大、豪华档一直带不进去，只有小档两边同名） */
+export type WalletTier = 'small' | 'mid' | 'big' | 'lux';
+
 export interface LiveTierDef {
   id: LiveTier;
+  wallet: WalletTier;
   name: string;
   /** 一份多少筹码（docs/economy.md 第 2 节） */
   stake: number;
@@ -28,10 +33,10 @@ export interface LiveTierDef {
 }
 
 export const LIVE_TIERS: Record<LiveTier, LiveTierDef> = {
-  small: { id: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 12_700 },
-  medium: { id: 'medium', name: '中', stake: 10_000, danger: 2, dawnBp: 16_000 },
-  large: { id: 'large', name: '大', stake: 50_000, danger: 3, dawnBp: 16_000 },
-  luxe: { id: 'luxe', name: '豪华', stake: 200_000, danger: 4, dawnBp: 16_000 },
+  small: { id: 'small', wallet: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 12_700 },
+  medium: { id: 'medium', wallet: 'mid', name: '中', stake: 10_000, danger: 2, dawnBp: 16_000 },
+  large: { id: 'large', wallet: 'big', name: '大', stake: 50_000, danger: 3, dawnBp: 16_000 },
+  luxe: { id: 'luxe', wallet: 'lux', name: '豪华', stake: 200_000, danger: 4, dawnBp: 16_000 },
 };
 
 export function isLiveTier(v: unknown): v is LiveTier {

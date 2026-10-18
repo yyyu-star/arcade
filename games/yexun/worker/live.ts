@@ -11,13 +11,13 @@
  *
  * 只从 src/content/live.ts 取档位表（不引规则核心）。
  */
-import { LIVE_MAX_BP, LIVE_OPEN, LIVE_TIERS, isLiveTier, liveReturn, type LiveTier } from '../src/content/live.ts';
+import { LIVE_MAX_BP, LIVE_OPEN, LIVE_TIERS, isLiveTier, liveReturn, type WalletTier } from '../src/content/live.ts';
 
 type WalletReply = { ok: true; wallet: unknown; credited?: number; capped?: number; dup?: boolean } | { ok: false; error: string; wallet?: unknown };
 
 export interface WalletRpc {
   view(userId: string): Promise<WalletReply>;
-  buyin(req: { userId: string; game: 'yexun'; ref: string; tier: LiveTier; amount: number; until: number; mode: 'client'; op: string }): Promise<WalletReply>;
+  buyin(req: { userId: string; game: 'yexun'; ref: string; tier: WalletTier; amount: number; until: number; mode: 'client'; op: string }): Promise<WalletReply>;
   /** stats：战绩小结（平台 5.10），浏览器报什么原样转发，形状由平台校验 */
   settle(req: { userId: string; game: 'yexun'; ref: string; amount: number; mode: 'client'; op: string; stats?: unknown }): Promise<WalletReply>;
   refund(req: { userId: string; game: 'yexun'; ref: string; mode: 'client'; op: string }): Promise<WalletReply>;
@@ -141,7 +141,7 @@ export async function handleLive(req: Request, env: LiveEnv, timeoutMs = WALLET_
     if (!isLiveTier(tier)) return fail(400, 'bad_tier');
     const stake = LIVE_TIERS[tier].stake;
     if (action === 'buyin') {
-      call = (w, userId) => w.buyin({ userId, game: 'yexun', ref, tier, amount: stake, until: Date.now() + BUYIN_TTL_MS, mode: 'client', op: `${ref}-in` });
+      call = (w, userId) => w.buyin({ userId, game: 'yexun', ref, tier: LIVE_TIERS[tier].wallet, amount: stake, until: Date.now() + BUYIN_TTL_MS, mode: 'client', op: `${ref}-in` });
     } else {
       const bp = body.bp;
       if (typeof bp !== 'number' || !Number.isInteger(bp) || bp < 0 || bp > LIVE_MAX_BP) return fail(400, 'bad_bp');

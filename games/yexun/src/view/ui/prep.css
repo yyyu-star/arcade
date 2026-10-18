@@ -1,6 +1,7 @@
 /* 开局准备：角色、咒印、加成（prep.ts）。风格跟着 screens.css 的面板走 */
 .yx-prep-layer { display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 36, 0.55); z-index: 30; }
-.yx-prep { width: min(760px, 92vw); max-height: calc(var(--app-h, 100vh) - 40px); display: flex; flex-direction: column; gap: 10px; }
+/* 限定在面板上：选模式屏的角色按钮也带 .yx-prep 类（yx-chip yx-prep），不限定会被撑成 760 宽 */
+.yx-panel.yx-prep { width: min(760px, 92vw); max-height: calc(var(--app-h, 100vh) - 40px); display: flex; flex-direction: column; gap: 10px; }
 .yx-prep-head { display: flex; align-items: center; gap: 10px; }
 .yx-ptabs { display: flex; gap: 6px; flex: 1; }
 .yx-ptab { min-width: 72px; min-height: 44px; border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
@@ -62,7 +63,7 @@
 .yx-lock { width: 11px; height: 11px; vertical-align: -1px; }
 @media (max-width: 640px) {
   .yx-pchars { grid-template-columns: repeat(2, 1fr); }
-  .yx-prep { width: 96vw; }
+  .yx-panel.yx-prep { width: 96vw; }
 }
 @media (max-height: 500px) {
   .yx-pchars { grid-template-columns: repeat(3, 1fr); }

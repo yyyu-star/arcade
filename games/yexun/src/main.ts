@@ -294,7 +294,11 @@ async function boot(): Promise<void> {
     prep.hide();
     menu.show(menuState());
   };
-  menu.onPrep = (tab) => prep.show(tab, prepState());
+  // 菜单层（z 50）压在角色页（z 30）上面，不先收起菜单，角色页开了也看不见（"选不了角色"，0.3.8）；关掉时 onClose 再把菜单（停在选模式屏）打开
+  menu.onPrep = (tab) => {
+    menu.hide();
+    prep.show(tab, prepState());
+  };
   menu.onCodex = () => {
     menu.hide();
     codex.show();

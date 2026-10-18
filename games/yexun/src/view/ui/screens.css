@@ -462,6 +462,8 @@
   .yx-sel .yx-opts small { white-space: nowrap; }
   /* 实盘四个档位排一行（旁边多了角色按钮以后，1280 宽时豪华档会单独掉到第二行） */
   .yx-sel .yx-tiers .yx-chip { flex: 1 1 60px; }
+  /* 实盘那一格只有角色一个按钮，别撑满半条 */
+  .yx-sel .yx-opts > .yx-chips > :only-child { flex: 0 1 220px; }
   /* 头像挂在角色卡右上角，卡变宽以后会压住名字，给它让出位置 */
   .yx-sel .yx-prepchar { padding-right: 26px; }
   .yx-sel .yx-opts > :is(.yx-best, .yx-livenote, :only-child) { grid-column: 1 / -1; }

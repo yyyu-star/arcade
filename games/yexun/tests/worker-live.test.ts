@@ -68,7 +68,8 @@ describe('三个动作的正常路径', () => {
     const until = args.until as number;
     expect(until).toBeGreaterThanOrEqual(before + 24 * 3600 * 1000);
     expect(until).toBeLessThanOrEqual(Date.now() + 24 * 3600 * 1000);
-    expect(args).toEqual({ userId: 'u1', game: 'yexun', ref: REF, tier: 'medium', amount: 10_000, until, mode: 'client', op: `${REF}-in` });
+    // 钱包的档位名是 mid（不是夜巡的 medium）：传 medium 钱包回 bad_request（0.3.8 线上修）
+    expect(args).toEqual({ userId: 'u1', game: 'yexun', ref: REF, tier: 'mid', amount: 10_000, until, mode: 'client', op: `${REF}-in` });
   });
 
   it('带入金额固定是各档的一份，浏览器报的 amount 不算', async () => {
@@ -76,6 +77,7 @@ describe('三个动作的正常路径', () => {
       const e = env();
       await run(e, post('buyin', { ref: REF, tier, amount: 999_999 }));
       expect(e.w.calls[0]!.args.amount).toBe(LIVE_TIERS[tier].stake);
+      expect(e.w.calls[0]!.args.tier).toBe({ small: 'small', medium: 'mid', large: 'big', luxe: 'lux' }[tier]);
     }
   });
 
