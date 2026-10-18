@@ -61,7 +61,8 @@ export const VIGIL_BOSS_ADD_BP = 2_000;
  * 实盘可以选已解锁的角色和地图（0.3.6，DESIGN.md 4.1、4.2）。各角色、各地图的实盘期望若比同档最高、最低差出 0.15 份以上，
  * 就在这里给一个单独的系数（万分比，乘在这一档的 dawnBp 上，没写 = 10_000 = 不调）；不改角色、地图本身的数值，不改对局规则。
  * 难度随档位涨得快的角色、地图（比如义庄）在各档需要的补偿不一样，所以系数按档写。
- * 角色和地图分开扫、各自对着小道士、雪原拟合，两个系数相乘（不做全组合）。夜探的角色系数在 explore.ts 的 RAID_LIVE.charBp。
+ * 角色和地图分开扫、各自对着小道士、雪原拟合，两个系数默认相乘；乘出来偏离同档平均 ±0.15 份以上的组合（胖师叔、采药女在义庄等，
+ * 角色和地图的强弱不是各管各的）单独写在 LIVE_COMBO_BP，整套系数直接替换乘积。夜探的角色系数在 explore.ts 的 RAID_LIVE.charBp。
  */
 export type LiveCoef<K extends string> = Partial<Record<K, Partial<Record<LiveTier, number>>>>;
 export const LIVE_CHAR_BP: LiveCoef<CharacterId> = {
@@ -78,9 +79,24 @@ export const LIVE_MAP_BP: LiveCoef<MapId> = {
   riverbank: { luxe: 10_800 },
 };
 
+/**
+ * 组合系数（0.3.7）：「角色 × 地图 × 档」整套系数（万分比），写了就替换 LIVE_CHAR_BP × LIVE_MAP_BP 的乘积。
+ * 只给乘积偏出同档平均 0.15 份以上的格子（新种子模拟，每格 2,000–6,000 局拟合，DESIGN.md 12）；没写的组合仍按乘积。
+ */
+export const LIVE_COMBO_BP: Partial<Record<CharacterId, Partial<Record<MapId, Partial<Record<LiveTier, number>>>>>> = {
+  pang: { yizhuang: { medium: 10_000, large: 10_100, luxe: 10_000 }, riverbank: { luxe: 7_200 } },
+  caiyao: { yizhuang: { medium: 13_000, large: 13_900, luxe: 15_300 }, icelake: { medium: 10_400, large: 12_200 } },
+  jianxia: { bamboo: { large: 9_300 } },
+  fushi: { bamboo: { large: 8_900 }, icelake: { large: 12_200 } },
+  gengfu: { icelake: { luxe: 11_200 } },
+};
+
 /** 实盘档 tier 的守夜撑了 ticks 拍（每秒 30 拍）、赢没赢、打没打倒尸王 → 结回倍数（万分比，整数）；角色、地图缺省 = 小道士、雪原 */
 export function vigilBp(tier: LiveTier, ticks: number, won: boolean, bossKilled: boolean, character: CharacterId = 'xiaodao', map: MapId = 'snow'): number {
-  const dawn = Math.floor((Math.floor((LIVE_TIERS[tier].dawnBp * (LIVE_CHAR_BP[character]?.[tier] ?? 10_000)) / 10_000) * (LIVE_MAP_BP[map]?.[tier] ?? 10_000)) / 10_000);
+  const combo = LIVE_COMBO_BP[character]?.[map]?.[tier];
+  const dawn = combo !== undefined
+    ? Math.floor((LIVE_TIERS[tier].dawnBp * combo) / 10_000)
+    : Math.floor((Math.floor((LIVE_TIERS[tier].dawnBp * (LIVE_CHAR_BP[character]?.[tier] ?? 10_000)) / 10_000) * (LIVE_MAP_BP[map]?.[tier] ?? 10_000)) / 10_000);
   if (bossKilled) return Math.min(LIVE_MAX_BP, dawn + VIGIL_BOSS_ADD_BP);
   if (won) return Math.min(LIVE_MAX_BP, dawn);
   // 按拍插值：整数运算，浏览器和 Worker、各平台算出来一样

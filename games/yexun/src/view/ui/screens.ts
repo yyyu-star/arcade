@@ -7,7 +7,7 @@ import { MAP_IDS, MAP_UNLOCK, MAPS, type MapId } from '../../content/maps.ts';
 import { drawMapThumb } from '../art/terrain.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
-import { LIVE_TIER_IDS, LIVE_TIERS, vigilBp, type LiveTier } from '../../content/live.ts';
+import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, vigilBp, type LiveTier } from '../../content/live.ts';
 import { RAID_LIVE, RAID_TEMPLATES, raidCharCoef, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
 import type { TreasureTier } from '../../content/treasures.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, type Region } from '../../content/regions.ts';
@@ -968,6 +968,8 @@ function raidLiveNote(tier: RaidLiveTier, tpl: RaidLiveTemplate, character: Char
 function liveNote(tier: LiveTier, character: CharacterId, map: MapId): string {
   const dawn = vigilBp(tier, 0, true, false, character, map);
   const boss = vigilBp(tier, 0, true, true, character, map);
-  const f = (bp: number): string => (bp / 10_000).toFixed(2).replace(/0$/, '');
-  return `撑过 3 分钟开始回钱，越久越多：天亮 ${f(dawn)} 份，打倒尸王 ${f(boss)} 份；最多输这一份`;
+  const f = (bp: number): string => String(Number((bp / 10_000).toFixed(2)));
+  // 系数大的组合（义庄豪华档）天亮就到封顶：打不打倒尸王都一样，直说，免得以为还能多拿
+  const top = dawn >= LIVE_MAX_BP ? `天亮就封顶 ${f(dawn)} 份` : `天亮 ${f(dawn)} 份，打倒尸王 ${f(boss)} 份`;
+  return `撑过 3 分钟开始回钱，越久越多：${top}；最多输这一份`;
 }

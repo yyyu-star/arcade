@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { LIVE_CHAR_BP, LIVE_MAP_BP, LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, vigilBp } from '../src/content/live.ts';
+import { LIVE_CHAR_BP, LIVE_COMBO_BP, LIVE_MAP_BP, LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, vigilBp } from '../src/content/live.ts';
 import { RAID_LIVE } from '../src/content/explore.ts';
 import { liveBp } from '../src/explore/settle.ts';
 import { World } from '../src/core/state.ts';
@@ -10,7 +10,7 @@ import { LIVE_KEY, LiveClient, liveSetup, reviveLive } from '../src/platform/liv
 const SAMPLES: [number, boolean, boolean][] = [[0, false, false], [4_000, false, false], [9_000, false, false], [20_000, false, false], [27_000, true, false], [27_000, true, true]];
 
 /** 测试里临时改系数表，用完还原 */
-const saved = { char: structuredClone(LIVE_CHAR_BP), map: structuredClone(LIVE_MAP_BP), raid: structuredClone(RAID_LIVE.charBp) };
+const saved = { char: structuredClone(LIVE_CHAR_BP), map: structuredClone(LIVE_MAP_BP), combo: structuredClone(LIVE_COMBO_BP), raid: structuredClone(RAID_LIVE.charBp) };
 const restore = (t: Record<string, unknown>, from: Record<string, unknown>): void => {
   for (const k of Object.keys(t)) delete t[k];
   Object.assign(t, structuredClone(from));
@@ -18,11 +18,13 @@ const restore = (t: Record<string, unknown>, from: Record<string, unknown>): voi
 afterEach(() => {
   restore(LIVE_CHAR_BP, saved.char);
   restore(LIVE_MAP_BP, saved.map);
+  restore(LIVE_COMBO_BP, saved.combo);
   restore(RAID_LIVE.charBp, saved.raid);
 });
 const clearAll = (): void => {
   restore(LIVE_CHAR_BP, {});
   restore(LIVE_MAP_BP, {});
+  restore(LIVE_COMBO_BP, {});
   restore(RAID_LIVE.charBp, {});
 };
 
@@ -63,6 +65,27 @@ describe('实盘选角色、地图：vigilBp', () => {
     LIVE_CHAR_BP.pang = { medium: 25_000 };
     for (const [ticks, won, boss] of SAMPLES) expect(vigilBp('medium', ticks, won, boss, 'pang', 'bamboo')).toBeLessThanOrEqual(LIVE_MAX_BP);
     expect(vigilBp('medium', 27_000, true, false, 'pang', 'bamboo')).toBe(LIVE_MAX_BP);
+  });
+  it('组合系数替换角色 × 地图的乘积，只管写了的那一档；系数在合理范围', () => {
+    clearAll();
+    LIVE_CHAR_BP.pang = { medium: 9_000 };
+    LIVE_MAP_BP.yizhuang = { medium: 14_000 };
+    const dawn = LIVE_TIERS.medium.dawnBp;
+    expect(vigilBp('medium', 27_000, true, false, 'pang', 'yizhuang')).toBe(Math.floor((Math.floor((dawn * 9_000) / 10_000) * 14_000) / 10_000));
+    LIVE_COMBO_BP.pang = { yizhuang: { medium: 10_000 } };
+    expect(vigilBp('medium', 27_000, true, false, 'pang', 'yizhuang')).toBe(dawn);
+    // 尸王加成不缩放，别的档、别的地图、别的角色仍按乘积
+    expect(vigilBp('medium', 27_000, true, true, 'pang', 'yizhuang')).toBe(dawn + VIGIL_BOSS_ADD_BP);
+    expect(vigilBp('large', 27_000, true, false, 'pang', 'yizhuang')).toBe(vigilBp('large', 27_000, true, false));
+    expect(vigilBp('medium', 27_000, true, false, 'pang', 'snow')).toBe(Math.floor((dawn * 9_000) / 10_000));
+    expect(vigilBp('medium', 27_000, true, false, 'xiaodao', 'yizhuang')).toBe(Math.floor((dawn * 14_000) / 10_000));
+    for (const per of Object.values(saved.combo))
+      for (const maps of Object.values(per!))
+        for (const [t, c] of Object.entries(maps!)) {
+          expect(LIVE_TIER_IDS).toContain(t);
+          expect(c).toBeGreaterThanOrEqual(5_000);
+          expect(c).toBeLessThanOrEqual(25_000);
+        }
   });
   it('夜探角色系数乘在算好的倍数上：至少 1 份、封顶照旧、没登记的角色和档位不变', () => {
     clearAll();
