@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACE,
   BIG_JOKER,
+  DEFAULT_OPTIONS,
+  SHORT_END_LEVEL,
+  endLevelOf,
+  type Options,
   createGame,
   dispatch,
   eventsFor,
@@ -328,8 +333,8 @@ describe('进贡与还贡', () => {
 });
 
 /** 让四个电脑把一整局打完，记录全部动作。 */
-function playWholeGame(seed: string, maxActions = 20000): { actions: Action[]; states: GameState[] } {
-  let { state } = createGame(seed);
+function playWholeGame(seed: string, maxActions = 20000, options?: Partial<Options>): { actions: Action[]; states: GameState[] } {
+  let { state } = createGame(seed, options);
   const actions: Action[] = [];
   const states: GameState[] = [state];
   while (state.phase !== 'gameOver' && actions.length < maxActions) {
@@ -347,6 +352,32 @@ function playWholeGame(seed: string, maxActions = 20000): { actions: Action[]; s
   }
   return { actions, states };
 }
+
+describe('短局（0.25.0，options.endLevel）', () => {
+  it('升到 10 就赢下整局，不用打 A；默认还是要过 A', () => {
+    for (const seed of ['short-1', 'short-2', 'short-3']) {
+      const { states } = playWholeGame(seed, 20000, { endLevel: SHORT_END_LEVEL });
+      const final = states[states.length - 1]!;
+      expect(final.phase).toBe('gameOver');
+      expect(final.levels[final.winner!]).toBeGreaterThanOrEqual(10);
+      // 赢之前谁都没到 10
+      const before = states[states.length - 2]!;
+      expect(Math.max(...before.levels)).toBeLessThan(10);
+      expect(states.every((x) => x.level < ACE)).toBe(true);
+    }
+    const full = playWholeGame('short-1').states;
+    expect(full[full.length - 1]!.lastDeal!.levelsBefore[full[full.length - 1]!.winner!]).toBe(ACE);
+  });
+
+  it('旧存档没有 endLevel、配错的值，都按 A', () => {
+    expect(endLevelOf({ options: { ...DEFAULT_OPTIONS } })).toBe(ACE);
+    const old = { ...DEFAULT_OPTIONS } as Partial<Options>;
+    delete old.endLevel;
+    expect(endLevelOf({ options: old as Options })).toBe(ACE);
+    expect(endLevelOf({ options: { ...DEFAULT_OPTIONS, endLevel: 99 } })).toBe(ACE);
+    expect(endLevelOf({ options: { ...DEFAULT_OPTIONS, endLevel: 10 } })).toBe(10);
+  });
+});
 
 describe('确定性、序列化与回放', () => {
   const { actions, states } = playWholeGame('replay-1');

@@ -209,7 +209,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
 | `npm run stake-smoke` / `node tools/stake-sim.ts` | 单机实盘冒烟（本地栈 + 假钱包）/ 实盘计分模拟 |
-| `npm run ai-sim -- solo\|room\|style\|time` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时（docs/ai.md） |
+| `npm run ai-sim -- solo\|room\|style\|time\|length` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时、一局多长（docs/ai.md） |
 | `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174 |
 
 ## 5. 浏览器存储 key（全部 `guandan.` 前缀）
@@ -217,7 +217,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | key | 内容 |
 |---|---|
 | `guandan.save` | 进行中的整局：`{ v, state: GameState, difficulty, counted, dealsCounted }`；整局结束即删除 |
-| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`） |
+| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`）、娱乐单机的局长 `length`（`short` / `full`，0.25.0） |
 | `guandan.stats` | 战绩：局数、胜局、连胜、最高连胜、副数、头游次数 |
 | `guandan.tutorial` | 新手引导是否看过 |
 | `guandan.errors` | 最近 20 条未捕获错误（兜底面板写入） |

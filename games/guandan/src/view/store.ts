@@ -111,7 +111,11 @@ export interface Settings {
   taunts: boolean;
   /** 聊天开 / 不看（好友房 0.22.0、单机 0.23.0，和"互动"分开：有人想关掉嘲讽但想看朋友说话）：不看时别人说的不冒气泡、不进记录，自己也没有聊天页 */
   chat: boolean;
+  /** 娱乐单机的局长（0.25.0）：短局打到 10、完整打过 A；记住上次选的，快速开始按它开 */
+  length: GameLength;
 }
+
+export type GameLength = 'short' | 'full';
 
 export const DEFAULT_SETTINGS: Settings = {
   v: 1,
@@ -125,6 +129,7 @@ export const DEFAULT_SETTINGS: Settings = {
   counter: true,
   taunts: true,
   chat: true,
+  length: 'short',
 };
 
 export const SPEED_FACTOR: Record<SpeedSetting, number> = { slow: 0.7, normal: 1, fast: 1.7 };
@@ -137,6 +142,7 @@ export function getSettings(): Settings {
   settingsCache = s && s.v === 1 ? { ...DEFAULT_SETTINGS, ...s, rules: { ...(s.rules ?? {}) } } : { ...DEFAULT_SETTINGS };
   // 难度 0.12.1 起是新手 / 普通 / 高手三档：旧版本存的四档换过来（简单→新手、较强→普通、困难→高手），认不得的按默认
   settingsCache.difficulty = soloLevelOf(settingsCache.difficulty) ?? DEFAULT_SETTINGS.difficulty;
+  if (settingsCache.length !== 'short' && settingsCache.length !== 'full') settingsCache.length = DEFAULT_SETTINGS.length;
   return settingsCache;
 }
 

@@ -104,8 +104,8 @@ export class TrickView {
         scale: views ? scale : 1,
         alpha: 1,
         angle: 0,
-        duration: 240,
-        delay: i * 18,
+        duration: 200,
+        delay: i * 14,
         ease: 'Cubic.easeOut',
       }),
     );
@@ -184,7 +184,7 @@ export class TrickView {
       live.forEach((s) => s.destroy());
       return;
     }
-    await tweenP(this.scene, { targets: live, alpha: 0, duration: 220 });
+    await tweenP(this.scene, { targets: live, alpha: 0, duration: 180 });
     live.forEach((s) => s.destroy());
   }
 

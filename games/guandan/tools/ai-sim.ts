@@ -8,6 +8,9 @@
  *   node tools/ai-sim.ts style [--matches 400]   性格的风格指标：老张、小美、阿强（普通强弱）坐 1 号，别的座位是没性格的普通电脑；
  *                                                压牌率、每副炸弹、开局就炸的比例、每场之间压牌率的起伏、手热和手冷两种状态的差别
  *   node tools/ai-sim.ts time  [--matches 100]   单次决策耗时（各强弱、各性格）：p50 / p99 / 最大
+ *   node tools/ai-sim.ts length [--matches 400]  一局多长（0.25.0）：娱乐三档 × 短局（打到 10）/ 完整（过 A），打到整局结束，
+ *                                                给副数和估的分钟数（中位数、p90）。分钟数 = 电脑每手按 personas.ts 的 thinkTime（取中间值）+ 出牌动画，
+ *                                                我每手 4 秒，每墩收牌、每副结算按 TableScene 的停顿，结算页看 5 秒（stake-text.ts 的估法）
  *   node tools/ai-sim.ts grid  [--matches 2000]  配平（仓库 docs/balance.md）：0 号坐"小白"或"普通"，搭档 × 对手的每种强弱组合（带性格），
  *                                                期望 ± 2 倍标准误、胜率；--mates / --opps 限定组合
  *
@@ -25,6 +28,7 @@ import { createGame, dispatch, legalPlays, seatsToAct, teamOf, viewFor, type Act
 import { decide, formOf, type Difficulty, type PersonaId } from '../src/ai/index.ts';
 import { SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor, type SoloBots, type Venue } from '../src/ai/venue.ts';
 import { TIER_IDS } from '../src/stake/index.ts';
+import { thinkTime } from '../src/view/personas.ts';
 
 const SHARE = 20;
 const BOMB_TYPES: readonly string[] = ['bomb', 'straightFlush', 'jokerBomb'];
@@ -48,6 +52,9 @@ interface Job {
   /** 记风格的座位（-1 不记） */
   watch: number;
   timing?: boolean;
+  /** 量局长（length 模式）：打到整局结束（不看副数、不封顶），规则带上这个终点（不给是 A） */
+  untilOver?: boolean;
+  endLevel?: number;
 }
 
 interface Style {
@@ -73,6 +80,8 @@ interface Result {
   form: number;
   /** 计时（毫秒），按"强弱/性格"分组 */
   times: Record<string, number[]> | null;
+  /** 估的这一局真人要坐多久（秒，length 模式） */
+  seconds: number;
 }
 
 function dealPoints(s: GameState): number {
@@ -111,13 +120,15 @@ function act(job: Job, view: PlayerView, seat: number, times: Record<string, num
 }
 
 function playMatch(job: Job): Result {
-  let { state } = createGame(job.id);
+  let { state } = createGame(job.id, job.endLevel ? { endLevel: job.endLevel } : undefined);
+  let seconds = 0;
   let points = 0;
   let deals = 0;
   const style: Style | null = job.watch >= 0 ? { beat: 0, chances: 0, bombs: 0, earlyBombs: 0, calmBombs: 0, leads: 0, bigLeads: 0, deals: 0 } : null;
   const times = job.timing ? {} : null;
   const settle = (): boolean => {
     deals++;
+    if (job.untilOver) return false;
     points += dealPoints(state);
     if (Math.abs(points) >= SHARE) {
       points = Math.sign(points) * SHARE;
@@ -158,11 +169,30 @@ function playMatch(job: Job): Result {
     }
     const r = dispatch(state, a);
     if (r.error) throw new Error(`${job.id}：${r.error}`);
+    if (job.untilOver) seconds += paceOf(job, seat, view, a, r.events);
     state = r.state;
   }
   if (style) style.deals = deals;
   const w = job.watch >= 0 ? job.seats[job.watch]! : null;
-  return { points, deals, style, form: w?.persona ? formOf(job.id, job.watch, 1, w.persona) : 0, times };
+  return { points, deals, style, form: w?.persona ? formOf(job.id, job.watch, 1, w.persona) : 0, times, seconds };
+}
+
+/** 一步大概要多久（秒）：画面的停顿照 TableScene（0.25.0 的值），电脑想多久照 thinkTime 的中间值，我每手 4 秒 */
+function paceOf(job: Job, seat: number, view: PlayerView, a: Action, events: { type: string }[]): number {
+  let s = 0;
+  if (view.phase === 'play' && (a.type === 'play' || a.type === 'pass')) {
+    if (seat === 0) s += 4;
+    else {
+      const bomb = a.type === 'play' && !!a.as && BOMB_TYPES.includes(a.as.type);
+      s += thinkTime({ kind: a.type === 'pass' ? 'pass' : bomb ? 'bomb' : 'play', lead: !view.trick.last, persona: job.seats[seat]!.persona }, () => 0.5) / 1000;
+    }
+    s += a.type === 'pass' ? 0.18 : 0.45;
+  } else if (a.type === 'tribute' || a.type === 'return') s += seat === 0 ? 3 : 0.8;
+  for (const e of events) {
+    if (e.type === 'trickWon') s += 0.65 + 0.18;
+    if (e.type === 'dealEnd') s += 1.1 + 5 + 2;
+  }
+  return s;
 }
 
 // ───────────── 并行 ─────────────
@@ -285,6 +315,20 @@ async function main(): Promise<void> {
     }
     console.log(`单次决策耗时（毫秒，${matches} 场 × 2 组）：`);
     for (const [k, xs] of Object.entries(all)) console.log(`- ${k}：${xs.length} 次，p50 ${pct(xs, 0.5).toFixed(2)}，p99 ${pct(xs, 0.99).toFixed(2)}，最大 ${Math.max(...xs).toFixed(1)}`);
+  } else if (mode === 'length') {
+    const matches = Number(arg('matches', '400'));
+    console.log(`一局多长（每格 ${matches} 局，打到整局结束；0 号是"普通"，搭档和对手按娱乐场地带性格）：`);
+    console.log('| 难度 | 局长 | 副数 中位 / p90 | 分钟 中位 / p90 |');
+    console.log('|---|---|---|---|');
+    for (const level of SOLO_LEVELS) {
+      for (const [name, endLevel] of [['短局（打到 10）', 10], ['完整（过 A）', undefined]] as const) {
+        const jobs = soloJobs({ kind: 'solo', level }, 'normal', matches, `${prefix}-len-${level}`).map((j) => ({ ...j, untilOver: true, ...(endLevel ? { endLevel } : {}) }));
+        const rs = await runAll(jobs);
+        const ds = rs.map((r) => r.deals);
+        const ms = rs.map((r) => r.seconds / 60);
+        console.log(`| ${level} | ${name} | ${pct(ds, 0.5)} / ${pct(ds, 0.9)} | ${pct(ms, 0.5).toFixed(1)} / ${pct(ms, 0.9).toFixed(1)} |`);
+      }
+    }
   } else if (mode === 'grid') {
     const matches = Number(arg('matches', '2000'));
     const mates = arg('mates', 'easy,normal,good,hard').split(',') as Difficulty[];
@@ -311,7 +355,7 @@ async function main(): Promise<void> {
       }
     }
   } else {
-    throw new Error(`不认得的模式 ${mode}（solo / room / style / time / grid）`);
+    throw new Error(`不认得的模式 ${mode}（solo / room / style / time / length / grid）`);
   }
 }
 

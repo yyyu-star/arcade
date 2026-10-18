@@ -12,13 +12,20 @@ export function stars(n: number): string {
 }
 
 /**
- * 娱乐三档的卡（docs/ai.md 第 2 节）：电脑多强、一局多久、适合谁。娱乐一局打到过 A，随时存档；
- * 时长按模拟的中位数（新手档 8 副约 20 分钟，普通、高手 11 副约 30 分钟；我每手 4 秒估）
+ * 娱乐三档的卡（docs/ai.md 第 2 节）：电脑多强、一局多久、适合谁，随时存档。time 是完整（打过 A），short 是短局（打到 10，0.25.0）。
+ * 时长按 `ai-sim length` 的中位数（0.25.0 的出牌节奏，我每手 4 秒估）：完整 新手 7 副约 20 分钟、普通高手 11–12 副约 30 分钟；
+ * 短局 新手 4 副约 11 分钟、普通高手 5 副约 14 分钟
  */
 export const LEVEL_CARD = {
-  novice: { name: '新手', stars: 1, time: '一局约 20 分钟，随时存档', who: '刚学掼蛋，先赢几把找感觉' },
-  normal: { name: '普通', stars: 2, time: '一局约 30 分钟，随时存档', who: '会打，想认真赢' },
-  pro: { name: '高手', stars: 4, time: '一局约 30 分钟，随时存档', who: '老手，电脑全记牌、配合好' },
+  novice: { name: '新手', stars: 1, time: '一局约 20 分钟，随时存档', short: '一局约 10 分钟，随时存档', who: '刚学掼蛋，先赢几把找感觉' },
+  normal: { name: '普通', stars: 2, time: '一局约 30 分钟，随时存档', short: '一局约 15 分钟，随时存档', who: '会打，想认真赢' },
+  pro: { name: '高手', stars: 4, time: '一局约 30 分钟，随时存档', short: '一局约 15 分钟，随时存档', who: '老手，电脑全记牌、配合好' },
+} as const;
+
+/** 局长（0.25.0）：娱乐单机开局时选，记在设置里；每档多久看上面卡的 time / short */
+export const LENGTH_CARD = {
+  short: { name: '短局', goal: '打到 10' },
+  full: { name: '完整', goal: '打过 A' },
 } as const;
 
 /** 实盘四档的卡：电脑多强；一场 8 副约 20 分钟（docs/stake.md 1.4） */

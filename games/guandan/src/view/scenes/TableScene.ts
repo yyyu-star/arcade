@@ -10,6 +10,7 @@ import { hintList } from '../../ai/index.ts';
 import {
   beats,
   canPass,
+  endLevelOf,
   hint,
   interpret,
   isBomb,
@@ -27,7 +28,7 @@ import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { dur, tweenP, wait } from '../anim.ts';
-import { PLACE_NAMES, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, goalWord, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
@@ -1358,7 +1359,9 @@ export class TableScene extends Phaser.Scene {
         this.hand.setHand([], e.level, { animate: false });
         this.buildTopBar(W);
         audio.sfx('deal');
-        await bigWord(this, `第 ${e.dealNo} 副`, { sub: `打 ${levelName(e.level)}${e.level === 14 ? ' · 过 A 就赢' : ''}`, size: TYPE.huge, hold: 500 });
+        const end = endLevelOf(this.ses.view());
+        const goal = end < 14 ? ` · 短局，升到 ${levelName(end)} 就赢` : e.level === 14 ? ' · 过 A 就赢' : '';
+        await bigWord(this, `第 ${e.dealNo} 副`, { sub: `打 ${levelName(e.level)}${goal}`, size: TYPE.huge, hold: 500 });
         const v = this.ses.view();
         this.hand.setHand(v.hand, v.level, { animate: false });
         this.dealToOthers(W / 2, 250);
@@ -1420,11 +1423,11 @@ export class TableScene extends Phaser.Scene {
         this.trick.showPass(e.seat);
         audio.sfx('pass');
         this.talk(e.seat, 'pass');
-        await wait(this, 220);
+        await wait(this, 180);
         break;
       case 'trickWon': {
-        // 一墩打完：停一下让人看清是谁的牌收了这一墩，再清桌
-        await wait(this, 950);
+        // 一墩打完：停一下让人看清是谁的牌收了这一墩，再清桌（0.25.0 从 950 缩到 650：所有者嫌一把太慢，这是每墩都要等的）
+        await wait(this, 650);
         audio.sfx('collect');
         await this.trick.clearAll();
         if (e.jiefeng) {
@@ -1462,8 +1465,8 @@ export class TableScene extends Phaser.Scene {
       case 'dealEnd':
         this.funMoment(dealMoment(e.result));
         this.feedDeal(e.result);
-        // 最后一手和名次章留在桌上看清楚，再弹结算
-        await wait(this, 1500);
+        // 最后一手和名次章留在桌上看清楚，再弹结算（0.25.0：1500 → 1100）
+        await wait(this, 1100);
         break;
       case 'gameOver':
         break;
@@ -1809,12 +1812,13 @@ export class TableScene extends Phaser.Scene {
       if (teamOf(seat) === v.winner) this.tweens.add({ targets: img, y: -134, duration: dur(420), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       b.add(text(this, x, -48, seatName(seat), { size: TYPE.label, bold: true, color: teamOf(seat) === 0 ? COLOR.teamUs : COLOR.teamThem }));
     });
-    b.add(text(this, 0, 18, watch ? `${this.side(v.winner)}先过 A，赢下整局` : win ? '我方先过 A，赢下整局！' : '对方先过了 A，下局再来', { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
+    const goal = goalWord(endLevelOf(v));
+    b.add(text(this, 0, 18, watch ? `${this.side(v.winner)}先${goal}，赢下整局` : win ? `我方先${goal}，赢下整局！` : `对方先${goal === '过 A' ? '过了 A' : goal}，下局再来`, { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
     // 整局的称号：一行排开，按钮上方
     this.logMatch();
     const titles = matchTitles(this.matchLog);
     // 分享（art-v3）：按钮行正中带字的"晒战绩"，不再是右上角一个小图标
-    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null }, awards, 200);
+    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null, goal }, awards, 200);
     if (titles.length && !awards) b.add(text(this, 0, 114, titles.map((t) => this.titleLine(t, false)).join('    '), { size: TYPE.small, bold: true, color: COLOR.redDark }));
     if (this.net && watch) {
       // 旁观的人：看完结果回首页（"再来一场"是这一桌的人一起换房间，不带旁观的）

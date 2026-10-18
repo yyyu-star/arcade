@@ -157,14 +157,22 @@ describe('口吻和节奏（src/view/personas.ts）', () => {
     }
   });
 
-  it('思考时间封在 450–2600 毫秒；小美比阿强想得久，上头的阿强更快；要紧的一手多想一会儿', () => {
+  it('没性格时的节奏（0.25.0 主线定）：不要 0.3–0.5 秒，跟牌 0.5–0.9，领出 0.7–1.1，炸弹约 1 秒', () => {
+    const range = (kind: 'pass' | 'play' | 'bomb', lead: boolean) => [0, 0.999].map((r) => thinkTime({ kind, lead }, () => r));
+    expect(range('pass', false)).toEqual([300, 500]);
+    expect(range('play', false)).toEqual([500, 900]);
+    expect(range('play', true)).toEqual([700, 1100]);
+    for (const ms of range('bomb', true)) expect(Math.abs(ms - 1000)).toBeLessThanOrEqual(50);
+  });
+
+  it('思考时间封在 300–1600 毫秒（0.25.0 压到约 6 成）；小美比阿强想得久，上头的阿强更快；要紧的一手多想一会儿', () => {
     const mid = () => 0.5;
     for (const kind of ['pass', 'play', 'bomb'] as const) {
       for (const r of [0, 0.99]) {
         for (const persona of [...PERSONA_IDS, undefined]) {
           const ms = thinkTime({ kind, lead: true, tense: true, persona, form: -1, tilt: 1 }, () => r);
-          expect(ms).toBeGreaterThanOrEqual(450);
-          expect(ms).toBeLessThanOrEqual(2600);
+          expect(ms).toBeGreaterThanOrEqual(300);
+          expect(ms).toBeLessThanOrEqual(1600);
         }
       }
     }

@@ -464,6 +464,12 @@ function afterPlay(s: GameState, ev: GameEvent[], seat: Seat): void {
   ev.push({ type: 'turn', seat: s.turn });
 }
 
+/** 打到几结束；0.24.0 及以前的存档里 options 没有 endLevel，按 A */
+export function endLevelOf(s: Pick<GameState, 'options'>): number {
+  const e = (s.options as Partial<Options>).endLevel;
+  return typeof e === 'number' && Number.isInteger(e) && e >= 3 && e < ACE ? e : ACE;
+}
+
 function endDeal(s: GameState, ev: GameEvent[]): void {
   const order = [...s.finished];
   const head = order[0]!;
@@ -500,6 +506,8 @@ function endDeal(s: GameState, ev: GameEvent[]): void {
     const after = Math.min(ACE, before + up);
     s.levels[winnerTeam] = after;
     if (after === ACE && before !== ACE) s.aFails[winnerTeam] = 0;
+    // 短局（options.endLevel < A）：升到终点就赢，不用"过"；旧存档没有这个字段，按 A 算
+    if (after >= endLevelOf(s) && endLevelOf(s) < ACE) gameWon = true;
   }
   const result: DealResult = {
     dealNo: s.dealNo,
