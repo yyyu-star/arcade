@@ -245,7 +245,7 @@ export class Home {
           '</div>');
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     if (s.firstTime) {
-      this.ui.innerHTML = top + title + '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button><div class="yx-hint">只管走位，法器自己出手</div>';
+      this.ui.innerHTML = top + title + '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button><div class="yx-hint">只管走位，法器自己出手</div><button type="button" class="yx-mother" data-a="select">其他玩法：夜探、实盘</button>';
     } else {
       const d = Math.min(s.danger, s.dangerOpen) as Danger;
       const plan = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
