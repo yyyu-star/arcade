@@ -474,7 +474,7 @@ describe('夜探后半段（RAID_LATE：补刷、宝妖、鬼市、宝库和钥�
     expect(raid.hasKey).toBe(0);
   });
 
-  it('宝库：开局封着搜不了；钥匙从 5:00 以后第一只精英或守卫掉；8:00 有钥匙才能搜，开出 5 件', () => {
+  it('宝库：开局封着搜不了；钥匙从 keyFrom 以后第一只精英或守卫掉；vault.at 以后有钥匙才能搜，开出 vault.items 件', () => {
     const raid = new Raid({ seed: 3, template: 'guzhen', danger: 2 });
     expect(raid.vault).toBeGreaterThanOrEqual(0);
     const v = raid.map.chests[raid.vault]!;
@@ -494,6 +494,26 @@ describe('夜探后半段（RAID_LATE：补刷、宝妖、鬼市、宝库和钥�
     h.x = v.x;
     h.y = v.y;
     const bag0 = raid.bag.length;
+    runTo(raid, h, L.vault.at + CHEST_OPEN.hold + 2);
+    expect(raid.chestOpen[raid.vault]).toBe(1);
+    expect(raid.bag.length).toBe(bag0 + L.vault.items);
+  });
+
+  it('宝库：带着钥匙早到、站在金箱上等，到 vault.at 后站满 hold 拍就开（所有者按倒计时早到的情形）', () => {
+    const raid = new Raid({ seed: 3, template: 'guzhen', danger: 2 });
+    const v = raid.map.chests[raid.vault]!;
+    const h = fakeHost(0, 0);
+    runTo(raid, h, L.vault.keyFrom);
+    raid.onKill(9, 0, true, 0, 0, h);
+    expect(raid.hasKey).toBe(1);
+    // 早 60 秒就站上去：封着，搜不了
+    h.x = v.x;
+    h.y = v.y;
+    runTo(raid, h, L.vault.at - 1);
+    expect(raid.vaultReady(h.tick)).toBe(false);
+    expect(raid.chestOpen[raid.vault]).toBe(0);
+    const bag0 = raid.bag.length;
+    // 不挪窝，开封以后站满 hold 拍
     runTo(raid, h, L.vault.at + CHEST_OPEN.hold + 2);
     expect(raid.chestOpen[raid.vault]).toBe(1);
     expect(raid.bag.length).toBe(bag0 + L.vault.items);

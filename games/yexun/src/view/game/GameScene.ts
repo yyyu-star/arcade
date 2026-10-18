@@ -11,7 +11,7 @@ import { DROWN, ENEMIES, HOP_AIR, HOP_PERIOD, SPROUT, WATER } from '../../conten
 import { CHARACTERS } from '../../content/meta.ts';
 import { ARENA, DROPS, xpNeed } from '../../content/player.ts';
 import { inRects, MAPS, type MapDef } from '../../content/maps.ts';
-import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN } from '../../content/explore.ts';
+import { BEAST, DAWN_RED, DAWN_WARN, GATE, RAID_DAWN, RAID_LATE } from '../../content/explore.ts';
 import { TIERS, TIER_INFO, TREASURES } from '../../content/treasures.ts';
 import { edgeArrow, walkSecs } from '../../explore/view/guide-hud.ts';
 import { guide, newGuide } from '../../explore/guide.ts';
@@ -40,6 +40,17 @@ import { Town } from './town.ts';
 import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+/** 夜探提示里的时刻一律按 HUD 顶上的"离天亮"倒计时写（和 HUD 一样向上取整）：写已过时间（"8:00 以后"）所有者按倒计时理解，早到了打不开宝库（0.3.10） */
+const raidClock = (tick: number): string => {
+  const s = Math.max(0, Math.ceil((RAID_DAWN - tick) / 30));
+  return `${pad2(Math.floor(s / 60))}:${pad2(s % 60)}`;
+};
+/** 还差多少拍 → m:ss（向上取整，和倒计时对得上） */
+const waitClock = (ticks: number): string => {
+  const s = Math.max(0, Math.ceil(ticks / 30));
+  return `${Math.floor(s / 60)}:${pad2(s % 60)}`;
+};
 /** 只在 dev 构建里认 ?slowmo=N（截图预览用），正式构建恒为 1 */
 const SLOWMO = import.meta.env.DEV ? Math.max(1, Number(new URLSearchParams(location.search).get('slowmo') ?? 1) || 1) : 1;
 
@@ -182,6 +193,8 @@ export class GameScene extends Phaser.Scene {
   private stallViews: { img: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image; price: Phaser.GameObjects.Text; glow: Phaser.GameObjects.Image; sig: string }[] = [];
   /** 宝库的封条（金箱上的交叉符纸） */
   private sealImg: Phaser.GameObjects.Image | null = null;
+  /** 宝库上方的一行字：还差多久开封 / 可以搜了 / 要钥匙（走近了才显示） */
+  private sealText: Phaser.GameObjects.Text | null = null;
   private gdAt = -99;
   private gdMask = -1;
   private trailG: Phaser.GameObjects.Graphics | null = null;
@@ -561,6 +574,13 @@ export class GameScene extends Phaser.Scene {
     if (raid.vault >= 0) {
       const c = raid.map.chests[raid.vault]!;
       this.sealImg = this.img('seal', c.x, c.y + 4).setDepth(c.y + 16);
+      this.sealText = this.add
+        .text(c.x, c.y - 70, '', { fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#ffe08a', stroke: '#17131c', strokeThickness: 6 })
+        .setOrigin(0.5, 1)
+        .setResolution(2)
+        // 压在特效上面（法器的光圈、火团很大，按 y 排会被盖住看不清）
+        .setDepth(1_000_000)
+        .setVisible(false);
     }
     for (const g of raid.map.gates) {
       const foot = g.y - 50;
@@ -896,12 +916,12 @@ export class GameScene extends Phaser.Scene {
         case Ev.Key:
           sfx.play('pickup');
           this.burst(this.w.x, this.w.y - 40, 0xffd23a, 1.4);
-          this.d.banners.say('拿到宝库钥匙', 'gold', 2600, '8:00 以后去开封着的金箱');
+          this.d.banners.say('拿到宝库钥匙', 'gold', 2600, this.w.tick < RAID_LATE.vault.at ? `离天亮 ${raidClock(RAID_LATE.vault.at)} 宝库开封，到时去贴着封条的金箱` : '去贴着封条的金箱，站一会儿就能搜');
           break;
         case Ev.Vault:
           sfx.play('gateOpen', { volume: 0.8 });
           this.fx.spawn({ frame: 'ring', x, y, life: 900, s0: 0.5, s1: 3, a0: 1, a1: 0, tint: 0xffd23a, depth: 60 });
-          if (ev.b[i] === 1) this.d.banners.say('宝库开封了', 'gold', 2600);
+          if (ev.b[i] === 1) this.d.banners.say('宝库开封了', 'gold', 2600, '去贴着封条的金箱，站一会儿就能搜');
           else this.d.banners.say('宝库开封了', 'warn', 3000, '要钥匙：打倒精英或守卫掉');
           break;
         case Ev.Roamer:
@@ -1217,7 +1237,7 @@ export class GameScene extends Phaser.Scene {
   private onMarket(x: number, y: number, a: number, stall: number): void {
     if (a === 0) {
       sfx.play('bell');
-      this.d.banners.say('鬼市开了（到 8:00）', 'gold', 3000, '镇中心，拿身上的铜钱买宝物');
+      this.d.banners.say(`鬼市开了（离天亮 ${raidClock(RAID_LATE.market.to)} 收市）`, 'gold', 3000, '镇中心，拿身上的铜钱买宝物');
     } else if (a === 1) {
       this.d.banners.say('鬼市收了', 'ink', 2000);
     } else {
@@ -1916,6 +1936,14 @@ export class GameScene extends Phaser.Scene {
     if (this.sealImg) {
       const sealed = raid.chestOpen[raid.vault] !== 1 && !raid.vaultReady(w.tick);
       this.sealImg.setVisible(sealed);
+    }
+    if (this.sealText) {
+      const c = raid.map.chests[raid.vault]!;
+      const near = raid.chestOpen[raid.vault] !== 1 && raid.outcome === 'none' && Math.hypot(c.x - w.x, c.y - w.y) < 420;
+      let text = '';
+      if (near) text = w.tick < RAID_LATE.vault.at ? `还差 ${waitClock(RAID_LATE.vault.at - w.tick)} 开封` : raid.hasKey === 1 ? '可以搜了：站一会儿' : '要钥匙：打倒精英或守卫掉';
+      if (this.sealText.text !== text) this.sealText.setText(text).setColor(text.startsWith('要钥匙') ? '#ff8a6a' : '#ffe08a');
+      this.sealText.setVisible(near);
     }
     // 宝妖在屏幕外：屏幕边上一个橙色箭头
     const gi = raid.outcome === 'none' ? this.goblinSlot(raid) : -1;
