@@ -43,11 +43,11 @@ import { suggestFor } from '../suggest.ts';
 import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog, type Title } from '../../stake/titles.ts';
 import { AWARD_NAME, matchAwards, winnerOf, type Award } from '../../net/awards.ts';
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
-import { COLOR, TYPE, css, minHit } from '../theme.ts';
+import { COLOR, TYPE, css, minHit, phoneType } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
 import { join } from '../online.ts';
 import { cloudButton } from '../ui/cloud.ts';
-import { Button, iconButton, setHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
+import { Button, fitWidth, iconButton, setHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { applyAudio, confirm, openRules, openSettings } from '../ui/panels.ts';
 import { runTutorial } from '../tutorial.ts';
 import { CardView } from '../table/card.ts';
@@ -399,6 +399,7 @@ export class TableScene extends Phaser.Scene {
     c.add(g);
     const v = this.ses.view();
     // 三组（art-v3）：左"大厅"（好友房加邀请）；中 我方的级 · 本副打几 · 第几副 · 对方的级；右 图标。名次不另摆，头像上盖着印章
+    const phone = phoneType();
     const team = (x: number, label: string, lv: number, color: number, active: boolean, fails: number): void => {
       const tg = this.add.graphics();
       tg.fillStyle(color, active ? 1 : 0.55).fillRoundedRect(x, 8, 132, 40, 20);
@@ -406,7 +407,8 @@ export class TableScene extends Phaser.Scene {
       c.add(tg);
       c.add(text(this, x + 16, 28, label, { size: TYPE.label, color: 0xffffff, bold: true, ox: 0 }));
       c.add(text(this, x + 106, 28, levelName(lv), { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'num', stroke: 0x2b1d14, strokeWidth: 3 }));
-      if (fails > 0) c.add(text(this, x + 132, 9, `A×${fails}`, { size: 14, color: 0xffd0c0, bold: true, ox: 1, oy: 0 }));
+      // 手机上字托底到 12 像素以后角标会压着级数，删掉（结算页照样说哪队打 A 没过）
+      if (fails > 0 && !phone) c.add(text(this, x + 132, 9, `A×${fails}`, { size: 14, color: 0xffd0c0, bold: true, ox: 1, oy: 0 }));
     };
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
     this.lobbyBtn = new Button(this, 70, 28, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
@@ -427,13 +429,15 @@ export class TableScene extends Phaser.Scene {
     const mx = W / 2;
     team(mx - 238, this.side(0), v.levels[0], COLOR.teamUs, v.declarer === 0, v.aFails[0]);
     team(mx + 106, this.side(1), v.levels[1], COLOR.teamThem, v.declarer === 1, v.aFails[1]);
-    c.add(text(this, mx - 34, 28, '本副打', { size: TYPE.label, color: 0xf0dfc0, ox: 1 }));
+    // 手机上两队的胶囊和级牌之间只剩 70 多，放不下"本副打"和"第 N 副"两段：删掉"本副打"（级牌本身就是），"第N副"挪到左边
+    if (!phone) c.add(text(this, mx - 34, 28, '本副打', { size: TYPE.label, color: 0xf0dfc0, ox: 1 }));
     const badge = this.add.graphics();
     badge.fillStyle(COLOR.ivory, 1).fillRoundedRect(mx - 26, 4, 52, 48, 8);
     badge.lineStyle(3, COLOR.gold, 1).strokeRoundedRect(mx - 26, 4, 52, 48, 8);
     c.add(badge);
     c.add(text(this, mx, 29, levelName(v.level), { size: TYPE.big - 4, color: COLOR.red, bold: true, font: 'num' }));
-    c.add(text(this, mx + 36, 28, `第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
+    if (phone) c.add(text(this, mx - 32, 28, `第${v.dealNo}副`, { size: TYPE.small, color: 0xd8c6a6, ox: 1 }));
+    else c.add(text(this, mx + 36, 28, `第 ${v.dealNo} 副`, { size: TYPE.small, color: 0xd8c6a6, ox: 0 }));
 
     // 右：规则、设置、音量、返回，加云存档（它的红点提示没同步上，收进设置就看不见了，所以留在顶栏）
     const icons: [string, () => void][] = [
@@ -520,7 +524,11 @@ export class TableScene extends Phaser.Scene {
     const pa = this.seats[2]!.a;
     const x0 = Math.max(W / 2 - 140, pa.ax + 104);
     const cells = countLeft(v.hand, v.history);
-    if (x0 + cells.length * 32 + 16 > this.iconsLeft) y0 = Math.max(y0, minHit() + 4);
+    // 手机上点数、张数托底到 12、14 像素，格子跟着放宽加高，不然"10""9"挤成一串
+    const phone = phoneType();
+    const cw = phone ? 38 : 32;
+    const h = phone ? 60 : 50;
+    if (x0 + cells.length * cw + 16 > this.iconsLeft) y0 = Math.max(y0, minHit() + 4);
     // 点按区域只往下扩到够 44 CSS 像素：往上会压着顶栏
     const hitDown = (z: Phaser.GameObjects.Zone, w: number, h: number): void => {
       setHit(z, w, Math.max(h, minHit()));
@@ -543,9 +551,7 @@ export class TableScene extends Phaser.Scene {
       this.counterAt = { x: x0 + (t.width + 28) / 2, y: y0 + 17 };
       return;
     }
-    const cw = 32;
     const w = cells.length * cw + 16;
-    const h = 50;
     const g = this.add.graphics();
     // 纸签（art-v3）：米黄纸、深褐字，压在绒布上带一点投影
     g.fillStyle(0x000000, 0.3).fillRoundedRect(x0 + 3, y0 + 4, w, h, 6);
@@ -559,8 +565,8 @@ export class TableScene extends Phaser.Scene {
       const name = cell.rank === 17 ? '大' : cell.rank === 16 ? '小' : levelName(cell.rank);
       const a = cell.left === 0 ? 0.3 : 1;
       // 点数 16、张数 19：iPad 横屏（缩到 ×0.92）都到 14 CSS 像素；手机上更小的由手机字号档管
-      c.add(text(this, x, y0 + 14, name, { size: 16, bold: true, color: lv || cell.rank >= 16 ? COLOR.red : 0x6a4a2a }).setAlpha(a));
-      c.add(text(this, x, y0 + 34, String(cell.left), { size: 19, bold: true, font: 'num', color: lv ? COLOR.red : PAPER_INK }).setAlpha(a));
+      c.add(text(this, x, y0 + (phone ? 17 : 14), name, { size: 16, bold: true, color: lv || cell.rank >= 16 ? COLOR.red : 0x6a4a2a }).setAlpha(a));
+      c.add(text(this, x, y0 + (phone ? 43 : 34), String(cell.left), { size: 19, bold: true, font: 'num', color: lv ? COLOR.red : PAPER_INK }).setAlpha(a));
     });
     const z = this.add.zone(x0, y0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     hitDown(z, w, h);
@@ -1594,16 +1600,18 @@ export class TableScene extends Phaser.Scene {
       `炸弹 ${this.side(0)} ${rc.bombs[0]} · ${this.side(1)} ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
       rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
     ];
-    // 名场面（0.7.1）：最精彩的两条
-    const hl = dealHighlights(r, history).slice(0, 2);
+    // 名场面（0.7.1）：最精彩的两条。手机上字托底到 12 像素，框里一行只放得下十来个字：名场面、称号各留一条，再长的截断
+    const phone = phoneType();
+    const hl = dealHighlights(r, history).slice(0, phone ? 1 : 2);
     if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
-    const titles = dealTitles(r, history);
+    const titles = dealTitles(r, history).slice(0, phone ? 1 : undefined);
     // 左下分两框（art-v3）：上面是数据（炸弹、最大一炸），下面是故事（名场面、称号），不再红黑混排一长串
     // 数据框从名次第四行下面留出一点开始（第四行下沿 96），行距 28
     const dataY = 124;
-    const storyY = dataY + 28 + 16 + 12 + 16;
+    const row = phone ? 32 : 28;
+    const storyY = dataY + row + 16 + 12 + 16;
     const story = recap.length - 2 + titles.length;
-    const lastY = story > 0 ? storyY + (story - 1) * 28 : dataY + 28;
+    const lastY = story > 0 ? storyY + (story - 1) * row : dataY + row;
     const m = modal(this, 820, Math.max(560, 2 * (lastY + 16 + 30)), `第 ${r.dealNo} 副 结束`, { closeBtn: false });
     this.openOverlay('settle', m);
     const b = m.body;
@@ -1684,12 +1692,12 @@ export class TableScene extends Phaser.Scene {
     // 左下：这一副的复盘和称号（0.6.1，只看公开的出牌、名次和播过的接风）
     this.logMatch();
     const boxes = this.add.graphics();
-    boxes.fillStyle(0xf3e6c9, 1).fillRoundedRect(-378, dataY - 16, 368, 28 + 32, 10);
-    if (story > 0) boxes.fillStyle(0xfbe3d8, 1).fillRoundedRect(-378, storyY - 16, 368, (story - 1) * 28 + 32, 10);
+    boxes.fillStyle(0xf3e6c9, 1).fillRoundedRect(-378, dataY - 16, 368, row + 32, 10);
+    if (story > 0) boxes.fillStyle(0xfbe3d8, 1).fillRoundedRect(-378, storyY - 16, 368, (story - 1) * row + 32, 10);
     b.add(boxes);
-    recap.slice(0, 2).forEach((line, i) => b.add(text(this, -366, dataY + i * 28, line, { size: TYPE.small, color: COLOR.ink, ox: 0 })));
+    recap.slice(0, 2).forEach((line, i) => b.add(fitWidth(text(this, -366, dataY + i * row, line, { size: TYPE.small, color: COLOR.ink, ox: 0 }), 344)));
     const storyLines = [...recap.slice(2), ...titles.map((t) => this.titleLine(t, true))];
-    storyLines.forEach((line, i) => b.add(text(this, -366, storyY + i * 28, line, { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 })));
+    storyLines.forEach((line, i) => b.add(fitWidth(text(this, -366, storyY + i * row, line, { size: TYPE.small, bold: true, color: COLOR.redDark, ox: 0 }), 344)));
     // 主按钮右挪，左边放"回大厅"：结算弹窗盖着顶栏的大厅按钮，任何界面两步内要能回大厅（仓库 AGENTS 第 2 节）
     const by = stakeLine ? 200 : 190;
     const lobby = new Button(this, rx - 126, by, 132, 56, lobbyName(), 'wood', () => this.lobbyFromSettle(), 'home');

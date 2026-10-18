@@ -8,8 +8,8 @@ import { SOLO_LEVELS, type SoloLevel } from '../../ai/venue.ts';
 import { SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
 import { LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
-import { COLOR, TYPE } from '../theme.ts';
-import { Button, modal, text, type Modal } from './kit.ts';
+import { COLOR, TYPE, phoneType } from '../theme.ts';
+import { Button, fitWidth, modal, text, type Modal } from './kit.ts';
 
 function reg(m: Modal, key: string, b: Button): Button {
   m.body.add(b);
@@ -21,6 +21,7 @@ function reg(m: Modal, key: string, b: Button): Button {
 export function openLevelPicker(scene: Phaser.Scene, current: SoloLevel, onPick: (level: SoloLevel) => void): Modal {
   const m = modal(scene, 900, 430);
   const b = m.body;
+  const phone = phoneType();
   b.add(text(scene, 0, -170, '选难度', { size: TYPE.title, bold: true, color: COLOR.redDark }));
   SOLO_LEVELS.forEach((lv, i) => {
     const y = -95 + i * 92;
@@ -31,8 +32,9 @@ export function openLevelPicker(scene: Phaser.Scene, current: SoloLevel, onPick:
     b.add(g);
     b.add(text(scene, -390, y, c.name, { size: TYPE.title, bold: true, color: COLOR.redDark, ox: 0 }));
     b.add(text(scene, -250, y - 15, `电脑 ${stars(c.stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
-    b.add(text(scene, -250, y + 17, c.time, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
-    b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250 }));
+    // 手机上字托底到 12 像素，整句会压到右边"适合谁"那段：只留"一局约 N 分钟"
+    b.add(text(scene, -250, y + 17, phone ? c.time.split('，')[0]! : c.time, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
+    b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250, align: 'left' }));
     reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv)), 'play'));
   });
   b.add(text(scene, 0, 168, '随时能在设置里换', { size: TYPE.small, color: COLOR.muted }));
@@ -55,10 +57,13 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     b.add(text(scene, -400, y, TIER_NAME[tier], { size: TYPE.title, bold: true, color: COLOR.redDark, ox: 0 }));
     // 实盘一场最多输一份、最多赢一份（结回 0 到两份，docs/stake.md 1.1）
     const share = fmtChips(TIERS[tier]);
+    // 实盘的钱数不截断（主线 10-18：截成"最多输 20…"正好把能输多少藏掉了）。赢输都是一份，第二行合成"最多输赢"，
+    // 手机托底到 12 像素时豪华档"一份 200,000 · 每分 10,000"也在 -270 到 60 之间放得下（SE 截图核对过；右边一列从 40 挪到 60 留了余量）
     b.add(text(scene, -270, y - 14, `一份 ${share} · 每分 ${fmtChips(pointValue(tier))}`, { size: TYPE.label, color: COLOR.ink, ox: 0 }));
-    b.add(text(scene, -270, y + 16, `最多赢 ${share} · 最多输 ${share}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
-    b.add(text(scene, 40, y - 14, `电脑 ${stars(TIER_CARD[tier].stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
-    b.add(text(scene, 40, y + 16, `${SOLO_DEALS} 副 · ${TIER_CARD.time}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
+    b.add(text(scene, -270, y + 16, `最多输赢 ${share}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
+    b.add(text(scene, 60, y - 14, `电脑 ${stars(TIER_CARD[tier].stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
+    // 时间那行可以截（手机上放不下时）
+    b.add(fitWidth(text(scene, 60, y + 16, `${SOLO_DEALS} 副 · ${TIER_CARD.time}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }), 195));
     const btn = reg(m, `tier:${tier}`, new Button(scene, 340, y, 150, 52, '进场', 'red', () => void enter(tier)));
     btn.setEnabled(false);
     buttons[tier] = btn;
