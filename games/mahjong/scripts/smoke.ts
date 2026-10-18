@@ -110,6 +110,17 @@ async function soloFun(page: Page, name: string): Promise<void> {
   for (const [what, re] of [['扔道具', /^道具 0>1/], ['发表情', /^表情 0/], ['说短语', /^短语 0/]] as const) {
     if (!lines.some((l) => re.test(l))) throw new Error(`互动流水里没有${what}：${lines.join(' | ')}`);
   }
+  // 单机聊天（0.19.2，kit 的 localChat）：手机号整条拒发、在面板里说原因；正常的一句在自己头像旁冒气泡
+  await page.waitForTimeout(1_200);
+  await tap('fun:button');
+  await tap('fun:tab:chat');
+  await page.fill('[data-key="fun:chatInput"]', '加我 13800138000');
+  await page.click('[data-key="fun:chatSend"]');
+  if (!/号码/.test((await page.textContent('.atf-note')) ?? '')) throw new Error('单机聊天发手机号没被拦下');
+  await page.fill('[data-key="fun:chatInput"]', '这把稳了');
+  await page.click('[data-key="fun:chatSend"]');
+  if (!(await page.waitForSelector('.atf-say:has-text("这把稳了")', { timeout: 3_000 }).catch(() => null))) throw new Error('单机聊天说的话没冒气泡');
+  await page.click('.atf-away', { position: { x: 5, y: 5 } });
 }
 
 // 平台大厅的"好友房"按钮带 ?online=1：开房、进房那一块亮起来，参数用完从地址栏去掉

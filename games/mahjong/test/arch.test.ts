@@ -79,6 +79,13 @@ describe('规则核心和电脑', () => {
     }
   });
 
+  test('电脑不读聊天（0.19.2 单机也能说话）：规则、电脑和单机牌局都不 import 聊天和互动组件，说的话只在画面上显示', () => {
+    for (const f of [...PURE, join(ROOT, 'solo.ts')]) {
+      const imports = [...code(f).matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]!);
+      for (const i of imports) expect(/^arcade-kit\/(chat|table-fun)/.test(i), `${relative(ROOT, f)} → ${i}`).toBe(false);
+    }
+  });
+
   test('电脑从玩法那里只拿名单上的东西：视图和动作的类型、只吃牌的纯函数和常量（不经 index.ts 的 export * 拿到 begin、tenpaiKinds 这类状态函数）', () => {
     for (const f of files(join(ROOT, 'ai'))) expect(variantLeaks(code(f)), relative(ROOT, f)).toEqual([]);
   });

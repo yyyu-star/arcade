@@ -18,6 +18,7 @@ import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
 import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { chatOff, createFun, funOff, setChatOff, setFunOff } from './view/fun.ts';
+import { localChat } from 'arcade-kit/chat';
 import type { ChatResultLike, FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
 import { renderLobby } from './view/lobby.ts';
 import { settleFx } from './view/fx.ts';
@@ -139,7 +140,7 @@ const funBtn = button('act soft', volBox, '', () => {
   if (funOff()) fun?.closeAll();
   paintTop();
 });
-// 好友房聊天的开关（0.19.0）：只在好友房里出现；不看了别人说的就不显示，自己还能说
+// 聊天的开关（0.19.0 好友房，0.19.2 起单机也有）：对局里出现；不看了别人说的就不显示，自己还能说
 const chatBtn = button('act soft', volBox, '', () => {
   setChatOff(!chatOff());
   paintTop();
@@ -162,7 +163,7 @@ function paintTop(): void {
   funBtn.textContent = funOff() ? '互动：不看' : '互动：开';
   ambBtn.textContent = prefs.ambience ? '茶馆声：开' : '茶馆声：关';
   chatBtn.textContent = chatOff() ? '聊天：不看' : '聊天：开';
-  chatBtn.hidden = !online;
+  chatBtn.hidden = !online && !solo;
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -876,7 +877,17 @@ function playSolo(s: Solo): void {
   const kinds = s.save.state.kinds;
   const personas = s.save.state.personas;
   // 单机没有房间：自己发的直接交回组件播，电脑怎么回由组件按 kit 的 botReact 算
-  fun = newFun(table, () => 0, (seat) => (kinds[seat] === 'ai' ? (PERSONAS[personas[seat]!]?.fun ?? 'normal') : null), (id, to) => fun?.receive(0, id, to), 'solo', true);
+  // 单机也能说话（kit 0.18.1 的 localChat：过滤、限速和房间一样，只在本地冒气泡）。我永远是 0 号座位；
+  // 说的话只交给 TableFun 显示，不进 Solo、不给电脑（电脑不读聊天，公平）
+  fun = newFun(
+    table,
+    () => 0,
+    (seat) => (kinds[seat] === 'ai' ? (PERSONAS[personas[seat]!]?.fun ?? 'normal') : null),
+    (id, to) => fun?.receive(0, id, to),
+    'solo',
+    true,
+    localChat((text, masked) => fun?.chat(0, text, masked)),
+  );
   s.resume();
   if (!localStorage.getItem(GUIDE_KEY)) showGuide(stage);
 }
