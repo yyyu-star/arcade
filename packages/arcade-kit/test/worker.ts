@@ -104,6 +104,9 @@ export const toyGame: RoomGame<ToyState, ToyAction, ToyView> = {
   over: (s) => s.hands.every((h) => h.length === 0),
   // 0.6.0：6 句快捷短语（编号 0–5），房间只转发
   emotes: 6,
+  // 0.18.0：开着聊天，加一个游戏自己的打码词
+  chat: true,
+  chatWords: ['土豆泥'],
 };
 
 export class ToyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
@@ -151,6 +154,8 @@ export const toyRoundsGame: RoomGame<ToyState, ToyAction, ToyView> = {
   ...toyGame,
   // 顺便覆盖只有 start 的旧游戏：房间照旧给 32 位种子
   begin: undefined,
+  // 没开聊天的游戏（0.18.0 测 chat_off）
+  chat: undefined,
   breakPoint: (s) => s.played.length % 4 === 2,
 };
 

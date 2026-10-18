@@ -45,6 +45,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/protocol` | 两边 | 消息类型、协议版本、关闭码、房间码格式 |
 | `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
 | `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment`（0.12.5）等接口小函数；只在有平台且已登录时挂 |
+| `arcade-kit/chat` | 两边 | 好友房聊天的过滤（0.18.0）：`checkChat`（规整 → 字数 → 链接、号码、微信 QQ 整条拒发 → 脏话打码）、`chatRejectText`；纯函数，房间和页面用同一个 |
 | `arcade-kit/theme` | 浏览器 | DOM 组件的主题（0.16.0）：`KitTheme`、`themeVars`（主题对象 → `--ak-*` 变量列表，挡 CSS 注入）、`applyTheme`；分享预览、邀请横条和面板、牌桌互动菜单都认 |
 
 **发布和仓库内引用是两种形态**（0.10.0）：
@@ -346,6 +347,22 @@ protected override onEmote(from: number, id: number, to?: number): void {
   数字都在 `BOT_REACT`，第六个参数能整个换掉。
 - 电脑的反应只是画面，**出牌决策绝不读它**；真人的短语、道具不记进牌局状态（见上面 `onEmote` 的规矩）。
 - 其他纯函数：`stickerMood`（表情对应的情绪）、`FunCooldown`（冷却）、`FunTally`（护盾、连击、回敬）、`placeMenu`（菜单放哪，避开禁区；窄屏按 `fitMenuWidth` 收窄到屏幕宽减 16px，0.11.2）、`funItem`/`stickerId`/`propId`（编号换算），测试在 `test/fun-logic.test.ts`。
+
+## 好友房聊天（chat，0.18.0）
+
+设计和取舍见 [docs/chat.md](docs/chat.md)（主线 2026-10-17 审过）。只在好友房、入座的真人能说，一条 ≤ 30 个字；房间过滤、限速后只转发，**不写存储、不进快照、不进任何记录**，房间散了就没了。
+
+- 房间：游戏的 `RoomGame` 写 `chat: true`（可选 `chatWords` 加打码词，删不了 kit 的）。限速 `chatMs`（默认 3000）、`chatPerMin`（默认 10）在 `RoomLimits`，`KIT_QUOTA` 里能改。
+  真人说的话不交给规则、`onStep`、`onEmote`，电脑不读、不回自由文字。
+- 页面：`new RoomClient({ ..., onChat: (seat, text, masked) => fun.chat(seat, text, masked), onChatError: (code) => fun.chatError(code) })`，
+  `TableFun` 传 `chat: (text) => client.chat(text)` 和设置里的 `chatEnabled: () => …`（"聊天：开 / 不看"，和"互动"分开）。
+  传了 `onChat` 连接才带 `chat=1`，房间只给这样的连接发（旧页面不认识这条消息），所以不加 `PROTOCOL_VERSION`。
+- `client.chat(text)` 先在本地过一遍和房间一样的检查，不行直接返回原因（`chatRejectText(code, why)` 给说法）：链接"不能发链接"，号码"不能发号码，金额请写成 1,000,000"——
+  标准千分位的金额（≤ 10 位）放行；太快的带 `waitMs`，"发送"按钮倒计时。
+- 界面：头像旁冒 4 秒气泡（能折行，同一个人后一条顶掉前一条）；"互动"面板多一个"聊天"页：最近 30 条（只在内存里）、输入框（16px，iOS 不放大页面）和"发送"，回车发；
+  键盘弹出时按 `visualViewport` 把面板挪到键盘上面；收起时有新消息，"互动"按钮上一个小红点。被屏蔽（单个、全部）的人说的不显示。
+- 平台的屏蔽名单（`docs/social.md` 3.1）要平台出一个 RPC，出了以后 kit 小版本接上（docs/chat.md 第 6 节，主线定的 B 方案）；现在只有 kit 的本地屏蔽。
+- 演示页 `demo/table-fun.html` 里能点开"聊天"页试（单机演示，右家隔一秒回一句）。
 
 ## 分享卡和邀请（share、social，0.12.0）
 
@@ -654,7 +671,8 @@ packages/arcade-kit/
 │  ├─ rng.ts         ChaCha20 随机数
 │  ├─ fun.ts、fun-art.ts  快捷短语、表情、道具的画面层
 │  ├─ fun-logic.ts   牌桌互动的规则：冷却、护盾、连击、回敬、电脑反应、菜单位置（纯函数）
-│  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示）
+│  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示、聊天页）
+│  ├─ chat.ts、chat-words.ts  好友房聊天的过滤和打码词表（纯函数）
 │  ├─ share.ts       分享卡（Canvas 画战绩图、系统分享或预览）
 │  ├─ qr.ts          二维码编码器（字节模式、纠错 M、版本 1–10，纯函数，分享卡用）
 │  ├─ social.ts      报位置、收邀请的横条、好友和邀请的接口小函数

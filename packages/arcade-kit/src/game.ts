@@ -161,6 +161,16 @@ export interface RoomGame<S, A, V, O = unknown, E extends RoomEffect = RoomEffec
    * 短语的文字、图标由游戏自己在页面里定，房间不知道内容。不写（或不是正整数）就是没有短语，发了回 no_emotes
    */
   emotes?: number;
+
+  // ---------- 0.18.0 ----------
+
+  /**
+   * 好友房聊天（docs/chat.md）：true 时入座的人能发自由文字（一条 ≤ 30 个字），房间过滤、限速后只转发，不进状态、不写存储。
+   * 不写就没有聊天，发了回 chat_off，welcome 里也不带节奏
+   */
+  chat?: boolean;
+  /** 聊天打码时在 kit 的词表（chat-words.ts）之外再加的词；只能加，删不了 kit 的 */
+  chatWords?: readonly string[];
 }
 
 /**
@@ -193,6 +203,7 @@ export function snapshotBytes<S, A, V, O, E extends RoomEffect>(game: RoomGame<S
       view: game.view(state, seat),
       // 有短语的游戏多带一个节奏（0.7.0）
       ...(game.emotes ? { emote: { ms: 999_999, burst: 99 } } : {}),
+      ...(game.chat ? { chat: { ms: 999_999, perMin: 99, max: 99 } } : {}),
     };
     max = Math.max(max, new TextEncoder().encode(JSON.stringify(msg)).byteLength);
   }

@@ -131,8 +131,11 @@ export async function acceptJoin(request: Request, env: KitEnv, code: string, op
     limited = true;
   }
   // 新建请求，只带认好的身份和客户端版本；浏览器带来的 x-kit-user 之类的头一律不转
-  const cv = new URL(request.url).searchParams.get('cv') ?? '0';
-  const res = await roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}`, {
+  const q = new URL(request.url).searchParams;
+  const cv = q.get('cv') ?? '0';
+  // chat=1（0.18.0）：新版 RoomClient 认聊天消息，房间只给这样的连接发
+  const chat = q.get('chat') === '1' ? '&chat=1' : '';
+  const res = await roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}${chat}`, {
     headers: { upgrade: 'websocket', 'x-kit-user': identityHeader(me), ...(limited ? { [LIMITED_HEADER]: '1' } : {}) },
   });
   if (!res.headers.has(MISS_HEADER)) return res;

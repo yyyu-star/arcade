@@ -17,6 +17,7 @@
  *   计量说今天快满了（busy）就不进新人；说满了（stop）就在这一段打完（RoomGame.breakPoint）时收场。
  */
 import { DurableObject } from 'cloudflare:workers';
+import { CHAT_MAX, checkChat } from './chat.js';
 import type { RoomEffect, RoomGame, RoomSetup } from './game.js';
 import { type Identity, KIT_HOST, LIMITED_HEADER, MISS_HEADER, meterStub, parseIdentity } from './internal.js';
 import type { MeterEnv, MeterLevel, RoomMeter } from './meter.js';
@@ -24,6 +25,7 @@ import { ENTROPY_WORDS } from './rng.js';
 import {
   CLOSE,
   CLOSE_REASON,
+  type ChattedMsg,
   type DownMsg,
   type EmotedMsg,
   type Frame,
@@ -86,6 +88,12 @@ export interface RoomLimits {
   emoteMs: number;
   emoteBurst: number;
   /**
+   * 聊天的节奏（0.18.0，RoomGame.chat）：同一个座位两条至少隔 chatMs、滚动一分钟最多 chatPerMin 条，超了回 chat_too_fast、不转发、不占数。
+   * 和短语一样是代码里的默认值，KIT_QUOTA 里写了 chatMs / chatPerMin 就以那里为准。chatMs 为 0 不限间隔，chatPerMin 为 0 不限条数
+   */
+  chatMs: number;
+  chatPerMin: number;
+  /**
    * 写了多少行报一次计量（0.2.0）。计量每报一次自己写 1 行，200 就是多花 0.5%；
    * 太大的话计量知道得晚，满了以后房间还会多写最多这么多行才收场
    */
@@ -115,6 +123,8 @@ export const DEFAULT_LIMITS: RoomLimits = {
   minClientVersion: 0,
   emoteMs: 1000,
   emoteBurst: 3,
+  chatMs: 3000,
+  chatPerMin: 10,
   meterBatch: 200,
   closingMs: 60 * 60_000,
 };
@@ -220,6 +230,8 @@ interface Persist<S> {
 interface Attachment {
   userId: string;
   name: string;
+  /** 连接时带了 chat=1（0.18.0，新版 RoomClient 传了 onChat）：只给这样的连接发聊天，旧页面不认识这条消息 */
+  chat?: true;
 }
 
 const TABLE = 'kit_room';
@@ -318,6 +330,9 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   /** 每个座位快捷短语的令牌桶（内存里；被驱逐就重置成满的，驱逐前至少空闲了一阵，本来也该满了） */
   private readonly emoteBuckets = new Map<number, { tokens: number; at: number }>();
   private emoteRateCache: EmoteRate | null = null;
+  /** 每个座位最近一分钟里发出去的聊天的时间（内存里，被驱逐就清空，和短语的桶一样） */
+  private readonly chatTimes = new Map<number, number[]>();
+  private chatRateCache: ChatRate | null = null;
   /** 这一步写了几行（sql 的 rowsWritten + setAlarm、关房各 1）；测试断言 ≤ 2 */
   private writes = 0;
   /** 每个入口结束时记下来，给测试看 */
@@ -396,7 +411,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (request.headers.has(LIMITED_HEADER) && !this.insider(me.userId)) return this.refuse(CLOSE.tryLater);
     const gate = await this.newcomerGate(me.userId);
     if (gate !== null) return this.refuse(gate);
-    return this.entry(() => this.join(me, url.searchParams.get('cv')));
+    return this.entry(() => this.join(me, url.searchParams.get('cv'), url.searchParams.get('chat') === '1'));
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -636,7 +651,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   }
 
   /** 进房（含重连）：接受、记座位、发快照，中间没有 await（4.5 续局的写法）。 */
-  private join(me: Identity, rawCv: string | null): Response {
+  private join(me: Identity, rawCv: string | null, chat = false): Response {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
@@ -699,7 +714,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       other.serializeAttachment(null);
       other.close(CLOSE.replaced, 'replaced');
     }
-    server.serializeAttachment({ userId: me.userId, name: me.name } satisfies Attachment);
+    server.serializeAttachment({ userId: me.userId, name: me.name, ...(chat ? { chat: true as const } : {}) } satisfies Attachment);
 
     if (s && changed) {
       // 托管被收回、而且正轮到他：这一手从现在重新算 30 秒。只是掉线没到托管就回来的，不重置（不然隔 29 秒重连一次就能一直拖着）
@@ -751,6 +766,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
         return this.act(ws, seat, msg.moveId, msg.baseSeq, msg.action);
       case 'emote':
         return this.emote(ws, seat, msg.id, msg.to);
+      case 'chat':
+        return this.chat(ws, seat, msg.text);
       default:
         return this.reject(ws, 'bad_message');
     }
@@ -779,6 +796,39 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     } catch (e) {
       console.error('onEmote threw', st.code, e instanceof Error ? e.message : e);
     }
+  }
+
+  /**
+   * 聊天（0.18.0，docs/chat.md）：校验、过滤、按座位限速，然后只转发给带了 chat=1 的连接；不写存储、不改 seq、不进快照，房间关了就没了。
+   * 入站已经在 onMessage 里记过。被拒的不占这个座位的条数。真人说的话不交给规则、onStep、onEmote（公平：电脑不读真人说的话）
+   */
+  private chat(ws: WebSocket, seat: number | null, raw: unknown): void {
+    const st = this.st!;
+    if (this.game.chat !== true) return this.reject(ws, 'chat_off');
+    if (seat === null) return this.reject(ws, 'not_seated');
+    if (st.status === 'over') return this.reject(ws, 'room_over');
+    const c = checkChat(raw, this.game.chatWords ?? []);
+    if (!c.ok) return this.reject(ws, c.code);
+    if (!this.takeChat(seat)) return this.reject(ws, 'chat_too_fast');
+    const msg: ChattedMsg = { t: 'chat', seat, text: c.text, ...(c.masked ? { masked: true as const } : {}) };
+    for (const o of this.sockets()) if (attachmentOf(o)?.chat) this.send(o, msg);
+  }
+
+  private chatRate(): ChatRate {
+    this.chatRateCache ??= chatRateOf((this.env as unknown as MeterEnv | undefined)?.KIT_QUOTA, { ms: this.limits.chatMs, perMin: this.limits.chatPerMin });
+    return this.chatRateCache;
+  }
+
+  private takeChat(seat: number): boolean {
+    const { ms, perMin } = this.chatRate();
+    const now = Date.now();
+    const times = (this.chatTimes.get(seat) ?? []).filter((t) => now - t < 60_000);
+    this.chatTimes.set(seat, times);
+    const last = times[times.length - 1];
+    if (ms > 0 && last !== undefined && now - last < ms) return false;
+    if (perMin > 0 && times.length >= perMin) return false;
+    times.push(now);
+    return true;
   }
 
   /** 快捷短语的节奏：KIT_QUOTA 里写了就用那里的，没写用 RoomLimits（只算一次） */
@@ -1638,6 +1688,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       now: Date.now(),
       // 有短语的游戏告诉页面限速的节奏（0.7.0），RoomClient 按它排队，用户感觉不到限速
       ...(hasEmotes(this.game.emotes) ? { emote: this.emoteRate() } : {}),
+      ...(this.game.chat === true ? { chat: { ...this.chatRate(), max: CHAT_MAX } } : {}),
     };
   }
 
@@ -1667,7 +1718,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     }
   }
 
-  private send(ws: WebSocket, msg: DownMsg<V> | EmotedMsg): void {
+  private send(ws: WebSocket, msg: DownMsg<V> | EmotedMsg | ChattedMsg): void {
     try {
       ws.send(JSON.stringify(msg));
     } catch {
@@ -1776,4 +1827,25 @@ export function emoteRateOf(raw: unknown, base: EmoteRate): EmoteRate {
   const q = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
   const ok = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
   return { ms: ok(q.emoteMs) ? q.emoteMs : base.ms, burst: Math.max(1, ok(q.emoteBurst) ? q.emoteBurst : base.burst) };
+}
+
+/** 聊天的节奏（0.18.0）：两条至少隔 ms 毫秒，一分钟最多 perMin 条 */
+export interface ChatRate {
+  ms: number;
+  perMin: number;
+}
+
+/** KIT_QUOTA（对象或 JSON 字符串）里的 chatMs / chatPerMin 覆盖默认值；不合格的忽略 */
+export function chatRateOf(raw: unknown, base: ChatRate): ChatRate {
+  let v: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      v = null;
+    }
+  }
+  const q = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  const ok = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
+  return { ms: ok(q.chatMs) ? q.chatMs : base.ms, perMin: ok(q.chatPerMin) ? q.chatPerMin : base.perMin };
 }

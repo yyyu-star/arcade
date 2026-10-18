@@ -16,7 +16,8 @@
  *
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
-import { CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
+import { type ChatBlockWhy, checkChat } from './chat.js';
+import { type ChattedMsg, CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
 
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
 
@@ -37,6 +38,13 @@ export interface RoomClientOptions<V> {
    * to（0.7.0）：冲着哪个座位发的，没指定时是 undefined；bot（0.10.0）：电脑座位发的（GameRoom.botEmote）是 true，一般不用区分
    */
   onEmote?(seat: number, id: number, to?: number, bot?: boolean): void;
+  /**
+   * 有人说了一句（0.18.0，见 RoomGame.chat 和 docs/chat.md）：seat 是房间的座位号，text 是房间过滤、打码后的字，masked 表示打过码。
+   * 传了它连接时才带 chat=1，房间才会给这个页面发聊天；不传就收不到、也别调 chat()
+   */
+  onChat?(seat: number, text: string, masked: boolean): void;
+  /** 房间拒了一条聊天（0.18.0，CHAT_ERRORS 里聊天专有的那几个）：本地已经先挡过一遍，一般只在节奏刚调过、刚重连时出现 */
+  onChatError?(code: string): void;
   /** 下面这些是给测试注入的；浏览器里不用传 */
   WebSocketImpl?: { new (url: string): WebSocketLike };
   random?: () => number;
@@ -89,6 +97,19 @@ export function backoffMs(attempt: number, random: () => number = Math.random): 
   return Math.round(cap * (0.5 + random() / 2));
 }
 
+/**
+ * chat() 的结果（0.18.0）：被本地挡下的 code 和房间回的一样（CHAT_ERRORS），多一个 chat_offline（没连上）；
+ * chat_blocked 带 why（链接还是号码，挑说法用），chat_too_fast 带 waitMs
+ */
+export type ChatSendResult =
+  | { ok: true }
+  | { ok: false; code: 'chat_off' | 'chat_empty' | 'chat_too_long' | 'chat_offline' }
+  | { ok: false; code: 'chat_blocked'; why: ChatBlockWhy }
+  | { ok: false; code: 'chat_too_fast'; waitMs: number };
+
+/** 聊天专有的拒绝码：不交给 onMessage（not_seated、room_over 和短语共用，照旧走 onMessage） */
+const CHAT_ONLY_ERRORS = new Set(['chat_off', 'chat_empty', 'chat_too_long', 'chat_too_fast', 'chat_blocked']);
+
 export class RoomClient<A = unknown, V = unknown> {
   private ws: WebSocketLike | null = null;
   private status: ClientStatus = 'connecting';
@@ -117,6 +138,9 @@ export class RoomClient<A = unknown, V = unknown> {
   /** 太快时排着的（只留最后 EMOTE_QUEUE 个），到下一个令牌时发 */
   private emoteQueue: { id: number; to?: number }[] = [];
   private emoteTimer: unknown = null;
+  /** 聊天的节奏（0.18.0，welcome.chat）和本地记的最近一分钟发出去的时间；没收到 welcome 前按 kit 的默认 */
+  private chatRate = { ms: 3000, perMin: 10 };
+  private chatTimes: number[] = [];
   private readonly opts: Required<Pick<RoomClientOptions<V>, 'random' | 'setTimer' | 'clearTimer'>> & RoomClientOptions<V>;
   private readonly onWake = () => this.wake(false);
   /** pageshow 带 persisted：页面是从往返缓存里拿回来的，旧连接不能信 */
@@ -161,6 +185,33 @@ export class RoomClient<A = unknown, V = unknown> {
   /** 房主开局；opts 是开局选项（0.3.0，游戏校验），不带就和以前一样 */
   start(opts?: unknown): void {
     this.trySend(opts === undefined ? { t: 'start' } : { t: 'start', opts });
+  }
+
+  /**
+   * 说一句（0.18.0）：先在本地过一遍房间同样的检查（字数、导流、节奏），不行就不发、直接告诉页面为什么（chatRejectText 给说法）；
+   * 行就发出去，房间转发回来的经 onChat 交给页面（发的人自己也收到）。没连上不存着重发。waitMs 是太快时还要等多久
+   */
+  chat(text: string, now = Date.now()): ChatSendResult {
+    if (!this.opts.onChat) return { ok: false, code: 'chat_off' };
+    const c = checkChat(text);
+    if (!c.ok) return c.code === 'chat_blocked' ? { ok: false, code: c.code, why: c.why } : { ok: false, code: c.code };
+    const wait = this.chatWait(now);
+    if (wait > 0) return { ok: false, code: 'chat_too_fast', waitMs: wait };
+    if (!this.ws || this.ws.readyState !== OPEN || !this.welcomed) return { ok: false, code: 'chat_offline' };
+    this.chatTimes.push(now);
+    // 发原文：本地打过码的再交给房间就认不出脏话了，masked 会丢（房间以自己的过滤为准）
+    this.trySend({ t: 'chat', text });
+    return { ok: true };
+  }
+
+  /** 还要等多久才能说下一句（毫秒，0 = 现在就能）：按房间给的节奏，界面拿来给"发送"按钮倒计时 */
+  chatWait(now = Date.now()): number {
+    const { ms, perMin } = this.chatRate;
+    this.chatTimes = this.chatTimes.filter((t) => now - t < 60_000);
+    const last = this.chatTimes[this.chatTimes.length - 1];
+    let wait = ms > 0 && last !== undefined ? last + ms - now : 0;
+    if (perMin > 0 && this.chatTimes.length >= perMin) wait = Math.max(wait, this.chatTimes[this.chatTimes.length - perMin]! + 60_000 - now);
+    return Math.max(0, wait);
   }
 
   /**
@@ -224,6 +275,7 @@ export class RoomClient<A = unknown, V = unknown> {
     const Impl = this.opts.WebSocketImpl ?? (globalThis.WebSocket as unknown as { new (url: string): WebSocketLike });
     const url = new URL(this.opts.url);
     url.searchParams.set('cv', String(this.opts.clientVersion ?? 0));
+    if (this.opts.onChat) url.searchParams.set('chat', '1');
     const ws = new Impl(url.toString());
     this.ws = ws;
     this.connectTimer = this.opts.setTimer(() => {
@@ -245,9 +297,9 @@ export class RoomClient<A = unknown, V = unknown> {
       // 收到任何东西都说明连接活着
       this.probing = false;
       if (typeof ev.data !== 'string' || ev.data === PONG) return;
-      let msg: DownMsg<V> | EmotedMsg;
+      let msg: DownMsg<V> | EmotedMsg | ChattedMsg;
       try {
-        msg = JSON.parse(ev.data) as DownMsg<V> | EmotedMsg;
+        msg = JSON.parse(ev.data) as DownMsg<V> | EmotedMsg | ChattedMsg;
       } catch {
         return;
       }
@@ -255,10 +307,19 @@ export class RoomClient<A = unknown, V = unknown> {
         if (Number.isInteger(msg.seat) && Number.isInteger(msg.id)) this.opts.onEmote?.(msg.seat, msg.id, Number.isInteger(msg.to) ? msg.to : undefined, msg.bot === true);
         return;
       }
+      if (msg.t === 'chat') {
+        if (Number.isInteger(msg.seat) && typeof msg.text === 'string') this.opts.onChat?.(msg.seat, msg.text, msg.masked === true);
+        return;
+      }
+      if (msg.t === 'error' && !msg.moveId && CHAT_ONLY_ERRORS.has(msg.code)) {
+        this.opts.onChatError?.(msg.code);
+        return;
+      }
       // 本地已经按节奏排队了，房间偶尔还嫌快（比如刚重连、节奏刚调过）：静默丢掉，不打扰页面
       if (msg.t === 'error' && msg.code === 'emote_too_fast' && !msg.moveId) return;
       if (msg.t === 'welcome') {
         if (msg.emote && msg.emote.ms >= 0 && msg.emote.burst >= 1) this.emoteRate = { ms: msg.emote.ms, burst: msg.emote.burst };
+        if (msg.chat && msg.chat.ms >= 0 && msg.chat.perMin >= 0) this.chatRate = { ms: msg.chat.ms, perMin: msg.chat.perMin };
         // 快照：整桌重画，从它的 seq 往后接；真的进了房间，退避和失败次数清零
         this.lastSeq = msg.seq;
         this.welcomed = true;

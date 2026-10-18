@@ -10,6 +10,7 @@
  * - 公平：人人一样、免费；只是画面和声音，不停计时、不改规则；电脑的出牌不读这些。电脑的反应只在画面层（单机）或房间的互动钩子里算。
  * - kit 不认识任何游戏：短语表、名场面的映射、电脑人物都由游戏给。
  */
+import { CHAT_MAX, chatRejectText, type ChatBlockWhy } from './chat.js';
 import { applyTheme, type KitTheme } from './theme.js';
 import { PROPS, STICKERS, createFunLayer, propSvg, showSticker, stickerSvg, throwAt, type FunLayer, type FunPhase, type PropId, type RectLike, type StickerId } from './fun.js';
 import {
@@ -84,6 +85,13 @@ export interface TableFunOptions {
    * 组件过 2 秒再问。不给就挑第一个电脑（没有就第一个别人），和以前一样
    */
   hintSeat?(): number | null;
+  /**
+   * 好友房聊天（0.18.0，docs/chat.md）：给了它"互动"面板才有"聊天"页。好友房传 `(text) => client.chat(text)`，返回 RoomClient.chat 的结果；
+   * 收到的经 TableFun.chat 交进来。单机不给（单机没有聊天）
+   */
+  chat?(text: string): ChatResultLike;
+  /** 设置里"聊天：开 / 不看"（和"互动"分开）：不看时别人说的不冒气泡、不进记录，自己也没有聊天页；默认开 */
+  chatEnabled?(): boolean;
   /** 设置里"互动：开 / 不看"，关了别人的一律不播，单机电脑也不反应；默认开 */
   enabled?(): boolean;
   /** 屏蔽名单按这个分开（房间码；单机一个固定值），默认 'solo' */
@@ -120,6 +128,12 @@ const DEFAULT_LINES: Record<FunMood, readonly string[]> = {
 
 const HINT_TEXT = '点头像扔道具，长按连扔';
 
+/** RoomClient.chat 的结果里组件要看的部分（不 import client.ts，单机的游戏也能用组件） */
+export type ChatResultLike = { ok: true } | { ok: false; code: string; why?: ChatBlockWhy; waitMs?: number };
+
+/** 聊天：气泡停多久、页面里记最近几条（只在内存里） */
+export const CHAT_UI = { bubbleMs: 4000, keep: 30 } as const;
+
 /**
  * 首次提示冒在哪个座位（纯函数，测试直接测）：游戏给了 pick 就听它的，它给的座位空着或不存在当作"现在不行"；
  * 没给就挑第一个电脑，没有电脑挑第一个别人。null = 这会儿不提示，过一会儿再问
@@ -152,6 +166,14 @@ const CSS = `
 .atf-cool::after{content:'';position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--ak-title,#f3d98b);animation:atf-spin .7s linear infinite}
 .atf-btn{position:absolute;left:0;top:0;pointer-events:auto;min-width:44px;min-height:44px;border-radius:var(--ak-radius-btn,22px);border:2px solid var(--ak-border,#d4a64a);background:var(--ak-soft,#5a3a22);color:var(--ak-fg,#fff6e0);font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px 6px;box-sizing:border-box}
 .atf-btn svg{width:22px;height:22px}
+.atf-btn.atf-dot::after{content:'';position:absolute;right:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#e8323a;border:2px solid var(--ak-fg,#fff6e0)}
+.atf-say{white-space:normal;max-width:240px;word-break:break-all;font-weight:600}
+.atf-log{display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.4;min-height:44px}
+.atf-log b{color:var(--ak-title,#f3d98b);font-weight:700;margin-right:4px}
+.atf-log .atf-empty{opacity:.6}
+.atf-input{flex:1;min-width:0;min-height:44px;border:1px solid var(--ak-border,rgba(212,166,74,.6));border-radius:var(--ak-radius-btn,10px);background:#fffaf0;color:#2b1d14;font:inherit;font-size:16px;padding:0 10px;box-sizing:border-box}
+.atf-note{font-size:13px;margin:4px 4px 0;opacity:.85;min-height:18px}
+.atf-chip:disabled{opacity:.5;cursor:default}
 .atf-bubble{position:absolute;left:0;top:0;max-width:220px;padding:6px 12px;border-radius:var(--ak-radius,14px);background:#fffaf0;color:#2b1d14;font-size:15px;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .atf-flash{position:absolute;left:0;top:0;font-size:26px;font-weight:900;color:var(--ak-title,#f3d98b);-webkit-text-stroke:1.5px #2b1d14;pointer-events:none;white-space:nowrap}
 .atf-banner{position:absolute;left:50%;top:18%;padding:10px 34px;background:linear-gradient(#c8323a,#8a1a20);border:2px solid var(--ak-title,#f3d98b);border-radius:6px;color:var(--ak-fg,#fff6e0);font-size:28px;font-weight:900;letter-spacing:4px;text-align:center;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
@@ -163,7 +185,7 @@ const CSS = `
 const SMILE = '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle cx="32" cy="32" r="24"/><circle cx="23" cy="27" r="2.5" fill="currentColor"/><circle cx="41" cy="27" r="2.5" fill="currentColor"/><path d="M20 37Q32 49 44 37"/></svg>';
 
 type Rect = { left: number; top: number; width: number; height: number };
-type Tab = 'phrase' | 'sticker' | 'prop';
+type Tab = 'phrase' | 'sticker' | 'prop' | 'chat';
 
 /** 挂子元素（Workers 的类型里也有一个 append，签名对不上，所以统一用 appendChild） */
 function add(parent: Node, ...kids: Node[]): void {
@@ -196,6 +218,14 @@ export class TableFun {
   private lastProp: PropId = 'tomato';
   private lastSticker: StickerId = 'smug';
   private timers = new Set<ReturnType<typeof setTimeout>>();
+  /** 聊天记录（最近 CHAT_UI.keep 条，只在内存里；关页面、换房间就没了） */
+  private chatLog: { seat: number; name: string; text: string }[] = [];
+  private chatLogEl: HTMLElement | null = null;
+  /** 每个人最近的那个聊天气泡：同一个人连说两条，后一条顶掉前一条 */
+  private says = new Map<number, HTMLElement>();
+  private unread = false;
+  /** 键盘弹出时跟着可见区挪面板（输入框聚焦时挂上） */
+  private vvFix: (() => void) | null = null;
   private dead = false;
   private readonly onResize = (): void => this.refresh();
 
@@ -277,6 +307,7 @@ export class TableFun {
         b.className = 'atf-btn';
         b.type = 'button';
         b.innerHTML = `${SMILE}<span>互动</span>`;
+        b.classList.toggle('atf-dot', this.unread);
         b.addEventListener('click', (e) => {
           e.stopPropagation();
           if (this.open?.dataset['kind'] === 'panel') this.closeAll();
@@ -476,10 +507,13 @@ export class TableFun {
     if (!this.canSend() || !this.btn) return;
     this.tab = tab;
     const r = this.btn.getBoundingClientRect();
+    const hasChat = this.chatOn();
+    if (tab === 'chat' && !hasChat) tab = this.tab = 'phrase';
     const b = this.box('panel', 440, 300, r);
     const tabs = this.el('div', 'atf-row');
-    (['phrase', 'sticker', 'prop'] as Tab[]).forEach((t, i) => {
-      const c = this.chip(['短语', '表情', '道具'][i]!, `fun:tab:${t}`, () => this.openPanel(t), t === tab ? 'atf-on' : 'atf-soft');
+    const list: [Tab, string][] = [['phrase', '短语'], ['sticker', '表情'], ['prop', '道具'], ...(hasChat ? [['chat', '聊天'] as [Tab, string]] : [])];
+    list.forEach(([t, label]) => {
+      const c = this.chip(label, `fun:tab:${t}`, () => this.openPanel(t), t === tab ? 'atf-on' : 'atf-soft');
       c.style.flex = '1';
       add(tabs, c);
     });
@@ -494,6 +528,12 @@ export class TableFun {
     const body = this.el('div', 'atf-scroll');
     body.style.maxHeight = '224px';
     body.style.marginTop = '8px';
+    if (tab === 'chat') {
+      add(b, body);
+      this.chatBody(b, body);
+      this.fit(b, r, 440);
+      return;
+    }
     if (tab === 'phrase') {
       const g = this.el('div', 'atf-grid');
       g.style.gridTemplateColumns = 'repeat(3,1fr)';
@@ -530,6 +570,155 @@ export class TableFun {
   closeAll(): void {
     this.open?.remove();
     this.open = null;
+    this.chatLogEl = null;
+    this.unhookViewport();
+  }
+
+  // ───────────── 聊天（0.18.0） ─────────────
+
+  private chatOn(): boolean {
+    return !!this.o.chat && (this.o.chatEnabled?.() ?? true);
+  }
+
+  /** 聊天页：上面最近 30 条（新的在下），下面一行输入框 + 发送，再下面一行小字（还能打几个字、为什么没发出去） */
+  private chatBody(b: HTMLDivElement, body: HTMLDivElement): void {
+    this.setUnread(false);
+    // 记录自己滚，输入框一直在下面看得见
+    const log = this.el('div', 'atf-log atf-scroll');
+    log.style.maxHeight = '160px';
+    this.chatLogEl = log;
+    this.renderLog();
+    add(body, log);
+    const row = this.el('div', 'atf-row');
+    row.style.marginTop = '8px';
+    row.style.flexWrap = 'nowrap';
+    const input = this.el('input', 'atf-input');
+    input.type = 'text';
+    input.enterKeyHint = 'send';
+    input.autocomplete = 'off';
+    input.placeholder = '说点什么';
+    input.dataset['key'] = 'fun:chatInput';
+    const send = this.chip('发送', 'fun:chatSend', () => go());
+    const note = this.el('div', 'atf-note');
+    const left = (): void => {
+      const n = CHAT_MAX - Array.from(input.value.trim()).length;
+      note.textContent = n < 0 ? `多了 ${-n} 个字` : `还能打 ${n} 个字`;
+      send.disabled = n < 0 || send.dataset['wait'] === '1';
+    };
+    const go = (): void => {
+      if (!input.value.trim() || send.disabled) return;
+      const r = this.o.chat!(input.value);
+      if (r.ok) {
+        input.value = '';
+        left();
+        return;
+      }
+      note.textContent = chatRejectText(r.code, r.why);
+      if (r.code === 'chat_too_fast' && r.waitMs) this.countdown(send, r.waitMs, left);
+    };
+    input.addEventListener('input', left);
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.isComposing) go();
+    });
+    input.addEventListener('focus', () => this.hookViewport(b));
+    add(row, input, send);
+    add(body, row, note);
+    left();
+    body.style.maxHeight = '';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /** 被限速时"发送"按钮倒计时，到点恢复 */
+  private countdown(btn: HTMLButtonElement, ms: number, done: () => void): void {
+    btn.dataset['wait'] = '1';
+    btn.disabled = true;
+    const end = this.now() + ms;
+    const tick = (): void => {
+      const s = Math.ceil((end - this.now()) / 1000);
+      if (s <= 0 || !btn.isConnected) {
+        btn.textContent = '发送';
+        delete btn.dataset['wait'];
+        done();
+        return;
+      }
+      btn.textContent = `${s} 秒`;
+      this.later(Math.min(1000, end - this.now()), tick);
+    };
+    tick();
+  }
+
+  private renderLog(): void {
+    const log = this.chatLogEl;
+    if (!log) return;
+    log.replaceChildren();
+    if (this.chatLog.length === 0) add(log, this.el('div', 'atf-empty', '还没人说话。这里的话不保存，房间散了就没了'));
+    for (const m of this.chatLog) {
+      const row = this.el('div', '');
+      add(row, this.el('b', '', `${m.name}：`), this.doc.createTextNode(m.text));
+      add(log, row);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /**
+   * iOS 键盘弹出时会盖住下半屏、页面不一定跟着滚：按 visualViewport 把面板整个往上挪到键盘上面，记录区限在可见高度的 60% 以内。
+   * 只动这个面板的 top（transform 里是 placeMenu 摆的位置），收起菜单时摘掉
+   */
+  private hookViewport(b: HTMLDivElement): void {
+    const vv = window.visualViewport;
+    if (!vv || this.vvFix) return;
+    const fix = (): void => {
+      const log = this.chatLogEl;
+      if (log) log.style.maxHeight = `${Math.max(44, Math.floor(vv.height * 0.6) - 110)}px`;
+      b.style.top = '0px';
+      const r = b.getBoundingClientRect();
+      const bottom = vv.offsetTop + vv.height - 8;
+      if (r.bottom > bottom) b.style.top = `${Math.max(vv.offsetTop + 4 - r.top, bottom - r.bottom)}px`;
+    };
+    this.vvFix = fix;
+    vv.addEventListener('resize', fix);
+    vv.addEventListener('scroll', fix);
+    fix();
+  }
+
+  private unhookViewport(): void {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (this.vvFix && vv) {
+      vv.removeEventListener('resize', this.vvFix);
+      vv.removeEventListener('scroll', this.vvFix);
+    }
+    this.vvFix = null;
+  }
+
+  private setUnread(on: boolean): void {
+    this.unread = on;
+    this.btn?.classList.toggle('atf-dot', on);
+  }
+
+  /**
+   * 有人说了一句（好友房 RoomClient 的 onChat 交进来）：头像旁冒 4 秒气泡、记进聊天页。
+   * 别人说的在"聊天：不看"、被屏蔽（单个或全部屏蔽）时一律不显示；面板没开在聊天页时"互动"按钮上亮个小红点
+   */
+  chat(from: number, text: string, _masked = false): void {
+    if (this.dead || !this.o.chat) return;
+    const src = this.seat(from);
+    if (!src) return;
+    if (!src.me && (!(this.o.chatEnabled?.() ?? true) || this.isBlocked(from))) return;
+    this.chatLog.push({ seat: from, name: src.me ? '我' : src.name, text });
+    while (this.chatLog.length > CHAT_UI.keep) this.chatLog.shift();
+    this.says.get(from)?.remove();
+    const bb = this.bubble(from, text, CHAT_UI.bubbleMs, 'atf-say');
+    if (bb) this.says.set(from, bb);
+    if (this.chatLogEl) this.renderLog();
+    else if (!src.me) this.setUnread(true);
+    this.o.log?.(`聊天 ${from}`);
+  }
+
+  /** 房间拒了一条（RoomClient 的 onChatError）：聊天页开着就在小字那行说一声 */
+  chatError(code: string): void {
+    const note = this.open?.querySelector<HTMLElement>('.atf-note');
+    if (note) note.textContent = chatRejectText(code);
   }
 
   /** 有菜单或面板开着（游戏可以据此暂停自己的快捷键） */
@@ -660,19 +849,20 @@ export class TableFun {
 
   // ───────────── 小效果 ─────────────
 
-  /** 头像旁的一句话：朝屏幕中间那侧冒，2.4 秒后淡出 */
-  bubble(seat: number, text: string, ms = 2400): void {
+  /** 头像旁的一句话：朝屏幕中间那侧冒，2.4 秒后淡出；cls 加样式（聊天的气泡能折行） */
+  bubble(seat: number, text: string, ms = 2400, cls = ''): HTMLElement | undefined {
     const s = this.seat(seat);
-    if (!s) return;
-    const b = this.el('div', 'atf-bubble', text);
+    if (!s) return undefined;
+    const b = this.el('div', `atf-bubble ${cls}`.trim(), text);
     this.layer.el.appendChild(b);
-    const w = Math.min(220, b.offsetWidth || text.length * 15 + 24);
+    const w = Math.min(cls ? 240 : 220, b.offsetWidth || text.length * 15 + 24);
     const cx = s.rect.left + s.rect.width / 2;
     const right = cx < window.innerWidth / 2;
     const x = Math.max(4, Math.min(window.innerWidth - w - 4, right ? s.rect.left + s.rect.width + 6 : s.rect.left - 6 - w));
     const y = Math.max(4, s.rect.top - 6);
     b.style.transform = `translate(${x}px,${y}px)`;
     void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160).then(() => anim(b, [{ opacity: 1 }, { opacity: 0 }], 260, ms)).then(() => b.remove());
+    return b;
   }
 
   /** 头像上方冒一个字（×N、回敬！、护盾）：放大弹一下再飘走 */
@@ -749,6 +939,7 @@ export class TableFun {
 
   destroy(): void {
     this.dead = true;
+    this.unhookViewport();
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     window.removeEventListener('resize', this.onResize);

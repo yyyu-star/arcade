@@ -5,7 +5,7 @@ import { runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { roomStub } from '../src/internal.ts';
-import type { DownMsg, EmotedMsg, StateMsg } from '../src/protocol.ts';
+import type { ChattedMsg, DownMsg, EmotedMsg, StateMsg } from '../src/protocol.ts';
 import { emoteRateOf } from '../src/room.ts';
 import { advance, type Conn, freezeClock, inspect, join, openRoom, resetMeter } from './helpers.ts';
 import type { ChattyRoom, ToyView } from './worker.ts';
@@ -27,7 +27,7 @@ async function table(): Promise<{ code: string; a: Conn; b: Conn; watcher: Conn 
   return { code, a, b, watcher };
 }
 
-const emoted = (m: DownMsg<ToyView> | EmotedMsg): m is EmotedMsg => m.t === 'emote';
+const emoted = (m: DownMsg<ToyView> | EmotedMsg | ChattedMsg): m is EmotedMsg => m.t === 'emote';
 
 describe('快捷短语', () => {
   it('入座的人发：所有人（含自己、来看的）收到座位和编号；不写库、不改 seq；入站照样记数，下次写库时一起存', async () => {

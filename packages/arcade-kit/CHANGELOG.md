@@ -1,5 +1,18 @@
 # 更新日志
 
+## 0.18.0
+
+好友房打字聊天（设计 `docs/chat.md`，主线审过；`docs/social.md` 3.1 改成要做）。游戏要显式打开，不开的游戏行为完全不变。
+- **房间**：`RoomGame.chat = true` 后入座的人能发 `{ t: 'chat', text }`；房间过 `checkChat`、按座位限速（3 秒一条、一分钟 10 条，`RoomLimits.chatMs` / `chatPerMin`，`KIT_QUOTA` 可改），
+  只转发给连接时带了 `chat=1` 的连接（`{ t: 'chat', seat, text, masked? }`）。0 行存储、不改 seq、不进快照和 welcome；被拒回 `CHAT_ERRORS` 里的 code、不占条数。`welcome.chat` 带节奏和字数。
+- **过滤**（新入口 `arcade-kit/chat`，纯函数）：NFKC 规整、去零宽和方向控制符；≤ 30 个字；链接、连续 7 位以上的数字（空格、横线、中文数字拆开的也认）、微信 QQ 号样式整条拒发；
+  **标准千分位的金额放行**（1,000,000，≤ 10 位，主线审时加的），拒发提示"不能发号码，金额请写成 1,000,000"；脏话按 `chat-words.ts` 打码照发，游戏能用 `chatWords` 加词。
+- **页面**：`RoomClient` 的 `onChat`、`onChatError`、`chat(text)`（本地先挡）、`chatWait()`；`acceptJoin` 把 `chat=1` 转给房间。
+  `TableFun` 的 `chat` / `chatEnabled` 选项、`chat(seat, text)` 收、`chatError(code)`：聊天页、4 秒气泡、小红点、键盘避让。`bubble()` 多一个 `cls` 参数并返回气泡元素。
+- 平台屏蔽名单：按主线定的 B 方案，这一版只有 kit 本地屏蔽，平台 RPC 出了再接。
+- 测试：`test/chat.test.ts` 20 条（过滤的绕法和误伤、金额、打码；房间转发、旧页面收不到、限速两道、被拒不占数、chat_off、不进快照和存储、聊天代码不碰存储和钩子；`RoomClient` 本地挡和分流）。
+  反证：去掉房间的限速、不看 `chat=1` 都转发，对应测试失败。演示页截了 1280×720 和手机横屏 844×390，控制台零报错。
+
 ## 0.17.0
 
 - 牌桌互动加可选的 `hintSeat()`：首次提示"点头像扔道具，长按连扔"冒在哪个座位由游戏定，返回 null 表示现在会挡住东西（比如那家刚出的牌），组件过 2 秒再问。
