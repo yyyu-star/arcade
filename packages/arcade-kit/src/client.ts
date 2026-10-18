@@ -562,8 +562,16 @@ export interface MatchClientOptions {
   onSolo(why: MatchSoloWhy): void;
   /** 已经有一个开着的房间：带他回去（不给就当 onMatched） */
   onHasRoom?(code: string): void;
+  /** 排队最多等多久（毫秒，和排队那边的 waitMs 一样，默认 15 秒）：没收到人数推送时，兜底计时按它算 */
+  waitMs?: number;
   WebSocketImpl?: { new (url: string): WebSocketLike };
 }
+
+/**
+ * 兜底（安全审阅 0.20.0）：排队那边到点了还没给结果（平台、房间卡住，或者连接静默死掉），再多等这么久就自己转单机（unavailable），
+ * 不让页面一直停在"等待中"
+ */
+export const MATCH_GRACE_MS = 10_000;
 
 /** 转单机时给玩家看的话（游戏可以换掉个别措辞） */
 export const MATCH_TEXT: Record<MatchSoloWhy, string> = {
@@ -582,11 +590,13 @@ export const MATCH_TEXT: Record<MatchSoloWhy, string> = {
 export class MatchClient {
   private ws: WebSocketLike | null = null;
   private done = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly opts: MatchClientOptions) {}
 
   start(): void {
     if (this.ws || this.done) return;
+    this.arm((this.opts.waitMs ?? 15_000) + MATCH_GRACE_MS);
     const Impl = this.opts.WebSocketImpl ?? (globalThis.WebSocket as unknown as { new (url: string): WebSocketLike });
     const ws = new Impl(this.opts.url);
     this.ws = ws;
@@ -599,7 +609,9 @@ export class MatchClient {
         return;
       }
       if (m.t === 'waiting') {
-        if (!this.done) this.opts.onWaiting?.(m.n, m.seats, m.left);
+        if (this.done) return;
+        this.arm(m.left + MATCH_GRACE_MS);
+        this.opts.onWaiting?.(m.n, m.seats, m.left);
       } else if (m.t === 'matched') this.end(() => this.opts.onMatched(m.code));
       else if (m.t === 'has_room') this.end(() => (this.opts.onHasRoom ?? this.opts.onMatched)(m.code));
       else if (m.t === 'solo') this.end(() => this.opts.onSolo(m.why));
@@ -614,6 +626,7 @@ export class MatchClient {
   /** 不排了（"取消"或"不等了，和电脑打"）：关掉连接，之后不再回调 */
   cancel(): void {
     this.done = true;
+    this.disarm();
     const ws = this.ws;
     this.ws = null;
     try {
@@ -626,8 +639,28 @@ export class MatchClient {
   private end(fn: () => void): void {
     if (this.done) return;
     this.done = true;
+    this.disarm();
     this.ws = null;
     fn();
+  }
+
+  /** 到点还没有结果：关掉连接，自己转单机 */
+  private arm(ms: number): void {
+    this.disarm();
+    this.timer = setTimeout(() => {
+      const ws = this.ws;
+      this.end(() => this.opts.onSolo('unavailable'));
+      try {
+        ws?.close(1000, 'no answer');
+      } catch {
+        // 已经关了
+      }
+    }, Math.max(0, ms));
+  }
+
+  private disarm(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
   }
 }
 

@@ -110,7 +110,7 @@ export class RoomMeter extends DurableObject<MeterEnv> {
 
   /**
    * 一张桌给几个人一起占名额（0.20.0，快速匹配）：要么都占上，要么一个都不占，占不上的回第一个被挡的人。
-   * 全站开房数只记 1（一张桌一个房间）；写入是每人 1 行加当天 1 行
+   * 全站开房数只记 1（一张桌一个房间）。一次写 1 + 人数 行（每人那一行加当天那一行），写在计量里、记进当天的数，不算房间的"每步 ≤ 2 行"
    */
   async kitReserveMany(userIds: readonly string[], code: string, until: number): Promise<ReserveMany> {
     const now = Date.now();
@@ -139,8 +139,11 @@ export class RoomMeter extends DurableObject<MeterEnv> {
     return this.kitReleaseMany([userId], code, writes, cancel);
   }
 
-  /** 一张桌的几个人一起还（0.20.0）。全站开房数在 cancel 时只退 1 */
-  async kitReleaseMany(userIds: readonly string[], code: string, writes: number, cancel = false): Promise<MeterLevel> {
+  /**
+   * 一张桌的几个人一起还（0.20.0）。cancel：开房次数也退回；room：全站开房数也退 1（默认跟着 cancel：整桌没建成）。
+   * 匹配桌开打时没来的人（0.20.0）是 cancel 但不退全站数：桌子开成了，只是他的那一份退给他
+   */
+  async kitReleaseMany(userIds: readonly string[], code: string, writes: number, cancel = false, room = cancel): Promise<MeterLevel> {
     const now = Date.now();
     const day = this.day(now);
     let w = 0;
@@ -154,7 +157,7 @@ export class RoomMeter extends DurableObject<MeterEnv> {
       if (cancel && user.count > 0) user.count--;
       w += this.saveUser(id, user);
     }
-    const rooms = cancel && found ? Math.max(0, day.rooms - 1) : day.rooms;
+    const rooms = room && found ? Math.max(0, day.rooms - 1) : day.rooms;
     const total = day.writes + clean(writes) + w + 1;
     this.saveDay(day.day, total, rooms);
     return levelOf(total, this.limits());

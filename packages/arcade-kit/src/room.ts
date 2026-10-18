@@ -364,8 +364,11 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   lastStepFailed = false;
   /** 写了还没报给计量的行数 */
   private unmetered = 0;
-  /** 这一步做完以后要还的名额（打完、关房；房主一个人，匹配桌是排进来的每个人），entry 最后去找计量 */
-  private release: { users: string[]; code: string } | null = null;
+  /**
+   * 这一步做完以后要还的名额（打完、关房；房主一个人，匹配桌是排进来的每个人），entry 最后去找计量。
+   * refund：匹配桌开打时没来的人（0.20.0），连当天的开房次数一起退给他（全站开房数不退，桌子开成了）
+   */
+  private release: { users: string[]; code: string; refund?: true } | null = null;
   /** 计量最近一次说的门槛（内存；被驱逐就重新问） */
   private level: { value: MeterLevel; at: number } | null = null;
   /** 计量连不上时，什么时候再试着报数 */
@@ -629,7 +632,9 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       this.release = null;
       this.unmetered = 0;
       try {
-        const level = release ? await meter.kitReleaseMany(release.users, release.code, n) : await meter.kitReport(n);
+        const level = release
+          ? await meter.kitReleaseMany(release.users, release.code, n, release.refund === true, false)
+          : await meter.kitReport(n);
         this.level = { value: level, at: Date.now() };
         this.meterRetryAt = 0;
       } catch (e) {
@@ -1017,7 +1022,17 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private beginPlay(st: Persist<S>, now: number, checked?: { opts: O | undefined; count: number }): { state: S | null; delay: number }[] {
     const { opts, count } = checked ?? { opts: st.opts as O | undefined, count: this.countOf(st.opts as O | undefined) };
     st.seats = st.seats.map((s, i) => (s.kind === 'empty' && i < count ? aiSeat() : s));
-    if (st.match) for (const s of st.seats) if (s.kind === 'human' && s.awaySince !== null) s.auto = true;
+    if (st.match) {
+      const absent: string[] = [];
+      for (const s of st.seats) {
+        if (s.kind !== 'human' || s.awaySince === null) continue;
+        s.auto = true;
+        absent.push(s.userId!);
+      }
+      // 没来的人（关了页面、网断了）：他的开房名额和当天次数退给他，不然白扣一个、还被 has_room 卡到这桌打完。
+      // 他后来回来照样能接着打这个座位（座位还绑着他）
+      if (absent.length) this.release = { users: absent, code: st.code, refund: true };
+    }
     st.owners = st.seats.map((s) => (s.kind === 'human' ? s.userId : null));
     st.rulesVersion = this.game.rulesVersion;
     st.game = this.begin(st.code, { opts, seats: st.seats.map((s) => s.kind) });

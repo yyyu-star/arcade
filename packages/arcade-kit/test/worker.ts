@@ -209,12 +209,19 @@ export class FlakyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
 export class ToyQueue extends MatchQueue<Env> {
   protected readonly seats = 4;
   protected override readonly perHour = 5;
+  protected override readonly callMs = 300;
   fakeBlocks: [string, string][] | null = [];
+  /** 为真时屏蔽名单、建房都一直不回（测凑桌的超时） */
+  hang: { blocks?: boolean; create?: boolean } = {};
   protected override tableSize(tier: string): number {
     return tier === 'duo' ? 2 : this.seats;
   }
   protected override blockedAmong(ids: string[]): Promise<[string, string][]> {
+    if (this.hang.blocks) return new Promise(() => {});
     return this.fakeBlocks ? Promise.resolve(this.fakeBlocks) : super.blockedAmong(ids);
+  }
+  protected override createMatchRoom(...a: Parameters<MatchQueue<Env>['createMatchRoom']>) {
+    return this.hang.create ? new Promise<never>(() => {}) : super.createMatchRoom(...a);
   }
 }
 

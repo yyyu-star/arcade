@@ -428,6 +428,7 @@ const mc = new MatchClient({
 mc.start(); // "取消""不等了"都是 mc.cancel()
 ```
 
+- 档位配置在游戏自己的测试里查一遍：`expect(matchConfigErrors(game, tiers, tableSizeOf, roomOptionsOf)).toEqual([])`（`arcade-kit/game`），对不上的话线上每桌都会转单机。
 - 房间不用改：匹配桌是普通的 `GameRoom`，排进来的人建房时已经坐好，人到齐（或等满 `RoomLimits.matchJoinMs`，默认 20 秒）自动开打，没来的电脑代打、来了交还；
   只有排进来的人能进（别人 4004），`start` 回 `not_host`。两个真人要坐特定座位（比如对家）的，房间类覆盖 `matchSeats(n, count)`。
 - 额度：每张匹配桌每个真人占一个开房名额，和好友房共用 `dailyRoomsPerUser`（默认每天 6 个，游戏 `vars.KIT_QUOTA` 里改）；入队前就问计量，用完了直接 `solo: daily_limit`。

@@ -156,6 +156,36 @@ describe('排队', () => {
     });
   });
 
+  it('平台的屏蔽名单卡住：等 callMs 就按没有屏蔽凑桌（安全审阅）', async () => {
+    await runInDurableObject(queueStub('duo'), (q: ToyQueue) => {
+      q.hang = { blocks: true };
+    });
+    const w1 = await enqueue('duo', 'w1');
+    const w2 = await enqueue('duo', 'w2');
+    const [x, y] = await Promise.all([matchedCode(w1), matchedCode(w2)]);
+    expect(x).toBe(y);
+    await runInDurableObject(queueStub('duo'), (q: ToyQueue) => {
+      q.hang = {};
+    });
+  });
+
+  it('房间卡住：这一桌转单机（unavailable），锁放开，后来的人照常拿到连接、能凑桌', async () => {
+    await runInDurableObject(queueStub('duo'), (q: ToyQueue) => {
+      q.hang = { create: true };
+    });
+    const x1 = await enqueue('duo', 'x1');
+    const x2 = await enqueue('duo', 'x2');
+    expect(await result(x1)).toEqual({ t: 'solo', why: 'unavailable' });
+    expect(await result(x2)).toEqual({ t: 'solo', why: 'unavailable' });
+    await runInDurableObject(queueStub('duo'), (q: ToyQueue) => {
+      q.hang = {};
+    });
+    const x3 = await enqueue('duo', 'x3');
+    const x4 = await enqueue('duo', 'x4');
+    const [a, b] = await Promise.all([matchedCode(x3), matchedCode(x4)]);
+    expect(a).toBe(b);
+  });
+
   it('排队连接只收不发：发东西就断开', async () => {
     const c = await enqueue('four', 'm1');
     c.send({ t: 'hi' });
@@ -209,6 +239,10 @@ describe('匹配桌', () => {
     const q2 = st.seats.findIndex((s: { userId: string | null }) => s.userId === 'q2');
     expect(st.seats[q2]).toMatchObject({ kind: 'human', auto: true });
     expect(st.owners[q2]).toBe('q2');
+    // 没来的人：开打那一刻名额和当天次数都退给他（不白扣、不被 has_room 卡住）；来了的人照常占着
+    await vi.waitFor(async () => expect((await meter().kitPeek('q2')).room).toBeNull());
+    expect((await meter().kitPeek('q1')).room).toBe(code);
+    expect((await meter().kitUsage()).rooms).toBe(1);
     const { conn: back, welcome } = (await join(code, 'q2')) as { conn: Conn; welcome: WelcomeMsg<ToyView> };
     open.push(back);
     expect(welcome.you.seat).toBe(q2);

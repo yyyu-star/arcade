@@ -37,6 +37,11 @@ const CODE_TRIES = 5;
 const FORM_ROUNDS = 8;
 /** 平台屏蔽名单一次最多问几个人（平台 blockedAmong 的上限，德州 9 人桌） */
 const BLOCK_MAX = 9;
+/**
+ * 凑桌时找平台、找房间最多等多久（毫秒，安全审阅 0.20.0）：凑桌持着"正在凑"的锁，平台或房间卡住时整个档位都会一直"等待中"。
+ * 超时的屏蔽名单按空的算，建房按 unavailable（这一桌的人转单机）
+ */
+export const MATCH_CALL_MS = 3_000;
 
 export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends DurableObject<Env> {
   /** 一桌最多几个真人（凑满就开）。按档位不同的游戏覆盖 tableSize */
@@ -47,6 +52,8 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
   protected readonly maxQueue: number = 200;
   /** 每人每小时最多排几次，超了 4029（内存里记，被驱逐就清零，接受） */
   protected readonly perHour: number = 30;
+  /** 凑桌时找平台、找房间最多等多久（毫秒，见 MATCH_CALL_MS） */
+  protected readonly callMs: number = MATCH_CALL_MS;
 
   /** 这个档位一桌最多几个真人；默认 seats */
   protected tableSize(_tier: string): number {
@@ -72,6 +79,12 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
       console.error('blockedAmong failed, matching without it', e instanceof Error ? e.message : e);
       return [];
     }
+  }
+
+  /** 开一张匹配桌（房间的 kitCreateMatch）。游戏不用覆盖；kit 的测试用它模拟房间卡住 */
+  protected createMatchRoom(code: string, players: Identity[], opts: unknown): Promise<MatchOutcome> {
+    const stub = roomStub(this.env.ROOM, code) as unknown as { kitCreateMatch(code: string, players: Identity[], opts?: unknown): Promise<MatchOutcome> };
+    return stub.kitCreateMatch(code, players, opts);
   }
 
   /** 现在设着的闹钟；undefined 是还不知道，用前 getAlarm() 读 */
@@ -103,12 +116,15 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
     this.ctx.acceptWebSocket(server);
     const done = new Response(null, { status: 101, webSocket: client });
     const now = Date.now();
-    const others = this.sockets().filter((o) => o !== server);
+    // 只数还排着的（附件还在）：已经出队、正在关的连接不占队长
+    const others = this.waiting().filter((o) => o !== server);
     const mine = others.filter((o) => waiterOf(o)?.userId === me.userId);
     if (others.length - mine.length >= this.maxQueue) {
       server.close(CLOSE.tryLater, 'queue full');
       return done;
     }
+    // 一小时前的旧条目顺手清掉（排过一次就走的人不能让这张表一直涨）
+    for (const [u, ts] of this.hourly) if (now - ts[ts.length - 1]! >= 3_600_000) this.hourly.delete(u);
     const times = (this.hourly.get(me.userId) ?? []).filter((t) => now - t < 3_600_000);
     if (times.length >= this.perHour) {
       this.hourly.set(me.userId, times);
@@ -120,7 +136,8 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
     // 同一个人只排一次：旧的那条让位
     for (const o of mine) this.drop(o, CLOSE.replaced, 'replaced');
     server.serializeAttachment({ userId: me.userId, name: me.name, since: now, tier } satisfies Waiter);
-    await this.form();
+    // 先回 101 再凑桌：凑桌要找平台、房间，不能让新来的人连连接都拿不到
+    this.ctx.waitUntil(this.form());
     return done;
   }
 
@@ -189,7 +206,10 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
     const size = Math.max(1, Math.min(this.tableSize(tier), BLOCK_MAX));
     const due = Date.now() >= list[0]!.me.since + this.waitMs;
     if (list.length < size && !due) return false;
-    const blocks = await this.blockedAmong(list.slice(0, BLOCK_MAX).map((w) => w.me.userId));
+    const blocks = await withTimeout(this.blockedAmong(list.slice(0, BLOCK_MAX).map((w) => w.me.userId)), this.callMs).catch((e: unknown) => {
+      console.error('blockedAmong timed out, matching without it', e instanceof Error ? e.message : e);
+      return [] as [string, string][];
+    });
     const chosen: typeof list = [];
     for (const w of list.slice(0, BLOCK_MAX)) {
       if (chosen.length >= size) break;
@@ -208,9 +228,8 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
     let code = '';
     for (let i = 0; i < CODE_TRIES; i++) {
       code = newRoomCode();
-      const stub = roomStub(this.env.ROOM, code) as unknown as { kitCreateMatch(code: string, players: Identity[], opts?: unknown): Promise<MatchOutcome> };
       try {
-        out = await stub.kitCreateMatch(code, players, this.roomOptions(tier));
+        out = await withTimeout(this.createMatchRoom(code, players, this.roomOptions(tier)), this.callMs);
       } catch (e) {
         console.error('kitCreateMatch failed', e instanceof Error ? e.message : e);
         out = { r: 'unavailable' };
@@ -244,13 +263,18 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
       }
       return true;
     }
-    // 房间那边出错、选项不对：这一轮的人转单机，不让他们一直等
-    console.error('match room not created', out.r);
+    // 房间那边出错、超时、选项不对：这一轮的人转单机，不让他们一直等。
+    // bad / bad_options 是游戏配错了（tableSize 比这一局的座位多、roomOptions 过不了 RoomGame.options），每桌都会这样：
+    // 大声记日志；游戏在自己的测试里用 game.ts 的 matchConfigErrors 先查
+    if (out.r === 'bad' || out.r === 'bad_options') console.error(`MatchQueue misconfigured for tier ${tier}: room said ${out.r} (check tableSize / roomOptions with matchConfigErrors)`);
+    else console.error('match room not created', out.r);
     for (const c of chosen) {
       const ws = sockOf(c.me.userId);
       if (ws) this.solo(ws, 'unavailable');
     }
-    return true;
+    // 房间那边不好（超时、出错）：这一次不接着凑，剩下的人等下一次闹钟，不让锁一直被连着的超时占着
+    this.again = false;
+    return false;
   }
 
   /** 只往早了调闹钟：最早那个人等够的时刻 */
@@ -331,4 +355,17 @@ function send(ws: WebSocket, msg: MatchDownMsg): void {
   } catch {
     // 连接正在关
   }
+}
+
+/**
+ * 等一个外部调用最多 ms 毫秒，超时抛错（调用方按失败处理）。只在凑桌这一次请求里等，不是房间的状态计时，
+ * 所以用运行时的 scheduler.wait（不是 setTimeout、也不占那一个闹钟）
+ */
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  // 超时以后原来的调用照样可能失败：先接住它的错，免得变成没人处理的 rejection
+  const settled = p.then((v) => ({ ok: true as const, v }), (e: unknown) => ({ ok: false as const, e }));
+  const out = await Promise.race([settled, scheduler.wait(ms).then(() => null)]);
+  if (out === null) throw new Error(`timed out after ${ms} ms`);
+  if (!out.ok) throw out.e;
+  return out.v;
 }

@@ -1,6 +1,6 @@
 /** 浏览器连接器（4.5）：退避加抖动、哪些关闭码不重连、切回前台马上连、seq 去重、没确认的操作重发。用假的 WebSocket 和计时器。 */
 import { describe, expect, it, vi } from 'vitest';
-import { backoffMs, CONNECT_MS, MatchClient, PONG_WAIT_MS, RoomClient, STALL_GRACE_MS, STALL_JITTER_MS, type WebSocketLike } from '../src/client.ts';
+import { backoffMs, CONNECT_MS, MATCH_GRACE_MS, MatchClient, PONG_WAIT_MS, RoomClient, STALL_GRACE_MS, STALL_JITTER_MS, type WebSocketLike } from '../src/client.ts';
 import type { DownMsg } from '../src/protocol.ts';
 
 class FakeWs implements WebSocketLike {
@@ -497,5 +497,29 @@ describe('MatchClient（0.20.0）', () => {
     ws.push({ t: 'matched', code: '123456' });
     ws.drop(1000);
     expect(got).toEqual([]);
+  });
+});
+
+describe('MatchClient 兜底（0.20.0 安全审阅）', () => {
+  it('排队那边到点了还没给结果：再等 MATCH_GRACE_MS 就自己转单机、关掉连接；人数推送会把兜底往后挪', () => {
+    vi.useFakeTimers();
+    try {
+      FakeWs.all = [];
+      const got: unknown[] = [];
+      const c = new MatchClient({ url: 'wss://x/m', waitMs: 15_000, onMatched: () => got.push('matched'), onSolo: (w) => got.push(w), WebSocketImpl: FakeWs });
+      c.start();
+      const ws = FakeWs.all[0]!;
+      vi.advanceTimersByTime(20_000);
+      ws.push({ t: 'waiting', n: 2, seats: 4, left: 9_000 });
+      vi.advanceTimersByTime(9_000 + MATCH_GRACE_MS - 1);
+      expect(got).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(got).toEqual(['unavailable']);
+      expect(ws.readyState).toBe(3);
+      ws.push({ t: 'matched', code: '123456' });
+      expect(got).toEqual(['unavailable']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
