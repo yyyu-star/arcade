@@ -351,9 +351,7 @@ async function smokeDesktop(browser: Browser): Promise<void> {
   await shot(ctx, '06-table-played');
 
   // 单机互动（0.7.1；0.11.0 按 docs/table-fun.md）：点阿强的头像扔个番茄，看到播出来；电脑回不回、怎么回按性格（随机），只记下来。
-  // 1280×720 上 kit 0.19 的电脑聊天框四个角都放不下，摆在左上角盖住了阿强的头像（0.24.0 起）：先像玩家一样点"收起"。
-  // kit 0.20.0 起四个角都会压到东西时默认就收着，升级后这一步可以去掉
-  if ('chat:fold' in (await controls(ctx))) await click(ctx, 'chat:fold');
+  // 1280×720 上电脑版聊天框四个角都放不下时 kit 0.20.0 起默认收着，不再盖住阿强的头像（0.24.0 时要先点"收起"）
   await click(ctx, 'fun:seat3');
   await until(ctx, '头像菜单', "'fun:prop0' in g.controls()");
   await click(ctx, 'fun:prop0');

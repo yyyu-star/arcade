@@ -111,6 +111,11 @@ export interface Settings {
   taunts: boolean;
   /** 聊天开 / 不看（好友房 0.22.0、单机 0.23.0，和"互动"分开：有人想关掉嘲讽但想看朋友说话）：不看时别人说的不冒气泡、不进记录，自己也没有聊天页 */
   chat: boolean;
+  /**
+   * 快速匹配桌上和陌生人打字聊天（0.26.0，kit docs/match.md 第 5 节，默认开）：关掉时进匹配桌不带 chat=1，房间不给这条连接转聊天、自己也发不了。
+   * 好友房、单机只看上面的 chat。开放公开注册时重新评估默认值
+   */
+  strangerChat: boolean;
   /** 娱乐单机的局长（0.25.0）：短局打到 10、完整打过 A；记住上次选的，快速开始按它开 */
   length: GameLength;
 }
@@ -129,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   counter: true,
   taunts: true,
   chat: true,
+  strangerChat: true,
   length: 'short',
 };
 

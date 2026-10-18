@@ -306,7 +306,7 @@ export class TableScene extends Phaser.Scene {
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
       // 手机上的"聊天"按钮放顶栏左边（"大厅"和邀请后面的空处）：牌桌左下已经挤着我的头像、"互动"和"理牌"，
       // kit 默认挨着"互动"放会把我自己的气泡挤到按钮底下（kit 0.19.0 截图）
-      chatButton: () => (seated() ? this.worldRect(126 + (net ? lp + 16 : 0) + 12, 4, lp, Math.max(48, mh)) : null),
+      chatButton: () => (seated() ? this.worldRect(126 + (this.inviteBtn ? lp + 16 : 0) + 12, 4, lp, Math.max(48, mh)) : null),
       // 弹幕只在左右两家之间、对家名牌下沿到"轮到你"那行提示（BUTTON_Y - 50）上面飘：手机横屏上下都挤，横穿整屏一定会压到左右两家的名牌
       danmakuArea: () => {
         const [l, r, t] = [this.seats[3]!, this.seats[1]!, this.seats[2]!];
@@ -329,7 +329,8 @@ export class TableScene extends Phaser.Scene {
           audio.sfx('taunt');
           this.fun?.chat(ME, t, masked);
         }),
-      chatEnabled: () => getSettings().chat,
+      // 陌生人桌（快速匹配）设置"聊天"选了"不和陌生人"的：这条连接没带 chat=1，收不到也发不了，聊天页整个不给
+      chatEnabled: () => getSettings().chat && (net?.chatOn ?? true),
       scope: () => net?.code ?? 'solo',
       localBots: !net,
       moodLines: MOOD_LINES,
@@ -462,7 +463,8 @@ export class TableScene extends Phaser.Scene {
     // 好友房开打以后也能叫朋友（0.6.1）：紧挨"大厅"，中途进来的人接管电脑的座位
     const net = this.net;
     const lp = Math.max(56, minHit());
-    this.inviteBtn = net ? iconButton(this, 126 + lp / 2 + 8, 28, 'invite', () => void openInvitePanel(net.code), 46) : null;
+    // 快速匹配的桌（0.26.0）只给排到的人进，不摆邀请
+    this.inviteBtn = net && !net.match ? iconButton(this, 126 + lp / 2 + 8, 28, 'invite', () => void openInvitePanel(net.code), 46) : null;
     if (this.inviteBtn) {
       setHit(this.inviteBtn, lp, deep);
       c.add(this.inviteBtn);
@@ -673,6 +675,11 @@ export class TableScene extends Phaser.Scene {
     if (net) return this.leaveRoom();
     this.cancelBot();
     this.scene.start('title');
+  }
+
+  /** 分享卡上的链接带不带房间码：匹配桌别人拿着码也进不去（kit 0.20.0 只放排到的人），不带 */
+  private shareRoom(): string | null {
+    return this.net && !this.net.match ? this.net.code : null;
   }
 
   /**
@@ -1818,7 +1825,7 @@ export class TableScene extends Phaser.Scene {
     this.logMatch();
     const titles = matchTitles(this.matchLog);
     // 分享（art-v3）：按钮行正中带字的"晒战绩"，不再是右上角一个小图标
-    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null, goal }, awards, 200);
+    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.shareRoom(), goal }, awards, 200);
     if (titles.length && !awards) b.add(text(this, 0, 114, titles.map((t) => this.titleLine(t, false)).join('    '), { size: TYPE.small, bold: true, color: COLOR.redDark }));
     if (this.net && watch) {
       // 旁观的人：看完结果回首页（"再来一场"是这一桌的人一起换房间，不带旁观的）
@@ -1827,7 +1834,8 @@ export class TableScene extends Phaser.Scene {
     }
     if (this.net) {
       // 好友房不计战绩。再来一场（0.6.2）：开个新房间，这一桌的人自动跟过去、坐回原来的座位
-      const tip = text(this, 0, 74, '好友房不计战绩 · 点"再来一场"，这一桌一起换到新房间', { size: TYPE.label, color: COLOR.ink });
+      // 匹配桌（0.26.0）也能再来一场：这一桌的人一起换到一个新开的好友房
+      const tip = text(this, 0, 74, `${this.net.match ? '匹配桌' : '好友房'}不计战绩 · 点"再来一场"，这一桌一起换到新房间`, { size: TYPE.label, color: COLOR.ink });
       b.add(tip);
       b.setData('againTip', tip);
       const home = new Button(this, -230, 170, 200, 64, '回首页', 'wood', () => this.leaveRoom(), 'back');
@@ -2026,7 +2034,7 @@ export class TableScene extends Phaser.Scene {
     if (awards) this.addAwards(b, -72, awards);
     b.add(text(this, 0, top - 196, `好友房实盘 · ${TIER_NAME[ns.tier]}`, { size: TYPE.label, bold: true, color: COLOR.muted }));
     // 没带上的人（不计输赢）没有可分享的
-    if (!watch && me.paid === 'yes') this.addShare(b, 340, top - 210, { kind: 'stake', tier: ns.tier, points: me.points, chips: me.points * pv, deals: ns.deals, room: this.net?.code ?? null }, awards);
+    if (!watch && me.paid === 'yes') this.addShare(b, 340, top - 210, { kind: 'stake', tier: ns.tier, points: me.points, chips: me.points * pv, deals: ns.deals, room: this.shareRoom() }, awards);
     const head = watch ? '这一场打完了' : me.paid !== 'yes' ? '这一场不计输赢' : me.points === 0 ? '这场打平，0 分' : `这场 ${signed(me.points)} 分，${signed(me.points * pv)}`;
     b.add(text(this, 0, top - 148, head, { size: TYPE.big, bold: true, color: me.paid === 'yes' && me.points > 0 ? COLOR.red : COLOR.ink }));
     const why = v.phase === 'gameOver' ? `${this.side(v.winner)}先过了 A，这一场提前结束` : ns.deals >= ROOM_DEALS ? `打满 ${ROOM_DEALS} 副` : '这一场提前结束';

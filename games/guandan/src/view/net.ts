@@ -19,7 +19,7 @@ import type { TierId } from '../stake/index.ts';
 import { seatIdentity, setSeatIdentities, setWatching, type SeatIdentity } from './labels.ts';
 import type { BotStyle, TableSession } from './session.ts';
 import { QUOTA_TEXT } from './quota-text.ts';
-import { KEYS, rawStore } from './store.ts';
+import { KEYS, getSettings, rawStore } from './store.ts';
 import { GUEST_ID, lobbyName, standalone, withNick } from './platform.ts';
 
 export { QUOTA_TEXT };
@@ -43,6 +43,8 @@ export interface SavedRoom {
   at: number;
   /** 是谁的房间（平台 /api/me 的 user.id）；进房后才问得到，问到之前是 null。同一台设备换了账号就不能给新账号看（host 也不能被带走） */
   userId: string | null;
+  /** 快速匹配排到的桌（0.26.0）：刷新接回去时也按设置"聊天：不和陌生人"决定带不带 chat=1 */
+  match?: true;
 }
 /** 房间最长活 8 小时（worker/room.ts 的 maxLifeMs），超过就不提"回到房间"了 */
 const ROOM_LIFE_MS = 8 * 3_600_000;
@@ -224,6 +226,8 @@ export interface NetSessionDeps {
   whoAmI?: () => Promise<string | null>;
   setTimer?: RoomClientOptions<NetView>['setTimer'];
   clearTimer?: RoomClientOptions<NetView>['clearTimer'];
+  /** 快速匹配排到的桌（0.26.0）：不给就看本机记着的这个房间是不是 */
+  match?: boolean;
 }
 
 export class NetSession implements TableSession {
@@ -231,6 +235,10 @@ export class NetSession implements TableSession {
   autoplay = false;
   lastEvents: GameEvent[] = [];
   readonly code: string;
+  /** 进房时就知道是快速匹配排到的桌（房间信息到之前用） */
+  private readonly matched: boolean;
+  /** 这条连接收不收发打字聊天：陌生人桌按进房那一刻的设置（中途改了下次进房生效，连接上的 chat=1 改不了），别的都收（设置里"聊天"另算） */
+  readonly chatOn: boolean;
   /** 这个房间是我开的（只有房主能开局；房间不下发谁是房主） */
   readonly host: boolean;
   /** 我的真实座位；没坐下为 null */
@@ -268,7 +276,10 @@ export class NetSession implements TableSession {
     this.host = host;
     this.whoAmI = deps.whoAmI ?? (() => currentUserId());
     const prev = savedRoom()?.code === code ? savedRoom() : null;
-    rawStore.write(KEYS.room, { code, host, at: prev?.at ?? Date.now(), userId: prev?.userId ?? null } satisfies SavedRoom);
+    this.matched = deps.match ?? prev?.match === true;
+    rawStore.write(KEYS.room, { code, host, at: prev?.at ?? Date.now(), userId: prev?.userId ?? null, ...(this.matched ? { match: true as const } : {}) } satisfies SavedRoom);
+    // 陌生人桌（快速匹配）看设置"聊天"选没选"不和陌生人"（strangerChat 为假）：选了就不给 onChat，kit 进房不带 chat=1，房间不转聊天给这条连接（kit docs/match.md 第 5 节）
+    this.chatOn = !this.matched || getSettings().strangerChat;
     this.client =
       deps.client ??
       new RoomClient<NetAction, NetView>({
@@ -280,7 +291,7 @@ export class NetSession implements TableSession {
         // detail："画面座位:编号" 或 "画面座位:编号:画面对象座位"
         // "说话人:编号:对象:电脑"（画面座位；没对象是空串，电脑发的末尾是 1）
         // 聊天（kit 0.18.0）：文字里可能有冒号，不走 emit 的字符串，直接交给牌桌挂的 chatSink（座位换成画面上的）
-        onChat: (seat, text, masked) => this.chatSink?.(rotation(this.mySeat ?? 0).seat(seat), text, masked),
+        ...(this.chatOn ? { onChat: (seat: number, text: string, masked: boolean) => this.chatSink?.(rotation(this.mySeat ?? 0).seat(seat), text, masked) } : {}),
         onChatError: (code) => this.chatErrorSink?.(code),
         onEmote: (seat, id, to, bot) => {
           const r = rotation(this.mySeat ?? 0);
@@ -290,6 +301,11 @@ export class NetSession implements TableSession {
         ...(deps.setTimer ? { setTimer: deps.setTimer } : {}),
         ...(deps.clearTimer ? { clearTimer: deps.clearTimer } : {}),
       });
+  }
+
+  /** 快速匹配的桌（kit 0.20.0 的 RoomInfo.match）：没有房间码、邀请、房主开局，人到齐自动开打 */
+  get match(): boolean {
+    return this.room ? this.room.match === true : this.matched;
   }
 
   /** 平台暂时不可用（1013）：连不上不是玩家的网络问题，别让他去查网络 */

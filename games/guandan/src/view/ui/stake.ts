@@ -5,7 +5,7 @@
  */
 import type Phaser from 'phaser';
 import { SOLO_LEVELS, type SoloLevel } from '../../ai/venue.ts';
-import { SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
+import { ROOM_DEALS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
 import { COLOR, TYPE, phoneType } from '../theme.ts';
@@ -20,13 +20,14 @@ function reg(m: Modal, key: string, b: Button): Button {
 
 /**
  * 娱乐选难度：上面一排选局长（短局打到 10 / 完整打过 A，0.25.0），下面新手 / 普通 / 高手每档一行（电脑多强、一局多久、适合谁）；
- * 当前设置的那档描金边，时间那行跟着局长换
+ * 当前设置的那档描金边，时间那行跟着局长换。给了 onMatch 右下角还有"快速匹配"（0.26.0：和真人打，娱乐好友房的规则，打过 A）
  */
 export function openLevelPicker(
   scene: Phaser.Scene,
   current: SoloLevel,
   length: GameLength,
   onPick: (level: SoloLevel, length: GameLength) => void,
+  onMatch?: () => void,
 ): Modal {
   const m = modal(scene, 900, 500);
   const b = m.body;
@@ -69,17 +70,42 @@ export function openLevelPicker(
     b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250, align: 'left' }));
     reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play'));
   });
-  b.add(text(scene, 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
+  b.add(text(scene, onMatch ? -120 : 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
+  if (onMatch) reg(m, 'match', new Button(scene, 300, 210, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite'));
   return m;
 }
 
-/** 选档位：每档一份多少、电脑多强、一场多久、最多赢 / 最多输；钱包不够的灰掉，钱包连不上整个灰掉。进场成功交给 onStarted */
-export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSession) => void): Modal {
+/**
+ * 选档位：每档一份多少、电脑多强、一场多久、最多赢 / 最多输；钱包不够的灰掉，钱包连不上整个灰掉。进场成功交给 onStarted。
+ * 给了 onMatch 右上角多一个"和电脑 / 快速匹配"（0.26.0）：切到匹配时每档的按钮变"匹配"、时间那行换成好友房实盘的副数，点了交给 onMatch（带入由房间开打时办）
+ */
+export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSession) => void, onMatch?: (tier: TierId) => void): Modal {
   const m = modal(scene, 940, 600);
   const b = m.body;
   b.add(text(scene, 0, -250, '选档位', { size: TYPE.title, bold: true, color: COLOR.redDark }));
-  const balance = text(scene, 0, -208, '正在看钱包…', { size: TYPE.body, bold: true, color: COLOR.ink });
+  // 有匹配时钱包靠左、右边放切换
+  const balance = text(scene, onMatch ? -400 : 0, -208, '正在看钱包…', { size: TYPE.body, bold: true, color: COLOR.ink, ...(onMatch ? { ox: 0 } : {}) });
   b.add(balance);
+  let matching = false;
+  const times: Phaser.GameObjects.Text[] = [];
+  const timeOf = (): string => (matching ? `${ROOM_DEALS} 副 · ${STAKE_TEXT.matchWho}` : `${SOLO_DEALS} 副 · ${TIER_CARD.time}`);
+  if (onMatch) {
+    const seg = segmented(
+      scene,
+      205,
+      -208,
+      [{ label: '和电脑', value: 'solo' }, { label: '快速匹配', value: 'match' }],
+      'solo',
+      (v) => {
+        matching = v === 'match';
+        for (const t of TIER_IDS) buttons[t]!.label.setText(matching ? '匹配' : '进场');
+        times.forEach((t) => fitWidth(t.setText(timeOf()), 195));
+      },
+      150,
+    );
+    b.add(seg);
+    m.body.setData('seg:mode', seg);
+  }
   const buttons: Partial<Record<TierId, Button>> = {};
   TIER_IDS.forEach((tier, i) => {
     const y = -140 + i * 78;
@@ -95,8 +121,10 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     b.add(text(scene, -270, y + 16, `最多输赢 ${share}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
     b.add(text(scene, 60, y - 14, `电脑 ${stars(TIER_CARD[tier].stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
     // 时间那行可以截（手机上放不下时）
-    b.add(fitWidth(text(scene, 60, y + 16, `${SOLO_DEALS} 副 · ${TIER_CARD.time}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }), 195));
-    const btn = reg(m, `tier:${tier}`, new Button(scene, 340, y, 150, 52, '进场', 'red', () => void enter(tier)));
+    const time = fitWidth(text(scene, 60, y + 16, timeOf(), { size: TYPE.small, color: COLOR.muted, ox: 0 }), 195);
+    times.push(time);
+    b.add(time);
+    const btn = reg(m, `tier:${tier}`, new Button(scene, 340, y, 150, 52, '进场', 'red', () => (matching && onMatch ? (m.close(), onMatch(tier)) : void enter(tier))));
     btn.setEnabled(false);
     buttons[tier] = btn;
   });

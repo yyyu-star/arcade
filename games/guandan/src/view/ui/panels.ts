@@ -66,10 +66,22 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   y += P;
   row(colL, y, '牌背');
   seg(colL, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 }));
-  // 聊天（好友房 0.22.0、单机 0.23.0）：放左栏最后，右栏的地方规则已经排到底了
+  // 聊天（好友房 0.22.0、单机 0.23.0）：放左栏最后，右栏的地方规则已经排到底了。
+  // 0.26.0 加"不和陌生人"（快速匹配桌上不收不发打字，好友房、单机照常；下次进匹配桌生效）：手机横屏上左栏放不下第七行，并进这一行做成三档，存的还是 chat、strangerChat 两项
   y += P;
   row(colL, y, '聊天');
-  seg(colL, y, [{ label: '开', value: '1' }, { label: '不看', value: '0' }], s.chat ? '1' : '0', (v) => updateSettings({ chat: v === '1' }));
+  b.add(
+    segmented(
+      scene,
+      colL + 120 + 65,
+      y,
+      [{ label: '开', value: '1' }, { label: '不和陌生人', value: 'friends' }, { label: '不看', value: '0' }],
+      !s.chat ? '0' : s.strangerChat ? '1' : 'friends',
+      (v) => updateSettings(v === '0' ? { chat: false } : { chat: true, strangerChat: v === '1' }),
+      130,
+      P,
+    ),
+  );
 
   // 右栏。别人（好友房的人、单机的电脑）的互动（短语、表情、道具，docs/table-fun.md 第 5 节）：关掉就不看也不听，单机的电脑也不发（自己照样能发）
   y = top;

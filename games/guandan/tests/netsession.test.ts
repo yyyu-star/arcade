@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { testKey, guandanRoom as R, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
 import { seatIdentity, seatName } from '../src/view/labels.ts';
 import { fullSeatName, isWatching } from '../src/view/labels.ts';
+import { updateSettings } from '../src/view/store.ts';
 import { NetSession, QUOTA_TEXT, autoSeat, closeText, createRoom, currentUserId, isFinalForRoom, roomOwnerCheck, type SavedRoom } from '../src/view/net.ts';
 
 class FakeClient {
@@ -425,5 +426,49 @@ describe('旁观（0.13.0，docs/social.md 1.4）', () => {
     expect(e.watching).toBe(false);
     expect(e.freeSeat()).toBeNull();
     for (const x of [a, b, c, d, e]) x.close();
+  });
+});
+
+describe('快速匹配的桌（0.26.0）', () => {
+  /** 记下连的地址就行：kit 有 onChat 才在地址上带 chat=1 */
+  const urls: string[] = [];
+  class FakeSocket {
+    readyState = 0;
+    onopen = null;
+    onmessage = null;
+    onclose = null;
+    onerror = null;
+    constructor(url: string) {
+      urls.push(url);
+    }
+    send(): void {}
+    close(): void {}
+  }
+  const open = (match: boolean): NetSession => {
+    const ses = new NetSession('654321', false, { match, url: 'ws://x/games/guandan/room/rooms/654321/ws', WebSocketImpl: FakeSocket as never });
+    ses.close();
+    return ses;
+  };
+
+  it('聊天选了"不和陌生人"：匹配桌不带 chat=1、聊天页不给；好友房照常带', () => {
+    updateSettings({ strangerChat: false });
+    urls.length = 0;
+    const m = open(true);
+    expect(m.match).toBe(true);
+    expect(m.chatOn).toBe(false);
+    expect(urls.at(-1)).not.toContain('chat=1');
+    const f = open(false);
+    expect(f.chatOn).toBe(true);
+    expect(urls.at(-1)).toContain('chat=1');
+    updateSettings({ strangerChat: true });
+    expect(open(true).chatOn).toBe(true);
+    expect(urls.at(-1)).toContain('chat=1');
+  });
+
+  it('房间信息到了以 RoomInfo.match 为准', () => {
+    const { ses } = make();
+    expect(ses.match).toBe(false);
+    ses.handle({ ...welcome(walk(0)[0]!, 0), room: { ...room(0), match: true } });
+    expect(ses.match).toBe(true);
   });
 });

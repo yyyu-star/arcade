@@ -6,16 +6,16 @@ import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { levelName } from '../labels.ts';
 import { Session, randomSeed } from '../session.ts';
-import { SOLO_DEALS } from '../../stake/index.ts';
-import { LENGTH_CARD, LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed } from '../stake-text.ts';
-import { StakeSession, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
+import { SOLO_DEALS, type TierId } from '../../stake/index.ts';
+import { LENGTH_CARD, LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed, stakeError } from '../stake-text.ts';
+import { StakeSession, buyinStake, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
 import { getSettings, getStats, loadSave, updateSettings } from '../store.ts';
 import { COLOR, RADIUS, TYPE, minHit } from '../theme.ts';
 import { FIGURE_SIZE, LANTERN_SIZE, homeLayout } from '../home-layout.ts';
 import { LOW_MEMORY } from '../device.ts';
 import { anim } from '../anim.ts';
 import { goLobby } from '../lobby.ts';
-import { join, openOnline } from '../online.ts';
+import { join, openMatch, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
 import { Button, ModeCard, iconButton, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
@@ -235,16 +235,38 @@ export class TitleScene extends Phaser.Scene {
   /** 娱乐：先选难度（docs/balance.md 第 3 节：新手 / 普通 / 高手），有存档时再确认一次 */
   pickFun(saved: string | null): void {
     const s = getSettings();
-    this.overlay = openLevelPicker(this, s.difficulty, s.length, (difficulty, length) => {
-      updateSettings({ difficulty, length });
+    const fresh = (): void => {
       if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame());
       else this.newGame();
-    });
+    };
+    this.overlay = openLevelPicker(
+      this,
+      s.difficulty,
+      s.length,
+      (difficulty, length) => {
+        updateSettings({ difficulty, length });
+        fresh();
+      },
+      // 快速匹配（0.26.0）：排不到就按现在的难度、局长开一局单机
+      () => openMatch(null, () => this.scene.isActive() && fresh()),
+    );
   }
 
-  /** 实盘：选档位（docs/stake.md 2.1） */
+  /** 实盘：选档位（docs/stake.md 2.1）；快速匹配排不到就转这一档的单机（照常带入一份） */
   pickStake(): void {
-    this.overlay = openTierPicker(this, (ses) => this.startStake(ses));
+    this.overlay = openTierPicker(
+      this,
+      (ses) => this.startStake(ses),
+      (tier) => openMatch(tier, () => void this.soloStake(tier)),
+    );
+  }
+
+  private async soloStake(tier: TierId): Promise<void> {
+    if (!this.scene.isActive()) return;
+    const r = await buyinStake(tier);
+    if (!this.scene.isActive()) return;
+    if (r.ok) this.startStake(r.ses);
+    else toast(this, stakeError(r.error), worldW(this) / 2, worldH - 60);
   }
 
   startStake(ses: StakeSession): void {
@@ -270,6 +292,14 @@ export class TitleScene extends Phaser.Scene {
     // 弹层里的按钮（选模式、选档位）：坐标是弹层里的，加上弹层的位置
     const body = this.overlay?.root.scene ? this.overlay.body : null;
     for (const [k, v] of Object.entries((body?.data?.getAll() ?? {}) as Record<string, unknown>)) {
+      // 选项组（局长、和电脑 / 快速匹配）：每一项叫 <名字>:<第几项>
+      if (k.startsWith('seg:') && v instanceof Phaser.GameObjects.Container) {
+        v.list.filter((o) => o instanceof Phaser.GameObjects.Zone).forEach((z, i) => {
+          const zone = z as Phaser.GameObjects.Zone;
+          out[`${k.slice(4)}:${i}`] = { x: body!.x + v.x + zone.x, y: body!.y + v.y + zone.y };
+        });
+        continue;
+      }
       if (!k.startsWith('btn:') || !(v instanceof Button) || !v.scene || !v.enabled) continue;
       out[k.slice(4)] = { x: body!.x + v.x, y: body!.y + v.y };
     }
