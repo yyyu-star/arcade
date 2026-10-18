@@ -108,19 +108,13 @@ jobs:
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
         run: bash tools/verify-main.sh "${{ github.sha }}"
-      # 只部署 main 的最新提交：排队或等批准期间又合并了新的 PR，这次运行的提交就旧了，部署它会把线上退回旧版本。
-      # 失败时不重跑这次运行：对 main 手动运行本流程（workflow_dispatch），部署的就是最新提交（见 CONTRIBUTING.md）
-      - name: 只部署 main 的最新提交
+      # 只部署 main 上本模块的最新提交：排队或等批准期间又合并了新的 PR，而且改过本模块（或它的流程、tools/），这次运行的提交就旧了，部署它会把线上退回旧版本。
+      # 别的模块、文档、共用包的合并不挡（2026-10-18 起各模块能同时发）。失败时不重跑这次运行：对 main 手动运行本流程（workflow_dispatch），部署的就是最新提交（见 CONTRIBUTING.md）
+      - name: 只部署 main 上本模块的最新提交
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          head=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
-          if [ "$head" != "$SHA" ]; then
-            echo "::error::有更新的合并（main 现在是 $head，这次运行是 $SHA），旧运行不部署；要部署就对 main 手动运行本流程"
-            exit 1
-          fi
+        run: bash tools/verify-latest.sh "${{ github.sha }}" platform/ .github/workflows/platform.yml tools/
       # 不用缓存：缓存能被跑模块代码的作业写
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:

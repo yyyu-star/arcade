@@ -116,8 +116,8 @@
   写了没声明的服务绑定一律拒绝，所以游戏改不了自己接平台的方式（比如拿别的游戏名记账）。
 - **wrangler 的运行环境**：新建的空目录、`--env-file /dev/null`（不读任何 `.env`）、只传必需的环境变量、`CLOUDFLARE_API_BASE_URL` 写死成官方地址。
 - **PR 上的快速检查**（`tools/check-deploy-config.mjs`）提前拦下 `.env`、`.npmrc`、`wrangler.json`/`.toml`、`.wrangler/`、名单外隐藏文件、符号链接和白名单外的配置。
-- **人工闸门**：只部署经 PR、由仓库所有者合并的提交（`tools/verify-main.sh`），而且只部署 main 的最新提交（旧运行重跑会失败，
-  要部署就对 main 手动运行该模块的流程）；deploy 作业还要维护者在 production 环境上批准才执行。
+- **人工闸门**：只部署经 PR、由仓库所有者合并的提交（`tools/verify-main.sh`），而且只部署 main 上本模块的最新提交（`tools/verify-latest.sh`：这次提交之后 main 又改过本模块、它的流程或 `tools/` 的，
+  旧运行失败，要部署就对 main 手动运行该模块的流程；别的模块的合并不挡）；deploy 作业还要维护者在 production 环境上批准才执行。
 - **打包方式写死**：最终配置固定 `no_bundle: true`、`find_additional_modules: false`、`upload_source_maps: false`，入口复制到只有它的目录、
   去掉末尾的 `sourceMappingURL` 注释，所以只上传那一个文件（细节见 `tools/deployer/lib.mjs` 的 `FINAL_BUNDLE_FLAGS`）。
 - **钉死的工具**：第三方 Actions 钉在完整的提交 SHA 上，wrangler 钉在 `tools/deployer/` 的 lockfile 上（升级见 `tools/deployer/README.md`）；

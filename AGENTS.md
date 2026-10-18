@@ -14,7 +14,7 @@ arcade/
 ├─ README.md               总览：有哪些模块、怎么开发、怎么部署
 ├─ CONTRIBUTING.md         合作指南：分支、PR、审阅、合并、部署、回滚
 ├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）、table-fun.md（牌桌互动规范：三个牌桌游戏共用）、balance.md（难度和收益的配平目标）、social.md（社交：分享、在线、邀请、旁观、好友榜和分期）
-├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh（部署前核对）
+├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh、verify-latest.sh（部署前核对）
 ├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
 ├─ games/
@@ -63,7 +63,7 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 ## 2. 拆分与单独部署
 
 - **单独部署**：每个模块的流程只部署自己的 Worker，一个模块的部署不会动到其他模块。正式环境只由 main 上经 PR 合并的提交触发部署
-  （或在 GitHub Actions 里对 main 手动运行该模块的流程；只部署 main 的最新提交，旧提交的运行重跑也会在核对这一步失败），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
+  （或在 GitHub Actions 里对 main 手动运行该模块的流程；只部署 main 上本模块的最新提交：之后又有合并改过本模块、它的流程或 `tools/` 的旧运行会在核对这一步失败，别的模块的合并不挡），deploy 作业还要维护者在 production 环境上批准才执行；模块里的 `npm run deploy` 是拆成独立仓库后用的，不在本仓库对正式环境手动执行。
 - **部署流程的结构**（为什么这样见 [docs/review-policy.md](docs/review-policy.md) 第 7 节）：test 作业跑模块代码（不拿凭证），用 `wrangler deploy --dry-run --outdir` 打包后上传 artifact；
   deploy 作业不 checkout 模块代码，只取 `tools/` 和模块的 `wrangler.jsonc`，用 `tools/deployer/` 里钉死的 wrangler 由 `deploy.mjs` 检查后 `--no-bundle` 部署。
   所以部署用的配置就是模块根目录那份 `wrangler.jsonc` 加上 `deploy.mjs` 按 `tools/workers.json` 叠加的平台绑定、`GATE`、关掉的 `workers_dev`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。
