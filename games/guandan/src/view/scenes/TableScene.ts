@@ -304,6 +304,8 @@ export class TableScene extends Phaser.Scene {
       // 桌上各家出的牌：弹幕不横穿、气泡不压（kit 0.19.0）
       center: () => this.trick.boxes().map((b) => this.worldRect(b.x, b.y, b.w, b.h)),
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
+      // 按钮框按世界坐标跟着画面放大，kit 的字和图标是固定像素：1920 宽上成了大框小字（0.26.1），按画面的缩放放大（手机上 ≤ 1 就是原样）
+      buttonStyle: () => ({ scale: this.worldRect(0, 0, 100, 100).width / 100 }),
       // 手机上的"聊天"按钮放顶栏左边（"大厅"和邀请后面的空处）：牌桌左下已经挤着我的头像、"互动"和"理牌"，
       // kit 默认挨着"互动"放会把我自己的气泡挤到按钮底下（kit 0.19.0 截图）
       chatButton: () => (seated() ? this.worldRect(126 + (this.inviteBtn ? lp + 16 : 0) + 12, 4, lp, Math.max(48, mh)) : null),
@@ -899,7 +901,9 @@ export class TableScene extends Phaser.Scene {
     const sec = w?.deadline ? Math.max(0, Math.ceil((w.deadline - Date.now()) / 1000)) : null;
     const left = sec === null ? '' : `${sec} 秒后自动开始`;
     const others = (w?.waiting ?? []).filter((s) => s !== 0);
-    t.setY(can ? 250 : 190);
+    // 跟着按钮走（0.26.1 起结算页的内容会整体上移）：能点时在按钮下面，不能点时占按钮的位置
+    const by = btn?.y ?? 190;
+    t.setY(can ? by + 60 : by);
     if (can) t.setText(left);
     else if (others.length) t.setText(`等 ${others.map(seatName).join('、')} 点继续${left ? ` · ${left}` : ''}`);
     else t.setText('马上开下一副…');
@@ -1652,10 +1656,10 @@ export class TableScene extends Phaser.Scene {
       `炸弹 ${this.side(0)} ${rc.bombs[0]} · ${this.side(1)} ${rc.bombs[1]}${this.dealJiefeng ? ` · 接风 ${this.dealJiefeng} 次` : ''}`,
       rc.top ? `最大一炸 ${seatName(rc.top.seat)}：${playDetail(rc.top.play)}` : `头游 ${seatName(r.order[0]!)} ${rc.firstPlays} 手出完`,
     ];
-    // 名场面（0.7.1）：最精彩的两条。手机上字托底到 12 像素，框里一行只放得下十来个字：名场面、称号各留一条，再长的截断
+    // 名场面（0.7.1）：最精彩的两条，一条一行（0.26.1：两条挤一行在 1280 上被截成"…"）。手机上字托底到 12 像素，框里一行只放得下十来个字：名场面、称号各留一条，再长的截断
     const phone = phoneType();
     const hl = dealHighlights(r, history).slice(0, phone ? 1 : 2);
-    if (hl.length) recap.push(`名场面：${hl.map((h) => highlightText(h, seatName)).join('；')}`);
+    for (const h of hl) recap.push(`名场面：${highlightText(h, seatName)}`);
     const titles = dealTitles(r, history).slice(0, phone ? 1 : undefined);
     // 左下分两框（art-v3）：上面是数据（炸弹、最大一炸），下面是故事（名场面、称号），不再红黑混排一长串
     // 数据框从名次第四行下面留出一点开始（第四行下沿 96），行距 28
@@ -1664,9 +1668,13 @@ export class TableScene extends Phaser.Scene {
     const storyY = dataY + row + 16 + 12 + 16;
     const story = recap.length - 2 + titles.length;
     const lastY = story > 0 ? storyY + (story - 1) * row : dataY + row;
-    const m = modal(this, 820, Math.max(560, 2 * (lastY + 16 + 30)), `第 ${r.dealNo} 副 结束`, { closeBtn: false });
+    // 内容从 -280（标题飘带上沿）排到 lastY + 46：故事行多了弹窗往下长，内容整体上移，不在飘带下面空出一大块（0.26.1）
+    const H = Math.max(560, lastY + 46 + 280);
+    const lift = 280 - H / 2;
+    const m = modal(this, 820, H, `第 ${r.dealNo} 副 结束`, { closeBtn: false });
     this.openOverlay('settle', m);
     const b = m.body;
+    const base = b.list.length;
     const mine = r.winnerTeam === 0;
     if (mine) {
       audio.sfx('levelUp');
@@ -1783,6 +1791,7 @@ export class TableScene extends Phaser.Scene {
       b.add(this.settleWait);
       this.refreshSettleWait();
     }
+    if (lift) for (const o of b.list.slice(base)) (o as unknown as { y: number }).y += lift;
     // 托管（调试代打）时自动进下一副
     if (this.ses.autoplay) {
       this.time.delayedCall(Math.max(600, dur(1200)), () => {
