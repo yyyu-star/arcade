@@ -362,6 +362,8 @@ protected override onEmote(from: number, id: number, to?: number): void {
 - 界面：头像旁冒 4 秒气泡（能折行，同一个人后一条顶掉前一条）；"互动"面板多一个"聊天"页：最近 30 条（只在内存里）、输入框（16px，iOS 不放大页面）和"发送"，回车发；
   键盘弹出时按 `visualViewport` 把面板挪到键盘上面；收起时有新消息，"互动"按钮上一个小红点。被屏蔽（单个、全部）的人说的不显示。
 - 平台的屏蔽名单（`docs/social.md` 3.1）要平台出一个 RPC，出了以后 kit 小版本接上（docs/chat.md 第 6 节，主线定的 B 方案）；现在只有 kit 的本地屏蔽。
+- **单机也能聊**（0.18.1）：`localChat(say, opts?)` 返回一个和 `client.chat` 一样用法的发送函数（结果同是 `ChatSendResult`），过同一套过滤和限速（默认 3 秒一条、一分钟 10 条，`words`、`ms`、`perMin` 可改），
+  行就调 `say(打码后的字, masked)`。只在本机显示自己说的，不发到任何地方、不存；电脑不读、不回。接法：`const send = localChat((t, m) => fun.chat(mySeat, t, m)); new TableFun({ ..., chat: send })`。
 - 演示页 `demo/table-fun.html` 里能点开"聊天"页试（单机演示，右家隔一秒回一句）。
 
 ## 分享卡和邀请（share、social，0.12.0）

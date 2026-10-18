@@ -16,7 +16,7 @@
  *
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
-import { type ChatBlockWhy, checkChat } from './chat.js';
+import { type ChatSendResult, checkChat } from './chat.js';
 import { type ChattedMsg, CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
 
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
@@ -97,15 +97,8 @@ export function backoffMs(attempt: number, random: () => number = Math.random): 
   return Math.round(cap * (0.5 + random() / 2));
 }
 
-/**
- * chat() 的结果（0.18.0）：被本地挡下的 code 和房间回的一样（CHAT_ERRORS），多一个 chat_offline（没连上）；
- * chat_blocked 带 why（链接还是号码，挑说法用），chat_too_fast 带 waitMs
- */
-export type ChatSendResult =
-  | { ok: true }
-  | { ok: false; code: 'chat_off' | 'chat_empty' | 'chat_too_long' | 'chat_offline' }
-  | { ok: false; code: 'chat_blocked'; why: ChatBlockWhy }
-  | { ok: false; code: 'chat_too_fast'; waitMs: number };
+// chat() 的结果类型 0.18.1 起定义在 chat.ts（单机的 localChat 也用），这里照旧导出，旧代码不用改
+export type { ChatSendResult };
 
 /** 聊天专有的拒绝码：不交给 onMessage（not_seated、room_over 和短语共用，照旧走 onMessage） */
 const CHAT_ONLY_ERRORS = new Set(['chat_off', 'chat_empty', 'chat_too_long', 'chat_too_fast', 'chat_blocked']);

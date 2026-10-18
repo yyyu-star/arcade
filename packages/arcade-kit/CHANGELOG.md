@@ -1,5 +1,12 @@
 # 更新日志
 
+## 0.18.1（2026-10-18）
+
+- 单机也能聊（所有者要求聊天通用）：`arcade-kit/chat` 加 `localChat(say, opts?)`，返回和 `RoomClient.chat` 一样用法的发送函数：过同一套 `checkChat`、本地限速（默认同房间 3 秒一条、一分钟 10 条，`opts.now` 给测试注入），
+  行就调 `say(text, masked)`。只在本机显示自己说的，不发、不存，不碰 DOM；电脑不读。
+- `ChatSendResult` 类型挪到 `chat.ts`（`client.ts` 照旧导出，旧代码不用改），`chat.ts` 不依赖 `client.ts`。
+- 测试：`test/chat.test.ts` 加 3 条（过滤同房间、限速两道和拒发不占条数、`ms`/`perMin` 为 0 不限）；反证：让被拒的也占条数，测试失败。docs/chat.md、README 写明单机怎么接。
+
 ## 0.18.0
 
 好友房打字聊天（设计 `docs/chat.md`，主线审过；`docs/social.md` 3.1 改成要做）。游戏要显式打开，不开的游戏行为完全不变。

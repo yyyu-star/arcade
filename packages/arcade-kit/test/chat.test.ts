@@ -5,7 +5,7 @@ import { runInDurableObject } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import chatSrc from '../src/chat.ts?raw';
 import roomSrc from '../src/room.ts?raw';
-import { CHAT_MAX, blockReason, chatRejectText, checkChat, maskChat, normalizeChat } from '../src/chat.ts';
+import { CHAT_MAX, blockReason, chatRejectText, checkChat, localChat, maskChat, normalizeChat } from '../src/chat.ts';
 import { RoomClient, type WebSocketLike } from '../src/client.ts';
 import type { ChattedMsg, DownMsg, EmotedMsg } from '../src/protocol.ts';
 import { chatRateOf } from '../src/room.ts';
@@ -77,8 +77,10 @@ describe('过滤（纯函数）', () => {
     expect(checkChat('生日你快乐')).toEqual({ ok: true, text: '生日你快乐', masked: false });
   });
 
-  it('chat.ts 是纯函数：不碰 DOM、时间、随机数、存储', () => {
-    for (const bad of ['document', 'window', 'Date.now', 'new Date', 'Math.random', 'localStorage', 'storage.']) expect(chatSrc, bad).not.toContain(bad);
+  it('chat.ts 是纯函数：不碰 DOM、时间、随机数、存储（单机的 localChat 只默认读 Date.now 限速）', () => {
+    const pure = chatSrc.slice(0, chatSrc.indexOf('export type ChatSendResult'));
+    for (const bad of ['document', 'window', 'Date.now', 'new Date', 'Math.random', 'localStorage', 'storage.']) expect(pure, bad).not.toContain(bad);
+    for (const bad of ['document', 'window', 'Math.random', 'localStorage', 'sessionStorage', 'indexedDB', 'fetch(']) expect(chatSrc, bad).not.toContain(bad);
     // 后行断言在 iOS 16.4 以前的 Safari 是语法错误，会让引了它的 RoomClient 整个起不来
     expect(chatSrc).not.toMatch(/\(\?<[!=]/);
   });
@@ -287,5 +289,51 @@ describe('RoomClient 的聊天', () => {
     expect(c.chat('你好')).toEqual({ ok: false, code: 'chat_off' });
     expect(ws.sent.some((s) => s.includes('"chat"'))).toBe(false);
     c.close();
+  });
+});
+
+describe('单机聊天 localChat（0.18.1）', () => {
+  it('过滤和房间一样：打码照发、导流拒发、空的太长的拒发；行的才调 say', () => {
+    const said: [string, boolean][] = [];
+    let t = 1_000_000;
+    const send = localChat((s, m) => said.push([s, m]), { words: ['土豆泥'], now: () => t });
+    expect(send('  ')).toEqual({ ok: false, code: 'chat_empty' });
+    expect(send('好'.repeat(31))).toEqual({ ok: false, code: 'chat_too_long' });
+    expect(send('加我 138 0013 8000')).toMatchObject({ ok: false, code: 'chat_blocked' });
+    expect(send('www.a.com')).toEqual({ ok: false, code: 'chat_blocked', why: 'link' });
+    expect(said).toEqual([]);
+    expect(send('傻逼 土豆泥')).toEqual({ ok: true });
+    t += 3_000;
+    expect(send('赢了 1,000,000')).toEqual({ ok: true });
+    expect(said).toEqual([['** ***', true], ['赢了 1,000,000', false]]);
+  });
+
+  it('限速两道（默认同房间：3 秒一条、一分钟 10 条），拒发的不占条数，waitMs 说还要等多久', () => {
+    let t = 5_000_000;
+    let n = 0;
+    const send = localChat(() => n++, { now: () => t });
+    expect(send('1')).toEqual({ ok: true });
+    t += 1_000;
+    expect(send('2')).toEqual({ ok: false, code: 'chat_too_fast', waitMs: 2_000 });
+    // 被拒（太快、导流）都不占条数
+    expect(send('13800138000')).toMatchObject({ code: 'chat_blocked' });
+    t += 2_000;
+    for (let i = 2; i <= 10; i++) {
+      expect(send(String(i)), String(i)).toEqual({ ok: true });
+      t += 3_000;
+    }
+    expect(n).toBe(10);
+    // 第 1 条在 30 秒前：这一分钟满了，要等到第 1 条满一分钟
+    expect(send('11')).toEqual({ ok: false, code: 'chat_too_fast', waitMs: 60_000 - 30_000 });
+    t += 30_000;
+    expect(send('12')).toEqual({ ok: true });
+    expect(n).toBe(11);
+  });
+
+  it('ms / perMin 能改，0 不限', () => {
+    let n = 0;
+    const send = localChat(() => n++, { ms: 0, perMin: 0, now: () => 0 });
+    for (let i = 0; i < 30; i++) expect(send('好')).toEqual({ ok: true });
+    expect(n).toBe(30);
   });
 });
