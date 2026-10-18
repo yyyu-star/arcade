@@ -894,14 +894,15 @@ export class TableFun {
     const w = Math.min(maxW, b.offsetWidth || text.length * fs + 24);
     const h = b.offsetHeight || fs * 1.6;
     // 避开"互动"按钮、各家的名牌筹码和别人的头像（0.18.2）：原来总往朝中心那侧放，竖屏自己的气泡被按钮压住半截
-    const avoid: RectLike[] = [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...this.cui.rects(), ...[...this.live].map((e) => e.getBoundingClientRect())];
-    if (this.btn) avoid.push(this.btn.getBoundingClientRect());
+    // 按钮、聊天框叠在气泡上面（DOM 层在效果层之上），压到了字就看不见：单独当"硬"禁区，代价 ×3（0.19.1）
+    const avoid: RectLike[] = [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())];
+    const hard: RectLike[] = [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])];
     this.o.seats().forEach((o, i) => {
       if (!o) return;
       if (o.plate) avoid.push(o.plate);
       if (i !== seat) avoid.push(o.rect);
     });
-    const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid);
+    const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid, hard);
     b.style.transform = `translate(${at.left}px,${at.top}px)`;
     this.live.add(b);
     void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160)

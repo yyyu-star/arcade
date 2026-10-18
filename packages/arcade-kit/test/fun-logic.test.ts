@@ -375,7 +375,7 @@ describe('botReact：名场面', () => {
   });
 });
 
-describe('placeBubble（0.18.2）', () => {
+describe('placeBubble（0.18.2、0.19.1）', () => {
   const view = { width: 390, height: 844 };
   const me = { left: 20, top: 700, width: 60, height: 60 };
   it('没东西挡：朝屏幕中心那侧、和头像顶边对齐（和以前一样）', () => {
@@ -394,6 +394,15 @@ describe('placeBubble（0.18.2）', () => {
     const plate = { left: 231, top: 74, width: 100, height: 40 };
     const at = placeBubble(top, 90, 30, view, [plate]);
     expect(at.left + 90).toBeLessThanOrEqual(top.left);
+  });
+  it('压到叠在上面的按钮（hard）代价 ×3（0.19.1）：面积差不多时宁可擦一点名牌，也不钻到"互动"按钮底下', () => {
+    const edge = { left: 0, top: 700, width: 60, height: 60 };
+    const btn = { left: 66, top: 694, width: 40, height: 30 };
+    const plate = { left: 4, top: 664, width: 72, height: 30 };
+    const soft = [plate, { left: 94, top: 694, width: 30, height: 30 }, { left: 0, top: 766, width: 390, height: 78 }];
+    // 右边只压按钮 1200 + 900，上边压名牌 2160：按面积算选右边，按钮当 hard 算就换到上边
+    expect(placeBubble(edge, 120, 30, view, [...soft, btn])).toEqual({ left: 66, top: 694 });
+    expect(placeBubble(edge, 120, 30, view, soft, [btn])).toEqual({ left: 4, top: 664 });
   });
   it('四边都挡：选压得最少的，夹在屏幕里', () => {
     const all = [{ left: 0, top: 0, width: 390, height: 844 }];

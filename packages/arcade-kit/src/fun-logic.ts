@@ -318,9 +318,20 @@ export function placeMenu(anchor: Box, want: number, h: number, view: { width: n
 /**
  * 头像旁的一句话（w×h）放哪（0.18.2）：先试朝屏幕中心那一侧、和头像顶边对齐（原来的样子），再试另一侧、头像上方、下方；
  * 夹在可见区里（留 margin），和头像本身、"互动"按钮、各家名牌筹码、禁区压得最少的那个胜出，一样少时按试的顺序。
- * 竖屏自己的气泡原来总在右边、被"互动"按钮压住半截，点头像的提示盖住对家的名字和筹码（麻将报）
+ * 竖屏自己的气泡原来总在右边、被"互动"按钮压住半截，点头像的提示盖住对家的名字和筹码（麻将报）。
+ * hard 是叠在气泡上面、能点的东西（"互动""聊天"按钮、聊天框，0.19.1）：压到它们气泡的字就看不见了，代价按 HARD_COST 倍算；
+ * 名牌、手牌在气泡下面，压一点还看得见字
  */
-export function placeBubble(anchor: Box, w: number, h: number, view: { width: number; height: number }, avoid: readonly Box[] = [], margin = 4, gap = 6): { left: number; top: number } {
+export function placeBubble(
+  anchor: Box,
+  w: number,
+  h: number,
+  view: { width: number; height: number },
+  avoid: readonly Box[] = [],
+  hard: readonly Box[] = [],
+  margin = 4,
+  gap = 6,
+): { left: number; top: number } {
   const cx = anchor.left + anchor.width / 2;
   const right = { left: anchor.left + anchor.width + gap, top: anchor.top - gap };
   const left = { left: anchor.left - gap - w, top: anchor.top - gap };
@@ -336,7 +347,7 @@ export function placeBubble(anchor: Box, w: number, h: number, view: { width: nu
   let best: Box | null = null;
   let bestCost = Infinity;
   for (const c of order.map(clamp)) {
-    const cost = [anchor, ...avoid].reduce((s, b) => s + overlap(c, b), 0);
+    const cost = [anchor, ...avoid].reduce((s, b) => s + overlap(c, b), 0) + hard.reduce((s, b) => s + HARD_COST * overlap(c, b), 0);
     if (cost < bestCost) {
       best = c;
       bestCost = cost;
@@ -345,6 +356,9 @@ export function placeBubble(anchor: Box, w: number, h: number, view: { width: nu
   }
   return { left: best!.left, top: best!.top };
 }
+
+/** 气泡压到叠在它上面的按钮、聊天框时的代价倍数（0.19.1，主线定的 ×3） */
+export const HARD_COST = 3;
 
 // ---------- 聊天的版式（0.19.0，docs/chat.md 第 5 节） ----------
 

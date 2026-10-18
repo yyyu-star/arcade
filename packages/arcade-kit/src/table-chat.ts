@@ -565,6 +565,10 @@ export class ChatUi {
   /** 找空轨道飞一条；没有空的返回 false */
   private fly(line: ChatLine): boolean {
     const area = this.area();
+    // 弹幕层裁在弹幕区里（0.19.1）：从区的右沿出现、左沿消失，不会飘出去擦过两边的座位
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    this.dmLayer().style.clipPath = `inset(${Math.max(0, area.top)}px ${Math.max(0, vw - area.left - area.width)}px ${Math.max(0, vh - area.top - area.height)}px ${Math.max(0, area.left)}px)`;
     const lineH = Math.round(this.font * 1.5) + 10;
     const lanes = danmakuLanes(area, lineH, [...this.h.blocked(), ...this.h.bubbles(), ...this.rects()], this.mode === 'desk' ? DANMAKU.lanesDesk : DANMAKU.lanesPhone);
     if (lanes.length === 0) return true;
