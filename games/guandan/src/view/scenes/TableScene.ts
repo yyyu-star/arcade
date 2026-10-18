@@ -57,6 +57,7 @@ import { BUTTON_Y, TOPBAR_H, seatAnchors } from '../table/layout.ts';
 import { SeatView } from '../table/seats.ts';
 import { Nudges } from '../table/nudge.ts';
 import { TableFun, funItem, type FunSeat } from 'arcade-kit/table-fun';
+import { localChat } from 'arcade-kit/chat';
 import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
 import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
@@ -295,8 +296,14 @@ export class TableScene extends Phaser.Scene {
       // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒
       hintSeat: () => [1, 3].find((v) => !this.isMe(v) && !this.trick.occupied(v)) ?? null,
       enabled: () => getSettings().taunts,
-      // 好友房聊天（0.22.0）：只在好友房给，单机没有聊天页
-      ...(net ? { chat: (t: string) => net.chat(t), chatEnabled: () => getSettings().chat } : {}),
+      // 聊天：好友房走房间（0.22.0）；单机（0.23.0，所有者要求聊天通用）用 kit 的 localChat，同一套过滤和限速，只在自己头像旁冒、不发不存，电脑不读
+      chat: net
+        ? (t: string) => net.chat(t)
+        : localChat((t, masked) => {
+          audio.sfx('taunt');
+          this.fun?.chat(ME, t, masked);
+        }),
+      chatEnabled: () => getSettings().chat,
       scope: () => net?.code ?? 'solo',
       localBots: !net,
       moodLines: MOOD_LINES,

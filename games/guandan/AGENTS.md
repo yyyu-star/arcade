@@ -166,7 +166,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 掼蛋自己多的在 `table/nudge.ts`：公开事件后的顺手提示（`suggest.ts`）、好友房里轮到的人想了 8 秒以上别人能扔的"催促炸弹"、
     单机里我想了 8 秒以上爱闹的电脑按 `URGE_P` 扔一个催促炸弹（`slowUrge`，每手最多判一次，走 kit 的收，同样受护盾）。收到的短语、表情配掼蛋自己的提示音（`funIn`）。
   - 好友房聊天（0.22.0，kit 0.18.0 的 chat，设计在 kit 的 `docs/chat.md`）：房间 `rules.ts` 写 `chat: true`；页面 `NetSession` 的 `onChat` 换成画面座位交给 `chatSink`（牌桌挂上、关时摘掉），
-    `TableFun` 只在好友房给 `chat` / `chatEnabled`（设置"聊天：开 / 不看"，`guandan.settings` 的 `chat`）。房间只转发不存，规则、电脑都不读；`tests/room/routes.spec.ts` 走真路由核对，`online-smoke` 里 1 号打一句、房主看到。
+    `TableFun` 给 `chat` / `chatEnabled`（设置"聊天：开 / 不看"，`guandan.settings` 的 `chat`）；单机（0.23.0）用 kit 0.18.1 的 `localChat`，只在自己头像旁冒，不发不存，电脑不读。房间只转发不存，规则、电脑都不读；`tests/room/routes.spec.ts` 走真路由核对，`online-smoke` 里 1 号打一句、房主看到。
   - 设置里能整个关掉（字段名仍是 `taunts`）；点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（kit 存 sessionStorage `guandan.fun.blocked`）。冒烟点的控件是 kit 的名字（`fun:button`、`fun:seat3`、`fun:prop0`……，换成世界坐标放进 `controls()`）。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
   - 称号和每副复盘只用公开信息（出牌记录、名次），电脑决策不读表情。
