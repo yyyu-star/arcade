@@ -17,8 +17,9 @@
  */
 
 import type { GuestOptions } from 'arcade-kit/guest';
-import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
+import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/net/match.ts';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
 
@@ -34,6 +35,8 @@ export interface Env {
   GATE?: string;
   /** 联机房间（Durable Object，worker/room.ts 的 Room） */
   ROOM?: DurableObjectNamespace;
+  /** 快速匹配的排队（0.26.0，worker/match.ts 的 Queue，每个档位一个实例） */
+  MATCH?: DurableObjectNamespace;
   /** "on" 才开联机；其他值（含没配）开房 404、进房 4004 */
   ONLINE?: string;
   /** 只认这个网站发起的请求（Origin）：正式部署由工作流注入 https://<站点>；不设就按请求自己的 origin */
@@ -66,32 +69,42 @@ export const GUEST: GuestOptions = { reserved: ['老张', '小美', '阿强'] };
 
 const CREATE_PATH = `${ROOM_PATH}/rooms`;
 const JOIN_RE = new RegExp(`^${ROOM_PATH}/rooms/([^/]+)/ws$`);
+const MATCH_RE = new RegExp(`^${MATCH_PATH}/([^/]+)$`);
 
 /**
- * 联机房间的两个路由（wrangler.jsonc 的 run_worker_first 放行 /games/guandan/room/*），其余交给 arcade-kit：
- * 查 Origin、经平台 /api/me 认人、找房间都在 acceptCreate / acceptJoin 里，这里不碰浏览器的原始请求。
+ * 联机房间的三个路由：开房、进房、快速匹配排队（0.26.0）（wrangler.jsonc 的 run_worker_first 放行 /games/guandan/room/*），其余交给 arcade-kit：
+ * 查 Origin、经平台 /api/me 认人、找房间都在 acceptCreate / acceptJoin / acceptMatch 里，这里不碰浏览器的原始请求。
  * 不经过 GATE：进房本来就要登录（kit 认不出人就拒绝），GATE=off 时也一样。
  * 返回 null 表示不是房间的路径。
  */
 export function routeRoom(request: Request, env: Env): Promise<Response> | Response | null {
   const path = new URL(request.url).pathname;
   const join = JOIN_RE.exec(path);
-  if (path !== CREATE_PATH && !join) return path.startsWith(`${ROOM_PATH}/`) || path === ROOM_PATH ? new Response('not found', { status: 404 }) : null;
+  const match = MATCH_RE.exec(path);
+  if (path !== CREATE_PATH && !join && !match) return path.startsWith(`${ROOM_PATH}/`) || path === ROOM_PATH ? new Response('not found', { status: 404 }) : null;
   const on = env.ONLINE === 'on' && env.ROOM !== undefined;
   // 整个 env 交给 kit：它要看 GATE 决定是不是独立模式（只挑 ROOM、ARCADE 时丢了 GATE，本站部署 ARCADE 掉了会退成游客放行，0.12.4 审计）。
   // 闸门的 Fetcher 只声明了 fetch；运行时的服务绑定就是 kit 要的 Fetcher；ROOM 上面 on 已经查过
   const kitEnv = env as unknown as KitEnv;
   const opts: GateOptions = env.SITE_ORIGIN ? { siteOrigin: env.SITE_ORIGIN, guest: GUEST } : { guest: GUEST };
   if (path === CREATE_PATH) return on ? createWithOptions(request, env, kitEnv, opts) : new Response('not found', { status: 404 });
-  if (!on) {
-    // 联机关着：和"没有这个房间"一样，接受升级后马上 4004 关掉（浏览器的 WebSocket 拿不到 HTTP 状态码，客户端认得 4004、不再重连）
-    if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('websocket only', { status: 426 });
-    const pair = new WebSocketPair();
-    pair[1].accept();
-    pair[1].close(CLOSE.noRoom, 'online off');
-    return new Response(null, { status: 101, webSocket: pair[0] });
+  // 联机关着：和"没有这个房间"一样，接受升级后马上 4004 关掉（浏览器的 WebSocket 拿不到 HTTP 状态码，客户端认得 4004、不再重连）
+  if (!on) return refuseSocket(request, CLOSE.noRoom, 'online off');
+  if (match) {
+    // 快速匹配（0.26.0）：档位不认得、没开放的，kit 回 4004。没有钱包（单独部署）只开娱乐，实盘的排不了
+    if (!env.MATCH) return refuseSocket(request, CLOSE.noRoom, 'no match');
+    const tiers = env.WALLET ? MATCH_TIERS : [MATCH_FUN];
+    return acceptMatch(request, { ...kitEnv, MATCH: env.MATCH }, match[1]!, { ...opts, tiers });
   }
   return acceptJoin(request, kitEnv, join![1]!, opts);
+}
+
+function refuseSocket(request: Request, code: number, reason: string): Response {
+  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('websocket only', { status: 426 });
+  const pair = new WebSocketPair();
+  pair[1].accept();
+  pair[1].close(code, reason);
+  return new Response(null, { status: 101, webSocket: pair[0] });
 }
 
 /**

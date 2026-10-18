@@ -10,10 +10,14 @@
     "bindings": [
       { "name": "ROOM", "class_name": "TexasRoom" },
       { "name": "METER", "class_name": "RoomMeter" },
+      { "name": "MATCH", "class_name": "Queue" },
       { "name": "FAKE_BANK", "class_name": "FakeBank" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter", "FakeBank"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter", "FakeBank"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
   "services": [{ "binding": "WALLET", "service": "texas-test", "entrypoint": "WalletService", "props": { "game": "texas" } }],
   "vars": {
     "GATE": "login",

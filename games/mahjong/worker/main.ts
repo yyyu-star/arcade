@@ -6,6 +6,7 @@
  *   房间链接 ?room=123456 登录完原样带回来；平台不可用回 503 页；GATE=off 时不拦；
  * - /games/mahjong/api/stake/* 是单机实盘的带入、结回（client 模式）：经服务绑定 WALLET 调平台钱包；结回带的小结 stats 原样转发，不改不补（5.10）；
  * - /games/mahjong/rooms（开房）、/games/mahjong/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（第 6 节）；
+ *   /games/mahjong/rooms/match/<档位>（快速匹配排队，0.21.0）交给 kit 的 acceptMatch：排到了开一张匹配桌，只剩自己的转单机；
  *   开房的请求体 { opts } 是玩法、档位和规则设置，kit 开房时校验、定下，进房的人都看得到；
  * - 别的路径不经过这里（wrangler.jsonc 的 run_worker_first 只列了上面这些），由静态资源直接回。
  *
@@ -14,7 +15,9 @@
 import { whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
 import type { GuestOptions } from 'arcade-kit/guest';
-import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { CLOSE } from 'arcade-kit/protocol';
+import { MATCH_FUN, MATCH_TIERS } from '../src/game/match.ts';
 import { PERSONAS } from '../src/ai/personas.ts';
 import type { SettleStats } from '../src/core/match/index.ts';
 import { soloOp } from '../src/game/ops.ts';
@@ -24,6 +27,7 @@ import type { MahjongRoom } from './room.ts';
 
 export { RoomMeter } from 'arcade-kit/meter';
 export { MahjongRoom } from './room.ts';
+export { Queue } from './match.ts';
 
 /** ref、op 的格式（平台同样的检查，这里先挡掉，免得白调一次）。入口模块只导出 default 和 DO 类（见 game.ts） */
 const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -51,6 +55,8 @@ export interface Env extends MeterEnv {
   /** 平台钱包：同上；没有时单机和好友房的实盘都不开 */
   WALLET?: PlatformWallet;
   ROOM: DurableObjectNamespace<MahjongRoom>;
+  /** 快速匹配的排队（0.21.0，worker/match.ts 的 Queue，每个档位一个实例）；没绑的部署排队一律 4004 */
+  MATCH?: DurableObjectNamespace;
   /** off 以外（包括没配）都要登录 */
   GATE?: string;
   /** 写请求、开房进房的 Origin 必须是它；不设就按请求自己的 origin（正式部署由工作流注入） */
@@ -61,6 +67,8 @@ const BASE = '/games/mahjong';
 const STAKE = `${BASE}/api/stake/`;
 const ROOMS = `${BASE}/rooms`;
 const JOIN = /^\/games\/mahjong\/rooms\/([^/]+)\/ws$/;
+/** 快速匹配排队（0.21.0）：在 rooms/ 下面，run_worker_first 已经放行；JOIN 要以 /ws 结尾，不会撞 */
+const MATCH = /^\/games\/mahjong\/rooms\/match\/([^/]+)$/;
 /** 带入、结回的请求体：结回带小结（≤ 256 字节），留足余量 */
 const MAX_BODY = 1_024;
 /** 单机那一份的到期退回：平台最长 24 小时（一直没结回来的原样退回） */
@@ -99,6 +107,12 @@ export default {
       // 没有钱包就开不了实盘房（页面上本来就不给选，这里挡住手写的请求）
       if (!env.WALLET && stakesOf((opts as { stakes?: unknown } | undefined)?.stakes)?.wallet) return json({ error: 'no_wallet' }, 409);
       return acceptCreate(request, env, { siteOrigin: site, options: opts, guest: GUEST });
+    }
+    const match = MATCH.exec(path);
+    if (match) {
+      // 档位不认得、没开放的 kit 回 4004；没有钱包（单独部署）只开娱乐，实盘的排不了
+      if (!env.MATCH) return refuseSocket(request, CLOSE.noRoom, 'no match');
+      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: site, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : [MATCH_FUN] });
     }
     const join = JOIN.exec(path);
     if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: site, guest: GUEST });
@@ -155,6 +169,15 @@ async function stake(request: Request, env: Env, site: string, sub: string): Pro
   }
   if (r.ok && r.statsIgnored) console.error('mahjong: stats ignored', r.statsIgnored);
   return r.ok ? json(r, 200, who.setCookie) : json(r, STATUS[r.error] ?? 503, who.setCookie);
+}
+
+/** 浏览器的 WebSocket 拿不到 HTTP 状态码：接受升级后马上用关闭码说原因（客户端认得 4004，不再重连） */
+function refuseSocket(request: Request, code: number, reason: string): Response {
+  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('websocket only', { status: 426 });
+  const pair = new WebSocketPair();
+  pair[1].accept();
+  pair[1].close(code, reason);
+  return new Response(null, { status: 101, webSocket: pair[0] });
 }
 
 function denied(who: Exclude<WhoIs, { user: unknown }>): Response {

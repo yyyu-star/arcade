@@ -63,6 +63,8 @@ export function stakeError(error: string): string {
 export const STAKE_TEXT = {
   /** 选档页、结算页底下的小字（economy.md 第 0 节：界面写明） */
   noCash: '筹码只在游戏里用，无任何现金价值',
+  /** 选档页切到"快速匹配"时，每档时间那行（0.26.0：好友房实盘的规则，和真人打，空位电脑补） */
+  matchWho: '和真人打',
   walletDown: '钱包暂时连不上，实盘先开不了；娱乐局照常玩',
   lowFunds: '钱包里的筹码不够的档灰掉了：选小一点的档，或者去大厅领补给',
   /** 平台 0.9.5 起同一个游戏能同时有好几份：别处那一份不挡开新的，只是给个退回的办法 */

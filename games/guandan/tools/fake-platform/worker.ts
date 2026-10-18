@@ -145,8 +145,16 @@ export class WalletService extends WorkerEntrypoint<FakeEnv> {
   }
 }
 
-export default {
-  fetch(request: Request): Response {
+/**
+ * 默认入口（掼蛋的服务绑定 ARCADE）。0.26.0 起是 WorkerEntrypoint：快速匹配凑桌前调平台的 blockedAmong RPC（kit 0.20.0），
+ * 这里谁也没屏蔽谁，回 []；不实现的话 kit 会当没有名单照样凑，但控制台每次凑桌都有一条 RPC 报错
+ */
+export default class FakePlatform extends WorkerEntrypoint<FakeEnv> {
+  blockedAmong(_userIds: string[]): [string, string][] {
+    return [];
+  }
+
+  override fetch(request: Request): Response {
     const url = new URL(request.url);
     // 社交（0.13.0 起页面挂 kit 的 social）：报位置收下、没有邀请、没有好友，不然每个冒烟页面都有 404
     if (url.pathname === '/api/presence') return new Response(null, { status: 204 });
@@ -157,5 +165,5 @@ export default {
     const id = /(?:^|;\s*)__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];
     if (id === 'down') return new Response('down', { status: 503 });
     return Response.json({ user: id ? { id, displayName: `玩家${decodeURIComponent(id)}` } : null });
-  },
-};
+  }
+}

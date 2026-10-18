@@ -1,6 +1,6 @@
 /** 浏览器连接器（4.5）：退避加抖动、哪些关闭码不重连、切回前台马上连、seq 去重、没确认的操作重发。用假的 WebSocket 和计时器。 */
 import { describe, expect, it, vi } from 'vitest';
-import { backoffMs, CONNECT_MS, PONG_WAIT_MS, RoomClient, STALL_GRACE_MS, STALL_JITTER_MS, type WebSocketLike } from '../src/client.ts';
+import { backoffMs, CONNECT_MS, MATCH_GRACE_MS, MatchClient, PONG_WAIT_MS, RoomClient, STALL_GRACE_MS, STALL_JITTER_MS, type WebSocketLike } from '../src/client.ts';
 import type { DownMsg } from '../src/protocol.ts';
 
 class FakeWs implements WebSocketLike {
@@ -453,5 +453,73 @@ describe('去重和重发', () => {
     t.ws().push(state(3, b));
     t.ws().push(state(4));
     expect(t.got.map((m) => (m.t === 'state' ? [m.seq, m.ack ?? null] : m.t))).toEqual(['welcome', [3, a], [4, null]]);
+  });
+});
+
+describe('MatchClient（0.20.0）', () => {
+  function run() {
+    FakeWs.all = [];
+    const got: unknown[] = [];
+    const c = new MatchClient({
+      url: 'wss://x/match/four',
+      onWaiting: (n, seats, left) => got.push(['waiting', n, seats, left]),
+      onMatched: (code) => got.push(['matched', code]),
+      onSolo: (why) => got.push(['solo', why]),
+      WebSocketImpl: FakeWs,
+    });
+    c.start();
+    return { c, got, ws: FakeWs.all[0]! };
+  }
+
+  it('人数、凑成：结果只回一次，之后的关闭不再回调', () => {
+    const { got, ws } = run();
+    ws.push({ t: 'waiting', n: 2, seats: 4, left: 9000 });
+    ws.push({ t: 'matched', code: '123456' });
+    ws.drop(1000);
+    expect(got).toEqual([['waiting', 2, 4, 9000], ['matched', '123456']]);
+  });
+
+  it('has_room 没给 onHasRoom 时当 onMatched；断线按关闭码转单机，不重连', () => {
+    const a = run();
+    a.ws.push({ t: 'has_room', code: '654321' });
+    expect(a.got).toEqual([['matched', '654321']]);
+    for (const [code, why] of [[4001, 'replaced'], [4029, 'too_often'], [1013, 'busy'], [1006, 'unavailable']] as const) {
+      const b = run();
+      b.ws.drop(code);
+      expect(b.got).toEqual([['solo', why]]);
+      expect(FakeWs.all).toHaveLength(1);
+    }
+  });
+
+  it('cancel 以后什么都不回调', () => {
+    const { c, got, ws } = run();
+    c.cancel();
+    ws.push({ t: 'matched', code: '123456' });
+    ws.drop(1000);
+    expect(got).toEqual([]);
+  });
+});
+
+describe('MatchClient 兜底（0.20.0 安全审阅）', () => {
+  it('排队那边到点了还没给结果：再等 MATCH_GRACE_MS 就自己转单机、关掉连接；人数推送会把兜底往后挪', () => {
+    vi.useFakeTimers();
+    try {
+      FakeWs.all = [];
+      const got: unknown[] = [];
+      const c = new MatchClient({ url: 'wss://x/m', waitMs: 15_000, onMatched: () => got.push('matched'), onSolo: (w) => got.push(w), WebSocketImpl: FakeWs });
+      c.start();
+      const ws = FakeWs.all[0]!;
+      vi.advanceTimersByTime(20_000);
+      ws.push({ t: 'waiting', n: 2, seats: 4, left: 9_000 });
+      vi.advanceTimersByTime(9_000 + MATCH_GRACE_MS - 1);
+      expect(got).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(got).toEqual(['unavailable']);
+      expect(ws.readyState).toBe(3);
+      ws.push({ t: 'matched', code: '123456' });
+      expect(got).toEqual(['unavailable']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

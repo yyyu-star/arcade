@@ -209,3 +209,43 @@ export function snapshotBytes<S, A, V, O, E extends RoomEffect>(game: RoomGame<S
   }
   return max;
 }
+
+/**
+ * 快速匹配的配置对不对得上房间（0.20.0，安全审阅）：每个开放的档位，排队那边的 tableSize（一桌几个真人）和 roomOptions（开桌带的选项）
+ * 要过得了这张桌的 RoomGame。对不上的话房间每桌都回 bad / bad_options、排到的人都转单机，线上只看得到日志。
+ * 游戏在自己的测试里调：`expect(matchConfigErrors(game, tiers, (t) => queue.tableSize(t), (t) => queue.roomOptions(t))).toEqual([])`。
+ * 返回每个问题一句话，没问题是空数组。纯函数，不碰运行时（普通 Node 测试能用）
+ */
+export function matchConfigErrors<S, A, V, O, E extends RoomEffect>(
+  game: RoomGame<S, A, V, O, E>,
+  tiers: readonly string[],
+  tableSize: (tier: string) => number,
+  roomOptions: (tier: string) => unknown = () => undefined,
+): string[] {
+  const out: string[] = [];
+  for (const tier of tiers) {
+    const raw = roomOptions(tier);
+    let opts: O | undefined;
+    if (raw !== undefined) {
+      if (!game.options) {
+        out.push(`${tier}: roomOptions given but the game has no options()`);
+        continue;
+      }
+      const o = game.options(raw);
+      if (o === null) {
+        out.push(`${tier}: roomOptions rejected by game.options()`);
+        continue;
+      }
+      opts = o;
+    } else if (game.options && game.options(undefined) === null) {
+      out.push(`${tier}: game.options() needs roomOptions for this tier`);
+      continue;
+    }
+    const count = game.seatCount ? game.seatCount(opts) : game.seats;
+    const size = tableSize(tier);
+    if (!Number.isInteger(size) || size < 2) out.push(`${tier}: tableSize ${size} must be an integer ≥ 2`);
+    else if (size > count) out.push(`${tier}: tableSize ${size} is more than the ${count} seats this table plays`);
+    else if (size > 9) out.push(`${tier}: tableSize ${size} is more than 9 (blockedAmong limit)`);
+  }
+  return out;
+}

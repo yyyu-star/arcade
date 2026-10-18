@@ -3,15 +3,17 @@
  * 单独部署（没有平台，DESIGN.md 10.1，site.ts）时不接钱包和云存档，"大厅"回游戏首页。
  * 规则在 src/core，流程在 solo.ts，这里只把它们和画面连起来。
  */
-import { detectPlatform } from 'arcade-kit/client';
+import { detectPlatform, MATCH_TEXT, MatchClient } from 'arcade-kit/client';
 import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
+import { chatMode as chatLayout } from 'arcade-kit/fun-logic';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
-import { DIFFICULTY_NAME, difficultyOf, stakesOf, type StakesId } from './core/stakes.ts';
+import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
-import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
+import { createError, createRoom, isRoomCode, matchUrl, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
+import { MATCH_TABLE, matchTierOf } from './room/match.ts';
 import { HAND_PAUSE_MS, OPENING_MS, TURN_MS, TWO_NOTE, type RoomView } from './room/rules.ts';
 import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, type WalletApi, type WalletReply, type WalletView } from './net/wallet.ts';
 import { site, twoText } from './site.ts';
@@ -27,7 +29,7 @@ import { roomCard, soloCard } from './view/share.ts';
 import { prepareShare, type ShareCard } from 'arcade-kit/share';
 import { mountSocial, openInvite, postMoment, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { el, setText, toggle } from './view/dom.ts';
-import { Lobby } from './view/lobby.ts';
+import { Lobby, topBuyIn } from './view/lobby.ts';
 import { ROOM_NAME, setRoom } from './view/rooms.ts';
 import { mountScene } from './view/scene.ts';
 import { propSvg, showSticker } from 'arcade-kit/fun';
@@ -107,6 +109,8 @@ const screen = el('div', 'screen', stage);
 let funOff = loadFunOff(localStorage, sessionStorage);
 /** 聊天"不看"（texas.settings 的 chatOff）：别人说的不冒气泡、不进记录，自己也没有聊天页 */
 let chatOff = readSettings().chatOff === true;
+/** 快速匹配桌上和陌生人聊不聊（0.20.0，texas.settings 的 strangerChat，默认聊）：不聊时进匹配桌不带 chat=1，好友房、单机照常 */
+let strangerChat = readSettings().strangerChat !== false;
 /** 牌桌上的互动组件：进桌时建、离桌时拆；单机的电脑由它在本地反应，好友房的由房间算（worker/room.ts） */
 let tf: TableFun | null = null;
 /**
@@ -157,6 +161,10 @@ const spectate = el('span', 'spectate hidden', hud, '也可以点蓝圈的座位
 const funSlot = el('div', 'fun-slot hidden', hud);
 // 放在这一行最前面：后面的"补码""歇一手"一显一隐，这个位置也不挪（kit 的按钮按矩形摆，挪了会压到别的按钮）
 hud.prepend(funSlot);
+// 手机横屏的"聊天"按钮（kit 0.19 的 chatButton）也在这一行占个位，挨着"互动"：不给的话 kit 把它摆在互动右边，压住"第几手""歇一手"（10-18 手机横屏截图）。
+// 电脑是聊天框、竖屏 kit 摆在互动下面，都不占这个位
+const chatSlot = el('div', 'fun-slot chat-slot hidden', hud);
+funSlot.after(chatSlot);
 // 开打以后也能叫人（0.3.0）：朋友点开链接看着，点亮着的电脑座位就能接管
 const inviteBtn = el('button', 'pill invite-btn hidden', hud, '叫朋友来');
 inviteBtn.type = 'button';
@@ -193,6 +201,7 @@ const lobby = new Lobby(stage, {
   resume,
   relief,
   openRoom,
+  match: (stakes, fun, level) => void quickMatch(stakes, fun, level),
   joinRoom,
   backToRoom,
   preview: (id) => {
@@ -210,7 +219,7 @@ const roomPanel = new RoomPanel(stage, {
 
 const getFit = watchViewport(app, stage, (f) => {
   tableView.layout(f);
-  tf?.refresh();
+  syncFun();
 });
 tableView.layout(getFit());
 
@@ -704,7 +713,8 @@ function openFun(scope: string): void {
     // 聊天（kit 0.18）：好友房经房间转发；单机（0.19.3，所有者要求）用 kit 的 localChat 在本机过一遍和房间一样的过滤、限速，
     // 只冒在我自己头上。电脑不读聊天（公平：说什么都不影响电脑怎么打、怎么起哄）
     chat: online ? (text: string) => online!.chat(text) : localChat((text, masked) => tf?.chat(ME, text, masked)),
-    chatEnabled: () => !chatOff,
+    chatEnabled: chatOn,
+    chatButton: () => (chatSlot.classList.contains('hidden') ? null : chatSlot.getBoundingClientRect()),
     scope: () => scope,
     localBots: !online,
     sound: (prop, phase) => funSound(prop, phase),
@@ -729,25 +739,48 @@ function chatFolded(): boolean {
  * 电脑版聊天框放不下（1280×720 的 6 人桌，哪儿都要盖住座位、按钮或公共牌）：第一次进桌先收成"聊天"小按钮，点开再看。
  * 只在玩家自己没收起、展开过（texas.chat 里还没有 folded）时做一次；kit 没有公开的"默认收起"参数，这里写它的设置（已请主线让 kit 加正式参数）
  */
-function foldChatIfCrowded(): void {
+function foldChatIfCrowded(): boolean {
   const prefs = readJson<Record<string, unknown>>(KEYS.chat) ?? {};
-  if (typeof prefs.folded === 'boolean' || window.innerWidth < 960) return;
-  if (!tableView.dockFits(340, 220, dockAvoid())) writeJson(KEYS.chat, { ...prefs, folded: true });
+  if (typeof prefs.folded === 'boolean' || window.innerWidth < 960) return false;
+  if (tableView.dockFits(340, 220, dockAvoid())) return false;
+  writeJson(KEYS.chat, { ...prefs, folded: true });
+  return true;
 }
 
+/** 聊天开关三档（0.20.0）：开 → 不和陌生人（快速匹配桌不聊，好友房、单机照常）→ 不看 */
+type ChatMode = 'on' | 'friends' | 'off';
+const chatMode = (): ChatMode => (chatOff ? 'off' : strangerChat ? 'on' : 'friends');
+const CHAT_MODE: Record<ChatMode, { label: string; next: ChatMode; tip: string }> = {
+  on: { label: '聊天：开', next: 'friends', tip: '聊天：开' },
+  friends: { label: '聊天：不和陌生人', next: 'off', tip: '聊天：不和陌生人（快速匹配的桌上不聊，好友房照常）' },
+  off: { label: '聊天：不看', next: 'on', tip: '聊天：不看（别人说的话不显示，自己也不能说）' },
+};
+
 function drawChatBtn(): void {
-  chatBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H10l-4.5 3.5V15.5H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>${chatOff ? '<path d="M4 4l16 16" stroke="currentColor" stroke-width="2"/>' : '<path d="M8 10.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
-  chatBtn.setAttribute('aria-label', chatOff ? '聊天：不看（点一下打开）' : '聊天：开（点一下不看）');
+  const m = chatMode();
+  const mark =
+    m === 'off'
+      ? '<path d="M4 4l16 16" stroke="currentColor" stroke-width="2"/>'
+      : m === 'friends'
+        ? '<circle cx="12" cy="10.5" r="1.6" fill="currentColor"/>'
+        : '<path d="M8 10.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+  chatBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H10l-4.5 3.5V15.5H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>${mark}</svg>`;
+  chatBtn.setAttribute('aria-label', `${CHAT_MODE[m].label}（点一下换）`);
   chatBtn.title = chatBtn.getAttribute('aria-label')!;
-  toggle(chatBtn, 'sel', !chatOff);
+  chatBtn.dataset.mode = m;
+  toggle(chatBtn, 'sel', m !== 'off');
 }
 
 chatBtn.addEventListener('click', () => {
-  chatOff = !chatOff;
-  patchSettings({ chatOff });
+  const next = CHAT_MODE[chatMode()].next;
+  chatOff = next === 'off';
+  strangerChat = next === 'on';
+  patchSettings({ chatOff, strangerChat });
   drawChatBtn();
-  // kit 每次开面板、每收到一句都现问 chatEnabled，不用重建组件（重建会丢掉内存里的聊天记录）
-  toast(chatOff ? '聊天：不看（别人说的话不显示，自己也不能说）' : '聊天：开');
+  syncFun();
+  // kit 每次开面板、每收到一句都现问 chatEnabled，不用重建组件（重建会丢掉内存里的聊天记录）。
+  // 匹配桌上从"不和陌生人"换回"开"：这次连接没带 chat=1，下回进桌才收得到
+  toast(CHAT_MODE[next].tip);
 });
 
 function closeFun(): void {
@@ -759,6 +792,11 @@ function closeFun(): void {
   document.body.classList.remove('texas-fun-idle');
 }
 
+/** 这会儿有没有聊天（kit 每次开面板、每收到一句都现问） */
+function chatOn(): boolean {
+  return !chatOff && (!online?.match || (online.chatOn && strangerChat));
+}
+
 /** 我坐着、没关互动：头像点开的是 kit 的菜单；不然（旁观、关了）头像的点按穿过去给牌桌（看对手、接管座位） */
 function funReady(): boolean {
   return mySeat() !== null && !funOff;
@@ -768,6 +806,8 @@ function funReady(): boolean {
 function syncFun(): void {
   if (!tf) return;
   toggle(funSlot, 'hidden', !funReady());
+  const phoneRow = chatLayout({ width: window.innerWidth, height: window.innerHeight }) === 'phone' && !stage.classList.contains('tall');
+  toggle(chatSlot, 'hidden', !(funReady() && chatOn() && phoneRow));
   document.body.classList.toggle('texas-fun-idle', !funReady());
   tf.refresh();
 }
@@ -1174,6 +1214,101 @@ async function openRoom(stakes: StakesId, size: number): Promise<void> {
   }
 }
 
+// ---------- 快速匹配（kit 0.20.0，DESIGN.md 6.11） ----------
+
+/** 正在排的队（同一时间只排一个） */
+let matcher: MatchClient | null = null;
+
+/**
+ * 这一档排队找真人：排队卡写"正在找人 · 已有 n/6 人 · 还剩 s 秒"，"不等了，和电脑打"和"取消"都是 cancel。
+ * 排到了进匹配桌（藏起房间码、叫人、选座、开打）；已经有开着的房间就回那一桌；只剩自己、今天的局数用完、联机忙时说一句（MATCH_TEXT），
+ * 过一秒多转成同一档的单机（照常从钱包带入）。被同一个账号别处的排队顶掉（replaced）不开单机。
+ * 娱乐档（fun，0.21.0）：所有难度排同一队，排到的是不记筹码的娱乐房间；转单机时按选的难度开娱乐单机
+ */
+async function quickMatch(stakes: StakesId, fun: boolean, level: number): Promise<void> {
+  if (busy || matcher) return;
+  const st = stakesOf(fun ? FUN_STAKES : stakes);
+  const body = el('div', 'match-card');
+  el('div', 'mc-tier', body, fun ? `娱乐 · 筹码不算数 · ${MATCH_TABLE} 人桌` : `实盘 · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${MATCH_TABLE} 人桌`);
+  const line = el('div', 'mc-wait', body);
+  el('div', 'mc-tip', body, '找到几个算几个，空位电脑补；只剩你一个就先和电脑打');
+  // 冒烟看排队卡说过什么（排到、转单机时卡片马上就关了）
+  const said = ((window as { __said?: string[] }).__said ??= []);
+  const say = (t: string): void => {
+    setText(line, t);
+    said.push(t);
+  };
+  let tick = 0;
+  /** 排到了、回原来的房间：卡片由这里关，之后什么都不做 */
+  let entered = false;
+  /** 房间说转单机：说完那句话一秒多后关卡片、开单机；这一秒里点了"取消"就不开 */
+  let soloNow = false;
+  let soloTimer = 0;
+  let count = 0;
+  let seats = MATCH_TABLE;
+  let until = 0;
+  const draw = (): void => say(`正在找人 · 已有 ${count}/${seats} 人 · 还剩 ${Math.max(0, Math.ceil((until - Date.now()) / 1000))} 秒`);
+  const stop = (): void => {
+    window.clearInterval(tick);
+    matcher?.cancel();
+    matcher = null;
+  };
+  say('正在找人…');
+  const mc = new MatchClient({
+    url: matchUrl(matchTierOf(stakes, fun)),
+    onWaiting: (n, size, leftMs) => {
+      count = n;
+      seats = size;
+      until = Date.now() + leftMs;
+      draw();
+      if (!tick) tick = window.setInterval(draw, 1_000);
+    },
+    onMatched: (code) => {
+      stop();
+      entered = true;
+      closeDialog();
+      enterRoom({ code, userId: cloud.userId(), host: false, at: Date.now(), match: true, ...(fun ? { fun: true as const } : {}) });
+    },
+    onHasRoom: (code) => {
+      stop();
+      entered = true;
+      closeDialog();
+      joinRoom(code);
+    },
+    onSolo: (why) => {
+      stop();
+      say(MATCH_TEXT[why]);
+      if (why === 'replaced') return;
+      soloNow = true;
+      soloTimer = window.setTimeout(closeDialog, 1_200);
+    },
+  });
+  matcher = mc;
+  mc.start();
+  const pick = await dialog(
+    stage,
+    '快速匹配',
+    body,
+    [
+      { label: '不等了，和电脑打', value: 'solo' },
+      { label: '取消', value: 'cancel', primary: true },
+    ],
+    true,
+  );
+  window.clearTimeout(soloTimer);
+  if (entered) return;
+  stop();
+  // 人点了"不等了"，或者房间说转单机、卡片到点自己关了（pick 是 null）；点了"取消"什么都不开
+  if (pick === 'solo' || (pick === null && soloNow)) void matchSolo(stakes, fun, level);
+}
+
+/** 匹配没排到人：同一档开一桌单机，6 人桌，钱包够就带满一份（不够少带一点，和选桌一样） */
+function matchSolo(stakes: StakesId, fun: boolean, level: number): Promise<void> {
+  if (fun) return start(FUN_STAKES, MATCH_TABLE, stakesOf(FUN_STAKES).max, true, level);
+  const st = stakesOf(stakes);
+  return start(stakes, MATCH_TABLE, topBuyIn(st, wallet?.balance ?? 0), false);
+}
+
 function joinRoom(code: string): void {
   if (!isRoomCode(code)) return;
   const old = savedRoom();
@@ -1206,10 +1341,11 @@ function enterRoom(r: SavedRoom): void {
   lastRefused = null;
   wasBuying = false;
   laidOut = { size: 0, me: -1 };
+  roomFoldCheck = true;
   stage.classList.add('in-room');
   closeDialog();
   // 换了房间、离开以后，旧连接还没播完的帧和状态回调一律不理
-  const o: Online = new Online(r, roomUi(() => online === o), { name: nickname() });
+  const o: Online = new Online(r, roomUi(() => online === o), { name: nickname(), chat: !r.match || strangerChat });
   online = o;
   openFun(`room:${r.code}`);
   social?.presenceNow(true);
@@ -1247,7 +1383,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   const ok = await dialog(
     stage,
     '离开房间',
-    seated && playing ? (site.standalone ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
+    seated && playing ? (noWallet() ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
     [
       { label: '留下', value: 'no' },
       { label: '离开', value: 'yes', primary: true },
@@ -1283,7 +1419,8 @@ let social: SocialHandle | null = null;
 /** 我在哪（kit 每次报之前现问）：在好友房里报房间码和"真人/座位数"，别的时候报在玩德州 */
 function presence(): Presence {
   const s = online?.state;
-  if (!s?.room) return { place: 'game', game: 'texas' };
+  // 快速匹配桌（0.20.0）进不去（不是这一桌的人房间回 4004），不报房间码
+  if (!s?.room || online?.match) return { place: 'game', game: 'texas' };
   const humans = s.room.seats.filter((x) => x.kind === 'human').length;
   const size = s.view?.size ?? s.opts?.size ?? s.room.seats.length;
   return { place: 'room', game: 'texas', room: s.code, seats: `${humans}/${size}` };
@@ -1313,7 +1450,7 @@ function roomShare(s: OnlineState, rows: RoomSummaryRow[], withRoom: boolean): (
   const v = s.view;
   if (site.standalone || !v) return undefined;
   const card = roomCard(rows, tally.awards(rows), `${stakesOf(v.stakes).name} · ${v.size} 人桌`, myName);
-  return card ? shareIt(card, withRoom ? s.code : null) : undefined;
+  return card ? shareIt(card, withRoom && !online?.match ? s.code : null) : undefined;
 }
 
 /**
@@ -1439,6 +1576,9 @@ function flushBots(): void {
 }
 
 /** 人数或我的座位变了：重摆牌桌（我永远在正下方）；摆了回 true */
+/** 这一间房还没按坐满的牌桌判断过聊天框放不放得下（enterRoom 置上，drawRoom 判断一次） */
+let roomFoldCheck = false;
+
 function layOut(size: number, me: number): boolean {
   if (laidOut.size === size && laidOut.me === me) return false;
   laidOut = { size, me };
@@ -1469,7 +1609,7 @@ function drawRoom(s: OnlineState): void {
       name: human ? info.name : null,
       // 中途坐下、接管电脑座位的人：钱到账了还要等这一手打完（0.2.5 写清楚，不让人以为卡住了）
       tag: human && info.auto ? '电脑代打' : human && info.away ? '掉线' : v.next?.[i] ? '下一手上桌' : v.buying[i] ? '带入中' : null,
-      takeable: spectator && info.kind === 'ai' && !info.reserved,
+      takeable: spectator && !online!.match && info.kind === 'ai' && !info.reserved,
     };
   });
   tableView.setPeople(people);
@@ -1484,6 +1624,12 @@ function drawRoom(s: OnlineState): void {
   toggle(twoNote, 'hidden', !v.needTwo);
   if (v.needTwo) toggle(betweenBar, 'hidden', false);
   if (!s.busy && animating === 0) tableView.show(v);
+  // 进房时还在等人页、牌桌没排座位，量不出聊天框挤不挤：等座位都坐上人（真人带入完）再看一次，要收起就重建组件
+  // （kit 只在建的时候读这个设置；之前说过的几句会丢，只发生在这台设备第一次进桌）
+  if (roomFoldCheck && !s.busy && animating === 0 && v.seats.every((x) => x.owner !== 'none')) {
+    roomFoldCheck = false;
+    if (foldChatIfCrowded()) openFun(`room:${s.code}`);
+  }
 
   setText(handNo, v.handNo ? `第 ${v.handNo} 手` : '');
   stage.dataset.phase = v.phase;
@@ -1500,7 +1646,8 @@ function drawRoom(s: OnlineState): void {
   toggle(backSeatBtn, 'hidden', me !== null || (s.you?.bound ?? null) === null);
   // 互动只有坐着的人能发（kit：旁观的不能发，免得刷屏）
   syncFun();
-  toggle(inviteBtn, 'hidden', false);
+  // 快速匹配桌叫不进人（0.20.0）
+  toggle(inviteBtn, 'hidden', online!.match);
   toggle(spectate, 'hidden', !people.some((p) => p.takeable));
   toggle(sitDownBtn, 'hidden', !people.some((p) => p.takeable));
 
@@ -1527,6 +1674,9 @@ function drawRoom(s: OnlineState): void {
     } else notMyTurn();
   }
 }
+
+/** 这一桌的筹码不碰钱包：单独部署，或者娱乐房间（0.21.0） */
+const noWallet = (): boolean => site.standalone || online?.fun === true;
 
 /** 钱包够带多少（按大盲取整，最多 full）；不知道钱包时按 full */
 const affordable = (full: number, bb: number): number => (wallet ? Math.min(full, Math.floor(wallet.balance / bb) * bb) : full);
@@ -1602,9 +1752,12 @@ function drawRoomTop(s: OnlineState): void {
   const st = o ? stakesOf(o.stakes) : null;
   // 旁观中（docs/social.md 1.4）：开打了、我没坐下也没绑着座位（离座回来的有"回到我的座位"）
   const watching = s.room?.status === 'playing' && (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
-  setText(where, `${watching ? '旁观中 · ' : ''}好友房 ${s.code}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  const kind = online?.match ? '快速匹配' : `好友房 ${s.code}`;
+  // 娱乐房间（0.21.0）不写档位：筹码不算数，盲注照小桌
+  const table = online?.fun ? ' · 娱乐 · 筹码不算数' : st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : '';
+  setText(where, `${watching ? '旁观中 · ' : ''}${kind}${table}`);
   toggle(where, 'watching', watching);
-  setText(walletChip, wallet ? `钱包 ${chips(wallet.balance)}` : '');
+  setText(walletChip, wallet && !online?.fun ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', false);
   setText(leaveBtn, '离开');
 }
@@ -1635,10 +1788,10 @@ async function roomRebuy(): Promise<void> {
   const seated = mine?.owner === 'player';
   const full = seated ? st.max - mine.stack : st.max;
   // 钱包不够补满：补钱包够的（平台 0.10.2），最少一个大盲（没坐上的最少这一档的最少买入）
-  const add = Math.max(Math.min(full, seated ? st.bb : st.min), affordable(full, st.bb));
+  const add = noWallet() ? full : Math.max(Math.min(full, seated ? st.bb : st.min), affordable(full, st.bb));
   const later = mine?.status !== 'out' && v.phase !== 'idle' ? '，这一手打完上桌' : '';
   const to = seated ? `补到 ${chips(mine.stack + add)}` : '上桌';
-  const msg = site.standalone ? `带 ${chips(add)} ${to}${later}。` : `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`;
+  const msg = noWallet() ? `带 ${chips(add)} ${to}${later}。` : `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`;
   const ok = await dialog(stage, '补码', msg, [
     { label: '算了', value: 'no' },
     { label: '补码', value: 'yes', primary: true },

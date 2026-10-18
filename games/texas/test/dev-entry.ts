@@ -4,7 +4,7 @@
  */
 import worker, { type Env } from '../worker/main.ts';
 
-export { RoomMeter, TexasRoom } from '../worker/main.ts';
+export { Queue, RoomMeter, TexasRoom } from '../worker/main.ts';
 
 export default {
   fetch(request: Request, env: Env): Promise<Response> {

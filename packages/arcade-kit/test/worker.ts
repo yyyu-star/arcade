@@ -5,7 +5,8 @@
 import type { RoomGame } from '../src/game.ts';
 import { shuffle, stream } from '../src/rng.ts';
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from '../src/room.ts';
-import { acceptCreate, acceptJoin, type GateOptions, type KitEnv } from '../src/worker.ts';
+import { acceptCreate, acceptJoin, acceptMatch, type GateOptions, type KitEnv } from '../src/worker.ts';
+import { MatchQueue } from '../src/match.ts';
 
 // 计量照游戏的写法从 kit 原样导出（wrangler.jsonc 的 class_name 是 RoomMeter）
 export { RoomMeter } from '../src/meter.ts';
@@ -31,6 +32,7 @@ export interface Env {
   NORESUME_ROOM: DurableObjectNamespace;
   FAKE_BANK: DurableObjectNamespace<FakeBank>;
   CHATTY_ROOM: DurableObjectNamespace;
+  MATCH: DurableObjectNamespace;
   /** props.game = "toy" */
   WALLET: Service<WalletService>;
   /** 没写 props.game */
@@ -126,14 +128,19 @@ export class FlakyMeter extends RoomMeter {
   private check(): void {
     if (this.down) throw new Error('meter down');
   }
-  override async kitReserve(...a: Parameters<RoomMeter['kitReserve']>) {
+  // 单人的 kitReserve / kitRelease 也经这两个（0.20.0），拦这里就都拦住了
+  override async kitReserveMany(...a: Parameters<RoomMeter['kitReserveMany']>) {
     this.check();
-    return super.kitReserve(...a);
+    return super.kitReserveMany(...a);
   }
-  override async kitRelease(...a: Parameters<RoomMeter['kitRelease']>) {
+  override async kitReleaseMany(...a: Parameters<RoomMeter['kitReleaseMany']>) {
     if (this.down) this.refusedReleases++;
     this.check();
-    return super.kitRelease(...a);
+    return super.kitReleaseMany(...a);
+  }
+  override async kitPeek(...a: Parameters<RoomMeter['kitPeek']>) {
+    this.check();
+    return super.kitPeek(...a);
   }
   override async kitReport(...a: Parameters<RoomMeter['kitReport']>) {
     this.check();
@@ -195,6 +202,29 @@ export class FlakyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
   }
 }
 
+/**
+ * 0.20.0 快速匹配：一桌最多 4 个真人（档位 duo 是 2 个），每小时最多排 5 次（测上限不用连 31 次）。
+ * fakeBlocks 不为 null 时代替平台的 blockedAmong（测试用 runInDurableObject 设）；默认空名单，免得每次凑桌都去调测试里只会 fetch 的假平台、刷一屏 workerd 的报错
+ */
+export class ToyQueue extends MatchQueue<Env> {
+  protected readonly seats = 4;
+  protected override readonly perHour = 5;
+  protected override readonly callMs = 300;
+  fakeBlocks: [string, string][] | null = [];
+  /** 为真时屏蔽名单、建房都一直不回（测凑桌的超时） */
+  hang: { blocks?: boolean; create?: boolean } = {};
+  protected override tableSize(tier: string): number {
+    return tier === 'duo' ? 2 : this.seats;
+  }
+  protected override blockedAmong(ids: string[]): Promise<[string, string][]> {
+    if (this.hang.blocks) return new Promise(() => {});
+    return this.fakeBlocks ? Promise.resolve(this.fakeBlocks) : super.blockedAmong(ids);
+  }
+  protected override createMatchRoom(...a: Parameters<MatchQueue<Env>['createMatchRoom']>) {
+    return this.hang.create ? new Promise<never>(() => {}) : super.createMatchRoom(...a);
+  }
+}
+
 async function bodyOpts(request: Request): Promise<unknown> {
   const text = await request.text().catch(() => '');
   return text ? (JSON.parse(text) as { opts?: unknown }).opts : undefined;
@@ -217,6 +247,8 @@ export default {
     }
     const gate: GateOptions = solo ? { ...GATE, guest: { reserved: ['老王'] } } : GATE;
     // 开房请求体 { opts } 是这个测试 Worker 自己的约定（游戏 Worker 各自决定怎么带），原样交给 kit（0.4.0）
+    const mt = /^\/match\/([^/]+)$/.exec(p);
+    if (mt) return acceptMatch(request, { ...e, MATCH: env.MATCH }, mt[1]!, { ...gate, tiers: ['four', 'duo'] });
     if (p === '/rooms') return acceptCreate(request, e, { ...gate, options: await bodyOpts(request) });
     const m = /^\/rooms\/([^/]+)\/ws$/.exec(p);
     if (m) return acceptJoin(request, e, m[1]!, gate);

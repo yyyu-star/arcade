@@ -12,10 +12,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "TexasRoom" },
-      { "name": "METER", "class_name": "RoomMeter" }
+      { "name": "METER", "class_name": "RoomMeter" },
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
   "services": [
     { "binding": "ARCADE", "service": "arcade" },
     { "binding": "WALLET", "service": "arcade", "entrypoint": "WalletService", "props": { "game": "texas" } }

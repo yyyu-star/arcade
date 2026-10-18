@@ -55,6 +55,8 @@ export interface FunSeat {
   temper?: FunTemper;
   /** 名牌、筹码数这些挂在头像旁的东西（屏幕矩形，0.18.2）：气泡避开它们，不盖住名字和钱数 */
   plate?: RectLike;
+  /** 头像旁别的小标签（缺门签、庄家、托管……，屏幕矩形，0.20.1）：和名牌一样，气泡和首次提示不盖 */
+  marks?: readonly RectLike[];
 }
 
 /**
@@ -84,9 +86,10 @@ export interface TableFunOptions {
   button?(): RectLike | null;
   /**
    * "互动"按钮的样子（0.18.2，替掉游戏自己对 .atf-btn 的 CSS 覆盖）：scale 把字（13px）和图标（22px）一起放大（舞台放大了的大屏用，最小 1）；
-   * row 为 true 时图标和字横排。每次 refresh 现问
+   * row 为 true 时图标和字横排；fontSize、icon（0.20.1，像素）直接给字号和图标边长，给了就不按 scale 算（德州、麻将原来直接改 .atf-btn）。
+   * 颜色、圆角走主题变量（--ak-soft、--ak-border、--ak-radius-btn）。每次 refresh 现问
    */
-  buttonStyle?(): { scale?: number; row?: boolean };
+  buttonStyle?(): ButtonStyle;
   /** 发出去：好友房走 kit emote，单机直接回给 receive */
   send(id: number, to?: number): void;
   /** 现在能不能发（好友房：坐下了才能），默认能 */
@@ -112,6 +115,11 @@ export interface TableFunOptions {
   lite?(): boolean;
   /** 电脑版聊天框放哪（0.19.0，用 left、top、width）：不给就在牌桌四个角里挑一个不压手牌、按钮、名牌的 */
   chatDock?(): RectLike | null;
+  /**
+   * 电脑版聊天框默认收不收（0.20.1）：玩家自己点过收起、展开就以玩家为准（存在 prefsKey 里）；没点过时听这个，给了 chatDock 也生效。
+   * 不给：没给 chatDock 时四个角都会压到东西才收（dockFits，0.20.0），给了 chatDock 默认展开。德州原来自己往 texas.chat 写 folded
+   */
+  chatFolded?(): boolean;
   /**
    * 弹幕在哪个区域飘（0.19.0）：不给就是屏幕 8%–58%，上沿压到最上面一排座位的头像、名牌下面；轨道自动避开手牌、按钮、名牌、头像、center
    */
@@ -218,13 +226,48 @@ type Tab = 'phrase' | 'sticker' | 'prop' | 'chat';
 /**
  * "互动" / "聊天"按钮的尺寸参数（0.18.2）：游戏没给 buttonStyle 就不写行内样式（不然会盖掉还没迁过来的游戏自己对 .atf-btn 的 CSS）
  */
-export function styleButton(b: HTMLElement, st: { scale?: number; row?: boolean } | undefined): void {
+export function styleButton(b: HTMLElement, st: ButtonStyle | undefined): void {
   const k = Math.max(1, st?.scale ?? 1);
-  b.style.fontSize = st ? `${13 * k}px` : '';
+  // 字号、图标给了就用（有个下限：字不小于 12、图标不小于 16，按钮本身保底 44 像素），没给按 scale
+  const font = st?.fontSize !== undefined && Number.isFinite(st.fontSize) ? Math.max(12, st.fontSize) : 13 * k;
+  const icon = st?.icon !== undefined && Number.isFinite(st.icon) ? Math.max(16, st.icon) : 22 * k;
+  b.style.fontSize = st ? `${font}px` : '';
   b.style.flexDirection = st?.row ? 'row' : '';
-  b.style.gap = st?.row ? `${6 * k}px` : '';
-  if (st) b.style.setProperty('--atf-icon', `${22 * k}px`);
+  b.style.gap = st?.row ? `${Math.round(font * 0.45)}px` : '';
+  if (st) b.style.setProperty('--atf-icon', `${icon}px`);
   else b.style.removeProperty('--atf-icon');
+}
+
+/** "互动" / "聊天"按钮的尺寸参数（TableFunOptions.buttonStyle） */
+export interface ButtonStyle {
+  scale?: number;
+  row?: boolean;
+  /** 字号（像素，0.20.1） */
+  fontSize?: number;
+  /** 图标边长（像素，0.20.1） */
+  icon?: number;
+}
+
+/**
+ * 头像旁的气泡（含首次提示"点头像扔道具"）要避开哪些地方（0.20.1）：
+ * - 软的（压一点还行）：游戏的禁区、桌上出的牌、正在冒的别的气泡、别人的头像；
+ * - 硬的（代价 ×3）：叠在气泡上面的按钮、聊天框（0.19.1，竖屏自己的气泡被"互动"按钮压住），以及各家的名牌和头像旁的标签（marks，麻将的缺门签）——
+ *   名字和筹码数是小字，气泡底色不透明，压一点就看不清是谁、剩多少（0.18.2 当软的，提示还是会盖住对家的名牌，所有者 10-18 报）
+ */
+export function bubbleZones(
+  seats: readonly (FunSeat | null)[],
+  seat: number,
+  z: { avoid: readonly RectLike[]; over: readonly RectLike[] },
+): { avoid: RectLike[]; hard: RectLike[] } {
+  const avoid = [...z.avoid];
+  const hard = [...z.over];
+  seats.forEach((o, i) => {
+    if (!o) return;
+    if (o.plate) hard.push(o.plate);
+    if (o.marks) hard.push(...o.marks);
+    if (i !== seat) avoid.push(o.rect);
+  });
+  return { avoid, hard };
 }
 
 /** 挂子元素（Workers 的类型里也有一个 append，签名对不上，所以统一用 appendChild） */
@@ -308,6 +351,7 @@ export class TableFun {
       button: () => (this.btn ? this.btn.getBoundingClientRect() : null),
       styleButton: (b) => styleButton(b, this.o.buttonStyle?.()),
       dock: () => this.o.chatDock?.() ?? null,
+      ...(opts.chatFolded ? { folded: () => opts.chatFolded!() } : {}),
       chatButton: () => this.o.chatButton?.() ?? null,
       area: () => this.o.danmakuArea?.() ?? null,
       lite: () => this.o.lite?.() ?? ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 2,
@@ -893,14 +937,9 @@ export class TableFun {
     this.layer.el.appendChild(b);
     const w = Math.min(maxW, b.offsetWidth || text.length * fs + 24);
     const h = b.offsetHeight || fs * 1.6;
-    // 避开"互动"按钮、各家的名牌筹码和别人的头像（0.18.2）：原来总往朝中心那侧放，竖屏自己的气泡被按钮压住半截
-    // 按钮、聊天框叠在气泡上面（DOM 层在效果层之上），压到了字就看不见：单独当"硬"禁区，代价 ×3（0.19.1）
-    const avoid: RectLike[] = [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())];
-    const hard: RectLike[] = [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])];
-    this.o.seats().forEach((o, i) => {
-      if (!o) return;
-      if (o.plate) avoid.push(o.plate);
-      if (i !== seat) avoid.push(o.rect);
+    const { avoid, hard } = bubbleZones(this.o.seats(), seat, {
+      avoid: [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())],
+      over: [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])],
     });
     const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid, hard);
     b.style.transform = `translate(${at.left}px,${at.top}px)`;

@@ -17,7 +17,7 @@
  * 浏览器里的计时器（重连、心跳）可以用 setTimeout，"只用一个闹钟"是房间（Durable Object）那边的规矩。
  */
 import { type ChatSendResult, checkChat } from './chat.js';
-import { type ChattedMsg, CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
+import { type ChattedMsg, CLOSE, CLOSE_REASON, type CreateError, type DownMsg, type EmotedMsg, isFinalClose, type MatchDownMsg, type MatchSoloWhy, PING, PONG, PROTOCOL_VERSION, type RoomInfo, type UpMsg } from './protocol.js';
 
 export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'failed';
 
@@ -545,6 +545,123 @@ export function closeText(code: number, reason?: string, overrides: RoomTexts = 
     if (name && name in ROOM_TEXT) key = name as RoomTextKey;
   }
   return overrides[key] ?? ROOM_TEXT[key];
+}
+
+// ---------- 快速匹配（0.20.0，docs/match.md） ----------
+
+export type { MatchSoloWhy };
+
+export interface MatchClientOptions {
+  /** 排队地址（游戏 Worker 接 acceptMatch 的那条路由，ws:// 或 wss://，带上档位） */
+  url: string;
+  /** 人数变了：n 是排着几个人（含自己），seats 一桌最多几个真人，leftMs 离"不等了"还剩多久（页面自己倒计时） */
+  onWaiting?(n: number, seats: number, leftMs: number): void;
+  /** 凑成一桌了：用 code 照常进房（RoomClient），这条排队连接已经关了 */
+  onMatched(code: string): void;
+  /** 不排了，转本机单机（同档位）；why 给页面挑一句话（MATCH_TEXT） */
+  onSolo(why: MatchSoloWhy): void;
+  /** 已经有一个开着的房间：带他回去（不给就当 onMatched） */
+  onHasRoom?(code: string): void;
+  /** 排队最多等多久（毫秒，和排队那边的 waitMs 一样，默认 15 秒）：没收到人数推送时，兜底计时按它算 */
+  waitMs?: number;
+  WebSocketImpl?: { new (url: string): WebSocketLike };
+}
+
+/**
+ * 兜底（安全审阅 0.20.0）：排队那边到点了还没给结果（平台、房间卡住，或者连接静默死掉），再多等这么久就自己转单机（unavailable），
+ * 不让页面一直停在"等待中"
+ */
+export const MATCH_GRACE_MS = 10_000;
+
+/** 转单机时给玩家看的话（游戏可以换掉个别措辞） */
+export const MATCH_TEXT: Record<MatchSoloWhy, string> = {
+  alone: '现在没人在排，先和电脑打',
+  daily_limit: '今天联机局数用完了，先和电脑打',
+  busy: '联机人多，先和电脑打',
+  unavailable: '暂时排不了，先和电脑打',
+  too_often: '排得太频繁了，先和电脑打一局',
+  replaced: '你在别的页面排上了，这里不排了',
+};
+
+/**
+ * 快速匹配的连接器：start() 连上就是在排，cancel() 关掉就是不排了。断线不重连：排队不值得重连，直接 onSolo('unavailable')。
+ * 结果只回一次（matched、solo、has_room 三选一），之后什么都不回调
+ */
+export class MatchClient {
+  private ws: WebSocketLike | null = null;
+  private done = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly opts: MatchClientOptions) {}
+
+  start(): void {
+    if (this.ws || this.done) return;
+    this.arm((this.opts.waitMs ?? 15_000) + MATCH_GRACE_MS);
+    const Impl = this.opts.WebSocketImpl ?? (globalThis.WebSocket as unknown as { new (url: string): WebSocketLike });
+    const ws = new Impl(this.opts.url);
+    this.ws = ws;
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== 'string' || ev.data === PONG) return;
+      let m: MatchDownMsg;
+      try {
+        m = JSON.parse(ev.data) as MatchDownMsg;
+      } catch {
+        return;
+      }
+      if (m.t === 'waiting') {
+        if (this.done) return;
+        this.arm(m.left + MATCH_GRACE_MS);
+        this.opts.onWaiting?.(m.n, m.seats, m.left);
+      } else if (m.t === 'matched') this.end(() => this.opts.onMatched(m.code));
+      else if (m.t === 'has_room') this.end(() => (this.opts.onHasRoom ?? this.opts.onMatched)(m.code));
+      else if (m.t === 'solo') this.end(() => this.opts.onSolo(m.why));
+    };
+    ws.onclose = (ev) => {
+      const why: MatchSoloWhy = ev.code === CLOSE.replaced ? 'replaced' : ev.code === CLOSE.tooManyJoins ? 'too_often' : ev.code === CLOSE.tryLater ? 'busy' : 'unavailable';
+      this.end(() => this.opts.onSolo(why));
+    };
+    ws.onerror = () => {};
+  }
+
+  /** 不排了（"取消"或"不等了，和电脑打"）：关掉连接，之后不再回调 */
+  cancel(): void {
+    this.done = true;
+    this.disarm();
+    const ws = this.ws;
+    this.ws = null;
+    try {
+      ws?.close(1000, 'cancel');
+    } catch {
+      // 已经关了
+    }
+  }
+
+  private end(fn: () => void): void {
+    if (this.done) return;
+    this.done = true;
+    this.disarm();
+    this.ws = null;
+    fn();
+  }
+
+  /** 到点还没有结果：关掉连接，自己转单机 */
+  private arm(ms: number): void {
+    this.disarm();
+    this.timer = setTimeout(() => {
+      const ws = this.ws;
+      this.end(() => this.opts.onSolo('unavailable'));
+      try {
+        ws?.close(1000, 'no answer');
+      } catch {
+        // 已经关了
+      }
+    }, Math.max(0, ms));
+  }
+
+  private disarm(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
 }
 
 // ---------- 有没有平台（0.10.0，独立部署时页面降级用） ----------

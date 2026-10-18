@@ -103,6 +103,11 @@ export interface RoomLimits {
    * 到了还办不完就记日志照样删（办事的一方要有自己的兜底，比如钱包到期退回买入）
    */
   closingMs: number;
+  /**
+   * 快速匹配的桌（0.20.0）：建好以后最多等排进来的人这么久，到了还没连上的座位由电脑代打、照样开打（人后来到了交还给他）。
+   * 都连上了就不等，马上开
+   */
+  matchJoinMs: number;
 }
 
 /** 4.5、4.6 的默认值。 */
@@ -127,6 +132,7 @@ export const DEFAULT_LIMITS: RoomLimits = {
   chatPerMin: 10,
   meterBatch: 200,
   closingMs: 60 * 60_000,
+  matchJoinMs: 20_000,
 };
 
 /** 闹钟里出错时，过这么久再醒来重试（不用"马上"，免得每次都出错时连着计费）。 */
@@ -225,6 +231,11 @@ interface Persist<S> {
   ending?: { reason: string; at: number } | null;
   /** 开房时定下的开局选项（0.4.0，RoomGame.options 校验过的）；没有就是开打时由 start 定 */
   opts?: unknown;
+  /**
+   * 快速匹配的桌（0.20.0）：排进来的人（建房时已经坐在各自的座位上）和最晚什么时候开打。
+   * 只有这几个人能进；没有房主（host 只是第一个人，用来还名额以外不起作用），start 一律 not_host
+   */
+  match?: { users: string[]; joinBy: number };
 }
 
 interface Attachment {
@@ -240,6 +251,16 @@ const TABLE = 'kit_room';
 export type CreateOutcome =
   | { r: 'created' | 'exists' | 'bad' | 'bad_options' | 'error' | 'unavailable' | 'busy' | 'daily_limit' }
   | { r: 'has_room'; code: string };
+
+/**
+ * 匹配开桌的结果（kitCreateMatch → match.ts 的 MatchQueue，0.20.0）。refused：计量挡了某个人（has_room 带他那个房间的码），
+ * userId 为 null 是全站忙（busy）；这一桌一个名额都没占，排队那边把这个人请出去再凑
+ */
+export type MatchOutcome =
+  | { r: 'created' | 'exists' | 'bad' | 'bad_options' | 'error' | 'unavailable' }
+  | { r: 'refused'; userId: string; why: 'has_room'; code: string }
+  | { r: 'refused'; userId: string; why: 'daily_limit' }
+  | { r: 'refused'; userId: null; why: 'busy' };
 
 /** 房间里一步的结果：要广播的帧、给做这步的连接回 ack。 */
 interface StepOut<S> {
@@ -343,8 +364,11 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   lastStepFailed = false;
   /** 写了还没报给计量的行数 */
   private unmetered = 0;
-  /** 这一步做完以后要还房主的名额（打完、关房），entry 最后去找计量 */
-  private release: { host: string; code: string } | null = null;
+  /**
+   * 这一步做完以后要还的名额（打完、关房；房主一个人，匹配桌是排进来的每个人），entry 最后去找计量。
+   * refund：匹配桌开打时没来的人（0.20.0），连当天的开房次数一起退给他（全站开房数不退，桌子开成了）
+   */
+  private release: { users: string[]; code: string; refund?: true } | null = null;
   /** 计量最近一次说的门槛（内存；被驱逐就重新问） */
   private level: { value: MeterLevel; at: number } | null = null;
   /** 计量连不上时，什么时候再试着报数 */
@@ -397,6 +421,45 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (out === 'created') this.maxStepWrites = before;
     else if (reserved && meter) await meter.kitRelease(host.userId, code, 0, true).catch(() => console.error('meter release failed', code));
     return { r: out instanceof Response ? 'error' : out };
+  }
+
+  /**
+   * 快速匹配开桌（0.20.0，只有 match.ts 的排队对象经 RPC 调）：players 按排队先后，每人占一个开房名额（计量一次占齐，占不齐一个都不占），
+   * 建房时把他们按 matchSeats 坐好。和 kitCreate 一样：码撞了回 exists、什么都不写；占到了却没建成就退回去。
+   */
+  async kitCreateMatch(code: string, players: Identity[], rawOpts?: unknown): Promise<MatchOutcome> {
+    const fixed = this.checkOpts(rawOpts);
+    if (fixed === undefined || (rawOpts !== undefined && !this.game.options)) return { r: 'bad_options' };
+    if (!validPlayers(code, players, fixed.count)) return { r: 'bad' };
+    const meter = this.meter();
+    const users = players.map((p) => p.userId);
+    let reserved = false;
+    if (meter && !this.load()) {
+      try {
+        const r = await meter.kitReserveMany(users, code, Date.now() + this.limits.maxLifeMs);
+        if (!r.ok) {
+          if (r.error === 'has_room') return { r: 'refused', userId: r.userId, why: 'has_room', code: r.code };
+          return r.error === 'daily_limit' ? { r: 'refused', userId: r.userId, why: 'daily_limit' } : { r: 'refused', userId: null, why: 'busy' };
+        }
+        reserved = true;
+      } catch (e) {
+        console.error('meter unreachable, refusing match room', e instanceof Error ? e.message : e);
+        return { r: 'unavailable' };
+      }
+    }
+    const before = this.maxStepWrites;
+    const out = await this.entry(() => this.createMatch(code, players, fixed));
+    if (out === 'created') this.maxStepWrites = before;
+    else if (reserved && meter) await meter.kitReleaseMany(users, code, 0, true).catch(() => console.error('meter release failed', code));
+    return { r: out instanceof Response ? 'error' : out };
+  }
+
+  /**
+   * 快速匹配时 n 个人坐哪几个座位（0.20.0，可选覆盖）：count 是这一局用几个座位，返回 n 个不重复的座位号（排队先后的顺序）。
+   * 默认随机（crypto，不在规则核心里）；比如两个真人要坐对家，游戏在这里给。给的不合格（重复、越界、个数不对）就按默认的随机
+   */
+  protected matchSeats(n: number, count: number): number[] {
+    return randomSeats(n, count);
   }
 
   /** 进房：只认 kit 自己拼的内部地址（worker.ts 的 acceptJoin），身份在 x-kit-user 头里。 */
@@ -569,7 +632,9 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       this.release = null;
       this.unmetered = 0;
       try {
-        const level = release ? await meter.kitRelease(release.host, release.code, n) : await meter.kitReport(n);
+        const level = release
+          ? await meter.kitReleaseMany(release.users, release.code, n, release.refund === true, false)
+          : await meter.kitReport(n);
         this.level = { value: level, at: Date.now() };
         this.meterRetryAt = 0;
       } catch (e) {
@@ -606,7 +671,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private async newcomerGate(userId: string): Promise<number | null> {
     const meter = this.meter();
     const st = this.load();
-    if (!meter || !st || st.host === userId || this.seatOf(userId) !== null || this.boundOf(userId) !== null) return null;
+    if (!meter || !st || st.host === userId || this.seatOf(userId) !== null || this.boundOf(userId) !== null || st.match?.users.includes(userId)) return null;
     if (this.sockets().some((o) => attachmentOf(o)?.userId === userId)) return null;
     const now = Date.now();
     if (!this.level || now - this.level.at >= LEVEL_TTL_MS) {
@@ -650,6 +715,32 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     return 'created';
   }
 
+  /** 匹配桌（0.20.0）：和 create 一样建表、存一行、设闹钟，只是排进来的人都先坐好（算掉线，连上就"回来"），记下最晚开打的时间。 */
+  private createMatch(code: string, players: Identity[], fixed: { opts: O | undefined; count: number }): 'created' | 'exists' | 'bad' {
+    if (this.load()) return 'exists';
+    this.writes += this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${TABLE} (k INTEGER PRIMARY KEY, v TEXT NOT NULL)`).rowsWritten;
+    const now = Date.now();
+    const seats: SeatState[] = Array.from({ length: this.game.seats }, () => emptySeat());
+    let order: number[];
+    try {
+      order = this.matchSeats(players.length, fixed.count);
+    } catch (e) {
+      console.error('matchSeats threw', e instanceof Error ? e.message : e);
+      order = [];
+    }
+    if (!validSeats(order, players.length, fixed.count)) order = randomSeats(players.length, fixed.count);
+    players.forEach((p, i) => (seats[order[i]!] = humanSeat(p.userId, p.name, now)));
+    this.st = {
+      sv: 1, code, host: players[0]!.userId, createdAt: now, status: 'waiting', seq: 0, gameSeq: 0, turnSeq: 0, seats, game: null, rulesVersion: null,
+      turnSince: null, aiAt: null, noHumanSince: now, inbound: 0, inboundBy: {}, joins: {}, owners: seats.map(() => null),
+      ...(fixed.opts !== undefined ? { opts: fixed.opts } : {}),
+      match: { users: players.map((p) => p.userId), joinBy: now + this.limits.matchJoinMs },
+    };
+    this.planAlarm();
+    this.save();
+    return 'created';
+  }
+
   /** 进房（含重连）：接受、记座位、发快照，中间没有 await（4.5 续局的写法）。 */
   private join(me: Identity, rawCv: string | null, chat = false): Response {
     const pair = new WebSocketPair();
@@ -669,6 +760,11 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const cv = Number(rawCv ?? '0');
     if (!Number.isFinite(cv) || cv < this.limits.minClientVersion) {
       server.close(CLOSE.tooOld, 'client too old');
+      return done();
+    }
+    // 匹配桌只认排进来的人（0.20.0）：房间码不给页面看，别人拿到码也进不来、看不了，回的和"没有这个房间"一样
+    if (st.match && !st.match.users.includes(me.userId)) {
+      server.close(CLOSE.noRoom, 'no room');
       return done();
     }
     const seat = this.seatOf(me.userId);
@@ -727,8 +823,10 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       st.joins[me.userId] = used + 1;
       st.noHumanSince = null;
     }
+    // 匹配桌的人到齐了：不等，和这次进房同一步开打（还是只写这一行和闹钟）
+    const frames = changed && this.matchReady(st) ? this.beginPlay(st, Date.now()) : [{ state: st.game, delay: 0 }];
     // 状态没变（没入座的人进来、在线时又从别的设备连一次）不写库、不广播
-    if (changed) this.commit({ frames: [{ state: st.game, delay: 0 }] }, server);
+    if (changed) this.commit({ frames }, server);
     this.send(server, this.welcome(seat, this.boundOf(me.userId)));
     return done();
   }
@@ -856,6 +954,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (current === raw) return this.reject(ws, 'already_seated');
     const target = st.seats[raw]!;
     if (st.status === 'over') return this.reject(ws, 'room_over');
+    // 匹配桌等人时座位是排好的，不换（开打以后离座、回座照常）
+    if (st.match && st.status === 'waiting') return this.reject(ws, 'seat_taken');
     if (st.status === 'waiting') {
       // 开房时定了选项的（0.4.0）：这一局用不到的座位现在就不让坐，免得房主开打时才被 seat_closed 拒
       if (st.opts !== undefined && raw >= this.countOf(st.opts as O)) return this.reject(ws, 'seat_closed');
@@ -890,7 +990,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
 
   private leave(seat: number | null): void {
     const st = this.st!;
-    if (seat === null) return;
+    if (seat === null || (st.match && st.status === 'waiting')) return;
     // 等人时空出来；开打后由电脑接手（不判负），轮到它就接着出。座位还绑着他，留下昵称给牌桌显示"电脑代某某打"
     st.seats[seat] = st.status === 'playing' ? { ...aiSeat(), name: st.seats[seat]!.name } : emptySeat();
     if (!this.seatedOnline()) st.noHumanSince ??= Date.now();
@@ -902,8 +1002,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
 
   private start(ws: WebSocket, me: Attachment, seat: number | null, rawOpts: unknown): void {
     const st = this.st!;
-    // 房主选择开打（9.1）
-    if (me.userId !== st.host) return this.reject(ws, 'not_host');
+    // 房主选择开打（9.1）；匹配桌没有房主，到齐或到点自动开（0.20.0）
+    if (me.userId !== st.host || st.match) return this.reject(ws, 'not_host');
     if (st.status !== 'waiting') return this.reject(ws, 'already_started');
     if (seat === null) return this.reject(ws, 'not_seated');
     // 开局选项（0.3.0）：游戏校验；这一局用几个座位，后面的座位一直空着。
@@ -911,20 +1011,42 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const fixed = st.opts !== undefined ? { opts: st.opts as O, count: this.countOf(st.opts as O) } : null;
     const checked = fixed ?? this.checkOpts(rawOpts);
     if (!checked) return this.reject(ws, 'bad_options');
-    const { opts, count } = checked;
-    if (st.seats.some((s, i) => i >= count && s.kind === 'human')) return this.reject(ws, 'seat_closed');
-    // 空座位由电脑补满；入座的人从这一刻起绑在自己的座位上
+    if (st.seats.some((s, i) => i >= checked.count && s.kind === 'human')) return this.reject(ws, 'seat_closed');
+    this.commit({ frames: this.beginPlay(st, Date.now(), checked) });
+  }
+
+  /**
+   * 开打：空座位由电脑补满，入座的人从这一刻起绑在自己的座位上，返回要广播的帧。
+   * 匹配桌（0.20.0）到点还没连上的人：座位照样绑给他，电脑先代打（auto），他连上就交还
+   */
+  private beginPlay(st: Persist<S>, now: number, checked?: { opts: O | undefined; count: number }): { state: S | null; delay: number }[] {
+    const { opts, count } = checked ?? { opts: st.opts as O | undefined, count: this.countOf(st.opts as O | undefined) };
     st.seats = st.seats.map((s, i) => (s.kind === 'empty' && i < count ? aiSeat() : s));
+    if (st.match) {
+      const absent: string[] = [];
+      for (const s of st.seats) {
+        if (s.kind !== 'human' || s.awaySince === null) continue;
+        s.auto = true;
+        absent.push(s.userId!);
+      }
+      // 没来的人（关了页面、网断了）：他的开房名额和当天次数退给他，不然白扣一个、还被 has_room 卡到这桌打完。
+      // 他后来回来照样能接着打这个座位（座位还绑着他）
+      if (absent.length) this.release = { users: absent, code: st.code, refund: true };
+    }
     st.owners = st.seats.map((s) => (s.kind === 'human' ? s.userId : null));
     st.rulesVersion = this.game.rulesVersion;
     st.game = this.begin(st.code, { opts, seats: st.seats.map((s) => s.kind) });
     st.gameSeq = st.seq + 1;
     st.turnSeq = st.gameSeq;
     st.status = 'playing';
-    const now = Date.now();
     st.turnSince = now;
     if (!this.game.over(st.game)) this.stalled(this.actorsOf(st.game));
-    this.commit({ frames: [{ state: st.game, delay: 0 }, ...this.runAuto(now)] });
+    return [{ state: st.game, delay: 0 }, ...this.runAuto(now)];
+  }
+
+  /** 匹配桌在等人，排进来的人都连上了 */
+  private matchReady(st: Persist<S>): boolean {
+    return !!st.match && st.status === 'waiting' && st.seats.every((s) => s.kind !== 'human' || s.awaySince === null);
   }
 
   /**
@@ -1033,6 +1155,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
 
     const frames: { state: S | null; delay: number }[] = [];
     let changed = false;
+    // 匹配桌等够了（0.20.0）：没来的由电脑代打，照样开
+    if (st.match && st.status === 'waiting' && now >= st.match.joinBy) return this.commit({ frames: this.beginPlay(st, now) });
     // 掉线超过宽限：电脑托管（只在开打以后有意义，等人时不管）
     for (const s of st.status === 'playing' ? st.seats : []) {
       if (s.kind === 'human' && s.awaySince !== null && !s.auto && now >= s.awaySince + this.limits.graceMs) {
@@ -1087,6 +1211,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const ds = [st.createdAt + this.limits.maxLifeMs];
     if (st.effectsAt != null) ds.push(st.effectsAt);
     if (st.noHumanSince !== null) ds.push(st.noHumanSince + this.limits.noHumanMs);
+    if (st.match && st.status === 'waiting') ds.push(st.match.joinBy);
     if (st.status === 'playing') {
       for (const s of st.seats) if (s.kind === 'human' && s.awaySince !== null && !s.auto) ds.push(s.awaySince + this.limits.graceMs);
       const due = this.deadline();
@@ -1143,7 +1268,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (over) {
       st.status = 'over';
       st.turnSince = null;
-      this.release = { host: st.host, code: st.code };
+      this.release = releaseOf(st);
       return;
     }
     const after = this.turnOf(next);
@@ -1190,7 +1315,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     console.error('game has nobody to act but is not over', st.code);
     st.status = 'over';
     st.turnSince = null;
-    this.release = { host: st.host, code: st.code };
+    this.release = releaseOf(st);
     return true;
   }
 
@@ -1571,7 +1696,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
         st.ending = { reason, at: Date.now() };
         st.effectsAt = null;
         st.effectTries = 0;
-        this.release = { host: st.host, code: st.code };
+        this.release = releaseOf(st);
         this.closing = false;
         this.planAlarm();
         this.save();
@@ -1587,7 +1712,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       ws.serializeAttachment(null);
       ws.close(CLOSE.roomClosed, reason);
     }
-    if (this.st) this.release = { host: this.st.host, code: this.st.code };
+    if (this.st) this.release = releaseOf(this.st);
     this.st = null;
     this.alarmToSet = null;
     this.alarmAt = null;
@@ -1655,13 +1780,14 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       turn,
       ...(st.opts !== undefined ? { opts: st.opts } : {}),
       ...(until !== null ? { pause: { until } } : {}),
+      ...(st.match ? { match: true as const } : {}),
     };
   }
 
   /** 这个房间的自己人：房主、坐着的、开打后绑过座位的。猜码超限时只放他们进（0.14.0） */
   private insider(userId: string): boolean {
     const st = this.load();
-    return !!st && (st.host === userId || this.seatOf(userId) !== null || this.boundOf(userId) !== null);
+    return !!st && (st.host === userId || this.seatOf(userId) !== null || this.boundOf(userId) !== null || !!st.match?.users.includes(userId));
   }
 
   /** 房主，或者开打后绑过座位的人：旁观名额不算他们（0.14.0） */
@@ -1776,6 +1902,33 @@ function sameGroup(
 
 function validHost(code: string, host: Identity): boolean {
   return ROOM_CODE_RE.test(code) && !!host && typeof host.userId === 'string' && !!host.userId && typeof host.name === 'string';
+}
+
+/** 打完、关房时要还谁的名额：匹配桌是排进来的每个人，好友房是房主 */
+function releaseOf(st: { host: string; code: string; match?: { users: string[] } }): { users: string[]; code: string } {
+  return { users: st.match ? [...st.match.users] : [st.host], code: st.code };
+}
+
+/** 匹配桌的人：1 到 count 个、userId 不重复、各自像个身份 */
+function validPlayers(code: string, players: unknown, count: number): players is Identity[] {
+  if (!Array.isArray(players) || players.length < 1 || players.length > count) return false;
+  if (!players.every((p: Identity) => validHost(code, p))) return false;
+  return new Set(players.map((p: Identity) => p.userId)).size === players.length;
+}
+
+function validSeats(order: unknown, n: number, count: number): order is number[] {
+  return Array.isArray(order) && order.length === n && new Set(order).size === n && order.every((x) => Number.isInteger(x) && x >= 0 && x < count);
+}
+
+/** 从 0..count-1 里随机挑 n 个座位（crypto；房间里的随机，不是规则核心） */
+function randomSeats(n: number, count: number): number[] {
+  const all = Array.from({ length: count }, (_, i) => i);
+  const r = crypto.getRandomValues(new Uint32Array(count));
+  for (let i = count - 1; i > 0; i--) {
+    const j = r[i]! % (i + 1);
+    [all[i], all[j]] = [all[j]!, all[i]!];
+  }
+  return all.slice(0, n);
 }
 
 function emptySeat(): SeatState {

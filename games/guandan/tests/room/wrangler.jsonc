@@ -11,13 +11,15 @@
     "bindings": [
       { "name": "ROOM", "class_name": "Room" },
       { "name": "METER", "class_name": "RoomMeter" },
-      { "name": "BANK", "class_name": "WalletBank" }
+      { "name": "BANK", "class_name": "WalletBank" },
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
     { "tag": "v2", "new_sqlite_classes": ["RoomMeter"] },
-    { "tag": "v3", "new_sqlite_classes": ["WalletBank"] }
+    { "tag": "v3", "new_sqlite_classes": ["WalletBank"] },
+    { "tag": "v4", "new_sqlite_classes": ["Queue"] }
   ],
   "services": [{ "binding": "WALLET", "service": "guandan-room-test", "entrypoint": "FakeWallet", "props": { "game": "guandan" } }],
   "vars": {

@@ -8,21 +8,21 @@
 src/core/   规则核心（纯函数、确定性）：cards 牌与牌序、patterns 牌型/比大小/枚举、game 状态机与玩家视角、options 规则开关、rng
 src/ai/     电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、memory 记牌（只用公开信息）、hints "提示"按钮的轮换列表、random 随机机器人（模拟基准）
 src/net/    联机（房间和页面共用，纯函数）：rules 把规则核心接成 arcade-kit 的 RoomGame、rotate 视角旋转（我总在下）、version 页面版本与房间、实盘路径、
-            stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）、emotes 互动编号表、fun-moments 短语表、电脑互动性格、名场面映射（接 kit 的 table-fun）
+            stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）、match 快速匹配的档位和开桌选项（0.26.0）、emotes 互动编号表、fun-moments 短语表、电脑互动性格、名场面映射（接 kit 的 table-fun）
 src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
             share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
-worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、
+worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、match.ts 快速匹配的排队（0.26.0）、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
 public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、_headers
 tests/      vitest；architecture.test.ts 检查 core/ai 的纯度；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai/（0.1.0）和 baseline-ai-0.1.2/ 旧版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
-            quota-smoke.ts 额度提示冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
+            quota-smoke.ts 额度提示冒烟；match-smoke.ts 快速匹配冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
 docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计（0.4.0 单机、0.5.0 好友房）、ai.md 电脑的场地、性格、强弱数字
 ```
 
@@ -132,6 +132,12 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     牌桌里判断"是不是我"一律用 `TableScene.isMe(seat)`（旁观时谁都不是），两队叫一队、二队（`side()`；"一二队"在标题字体里）。
     不能出手、不能扔互动（kit `not_seated`），顶上写"旁观中"；`NetSession.freeSeat()` 给"坐下"：回自己绑着的座位，娱乐房间接管第一个没绑人的电脑座位，实盘房间只看。
     `autoSeat` 开打后不再替人接管（先旁观）。坐下后会话换座位、牌桌整个重画。结束页旁观的人只有"回首页"、没有分享。
+  - 快速匹配（0.26.0，kit 0.20.0，设计在 kit 的 `docs/match.md`，房间规范是仓库根 `docs/platform-backend.md` 4.6 的匹配桌一行）：
+    排队是 `worker/match.ts` 的 `Queue`（kit `MatchQueue` 的子类，`wrangler.jsonc` 的 `MATCH`，每个档位一个实例），路由 `GET /games/guandan/room/match/<档位>` 走 kit 的 `acceptMatch`（`gate.ts`，同样受 `ONLINE` 开关；没有 `WALLET` 只开 `fun`）。
+    档位在 `src/net/match.ts`：`fun` 用娱乐好友房的规则，`real-<档位>` 用好友房实盘的规则（开桌选项 `{ stake }`，房间的 `parseRoomOpts` 校验）；改档位或桌大小跑 `tests/match.test.ts`（kit 的 `matchConfigErrors`）。
+    页面：选难度页的 `match`、选档页的"和电脑 / 快速匹配"（控件 `mode:0` / `mode:1`）→ `online.ts` 的 `openMatch`（排队卡 `#ol-match-wait`，人数、倒计时、`#ol-match-solo` 不等了、`#ol-match-cancel` 取消）；
+    排到了 `join(code, false, null, true)`，房间信息里 `room.match` 为真（`NetSession.match`）：大厅和牌桌不摆房间码、叫朋友、邀请、开局，分享卡不带房间码；`solo` 由标题页转同档单机（娱乐 `newGame`、实盘带入一份）。
+    陌生人聊天：设置"聊天"一行的"不和陌生人"（`strangerChat` 为假，默认开；手机横屏左栏放不下第七行，和 `chat` 并成一行三档）时，匹配桌的 `NetSession` 不给 `onChat`（kit 不带 `chat=1`），`chatOn` 为假，牌桌不给聊天页；记着的房间带 `match: true`，刷新接回去也照这个设置。
   - 报位置、收邀请（0.13.0，`src/view/social.ts`）：kit 的 `mountSocial`，`main.ts` 在 `detectOnce` 之后挂，没平台、没登录不挂；`where()` 在好友房里报 `place: room`、房间码和真人几个（"3/4"），
     别的时候报 `place: game`；进房（第一次连上）、离开房间时 `presenceNow()` 补报一次。邀请横条和"去"（跳 `/games/<id>/?room=<码>`）都是 kit 的。
     房间大厅的"叫朋友来"（`ol-share`）和牌桌顶上的邀请图标（控件 `invite`）都调 `openInvitePanel`（0.13.1）：kit 的"叫朋友来"面板，没挂上 social 时 `friends: false` 只有复制链接；链接按当前页面地址拼。
@@ -209,6 +215,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
 | `npm run stake-smoke` / `node tools/stake-sim.ts` | 单机实盘冒烟（本地栈 + 假钱包）/ 实盘计分模拟 |
+| `npm run match-smoke` | 快速匹配冒烟：两个浏览器排到同一桌、陌生人聊天开关、取消、一个人 15 秒转单机实盘（本地栈，约 2 分钟） |
 | `npm run ai-sim -- solo\|room\|style\|time\|length` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时、一局多长（docs/ai.md） |
 | `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174 |
 
@@ -217,12 +224,12 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | key | 内容 |
 |---|---|
 | `guandan.save` | 进行中的整局：`{ v, state: GameState, difficulty, counted, dealsCounted }`；整局结束即删除 |
-| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`）、娱乐单机的局长 `length`（`short` / `full`，0.25.0） |
+| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`）、娱乐单机的局长 `length`（`short` / `full`，0.25.0）、快速匹配桌上和陌生人打字聊天 `strangerChat`（0.26.0，默认开） |
 | `guandan.stats` | 战绩：局数、胜局、连胜、最高连胜、副数、头游次数 |
 | `guandan.tutorial` | 新手引导是否看过 |
 | `guandan.errors` | 最近 20 条未捕获错误（兜底面板写入） |
 | `guandan.cloud` | 云存档元数据 `{ v, userId, rev: {stats?, tutorial?}, dirty: 槽[] }`（0.1.7 起） |
-| `guandan.room` | 最近进的好友房 `{ code, host, at, userId }`，刷新、回来时接回去；只给 `userId` 那个账号看（0.2.1 起）；离开房间、回不去的关闭、换号、退出就删（0.2.0-beta 起） |
+| `guandan.room` | 最近进的好友房 `{ code, host, at, userId, match? }`（`match: true` 是快速匹配排到的桌，0.26.0），刷新、回来时接回去；只给 `userId` 那个账号看（0.2.1 起）；离开房间、回不去的关闭、换号、退出就删（0.2.0-beta 起） |
 | `guandan.<槽>.pre-sync` | 云同步合并改了本地数据前的备份（槽 = `stats` / `tutorial`，只留最近一份） |
 | `guandan.<槽>.pre-switch.<旧 userId>` | 换账号清空本地前的备份，每个旧账号一份（和 pre-sync 分开）；写时和已有的合并（只会变多），写完读回核对，没存上就不清空、暂停同步；之后再登录这个账号时并回本地、补传 |
 | `guandan.boot` | iOS 防崩溃标记 `{ v, pending, low, ver }`：页面在前台时 pending=1，切后台/离开清 0；打开时还是 1 说明上次被系统杀了，low 升一档（1 = 一倍渲染，2 = 再换 Canvas 渲染）；ver 不是当前版本就整条作废（0.1.10 起，只在 iOS 上写） |

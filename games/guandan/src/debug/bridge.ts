@@ -62,7 +62,22 @@ interface GameBridge {
   /** 内存估算（像素数）：纹理按 key 前缀分组、在场文字各自的画布、主画布；tools/mem.ts 用 */
   memory(): { textures: Record<string, number>; text: number; texts: number; canvas: number; webgl: boolean };
   /** 联机会话：房间码、我的真实座位、连接状态、房间状态、座位、最近的错误、排队的帧数 */
-  net(): { code: string; seat: number | null; status: string; closeCode: number | null; closeReason: string | null; room: string | null; seats: string[]; error: string | null; queue: number; pending: boolean; stake: StakeView | null } | null;
+  net(): {
+    code: string;
+    seat: number | null;
+    status: string;
+    closeCode: number | null;
+    closeReason: string | null;
+    room: string | null;
+    seats: string[];
+    error: string | null;
+    queue: number;
+    pending: boolean;
+    stake: StakeView | null;
+    /** 快速匹配的桌（0.26.0）、这条连接收不收打字聊天 */
+    match: boolean;
+    chat: boolean;
+  } | null;
   /** 云存档状态（云朵图标显示的） */
   cloud(): { status: string; note: string | null } | null;
   /** 单机实盘：本机的实盘存档（没有为 null）和牌桌上这一场结算的结果 */
@@ -256,6 +271,8 @@ export function mountBridge(game: Phaser.Game): void {
         pending: n.pending !== null,
         // 好友房实盘：最新一帧里每个座位的账（按我的座位转过，我是 0 号）
         stake: n.queue[n.queue.length - 1]?.nv.stake ?? n.shown?.stake ?? null,
+        match: n.match,
+        chat: n.chatOn,
       };
     },
     stats: () => {

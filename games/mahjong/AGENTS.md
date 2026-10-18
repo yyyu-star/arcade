@@ -17,5 +17,8 @@
   显示钱包、平台的错误一律按 `docs/platform-backend.md` 15.10 的对照表说人话（`src/view/text.ts`）。
 - `wrangler.jsonc` 是能单独部署的独立配置：不写平台绑定（`ARCADE`、`WALLET`）和 `GATE`，本站部署时由仓库的部署工具补上。
   没有平台时 Worker 认游客（kit 的独立模式）、实盘回 `no_wallet`，页面按 `detectPlatform()` 藏起钱包和实盘；`test/worker/standalone.test.ts` 覆盖。
+- 快速匹配（0.21.0，DESIGN.md 第 6 节）：档位在 `src/game/match.ts`（Worker 和页面共用），排队类 `worker/match.ts` 的 `Queue`（DO 绑定 `MATCH`）。
+  改了档位、房间的 `options` 或座位数，`test/match-tier.test.ts` 的 `matchConfigErrors` 必须还是 `[]`；入口的具名导出只有 `MahjongRoom`、`RoomMeter`、`Queue`（`test/worker/match.test.ts` 守着）。
+  `wrangler.jsonc` 已上线的迁移（v1、v2）不能改，加 DO 类另起一条新 tag，`test/wrangler.*.jsonc` 和测试入口同步。改了排队、匹配桌，跑 `npm run build:cf && npm run smoke:match`（浏览器锁下）。
 - 浏览器存储的键一律 `mahjong.` 前缀（DESIGN.md 第 8 节）。
 - 提交信息以 `mahjong:` 开头，分支 `mahjong/<说明>`；只暂存明确路径。

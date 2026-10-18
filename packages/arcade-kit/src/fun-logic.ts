@@ -443,6 +443,19 @@ export function pickLane(freeAt: readonly number[], now: number): number {
  * 上面两个角从屏幕高度的 9% 往下：几个游戏的顶栏（回大厅、设置）都在那一条里，kit 不知道它们的位置
  */
 export function placeDock(view: { width: number; height: number }, w: number, h: number, avoid: readonly Box[] = [], margin = 12): { left: number; top: number } {
+  const { left, top } = dockSpot(view, w, h, avoid, margin);
+  return { left, top };
+}
+
+/**
+ * 四个角里有没有一个一点都不压禁区（0.20.0）：没有的话，玩家又没自己展开过，电脑版聊天框默认收成"聊天"小按钮。
+ * 掼蛋 1280×720 上四个角都放不下，压得最少的左上角正好盖住左家的头像，点不到他、也看不到剩几张
+ */
+export function dockFits(view: { width: number; height: number }, w: number, h: number, avoid: readonly Box[] = [], margin = 12): boolean {
+  return dockSpot(view, w, h, avoid, margin).cost === 0;
+}
+
+function dockSpot(view: { width: number; height: number }, w: number, h: number, avoid: readonly Box[], margin: number): { left: number; top: number; cost: number } {
   const l = margin;
   const r = Math.max(margin, view.width - margin - w);
   const t = Math.max(margin, Math.round(view.height * 0.09));
@@ -457,7 +470,7 @@ export function placeDock(view: { width: number; height: number }, w: number, h:
       if (cost === 0) break;
     }
   }
-  return best;
+  return { ...best, cost: bestCost };
 }
 
 /**

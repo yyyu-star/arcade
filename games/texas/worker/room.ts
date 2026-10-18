@@ -45,7 +45,8 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
 
   protected override onStep(s: RoomState): void {
     // 搭子战绩（0.17.0，平台 15.19；DESIGN.md 6.10）：规则在有人离桌、散桌时切出的场，按座位报（电脑座位 kit 跳过），不 await、不重试
-    if (s.mates && s.mates.n > this.matches) {
+    // 娱乐房间不报（报给平台走的是钱包的绑定，娱乐房间一概不碰）
+    if (!s.fun && s.mates && s.mates.n > this.matches) {
       for (const m of s.mates.last) this.reportMatch(m.players, m.match);
       this.matches = s.mates.n;
     }
@@ -80,6 +81,8 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
   protected override async perform(e: WalletEffect, userId: string | null): Promise<unknown> {
     // 电脑座位没有钱包；规则只给真人座位记钱包的事，到这里是写错了
     if (!userId) return { ok: false, error: 'no_user' };
+    // 娱乐房间（0.21.0）：筹码不算数，和单独部署一样直接当办成，一次都不调平台（test/worker/room.test.ts 数着）
+    if (e.fun) return { ok: true };
     // 单独部署没有钱包：好友房的筹码白送、不记账（游客模式，DESIGN.md 10.1）。本站丢了绑定不能这样，一律拒绝
     if (!this.env.WALLET) return isStandalone(this.env) ? { ok: true } : { ok: false, error: 'unavailable' };
     const base = { userId, game: GAME, ref: e.ref, mode: 'server' as const, op: roomOp(e) };

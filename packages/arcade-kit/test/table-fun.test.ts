@@ -3,7 +3,8 @@
  * 组件本身要 DOM，在 demo/table-fun.html 里看；这里只测纯函数（import 时不碰 DOM，Node 里能直接引）
  */
 import { describe, expect, it } from 'vitest';
-import { checkPrefsKey, checkStorageKey, hintSeatFor, type FunSeat } from '../src/table-fun.ts';
+import { placeBubble } from '../src/fun-logic.ts';
+import { bubbleZones, checkPrefsKey, checkStorageKey, hintSeatFor, styleButton, type FunSeat } from '../src/table-fun.ts';
 
 describe('checkStorageKey', () => {
   it('游戏 id 的写法：小写字母、数字、连字符，最多 32 位', () => {
@@ -50,5 +51,81 @@ describe('checkPrefsKey（聊天设置的存储 key，0.19.0）', () => {
     for (const k of ['guandan.chat', 'texas', 'texas.', 'texas.Chat', 'texas. chat', 'arcade.chat', `texas.${'a'.repeat(60)}`, 3, undefined]) {
       expect(() => checkPrefsKey(k, 'texas'), String(k)).toThrow(/prefsKey/);
     }
+  });
+});
+
+describe('头像旁的气泡避开哪里（bubbleZones，0.20.1）', () => {
+  const view = { width: 844, height: 390 };
+  // 对家在上：头像 + 右边的名牌（名字、筹码）；左边是桌上出的牌
+  const top: FunSeat = { rect: { left: 392, top: 20, width: 60, height: 60 }, plate: { left: 458, top: 14, width: 120, height: 34 }, name: '小美', bot: true };
+  const me: FunSeat = { rect: { left: 20, top: 300, width: 60, height: 60 }, plate: { left: 20, top: 362, width: 60, height: 20 }, name: '我', me: true };
+  const trick = { left: 280, top: 14, width: 106, height: 34 };
+
+  it('各家的名牌是硬禁区：首次提示宁可擦一点桌上的牌，也不盖对家的名字和筹码（所有者 10-18）', () => {
+    const z = bubbleZones([me, top], 1, { avoid: [trick], over: [] });
+    expect(z.hard).toEqual([me.plate, top.plate]);
+    expect(z.avoid).toEqual([trick, me.rect]);
+    const at = placeBubble(top.rect, 150, 30, view, z.avoid, z.hard);
+    const hit = (b: { left: number; top: number; width: number; height: number }): boolean =>
+      at.left < b.left + b.width && b.left < at.left + 150 && at.top < b.top + b.height && b.top < at.top + 30;
+    expect(hit(top.plate!)).toBe(false);
+    // 反证：名牌当软的（0.18.2 的做法）就会压上去
+    const old = placeBubble(top.rect, 150, 30, view, [...z.avoid, ...z.hard], []);
+    expect(old.left < top.plate!.left + top.plate!.width && top.plate!.left < old.left + 150).toBe(true);
+  });
+
+  it('头像旁的标签（marks，麻将的缺门签）也是硬的：首次提示换一侧，不压住右上家的缺门（麻将体检）', () => {
+    // 右上家：头像左边挂着缺门签，提示原来朝屏幕中心（左边）冒、正好压住它
+    const tr: FunSeat = { rect: { left: 700, top: 40, width: 60, height: 60 }, marks: [{ left: 650, top: 40, width: 44, height: 28 }], name: '东家', bot: true };
+    const z = bubbleZones([me, tr], 1, { avoid: [], over: [] });
+    expect(z.hard).toEqual([me.plate, ...tr.marks!]);
+    const at = placeBubble(tr.rect, 150, 30, view, z.avoid, z.hard);
+    const m = tr.marks![0]!;
+    expect(at.left < m.left + m.width && m.left < at.left + 150 && at.top < m.top + m.height && m.top < at.top + 30).toBe(false);
+    // 反证：不给 marks 就压上去
+    const bare = placeBubble(tr.rect, 150, 30, view, z.avoid, [me.plate!]);
+    expect(bare.left < m.left + m.width && m.left < bare.left + 150 && bare.top < m.top + m.height && m.top < bare.top + 30).toBe(true);
+  });
+
+  it('竖屏自己的气泡：叠在上面的"互动"按钮照样是硬的（0.19.1 已修，这里守住接线）', () => {
+    const port = { width: 390, height: 844 };
+    const self: FunSeat = { rect: { left: 20, top: 700, width: 60, height: 60 }, name: '我', me: true };
+    const btn = { left: 86, top: 694, width: 60, height: 60 };
+    const z = bubbleZones([self], 0, { avoid: [], over: [btn] });
+    expect(z.hard).toEqual([btn]);
+    expect(z.avoid).toEqual([]);
+    const at = placeBubble(self.rect, 120, 30, port, z.avoid, z.hard);
+    expect(at.left + 120 <= btn.left || at.top + 30 <= btn.top).toBe(true);
+  });
+});
+
+describe('styleButton（"互动"按钮的大小参数）', () => {
+  const fake = (): { style: Record<string, string> & { setProperty(k: string, v: string): void; removeProperty(k: string): void } } => {
+    const style = {
+      setProperty(k: string, v: string) {
+        (style as Record<string, unknown>)[k] = v;
+      },
+      removeProperty(k: string) {
+        delete (style as Record<string, unknown>)[k];
+      },
+    } as Record<string, string> & { setProperty(k: string, v: string): void; removeProperty(k: string): void };
+    return { style };
+  };
+  it('没给：不写行内样式（游戏自己的 CSS 还管用）', () => {
+    const b = fake();
+    styleButton(b as unknown as HTMLElement, undefined);
+    expect(b.style['fontSize']).toBe('');
+    expect(b.style['--atf-icon']).toBeUndefined();
+  });
+  it('scale 按 13 / 22 放大；fontSize、icon（0.20.1）直接给像素，优先于 scale，有下限', () => {
+    const a = fake();
+    styleButton(a as unknown as HTMLElement, { scale: 1.5, row: true });
+    expect([a.style['fontSize'], a.style['--atf-icon'], a.style['flexDirection']]).toEqual(['19.5px', '33px', 'row']);
+    const b = fake();
+    styleButton(b as unknown as HTMLElement, { scale: 2, fontSize: 18, icon: 24 });
+    expect([b.style['fontSize'], b.style['--atf-icon'], b.style['flexDirection']]).toEqual(['18px', '24px', '']);
+    const c = fake();
+    styleButton(c as unknown as HTMLElement, { fontSize: 4, icon: Number.NaN });
+    expect([c.style['fontSize'], c.style['--atf-icon']]).toEqual(['12px', '22px']);
   });
 });

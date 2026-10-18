@@ -2,15 +2,18 @@
  * 好友房的大厅（DOM 层，输房间码用原生输入框，手机上好打字）：开房、输码进房、选座、房主开局；牌桌上的"重连中"横条。
  * 标题页一直有"好友房"（0.3.0 起）；?online=1 启动后直接打开这个面板（平台大厅的入口）。房间、牌局都在服务端，这里只发意图、照房间的信息画。
  * 每天的额度（arcade-kit 0.2.0）：已经有房间给"回到房间"，今天开房次数用完、今天人太多都说成一句话，单机照常。
+ * 快速匹配（0.26.0，kit 0.20.0 的 MatchClient，设计在 kit 的 docs/match.md）：排队也画在这张卡上；排到了照好友房进房，只是不给房间码、邀请、开局。
  */
+import { MATCH_TEXT, MatchClient, type MatchSoloWhy } from 'arcade-kit/client';
 import { CLOSE } from 'arcade-kit/protocol';
 import { app } from './app.ts';
-import { NetSession, createRoom, errorText, forgetRoom, isFinalForRoom, myRoom, roomInUrl } from './net.ts';
+import { NetSession, createRoom, errorText, forgetRoom, isFinalForRoom, myRoom, roomInUrl, savedRoom } from './net.ts';
+import { MATCH_PATH, matchTierOf } from '../net/match.ts';
 import { parseRoomOpts } from '../net/stake.ts';
 import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../stake/index.ts';
 import { ROOM_STAKE_TEXT, STAKE_TEXT, TIER_NAME, fmtChips } from './stake-text.ts';
 import { fetchWallet } from './stake.ts';
-import { standalone } from './platform.ts';
+import { standalone, withNick } from './platform.ts';
 import { openInvitePanel, presenceNow } from './social.ts';
 import { getNick, setNick } from './store.ts';
 import { loginUrl } from './ui/cloud.ts';
@@ -53,6 +56,7 @@ function style(): void {
 #online .ol-seat .gd-btn, #online #ol-tiers .gd-btn { flex: none; padding: 0 var(--gd-s3); font-size: 15px; }
 #online .ol-note { min-height: 1.5em; color: var(--gd-red-dark); font-weight: bold; }
 #online .ol-tip { color: var(--gd-muted); font-size: 14px; }
+#online .ol-wait { font: bold 20px/1.4 var(--gd-font); text-align: center; }
 #online .ol-stake { padding: var(--gd-s1) var(--gd-s3); border-radius: var(--gd-r-sm); background: #f6dcc8; color: var(--gd-red-dark); font-weight: bold; }
 #net-banner { position: fixed; z-index: 8400; left: 50%; top: max(var(--gd-s2), env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: none;
   padding: var(--gd-s2) var(--gd-s4); border-radius: var(--gd-r-pill); background: rgba(43, 22, 10, 0.92); border: 2px solid var(--gd-gold); color: #ffe9c2;
@@ -88,6 +92,7 @@ function card(): HTMLElement {
 }
 
 function close(): void {
+  stopMatch();
   root?.remove();
   root = null;
 }
@@ -184,11 +189,11 @@ async function create(stake: TierId | null): Promise<void> {
  * 开打了就接管电脑的座位。返回要给人看的一句话（弹了系统分享、或者自己关掉了分享面板时没有）。大厅和牌桌（0.6.1）共用
  */
 
-/** 进房（含房主自己）：连上后画房间。prefer：再来一场跟过来的，想坐的真实座位 */
-export function join(code: string, host: boolean, prefer: number | null = null): void {
+/** 进房（含房主自己）：连上后画房间。prefer：再来一场跟过来的，想坐的真实座位；match：快速匹配排到的桌 */
+export function join(code: string, host: boolean, prefer: number | null = null, match = false): void {
   offSes?.();
   ses?.close();
-  const s = new NetSession(code, host);
+  const s = new NetSession(code, host, match ? { match } : {});
   s.prefer = prefer;
   ses = s;
   roomInUrl(code);
@@ -220,7 +225,8 @@ function renderRoom(): void {
     return;
   }
   const c = card();
-  c.appendChild(el('h2', {}, '好友房'));
+  const match = s.match;
+  c.appendChild(el('h2', {}, match ? '快速匹配' : '好友房'));
   if (s.status === 'closed' || s.status === 'failed') {
     c.appendChild(el('div', { class: 'ol-note' }, s.linkText()));
     // 回不去了（房间散了、码不对、满了、在别处进了……）：地址栏里的房间码也去掉，免得刷新又撞上
@@ -233,15 +239,18 @@ function renderRoom(): void {
       else row.appendChild(button('去登录', () => (window.location.href = loginUrl(`?room=${s.code}`))));
     }
     if (s.status === 'failed') row.appendChild(button('再试一次', () => s.retry()));
-    row.appendChild(button('好', () => openOnline(), 'gd-2', 'ol-ok'));
+    row.appendChild(button('好', () => (match ? close() : openOnline()), 'gd-2', 'ol-ok'));
     c.appendChild(row);
     return;
   }
-  const head = el('div', { class: 'ol-row' });
-  head.appendChild(el('span', {}, '房间码'));
-  head.appendChild(el('span', { class: 'ol-code', id: 'ol-room-code' }, s.code));
-  c.appendChild(head);
-  if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void openInvitePanel(s.code), 'gd-big', 'ol-share'));
+  // 匹配桌只给排到的人进（别人拿着码也是 4004）：房间码、叫朋友都不摆
+  if (!match) {
+    const head = el('div', { class: 'ol-row' });
+    head.appendChild(el('span', {}, '房间码'));
+    head.appendChild(el('span', { class: 'ol-code', id: 'ol-room-code' }, s.code));
+    c.appendChild(head);
+    if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void openInvitePanel(s.code), 'gd-big', 'ol-share'));
+  }
   // 实盘房间：开房时定的档位，进房的人都看得到
   const stake = parseRoomOpts(s.room?.opts)?.stake ?? null;
   if (stake) {
@@ -266,7 +275,7 @@ function renderRoom(): void {
     who.appendChild(el('b', { title: name }, name));
     who.appendChild(el('small', {}, `${seatLabel(i, s.mySeat)}${st.kind === 'human' && st.away ? ' · 掉线了' : ''}`));
     box.appendChild(who);
-    if (room.status === 'waiting' && st.kind === 'empty') box.appendChild(button(s.mySeat === null ? '坐这里' : '换到这', () => s.sit(i), '', `ol-sit-${i}`));
+    if (room.status === 'waiting' && st.kind === 'empty' && !match) box.appendChild(button(s.mySeat === null ? '坐这里' : '换到这', () => s.sit(i), '', `ol-sit-${i}`));
     if (room.status === 'playing' && s.mySeat === null) {
       // 开打后座位绑人（arcade-kit 0.1.1）：坐过的人只能回自己的座位；没坐过的人只能接管没绑人的电脑座位
       if (s.bound === i) box.appendChild(button('回到我的座位', () => s.sit(i), '', `ol-sit-${i}`));
@@ -275,7 +284,10 @@ function renderRoom(): void {
     seats.appendChild(box);
   });
   c.appendChild(seats);
-  if (room.status === 'waiting') {
+  if (room.status === 'waiting' && match) {
+    // 匹配桌：排到的人都坐好了，到齐就开；20 秒还没来的座位电脑替他打（kit 的 matchJoinMs）
+    c.appendChild(el('div', { class: 'ol-tip', id: 'ol-match-tip' }, '排到了！人到齐就开打，没来的座位电脑替他打'));
+  } else if (room.status === 'waiting') {
     if (s.host) {
       // 实盘至少两个真人（3.1）：房间开局时不够也会整场不计输赢，这里先把按钮灰掉
       const humans = room.seats.filter((st) => st.kind === 'human').length;
@@ -291,7 +303,7 @@ function renderRoom(): void {
       el('div', { class: 'ol-tip' }, s.bound !== null ? '电脑在替你打，点"回到我的座位"接着打' : free ? '已经开打了，选一个电脑的座位接管' : '已经开打了，座位都有主人，换个房间吧'),
     );
   } else if (room.status === 'over') {
-    c.appendChild(el('div', { class: 'ol-tip' }, '这局已经打完了，开个新房间再来'));
+    c.appendChild(el('div', { class: 'ol-tip' }, match ? '这局已经打完了，再排一次吧' : '这局已经打完了，开个新房间再来'));
   }
   c.appendChild(noteEl());
   c.appendChild(button('离开房间', () => leave(), 'gd-2', 'ol-leave'));
@@ -301,6 +313,7 @@ function renderRoom(): void {
 }
 
 function leave(): void {
+  const match = ses?.match ?? false;
   offSes?.();
   offSes = null;
   ses?.leave();
@@ -308,7 +321,80 @@ function leave(): void {
   app.net = null;
   presenceNow();
   note = '';
-  openOnline();
+  // 匹配桌是从选档页排来的：离开就回标题页（好友房面板和它不相干）
+  if (match) close();
+  else openOnline();
+}
+
+let matcher: MatchClient | null = null;
+let tick: number | null = null;
+
+function stopMatch(): void {
+  matcher?.cancel();
+  matcher = null;
+  if (tick !== null) window.clearInterval(tick);
+  tick = null;
+}
+
+/**
+ * 快速匹配（0.26.0）：stake 是档位（娱乐 null），solo 是转同档单机（标题页给：娱乐按现在的设置开一局、实盘按这一档带入）。
+ * 排队连接只建一条、不轮询；人数变了服务端推一次（带剩余毫秒数），倒计时页面自己数。15 秒只剩自己、联机忙、今天局数用完都转单机；
+ * 排到了用好友房同一套进房（match = true）
+ */
+export function openMatch(stake: TierId | null, solo: () => void): void {
+  stopMatch();
+  const c = card();
+  c.appendChild(el('h2', {}, '快速匹配'));
+  c.appendChild(
+    el('div', { class: 'ol-stake', id: 'ol-match-tier' }, stake ? `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${ROOM_DEALS} 副` : '娱乐 · 打过 A · 不计战绩'),
+  );
+  const wait = el('div', { class: 'ol-wait', id: 'ol-match-wait' }, '正在找人…');
+  c.appendChild(wait);
+  c.appendChild(el('div', { class: 'ol-tip' }, '找到几个算几个，空位电脑补；只剩你一个就先和电脑打'));
+  const row = el('div', { class: 'ol-row' });
+  const cancel = button('取消', () => close(), 'gd-2', 'ol-match-cancel');
+  const now = button('不等了，和电脑打', () => (close(), solo()), '', 'ol-match-solo');
+  row.appendChild(now);
+  row.appendChild(cancel);
+  c.appendChild(row);
+  let n = 1;
+  let seats = 4;
+  let until = 0;
+  const paint = (): void => {
+    const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    wait.textContent = until ? `正在找人 · 已有 ${n}/${seats} 人 · 还剩 ${left} 秒` : '正在找人…';
+  };
+  const done = (t: string, then: (() => void) | null): void => {
+    stopMatch();
+    wait.textContent = t;
+    now.remove();
+    cancel.remove();
+    if (then) window.setTimeout(() => root?.contains(wait) && (close(), then()), 1200);
+    else row.appendChild(button('好', () => close(), 'gd-2', 'ol-ok'));
+  };
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const m = new MatchClient({
+    url: withNick(`${proto}//${window.location.host}${MATCH_PATH}/${matchTierOf(stake)}`),
+    onWaiting: (count, size, leftMs) => {
+      [n, seats, until] = [count, size, Date.now() + leftMs];
+      paint();
+    },
+    onMatched: (code) => {
+      stopMatch();
+      join(code, false, null, true);
+    },
+    // 已经有一个开着的房间（kit 入队前先问计量）：带他回去，是他开的好友房还当房主
+    onHasRoom: (code) => {
+      stopMatch();
+      const saved = savedRoom();
+      join(code, saved?.code === code && saved.host);
+    },
+    // 别的页面排上了：这里不排了，也不替他开单机
+    onSolo: (why: MatchSoloWhy) => done(MATCH_TEXT[why], why === 'replaced' ? null : solo),
+  });
+  matcher = m;
+  tick = window.setInterval(paint, 1000);
+  m.start();
 }
 
 function enterTable(s: NetSession): void {

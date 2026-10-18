@@ -4,7 +4,10 @@
 import { CLIENT_VERSION } from '../../src/net/version.ts';
 import { exports } from 'cloudflare:workers';
 import { CLOSE } from 'arcade-kit/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { runDurableObjectAlarm } from 'cloudflare:test';
+import type { WelcomeMsg } from 'arcade-kit/protocol';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NetView } from '../../src/net/rules.ts';
 import { env } from 'cloudflare:workers';
 import worker from '../../worker/index.ts';
 import * as main from '../../worker/main.ts';
@@ -19,8 +22,8 @@ function call(req: Request, vars: Partial<Env>): Promise<Response> {
 }
 
 describe('部署入口 worker/main.ts', () => {
-  it('只有默认导出、房间类 Room 和计量 RoomMeter（运行时把每个具名导出都当成入口，多了会启动失败）', () => {
-    expect(Object.keys(main).sort()).toEqual(['Room', 'RoomMeter', 'default']);
+  it('只有默认导出、房间类 Room、排队 Queue 和计量 RoomMeter（运行时把每个具名导出都当成入口，多了会启动失败）', () => {
+    expect(Object.keys(main).sort()).toEqual(['Queue', 'Room', 'RoomMeter', 'default']);
     expect(main.default).toBe(worker);
   });
 });
@@ -138,5 +141,64 @@ describe('好友房聊天（0.22.0，kit 0.18.0）', () => {
     await b.waitFor(() => said(b).some((m) => m.seat === 0), 'chat 0');
     expect(said(b).map((m) => m.text)).toEqual(['** 好牌', '赢了 1,000,000']);
     expect(said(old)).toEqual([]);
+  });
+});
+
+describe('快速匹配（0.26.0，kit 0.20.0）', () => {
+  const MATCH = `${SITE}/games/guandan/room/match`;
+  async function enqueue(tier: string, userId: string): Promise<{ msgs: { t: string; code?: string; why?: string }[]; closed: () => boolean; ws: WebSocket }> {
+    const res = await exports.default.fetch(`${MATCH}/${tier}`, { headers: { upgrade: 'websocket', cookie: cookie(userId), origin: SITE } });
+    expect(res.status).toBe(101);
+    const ws = res.webSocket!;
+    ws.accept();
+    const msgs: { t: string; code?: string; why?: string }[] = [];
+    let closed = false;
+    ws.addEventListener('message', (e) => msgs.push(JSON.parse(e.data as string)));
+    ws.addEventListener('close', () => (closed = true));
+    return { msgs, closed: () => closed, ws };
+  }
+  const resultOf = async (q: { msgs: { t: string; code?: string; why?: string }[] }) => {
+    await vi.waitFor(() => expect(q.msgs.some((m) => m.t !== 'waiting')).toBe(true), { timeout: 3000 });
+    return q.msgs.find((m) => m.t !== 'waiting')!;
+  };
+
+  it('四个人排娱乐：凑满一桌立刻开，房间是娱乐规则、匹配桌（room.match），人都到齐就自动开打', async () => {
+    const qs = [];
+    for (const u of ['m1', 'm2', 'm3', 'm4']) qs.push(await enqueue('fun', u));
+    const rs = await Promise.all(qs.map(resultOf));
+    expect(new Set(rs.map((r) => r.t))).toEqual(new Set(['matched']));
+    const code = rs[0]!.code!;
+    expect(rs.every((r) => r.code === code)).toBe(true);
+    const conns: Conn[] = [];
+    let last: WelcomeMsg<NetView> | null = null;
+    for (const u of ['m1', 'm2', 'm3', 'm4']) {
+      const j = await join(code, u);
+      conns.push(j.conn);
+      last = j.welcome;
+    }
+    expect(last!.room.match).toBe(true);
+    expect(last!.room.status).toBe('playing');
+    expect(last!.room.opts).toEqual({ stake: null });
+    for (const c of conns) c.ws.close();
+  });
+
+  it('实盘档排到的桌带上档位；不认得的档位 4004', async () => {
+    const a = await enqueue('real-small', 'r1');
+    const b = await enqueue('real-small', 'r2');
+    advance(15_000);
+    await runDurableObjectAlarm(env.MATCH.get(env.MATCH.idFromName('kit-match:real-small')));
+    const [x, y] = await Promise.all([resultOf(a), resultOf(b)]);
+    expect(x.t).toBe('matched');
+    expect(y.code).toBe(x.code);
+    const j = await join(x.code!, 'r1');
+    expect(j.welcome.room.opts).toEqual({ stake: 'small' });
+    j.conn.ws.close();
+    const bad = await exports.default.fetch(`${MATCH}/real-gold`, { headers: { upgrade: 'websocket', cookie: cookie('r3'), origin: SITE } });
+    expect(await refusedWith(bad)).toBe(CLOSE.noRoom);
+  });
+
+  it('没有钱包（单独部署）只开娱乐：实盘档 4004', async () => {
+    const res = await call(new Request(`${MATCH}/real-small`, { headers: { upgrade: 'websocket', cookie: cookie('s1'), origin: SITE } }), { WALLET: undefined });
+    expect(await refusedWith(res)).toBe(CLOSE.noRoom);
   });
 });

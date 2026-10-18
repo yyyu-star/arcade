@@ -11,7 +11,7 @@ import { MOOD_LINES, PHRASES } from './text.ts';
 
 /** 总开关"互动：开 / 不看"：关了别人的一律不播，单机电脑也不反应 */
 export const OFF_KEY = 'mahjong.comms';
-/** 好友房聊天"聊天：开 / 不看"（0.19.0）：关了别人说的不显示，自己还能说 */
+/** 聊天的开关（0.19.0 两档，0.21.0 三档，见 chatMode） */
 export const CHAT_OFF_KEY = 'mahjong.chatOff';
 /** 头像菜单里的 3 句点名短语："又点炮了哇""快点嘛，花儿都谢了""好牌，服了" */
 const NAMED = [3, 7, 12] as const;
@@ -88,19 +88,31 @@ export function setFunOff(off: boolean): void {
   }
 }
 
-export function chatOff(): boolean {
+export type ChatMode = 'on' | 'stranger' | 'off';
+
+/**
+ * 聊天三档（0.21.0 快速匹配起；手机横屏的设置面板放不下再加一行，并成一个按钮轮着切）：
+ * 开；不和陌生人（匹配桌不看也不能说，连接不带 chat=1；好友房、单机照开）；不看（别人说的都不显示，自己还能说）。
+ * 存在原来的 mahjong.chatOff：'1' 是不看（0.19.0 起就这么存），'stranger' 是不和陌生人，没有是开
+ */
+export function chatMode(): ChatMode {
   try {
-    return localStorage.getItem(CHAT_OFF_KEY) === '1';
+    const v = localStorage.getItem(CHAT_OFF_KEY);
+    return v === '1' ? 'off' : v === 'stranger' ? 'stranger' : 'on';
   } catch {
-    return false;
+    return 'on';
   }
 }
 
-export function setChatOff(off: boolean): void {
+export function setChatMode(m: ChatMode): void {
   try {
-    if (off) localStorage.setItem(CHAT_OFF_KEY, '1');
-    else localStorage.removeItem(CHAT_OFF_KEY);
+    if (m === 'on') localStorage.removeItem(CHAT_OFF_KEY);
+    else localStorage.setItem(CHAT_OFF_KEY, m === 'off' ? '1' : 'stranger');
   } catch {
     // 存不上就这一次有效
   }
+}
+
+export function chatOff(): boolean {
+  return chatMode() === 'off';
 }

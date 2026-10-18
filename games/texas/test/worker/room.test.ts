@@ -6,12 +6,15 @@ import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import type { DownMsg, EmotedMsg, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stakesOf } from '../../src/core/stakes.ts';
+import { FUN_STAKES, stakesOf } from '../../src/core/stakes.ts';
 import { propId } from 'arcade-kit/fun-logic';
 import { EMOTE_COUNT, SEATS, TAUNT_COUNT, type RoomState, type RoomView } from '../../src/room/rules.ts';
 import { togetherOp } from 'arcade-kit/room';
 import { NEW_BALANCE } from 'arcade-kit/testing';
 import { ROOM_LIMITS, type TexasRoom } from '../../worker/room.ts';
+import worker from '../../worker/main.ts';
+import { MATCH_TABLE } from '../../src/room/match.ts';
+import { CLOSE } from 'arcade-kit/protocol';
 import { advance, BASE, freezeClock, SITE, statsOf, togetherOf, usage, walletOf } from './helpers.ts';
 
 type Msg = DownMsg<RoomView>;
@@ -590,4 +593,90 @@ describe('换人、托管', () => {
     expect(s.t.seats[3]!.owner).toBe('player');
     await writesOk(code);
   }, 20_000); // 0.1.1 起每手之后多一次停顿（拨时钟、跑闹钟），要多打好几手，5 秒的默认上限和别的测试一起跑时不够
+});
+
+describe('快速匹配（0.20.0，kit 的 MatchQueue；DESIGN.md 6.11）', () => {
+  // 这里的假平台 ARCADE 只有 fetch（vitest.worker.config.ts），排队凑桌前问屏蔽名单的 RPC 会失败：kit 记一笔日志、当没人屏蔽谁接着凑（workerd 会打一行 Failed to get handler），屏蔽名单本身在 kit 里测
+  /** 排队连接：收到的消息和关闭码 */
+  async function enqueue(tier: string, sid: string, e?: Partial<typeof env>) {
+    const req = new Request(`${BASE}/rooms/match/${tier}`, { headers: { upgrade: 'websocket', origin: SITE, cookie: `__Host-sid=${sid}` } });
+    const res = e ? await worker.fetch(req as Parameters<typeof worker.fetch>[0], { ...env, ...e } as Parameters<typeof worker.fetch>[1]) : await exports.default.fetch(req);
+    expect(res.status).toBe(101);
+    const ws = res.webSocket!;
+    const out = { msgs: [] as { t: string; code?: string; why?: string }[], closed: null as number | null };
+    ws.accept();
+    ws.addEventListener('message', (m) => {
+      out.msgs.push(JSON.parse(m.data as string));
+    });
+    ws.addEventListener('close', (c) => {
+      out.closed = c.code;
+    });
+    return out;
+  }
+
+  it('同一档两个人：等满 15 秒开一张匹配桌，两人进同一桌、各坐一个座位，人到齐自动开打，各从钱包扣这一档的满买入', async () => {
+    const [a, b] = [user(), user()];
+    const qa = await enqueue('real-small', a);
+    const qb = await enqueue('real-small', b);
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'waiting') && qb.msgs.some((m) => m.t === 'waiting'));
+    advance(15_000);
+    await runDurableObjectAlarm(env.MATCH!.get(env.MATCH!.idFromName('kit-match:real-small')));
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'matched') && qb.msgs.some((m) => m.t === 'matched'));
+    const code = qa.msgs.find((m) => m.t === 'matched')!.code!;
+    expect(qb.msgs.find((m) => m.t === 'matched')!.code).toBe(code);
+    const [ca, cb] = [await join(code, a), await join(code, b)];
+    const welcome = ca.msgs.find((m) => m.t === 'welcome') as WelcomeMsg<RoomView>;
+    expect(welcome.room.match).toBe(true);
+    // 人到齐就开打（不用谁点"开打"），各坐一个座位，买入都到账
+    await ca.see((v) => v.phase !== 'idle' && v.size === MATCH_TABLE && v.stakes === 'small');
+    expect(ca.seat).not.toBeNull();
+    expect(cb.seat).not.toBeNull();
+    expect(ca.seat).not.toBe(cb.seat);
+    for (const id of [a, b]) await waitFor(async () => (await walletOf(id)).balance === NEW_BALANCE - MAX);
+    await writesOk(code);
+  });
+
+  it('娱乐档（0.21.0）：两个人排到同一张娱乐桌，打几手、都离开，钱包一次都没调过、一分没动，也不报搭子战绩', async () => {
+    const [a, b] = [user(), user()];
+    const qa = await enqueue('fun', a);
+    const qb = await enqueue('fun', b);
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'waiting') && qb.msgs.some((m) => m.t === 'waiting'));
+    advance(15_000);
+    await runDurableObjectAlarm(env.MATCH!.get(env.MATCH!.idFromName('kit-match:fun')));
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'matched') && qb.msgs.some((m) => m.t === 'matched'));
+    const code = qa.msgs.find((m) => m.t === 'matched')!.code!;
+    const conns = [await join(code, a), await join(code, b)];
+    expect((conns[0]!.msgs.find((m) => m.t === 'welcome') as WelcomeMsg<RoomView>).room.match).toBe(true);
+    // 买入照样走一遍"记下钱包的事 → 房间去办 → 写回"，只是房间直接当办成：照常上桌、照常开打
+    await conns[0]!.see((v) => v.phase !== 'idle' && v.size === MATCH_TABLE && v.stakes === FUN_STAKES && !v.needTwo);
+    const h = conns[0]!.view!.handNo;
+    await playUntil(conns, (v) => v.handNo >= h + 2);
+    conns[1]!.send({ t: 'leave' });
+    conns[0]!.send({ t: 'leave' });
+    // 两份都结回排上、办完（规则里的钱包的事清空）
+    await waitFor(async () => {
+      const g = (await inspect(code)).persist?.game;
+      return !!g && g.sealed.every(Boolean) && g.fx.length === 0;
+    });
+    for (const id of [a, b]) {
+      expect(await usage(id)).toEqual({ calls: 0, writes: 0 });
+      expect(await walletOf(id)).toMatchObject({ balance: NEW_BALANCE, stakes: [] });
+      expect(await togetherOf(id)).toEqual([]);
+    }
+    await writesOk(code);
+  }, 20_000);
+
+  it('没有钱包（单独部署）也开娱乐档：排上了，不 4004', async () => {
+    const q = await enqueue('fun', user(), { WALLET: undefined });
+    await waitFor(async () => q.msgs.some((m) => m.t === 'waiting'));
+    expect(q.closed).toBeNull();
+  });
+
+  it('不认得的档位、没有钱包（单独部署）排实盘、没绑 MATCH 都回 4004', async () => {
+    for (const [tier, e] of [['real-gold', undefined], ['real-small', { WALLET: undefined }], ['fun', { MATCH: undefined }]] as const) {
+      const q = await enqueue(tier, user(), e as Partial<typeof env> | undefined);
+      await waitFor(async () => q.closed !== null);
+      expect(q.closed, `${tier} ${JSON.stringify(e)}`).toBe(CLOSE.noRoom);
+    }
+  });
 });

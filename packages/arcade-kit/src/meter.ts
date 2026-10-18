@@ -65,6 +65,20 @@ export type MeterLevel = 'ok' | 'busy' | 'stop';
 
 export type Reserve = { ok: true } | { ok: false; error: 'has_room'; code: string } | { ok: false; error: 'daily_limit' | 'busy' };
 
+/** 几个人一起占（0.20.0）：被挡时 userId 是第一个被挡的人；全站忙（busy）不是哪一个人的事，userId 为 null */
+export type ReserveMany =
+  | { ok: true }
+  | { ok: false; userId: string; error: 'has_room'; code: string }
+  | { ok: false; userId: string; error: 'daily_limit' }
+  | { ok: false; userId: null; error: 'busy' };
+
+/** kitPeek 的结果（0.20.0）：room 是这个人开着的房间码，daily 是今天的开房次数用完了 */
+export interface Peek {
+  room: string | null;
+  daily: boolean;
+  level: MeterLevel;
+}
+
 export interface Usage {
   day: string;
   writes: number;
@@ -90,17 +104,29 @@ export class RoomMeter extends DurableObject<MeterEnv> {
 
   /** 开房前占一个名额（房间调）。房间没建成要调 kitRelease(…, cancel) 退回。 */
   async kitReserve(userId: string, code: string, until: number): Promise<Reserve> {
+    const r = await this.kitReserveMany([userId], code, until);
+    return r.ok ? r : r.error === 'has_room' ? { ok: false, error: 'has_room', code: r.code } : { ok: false, error: r.error };
+  }
+
+  /**
+   * 一张桌给几个人一起占名额（0.20.0，快速匹配）：要么都占上，要么一个都不占，占不上的回第一个被挡的人。
+   * 全站开房数只记 1（一张桌一个房间）。一次写 1 + 人数 行（每人那一行加当天那一行），写在计量里、记进当天的数，不算房间的"每步 ≤ 2 行"
+   */
+  async kitReserveMany(userIds: readonly string[], code: string, until: number): Promise<ReserveMany> {
     const now = Date.now();
     const lim = this.limits();
     const day = this.day(now);
-    const user = this.user(userId, day.day, now);
+    const users = userIds.map((id) => ({ id, row: this.user(id, day.day, now) }));
     // 先说"回你的房间"：在打的房间不受全站门槛影响，回去照样能玩
-    if (user.live.length >= lim.roomsPerUser) return { ok: false, error: 'has_room', code: user.live[user.live.length - 1]!.code };
-    if (user.count >= lim.dailyRoomsPerUser) return { ok: false, error: 'daily_limit' };
-    if (levelOf(day.writes, lim) !== 'ok' || day.rooms >= lim.dailyRooms) return { ok: false, error: 'busy' };
-    user.count++;
-    user.live.push({ code, until: until + EXPIRY_SLACK_MS });
-    const w = this.saveUser(userId, user);
+    for (const { id, row } of users) if (row.live.length >= lim.roomsPerUser) return { ok: false, userId: id, error: 'has_room', code: row.live[row.live.length - 1]!.code };
+    for (const { id, row } of users) if (row.count >= lim.dailyRoomsPerUser) return { ok: false, userId: id, error: 'daily_limit' };
+    if (levelOf(day.writes, lim) !== 'ok' || day.rooms >= lim.dailyRooms) return { ok: false, userId: null, error: 'busy' };
+    let w = 0;
+    for (const { id, row } of users) {
+      row.count++;
+      row.live.push({ code, until: until + EXPIRY_SLACK_MS });
+      w += this.saveUser(id, row);
+    }
     this.saveDay(day.day, day.writes + w + 1, day.rooms + 1);
     return { ok: true };
   }
@@ -110,20 +136,50 @@ export class RoomMeter extends DurableObject<MeterEnv> {
    * 名额已经不在（还过一次、或者已经到点作废）就只记写入，可以重复调。
    */
   async kitRelease(userId: string, code: string, writes: number, cancel = false): Promise<MeterLevel> {
+    return this.kitReleaseMany([userId], code, writes, cancel);
+  }
+
+  /**
+   * 一张桌的几个人一起还（0.20.0）。cancel：开房次数也退回；room：全站开房数也退 1（默认跟着 cancel：整桌没建成）。
+   * 匹配桌开打时没来的人（0.20.0）是 cancel 但不退全站数：桌子开成了，只是他的那一份退给他
+   */
+  async kitReleaseMany(userIds: readonly string[], code: string, writes: number, cancel = false, room = cancel): Promise<MeterLevel> {
     const now = Date.now();
     const day = this.day(now);
-    const user = this.user(userId, day.day, now);
-    const i = user.live.findIndex((r) => r.code === code);
     let w = 0;
-    if (i >= 0) {
+    let found = false;
+    for (const id of userIds) {
+      const user = this.user(id, day.day, now);
+      const i = user.live.findIndex((r) => r.code === code);
+      if (i < 0) continue;
+      found = true;
       user.live.splice(i, 1);
       if (cancel && user.count > 0) user.count--;
-      w = this.saveUser(userId, user);
+      w += this.saveUser(id, user);
     }
-    const rooms = cancel && i >= 0 ? Math.max(0, day.rooms - 1) : day.rooms;
+    const rooms = room && found ? Math.max(0, day.rooms - 1) : day.rooms;
     const total = day.writes + clean(writes) + w + 1;
     this.saveDay(day.day, total, rooms);
     return levelOf(total, this.limits());
+  }
+
+  /**
+   * 只读（0.20.0，快速匹配入队前问）：这个人现在开着的房间（没有为 null）、今天的开房次数用完没有、全站的门槛。
+   * 入队前就挡掉"有房间""今天用完了""联机忙"的人，不让他们白等 15 秒
+   */
+  async kitPeek(userId: string): Promise<Peek> {
+    const now = Date.now();
+    const lim = this.limits();
+    const day = this.day(now);
+    const user = this.user(userId, day.day, now);
+    const lv = levelOf(day.writes, lim);
+    // 全站开房数到了也开不了新桌，对排队的人和"联机忙"一样
+    const level = lv === 'ok' && day.rooms >= lim.dailyRooms ? 'busy' : lv;
+    return {
+      room: user.live.length >= lim.roomsPerUser ? user.live[user.live.length - 1]!.code : null,
+      daily: user.count >= lim.dailyRoomsPerUser,
+      level,
+    };
   }
 
   /** 报一批写入（房间攒够一批时调），回现在的门槛。 */

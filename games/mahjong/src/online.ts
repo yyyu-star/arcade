@@ -7,6 +7,7 @@
  */
 import { closeText, createText, RoomClient, type ChatSendResult, type ClientStatus } from 'arcade-kit/client';
 import type { DownMsg, RoomInfo, You } from 'arcade-kit/protocol';
+import { MATCH_PATH } from './game/match.ts';
 import type { RoomAction, RoomOpts, RoomView } from './room/rules.ts';
 import { ROOM_TEXTS } from './view/text.ts';
 
@@ -54,7 +55,8 @@ export class Online {
   /** 主动离开了：还在路上的帧、状态变化一律不再画（不然离开后回到选桌页，排队的帧又画出一张牌桌盖上去） */
   private closed = false;
 
-  constructor(code: string, ui: OnlineUi, opts: { url?: string } = {}) {
+  /** chat: false 时不给 onChat，连接不带 chat=1，房间就不给这个页面发聊天（匹配桌选了"不和陌生人"，0.21.0） */
+  constructor(code: string, ui: OnlineUi, opts: { url?: string; chat?: boolean } = {}) {
     this.ui = ui;
     this.s = { code, opts: null, status: 'connecting', room: null, you: null, view: null };
     this.client = new RoomClient<RoomAction, RoomView>({
@@ -63,8 +65,9 @@ export class Online {
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, c, reason) => this.onStatus(st, c, reason),
       // 传了 onChat 连接才带 chat=1，房间才给这个页面发聊天
-      onChat: (seat, text, masked) => this.ui.chat(seat, text, masked),
-      onChatError: (code) => this.ui.chatError(code),
+      ...(opts.chat === false
+        ? {}
+        : { onChat: (seat: number, text: string, masked: boolean) => this.ui.chat(seat, text, masked), onChatError: (code: string) => this.ui.chatError(code) }),
       onEmote: (seat, id, to, bot) => {
         if (!bot || (!this.playing && !this.queue.length)) return this.ui.emote(seat, id, to);
         if (this.later.length < 6) this.later.push({ seat, id, ...(to !== undefined ? { to } : {}) });
@@ -171,6 +174,14 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeou
 /** 房间的 WebSocket 地址：页面在 /games/mahjong/ 下，相对路径就对 */
 export function roomUrl(code: string): string {
   const u = new URL(`rooms/${code}/ws`, location.href);
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+  u.search = '';
+  return u.toString();
+}
+
+/** 快速匹配的排队地址（0.21.0）：和房间一样在 rooms/ 下面，相对页面 */
+export function matchUrl(tier: string): string {
+  const u = new URL(`${MATCH_PATH}/${tier}`, location.href);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
   u.search = '';
   return u.toString();

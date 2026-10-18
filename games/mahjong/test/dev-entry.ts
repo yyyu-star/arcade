@@ -4,7 +4,7 @@
  */
 import worker, { type Env } from '../worker/main.ts';
 
-export { RoomMeter, MahjongRoom } from '../worker/main.ts';
+export { RoomMeter, MahjongRoom, Queue } from '../worker/main.ts';
 
 const PLATFORM = new Set(['/api/me', '/api/wallet', '/api/presence', '/api/invites', '/api/friends', '/api/feed']);
 

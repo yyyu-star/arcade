@@ -26,13 +26,16 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "Room" },
-      { "name": "METER", "class_name": "RoomMeter" }
+      { "name": "METER", "class_name": "RoomMeter" },
+      // 快速匹配的排队（0.26.0，worker/match.ts）：每个档位一个实例，0 行存储（排着的人就是休眠的连接），只用闹钟
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
-  // v1 已经上线，不能改；计量另加一条
+  // v1、v2 已经上线，不能改；新的类另加一条
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
-    { "tag": "v2", "new_sqlite_classes": ["RoomMeter"] }
+    { "tag": "v2", "new_sqlite_classes": ["RoomMeter"] },
+    { "tag": "v3", "new_sqlite_classes": ["Queue"] }
   ],
   // 不写 services 和 GATE：本站部署时部署工具补上 ARCADE（问平台登录状态 /api/me）、WALLET（平台钱包 RPC，props.game = guandan）和 GATE=login。
   // 没有它们就是单独部署（kit 的独立模式）：游客身份，实盘接口回 409 no_wallet

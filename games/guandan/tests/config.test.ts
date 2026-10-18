@@ -47,11 +47,13 @@ describe('wrangler.jsonc', () => {
       expect.arrayContaining([
         { name: 'ROOM', class_name: 'Room' },
         { name: 'METER', class_name: 'RoomMeter' },
+        { name: 'MATCH', class_name: 'Queue' },
       ]),
     );
+    expect(main).toMatch(/export \{ Queue \} from '\.\/match\.ts'/);
     expect(main).toMatch(/export \{ RoomMeter \} from 'arcade-kit\/meter'/);
     const sqlite = conf.migrations.flatMap((m) => m.new_sqlite_classes ?? []);
-    expect(sqlite).toEqual(expect.arrayContaining(['Room', 'RoomMeter']));
+    expect(sqlite).toEqual(expect.arrayContaining(['Room', 'RoomMeter', 'Queue']));
     // 已经上线的 v1 不能改
     expect(conf.migrations[0]).toEqual({ tag: 'v1', new_sqlite_classes: ['Room'] });
   });

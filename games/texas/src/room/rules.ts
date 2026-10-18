@@ -20,7 +20,7 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { stream } from 'arcade-kit/rng';
 import { aiAction } from '../bot.ts';
 import { NO_FAME, noteHand, settleStats, type Fame, type SettleStats } from '../core/fame.ts';
-import { ROOM_LEVEL, STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
+import { FUN_LEVEL, FUN_STAKES, ROOM_LEVEL, STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
 import { TAUNTS } from '../fun/taunts.ts';
 import {
   MAX_SEATS,
@@ -67,6 +67,8 @@ export const HAND_PAUSE_MS = 7_000;
 export interface RoomOpts {
   stakes: StakesId;
   size: number;
+  /** 娱乐房间（0.21.0，快速匹配的娱乐档）：筹码不算数，带入、结回都不碰钱包（worker/room.ts 的 perform），档位固定 FUN_STAKES */
+  fun?: true;
 }
 
 const DEFAULT_OPTS: RoomOpts = { stakes: 'small', size: 6 };
@@ -83,6 +85,8 @@ export interface Pending extends RoomEffect {
 /** 交给房间去办的：带上档位（操作 id = ref-id） */
 export interface WalletEffect extends Pending {
   stakes: StakesId;
+  /** 娱乐房间的：房间直接当办成，不调平台 */
+  fun?: true;
 }
 
 export interface RoomState {
@@ -128,6 +132,8 @@ export interface RoomState {
    * 0.16.x 的房间没有，从现在起记
    */
   mates?: { n: number; last: Match[] };
+  /** 娱乐房间（RoomOpts.fun）：开局定下，不再变 */
+  fun?: true;
 }
 
 /** 一场：同桌的真人座位和各自赢没赢（从坐下到这时净赢为正）；match 是房间里的场次，报平台时拼进 op 去重 */
@@ -175,6 +181,8 @@ const SIMPLE = new Set<string>(['fold', 'check', 'call', 'allin', 'away', 'back'
  * 电脑用好友房的强弱档（0.5.0，stakes.ts 的 ROOM_LEVEL：四档都是最强，和 0.4.0 的 strong 一样）。期望见 DESIGN.md 6.5
  */
 const FRIENDS = { holdHands: true, minHumans: 2 } as const;
+/** 娱乐房间不碰钱包，一个人带电脑打也赢不走什么：剩一个真人照样发牌；电脑按娱乐的"普通" */
+const FUN = { holdHands: true, minHumans: 1, level: FUN_LEVEL.normal } as const;
 
 /** 真人不到两个时页面上的那句（等人页和牌桌共用） */
 export const TWO_NOTE = '实盘好友房至少要两个人；一个人想玩实盘，去单机';
@@ -187,9 +195,11 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     if (raw === undefined) return DEFAULT_OPTS;
     if (!raw || typeof raw !== 'object') return null;
     const o = raw as Record<string, unknown>;
-    if (!STAKES.some((x) => x.id === o.stakes) || !Number.isInteger(o.size)) return null;
+    if (!Number.isInteger(o.size) || (o.fun !== undefined && o.fun !== true)) return null;
     const size = o.size as number;
-    return size >= 2 && size <= SEATS ? { stakes: o.stakes as StakesId, size } : null;
+    if (size < 2 || size > SEATS) return null;
+    if (o.fun === true) return { stakes: FUN_STAKES, size, fun: true };
+    return STAKES.some((x) => x.id === o.stakes) ? { stakes: o.stakes as StakesId, size } : null;
   },
   seatCount: (opts) => (opts ?? DEFAULT_OPTS).size,
 
@@ -198,7 +208,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     const r = stream(entropy, RNG.room);
     const kinds = Array.from({ length: SEATS }, (_, i) => setup?.seats[i] ?? 'empty');
     let s: RoomState = {
-      t: newTable(opts.stakes, opts.size, entropy, { ...FRIENDS, level: ROOM_LEVEL[opts.stakes] }),
+      t: newTable(opts.stakes, opts.size, entropy, opts.fun ? FUN : { ...FRIENDS, level: ROOM_LEVEL[opts.stakes] }),
       ref: `r${hex(r.u32())}${hex(r.u32())}`,
       kinds,
       fx: [],
@@ -213,6 +223,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
       opening: true,
       inn: new Array<number>(SEATS).fill(0),
       outs: new Array<number>(SEATS).fill(0),
+      ...(opts.fun ? { fun: true as const } : {}),
     };
     kinds.forEach((k, i) => {
       if (k === 'human' && i < opts.size) s = buy(s, i);
@@ -306,7 +317,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
       canRebuy: seat !== null && canRebuy(s, seat),
       closed: s.closed,
       last: s.last ?? null,
-      needTwo: !s.closed && !s.opening && s.t.phase === 'idle' && !s.t.hold && humansReady(s) < 2,
+      needTwo: !s.fun && !s.closed && !s.opening && s.t.phase === 'idle' && !s.t.hold && humansReady(s) < 2,
       net: s.t.seats.map((c, i) => {
         const inn = s.inn?.[i] ?? 0;
         if (!inn) return null;
@@ -318,7 +329,7 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
   },
 
   // 每个座位只交排第一的那笔：同一份的带入、结回按先后办，结回办完以后的带入才开新的一份
-  effects: (s) => s.fx.filter((e, i) => s.fx.findIndex((x) => x.seat === e.seat) === i).map((e) => ({ ...e, stakes: s.t.stakes })),
+  effects: (s) => s.fx.filter((e, i) => s.fx.findIndex((x) => x.seat === e.seat) === i).map((e) => ({ ...e, stakes: s.t.stakes, ...(s.fun ? { fun: true as const } : {}) })),
 
   settled(s, id, result) {
     const e = s.fx.find((x) => x.id === id);
