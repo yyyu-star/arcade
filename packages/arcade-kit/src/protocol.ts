@@ -69,6 +69,42 @@ export const CLOSE_REASON = {
  */
 export type CreateError = 'login' | 'forbidden' | 'has_room' | 'daily_limit' | 'busy' | 'unavailable' | 'bad_options';
 
+/**
+ * 快速匹配（0.20.0，docs/match.md）转单机的原因：
+ * - alone 等到时间只有自己在排；daily_limit 这个人今天的联机局数用完了；busy 今天联机的人太多（全站门槛）；
+ * - unavailable 计量或房间暂时连不上；too_often 这一小时排得太多了；replaced 同一个人在别的页面又排了一次（这一页不用管了）。
+ */
+export type MatchSoloWhy = 'alone' | 'daily_limit' | 'busy' | 'unavailable' | 'too_often' | 'replaced';
+
+/** 排队时的人数（0.20.0）：n 是现在排着几个人（含自己），seats 是一桌最多几个真人，left 是离"不等了"还剩几毫秒（按房间的钟算好的差值） */
+export interface MatchWaitingMsg {
+  t: 'waiting';
+  n: number;
+  seats: number;
+  left: number;
+}
+
+/** 凑成一桌了（0.20.0）：用 code 照常进房（RoomClient），房间只认排进来的这几个人 */
+export interface MatchedMsg {
+  t: 'matched';
+  code: string;
+}
+
+/** 不排了，转本机单机（0.20.0） */
+export interface MatchSoloMsg {
+  t: 'solo';
+  why: MatchSoloWhy;
+}
+
+/** 这个人已经有一个开着的房间（0.20.0）：不排队，页面带他回那个房间 */
+export interface MatchHasRoomMsg {
+  t: 'has_room';
+  code: string;
+}
+
+/** 排队连接上的下行消息（0.20.0）。排队连接只收不发，浏览器发什么都会被 1008 断开 */
+export type MatchDownMsg = MatchWaitingMsg | MatchedMsg | MatchSoloMsg | MatchHasRoomMsg;
+
 /** 不重连的关闭码。 */
 export function isFinalClose(code: number): boolean {
   return code === CLOSE.policy || code === CLOSE.tooBig || (code >= 4000 && code < 5000);
@@ -176,6 +212,11 @@ export interface RoomInfo {
    * 只有在停时才有，这时 turn 是 null；游戏的 resume 出错时房间会把它往后推
    */
   pause?: { until: number };
+  /**
+   * 快速匹配凑出来的桌（0.20.0）：只有排进来的人能进、没有房主、人到齐（或等满 RoomLimits.matchJoinMs）自动开打。
+   * 页面据此藏起房间码、邀请、叫人和"开打"按钮
+   */
+  match?: true;
 }
 
 /** 一帧画面：按座位过滤过的游戏视图，delay 是相对上一帧的播放延迟（电脑连续出牌时用，4.4）。 */

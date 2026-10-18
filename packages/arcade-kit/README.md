@@ -46,6 +46,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/share` | 浏览器 | 分享卡（0.12.0）：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
 | `arcade-kit/social` | 浏览器 | 社交第一期（0.12.0）：`mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment`（0.12.5）等接口小函数；只在有平台且已登录时挂 |
 | `arcade-kit/chat` | 两边 | 好友房聊天的过滤（0.18.0）：`checkChat`（规整 → 字数 → 链接、号码、微信 QQ 整条拒发 → 脏话打码）、`chatRejectText`；纯函数，房间和页面用同一个 |
+| `arcade-kit/match` | 游戏 Worker（Durable Object） | 快速匹配（0.20.0）：排队基类 `MatchQueue`，每个档位一个实例，0 行存储、一个闹钟，凑满或到点开一张匹配桌（`acceptMatch` 在 `worker`，`MatchClient` 在 `client`） |
 | `arcade-kit/theme` | 浏览器 | DOM 组件的主题（0.16.0）：`KitTheme`、`themeVars`（主题对象 → `--ak-*` 变量列表，挡 CSS 注入）、`applyTheme`；分享预览、邀请横条和面板、牌桌互动菜单都认 |
 
 **发布和仓库内引用是两种形态**（0.10.0）：
@@ -392,6 +393,46 @@ protected override onEmote(from: number, id: number, to?: number): void {
   用它替掉游戏自己对 `.atf-btn` 的 CSS 覆盖；不传就不写行内样式，旧的覆盖照样生效（迁移不急）。
 - 演示页 `demo/table-fun.html` 里能直接试：右上聊天框打字，"电脑们说几句"看弹幕排轨道（单机演示，右家隔一秒回一句）。
 
+## 快速匹配（match，0.20.0）
+
+同一个游戏、同一个档位的人排在一起，凑满一桌立刻开，最多等 15 秒：到点 ≥ 2 个真人就开（空位电脑补），只剩自己就转本机单机。设计和边界见 [docs/match.md](docs/match.md)。
+
+Worker 里加一个排队类、一条路由（`wrangler.jsonc` 加 DO 绑定 `MATCH` 和迁移 `new_sqlite_classes`，不新建 Worker）：
+
+```ts
+import { MatchQueue } from 'arcade-kit/match';
+import { acceptMatch } from 'arcade-kit/worker';
+
+export class Queue extends MatchQueue<Env> {
+  protected readonly seats = 4; // 一桌最多几个真人
+  // 按档位不同的：tableSize(tier)、roomOptions(tier)（开桌带的开局选项，房间照常用 RoomGame.options 校验）
+}
+
+// fetch 里：
+const m = /^\/games\/mygame\/match\/([a-z0-9-]+)$/.exec(url.pathname);
+if (m) return acceptMatch(request, env, m[1]!, { tiers: ['fun', 'real-1'], siteOrigin: env.SITE_ORIGIN });
+```
+
+页面：
+
+```ts
+import { MATCH_TEXT, MatchClient } from 'arcade-kit/client';
+
+const mc = new MatchClient({
+  url: `${wsBase}/match/${tier}`,
+  onWaiting: (n, seats, leftMs) => showQueue(n, seats, leftMs), // 人数变了才推，倒计时页面自己走
+  onMatched: (code) => enterRoom(code), // 照常 new RoomClient 进房；room.match 为 true 时藏起房间码、邀请、"开打"
+  onHasRoom: (code) => enterRoom(code), // 已经有开着的房间
+  onSolo: (why) => playSolo(tier, MATCH_TEXT[why]), // 只剩自己、今天局数用完、联机忙……转单机
+});
+mc.start(); // "取消""不等了"都是 mc.cancel()
+```
+
+- 房间不用改：匹配桌是普通的 `GameRoom`，排进来的人建房时已经坐好，人到齐（或等满 `RoomLimits.matchJoinMs`，默认 20 秒）自动开打，没来的电脑代打、来了交还；
+  只有排进来的人能进（别人 4004），`start` 回 `not_host`。两个真人要坐特定座位（比如对家）的，房间类覆盖 `matchSeats(n, count)`。
+- 额度：每张匹配桌每个真人占一个开房名额，和好友房共用 `dailyRoomsPerUser`（默认每天 6 个，游戏 `vars.KIT_QUOTA` 里改）；入队前就问计量，用完了直接 `solo: daily_limit`。
+- 陌生人聊天：房间不用为匹配改，页面按设置"和陌生人打字聊天"（默认开）决定带不带 `chat=1`。平台的屏蔽名单（`ARCADE.blockedAmong`）由排队自动用，屏蔽过的人排不到一桌。
+
 ## 分享卡和邀请（share、social，0.12.0）
 
 规范是仓库根 `docs/social.md` 1.1–1.3。两个入口都只在调用时碰 DOM，import 时不碰；纯的部分测试在 `test/share.test.ts`、`test/social.test.ts`。
@@ -692,6 +733,7 @@ packages/arcade-kit/
 │  ├─ worker.ts      开房 acceptCreate、进房 acceptJoin、登录闸门 loginGate、json / readJson
 │  ├─ auth.ts        经平台 /api/me 认人 whoIs、按部署方式认人 identify、同站校验 sameOrigin
 │  ├─ guest.ts       独立模式：游客 cookie、游客身份、昵称清洗
+│  ├─ match.ts       快速匹配的排队 MatchQueue（Durable Object，0.20.0）
 │  ├─ meter.ts       每天的额度计量 RoomMeter
 │  ├─ game.ts        规则接口 RoomGame、snapshotBytes
 │  ├─ client.ts      浏览器连接器 RoomClient、createRoom、默认文案

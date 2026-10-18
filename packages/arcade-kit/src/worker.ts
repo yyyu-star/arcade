@@ -12,8 +12,8 @@
  */
 import { identify, sameOrigin } from './auth.js';
 import { type GuestOptions, isStandalone, type ModeEnv } from './guest.js';
-import { CLOSE, type CreateError, ROOM_CODE_RE } from './protocol.js';
-import { identityHeader, type Identity, KIT_HOST, LIMITED_HEADER, meterStub, MISS_HEADER, missStub, newRoomCode, roomStub } from './internal.js';
+import { CLOSE, type CreateError, type MatchDownMsg, ROOM_CODE_RE } from './protocol.js';
+import { identityHeader, type Identity, KIT_HOST, LIMITED_HEADER, matchStub, meterStub, MISS_HEADER, missStub, newRoomCode, roomStub, TIER_RE } from './internal.js';
 // 只引类型：meter.ts 依赖 cloudflare:workers，游戏会在普通 Node 的测试里加载本文件
 import type { MeterEnv, RoomMeter } from './meter.js';
 import type { CreateOutcome } from './room.js';
@@ -142,6 +142,48 @@ export async function acceptJoin(request: Request, env: KitEnv, code: string, op
   // 房间说"这个码没有房间"：记一次（按人、按 IP 各 1 行，再报进当天的写入），转给浏览器的回话不带这个内部头
   if (guard) await guard.miss().catch((e: unknown) => console.error('join miss record failed', e instanceof Error ? e.message : e));
   return new Response(null, { status: 101, webSocket: res.webSocket });
+}
+
+export interface MatchOptions extends GateOptions {
+  /** 开放快速匹配的档位（只开有单机能接住的档位）；不在里面的回 4004 */
+  tiers: readonly string[];
+}
+
+/**
+ * 快速匹配（0.20.0，docs/match.md）：WebSocket 升级，连上就是在 tier 这个档位排队（游戏 Worker 绑 MATCH，类继承 match.ts 的 MatchQueue）。
+ * 认人、查 Origin 和 acceptJoin 一样；入队前先问计量一次（只读）：已经有开着的房间回 { t: 'has_room', code }，
+ * 今天的开房次数用完了、全站忙、计量连不上回 { t: 'solo', why }，都不进队。没绑计量（单独部署）不问
+ */
+export async function acceptMatch(request: Request, env: KitEnv & { MATCH: DurableObjectNamespace }, tier: string, opts: MatchOptions): Promise<Response> {
+  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('websocket only', { status: 426 });
+  if (!TIER_RE.test(tier) || !opts.tiers.includes(tier)) return refuse(CLOSE.noRoom, 'no such tier');
+  if (!sameOrigin(request, opts.siteOrigin)) return refuse(CLOSE.forbidden, 'bad origin');
+  const w = await who(request, env, opts, false);
+  if ('error' in w) return w.error === 'anonymous' ? refuse(CLOSE.unauthorized, 'login first') : refuse(CLOSE.tryLater, 'try later');
+  const me = w.user;
+  if (env.METER) {
+    try {
+      const p = await (meterStub(env.METER) as DurableObjectStub<RoomMeter>).kitPeek(me.userId);
+      if (p.room !== null) return answer({ t: 'has_room', code: p.room });
+      if (p.daily) return answer({ t: 'solo', why: 'daily_limit' });
+      if (p.level !== 'ok') return answer({ t: 'solo', why: 'busy' });
+    } catch (e) {
+      console.error('meter unreachable, match goes solo', e instanceof Error ? e.message : e);
+      return answer({ t: 'solo', why: 'unavailable' });
+    }
+  }
+  return matchStub(env.MATCH, tier).fetch(`https://${KIT_HOST}/match?tier=${tier}`, {
+    headers: { upgrade: 'websocket', 'x-kit-user': identityHeader(me) },
+  });
+}
+
+/** 接受升级、发一条排队的结果、正常关掉（页面按消息走，不看关闭码） */
+function answer(msg: MatchDownMsg): Response {
+  const pair = new WebSocketPair();
+  pair[1].accept();
+  pair[1].send(JSON.stringify(msg));
+  pair[1].close(1000, msg.t);
+  return new Response(null, { status: 101, webSocket: pair[0] });
 }
 
 /**

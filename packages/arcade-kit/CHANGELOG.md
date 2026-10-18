@@ -1,5 +1,20 @@
 # 更新日志
 
+## 0.20.0（2026-10-18）
+
+快速匹配（设计 docs/match.md，#290 审过，主线定了四个待定）：同一个游戏、同一个档位排队，凑满一桌立刻开，最多等 15 秒，到点 ≥ 2 个真人开桌、只剩自己转本机单机。不新建 Worker。
+- **排队** `arcade-kit/match` 的 `MatchQueue`（新入口，DO）：每个档位一个实例；0 行存储（排着的人就是休眠的 WebSocket）、一个闹钟（最早那个人到点）；同一个人再排旧连接 4001 让位；
+  每人每小时 30 次（4029）、队长 200（1013）；排队连接只收不发（发了 1008）。凑桌前问平台 `ARCADE.blockedAmong`，屏蔽过的两个人不同桌；单独部署没有平台时跳过。
+- **入口** `acceptMatch(request, env, tier, { tiers })`：认人、查 Origin 和进房一样；入队前问一次计量（新的只读 `kitPeek`）：有开着的房间回 `has_room`，今天的次数用完、联机忙、计量连不上回 `solo`。
+- **房间** `kitCreateMatch`：一次占齐所有人的名额（新的 `kitReserveMany`，占不齐一个都不占），排进来的人建房时坐好（`matchSeats(n, count)` 可覆盖，默认随机）；
+  都连上就和最后一个人进房同一步开打，等满 `RoomLimits.matchJoinMs`（20 秒）没来的电脑代打、来了交还；外人进房 4004，`start` 回 `not_host`，等人时不能换座；
+  打完、关房还每个人的名额（`kitReleaseMany`）。`RoomInfo.match` 告诉页面这是匹配桌。好友房行为不变。
+- **页面** `MatchClient`（`onWaiting`、`onMatched`、`onHasRoom`、`onSolo`，断线不重连）和转单机的默认文案 `MATCH_TEXT`（"今天联机局数用完了，先和电脑打"等）。
+- 额度：匹配桌也占每天的开房名额（`dailyRoomsPerUser`，默认 6，游戏 `vars.KIT_QUOTA` 里改）；全站开房数一张桌只记 1。
+- 文档：docs/match.md 改成实现版（陌生人打字聊天默认开、设置里能关，开放公开注册时重新评估；屏蔽名单直接用平台 0.25.0 的 RPC）；README 加"快速匹配"一节。
+- 测试：`match.test.ts` 15 条、`client.test.ts` 加 3 条（MatchClient）；`FlakyMeter` 改拦 `kitReserveMany` / `kitReleaseMany` / `kitPeek`。
+  反证五处（外人能进、不自动开打、不按 joinBy 开、没来的不托管、只还第一个人的名额）各有测试失败。
+
 ## 0.19.1（2026-10-18）
 
 0.19.0 接进掼蛋后截图看出的两处（主线定）：

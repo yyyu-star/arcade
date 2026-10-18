@@ -3,7 +3,7 @@
 > 总规范见仓库根的 `AGENTS.md`（拆成独立仓库后，以本文件和随附的 docs 为准）。房间规范是 `docs/platform-backend.md` 第 4 节。
 
 - 内容：联机底座，给各游戏的 Worker 和页面用：`src/room.ts`（Durable Object 房间基类）、`src/worker.ts`（游戏 Worker 的开房、进房入口）、
-  `src/meter.ts`（每天的额度计量，0.2.0）、`src/rng.ts`（ChaCha20 随机数，纯函数，0.2.0）、`src/auth.ts`（经平台 `/api/me` 认人；`identify` 按部署方式认人）、`src/guest.ts`（独立模式的游客身份，0.10.0）、`src/internal.ts`（内部地址、身份头）、`src/game.ts`（规则接口、快照体积）、`src/client.ts`（浏览器连接器）、`src/protocol.ts`（消息和关闭码）。
+  `src/meter.ts`（每天的额度计量，0.2.0）、`src/match.ts`（快速匹配的排队 DO，0.20.0，依赖 `cloudflare:workers`，设计 `docs/match.md`）、`src/rng.ts`（ChaCha20 随机数，纯函数，0.2.0）、`src/auth.ts`（经平台 `/api/me` 认人；`identify` 按部署方式认人）、`src/guest.ts`（独立模式的游客身份，0.10.0）、`src/internal.ts`（内部地址、身份头）、`src/game.ts`（规则接口、快照体积）、`src/client.ts`（浏览器连接器）、`src/protocol.ts`（消息和关闭码）。
   不部署，没有自己的 Worker。
 - 两种形态（0.10.0）：npm 上发 `dist/`（JS + `.d.ts`，`npm run build`）；仓库里 `package.json` 的 `exports` 一律写 `"./x": "./src/x.ts"`，
   仓库内游戏的 `file:` 引用直接用源码。`prepack` / `postpack`（`scripts/manifest.mjs`）在打包时换成 dist 版再换回来，不要手改 exports 指 dist，也不提交 `dist/`。

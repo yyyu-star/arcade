@@ -1,4 +1,4 @@
-// 只给测试用（vitest.config.ts）：带 ToyRoom、计量，和测"计量断线、分批报数"用的 FlakyRoom、FlakyMeter，以及测 0.3.0 可选接口的 LedgerRoom、ToyBank，测 0.5.0 停顿的 PauseRoom、NoResumeRoom，测 0.8.0 假钱包的 FakeBank（WALLET 绑回自己导出的 WalletService）、测 0.10.0 电脑短语的 ChattyRoom 的测试 Worker。不部署。
+// 只给测试用（vitest.config.ts）：带 ToyRoom、计量，和测"计量断线、分批报数"用的 FlakyRoom、FlakyMeter，以及测 0.3.0 可选接口的 LedgerRoom、ToyBank，测 0.5.0 停顿的 PauseRoom、NoResumeRoom，测 0.8.0 假钱包的 FakeBank（WALLET 绑回自己导出的 WalletService）、测 0.10.0 电脑短语的 ChattyRoom、测 0.20.0 快速匹配的 ToyQueue 的测试 Worker。不部署。
 {
   "name": "arcade-kit-test",
   "main": "./worker.ts",
@@ -14,10 +14,11 @@
       { "name": "PAUSE_ROOM", "class_name": "PauseRoom" },
       { "name": "NORESUME_ROOM", "class_name": "NoResumeRoom" },
       { "name": "FAKE_BANK", "class_name": "FakeBank" },
-      { "name": "CHATTY_ROOM", "class_name": "ChattyRoom" }
+      { "name": "CHATTY_ROOM", "class_name": "ChattyRoom" },
+      { "name": "MATCH", "class_name": "ToyQueue" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ToyRoom", "RoomMeter", "FlakyRoom", "FlakyMeter", "LedgerRoom", "ToyBank", "PauseRoom", "NoResumeRoom", "FakeBank", "ChattyRoom"] }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ToyRoom", "RoomMeter", "FlakyRoom", "FlakyMeter", "LedgerRoom", "ToyBank", "PauseRoom", "NoResumeRoom", "FakeBank", "ChattyRoom", "ToyQueue"] }],
   "services": [
     { "binding": "WALLET", "service": "arcade-kit-test", "entrypoint": "WalletService", "props": { "game": "toy" } },
     { "binding": "WALLET_BARE", "service": "arcade-kit-test", "entrypoint": "WalletService" }

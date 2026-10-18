@@ -73,3 +73,11 @@ export const LIMITED_HEADER = 'x-kit-limited';
 export function meterStub(ns: DurableObjectNamespace): DurableObjectStub {
   return ns.get(ns.idFromName(METER_NAME), { locationHint: 'apac' });
 }
+
+/** 快速匹配的排队（0.20.0）：每个档位一个实例，和房间一样放在亚太 */
+export function matchStub(ns: DurableObjectNamespace, tier: string): DurableObjectStub {
+  return ns.get(ns.idFromName(`kit-match:${tier}`), { locationHint: 'apac' });
+}
+
+/** 档位 key 的格式：游戏给的短字符串（如 real-2、fun-normal） */
+export const TIER_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
