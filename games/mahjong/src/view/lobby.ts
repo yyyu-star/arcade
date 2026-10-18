@@ -7,7 +7,7 @@ import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { LEVELS, type Level } from '../ai/venues.ts';
 import { STAKES, type StakesId, type TierId } from '../game/stakes.ts';
 import type { WalletView } from '../net/wallet.ts';
-import { stakeIcon } from './art.ts';
+import { homeScene, stakeIcon } from './art.ts';
 import { busy, button, el } from './dom.ts';
 import { GAME_NAME, LEVEL_FOR, LEVEL_NAME, MINUTES_PER_ROUND, num, STAKES_NAME, STARS, VARIANT_NAME } from './text.ts';
 
@@ -45,6 +45,8 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   let level = p.level;
   const opts: XzOpts = { ...p.opts };
   if (p.onBack) button('pill back', box, '‹ 主页', p.onBack);
+  // 竖屏选档页上面那块空白放主页同一张茶馆的画（只占剩下的高度，规则设置展开后自己缩没）；横屏没空，CSS 藏掉
+  el('div', 'lobby-art', box).innerHTML = homeScene();
   const head = el('div', 'lobby-head', box);
   el('h1', '', head, MODE_TITLE[p.mode]);
   el('div', 'variant', head, `${GAME_NAME} · ${VARIANT_NAME['sichuan-xuezhan']}`);
