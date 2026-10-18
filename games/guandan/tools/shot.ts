@@ -989,6 +989,18 @@ async function gallerySize(browser: Browser, z: GallerySize): Promise<void> {
   await until(ctx, '标题页', "g.scene === 'title'");
   await page.waitForTimeout(1200);
   await shot(ctx, `${p}-01-title`);
+  // 实盘选档位（0.21.0 手机专项补的一屏）：假钱包给够钱，四档都亮；--tiers-only 截完这一屏就停（只核对这一屏时省得跑整套）
+  await step('选档位', async () => {
+    await page.route('**/api/wallet', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ wallet: { balance: 1_000_000, stakes: [] } }) }));
+    await until(ctx, '模式卡', "'stake' in g.controls()", 8000);
+    await ck(ctx, 'stake');
+    await until(ctx, '选档位', "'tier:lux' in g.controls()", 8000);
+    await page.waitForTimeout(800);
+    await shot(ctx, `${p}-02-tiers`);
+    await page.keyboard.press('Escape');
+    await until(ctx, '关掉选档位', "!('tier:lux' in g.controls())", 8000);
+  });
+  if (process.argv.includes('--tiers-only')) return void (await page.context().close());
   // art-v3 起没有"选模式"那一层：主页上直接点"娱乐"模式卡
   await step('点娱乐卡', async () => {
     await until(ctx, '模式卡', "'fun' in g.controls() && 'stake' in g.controls()", 8000);
