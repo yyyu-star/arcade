@@ -224,13 +224,15 @@ class SlotCard {
     }
     const tc = THEME_COLOR[r.stock.theme];
     // 0.19.0 手机上卡窄了：小人小一号、推荐人往上挪，不和小人叠；按钮放宽，颜色点放进按钮里不压字
-    const guy = new StockGuy(sc, cx, y + (PHONE ? 136 : 140), r.stock.id, r.stock.face, PHONE ? 64 : 80, { idle: e.idle });
+    // 0.19.3 电脑上小人头顶（向日葵这类高的）压住「某某荐」：小人小一号，小人、名字、按钮一起往下挪（卡底下本来空着一截）
+    const dy = PHONE ? 0 : 10;
+    const guy = new StockGuy(sc, cx, y + (PHONE ? 136 : 150), r.stock.id, r.stock.face, PHONE ? 64 : 72, { idle: e.idle });
     guy.setAlpha(0.6);
-    const name = fitWidth(addText(sc, cx, y + (PHONE ? 140 : 144), r.stock.name, { size: 14, bold: true, color: COLOR.ink, originX: 0.5 }), w - 8);
+    const name = fitWidth(addText(sc, cx, y + (PHONE ? 140 : 154), r.stock.name, { size: 14, bold: true, color: COLOR.ink, originX: 0.5 }), w - 8);
     const btnW = PHONE ? w - 16 : w - 40;
-    const btn = addPill(sc, cx - btnW / 2, y + 170, btnW, 26, COLOR.accent);
-    const bt = addText(sc, cx - (PHONE ? 6 : 0), y + 183, '点我买', { size: 13, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
-    const dot = sc.add.circle(cx + btnW / 2 - 12, y + 183, 5, tc).setStrokeStyle(1.5, COLOR.ink, 1);
+    const btn = addPill(sc, cx - btnW / 2, y + 170 + dy, btnW, 26, COLOR.accent);
+    const bt = addText(sc, cx - (PHONE ? 6 : 0), y + 183 + dy, '点我买', { size: 13, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
+    const dot = sc.add.circle(cx + btnW / 2 - 12, y + 183 + dy, 5, tc).setStrokeStyle(1.5, COLOR.ink, 1);
     const who = r.friend ? `${r.friend.name}荐` : '软件荐';
     const whoT = fitWidth(addText(sc, cx, y + (PHONE ? 58 : 64), who, { size: 11, bold: true, color: COLOR.accentDark, originX: 0.5 }), w - 10);
     this.root.add([guy, name, btn, bt, dot, whoT]);
