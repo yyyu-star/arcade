@@ -326,6 +326,19 @@ export function finishRun(s: Save, r: RunEnd): RunReward {
   return { coins, record, unlockedDanger, askAssist, sources };
 }
 
+/**
+ * 实盘守夜结束：只记解锁要用的进度（0.3.11，所有者实盘中档撑到天亮、竹林还锁着）。
+ * - maxSeconds：地图、更夫按它解锁；认输按撑到的时间算，和娱乐一样；
+ * - cleared：撑到天亮就解锁娱乐的下一危险档、咒印。实盘不带加成、咒印，同一危险档比娱乐只难不易，记上不会让谁白捡；
+ *   钱包结回只看实盘档位和结局，不看 cleared，所以不碰实盘的配平。
+ * 不加局数、不发铜钱、不记纪录和排行（实盘的钱走钱包，纪录和娱乐分开）。
+ */
+export function recordLiveVigil(s: Save, r: { danger: Danger; won: boolean; ticks: number }): void {
+  s.maxSeconds = Math.max(s.maxSeconds, Math.floor(r.ticks / 30));
+  if (r.won && r.danger > s.cleared) s.cleared = r.danger;
+  writeSave(s);
+}
+
 // ───────────────────────── 解锁 ─────────────────────────
 
 /** 能选的最高危险档：撑到天亮过的下一档；第一局锁危险 0（13.2） */

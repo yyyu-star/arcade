@@ -8,7 +8,7 @@ import { DANGERS, DAWN_TICK, type Danger } from './content/waves.ts';
 import { CHARACTER_IDS, CHARACTERS, CURSE_IDS, MAX_CURSES, type CharacterId } from './content/meta.ts';
 import { ELEMENT_SET, PASSIVE_IDS, PASSIVES, TYPE_SETS, WEAPONS, type WeaponId } from './content/weapons.ts';
 import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Setup, type World } from './core/index.ts';
-import { buyChar, buyPerk, CHAR_PRICE, charOpen, charProgress, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
+import { buyChar, buyPerk, CHAR_PRICE, charOpen, charProgress, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, recordLiveVigil, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
 import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
@@ -481,6 +481,8 @@ async function boot(): Promise<void> {
       // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
       const seed = liveRun.seed;
       liveRun = null;
+      // 撑过的时间照样解锁地图、更夫，天亮了照样开下一危险档（以前实盘分支不记，撑到天亮竹林还锁着）
+      recordLiveVigil(save, { danger: w.setup.danger, won: dawned(w), ticks: Math.min(w.tick, DAWN_TICK) });
       showPlay(false);
       result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: 0, label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
       void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(showLiveResult);

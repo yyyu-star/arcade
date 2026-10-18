@@ -137,3 +137,29 @@ describe('上次的模式和镇子（主页一步开始用）', () => {
     expect('raidTpl' in p).toBe(false);
   });
 });
+
+describe('实盘守夜也记解锁进度（0.3.11）', () => {
+  it('撑过的秒数解锁地图，天亮开下一危险档；不加局数、不发铜钱、不记纪录', async () => {
+    const { fresh, recordLiveVigil, mapOpen, coins } = await import('../src/platform/save.ts');
+    const { MAP_UNLOCK } = await import('../src/content/maps.ts');
+    const s = fresh();
+    s.runs = 3;
+    const need = MAP_UNLOCK.bamboo!.seconds;
+    expect(mapOpen(s, 'bamboo')).toBe(false);
+    // 认输按撑到的时间算：差一秒不开
+    recordLiveVigil(s, { danger: 2, won: false, ticks: (need - 1) * 30 });
+    expect(mapOpen(s, 'bamboo')).toBe(false);
+    expect(s.cleared).toBe(-1);
+    // 撑到天亮（所有者那一局：中档雪原）
+    recordLiveVigil(s, { danger: 2, won: true, ticks: 900 * 30 });
+    expect(mapOpen(s, 'bamboo')).toBe(true);
+    expect(s.maxSeconds).toBe(900);
+    expect(s.cleared).toBe(2);
+    expect(s.runs).toBe(3);
+    expect(coins(s)).toBe(0);
+    expect(s.bestD[2]).toBeUndefined();
+    // 低档的天亮不会把已经开过的高档往回改
+    recordLiveVigil(s, { danger: 0, won: true, ticks: 900 * 30 });
+    expect(s.cleared).toBe(2);
+  });
+});
