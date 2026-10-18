@@ -111,6 +111,22 @@ export class SeatView {
     this.netTag.setText(who?.auto ? '电脑代打' : who?.away ? '重连中…' : who?.afk && !this.self ? '托管中' : '');
   }
 
+  /**
+   * 名牌、剩余张数、托管小字那一块（世界坐标，0.24.0）：kit 的气泡、弹幕、聊天按钮避开它，不盖住名字和张数。
+   * 我自己没有名牌和张数，返回 null
+   */
+  plateBox(): { x: number; y: number; w: number; h: number } | null {
+    if (this.self) return null;
+    const r = this.a.size / 2;
+    const nw = Math.max(64, this.nameText.width + 26);
+    const left = Math.min(-nw / 2, -r * 0.8);
+    const right = Math.max(nw / 2, r * 0.8 + 20);
+    // 上沿是剩余张数那张小牌背的顶，下沿是名牌（有托管小字时再往下一行）
+    const top = r * 0.62 - 28;
+    const bottom = r + 30 + (this.netTag.text ? 30 : 0);
+    return { x: this.a.ax + left, y: this.a.ay + top, w: right - left, h: bottom - top };
+  }
+
   /** 这一手还剩几秒（联机）；null 不显示 */
   setClock(sec: number | null): void {
     this.clock.setText(sec === null ? '' : String(sec)).setColor(sec !== null && sec <= 5 ? '#ffb0a0' : '#ffffff');

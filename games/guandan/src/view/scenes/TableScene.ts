@@ -43,6 +43,7 @@ import { suggestFor } from '../suggest.ts';
 import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog, type Title } from '../../stake/titles.ts';
 import { AWARD_NAME, matchAwards, winnerOf, type Award } from '../../net/awards.ts';
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
+import { LOW_MEMORY } from '../device.ts';
 import { COLOR, TYPE, css, minHit, phoneType } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
 import { join } from '../online.ts';
@@ -272,6 +273,7 @@ export class TableScene extends Phaser.Scene {
     const mh = minHit();
     // "互动"按钮夹在我的头像（中心 x 60）和"理牌"之间
     const left = 60 + Math.max(72, mh) / 2;
+    const lp = Math.max(56, mh);
     const bw = Math.max(48, Math.min(Math.max(56, mh), this.btnSort.x - this.btnSort.width / 2 - left));
     const bh = Math.max(64, mh);
     const free = (): boolean => this.overlay === null && !hasLayer(this);
@@ -287,10 +289,33 @@ export class TableScene extends Phaser.Scene {
       seats: () => this.seats.map((sv, v): FunSeat => {
         const id = net ? seatIdentity[v] : null;
         const persona = net ? id?.persona : this.ses.botStyle(v)?.persona;
-        return { rect: this.screenRect(sv.a), name: seatName(v), me: this.isMe(v), bot: net ? !!id && !id.human : v !== ME, temper: persona ? TEMPER[persona] : 'normal' };
+        const p = sv.plateBox();
+        return {
+          rect: this.screenRect(sv.a),
+          ...(p ? { plate: this.worldRect(p.x, p.y, p.w, p.h) } : {}),
+          name: seatName(v),
+          me: this.isMe(v),
+          bot: net ? !!id && !id.human : v !== ME,
+          temper: persona ? TEMPER[persona] : 'normal',
+        };
       }),
       avoid: () => [this.worldRect(0, BUTTON_Y - 40, W, worldH - BUTTON_Y + 40)],
+      // 桌上各家出的牌：弹幕不横穿、气泡不压（kit 0.19.0）
+      center: () => this.trick.boxes().map((b) => this.worldRect(b.x, b.y, b.w, b.h)),
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
+      // 手机上的"聊天"按钮放顶栏左边（"大厅"和邀请后面的空处）：牌桌左下已经挤着我的头像、"互动"和"理牌"，
+      // kit 默认挨着"互动"放会把我自己的气泡挤到按钮底下（kit 0.19.0 截图）
+      chatButton: () => (seated() ? this.worldRect(126 + (net ? lp + 16 : 0) + 12, 4, lp, Math.max(48, mh)) : null),
+      // 弹幕只在左右两家之间、对家名牌下沿到"轮到你"那行提示（BUTTON_Y - 50）上面飘：手机横屏上下都挤，横穿整屏一定会压到左右两家的名牌
+      danmakuArea: () => {
+        const [l, r, t] = [this.seats[3]!, this.seats[1]!, this.seats[2]!];
+        const pb = t.plateBox();
+        const x0 = l.a.ax + l.a.size / 2 + 40;
+        const x1 = r.a.ax - r.a.size / 2 - 40;
+        const y0 = pb ? pb.y + pb.h + 4 : t.a.ay + t.a.size / 2 + 40;
+        return this.worldRect(x0, y0, x1 - x0, BUTTON_Y - 72 - y0);
+      },
+      lite: () => LOW_MEMORY > 0,
       send,
       canSend: () => seated() && free(),
       // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒

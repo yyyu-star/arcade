@@ -44,6 +44,15 @@ export class TrickView {
     return !!this.slots[seat];
   }
 
+  /** 桌上现在每一家出的牌（或"不要"）占的地方（世界坐标，0.24.0）：kit 的弹幕不横穿、气泡不压 */
+  boxes(): { x: number; y: number; w: number; h: number }[] {
+    return this.slots.flatMap((c) => {
+      if (!c) return [];
+      const b = c.getBounds();
+      return b.width > 0 ? [{ x: b.x, y: b.y, w: b.width, h: b.height }] : [];
+    });
+  }
+
   clearSeat(seat: number): void {
     const s = this.slots[seat];
     if (s) s.destroy();
