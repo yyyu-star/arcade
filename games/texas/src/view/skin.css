@@ -351,3 +351,21 @@ html, body, body::before { background: var(--night); }
 /* 进桌：桌面从光里推近（只动 scale 和 opacity，不和 .screen 别的 transform 打架） */
 .stage.at-table .screen { animation: table-in .45s ease-out; }
 @keyframes table-in { from { opacity: 0; scale: 1.04; } }
+
+/*
+ * kit 的面板（分享预览、叫朋友来、互动菜单和面板）换成本游戏的墨绿金（kit 0.16 的 --ak-* 变量，写在根上靠继承；
+ * 0.18.4 美术 v3 第 5 步）。不写时 kit 是它自己的棕红色，和牌室不搭
+ */
+:root {
+  --ak-bg: #0f1d17;
+  --ak-fg: #f4efe1;
+  --ak-accent: #d9a441;
+  --ak-accent-fg: #2a1a04;
+  --ak-border: rgba(243, 200, 107, .5);
+  --ak-radius: 16px;
+  --ak-radius-btn: 12px;
+  --ak-font: system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --ak-overlay: rgba(2, 8, 5, .72);
+  --ak-soft: #1d2f26;
+  --ak-title: #f3c86b;
+}
