@@ -4,7 +4,7 @@ import { avatarKey, hasArt, stockKey, type Glyph } from '../assets.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { addGlyph, addImage, addPill } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
 import { addText } from '../ui/text.ts';
 import { chipLine } from './bits.ts';
 import { phoneLayout } from '../viewport.ts';
@@ -12,10 +12,10 @@ import { phoneLayout } from '../viewport.ts';
 const W = 960;
 const H = 640;
 /**
- * 手机横屏（960×444）：面板 940×430，标题小一号；故事一行一张纸条（矮一些），放不下时分页，
+ * 手机横屏（世界高 404、宽 718–960）：面板大小按 phonePanel（SE 702×392），标题小一号；故事一行一张纸条（矮一些），放不下时分页，
  * 标题行右边两个小按钮翻页（命名 reveal:prev / reveal:next）。
  */
-const PHONE_UI = { w: 940, h: 430, top: 104, bottomGap: 78, rowMin: 40 } as const;
+const PHONE_UI = { top: 104, bottomGap: 78, rowMin: 40 } as const;
 
 const REGIME_COLOR: Record<Regime, number> = {
   bull: 0xd8453b,
@@ -61,7 +61,8 @@ const DOWN_REGIME = new Set<Regime>(['bear', 'crash']);
 export class RevealPanel extends Dialog {
   constructor(scene: Phaser.Scene, v: StoryPanelData, onClosed?: () => void) {
     const phone = phoneLayout(scene);
-    super(scene, phone ? PHONE_UI.w : W, phone ? PHONE_UI.h : H, '这段日子', onClosed);
+    const pp = phone ? phonePanel(scene) : null;
+    super(scene, pp ? pp.w : W, pp ? pp.h : H, '这段日子', onClosed);
     const s = scene;
     const L = 36;
     // 手机：标题和市况签上移、小一号，给故事多留一行

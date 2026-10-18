@@ -22,6 +22,7 @@ import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
 import { statTile, tipOnButton } from '../meta/bits.ts';
 import { addBadge, addPortrait } from '../meta/setupPanel.ts';
 import { Button } from '../ui/button.ts';
+import { moneyShort } from '../ui/dialog.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
 import { addText, fitWidth } from '../ui/text.ts';
 import type Phaser from 'phaser';
@@ -76,30 +77,48 @@ interface Geo {
   /** 底部按钮高、离纸卡底边 */
   btnH: number;
   btnBottom: number;
+  /** 战绩格竖排（小图标和标签一行、数字一行，手机窄屏）；月份轨道一格的间距 */
+  stacked: boolean;
+  trackPitch: number;
+  /** 账单轨道离「收获」、最好成绩 / 经历 / 排行榜 / 下次试试离轨道的距离 */
+  dy: { track: number; best: number; recap: number; row: number; hint: number };
 }
 
 const DESK_GEO: Geo = {
   x: GAME_WIDTH / 2 - W / 2, y: 60, w: W, h: H, pad: 40, leftW: 420, headY: 46, portrait: 40, badge: 36, titleY: 86, titleSize: 40, moneySize: 40, wallet: 44,
   boxW: 400, guyMax: 180, boxBottom: 40, mx: 480, rightW: 404, tileCols: 2, tw: 196, tileIcon: 40, tileSize: TYPE.title + 2, tileGap: 12,
-  gainsInline: false, chipIcon: 34, btnH: 50, btnBottom: 74,
+  gainsInline: false, chipIcon: 34, btnH: 50, btnBottom: 74, stacked: false, trackPitch: 31,
+  dy: { track: 98, best: 44, recap: 92, row: 114, hint: 150 },
 };
 /**
- * 手机横屏（960×444）：纸卡 940×430；左栏标题、账户、最赚的一笔都收小一号，
- * 右栏战绩改成 3 × 2，「收获」两个字和图标并在一行，按钮 46 高。字号都不低于 13。
+ * 手机横屏（0.19.1 按世界宽度，718–960×404）：纸卡 = 整屏弹窗大小（SE 702×392，宽屏 940×392）；
+ * 左栏标题、账户、最赚的一笔收小一号，宽 290–380；右栏战绩 3 × 2，一格不到 140 宽时竖排，
+ * 「收获」两个字和图标并在一行，按钮 46 高，按右栏宽度分。
  */
-const PHONE_GEO: Geo = {
-  x: 10, y: 7, w: 940, h: 430, pad: 24, leftW: 380, headY: 34, portrait: 34, badge: 30, titleY: 58, titleSize: 32, moneySize: 32, wallet: 36,
-  boxW: 380, guyMax: 120, boxBottom: 34, mx: 430, rightW: 486, tileCols: 3, tw: 156, tileIcon: 32, tileSize: TYPE.title, tileGap: 9,
-  gainsInline: true, chipIcon: 30, btnH: 46, btnBottom: 58,
-};
+function phoneGeo(V: { w: number; h: number }): Geo {
+  const w = Math.min(940, V.w - 16);
+  const h = Math.min(430, V.h - 12);
+  const pad = w >= 900 ? 24 : 20;
+  const leftW = Math.max(290, Math.min(380, Math.round(w * 0.42)));
+  const mx = pad + leftW + 20;
+  const rightW = w - mx - 16;
+  const tileGap = 8;
+  const tw = Math.floor((rightW - tileGap * 2) / 3);
+  const stacked = tw < 140;
+  return {
+    x: Math.round((V.w - w) / 2), y: Math.round((V.h - h) / 2), w, h, pad, leftW, headY: 34, portrait: 34, badge: 30, titleY: 58, titleSize: 32, moneySize: 32, wallet: 36,
+    boxW: leftW, guyMax: 120, boxBottom: 34, mx, rightW, tileCols: 3, tw, tileIcon: stacked ? 20 : 32, tileSize: TYPE.title, tileGap,
+    gainsInline: true, chipIcon: 30, btnH: 46, btnBottom: 56, stacked, trackPitch: Math.min(31, Math.floor((rightW - 44) / 12)),
+    dy: { track: 52, best: 40, recap: 84, row: 98, hint: 132 },
+  };
+}
 
 /**
  * 结束页：称号与最终账户、本局小结、这个人设 × 难度（或今天的每日挑战）的最好成绩（刷新时标「新纪录」）、
  * 本局新达成的成就和解锁；进场后依次弹出成就、新人设、新难度。按钮：同种子再来、新局、主菜单。
  */
 export class EndScene extends BaseScene {
-  // 0.19.0 结束页还没按新的手机世界重排（0.19.1）：先按旧的 960×444 整体缩放进来
-  protected override readonly phoneReady = PHONE ? ('legacy' as const) : false;
+  protected override readonly phoneReady = PHONE;
   private buttons: Record<string, Button> = {};
   private room: Room | null = null;
   private summary: RunSummary | null = null;
@@ -132,7 +151,7 @@ export class EndScene extends BaseScene {
     // 通关是傍晚的暖光，出局是夜里
     this.room.setTime(sum.won ? 'dusk' : 'night', null);
     addBackdrop(this, 0.35).disableInteractive();
-    const G = phoneLayout(this) ? PHONE_GEO : DESK_GEO;
+    const G = phoneLayout(this) ? phoneGeo(viewOf(this)) : DESK_GEO;
     const ph = G !== DESK_GEO;
     const { x, y } = G;
     const W = G.w;
@@ -146,11 +165,16 @@ export class EndScene extends BaseScene {
     const hy = y + G.headY;
     // 0.16.0 手机上「大厅」回到左上角（和别的画面一样），头像那一行往右让出它的位置
     const hx = ph ? 104 : 0;
-    addPortrait(this, L + hx + 22, hy, { id: sum.persona, name: sum.personaName }, false, G.portrait);
-    addBadge(this, L + hx + 22 + G.badge + 8, hy, lv.level, G.badge);
-    const who = this.add.rectangle(L + hx, hy - 28, 90, 56, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(who, () => ({ x: L + hx, y: hy - 28, w: 90, h: 56 }), () => ({ title: '这一局', body: setup }));
-    const pillX = L + hx + (ph ? 84 : 96);
+    // 手机窄屏上一行放不下「大厅 + 头像 + 级别 + 通关 + 每日挑战/实盘」：有第二枚标签时不放头像和级别（悬停里有）
+    const second = sum.daily || lv0;
+    const faces = !(ph && second && hx + 84 + 74 + 120 > G.leftW);
+    if (faces) {
+      addPortrait(this, L + hx + 22, hy, { id: sum.persona, name: sum.personaName }, false, G.portrait);
+      addBadge(this, L + hx + 22 + G.badge + 8, hy, lv.level, G.badge);
+    }
+    const pillX = L + hx + (!faces ? 0 : ph ? 84 : 96);
+    const who = this.add.rectangle(L + hx, hy - 28, faces ? 90 : 64, 56, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(who, () => ({ x: L + hx, y: hy - 28, w: faces ? 90 : 64, h: 56 }), () => ({ title: '这一局', body: setup }));
     this.tag(pillX, hy - 10, sum.won ? '通关' : '出局', sum.won ? COLOR.accent : COLOR.danger, 64);
     if (sum.daily) this.tag(pillX + 74, hy - 10, dailyTag(sum.daily), COLOR.info, 120);
     if (lv0) this.tag(pillX + 74, hy - 10, `实盘 · ${chips(lv0.stake)}`, COLOR.accentDark, 120);
@@ -175,7 +199,8 @@ export class EndScene extends BaseScene {
     const boxW = G.boxW;
     this.add.rectangle(L, boxY, boxW, boxH, 0xffffff, 0.55).setOrigin(0, 0).setRounded(18).setStrokeStyle(2, COLOR.edge, 1);
     // 小人 + 右边一列当成一组，在卡里左右、上下都居中（右列按最宽的 170 估）
-    const guySize = Math.min(G.guyMax, boxH - (ph ? 24 : 40));
+    // 手机窄屏框只有 290 宽：小人按右边一列（约 170）让出来的宽度缩，不出框
+    const guySize = Math.min(G.guyMax, boxH - (ph ? 24 : 40), boxW - 20 - 170 - 16);
     const groupW = guySize + 20 + 170;
     const guyX = L + (boxW - groupW) / 2 + guySize / 2;
     const guyFeet = boxY + (boxH + guySize) / 2 + 4;
@@ -220,31 +245,34 @@ export class EndScene extends BaseScene {
     // ---- 右：战绩图标格（2 × 3），完整说法在悬停
     const mx = x + G.mx;
     const tw = G.tw;
-    const th = G.tileIcon + 16;
+    const th = G.stacked ? 54 : G.tileIcon + 16;
+    const rowGap = ph ? 8 : 10;
     const cols = G.tileCols;
     const tgx = G.tileGap;
     const ty0 = y + (ph ? 16 : 28);
+    // 竖排的窄格里金额写短的（「¥5479.9万」），全数在悬停
+    const money = (v: number, sign = false): string => (G.stacked ? moneyShort(v, sign) : formatMoney(v, sign ? { sign: true } : undefined));
     const tiles: [Glyph, string, string, number?][] = [
       ['calendar', `${sum.billsPaid}/${months}`, '还上', sum.won ? COLOR.accentDark : undefined],
-      ['wallet', formatMoney(sum.peakAccount), '最高'],
+      ['wallet', money(sum.peakAccount), '最高'],
       ['bolt', `${sum.limitUpDays}天`, '涨停'],
       ['arrow_up', sum.maxBoards > 1 ? `${sum.maxBoards}天` : '–', '连涨停'],
       ['horn', `${sum.chains}次`, '带小弟'],
     ];
     tiles.forEach(([g, v, label, color], i) => {
       const tx = mx + (i % cols) * (tw + tgx);
-      const ty = ty0 + Math.floor(i / cols) * (th + 10);
-      statTile(this, tx, ty, g, v, label, { w: tw, icon: G.tileIcon, size: G.tileSize, color, tint: g === 'arrow_up' ? COLOR.up : undefined });
+      const ty = ty0 + Math.floor(i / cols) * (th + rowGap);
+      statTile(this, tx, ty, g, v, label, { w: tw, icon: G.tileIcon, size: G.tileSize, color, tint: g === 'arrow_up' ? COLOR.up : undefined, stacked: G.stacked });
     });
     // 第 6 格：炒股本身净赚多少（0.5.4：以前是"最好 0/12"，没计入档案时看不懂；最好成绩挪到下面那一行）
     {
       const tx = mx + ((tiles.length) % cols) * (tw + tgx);
-      const ty = ty0 + Math.floor(tiles.length / cols) * (th + 10);
+      const ty = ty0 + Math.floor(tiles.length / cols) * (th + rowGap);
       const tm = sum.tradeMoney;
       // 0.18.1 亏了写「炒股净亏 ¥325万」（以前写「炒股净赚 −¥325万」，和副标题对不上）
       const word = tm === null ? '炒股净赚' : tradeWord(tm);
-      const v = tm === null ? '–' : tm < 0 ? formatMoney(-tm) : formatMoney(tm, { sign: true });
-      statTile(this, tx, ty, tm !== null && tm < 0 ? 'arrow_down' : 'arrow_up', v, word, { w: tw, icon: G.tileIcon, size: G.tileSize, color: tm === null ? undefined : signColor(tm), tint: tm === null ? undefined : signColor(tm) });
+      const v = tm === null ? '–' : tm < 0 ? money(-tm) : money(tm, true);
+      statTile(this, tx, ty, tm !== null && tm < 0 ? 'arrow_down' : 'arrow_up', v, word, { w: tw, icon: G.tileIcon, size: G.tileSize, color: tm === null ? undefined : signColor(tm), tint: tm === null ? undefined : signColor(tm), stacked: G.stacked });
       const hit = this.add.rectangle(tx, ty, tw, th, 0xffffff, 0.001).setOrigin(0, 0);
       bindTooltip(hit, () => ({ x: tx, y: ty, w: tw, h: th }), () => ({
         title: word,
@@ -256,49 +284,52 @@ export class EndScene extends BaseScene {
     }
     const rowsN = Math.ceil((tiles.length + 1) / cols);
     const gw = tw * cols + tgx * (cols - 1);
-    const gridHit = this.add.rectangle(mx, ty0, gw, rowsN * th + (rowsN - 1) * 10, 0xffffff, 0.001).setOrigin(0, 0).setDepth(-1);
-    bindTooltip(gridHit, () => ({ x: mx, y: ty0, w: gw, h: rowsN * (th + 10) }), () => ({ title: '这一局', body: summaryRows(sum).map(([k, v]) => `${k}：${v}`).join('\n') }));
+    const gridHit = this.add.rectangle(mx, ty0, gw, rowsN * th + (rowsN - 1) * rowGap, 0xffffff, 0.001).setOrigin(0, 0).setDepth(-1);
+    bindTooltip(gridHit, () => ({ x: mx, y: ty0, w: gw, h: rowsN * (th + rowGap) }), () => ({ title: '这一局', body: summaryRows(sum).map(([k, v]) => `${k}：${v}`).join('\n') }));
 
     // ---- 收获：图标 + 数字（名字在悬停）；手机上「收获」两个字和图标并在一行
-    const gy = ty0 + rowsN * (th + 10) + (ph ? 4 : 16);
+    const gy = ty0 + rowsN * (th + rowGap) + (ph ? 4 : 16);
     const gl = addText(this, mx, ph ? gy + 22 : gy, '收获', { size: TYPE.title, bold: true, originY: ph ? 0.5 : 0 });
-    this.gains(ph ? mx + gl.width + 10 : mx, ph ? gy : gy + 34, sum, G.chipIcon);
+    const gx = ph ? mx + gl.width + 10 : mx;
+    this.gains(gx, ph ? gy : gy + 34, sum, G.chipIcon, mx + G.rightW - gx);
 
     // ---- 12 个月账单轨道（0.5.1）：还上的绿格、没还上的红格、没走到的灰格；实盘只有 6 格
     // 0.18.0 屏幕材质（art-v3：数字在跳的地方用夜蓝小屏）：整条放在一块小屏上，每格上面一根这个月账户涨跌的小柱
-    const ky = ph ? gy + 56 : gy + 98;
+    const ky = gy + G.dy.track;
+    const P = G.trackPitch;
+    const trackW = 34 + months * P + 6;
     const barH = ph ? 8 : 14;
     const rets = s.stats.monthRets;
     const maxRet = Math.max(1, ...rets.map((r) => Math.abs(r)));
-    this.add.rectangle(mx - 4, ky - barH - 8, 34 + months * 31 + 6, barH + 8 + 34, COLOR.screen).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.ink, 1);
+    this.add.rectangle(mx - 4, ky - barH - 8, trackW, barH + 8 + 34, COLOR.screen).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.ink, 1);
     addGlyph(this, mx + 14, ky + 14, 'house', 22);
     const bars = this.add.graphics();
     for (let m = 0; m < months; m++) {
-      const px = mx + 34 + m * 31;
+      const px = mx + 34 + m * P;
       const paid = m < sum.billsPaid;
       const failed = !sum.won && m === sum.billsPaid;
       const fill = paid ? 0x1f6f4a : failed ? 0x6a2430 : 0x2e3d4f;
       const edge = paid ? 0x45d68f : failed ? 0xff6b6b : 0x3e5066;
-      const box = this.add.rectangle(px, ky, 27, 28, fill).setOrigin(0, 0).setRounded(7).setStrokeStyle(1.5, edge, 1);
-      addText(this, px + 13.5, ky + 14, `${m + 1}`, { size: paid || failed ? 13 : 11, bold: true, num: true, color: paid ? 0xc8ffe0 : failed ? 0xffd2cc : 0x8a9bb0, originX: 0.5, originY: 0.5 });
+      const box = this.add.rectangle(px, ky, P - 4, 28, fill).setOrigin(0, 0).setRounded(7).setStrokeStyle(1.5, edge, 1);
+      addText(this, px + (P - 4) / 2, ky + 14, `${m + 1}`, { size: paid || failed ? 13 : 11, bold: true, num: true, color: paid ? 0xc8ffe0 : failed ? 0xffd2cc : 0x8a9bb0, originX: 0.5, originY: 0.5 });
       const r = rets[m];
       if (r !== undefined && Math.abs(r) >= 0.5) {
         const h = Math.max(2, (Math.abs(r) / maxRet) * barH);
-        bars.fillStyle(mixColor(signColor(r), 0xffffff, 0.25), 1).fillRoundedRect(px + 8.5, ky - 3 - h, 10, h, 2);
+        bars.fillStyle(mixColor(signColor(r), 0xffffff, 0.25), 1).fillRoundedRect(px + (P - 4) / 2 - 5, ky - 3 - h, 10, h, 2);
       }
       if (this.lively && (paid || failed)) {
         box.setScale(0.2);
         this.tweens.add({ targets: box, scale: 1, duration: 200, delay: 40 * m, ease: 'Back.easeOut' });
       }
     }
-    const trackHit = this.add.rectangle(mx - 4, ky - barH - 8, 34 + months * 31 + 6, barH + 42, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(trackHit, () => ({ x: mx - 4, y: ky - barH - 8, w: 34 + months * 31 + 6, h: barH + 42 }), () => ({
+    const trackHit = this.add.rectangle(mx - 4, ky - barH - 8, trackW, barH + 42, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(trackHit, () => ({ x: mx - 4, y: ky - barH - 8, w: trackW, h: barH + 42 }), () => ({
       title: '每个月',
       body: `格子：这个月的账单还上了（绿）、没还上（红）、没走到（灰）。\n小柱：这个月炒股让账户涨了还是跌了，越高越多。\n${rets.map((r, i) => `${i + 1}月 ${formatPoints(r, 1)}`).join('　')}`,
     }));
     // 实盘：最好成绩、经历两行的位置换成结算的说明（实盘局不进最好成绩）
     if (lv0) {
-      this.liveBody = addText(this, mx + 12, ky + 44, '', { size: TYPE.label, color: COLOR.ink, wrap: ph ? G.rightW - 24 : 392, lineSpacing: 3 });
+      this.liveBody = addText(this, mx + 12, ky + G.dy.best, '', { size: TYPE.label, color: COLOR.ink, wrap: ph ? G.rightW - 24 : 392, lineSpacing: 3 });
       this.updateLive();
       const off = onLiveChange(() => this.updateLive());
       this.events.once('shutdown', off);
@@ -306,10 +337,10 @@ export class EndScene extends BaseScene {
       // 最好成绩 / 今日挑战一句（0.5 只在悬停，0.5.1 放回来）
       const best = profile.best[bestKey(sum.persona, sum.difficulty, sum.short)];
       const line = sum.daily ? `今日挑战：${dailyText(profile.daily[sum.daily])}` : `${sum.personaName}·${sum.difficulty}级${sum.short ? '短局' : ''}最好：${bestText(best)}`;
-      addGlyph(this, mx + 12, ky + 52, 'trophy', 22);
+      addGlyph(this, mx + 12, ky + G.dy.best + 8, 'trophy', 22);
       const lw = ph ? G.rightW - 100 : 380;
-      const lt = addText(this, mx + 30, ky + 44, line, { size: TYPE.label, color: COLOR.ink, wrap: lw, lineSpacing: 2 });
-      if (sum.daily ? this.result?.newDaily : this.result?.newBest) this.newTag(Math.min(mx + 30 + lt.width + 8, mx + lw + 20), ky + 36);
+      const lt = addText(this, mx + 30, ky + G.dy.best, line, { size: TYPE.label, color: COLOR.ink, wrap: lw, lineSpacing: 2 });
+      if (sum.daily ? this.result?.newDaily : this.result?.newBest) this.newTag(Math.min(mx + 30 + lt.width + 8, mx + lw + 20), ky + G.dy.best - 8);
     }
     // 这局的经历（借钱、押跌……）：最多两条，整段在「收获」的包里；每日挑战第二条的位置给排行榜（0.5.10）
     const board = sum.daily ? sum.daily : null;
@@ -317,23 +348,23 @@ export class EndScene extends BaseScene {
     const chal = !board && (runChallenge(s.seed) !== null || (canChallenge(s) && !!this.result && !this.result.ignored && cloudUserId() !== null && !standalone()));
     const row = !!board || chal;
     sum.recap.slice(0, lv0 ? 0 : row ? 1 : 2).forEach((l, i) => {
-      const t = addText(this, mx + 30, ky + 92 + i * 22, l, { size: TYPE.label - 1, color: COLOR.muted });
+      const t = addText(this, mx + 30, ky + G.dy.recap + i * 22, l, { size: TYPE.label - 1, color: COLOR.muted });
       let cut = Array.from(t.text);
       const rw = ph ? G.rightW - 40 : 380;
       while (t.width > rw && cut.length > 6) {
         cut = cut.slice(0, -2);
         t.setText(`${cut.join('')}…`);
       }
-      addGlyph(this, mx + 12, ky + 100 + i * 22, 'bag', 16);
+      addGlyph(this, mx + 12, ky + G.dy.recap + 8 + i * 22, 'bag', 16);
     });
 
-    if (board) this.boardRow(mx, ky + 114, ph ? G.rightW : 404, sum.runId, board);
-    else if (chal) this.challengeRow(mx, ky + 114, ph ? G.rightW : 404, sum);
+    if (board) this.boardRow(mx, ky + G.dy.row, ph ? G.rightW : 404, sum.runId, board);
+    else if (chal) this.challengeRow(mx, ky + G.dy.row, ph ? G.rightW : 404, sum);
 
     // 0.6.8 下次可以试试：离得最近的一两个成就和这局的进度。只在娱乐局放（实盘局不在筹码局里推"再来"，economy.md 第 0 节），
     // 只说成就进度，不提输赢和筹码；放不下（手机上经历多了）就不放
     if (!lv0) {
-      const hy = row ? ky + 150 : ky + 92 + Math.min(sum.recap.length, 2) * 22;
+      const hy = row ? ky + G.dy.hint : ky + G.dy.recap + Math.min(sum.recap.length, 2) * 22;
       const hints = achievementHints(s, Object.keys(profile.achievements));
       if (hints.length > 0 && hy + 20 <= y + H - G.btnBottom - 6) this.hintRow(mx, hy, ph ? G.rightW - 40 : 380, hints);
     }
@@ -342,10 +373,13 @@ export class EndScene extends BaseScene {
     const mk = (key: string, label: string, bx: number, w: number, variant: 'primary' | 'default', fn: () => void, hotkey?: string): void => {
       this.buttons[key] = new Button(this, bx, by, { width: w, height: G.btnH, label, variant, fontSize: 16, hotkey, onClick: fn });
     };
-    // 手机：三个按钮加「分享」撑满右栏（486 宽），手指好点
-    const bw = ph ? [104, 140, 104] : [120, 150, 110];
+    // 手机：三个按钮加「分享」撑满右栏（350–500 宽），手指好点；中间的「新一局」宽一点
+    const shareW = ph ? (G.stacked ? 76 : 102) : 132;
+    const rest = G.rightW - shareW - 36;
+    const bw = ph ? [Math.floor(rest * 0.3), rest - 2 * Math.floor(rest * 0.3), Math.floor(rest * 0.3)] : [120, 150, 110];
+    const liveW = ph ? Math.min(180, G.rightW - 12 - 140) : bw[1]!;
     // 实盘局只有一个「回开始菜单」：不在结束页推"再开一局"（设计稿第 5 节），同种子重玩也会开出一局没带入的实盘
-    if (lv0) mk('menu', '回开始菜单', mx + (ph ? 0 : bw[0]! + 12), ph ? 180 : bw[1]!, 'primary', () => this.session.toTitle(), 'Esc');
+    if (lv0) mk('menu', '回开始菜单', mx + (ph ? 0 : bw[0]! + 12), liveW, 'primary', () => this.session.toTitle(), 'Esc');
     else {
       mk('retry', sum.daily ? '再挑战' : '重玩', mx, bw[0]!, 'default', () => this.session.newRun(s.seed, s.setup), 'R');
       mk('new', '新一局', mx + bw[0]! + 12, bw[1]!, 'primary', () => this.newRun(sum, profile), '空格');
@@ -359,7 +393,7 @@ export class EndScene extends BaseScene {
     const lobbyAt = ph ? { x: x + 10, y: y + 12 } : { x: 14, y: 10 };
     this.buttons.lobby = new Button(this, lobbyAt.x, lobbyAt.y, { width: ph ? 96 : 104, height: 42, label: lobbyLabel(), icon: 'house', fontSize: 16, onClick: () => goLobby() });
     // 分享（0.6.5 起的海报位置，0.12.0 换成共用包的分享卡）：电脑上放在右上角（和「大厅」对称），手机上放在按钮那一排的最右边
-    const shareAt = ph ? { x: mx + (lv0 ? 192 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: ph && lv0 ? 140 : 102, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };
+    const shareAt = ph ? { x: mx + (lv0 ? liveW + 12 : bw[0]! + bw[1]! + bw[2]! + 36), y: by, w: lv0 ? 140 : shareW, h: G.btnH } : { x: GAME_WIDTH - 14 - 132, y: 10, w: 132, h: 42 };
     this.shareButton(shareAt, sum);
   }
 
@@ -548,7 +582,7 @@ export class EndScene extends BaseScene {
   }
 
   /** 本局新达成的成就、新解锁的人设和难度、点亮的图鉴：一排图标 + 数字，名字在悬停；没计入档案时一行短话（原因在悬停）。 */
-  private gains(x: number, y: number, sum: RunSummary, icon = 34): void {
+  private gains(x: number, y: number, sum: RunSummary, icon = 34, room = Infinity): void {
     const r = this.result;
     const why: string | null = !r
       ? '这次不写档案'
@@ -589,9 +623,17 @@ export class EndScene extends BaseScene {
     let cx = x;
     // icon 小于 34（手机）时整枚收窄：图标格 = icon + 14
     const lead = icon + 14;
-    for (const c of chips.slice(0, 6)) {
+    const list = chips.slice(0, 6);
+    for (const [i, c] of list.entries()) {
       const t = addText(this, 0, 0, c.v, { size: TYPE.title, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 });
       const w = lead + t.width + (icon < 34 ? 8 : 10);
+      // 手机窄屏放不下的几枚收成一个「+N」，悬停里逐条写
+      const left = list.slice(i);
+      if (left.length > 1 && cx + w + 8 + 52 > x + room) {
+        t.destroy();
+        this.moreChip(cx, y, left.map((m) => m.tip));
+        return;
+      }
       this.add.rectangle(cx, y, w, 44, COLOR.paperHi, 0.9).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.edge, 1);
       if (c.g) addGlyph(this, cx + lead / 2, y + 22, c.g, icon);
       else c.art?.(cx + lead / 2, y + 22);
@@ -601,6 +643,14 @@ export class EndScene extends BaseScene {
       bindTooltip(hit, () => ({ x: hx, y, w, h: 44 }), () => c.tip);
       cx += w + 8;
     }
+  }
+
+  private moreChip(x: number, y: number, tips: readonly TipContent[]): void {
+    const t = addText(this, x + 10, y + 22, `+${tips.length}`, { size: TYPE.title, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 }).setDepth(1);
+    const w = Math.max(52, t.width + 20);
+    this.add.rectangle(x, y, w, 44, COLOR.paperHi, 0.9).setOrigin(0, 0).setRounded(12).setStrokeStyle(2, COLOR.edge, 1);
+    const hit = this.add.rectangle(x, y, w, 44, 0xffffff, 0.001).setOrigin(0, 0).setDepth(2);
+    bindTooltip(hit, () => ({ x, y, w, h: 44 }), () => ({ title: '还有', body: tips.map((tp) => `${tp.title}：${tp.body}`).join('\n') }));
   }
 
   private tag(x: number, y: number, text: string, fill: number, w: number): void {

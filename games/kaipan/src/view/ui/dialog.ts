@@ -17,6 +17,15 @@ export const OVERLAY_FLAG = 'overlayOpen';
  * 居中对话框（设置、关于、确认等）：遮罩拦截点击，Esc 或右上角关闭。
  * 内容加到 inner（原点为面板左上角）。
  */
+/**
+ * 手机上整屏弹窗的大小（0.19.1）：世界是 718–960×404（见 theme.ts 的 phoneWorld），弹窗最宽 940、最高 430，
+ * 四周各留一点边：SE 上 702×392，844×390 上 858×392，宽屏 940×392。
+ */
+export function phonePanel(scene: Phaser.Scene): { w: number; h: number } {
+  const V = viewOf(scene);
+  return { w: Math.min(940, V.w - 16), h: Math.min(430, V.h - 12) };
+}
+
 export class Dialog extends Phaser.GameObjects.Container {
   readonly inner: Phaser.GameObjects.Container;
   readonly dw: number;

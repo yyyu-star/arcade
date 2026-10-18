@@ -11,7 +11,7 @@ import { StockGuy } from '../ui/stockGuy.ts';
 import { MIN_NUM_SIZE_PHONE, MIN_TEXT_SIZE, addText, fitWidth } from '../ui/text.ts';
 import { hideTooltip } from '../ui/tooltip.ts';
 import { friendCalls, preCount, stockMoves, streakOf, sumMoves, themeHeat, toLevels, vsMarket, vsWord } from './tape.ts';
-import { phoneLayout, phoneNew, viewOf } from '../viewport.ts';
+import { phoneLayout, viewOf } from '../viewport.ts';
 
 /**
  * 0.5.1 详情卡：点股票小人 / 推荐卡 / 风口行 / 群友头像打开，让玩家自己研究。
@@ -27,7 +27,7 @@ function stat(scene: Phaser.Scene, root: Phaser.GameObjects.Container, x: number
   const bg = scene.add.rectangle(x, y, w, 54, COLOR.paperHi, 1).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.edge, 1);
   const l = addText(scene, x + 10, y + 7, label, { size: 12, color: COLOR.muted });
   const v = addText(scene, x + 10, y + 24, value, { size: 20, bold: true, num: true, color });
-  while (v.width > w - 16 && v.style.fontSize && parseInt(String(v.style.fontSize), 10) - 2 >= Math.max(12, MIN_TEXT_SIZE, phoneNew(scene) ? MIN_NUM_SIZE_PHONE : 0)) v.setFontSize(parseInt(String(v.style.fontSize), 10) - 2);
+  while (v.width > w - 16 && v.style.fontSize && parseInt(String(v.style.fontSize), 10) - 2 >= Math.max(12, MIN_TEXT_SIZE, phoneLayout(scene) ? MIN_NUM_SIZE_PHONE : 0)) v.setFontSize(parseInt(String(v.style.fontSize), 10) - 2);
   root.add([bg, l, v]);
 }
 

@@ -5,6 +5,7 @@ import { GAME_HEIGHT, GAME_WIDTH, phoneWorld, pickPhoneLayout } from '../src/vie
 import { cameraFor } from '../src/view/viewport.ts';
 import { mobileLayout } from '../src/view/trade/layout.ts';
 import { phoneTopBar } from '../src/view/trade/topBarGeo.ts';
+import { phoneHome } from '../src/view/meta/homeGeo.ts';
 
 /** 0.5.5 手机布局：判定、相机兜底、viewOf、交易画面各区域。 */
 
@@ -59,17 +60,6 @@ describe('相机', () => {
     const view = { w: 960, h: 444 };
     expect(cameraFor(false, false, 2)).toMatchObject({ zoom: 2, scrollX: 0, scrollY: 0, phoneLayout: false });
     expect(cameraFor(true, true, 2, undefined, view)).toMatchObject({ zoom: 2, scrollX: 0, scrollY: 0, phoneLayout: true });
-  });
-
-  it('0.19.0 还没重排的场景（legacy）按 960×444 整体缩放进新的手机世界，居中不裁', () => {
-    const view = { w: 718, h: 404 };
-    const c = cameraFor('legacy', true, 2, undefined, view);
-    expect(c.phoneLayout).toBe(true);
-    expect(c.world).toEqual({ w: 960, h: 444 });
-    expect(c.zoom).toBeCloseTo(2 * Math.min(718 / 960, 404 / 444), 6);
-    const px = (x: number): number => (x - c.scrollX) * c.zoom;
-    expect(px(0)).toBeGreaterThanOrEqual(-1e-6);
-    expect(px(960)).toBeLessThanOrEqual(718 * 2 + 1e-6);
   });
 
   it('0.14.0 EXPAND：窗口比 16:9 宽或高时画布变长，1280×720 的世界居中、多出来的边左右（上下）平分', () => {
@@ -152,7 +142,6 @@ describe('手机上（844×390）', () => {
     viewport.applyCamera(ready, true);
     viewport.applyCamera(legacy, false);
     expect(viewport.viewOf(ready)).toEqual({ w: 874, h: 404 });
-    expect(viewport.phoneNew(ready)).toBe(true);
     expect(viewport.phoneLayout(ready)).toBe(true);
     expect(viewport.viewOf(legacy)).toEqual({ w: GAME_WIDTH, h: GAME_HEIGHT });
     expect(viewport.phoneLayout(legacy)).toBe(false);
@@ -160,15 +149,6 @@ describe('手机上（844×390）', () => {
     // 同一个场景重新按兜底方式搭：登记跟着改
     viewport.applyCamera(ready, false);
     expect(viewport.phoneLayout(ready)).toBe(false);
-  });
-
-  it('0.19.0 还没重排的场景登记成 960×444，字号下限不抬', async () => {
-    const { viewport } = await asPhone();
-    const old = fakeScene();
-    viewport.applyCamera(old, 'legacy');
-    expect(viewport.viewOf(old)).toEqual({ w: 960, h: 444 });
-    expect(viewport.phoneLayout(old)).toBe(true);
-    expect(viewport.phoneNew(old)).toBe(false);
   });
 
   it('交易画面的各区域都在手机世界里，互不重叠', async () => {
@@ -239,6 +219,31 @@ describe('0.19.0 交易画面在最窄、最宽的手机世界里', () => {
     expect(T.itemsX).toBe(646);
     expect(T.accHit.w).toBe(202);
   });
+});
+
+describe('0.19.1 手机主页', () => {
+  const overlap = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const W of [718, 874, 960]) {
+    for (const n of [2, 3]) {
+      it(`宽 ${W}、${n} 张模式卡：要点的都在下半屏、在世界里、互不重叠，卡不窄于 120`, () => {
+        const G = phoneHome(W, 404, n);
+        const all = [G.hero, ...G.cards];
+        for (const r of all) {
+          expect(r.x).toBeGreaterThanOrEqual(0);
+          expect(r.x + r.w).toBeLessThanOrEqual(W);
+          expect(r.y + r.h).toBeLessThanOrEqual(404);
+          expect(r.y + r.h / 2).toBeGreaterThan(404 / 2);
+          expect(r.h).toBeGreaterThanOrEqual(50);
+        }
+        for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) expect(overlap(all[i]!, all[j]!)).toBe(false);
+        for (const c of G.cards) expect(c.w).toBeGreaterThanOrEqual(120);
+        // 大卡在右下角（右手拇指），快速开始在它正上方、不压卡片
+        expect(G.hero.x + G.hero.w).toBe(W - 12);
+        expect(overlap(G.quick, G.hero)).toBe(false);
+        expect(G.quick.y + G.quick.h).toBeLessThanOrEqual(G.hero.y);
+      });
+    }
+  }
 });
 
 describe('电脑上不受影响', () => {

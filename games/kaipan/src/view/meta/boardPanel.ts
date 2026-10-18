@@ -4,20 +4,33 @@ import { loadBoard } from '../dailyBoard.ts';
 import { boardScoreText } from '../labels.ts';
 import { COLOR, SPACE, TYPE } from '../theme.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
 import { addText, fitWidth } from '../ui/text.ts';
 import { phoneLayout } from '../viewport.ts';
 
 /** 电脑、手机横屏各一套：面板宽高、每页几行、行高、第一行的 y、"我"那一行和翻页键的 y */
-const DESK = { w: 600, h: 540, per: 10, rowH: 32, top: 84, meY: 418, pagerY: 540 - 66 } as const;
-const PHONE_UI = { w: 620, h: 424, per: 7, rowH: 30, top: 70, meY: 290, pagerY: 424 - 56 } as const;
+interface Geo {
+  w: number;
+  h: number;
+  per: number;
+  rowH: number;
+  top: number;
+  meY: number;
+  pagerY: number;
+}
+const DESK: Geo = { w: 600, h: 540, per: 10, rowH: 32, top: 84, meY: 418, pagerY: 540 - 66 };
+/** 手机：宽按屏幕（最宽 620）、高跟 phonePanel（SE 392）；7 行 + 我 + 翻页键都在 70–376 内 */
+const phoneGeo = (scene: Phaser.Scene): Geo => {
+  const pp = phonePanel(scene);
+  return { w: Math.min(620, pp.w), h: pp.h, per: 7, rowH: 30, top: 70, meY: 290, pagerY: pp.h - 56 };
+};
 
 /**
  * 每日挑战排行（0.5.10）：全站 / 好友两页，前 50 名（每页 10 行，手机 7 行），下面单独一行"我：第几名"。
  * 只显示昵称和成绩（平台不给用户名）；我在前 50 名里的那一行标亮。
  */
 export class BoardPanel extends Dialog {
-  private readonly G: typeof DESK | typeof PHONE_UI;
+  private readonly G: Geo;
   private readonly boardId: string;
   private scope: Scope = 'all';
   private page = 0;
@@ -28,7 +41,7 @@ export class BoardPanel extends Dialog {
 
   constructor(scene: Phaser.Scene, date: string, boardId: string, onClosed?: () => void) {
     const ph = phoneLayout(scene);
-    const G = ph ? PHONE_UI : DESK;
+    const G = ph ? phoneGeo(scene) : DESK;
     super(scene, G.w, G.h, `每日排行 · ${date}`, onClosed);
     this.G = G;
     this.boardId = boardId;

@@ -11,8 +11,8 @@ import { sound } from '../sound.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { addGlyph, addImage, addSlice } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
-import { addText, setColor } from '../ui/text.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
+import { addText, fitWidth, setColor } from '../ui/text.ts';
 import { bindTooltip } from '../ui/tooltip.ts';
 import { funSetup } from './prefs.ts';
 import { tipOnButton, wanShort } from './bits.ts';
@@ -47,10 +47,29 @@ interface Geo {
 
 const DESKTOP: Geo = { w: W, h: H, cardW: CARD_W, cardH: CARD_H, cardGap: CARD_GAP, cardsY: CARDS_Y, badge: BADGE, badgesY: BADGES_Y, personaY: CARDS_Y + CARD_H + 20, diffY: BADGES_Y + BADGE / 2 + 48, side: 32 };
 /**
- * 手机横屏（960×444）：人设卡改成横卡（立绘在左，名字两行 + 本钱在右），难度徽章缩到 48，
- * 字号不变，只是收紧间距。
+ * 手机横屏（0.19.1）：面板大小取 phonePanel（SE 上 702×392，宽屏 940×392），人设卡宽按面板宽均分五张；
+ * 因为 SE 上一张卡只有 127 宽，卡改成竖的（立绘在上，名字、本钱各一行）。从上到下：标题行、卡（60–170）、人设一行、
+ * 难度徽章、难度两行、底下一排按钮（开局在右下角，h-52 起）。高度比 392 多出来的（旧世界 430）匀给徽章和难度行。
  */
-const PHONE_GEO: Geo = { w: 940, h: 430, cardW: 170, cardH: 100, cardGap: 10, cardsY: 64, badge: 48, badgesY: 250, personaY: 182, diffY: 322, side: 24 };
+function phoneGeo(v: { w: number; h: number }): Geo {
+  const { w, h } = v;
+  const side = 16;
+  const gap = 8;
+  const extra = Math.max(0, h - 392);
+  return {
+    w,
+    h,
+    cardW: Math.floor((w - side * 2 - gap * 4) / 5),
+    cardH: 110,
+    cardGap: gap,
+    cardsY: 60,
+    badge: 40,
+    badgesY: 252 + Math.round(extra * 0.4),
+    personaY: 184,
+    diffY: 309 + Math.round(extra * 0.7),
+    side,
+  };
+}
 
 /** 多难：一排 4 颗星，亮 n 颗（高手之后的几级都是满星）。originX 1 时右边对齐 x。 */
 function addStars(scene: Phaser.Scene, x: number, y: number, n: number, size: number, originX: 0 | 1 = 0): Phaser.GameObjects.Container {
@@ -141,9 +160,11 @@ export class SetupPanel extends Dialog {
   private gear = 1;
   private readonly cardLines = new Map<LiveTier, { lev: Phaser.GameObjects.Text; win: Phaser.GameObjects.Text }>();
   private startBtn: Button | null = null;
+  /** 手机档位卡上两行小字的可用宽度（放不下就截） */
+  private tierRoom = 0;
 
   constructor(scene: Phaser.Scene, opts: SetupOpts) {
-    const g = phoneLayout(scene) ? PHONE_GEO : DESKTOP;
+    const g = phoneLayout(scene) ? phoneGeo(phonePanel(scene)) : DESKTOP;
     super(scene, g.w, g.h, '新一局');
     this.g = g;
     const W = g.w;
@@ -164,7 +185,7 @@ export class SetupPanel extends Dialog {
     const ly = g.personaY;
     this.personaMoney = addText(scene, W / 2, ly, '', { size: TYPE.title, bold: true, num: true, color: COLOR.accentDark, originX: 1, originY: 0.5 });
     this.personaText = addText(scene, W / 2, ly, '', { size: TYPE.title, color: COLOR.ink, originY: 0.5 });
-    this.personaDesc = addText(scene, W / 2, ly + (g === DESKTOP ? 24 : 23), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5 });
+    this.personaDesc = addText(scene, W / 2, ly + (g === DESKTOP ? 24 : 21), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5 });
     this.inner.add([this.personaMoney, this.personaText, this.personaDesc]);
 
     if (this.live) {
@@ -175,26 +196,36 @@ export class SetupPanel extends Dialog {
     }
     else {
       const levels = difficultiesView();
-      const slot = (W - 84) / levels.length;
-      levels.forEach((d, i) => this.badge(d.level, d.name, 42 + slot * i + slot / 2, opts.anim));
+      const edge = g === DESKTOP ? 42 : g.side;
+      const slot = (W - edge * 2) / levels.length;
+      levels.forEach((d, i) => this.badge(d.level, d.name, edge + slot * i + slot / 2, opts.anim));
     }
     if (opts.onMode) this.modeSwitch(opts.onMode);
     if (!this.live) this.lengthSwitch();
-    this.diffText = addText(scene, W / 2, g.diffY, '', { size: TYPE.title, color: COLOR.ink, originX: 0.5, originY: 0.5 });
-    this.diffDesc = addText(scene, W / 2, g.diffY + (g === DESKTOP ? 26 : 23), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5 });
-    this.stack = scene.add.container(g === DESKTOP ? 176 : 140, H - (g === DESKTOP ? 42 : 36));
+    // 手机：开局在右下角（150×46，底边留 6），左边依次是返回、叠加的徽章；实盘的两行说明太长，第二行挪到底下一排中间换行
+    const phoneStartW = 150;
+    const phoneSy = H - 52;
+    const phoneMidX = g.side + 100 + 10;
+    const liveWrap = g !== DESKTOP && !!this.live;
+    this.diffText = addText(scene, W / 2, g.diffY, '', { size: TYPE.title, color: COLOR.ink, originX: 0.5, originY: 0.5, wrap: g === DESKTOP ? undefined : W - 32, lineSpacing: 0 });
+    this.diffDesc = addText(scene, W / 2, g.diffY + (g === DESKTOP ? 26 : 18), '', { size: TYPE.label, color: COLOR.muted, originX: 0.5, originY: 0.5, wrap: liveWrap ? W - phoneStartW - g.side - 12 - phoneMidX : undefined, lineSpacing: 0 });
+    this.stack = scene.add.container(g === DESKTOP ? 176 : phoneMidX, g === DESKTOP ? H - 42 : phoneSy + 23);
     this.diffStars = scene.add.container(0, g.diffY);
     this.inner.add([this.diffText, this.diffDesc, this.stack, this.diffStars]);
     // 0.11.0 实盘：档位卡下面多了一排杠杆，杠杆的风险和钱包那两行往下挪
     if (this.live) {
-      this.diffText.setY(g === DESKTOP ? 566 : 342).setFontSize(g === DESKTOP ? 16 : 14);
-      this.diffDesc.setY(g === DESKTOP ? 588 : 362);
+      this.diffText.setY(g === DESKTOP ? 566 : 294).setFontSize(g === DESKTOP ? 16 : 14);
+      if (g === DESKTOP) this.diffDesc.setY(588);
+      else {
+        this.diffText.setOrigin(0.5, 0);
+        this.diffDesc.setOrigin(0, 0.5).setPosition(phoneMidX, phoneSy + 23);
+      }
     }
 
-    // 手机：底部一排收窄（开局 170×46、返回 100×40），贴着 24 的边
-    const sw = g === DESKTOP ? 200 : 170;
+    // 手机：底部一排收窄（开局 150×46、返回 100×40），贴着 16 的边，底边离面板底 6
+    const sw = g === DESKTOP ? 200 : phoneStartW;
     const sh = g === DESKTOP ? 50 : 46;
-    const sy = g === DESKTOP ? H - 68 : H - 60;
+    const sy = g === DESKTOP ? H - 68 : phoneSy;
     const start = new Button(scene, W - g.side - sw, sy, { width: sw, height: sh, label: '开 局', variant: 'primary', fontSize: this.live ? 18 : 20, hotkey: '回车' });
     this.startBtn = start;
     start.setHandler(() => {
@@ -211,8 +242,11 @@ export class SetupPanel extends Dialog {
     const bx = W - g.side - sw - 20;
     const cup = addGlyph(scene, bx - 6, mid, 'trophy', 30);
     this.best = addText(scene, bx - 28, mid, '', { size: TYPE.label, bold: true, num: true, color: COLOR.muted, originX: 1, originY: 0.5 });
-    const bestHit = scene.add.rectangle(bx - 190, mid - 19, 190, 40, 0xffffff, 0.001).setOrigin(0, 0);
-    bindTooltip(bestHit, () => ({ x: this.inner.x + bx - 190, y: this.inner.y + mid - 19, w: 190, h: 40 }), () => ({ title: '这个组合的最好成绩', body: bestText(this.profile.best[bestKey(this.persona, this.difficulty, this.short)]) }));
+    // 点击区：手机上至少 50 高、宽 130（奖杯加数字）
+    const bhw = g === DESKTOP ? 190 : 130;
+    const bhh = g === DESKTOP ? 40 : 50;
+    const bestHit = scene.add.rectangle(bx - bhw, mid - bhh / 2, bhw, bhh, 0xffffff, 0.001).setOrigin(0, 0);
+    bindTooltip(bestHit, () => ({ x: this.inner.x + bx - bhw, y: this.inner.y + mid - bhh / 2, w: bhw, h: bhh }), () => ({ title: '这个组合的最好成绩', body: bestText(this.profile.best[bestKey(this.persona, this.difficulty, this.short)]) }));
     this.inner.add([start, back, cup, this.best, bestHit]);
     // 实盘没有"这个组合的最好成绩"
     if (this.live) for (const o of [cup, this.best, bestHit]) o.setVisible(false);
@@ -265,6 +299,7 @@ export class SetupPanel extends Dialog {
         jiggle(anim, c, 0.25);
         this.personaMoney.setText('');
         this.personaDesc.setText(personaLockText(p.unlockBy));
+        this.fitPhone(this.personaDesc);
         this.personaText.setText(`${p.name} · 还没解锁`).setX(W / 2).setOrigin(0.5, 0.5);
         setColor(this.personaText, COLOR.danger);
         return;
@@ -283,25 +318,20 @@ export class SetupPanel extends Dialog {
     this.named[`setup:persona:${p.id}`] = { center: () => ({ x: this.inner.x + x + CARD_W / 2, y: this.inner.y + y + CARD_H / 2 }) };
   }
 
-  /** 手机的横卡：立绘在左，右边名字（最多两行）和本钱（没解锁时是锁）。 */
+  /** 手机的竖卡：立绘在上，下面名字一行，再下面本钱（没解锁时是锁）。卡只有 127 宽（SE），名字最长 6 个字放得下一行。 */
   private phoneCardBody(c: Phaser.GameObjects.Container, p: PersonaView, unlocked: boolean): void {
     const s = this.scene;
     const { cardW, cardH } = this.g;
-    c.add(addPortrait(s, 42, cardH / 2, p, !unlocked, 72));
-    // 名字最长 6 个字：右栏 84 宽一行放 5 个字，最多折成两行
-    const tx = 80;
-    const tw = cardW - tx - 6;
-    // 放不下一行时在称呼前折（「职场新人 / 阿韭」），不按宽度硬折成「职场新人阿 / 韭」
-    const chars = [...p.name];
-    const label = chars.length > 5 ? `${chars.slice(0, -2).join('')}\n${chars.slice(-2).join('')}` : p.name;
-    const name = addText(s, tx, 12, label, { size: TYPE.label + 3, bold: true, color: unlocked ? COLOR.ink : COLOR.muted, wrap: tw, lineSpacing: 1 });
-    c.add(name);
-    const my = Math.max(name.y + name.height + 16, cardH - 24);
+    c.add(addPortrait(s, cardW / 2, 32, p, !unlocked, 50));
+    const name = addText(s, cardW / 2, 70, p.name, { size: TYPE.label + 3, bold: true, color: unlocked ? COLOR.ink : COLOR.muted, originX: 0.5, originY: 0.5 });
+    c.add(fitWidth(name, cardW - 8));
+    const my = cardH - 23;
     if (unlocked) {
-      c.add(addGlyph(s, tx + 10, my, 'wallet', 22));
-      c.add(addText(s, tx + 24, my, wanShort(p.account), { size: TYPE.label + 3, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 }));
+      const money = addText(s, cardW / 2 + 12, my, wanShort(p.account), { size: TYPE.label + 3, bold: true, num: true, color: COLOR.accentDark, originX: 0.5, originY: 0.5 });
+      c.add(addGlyph(s, cardW / 2 + 12 - money.width / 2 - 14, my, 'wallet', 20));
+      c.add(money);
     } else if (hasArt(s.textures, 'ui:codex_lock')) {
-      c.add(addImage(s, tx + 12, my, 'ui:codex_lock', 24));
+      c.add(addImage(s, cardW / 2, my, 'ui:codex_lock', 22));
     }
   }
 
@@ -309,21 +339,24 @@ export class SetupPanel extends Dialog {
     const s = this.scene;
     const BADGE = this.g.badge;
     const BADGES_Y = this.g.badgesY;
-    // 点击区域：电脑 120 宽；手机一格只有 107 宽，收到 104
-    const hw = this.g === DESKTOP ? 120 : 104;
+    // 点击区域：电脑 120 宽；手机一格按面板宽均分（SE 上 84），比格宽小 2
+    const phone = this.g !== DESKTOP;
+    const hw = phone ? Math.floor((this.g.w - this.g.side * 2) / difficultiesView().length) - 2 : 120;
     const unlocked = isDifficultyUnlocked(this.profile, level);
     const c = s.add.container(cx, BADGES_Y);
     const art = addBadge(s, 0, 0, level, BADGE);
     c.add(art);
-    c.add(addText(s, 0, BADGE / 2 + 12, name, { size: TYPE.label + 1, bold: true, color: unlocked ? COLOR.ink : COLOR.dim, originX: 0.5 }));
+    // 手机：没解锁的只淡化徽章，名字用 muted 不透明（原来 dim 再叠 0.5 透明，对比度太低看不清）
+    c.add(addText(s, 0, BADGE / 2 + (phone ? 8 : 12), name, { size: TYPE.label + 1, bold: true, color: unlocked ? COLOR.ink : phone ? COLOR.muted : COLOR.dim, originX: 0.5 }));
     if (!unlocked) {
-      c.setAlpha(0.5);
+      if (phone) for (const o of art) (o as Phaser.GameObjects.Image).setAlpha(0.5);
+      else c.setAlpha(0.5);
       for (const o of art) if (o instanceof Phaser.GameObjects.Image) o.setTint(0x9c9496);
       if (hasArt(s.textures, 'ui:codex_lock')) c.add(addImage(s, BADGE / 2 - 6, -BADGE / 2 + 8, 'ui:codex_lock', 24));
     }
     const ring = s.add.circle(0, 0, BADGE / 2 + 7).setStrokeStyle(4, COLOR.accent, 1).setVisible(false);
     c.add(ring);
-    const hit = s.add.rectangle(-hw / 2, -BADGE / 2 - 8, hw, BADGE + 36, 0xffffff, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: unlocked });
+    const hit = s.add.rectangle(-hw / 2, -BADGE / 2 - 8, hw, BADGE + 36 + (phone ? 4 : 0), 0xffffff, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: unlocked });
     hit.on(Phaser.Input.Events.POINTER_UP, () => {
       if (!unlocked) {
         sound.ui('denied');
@@ -395,7 +428,8 @@ export class SetupPanel extends Dialog {
     const bw = desk ? 96 : 84;
     const bh = desk ? 38 : 34;
     const y = desk ? 18 : 12;
-    const x0 = this.g.w / 2 - bw - 4;
+    // 手机：「短局 | 完整一年」占了 120–362，开关挪到它右边，别压住
+    const x0 = desk || this.live ? this.g.w / 2 - bw - 4 : Math.max(this.g.w / 2 - bw - 4, 120 + 118 * 2 + 6 + 14);
     ([['fun', '娱乐'], ['live', '实盘']] as const).forEach(([mode, label], i) => {
       const on = (mode === 'live') === !!this.live;
       const b = new Button(s, x0 + i * (bw + 8), y, { width: bw, height: bh, label, fontSize: 16, icon: mode === 'live' ? 'moneybag' : undefined });
@@ -417,11 +451,12 @@ export class SetupPanel extends Dialog {
   private tierCards(anim: Animator): void {
     const s = this.scene;
     const desk = this.g === DESKTOP;
-    const cw = desk ? 260 : 200;
-    const ch = desk ? 106 : 86;
-    const gap = desk ? 16 : 12;
+    const gap = desk ? 16 : 8;
+    const cw = desk ? 260 : Math.floor((this.g.w - this.g.side * 2 - gap * 3) / 4);
+    const ch = desk ? 106 : 72;
+    this.tierRoom = cw - 20;
     // 上面是人设的一句介绍（电脑到 y≈400），卡片从它下面开始；下面是杠杆那一排
-    const y = desk ? 406 : 208;
+    const y = desk ? 406 : 188;
     const x0 = (this.g.w - (cw * LIVE_TIERS.length + gap * (LIVE_TIERS.length - 1))) / 2;
     LIVE_TIERS.forEach((t, i) => {
       const x = x0 + i * (cw + gap);
@@ -430,14 +465,14 @@ export class SetupPanel extends Dialog {
       const d = difficultiesView()[t.difficulty - 1];
       const card = tierCard(t);
       c.add(addSlice(s, 0, 0, cw, ch, 'card_holding'));
-      c.add(addText(s, 14, desk ? 10 : 6, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
-      c.add(addStars(s, cw - 14, desk ? 22 : 14, card.stars, desk ? 18 : 14, 1));
-      const sy = desk ? 42 : 30;
+      c.add(addText(s, 14, desk ? 10 : 4, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
+      c.add(addStars(s, cw - 14, desk ? 22 : 13, card.stars, desk ? 18 : 14, 1));
+      const sy = desk ? 42 : 29;
       c.add(addGlyph(s, 26, sy, 'moneybag', desk ? 28 : 22));
       c.add(addText(s, 44, sy, chips(t.stake), { size: desk ? TYPE.big : TYPE.title + 2, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 }));
       const small = { size: desk ? TYPE.label : TYPE.label - 1, color: COLOR.muted };
-      const lev = addText(s, 14, desk ? 60 : 44, `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${card.lev}`, small);
-      const win = addText(s, 14, desk ? 78 : 59, `最多赢 ${card.win} · 最多输 ${card.lose}`, small);
+      const lev = addText(s, 14, desk ? 60 : 40, `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${card.lev}`, small);
+      const win = addText(s, 14, desk ? 78 : 55, `最多赢 ${card.win} · 最多输 ${card.lose}`, small);
       c.add([lev, win]);
       this.cardLines.set(t.id, { lev, win });
       if (!afford) c.setAlpha(0.5);
@@ -475,7 +510,7 @@ export class SetupPanel extends Dialog {
     const bw = desk ? 150 : 118;
     const bh = desk ? 34 : 28;
     const gap = desk ? 12 : 8;
-    const y = desk ? 520 : 298;
+    const y = desk ? 520 : 262;
     const x0 = (this.g.w - (bw * 3 + gap * 2)) / 2;
     const btns: Button[] = [];
     [1, 2, 3].forEach((x, i) => {
@@ -542,6 +577,7 @@ export class SetupPanel extends Dialog {
     if (this.live) {
       this.refreshLive();
       if (p) this.personaDesc.setText(ellipsize(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
+      this.fitPhone(this.personaDesc);
       return;
     }
     // 0.10.0：多难（星，高手之后的几级都是满星）、适合谁、一局约多久（仓库根 docs/balance.md 第 3 节）
@@ -556,19 +592,22 @@ export class SetupPanel extends Dialog {
       const goal = shortGoalFor(funSetup({ persona: this.persona, difficulty: this.difficulty, short: this.short }));
       const len = this.short ? `${BALANCE.short.months} 个月约 ${LIVE_MINUTES} 分钟 · 最后交首付 ${wanShort(goal)}` : `一年约 ${FUN_MINUTES} 分钟 · ${desc}`;
       this.diffDesc.setText(ellipsize(`${d.who ? `适合${d.who} · ` : ''}${len}`, 56));
+      this.fitPhone(this.diffDesc);
       // 叠加的几级：一排小徽章（第 1 级时写「最普通的市场」）
       this.stack.removeAll(true);
       const s = this.scene;
       if (d.all.length > 1) {
+        const ph = this.g !== DESKTOP;
         const lab = addText(s, 0, 0, '叠加', { size: TYPE.label, bold: true, color: COLOR.muted, originY: 0.5 });
         this.stack.add(lab);
-        d.all.forEach((x, i) => this.stack.add(addBadge(s, lab.width + 22 + i * 32, 0, x.level, 30)));
+        d.all.forEach((x, i) => this.stack.add(addBadge(s, lab.width + 22 + i * (ph ? 26 : 32), 0, x.level, ph ? 28 : 30)));
       } else {
         this.stack.add(addGlyph(s, 10, 0, 'face_calm', 24));
         this.stack.add(addText(s, 28, 0, '最普通的市场', { size: TYPE.label, color: COLOR.muted, originY: 0.5 }));
       }
     }
     if (p) this.personaDesc.setText(ellipsize(`${p.desc}${p.flavor ? `「${p.flavor}」` : ''}`, 56));
+    this.fitPhone(this.personaDesc);
     const b = this.profile.best[bestKey(this.persona, this.difficulty, this.short)];
     this.best.setText(!b || b.runs === 0 ? '—' : b.wins > 0 ? `${b.wins}/${b.runs} · ${wanShort(b.bestAccount)}` : `${b.bestMonths}/${this.short ? BALANCE.short.months : 12}`);
   }
@@ -583,8 +622,11 @@ export class SetupPanel extends Dialog {
     for (const t of LIVE_TIERS) {
       const k = tierCard(t, this.gear);
       const lines = this.cardLines.get(t.id);
+      const ph = this.g !== DESKTOP;
       lines?.lev.setText(`约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${k.lev}`);
-      lines?.win.setText(`最多赢 ${k.win} · 最多输 ${k.lose}`);
+      // 手机上卡窄（SE 约 160）：赢输两个筹码数写短句，数字不截（全句在悬停里）
+      lines?.win.setText(ph ? `赢≤${k.win} 输≤${k.lose}` : `最多赢 ${k.win} · 最多输 ${k.lose}`);
+      if (ph && lines) fitWidth(lines.lev, this.tierRoom);
     }
     // 第一行：开不了的原因，或者这一档杠杆的风险；第二行：钱包余额 + 规则
     const hard = block && block !== '钱包不够这一档';
@@ -595,6 +637,12 @@ export class SetupPanel extends Dialog {
     setColor(this.diffDesc, block === '钱包不够这一档' ? COLOR.danger : COLOR.muted);
     this.stack.removeAll(true);
     this.asideRow(l.aside ?? null);
+    // 手机：底下一排中间只有一处放得下，有没结的实盘时它占着，钱包那行只在出问题（钱不够）时抢回来
+    if (this.g !== DESKTOP && l.aside) {
+      const danger = block === '钱包不够这一档';
+      this.diffDesc.setVisible(danger);
+      this.stack.setVisible(!danger);
+    } else this.diffDesc.setVisible(true);
     this.startBtn?.setLabel(`带 ${chips(liveTierById(this.tier).stake)} 进场`).setEnabled(block === null);
   }
 
@@ -605,7 +653,7 @@ export class SetupPanel extends Dialog {
     if (!a) return;
     const s = this.scene;
     const ph = this.g !== DESKTOP;
-    const what = a.count > 1 ? `你还有 ${a.count} 局实盘没结（共 ${chips(a.amount)} 筹码）` : `你还有一局实盘没结（${chips(a.amount)} 筹码）`;
+    const what = ph ? `没结的实盘 ${chips(a.amount)}` : a.count > 1 ? `你还有 ${a.count} 局实盘没结（共 ${chips(a.amount)} 筹码）` : `你还有一局实盘没结（${chips(a.amount)} 筹码）`;
     const t = addText(s, 0, 0, what, { size: ph ? 13 : TYPE.label, color: COLOR.ink, originY: 0.5 });
     t.setInteractive();
     bindTooltip(t, () => ({ x: this.inner.x + this.stack.x, y: this.inner.y + this.stack.y - 12, w: t.width, h: 24 }), () => ({
@@ -632,6 +680,11 @@ export class SetupPanel extends Dialog {
       this.close();
       a.onRefund();
     });
+  }
+
+  /** 手机：一行小字放不下面板就截断（说明全文在悬停里） */
+  private fitPhone(t: Phaser.GameObjects.Text): void {
+    if (this.g !== DESKTOP) fitWidth(t, this.g.w - 32);
   }
 
   /** 当前选择（自动化用）。 */

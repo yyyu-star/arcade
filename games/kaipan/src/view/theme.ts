@@ -150,8 +150,6 @@ export function phoneWorld(w: number, h: number): { w: number; h: number } {
   const raw = Math.round((PHONE_H * long) / short / 2) * 2;
   return { w: Math.min(PHONE_W.max, Math.max(PHONE_W.min, raw)), h: PHONE_H };
 }
-/** 还没按新世界重排的手机场景（0.19.0 只重排了交易页）：仍按旧的 960×444 布局，整体缩放进可见区，和以前看到的一样大 */
-export const LEGACY_PHONE = { w: 960, h: 444 } as const;
 
 /** 实际的世界尺寸：电脑 1280×720，手机横屏见 phoneWorld。适配过手机的界面按它布局。 */
 export const VIEW =

@@ -7,7 +7,7 @@ import { sound } from '../sound.ts';
 import { COLOR, ITEM_KIND_COLOR, RARITY_COLOR, THEME_COLOR, RADIUS, TYPE, textOn } from '../theme.ts';
 import { addGlyph, addImage, addPill, addSlice } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
 import { addText, setColor } from '../ui/text.ts';
 import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
@@ -25,13 +25,18 @@ const GRID_Y = 132;
 const GRID_W = W - 64;
 const REGIME_TINT: Record<Regime, number> = { bull: 0xd8453b, bubble: 0xe08a1e, flat: 0x8a8f98, bear: 0x2f8f5b, crash: 0x5b3f9e };
 /**
- * 手机横屏（960×444）：面板 940×430，页签挪到标题右边一排，网格每页两行、翻页按钮放在底部一排
- * （详情条和「关闭」中间）；卡上的字不缩小，放不下就截短，全名在详情条和长按说明里。
+ * 手机横屏：面板大小按 phonePanel（718 宽的世界里 702×392，宽屏 940×392），页签挪到标题右边一排，
+ * 网格每页两行（列数随宽度变，卡宽不小于约 100）、翻页按钮放在底部一排（详情条和「关闭」中间）；
+ * 卡上的字不缩小，放不下就截短，全名在详情条和长按说明里。
  */
-const PHONE_UI = { w: 940, h: 430, gx: 24, gy: 100, gw: 892, progY: 68, rowY: 430 - 52, closeW: 96, pagerW: 84 } as const;
-/** 手机：翻页「下一页」按钮的左边；「上一页」在它左边 144 处，详情条到「上一页」左边 12 为止 */
-const PHONE_NEXT_X = PHONE_UI.w - 24 - PHONE_UI.closeW - 12 - PHONE_UI.pagerW;
-const PHONE_STRIP_W = PHONE_NEXT_X - 60 - PHONE_UI.pagerW - 12 - 24;
+function phoneUi(w: number, h: number) {
+  const closeW = 96;
+  const pagerW = 84;
+  // 「下一页」的左边；「上一页」在它左边 144 处，详情条到「上一页」左边 12 为止
+  const nextX = w - 24 - closeW - 12 - pagerW;
+  return { w, h, gx: 24, gy: 100, gw: w - 48, progY: 68, rowY: h - 52, closeW, pagerW, nextX, stripW: nextX - 60 - pagerW - 12 - 24, cardH: 110 };
+}
+type PhoneUi = ReturnType<typeof phoneUi>;
 
 /** 把文字截到 maxW 以内（末尾加省略号）。 */
 function clipTo(t: Phaser.GameObjects.Text, maxW: number): Phaser.GameObjects.Text {
@@ -84,36 +89,43 @@ export class CodexPanel extends Dialog {
   private readonly tabs = new Map<CodexTab, Button>();
   private readonly progressBox: Phaser.GameObjects.Container;
   private readonly phone: boolean;
+  /** 手机版尺寸（电脑上不用） */
+  private readonly ui: PhoneUi;
   /** 手机上各页签翻到第几页 */
   private readonly pageOf: Partial<Record<CodexTab, number>> = {};
 
   constructor(scene: Phaser.Scene, profile: Profile, tab: CodexTab = 'stocks') {
     const phone = phoneLayout(scene);
-    super(scene, phone ? PHONE_UI.w : W, phone ? PHONE_UI.h : H, '图鉴', () => this.markViewed());
+    const pp = phone ? phonePanel(scene) : { w: 940, h: 430 };
+    super(scene, phone ? pp.w : W, phone ? pp.h : H, '图鉴', () => this.markViewed());
     this.phone = phone;
+    const ui = phoneUi(pp.w, pp.h);
+    this.ui = ui;
     this.profile = profile;
     this.lit = litSets(profile);
     this.viewed = loadViewed();
     this.tab = tab;
+    // 手机：八个页签挤在标题和右上角「×」之间，窄了就缩宽、缩间距
+    const tabStep = Math.min(98, (ui.w - 100 - 76) / CODEX_TABS.length);
     CODEX_TABS.forEach((t, i) => {
       const b = phone
-        ? new Button(scene, 100 + i * 98, 14, { width: 92, height: 40, label: t.label, fontSize: 15, sound: 'select' })
+        ? new Button(scene, 100 + i * tabStep, 14, { width: Math.min(92, tabStep - 5), height: 40, label: t.label, fontSize: 15, sound: 'select' })
         : new Button(scene, 150 + i * 112, 18, { width: 104, height: 38, label: t.label, fontSize: 15, sound: 'select' });
       b.setHandler(() => this.show(t.key));
       this.inner.add(b);
       this.tabs.set(t.key, b);
       this.named[`codex:tab:${t.key}`] = b;
     });
-    this.progressBox = phone ? scene.add.container(PHONE_UI.gx, PHONE_UI.progY) : scene.add.container(GRID_X, 82);
+    this.progressBox = phone ? scene.add.container(ui.gx, ui.progY) : scene.add.container(GRID_X, 82);
     this.inner.add(this.progressBox);
     const close = phone
-      ? new Button(scene, PHONE_UI.w - 24 - PHONE_UI.closeW, PHONE_UI.rowY, { width: PHONE_UI.closeW, height: 40, label: '关闭', fontSize: 15, hotkey: 'Esc' })
+      ? new Button(scene, ui.w - 24 - ui.closeW, ui.rowY, { width: ui.closeW, height: 40, label: '关闭', fontSize: 15, hotkey: 'Esc' })
       : new Button(scene, W - 32 - 110, H - 64, { width: 110, height: 40, label: '关闭', fontSize: 15, hotkey: 'Esc' });
     close.setHandler(() => this.close());
     this.inner.add(close);
     this.named['codex:close'] = close;
     // 0.5.1：底部详情条——指到（或点到）哪张卡，就在这里写它的名字和一句说明（悬停提示照旧）
-    this.strip = phone ? scene.add.container(PHONE_UI.gx, PHONE_UI.rowY) : scene.add.container(32, H - 64);
+    this.strip = phone ? scene.add.container(ui.gx, ui.rowY) : scene.add.container(32, H - 64);
     this.inner.add(this.strip);
     this.show(tab);
   }
@@ -125,7 +137,7 @@ export class CodexPanel extends Dialog {
   private setStrip(t: TipContent | null): void {
     const s = this.scene;
     this.strip.removeAll(true);
-    const w = this.phone ? PHONE_STRIP_W : W - 32 - 110 - 16 - 32;
+    const w = this.phone ? this.ui.stripW : W - 32 - 110 - 16 - 32;
     this.strip.add(s.add.rectangle(0, 0, w, 40, COLOR.paperLo).setOrigin(0, 0).setRounded(12).setStrokeStyle(1.5, COLOR.edge, 1));
     this.strip.add(addGlyph(s, 22, 20, 'magnifier', 24));
     if (!t) {
@@ -133,11 +145,18 @@ export class CodexPanel extends Dialog {
       return;
     }
     const name = addText(s, 42, 20, t.title, { size: TYPE.label + 1, bold: true, color: COLOR.accentDark, originY: 0.5 });
+    // 手机条窄：名字太长先截名字，剩的地方不够一句就不放说明（全文在长按说明里）
+    if (this.phone) clipTo(name, w - 54);
     const body = addText(s, name.x + name.width + 12, 20, (t.body ?? '').split('\n')[0] ?? '', { size: TYPE.label, color: COLOR.ink, originY: 0.5 });
-    let cut = Array.from(body.text);
-    while (body.x + body.width > w - 12 && cut.length > 4) {
-      cut = cut.slice(0, -2);
-      body.setText(`${cut.join('')}…`);
+    if (this.phone) {
+      if (body.x + 52 > w - 12) body.setVisible(false);
+      else clipTo(body, w - 12 - body.x);
+    } else {
+      let cut = Array.from(body.text);
+      while (body.x + body.width > w - 12 && cut.length > 4) {
+        cut = cut.slice(0, -2);
+        body.setText(`${cut.join('')}…`);
+      }
     }
     this.strip.add([name, body]);
   }
@@ -199,8 +218,8 @@ export class CodexPanel extends Dialog {
     const c = s.add.circle(x, 10, 13, COLOR.paperHi).setStrokeStyle(2, COLOR.muted, 1);
     const q = addText(s, x, 10, '?', { size: TYPE.label + 2, bold: true, color: COLOR.muted, originX: 0.5, originY: 0.5 });
     this.progressBox.add([c, q]);
-    // 手机上长按才出说明：按的区域放大到 40×40（圆圈本身只有 26）
-    const target = this.phone ? s.add.rectangle(x - 20, -10, 40, 40, 0xffffff, 0.001).setOrigin(0, 0) : c;
+    // 手机上长按才出说明：按的区域放大到 50×50（圆圈本身只有 26）
+    const target = this.phone ? s.add.rectangle(x - 25, -12, 50, 50, 0xffffff, 0.001).setOrigin(0, 0) : c;
     if (target !== c) this.progressBox.add(target);
     target.setInteractive({ useHandCursor: true });
     bindTooltip(target, () => ({ x: this.inner.x + this.progressBox.x + x - 14, y: this.inner.y + this.progressBox.y - 4, w: 28, h: 28 }), () => ({ title, body }));
@@ -225,11 +244,10 @@ export class CodexPanel extends Dialog {
   private phonePager(cur: number, pages: number, prefix: string, go: (page: number) => void): void {
     if (pages <= 1) return;
     const s = this.scene;
-    const y = PHONE_UI.rowY;
-    const nx = PHONE_NEXT_X;
-    const prev = new Button(s, nx - 60 - PHONE_UI.pagerW, y, { width: PHONE_UI.pagerW, height: 40, label: '上一页', fontSize: 14, sound: 'select' });
+    const { rowY: y, nextX: nx, pagerW } = this.ui;
+    const prev = new Button(s, nx - 60 - pagerW, y, { width: pagerW, height: 40, label: '上一页', fontSize: 14, sound: 'select' });
     const label = addText(s, nx - 30, y + 20, `${cur + 1}/${pages}`, { size: 14, bold: true, num: true, color: COLOR.muted, originX: 0.5, originY: 0.5 });
-    const next = new Button(s, nx, y, { width: PHONE_UI.pagerW, height: 40, label: '下一页', fontSize: 14, sound: 'select' });
+    const next = new Button(s, nx, y, { width: pagerW, height: 40, label: '下一页', fontSize: 14, sound: 'select' });
     prev.setEnabled(cur > 0);
     next.setEnabled(cur < pages - 1);
     prev.setHandler(() => go(cur - 1));
@@ -277,13 +295,27 @@ export class CodexPanel extends Dialog {
     bindTooltip(target, rect, () => this.tip(e, g));
   }
 
+  /** 手机：一行放几张卡（卡宽不小于约 100，字放得下），一页两行 */
+  private cardCols(): number {
+    return Math.max(4, Math.floor((this.ui.gw + 8) / 108));
+  }
+
+  private cardW(cols: number): number {
+    return (this.ui.gw - 8 * (cols - 1)) / cols;
+  }
+
+  /** 手机：词典和小知识的卡带整句文字，窄屏一行 3 张，宽屏 4 张 */
+  private textCols(): number {
+    return this.ui.gw >= 740 ? 4 : 3;
+  }
+
   private cardGrid(g: CodexGroup, list: CodexEntry[]): void {
     const s = this.scene;
     const ph = this.phone;
-    const cols = ph ? 8 : 10;
-    const cw = ph ? 104 : 108;
-    const ch = ph ? 126 : 112;
-    const gx = ((ph ? PHONE_UI.gw : GRID_W) - cw * cols) / (cols - 1);
+    const cols = ph ? this.cardCols() : 10;
+    const ch = ph ? this.ui.cardH : 112;
+    const cw = ph ? this.cardW(cols) : 108;
+    const gx = ((ph ? this.ui.gw : GRID_W) - cw * cols) / (cols - 1);
     // 手机一页两行
     const per = ph ? cols * 2 : list.length;
     const pages = Math.max(1, Math.ceil(list.length / per));
@@ -291,8 +323,8 @@ export class CodexPanel extends Dialog {
     list.forEach((e, i) => {
       if (i < pg * per || i >= (pg + 1) * per) return;
       const k = i - pg * per;
-      const x = (ph ? PHONE_UI.gx : GRID_X) + (k % cols) * (cw + gx);
-      const y = (ph ? PHONE_UI.gy : GRID_Y) + Math.floor(k / cols) * (ch + 10);
+      const x = (ph ? this.ui.gx : GRID_X) + (k % cols) * (cw + gx);
+      const y = (ph ? this.ui.gy : GRID_Y) + Math.floor(k / cols) * (ch + 10);
       const c = s.add.container(x, y);
       const lit = this.lit[g].has(e.id);
       if (!lit) {
@@ -311,7 +343,7 @@ export class CodexPanel extends Dialog {
         if (ph) clipTo(name, cw - 10);
         else if (name.width > cw - 12) name.setFontSize(10);
         c.add(name);
-        c.add(this.picture(e, cw / 2, ph ? 78 : 70));
+        c.add(this.picture(e, cw / 2, 70));
         if (e.kind === 'stock' && e.role === 'st') {
           // 危险股：卡上带红签（详情里写清楚 ST 是什么）
           const t = addText(s, 0, 0, ROLE_WORD.st, { size: 10, bold: true, color: COLOR.white, originX: 0.5, originY: 0.5 });
@@ -359,25 +391,25 @@ export class CodexPanel extends Dialog {
   private achievementGrid(list: CodexEntry[]): void {
     const s = this.scene;
     const ph = this.phone;
-    const cols = ph ? 8 : 9;
-    const cw = ph ? 104 : 120;
+    const cols = ph ? this.cardCols() : 9;
+    const cw = ph ? this.cardW(cols) : 120;
     // 0.6.4 成就到 45 个：电脑上排 5 行，卡片压矮一点
-    const ch = ph ? 126 : 90;
-    const gx = ((ph ? PHONE_UI.gw : GRID_W) - cw * cols) / (cols - 1);
+    const ch = ph ? this.ui.cardH : 90;
+    const gx = ((ph ? this.ui.gw : GRID_W) - cw * cols) / (cols - 1);
     const per = ph ? cols * 2 : list.length;
     const pages = Math.max(1, Math.ceil(list.length / per));
     const pg = ph ? this.pageIndex('achievements', pages) : 0;
     list.forEach((e, i) => {
       if (i < pg * per || i >= (pg + 1) * per) return;
       const k = i - pg * per;
-      const x = (ph ? PHONE_UI.gx : GRID_X) + (k % cols) * (cw + gx);
-      const y = (ph ? PHONE_UI.gy : GRID_Y) + Math.floor(k / cols) * (ch + (ph ? 10 : 8));
+      const x = (ph ? this.ui.gx : GRID_X) + (k % cols) * (cw + gx);
+      const y = (ph ? this.ui.gy : GRID_Y) + Math.floor(k / cols) * (ch + (ph ? 10 : 8));
       const c = s.add.container(x, y);
       const got = this.lit.achievements.has(e.id);
       const secret = !!e.hidden && !got;
       const tier = e.tier ?? 'bronze';
       c.add(s.add.rectangle(0, 0, cw, ch, got ? COLOR.paperHi : 0xefe5d6).setOrigin(0, 0).setRounded(14).setStrokeStyle(got ? 3 : 2, got ? TIER_COLOR[tier] : COLOR.edge, 1));
-      c.add(achievementBadge(s, cw / 2, ph ? 50 : 36, tier, secret ? 'star' : (e.icon ?? 'star'), got, ph ? 68 : 56));
+      c.add(achievementBadge(s, cw / 2, ph ? 44 : 36, tier, secret ? 'star' : (e.icon ?? 'star'), got, ph ? 62 : 56));
       const nm = addText(s, cw / 2, ch - (ph ? 18 : 14), secret ? '？？？' : e.name, { size: TYPE.label, bold: true, color: got ? COLOR.ink : COLOR.muted, originX: 0.5, originY: 0.5 });
       if (ph) clipTo(nm, cw - 8);
       else if (nm.width > cw - 10) nm.setFontSize(11);
@@ -404,17 +436,17 @@ export class CodexPanel extends Dialog {
     const s = this.scene;
     const ph = this.phone;
     // 手机：一页 4 × 2 张，翻页按钮在底部一排
-    const cols = ph ? 4 : 5;
+    const cols = ph ? this.textCols() : 5;
     const rows = ph ? 2 : 3;
     const per = cols * rows;
     const pages = Math.ceil(GLOSSARY.length / per);
     this.wordPage = Math.max(0, Math.min(pages - 1, this.wordPage));
     const gap = 10;
-    const x0 = ph ? PHONE_UI.gx : GRID_X;
-    const y0 = ph ? PHONE_UI.gy : GRID_Y;
-    const gw = ph ? PHONE_UI.gw : GRID_W;
+    const x0 = ph ? this.ui.gx : GRID_X;
+    const y0 = ph ? this.ui.gy : GRID_Y;
+    const gw = ph ? this.ui.gw : GRID_W;
     const cw = (gw - gap * (cols - 1)) / cols;
-    const ch = ph ? 126 : 136;
+    const ch = ph ? this.ui.cardH : 136;
     for (const k of Object.keys(this.named)) if (k.startsWith('codex:card:') || k.startsWith('codex:words:') || k.startsWith('codex:seg:')) delete this.named[k];
     GLOSSARY.slice(this.wordPage * per, (this.wordPage + 1) * per).forEach((t, i) => {
       const x = x0 + (i % cols) * (cw + gap);
@@ -435,7 +467,11 @@ export class CodexPanel extends Dialog {
         }
       }
       c.add(body);
-      if (t.original) c.add(addText(s, 12, ch - 14, t.original === t.word ? 'A 股里也这么叫' : `A 股叫「${t.original}」`, { size: 10, color: COLOR.dim, originY: 0.5 }));
+      if (t.original) {
+        const orig = addText(s, 12, ch - 14, t.original === t.word ? 'A 股里也这么叫' : `A 股叫「${t.original}」`, { size: 10, color: COLOR.dim, originY: 0.5 });
+        if (ph) clipTo(orig, cw - 20);
+        c.add(orig);
+      }
       const hit = s.add.rectangle(0, 0, cw, ch, 0xffffff, 0.001).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       hit.on(Phaser.Input.Events.POINTER_UP, () => sound.ui('select'));
       bindTooltip(hit, () => ({ x: this.inner.x + x, y: this.inner.y + y, w: cw, h: ch }), () => this.wordTip(t));
@@ -477,10 +513,10 @@ export class CodexPanel extends Dialog {
     this.drawProgress(n, list.length, 0);
     for (const k of Object.keys(this.named)) if (k.startsWith('codex:card:') || k.startsWith('codex:words:') || k.startsWith('codex:seg:') || k.startsWith('codex:page:') || k.startsWith('codex:story:')) delete this.named[k];
     const ph = this.phone;
-    const cols = 4;
+    const cols = ph ? this.textCols() : 4;
     const gap = 10;
-    const cw = ((ph ? PHONE_UI.gw : GRID_W) - gap * (cols - 1)) / cols;
-    const ch = ph ? 126 : 132;
+    const cw = ((ph ? this.ui.gw : GRID_W) - gap * (cols - 1)) / cols;
+    const ch = ph ? this.ui.cardH : 132;
     // 手机：一页两行，正文截短的部分放进长按说明
     const per = ph ? cols * 2 : list.length;
     const pages = Math.max(1, Math.ceil(list.length / per));
@@ -488,8 +524,8 @@ export class CodexPanel extends Dialog {
     list.forEach((k, i) => {
       if (i < pg * per || i >= (pg + 1) * per) return;
       const j = i - pg * per;
-      const x = (ph ? PHONE_UI.gx : GRID_X) + (j % cols) * (cw + gap);
-      const y = (ph ? PHONE_UI.gy : GRID_Y) + Math.floor(j / cols) * (ch + gap);
+      const x = (ph ? this.ui.gx : GRID_X) + (j % cols) * (cw + gap);
+      const y = (ph ? this.ui.gy : GRID_Y) + Math.floor(j / cols) * (ch + gap);
       const c = s.add.container(x, y);
       this.knowledgeCardBody(c, k, cw, ch);
       if (ph && k.lit) {
@@ -555,25 +591,29 @@ export class CodexPanel extends Dialog {
     );
     // 手机：五种市况放在进度那一行的右边；卡片一列、一页 4 张，故事在右边；翻页在底部一排
     const ph = this.phone;
-    const pillW = ph ? 110 : 138;
-    const pillY = ph ? PHONE_UI.progY - 6 : GRID_Y - 4;
+    const ui = this.ui;
+    // 手机：五个签从进度右边排到面板右边距，窄屏缩宽
+    const pillW = ph ? Math.min(110, (ui.w - 24 - (ui.gx + 170) - 4 * 8) / 5) : 138;
+    const pillY = ph ? ui.progY - 6 : GRID_Y - 4;
     // 五种市况的收集格
     REGIMES.forEach((r, i) => {
       const seen = kinds.includes(r);
-      const x = ph ? PHONE_UI.gx + 170 + i * (pillW + 8) : GRID_X + i * 150;
+      const x = ph ? this.ui.gx + 170 + i * (pillW + 8) : GRID_X + i * 150;
       const pill = addPill(s, x, pillY, pillW, ph ? 32 : 34, seen ? REGIME_TINT[r] : COLOR.edge);
       page.add(pill);
       page.add(addText(s, x + pillW / 2, pillY + (ph ? 16 : 17), seen ? REGIME_LABEL[r] : '？', { size: 14, bold: true, color: seen ? COLOR.white : COLOR.muted, originX: 0.5, originY: 0.5 }));
     });
     // 左：卡片（两列）；右：故事
     const cols = ph ? 1 : 2;
-    const cw = ph ? 280 : 262;
-    const ch = ph ? 58 : 64;
-    const gx0 = ph ? PHONE_UI.gx : GRID_X;
-    const top = ph ? PHONE_UI.gy : GRID_Y + 46;
+    const cw = ph ? (ui.w >= 800 ? 280 : 250) : 262;
+    // 手机：一页 4 张要放进 gy 到底部一排上面 10 之间，高 52、间距 6
+    const ch = ph ? 52 : 64;
+    const cgap = ph ? 6 : 8;
+    const gx0 = ph ? this.ui.gx : GRID_X;
+    const top = ph ? this.ui.gy : GRID_Y + 46;
     const px = gx0 + cols * (cw + 12) + (ph ? 20 : 16);
-    const pw = (ph ? PHONE_UI.w - 24 : W - 32) - px;
-    const paneBottom = ph ? PHONE_UI.rowY - 10 : H - 96;
+    const pw = (ph ? ui.w - 24 : W - 32) - px;
+    const paneBottom = ph ? ui.rowY - 10 : H - 96;
     const pane = s.add.container(0, 0);
     page.add(s.add.rectangle(px - 12, top, pw + 12, paneBottom - top, 0xffffff, 0.55).setOrigin(0, 0));
     page.add(pane);
@@ -621,12 +661,12 @@ export class CodexPanel extends Dialog {
     const shown = list.slice(this.segPage * per, (this.segPage + 1) * per);
     shown.forEach((x, i) => {
       const cx = gx0 + (i % cols) * (cw + 12);
-      const cy = top + Math.floor(i / cols) * (ch + 8);
+      const cy = top + Math.floor(i / cols) * (ch + cgap);
       const card = s.add.rectangle(cx, cy, cw, ch, 0xffffff, 0.75).setOrigin(0, 0).setStrokeStyle(2, REGIME_TINT[x.regime]);
       page.add(card);
-      page.add(addText(s, cx + 12, cy + (ph ? 7 : 10), x.title, { size: 15, bold: true }));
+      page.add(addText(s, cx + 12, cy + (ph ? 4 : 10), x.title, { size: 15, bold: true }));
       // 手机：市况签的字是 13 号，签放宽放高一点
-      const pl = ph ? { y: 30, w: 54, h: 22, dx: 0 } : { y: 40, w: 46, h: 20, dx: 0 };
+      const pl = ph ? { y: 27, w: 54, h: 22, dx: 0 } : { y: 40, w: 46, h: 20, dx: 0 };
       const pill = addPill(s, cx + 12, cy + pl.y, pl.w, pl.h, REGIME_TINT[x.regime]);
       page.add(pill);
       const my = cy + pl.y + pl.h / 2;

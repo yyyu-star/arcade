@@ -8,7 +8,7 @@ import { COLOR, TYPE } from '../theme.ts';
 import { addGlyph } from '../ui/art.ts';
 import { wanShort } from './bits.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
 import { addText } from '../ui/text.ts';
 import { bindTooltip, type TipContent } from '../ui/tooltip.ts';
 import { achievementBadge } from './codexPanel.ts';
@@ -22,9 +22,10 @@ const H = 360;
 /** 成就多时一排放 6 个（宽一点），尽量两排放下，每个都能写一句说明。 */
 const gridCols = (n: number): number => (n > 10 ? 6 : 5);
 const gridW = (n: number): number => (n > 10 ? 1000 : 800);
-/** 手机横屏（960×444）：一排最多 8 个、一页两排（多了翻页），面板最宽 940 */
+/** 手机横屏：一排最多 8 个，按面板宽度（phonePanel）每格至少 108 算个数；一页两排（多了翻页） */
 const PHONE_COLS = 8;
-const PHONE_ROW_H = 130;
+const PHONE_CELL = 108;
+const PHONE_ROW_H = 118;
 
 /** 一条达成 / 解锁的弹窗：成就（档位框 + 图标）、新人设（立绘）、新难度（徽记）。 */
 class UnlockDialog extends Dialog {
@@ -33,13 +34,14 @@ class UnlockDialog extends Dialog {
     const grid = u.kind === 'achievements';
     const n = grid ? u.ids.length : 0;
     const phone = phoneLayout(scene);
-    const GRID_COLS = phone ? Math.max(1, Math.min(PHONE_COLS, n)) : gridCols(n);
+    const pp = phone ? phonePanel(scene) : null;
+    const GRID_COLS = pp ? Math.max(1, Math.min(PHONE_COLS, n, Math.floor((pp.w - 48) / PHONE_CELL))) : gridCols(n);
     const perPage = phone ? GRID_COLS * 2 : n;
     const rows = grid ? Math.ceil(Math.min(n, perPage) / GRID_COLS) : 0;
-    const w = grid ? (phone ? Math.max(W, GRID_COLS * 112 + 48) : gridW(n)) : W;
+    const w = grid ? (pp ? Math.min(pp.w, Math.max(W, GRID_COLS * PHONE_CELL + 48)) : gridW(n)) : W;
     // 0.5：格子里只放徽章 + 名字（档位看框色），条件放悬停
     const rowH = phone ? PHONE_ROW_H : rows <= 2 ? 150 : 124;
-    const h = grid ? (phone ? 150 : 160) + rows * rowH : H;
+    const h = grid ? (pp ? Math.min(pp.h, 150 + rows * rowH) : 160 + rows * rowH) : H;
     super(scene, w, h, `${title}${total > 1 ? `（${index + 1}/${total}）` : ''}`, onClosed);
     const cx = w / 2;
     let name = '';
@@ -58,9 +60,9 @@ class UnlockDialog extends Dialog {
           const x = 24 + cell * (i % GRID_COLS) + cell / 2;
           const y = 76 + Math.floor(i / GRID_COLS) * rowH;
           const compact = rowH < 140;
-          const badge = achievementBadge(scene, x, y + (compact ? 38 : 46), a.tier, a.icon, true, compact ? 68 : 84);
+          const badge = achievementBadge(scene, x, y + (phone ? 34 : compact ? 38 : 46), a.tier, a.icon, true, phone ? 64 : compact ? 68 : 84);
           box.add(badge);
-          box.add(addText(scene, x, y + (compact ? 80 : 98), a.name, { size: TYPE.label + 1, bold: true, color: COLOR.ink, originX: 0.5, wrap: cell - 8, align: 'center' }));
+          box.add(addText(scene, x, y + (phone ? 72 : compact ? 80 : 98), a.name, { size: TYPE.label + 1, bold: true, color: COLOR.ink, originX: 0.5, wrap: cell - 8, align: 'center' }));
           if (a.unlocks) box.add(addGlyph(scene, x + 34, y + 10, 'gift', 26));
           const hit = scene.add.rectangle(x - cell / 2, y, cell, rowH - 8, 0xffffff, 0.001).setOrigin(0, 0).setInteractive();
           bindTooltip(hit, () => ({ x: this.inner.x + x - cell / 2, y: this.inner.y + y, w: cell, h: rowH - 8 }), () => ({ title: `${a.name}（${TIER_NAME[a.tier]}）`, body: a.unlocks ? `${a.desc}\n同时解锁人设：${personaView(a.unlocks).name}` : a.desc }));

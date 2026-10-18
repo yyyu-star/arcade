@@ -261,9 +261,14 @@ export class TopBarView {
     this.day.setText(dayLabel(t));
     // 大环境：箭头 + 颜色（「大环境：一般」这类说明在日历的悬停提示里）
     const moodSign = MOOD_SIGN[t.mood];
-    this.weather.setText(`大环境${moodSign > 0 ? '↑' : moodSign < 0 ? '↓' : '–'}`);
-    // 日历小签放不下（手机上让出「大厅」以后，「开春政策窗口」会顶到账户那一列）就截短，全名在悬停里
-    fitWidth(this.calText.setText(t.calendar.name), FLAGS_RIGHT - TB.calTextX - 16 - this.weather.width);
+    const arrow = moodSign > 0 ? '↑' : moodSign < 0 ? '↓' : '–';
+    this.weather.setText(`大环境${arrow}`);
+    // 日历小签放不下（手机上让出「大厅」以后，「开春政策窗口」会顶到账户那一列）：先把天气缩成带颜色的箭头，
+    // 名字能放全就放全（0.19.1，主线要求）；还放不下才截短，全名和「大环境：xx」都在悬停里
+    const room = (): number => FLAGS_RIGHT - TB.calTextX - 16 - this.weather.width;
+    this.calText.setText(t.calendar.name);
+    if (this.calText.width > room()) this.weather.setText(arrow);
+    fitWidth(this.calText, room());
     this.calPill.setSize(this.calText.width + 16, TB.calPill.h);
     this.weather.setX(TB.calPill.x + this.calPill.width + 8);
     setColor(this.weather, moodSign > 0 ? COLOR.up : moodSign < 0 ? COLOR.down : COLOR.muted);

@@ -1,18 +1,15 @@
 import type Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, LEGACY_PHONE, PHONE, RENDER_SCALE, VIEW } from './theme.ts';
+import { GAME_HEIGHT, GAME_WIDTH, PHONE, RENDER_SCALE, VIEW } from './theme.ts';
 
 /** 按手机布局搭的场景（setupCamera 时登记，不靠比较相机缩放来猜）；值是它用的世界尺寸 */
 const phoneScenes = new WeakMap<object, { w: number; h: number }>();
 
-/**
- * 场景在手机上怎么布局：true = 按手机世界（VIEW）布局；'legacy' = 0.19.0 还没重排、仍按旧的 960×444 布局，
- * 整体缩放进手机世界；false = 只有电脑布局（1280×720），整体缩小放进来。
- */
-export type PhoneReady = boolean | 'legacy';
+/** 场景在手机上怎么布局：true = 按手机世界（VIEW）布局；false = 只有电脑布局（1280×720），整体缩小放进来。 */
+export type PhoneReady = boolean;
 
 /**
  * 相机怎么摆（0.5.5）：电脑上，或手机上适配过的场景（phoneReady），按渲染倍数 1:1 显示世界；
- * 手机上没适配的场景（1280×720）和 0.19.0 还没重排的场景（960×444）整体缩小、居中放进手机世界。
+ * 手机上没适配的场景（1280×720）整体缩小、居中放进手机世界。
  *
  * 0.14.0（art-v3 ①）画布用 EXPAND：窗口和世界比例不同时画布在一个方向上变长（以前是两边留空条），
  * 相机把世界居中，多出来的边由各场景画宽一些的背景填满。
@@ -26,8 +23,8 @@ export function cameraFor(
   view: { w: number; h: number } = VIEW,
 ): { zoom: number; scrollX: number; scrollY: number; phoneLayout: boolean; world: { w: number; h: number } } {
   const sz = size ?? { w: view.w * scale, h: view.h * scale };
-  // 世界内容的尺寸：手机上没适配的场景按 1280×720，没重排的按 960×444
-  const world = !phone ? { w: GAME_WIDTH, h: GAME_HEIGHT } : phoneReady === true ? view : phoneReady === 'legacy' ? LEGACY_PHONE : { w: GAME_WIDTH, h: GAME_HEIGHT };
+  // 世界内容的尺寸：手机上没适配的场景按 1280×720
+  const world = phone && phoneReady ? view : { w: GAME_WIDTH, h: GAME_HEIGHT };
   const k = Math.min(view.w / world.w, view.h / world.h, 1);
   const zoom = scale * k;
   return { zoom, scrollX: (world.w - sz.w / zoom) / 2, scrollY: (world.h - sz.h / zoom) / 2, phoneLayout: phone && phoneReady !== false, world };
@@ -81,13 +78,7 @@ export function viewOf(scene: Phaser.Scene): { w: number; h: number } {
   return (PHONE && phoneScenes.get(scene)) || { w: GAME_WIDTH, h: GAME_HEIGHT };
 }
 
-/** 0.19.0 这个场景是不是按新的手机世界（VIEW）布局：字号、点击区的手机下限只对它生效（没重排的场景还按旧尺寸排，抬了会挤） */
-export function phoneNew(scene: Phaser.Scene): boolean {
-  const v = PHONE ? phoneScenes.get(scene) : undefined;
-  return !!v && v.h === VIEW.h && v.w === VIEW.w;
-}
-
-/** 这个场景是不是按手机布局（960×444）。 */
+/** 这个场景是不是按手机布局（手机世界 718–960×404，见 theme.ts 的 phoneWorld）。 */
 export function phoneLayout(scene: Phaser.Scene): boolean {
   return PHONE && phoneScenes.has(scene);
 }

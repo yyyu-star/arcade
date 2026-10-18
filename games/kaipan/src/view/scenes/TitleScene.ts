@@ -19,7 +19,7 @@ import { COLOR, GAME_WIDTH, LOW_MEMORY, PHONE } from '../theme.ts';
 import { addGlyph, addImage, addPill } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
 import { StockGuy } from '../ui/stockGuy.ts';
-import { addText, fitWidth } from '../ui/text.ts';
+import { addText, fitWidth, setWrap } from '../ui/text.ts';
 import { CloudBadge } from '../ui/cloudBadge.ts';
 import { WALLET_URL, goLobby } from '../lobby.ts';
 import { loadBoard } from '../dailyBoard.ts';
@@ -35,6 +35,7 @@ import type { ChallengeFail, ChallengeView } from '../../platform/challenge.ts';
 import { hideHomeTip, showHomeTip } from '../../platform/viewportFit.ts';
 import { Room } from '../trade/room.ts';
 import { bleedOf, coverOf, phoneLayout, viewOf } from '../viewport.ts';
+import { phoneHome } from '../meta/homeGeo.ts';
 import { BaseScene } from './BaseScene.ts';
 
 /**
@@ -57,18 +58,8 @@ const DESK = {
   cloud: { x: 770, y: 78 },
 } as const;
 
-/** 手机横屏（960×444）：左边大卡和一句玩法，右边模式卡竖排 */
-const PHONE_UI = {
-  logoY: 34,
-  hero: { x: 24, y: 70, w: 444, h: 104 },
-  tagY: 190,
-  card: { x: 492, y: 70, w: 444, h: 76, gap: 10 },
-  tools: { right: 948, y: 8, h: 40, gap: 6, font: 14 },
-  cloud: { x: 160, y: 30 },
-} as const;
-
-/** 主视觉在手机上整体缩到 0.75、往左下挪（右边是模式卡） */
-const PHONE_ART = { k: 0.75, ox: -100, oy: -81 };
+/** 手机横屏按世界宽度排（0.19.1）：要点的都在下半屏，见 meta/homeGeo.ts */
+type PhoneHome = ReturnType<typeof phoneHome>;
 
 /** 前排小人（电脑世界坐标，脚踩的位置和高度）：两边各一群，房前两只小的；窗口变宽时两边再各露出一只 */
 const CROWD: readonly [number, number, number][] = [
@@ -80,8 +71,7 @@ const CLOUDS: readonly [number, number, number][] = [[192, 376, 1], [1104, 336, 
 type Item = { key: string; label: string; fn: () => void };
 
 export class TitleScene extends BaseScene {
-  // 0.19.0 手机世界改成 718–960×404，主页还没重排（0.19.1）：先按旧的 960×444 整体缩放进来
-  protected override readonly phoneReady = PHONE ? ('legacy' as const) : false;
+  protected override readonly phoneReady = PHONE;
   private buttons: Record<string, Button> = {};
   private room: Room | null = null;
   private profile: Profile = emptyProfile();
@@ -93,6 +83,8 @@ export class TitleScene extends BaseScene {
   private busy: Phaser.GameObjects.Rectangle | null = null;
   /** 视差的几层：容器和它跟鼠标走的幅度 */
   private parallax: { layer: Phaser.GameObjects.Container; amp: number }[] = [];
+  /** 手机几何（电脑上为 null） */
+  private G: PhoneHome | null = null;
 
   constructor(session: Session) {
     super('title', session);
@@ -106,14 +98,19 @@ export class TitleScene extends BaseScene {
     this.parallax = [];
     this.profile = loadProfile().profile;
     const ph = phoneLayout(this);
+    const V0 = viewOf(this);
+    this.G = ph ? phoneHome(V0.w, V0.h, standalone() ? 2 : 3) : null;
+    const G = this.G;
     const art = titleArtReady(this.textures);
     if (art) this.buildArt(ph);
     else this.buildRoom(ph);
-    const L = ph ? PHONE_UI : DESK;
-    const logo = addText(this, viewOf(this).w / 2, L.logoY, '开盘', { size: ph ? 46 : 80, bold: true, color: COLOR.accent, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: ph ? 9 : 12 });
+    const L = G ?? DESK;
+    const logo = G
+      ? addText(this, G.logo.x, G.logo.y, '开盘', { size: G.logo.size, bold: true, color: COLOR.accent, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 10 })
+      : addText(this, V0.w / 2, DESK.logoY, '开盘', { size: 80, bold: true, color: COLOR.accent, originX: 0.5, originY: 0.5, stroke: COLOR.ink, strokeWidth: 12 });
     if (this.lively) this.tweens.add({ targets: logo, scale: { from: 1, to: 1.04 }, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     const tag = '看群聊、追风口，每个月还上账';
-    if (ph) addText(this, PHONE_UI.hero.x + PHONE_UI.hero.w / 2, PHONE_UI.tagY, tag, { size: 15, bold: true, color: COLOR.ink, originX: 0.5, originY: 0.5, stroke: COLOR.paper, strokeWidth: 5 });
+    if (G) addText(this, G.logo.x, G.tagY, tag, { size: 16, bold: true, color: COLOR.ink, originX: 0.5, originY: 0.5, stroke: COLOR.paper, strokeWidth: 5 });
     else addText(this, GAME_WIDTH / 2, DESK.tagY, tag, { size: 18, bold: true, color: COLOR.ink, originX: 0.5, originY: 0.5, stroke: COLOR.paper, strokeWidth: 6 });
     this.hero(ph);
     this.modeCards(ph);
@@ -125,7 +122,7 @@ export class TitleScene extends BaseScene {
     this.events.off('shutdown', hideHomeTip);
     this.events.once('shutdown', hideHomeTip);
     // 回大厅（平台首页）：常驻左上角，开始菜单不在一局里，点了直接走。单独部署没有大厅，开始菜单本身就是首页，不放
-    if (!standalone()) this.buttons.lobby = new Button(this, ph ? 12 : 14, ph ? 8 : 10, { width: 104, height: 42, label: '大厅', icon: 'house', fontSize: 16, onClick: () => goLobby() });
+    if (!standalone()) this.buttons.lobby = new Button(this, G ? G.lobby.x : 14, G ? G.lobby.y : 10, { width: 104, height: 42, label: '大厅', icon: 'house', fontSize: 16, onClick: () => goLobby() });
     // 实盘的结果在局外说一次（提前收手、离开结束页之后才结完、放太久作废）；之后结完了也说。
     // 挂在 build 里：云同步等会重画开始菜单（不走 enter），监听要跟着新画面；读档、档案的提示先说，空出来再说这个
     const off = onLiveChange(() => this.time.delayedCall(1, () => this.liveNotice()));
@@ -135,16 +132,18 @@ export class TitleScene extends BaseScene {
     const offC = onChallengeChange(() => this.time.delayedCall(1, () => this.challengeNotice()));
     this.events.once('shutdown', offC);
     this.time.addEvent({ delay: 400, loop: true, callback: () => this.challengeNotice() });
-    const V = viewOf(this);
-    addText(this, V.w - 12, V.h - 8, `v${APP_VERSION}`, { size: 12, color: COLOR.ink, originX: 1, originY: 1, stroke: 0xfff6e6, strokeWidth: 4 }).setDepth(5);
+    // 手机上右下角是大卡：版本号挪到右上角小入口下面
+    const vx = G ? G.version.x : V0.w - 12;
+    addText(this, vx, G ? G.version.y : V0.h - 8, `v${APP_VERSION}`, { size: 12, color: COLOR.ink, originX: 1, originY: G ? 0 : 1, stroke: 0xfff6e6, strokeWidth: 4 }).setDepth(5);
   }
 
   // ---------------------------------------------------------------- 主视觉
 
   /** 电脑坐标换到当前布局（手机上整体缩小、挪开） */
   private at(x: number, y: number): { x: number; y: number; k: number } {
-    if (!phoneLayout(this)) return { x, y, k: 1 };
-    return { x: x * PHONE_ART.k + PHONE_ART.ox, y: y * PHONE_ART.k + PHONE_ART.oy, k: PHONE_ART.k };
+    const A = this.G?.art;
+    if (!A) return { x, y, k: 1 };
+    return { x: x * A.k + A.ox, y: y * A.k + A.oy, k: A.k };
   }
 
   /** 一层视差：电脑上有鼠标、开着动画、不是省内存设备时跟着鼠标偏一点 */
@@ -168,6 +167,7 @@ export class TitleScene extends BaseScene {
     }
     const hills = this.layer(8);
     const h = this.at(640, 664);
+    if (this.G) h.y = this.G.hillsY;
     hills.add(addImage(this, h.x, h.y, TITLE_ART.hills.key, TITLE_ART.hills.w * h.k, TITLE_ART.hills.h * h.k));
     const house = this.layer(10);
     const hs = this.at(696, 571);
@@ -297,9 +297,10 @@ export class TitleScene extends BaseScene {
     const themes = this.session.state.themeIds.length > 0 ? this.session.state.themeIds : THEME_IDS.slice(0, 6);
     const ids = themes.map((t) => stocksOf(t)[0]?.id).filter((x): x is string => !!x && hasArt(this.textures, stockKey(x, 'calm')));
     const xs = [150, 300, 980, 1130, 450, 830];
-    const sc = ph ? PHONE_ART.k : 1;
     ids.slice(0, 6).forEach((id, i) => {
-      this.guys.push(new StockGuy(this, (xs[i] ?? 640) * sc, viewOf(this).h - 20 * sc, id, i % 3 === 0 ? 'happy' : 'calm', 96 * sc, { idle: this.lively }));
+      // 手机上站在卡片上沿（at 把电脑坐标换过去），电脑上站在桌上
+      const p = ph ? this.at(xs[i] ?? 640, 700) : { x: xs[i] ?? 640, y: viewOf(this).h - 20, k: 1 };
+      this.guys.push(new StockGuy(this, p.x, p.y, id, i % 3 === 0 ? 'happy' : 'calm', 96 * p.k, { idle: this.lively }));
     });
     this.cheer();
   }
@@ -311,7 +312,7 @@ export class TitleScene extends BaseScene {
    * 第一次玩写「开始第一局」。人设立绘在 meta 图集里，到了再补上（先放一个图标）。
    */
   private hero(ph: boolean): void {
-    const H = ph ? PHONE_UI.hero : DESK.hero;
+    const H = ph && this.G ? this.G.hero : DESK.hero;
     const s: GameState = this.session.state;
     const can = this.canContinue();
     const quick = this.quickSetup();
@@ -330,15 +331,21 @@ export class TitleScene extends BaseScene {
     const parts: Phaser.GameObjects.GameObject[] = [];
     const icon = addGlyph(this, 16 + pw / 2, H.h / 2, can ? 'calendar' : 'rocket', pw * 0.62);
     parts.push(icon);
-    parts.push(addText(this, tx, ph ? 14 : 16, title, { size: ph ? 28 : 32, bold: true, color: COLOR.white, stroke: COLOR.accentDark, strokeWidth: 4 }));
-    const subT = addText(this, tx, ph ? 60 : 66, sub, { size: ph ? 15 : 17, bold: true, color: COLOR.white });
+    parts.push(addText(this, tx, ph ? 10 : 16, title, { size: ph ? 28 : 32, bold: true, color: COLOR.white, stroke: COLOR.accentDark, strokeWidth: 4 }));
+    // 手机上大卡只有 300–404 宽：快速开始的说明折成两行；「继续」时账户单占一行，说明放不下才截（全文在悬停里）
+    const room = H.w - tx - (ph ? 14 : 56);
+    const subT = ph
+      ? addText(this, tx, can ? 76 : 50, sub, { size: 14, bold: true, color: COLOR.white, wrap: can ? undefined : room })
+      : addText(this, tx, 66, sub, { size: 17, bold: true, color: COLOR.white });
     parts.push(subT);
     if (can) {
-      const money = addText(this, H.w - 20, ph ? 20 : 22, formatMoney(s.account), { size: ph ? 24 : 28, bold: true, num: true, color: COLOR.white, originX: 1, stroke: COLOR.accentDark, strokeWidth: 4 });
+      const money = ph
+        ? addText(this, tx, 46, formatMoney(s.account), { size: 22, bold: true, num: true, color: COLOR.white, stroke: COLOR.accentDark, strokeWidth: 4 })
+        : addText(this, H.w - 20, 22, formatMoney(s.account), { size: 28, bold: true, num: true, color: COLOR.white, originX: 1, stroke: COLOR.accentDark, strokeWidth: 4 });
       parts.push(money);
     }
     // 右下角留给「回车」
-    fitWidth(subT, H.w - tx - (PHONE ? 20 : 56));
+    if (!ph || can) fitWidth(subT, room);
     if (!PHONE) parts.push(addText(this, H.w - 16, H.h - 12, '回车', { size: 12, bold: true, color: COLOR.white, originX: 1, originY: 1 }).setAlpha(0.8));
     b.addContent(...parts);
     // 人设立绘到了就换掉图标（meta 图集按需加载，开始菜单先触发一次）
@@ -362,20 +369,30 @@ export class TitleScene extends BaseScene {
     ];
     if (!standalone()) items.push({ key: 'live', glyph: 'moneybag', title: '实盘', sub: this.liveWhy() ?? `带筹码打 ${BALANCE.live.months} 个月`, fn: () => this.openLive() });
     items.push({ key: 'new', glyph: 'star', title: '新一局', sub: '自己挑人设和难度', fn: () => this.openSetup() });
-    const C = ph ? PHONE_UI.card : DESK.card;
+    const C = DESK.card;
     const total = items.length * C.w + (items.length - 1) * C.gap;
     items.forEach((it, i) => {
-      const x = ph ? PHONE_UI.card.x : GAME_WIDTH / 2 - total / 2 + i * (C.w + C.gap);
-      const y = ph ? PHONE_UI.card.y + i * (C.h + C.gap) : DESK.card.y;
-      const b = new Button(this, x, y, { width: C.w, height: C.h, label: '', onClick: it.fn });
+      // 手机上和大卡并排在下半屏：一张卡 120–170 宽，图标、标题、说明竖着排，说明折成两行
+      const r = ph && this.G ? this.G.cards[i]! : { x: GAME_WIDTH / 2 - total / 2 + i * (C.w + C.gap), y: C.y, w: C.w, h: C.h };
+      const b = new Button(this, r.x, r.y, { width: r.w, height: r.h, label: '', onClick: it.fn });
       this.buttons[it.key] = b;
-      const g = ph ? 40 : 44;
-      const parts: Phaser.GameObjects.GameObject[] = [addGlyph(this, ph ? 36 : 38, ph ? C.h / 2 : 36, it.glyph, g)];
-      const tx = ph ? 70 : 70;
-      parts.push(addText(this, tx, ph ? 10 : 18, it.title, { size: ph ? 19 : 20, bold: true, color: COLOR.ink }));
-      const sub = addText(this, ph ? tx : 18, ph ? 42 : 66, it.sub, { size: ph ? 14 : 15, color: COLOR.muted, wrap: ph ? undefined : C.w - 32 });
-      if (ph) fitWidth(sub, C.w - tx - (it.key === 'new' && this.canContinue() ? 120 : 20));
-      parts.push(sub);
+      const parts: Phaser.GameObjects.GameObject[] = [];
+      if (ph) {
+        parts.push(addGlyph(this, r.w / 2, 22, it.glyph, 34));
+        const t = addText(this, r.w / 2, 42, it.title, { size: 18, bold: true, color: COLOR.ink, originX: 0.5 });
+        fitWidth(t, r.w - 12);
+        // 说明放不下就折成两行：有「 · 」的从那儿断，没有的两行折得一样长（不剩一个字吊在第二行）
+        const sub = addText(this, r.w / 2, 67, it.sub, { size: 13, color: COLOR.muted, originX: 0.5, align: 'center' });
+        if (sub.width > r.w - 14) {
+          if (it.sub.includes(' · ')) sub.setText(it.sub.replace(' · ', '\n'));
+          else setWrap(sub, Math.ceil(sub.width / 2) + 13);
+        }
+        parts.push(t, sub);
+      } else {
+        parts.push(addGlyph(this, 38, 36, it.glyph, 44));
+        parts.push(addText(this, 70, 18, it.title, { size: 20, bold: true, color: COLOR.ink }));
+        parts.push(addText(this, 18, 66, it.sub, { size: 15, color: COLOR.muted, wrap: r.w - 32 }));
+      }
       b.addContent(...parts);
     });
     // 「实盘」：调试会话、没登录时变灰，悬停说原因
@@ -396,9 +413,9 @@ export class TitleScene extends BaseScene {
       if (this.canContinue()) {
         const q = this.quickSetup();
         const r = nb.rect();
-        const qw = ph ? 104 : 96;
-        const qh = ph ? 40 : 30;
-        const qb = new Button(this, r.x + r.w - qw - (ph ? 12 : 10), ph ? r.y + (r.h - qh) / 2 : r.y + r.h - qh - 10, { width: qw, height: qh, label: '快速开始', fontSize: ph ? 15 : 13, variant: 'ghost', onClick: () => this.guardNew(() => this.startSetup(q.persona, q.difficulty, q.short)) });
+        // 手机上「新一局」卡太窄放不下：挪到「继续」大卡正上方
+        const Q = ph && this.G ? this.G.quick : { x: r.x + r.w - 96 - 10, y: r.y + r.h - 30 - 10, w: 96, h: 30 };
+        const qb = new Button(this, Q.x, Q.y, { width: Q.w, height: Q.h, label: '快速开始', fontSize: ph ? 15 : 13, variant: ph ? 'default' : 'ghost', onClick: () => this.guardNew(() => this.startSetup(q.persona, q.difficulty, q.short)) });
         qb.setDepth(nb.depth + 1);
         const qp = personaView(q.persona);
         const qd = difficultyView(q.difficulty);
@@ -410,7 +427,7 @@ export class TitleScene extends BaseScene {
 
   /** 右上角一排小入口；图鉴、成就带着收集进度 */
   private tools(ph: boolean): void {
-    const T = ph ? PHONE_UI.tools : DESK.tools;
+    const T = ph && this.G ? this.G.tools : DESK.tools;
     const prog = codexProgress(this.profile);
     const seen = this.profile.runs > 0 && !ph;
     const items: Item[] = [

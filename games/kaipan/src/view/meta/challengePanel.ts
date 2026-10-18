@@ -6,27 +6,44 @@ import { boardScoreText } from '../labels.ts';
 import { COLOR, SPACE, TYPE } from '../theme.ts';
 import { addGlyph } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
-import { Dialog } from '../ui/dialog.ts';
+import { Dialog, phonePanel } from '../ui/dialog.ts';
 import { addText, fitWidth } from '../ui/text.ts';
 import { phoneLayout } from '../viewport.ts';
 import { addBadge, addPortrait } from './setupPanel.ts';
 
 /** 电脑、手机横屏各一套（和每日排行面板同一个尺寸）：面板宽高、每页几行、行高、第一行的 y、"我"那一行和翻页键的 y */
 const DESK = { w: 600, h: 540, per: 10, rowH: 32, top: 84, meY: 418, pagerY: 540 - 66 } as const;
-const PHONE_UI = { w: 620, h: 424, per: 7, rowH: 30, top: 70, meY: 290, pagerY: 424 - 56 } as const;
+interface Geo {
+  w: number;
+  h: number;
+  per: number;
+  rowH: number;
+  top: number;
+  meY: number;
+  pagerY: number;
+}
+
+/**
+ * 手机横屏（0.19.1）：面板取 phonePanel（SE 上 702×392），每页 7 行从 64 起，"我"那一行在底下一排（翻页键、说明）的上面一行；
+ * 比 392 高的（旧世界 430）多出来的空隙留在表和"我"之间。
+ */
+function phoneUi(scene: Phaser.Scene): Geo {
+  const { w, h } = phonePanel(scene);
+  return { w, h, per: 7, rowH: 30, top: 64, meY: h - 100, pagerY: h - 52 };
+}
 
 /**
  * 0.13.0 好友挑战的成绩表：平台给的前 50 名（每页 10 行，手机 7 行），下面单独一行"我"。
  * 样子跟每日排行面板走；只显示昵称、成绩和这局的称号（平台不给用户名），我那一行标亮。
  */
 export class ChallengePanel extends Dialog {
-  private readonly G: typeof DESK | typeof PHONE_UI;
+  private readonly G: Geo;
   private page = 0;
   private rows: Phaser.GameObjects.Container;
   private readonly view: ChallengeView;
 
   constructor(scene: Phaser.Scene, view: ChallengeView, onClosed?: () => void) {
-    const G = phoneLayout(scene) ? PHONE_UI : DESK;
+    const G: Geo = phoneLayout(scene) ? phoneUi(scene) : DESK;
     super(scene, G.w, G.h, `${view.owner} 发起的挑战`, onClosed);
     this.G = G;
     this.view = view;
@@ -62,7 +79,10 @@ export class ChallengePanel extends Dialog {
     const me = v.me ? `我：第 ${v.me.rank ?? '—'} 名 · ${boardScoreText(v.me.score)}` : '我：还没交过成绩';
     this.rows.add(s.add.rectangle(28, G.meY - 4, G.w - 56, 2, COLOR.edge, 0.6).setOrigin(0, 0));
     this.rows.add(addText(s, 44, G.meY + 18, `${me}（共 ${v.count} 人）`, { size: TYPE.label + 1, bold: true, color: COLOR.ink, originY: 0.5 }));
+    // 手机：底下左边的说明在翻页键左边收住，放不下就截（电脑那一行够宽，不动）
+    let footRoom = Infinity;
     if (pages > 1) {
+      footRoom = G.w - 44 - 84 * 2 - 60 - 44 - 12;
       const prev = new Button(s, G.w - 44 - 84 * 2 - 60, G.pagerY, { width: 84, height: 40, label: '上一页', fontSize: 14, sound: 'select' });
       const label = addText(s, G.w - 44 - 84 - 30, G.pagerY + 20, `${this.page + 1}/${pages}`, { size: 14, bold: true, num: true, color: COLOR.muted, originX: 0.5, originY: 0.5 });
       const next = new Button(s, G.w - 44 - 84, G.pagerY, { width: 84, height: 40, label: '下一页', fontSize: 14, sound: 'select' });
@@ -73,7 +93,10 @@ export class ChallengePanel extends Dialog {
       this.named['challenge:next'] = next;
     }
     const foot = versionDiffers(v.payload.v) ? '每人只算第一次 · 发起时的版本和你的不同，结果可能对不上' : '每人只算第一次，30 天内有效';
-    this.rows.add(addText(s, 44, G.pagerY + 20, foot, { size: 13, color: COLOR.dim, originY: 0.5 }));
+    const phone = G !== DESK;
+    const note = addText(s, 44, G.pagerY + 20, foot, { size: 13, color: phone ? COLOR.muted : COLOR.dim, originY: 0.5 });
+    if (phone) fitWidth(note, Math.min(footRoom, G.w - 88));
+    this.rows.add(note);
   }
 
   private turn(d: number): void {
