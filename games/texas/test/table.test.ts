@@ -471,6 +471,17 @@ describe('主动亮牌（0.19.0）', () => {
     expect(apply(t, folder, { t: 'show', cards: [0] })).toEqual({ error: 'cannot_show' });
   });
 
+  it('停着时亮了牌就离桌、别人坐进同一个座位：他亮的收起来，不摆在新来的人座位上（0.19.2）', () => {
+    let t = ended();
+    t = must(apply(t, 0, { t: 'show', cards: [0] }));
+    t = must(apply(t, 1, { t: 'show', cards: [1] }));
+    t = must(apply(t, 0, { t: 'leave' }));
+    expect(t.seats[0]!.owner).toBe('none');
+    t = must(seatPlayer(t, 0, 2000, false));
+    expect(t.lastHand!.showed!.map((x) => x.seat)).toEqual([1]);
+    expect(t.kept![0]).toEqual([]);
+  });
+
   it('不在停着时、形状不对、摊牌已经亮过的都不收', () => {
     const t = ended();
     for (const cards of [[], [2], [0, 0], [0, 1, 1], 'x', [0.5]] as unknown as number[][]) expect(apply(t, 0, { t: 'show', cards })).toEqual({ error: 'bad_cards' });

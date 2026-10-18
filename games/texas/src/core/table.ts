@@ -731,11 +731,14 @@ function removeSeat(t: Table, seat: number): void {
 }
 
 /**
- * 座位换了人（0.19.1）：上一个人留着等亮的底牌作废。不清的话，停着时有人离桌、别人马上坐进同一个座位，
+ * 座位换了人（0.19.1）：上一个人留着等亮的底牌作废、亮过的收起来。不清的话，停着时有人离桌、别人马上坐进同一个座位，
  * view 会把上一个人的两张当成新来的人的 kept 下发（主线审 0.19.0 时指出）
  */
 function forget(t: Table, seat: number): void {
   if (t.kept?.[seat]) t.kept[seat] = [];
+  // 他亮过的牌是公开的，但按座位号摆：不收的话这一手剩下的几秒里会摆在新来的人座位上（0.19.2）
+  const r = t.lastHand;
+  if (r?.showed?.some((x) => x.seat === seat)) r.showed = r.showed.filter((x) => x.seat !== seat);
 }
 
 function putHouse(t: Table, seat: number): void {
