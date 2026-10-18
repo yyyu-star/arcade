@@ -67,5 +67,5 @@ tests/         vitest
 
 ## 7. 发布
 
-本目录 `npm test`、`npm run build:cf` 全过，跑 `npm run shot` 并逐张看截图；更新 `package.json` 版本和 `CHANGELOG.md`；
+本目录 `npm test`、`npm run build:cf` 全过，跑 `npm run shot` 并逐张看截图；每个要部署的 PR 都升一次版本（`package.json` 和 lockfile，0.3.0、0.3.1…），`CHANGELOG.md` 写成带日期的版本段，不攒"未发布"段（主线 2026-10-18：合并即部署，版本要能对上线上）；
 提交信息以 `yexun:` 开头，只暂存明确路径；推 `yexun/<说明>` 分支开 PR。合并和部署由维护者做。
