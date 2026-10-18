@@ -96,7 +96,7 @@ try {
       };
       await snap('menu-first');
       const t0 = Date.now();
-      await click('[data-a="start"]');
+      await click('[data-a="quick"]');
       await page.waitForFunction(() => {
         const w = (window as unknown as { __yx: { world: { eAlive: Uint8Array } | null } }).__yx.world;
         return !!w && w.eAlive.some((x) => x === 1);

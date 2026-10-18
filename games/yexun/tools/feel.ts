@@ -73,7 +73,7 @@ async function run(hz: number): Promise<Sample[]> {
   page.on('pageerror', (e) => console.error('页面异常', e.message));
   await page.goto(BASE, { timeout: 30_000 });
   await page.waitForFunction(() => !!(window as unknown as { __yx?: unknown }).__yx, null, { timeout: 20_000 });
-  await page.locator('[data-a="start"]').first().click();
+  await page.locator('[data-a="quick"]').first().click();
   await page.waitForFunction(() => !!(window as unknown as { __yx: { world: unknown } }).__yx.world, null, { timeout: 20_000 });
   await page.waitForTimeout(800);
   await page.evaluate(() => (window as unknown as { __virt: () => void }).__virt());

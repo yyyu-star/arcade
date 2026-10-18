@@ -97,11 +97,6 @@
 .yx-title span { color: #f4f0e6; font-size: 16px; letter-spacing: 4px; text-shadow: 0 1px 3px #000, 0 0 8px #000; }
 .yx-go { min-width: 260px; min-height: 68px; font-size: 28px; margin-top: 8px; }
 .yx-hint { color: #f4f0e6; font-size: 14px; text-shadow: 0 1px 3px #000; }
-/* 新手首屏只有一个大按钮，所有者第一次进来以为夜探和实盘没了；留一个不抢眼的文字入口进选模式屏 */
-.yx-menu .yx-mother {
-  min-height: 44px; padding: 0 16px; border: 0; background: none; cursor: pointer;
-  color: #f4f0e6; font-size: 15px; text-decoration: underline; text-underline-offset: 4px; text-shadow: 0 1px 3px #000;
-}
 .yx-moon, .yx-lamp { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--ink); flex: none; }
 .yx-moon { background: radial-gradient(circle at 65% 40%, transparent 45%, #f2c94c 47%); background-color: #2a3050; }
 .yx-lamp { background: radial-gradient(circle, #ffd57a 30%, #e2702a 70%); border-radius: 8px; }
@@ -359,7 +354,7 @@
 }
 /* 电脑大屏：整块菜单放大，不缩在中间一小块 */
 @media (min-width: 1600px) and (min-height: 900px) {
-  .yx-sel, .yx-title, .yx-quick, .yx-stats, .yx-go, .yx-hint, .yx-mother { zoom: 1.3; }
+  .yx-sel, .yx-title, .yx-quick, .yx-stats, .yx-go, .yx-hint { zoom: 1.3; }
   /* 顶上的按钮跟着放大；设置面板挪到放大后的齿轮下面 */
   .yx-menu .yx-home, .yx-menu .yx-more, .yx-menu .yx-gear { zoom: 1.3; }
   .yx-settings { top: calc(max(10px, env(safe-area-inset-top, 0px)) + 72px); }

@@ -72,7 +72,6 @@ function bindToggles(root: HTMLElement, list: Toggle[]): Record<string, (el: HTM
 // ───────────────────────── 开始菜单 ─────────────────────────
 
 export interface MenuState {
-  firstTime: boolean;
   danger: Danger;
   /** 能选的最高危险档 */
   dangerOpen: Danger;
@@ -211,7 +210,6 @@ export class Home {
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
-      start: () => this.m.quick(),
       quick: () => this.m.quick(),
       select: () => this.m.openSelect(),
       settings: () => this.root.classList.toggle('show-settings'),
@@ -235,18 +233,16 @@ export class Home {
       HOME_BTN +
       `<button type="button" class="yx-btn yx-gear" data-a="settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-.1-1.3 2-1.6-2-3.4-2.4.9a8 8 0 0 0-2.2-1.3L15 2.8h-4l-.4 2.5a8 8 0 0 0-2.2 1.3L6 5.7 4 9.1l2 1.6L5.9 12l.1 1.3-2 1.6 2 3.4 2.4-.9a8 8 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a8 8 0 0 0 2.2-1.3l2.4.9 2-3.4-2-1.6.1-1.3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
       `<div class="yx-settings">${togglesHtml(this.toggles)}</div>` +
-      (s.firstTime
-        ? ''
-        : '<div class="yx-more">' +
-          '<button type="button" class="yx-btn" data-a="daily">每日</button>' +
-          '<button type="button" class="yx-btn" data-a="boards">排行</button>' +
-          '<button type="button" class="yx-btn" data-a="replays">回放</button>' +
-          '<button type="button" class="yx-btn" data-a="codex">图鉴</button>' +
-          '</div>');
+      '<div class="yx-more">' +
+      '<button type="button" class="yx-btn" data-a="daily">每日</button>' +
+      '<button type="button" class="yx-btn" data-a="boards">排行</button>' +
+      '<button type="button" class="yx-btn" data-a="replays">回放</button>' +
+      '<button type="button" class="yx-btn" data-a="codex">图鉴</button>' +
+      '</div>';
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
-    if (s.firstTime) {
-      this.ui.innerHTML = top + title + '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button><div class="yx-hint">只管走位，法器自己出手</div><button type="button" class="yx-mother" data-a="select">其他玩法：夜探、实盘</button>';
-    } else {
+    // 新老玩家同一版主页（所有者 10-18：新手专用首屏只有"开始守夜"，找不到夜探和实盘）。
+    // 新玩家的"上次选择"是存档默认值（守夜 · 雪原 · 危险 0），第一局的引导照旧由局里管
+    {
       const d = Math.min(s.danger, s.dangerOpen) as Danger;
       const q = quickLive(s);
       const fun = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
@@ -260,7 +256,8 @@ export class Home {
         '<div class="yx-quick">' +
         `<button type="button" class="yx-big yx-go" data-a="quick"><span>${q ? '开始实盘' : '开始'}</span><small>${plan}</small></button>` +
         (why ? `<div class="yx-mwhy">${esc(why)}</div>` : '') +
-        '<button type="button" class="yx-big ghost yx-pick" data-a="select">选模式 / 地图</button>' +
+        // 和"开始"一样大：守夜、夜探、实盘都从这里进
+        `<button type="button" class="yx-big ghost yx-go yx-pick" data-a="select"><span>选模式</span><small>${s.live.available ? '守夜 · 夜探 · 实盘' : '守夜 · 夜探'}</small></button>` +
         '</div>' +
         '<div class="yx-stats">' +
         `<div><span>危险 ${d} 最好</span><b>${b.big}</b><small>${b.small}</small></div>` +

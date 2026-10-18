@@ -241,8 +241,7 @@ async function boot(): Promise<void> {
     cursesOpen: save.cleared >= 0,
     perks: save.perks,
   });
-  const menuState = (firstTime = false) => ({
-    firstTime,
+  const menuState = () => ({
     raidFirst: !save.raidDone,
     vault: { got: vaultProgress(save.vault).got, total: TREASURES.length },
     danger: save.danger,
@@ -821,7 +820,7 @@ async function boot(): Promise<void> {
     else {
       if (qd !== null) save.danger = qd;
       if (qm) save.map = qm;
-      menu.show(menuState(save.runs === 0));
+      menu.show(menuState());
     }
   });
   fitViewport(() => {

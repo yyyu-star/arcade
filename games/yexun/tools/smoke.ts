@@ -47,7 +47,7 @@ async function open(query: string, errs: string[], viewport = { width: 844, heig
 /** 点开始并等到场上出怪 */
 async function startRun(page: Page): Promise<void> {
   // 带 ?auto 时直接开打、没有菜单；没带就走菜单点"开始"
-  const btn = page.locator('[data-a="start"]').first();
+  const btn = page.locator('[data-a="quick"]').first();
   if (await btn.isVisible().catch(() => false)) await btn.click();
   await page.waitForFunction(() => {
     const w = (window as unknown as { __yx: { world: { eAlive: Uint8Array } | null } }).__yx.world;
