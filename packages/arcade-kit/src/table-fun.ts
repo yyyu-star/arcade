@@ -113,9 +113,11 @@ export interface TableFunOptions {
   /** 电脑版聊天框放哪（0.19.0，用 left、top、width）：不给就在牌桌四个角里挑一个不压手牌、按钮、名牌的 */
   chatDock?(): RectLike | null;
   /**
-   * 弹幕在哪个区域飘（0.19.0）：不给就是屏幕 8%–58%，上沿压到上方各家头像、名牌下面；轨道自动避开手牌、按钮、名牌、头像、center
+   * 弹幕在哪个区域飘（0.19.0）：不给就是屏幕 8%–58%，上沿压到最上面一排座位的头像、名牌下面；轨道自动避开手牌、按钮、名牌、头像、center
    */
   danmakuArea?(): RectLike | null;
+  /** 手机版"聊天"按钮放哪（0.19.0，屏幕矩形）：不给就挨着"互动"按钮，先右后左再上下挑不压东西的一侧；挤的牌桌（手机横屏）最好给 */
+  chatButton?(): RectLike | null;
   /**
    * 牌桌中间的信息区（0.19.0）：剩余张数、底池、牌墩、出牌区、弃牌区这些，弹幕不横穿、聊天框和气泡不压。可以给几块
    */
@@ -306,6 +308,7 @@ export class TableFun {
       button: () => (this.btn ? this.btn.getBoundingClientRect() : null),
       styleButton: (b) => styleButton(b, this.o.buttonStyle?.()),
       dock: () => this.o.chatDock?.() ?? null,
+      chatButton: () => this.o.chatButton?.() ?? null,
       area: () => this.o.danmakuArea?.() ?? null,
       lite: () => this.o.lite?.() ?? ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 2,
       history: () => this.openPanel('chat'),

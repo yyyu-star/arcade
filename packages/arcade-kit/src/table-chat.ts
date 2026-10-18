@@ -51,6 +51,8 @@ export interface ChatHost {
   styleButton(b: HTMLElement): void;
   /** 游戏指定电脑版聊天框的位置（只用 left、top、width），不给就自己挑角 */
   dock?(): Box | null;
+  /** 游戏指定手机版"聊天"按钮的位置，不给就挨着"互动"按钮 */
+  chatButton?(): Box | null;
   /** 游戏指定弹幕区，不给就是牌桌上半部分 */
   area?(): Box | null;
   /** 省内存模式（弹幕默认关） */
@@ -325,8 +327,13 @@ export class ChatUi {
     b.style.width = `${w}px`;
     b.style.height = `${hh}px`;
     b.classList.toggle('atf-dot', this.unread);
-    // 挨着"互动"按钮，朝屏幕中间那侧；手牌、名牌、头像都避开
-    const at = placeBeside(r, w, hh, view, this.h.blocked(), 4, 8);
+    // 游戏给了位置就放那；不然挨着"互动"按钮（先右后左再上下），手牌、名牌、头像都避开
+    const own = this.h.chatButton?.() ?? null;
+    const at = own ? { left: own.left, top: own.top } : placeBeside(r, w, hh, view, this.h.blocked(), 4, 8);
+    if (own) {
+      b.style.width = `${Math.max(44, own.width)}px`;
+      b.style.height = `${Math.max(44, own.height)}px`;
+    }
     b.style.transform = `translate(${at.left}px,${at.top}px)`;
     if (this.bar) this.placeBar();
   }
@@ -541,20 +548,18 @@ export class ChatUi {
   }
 
   /**
-   * 弹幕区：游戏给了就用；不给是屏幕 8%–58%，上沿再压到上方各家头像、名牌的下沿以下（顶栏和对家名牌不被横穿），
-   * 剩下不够两行时退回 8%
+   * 弹幕区：游戏给了就用；不给是屏幕 8%–58%，上沿再压到最上面一排座位（头像顶边在屏高 20% 以内的，就是对家那一排）的头像、名牌下沿以下，
+   * 顶栏和对家名牌不被横穿；剩下不够两行时往下放宽（最多到 75%），不往上退
    */
   private area(): Box {
     const a = this.h.area?.();
     if (a) return a;
     const w = window.innerWidth;
     const hh = window.innerHeight;
-    const bottom = Math.round(hh * 0.58);
     const lineH = Math.round(this.font * 1.5) + 10;
-    const seatsLow = this.h.seatBoxes().filter((b) => b.top < hh * 0.3).map((b) => b.top + b.height + 4);
-    let top = Math.max(Math.round(hh * 0.08), ...seatsLow);
-    if (bottom - top < lineH * 2) top = Math.round(hh * 0.08);
-    return { left: 0, top, width: w, height: bottom - top };
+    const top = Math.max(Math.round(hh * 0.08), ...this.h.seatBoxes().filter((b) => b.top < hh * 0.2).map((b) => b.top + b.height + 4));
+    const bottom = Math.min(Math.round(hh * 0.75), Math.max(Math.round(hh * 0.58), top + lineH * 2));
+    return { left: 0, top, width: w, height: Math.max(0, bottom - top) };
   }
 
   /** 找空轨道飞一条；没有空的返回 false */

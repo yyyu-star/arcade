@@ -14,7 +14,7 @@
 - **记录**：最近 30 条，名字按座位配色；电脑在聊天框里，手机在互动面板的聊天页。
 - **设置存储**：新选项 `prefsKey`（默认 `<storageKey>.chat`，必须是 `<游戏id>.<名字>`，不合格构造时抛错），存弹幕开关、聊天框收起和记录展开。
 - **互动按钮的尺寸参数**（原 0.18.2）：`buttonStyle?() → { scale?, row? }`，替掉游戏对 `.atf-btn` 的覆盖；不传就不写行内样式，旧覆盖照样生效。图标尺寸走 `--atf-icon`。
-- 新选项 `chatDock()`、`danmakuArea()` 让游戏指定聊天框位置和弹幕区；纯函数 `chatMode`、`chatFont`、`danmakuLanes`、`danmakuSpeed`、`pickLane`、`placeDock`、`barBottom`、`placeBeside`、`seatColor` 在 `fun-logic`。
+- 新选项 `chatDock()`、`chatButton()`、`danmakuArea()` 让游戏指定聊天框、手机聊天按钮的位置和弹幕区；纯函数 `chatMode`、`chatFont`、`danmakuLanes`、`danmakuSpeed`、`pickLane`、`placeDock`、`barBottom`、`placeBeside`、`seatColor` 在 `fun-logic`。
 - `controls()` 改成报 `.atf-ui` 里所有带 `data-key` 的东西（聊天框、聊天按钮、输入条都能点到）。
 - 测试：`fun-logic` 加 14 条（气泡 4 条；版式、轨道、停靠、输入条、按钮、配色 10 条），`table-fun` 加 2 条（prefsKey），主题守卫扫 `table-chat.ts`。
   反证两处：不看 avoid 时气泡测试失败；轨道不看 blocked 时 2 条失败。

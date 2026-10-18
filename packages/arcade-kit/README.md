@@ -378,7 +378,8 @@ protected override onEmote(from: number, id: number, to?: number): void {
     seats: () => view.seats.map((s, i) => s && ({ rect: avatarRect(i), plate: plateRect(i), name: s.name, me: i === 0 })),  // plate：名字和筹码那块，气泡、弹幕、聊天按钮都避开
     center: () => [potRect(), wallRect(), discardRect()],   // 牌桌中间的信息区（剩余张数、底池、牌墩、弃牌区）：弹幕不横穿、聊天框和气泡不压
     chatDock: () => ({ left: 24, top: tableTop + 12, width: 340, height: 0 }),  // 电脑版聊天框放哪（只用 left/top/width）；不给就自己挑角，可能压到牌墙
-    danmakuArea: () => tableUpperHalf(),                      // 弹幕区；不给是屏幕 8%–58%，上沿压到上方各家名牌下面
+    chatButton: () => chatButtonRect(),                      // 手机版"聊天"按钮放哪；不给就挨着"互动"按钮，挤的牌桌（手机横屏）最好给
+    danmakuArea: () => tableUpperHalf(),                      // 弹幕区；不给是屏幕 8%–58%，上沿压到对家那排名牌下面
     lite: () => settings.lowmem,                              // 省内存模式：弹幕默认关
     prefsKey: 'mygame.chat',                                  // 弹幕开关等存在哪；默认 '<storageKey>.chat'
   });
