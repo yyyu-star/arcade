@@ -6,7 +6,7 @@ import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import type { DownMsg, EmotedMsg, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stakesOf } from '../../src/core/stakes.ts';
+import { FUN_STAKES, stakesOf } from '../../src/core/stakes.ts';
 import { propId } from 'arcade-kit/fun-logic';
 import { EMOTE_COUNT, SEATS, TAUNT_COUNT, type RoomState, type RoomView } from '../../src/room/rules.ts';
 import { togetherOp } from 'arcade-kit/room';
@@ -636,8 +636,44 @@ describe('快速匹配（0.20.0，kit 的 MatchQueue；DESIGN.md 6.11）', () =>
     await writesOk(code);
   });
 
-  it('不认得的档位、没有钱包（单独部署）、没绑 MATCH 都回 4004', async () => {
-    for (const [tier, e] of [['real-gold', undefined], ['fun', undefined], ['real-small', { WALLET: undefined }], ['real-small', { MATCH: undefined }]] as const) {
+  it('娱乐档（0.21.0）：两个人排到同一张娱乐桌，打几手、都离开，钱包一次都没调过、一分没动，也不报搭子战绩', async () => {
+    const [a, b] = [user(), user()];
+    const qa = await enqueue('fun', a);
+    const qb = await enqueue('fun', b);
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'waiting') && qb.msgs.some((m) => m.t === 'waiting'));
+    advance(15_000);
+    await runDurableObjectAlarm(env.MATCH!.get(env.MATCH!.idFromName('kit-match:fun')));
+    await waitFor(async () => qa.msgs.some((m) => m.t === 'matched') && qb.msgs.some((m) => m.t === 'matched'));
+    const code = qa.msgs.find((m) => m.t === 'matched')!.code!;
+    const conns = [await join(code, a), await join(code, b)];
+    expect((conns[0]!.msgs.find((m) => m.t === 'welcome') as WelcomeMsg<RoomView>).room.match).toBe(true);
+    // 买入照样走一遍"记下钱包的事 → 房间去办 → 写回"，只是房间直接当办成：照常上桌、照常开打
+    await conns[0]!.see((v) => v.phase !== 'idle' && v.size === MATCH_TABLE && v.stakes === FUN_STAKES && !v.needTwo);
+    const h = conns[0]!.view!.handNo;
+    await playUntil(conns, (v) => v.handNo >= h + 2);
+    conns[1]!.send({ t: 'leave' });
+    conns[0]!.send({ t: 'leave' });
+    // 两份都结回排上、办完（规则里的钱包的事清空）
+    await waitFor(async () => {
+      const g = (await inspect(code)).persist?.game;
+      return !!g && g.sealed.every(Boolean) && g.fx.length === 0;
+    });
+    for (const id of [a, b]) {
+      expect(await usage(id)).toEqual({ calls: 0, writes: 0 });
+      expect(await walletOf(id)).toMatchObject({ balance: NEW_BALANCE, stakes: [] });
+      expect(await togetherOf(id)).toEqual([]);
+    }
+    await writesOk(code);
+  }, 20_000);
+
+  it('没有钱包（单独部署）也开娱乐档：排上了，不 4004', async () => {
+    const q = await enqueue('fun', user(), { WALLET: undefined });
+    await waitFor(async () => q.msgs.some((m) => m.t === 'waiting'));
+    expect(q.closed).toBeNull();
+  });
+
+  it('不认得的档位、没有钱包（单独部署）排实盘、没绑 MATCH 都回 4004', async () => {
+    for (const [tier, e] of [['real-gold', undefined], ['real-small', { WALLET: undefined }], ['fun', { MATCH: undefined }]] as const) {
       const q = await enqueue(tier, user(), e as Partial<typeof env> | undefined);
       await waitFor(async () => q.closed !== null);
       expect(q.closed, `${tier} ${JSON.stringify(e)}`).toBe(CLOSE.noRoom);

@@ -2,7 +2,7 @@
   "name": "texas",
   "private": true,
   "license": "MIT",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "type": "module",
   "description": "德州扑克：单机对电脑和好友房，筹码跨场保留（无任何现金价值）",
   "scripts": {

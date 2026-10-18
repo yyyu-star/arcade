@@ -86,7 +86,7 @@ export default {
     if (match) {
       if (!env.MATCH) return refuseSocket(request);
       // 匹配桌都是实盘：没有钱包（单独部署）一档都不开，kit 对不在 tiers 里的档位回 4004
-      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: env.SITE_ORIGIN, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : [] });
+      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: env.SITE_ORIGIN, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : ['fun'] });
     }
     return env.ASSETS.fetch(request);
   },

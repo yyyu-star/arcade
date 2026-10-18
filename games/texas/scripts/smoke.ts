@@ -11,7 +11,7 @@
  * 手机刷新后不自动进房、点标题页的"回到房间"回到座位，第四个人接管电脑座位，都离开后房间结束、房主再点"开房间"开出新的（不 409）、
  * 都离开后结算页、结回钱包（--only room 只跑这段）。
  * 快速匹配（--only match，0.20.0）：两个人点小桌的"快速匹配"，等满 15 秒排到同一张 6 人桌（没有房间码、叫人），关了陌生人聊天的那个连接不带 chat=1，
- * 打两手、离开结回钱包；排队时点"取消"回选桌；只有一个人排时转成同一档的单机。
+ * 打两手、离开结回钱包；娱乐档两人排到娱乐桌打一手、钱包不动（0.21.0）；排队时点"取消"回选桌；只有一个人排时转成同一档的单机。
  * 桌面那一段开"快"动画（0.55 倍）省时间；默认速度的节奏用 scripts/capture.ts 连拍看。
  * 单独部署（--only standalone，不带 --only 时也跑）：原样的 wrangler.jsonc 另起一个 wrangler dev，不接假平台：站点根跳到游戏首页，
  * 没有钱包、云存档、实盘，"大厅"回游戏首页；单机娱乐打两手、离桌；两个游客（一个带昵称）开好友房打两手、离开（DESIGN.md 10.1）。
@@ -924,6 +924,27 @@ async function match(browser: Browser, base: string): Promise<void> {
     log(tag, 'left the match table, wallet', await settled(p, tag));
   }
   log('match wallet', before, '->', await balance(p1));
+
+  // 娱乐档（0.21.0）：两个人排到同一张娱乐桌，标题写"娱乐"，打一手离开，钱包一分不动
+  const funBefore = await Promise.all([p1, p2].map((p) => balance(p)));
+  for (const p of [p1, p2]) await enter(p, '娱乐');
+  await Promise.all([p1, p2].map((p) => p.locator('.lobby .pill.match').click()));
+  if (!((await p1.locator('.match-card .mc-tier').textContent()) ?? '').startsWith('娱乐')) throw new Error('fun match card should say 娱乐');
+  for (const p of [p1, p2]) await p.locator('.stage.in-room.at-table').waitFor({ timeout: 45_000 });
+  if (!((await p1.locator('.topbar .where').textContent()) ?? '').includes('娱乐')) throw new Error('fun match table title should say 娱乐');
+  await shot(p1, 'match-fun');
+  await Promise.all([playRoom(p1, 1, 'f1'), playRoom(p2, 1, 'f2')]);
+  for (const p of [p2, p1]) {
+    await p.locator('.leave').click();
+    await p.locator('.dialog').waitFor();
+    if ((await p.locator('.d-body').textContent())?.includes('钱包')) throw new Error('fun room leave should not mention the wallet');
+    await p.locator('.d-btn.primary').click();
+    await p.locator('.summary').waitFor({ timeout: 5_000 });
+    await p.locator('.d-btn.primary').click();
+    await p.locator('.lobby').waitFor();
+  }
+  const funAfter = await Promise.all([p1, p2].map((p) => settled(p, 'fun')));
+  if (funAfter.join() !== funBefore.join()) throw new Error(`fun match should not touch the wallet: ${funBefore} -> ${funAfter}`);
 
   // 只有一个人排：15 秒后说一句，转成同一档的单机
   await enter(p1, '实盘');

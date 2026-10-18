@@ -7,7 +7,7 @@ import { detectPlatform, MATCH_TEXT, MatchClient } from 'arcade-kit/client';
 import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
-import { DIFFICULTY_NAME, difficultyOf, stakesOf, type StakesId } from './core/stakes.ts';
+import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
@@ -196,7 +196,7 @@ const lobby = new Lobby(stage, {
   resume,
   relief,
   openRoom,
-  match: (stakes) => void quickMatch(stakes),
+  match: (stakes, fun, level) => void quickMatch(stakes, fun, level),
   joinRoom,
   backToRoom,
   preview: (id) => {
@@ -1208,13 +1208,14 @@ let matcher: MatchClient | null = null;
 /**
  * 这一档排队找真人：排队卡写"正在找人 · 已有 n/6 人 · 还剩 s 秒"，"不等了，和电脑打"和"取消"都是 cancel。
  * 排到了进匹配桌（藏起房间码、叫人、选座、开打）；已经有开着的房间就回那一桌；只剩自己、今天的局数用完、联机忙时说一句（MATCH_TEXT），
- * 过一秒多转成同一档的单机（照常从钱包带入）。被同一个账号别处的排队顶掉（replaced）不开单机
+ * 过一秒多转成同一档的单机（照常从钱包带入）。被同一个账号别处的排队顶掉（replaced）不开单机。
+ * 娱乐档（fun，0.21.0）：所有难度排同一队，排到的是不记筹码的娱乐房间；转单机时按选的难度开娱乐单机
  */
-async function quickMatch(stakes: StakesId): Promise<void> {
+async function quickMatch(stakes: StakesId, fun: boolean, level: number): Promise<void> {
   if (busy || matcher) return;
-  const st = stakesOf(stakes);
+  const st = stakesOf(fun ? FUN_STAKES : stakes);
   const body = el('div', 'match-card');
-  el('div', 'mc-tier', body, `实盘 · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${MATCH_TABLE} 人桌`);
+  el('div', 'mc-tier', body, fun ? `娱乐 · 筹码不算数 · ${MATCH_TABLE} 人桌` : `实盘 · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${MATCH_TABLE} 人桌`);
   const line = el('div', 'mc-wait', body);
   el('div', 'mc-tip', body, '找到几个算几个，空位电脑补；只剩你一个就先和电脑打');
   // 冒烟看排队卡说过什么（排到、转单机时卡片马上就关了）
@@ -1240,7 +1241,7 @@ async function quickMatch(stakes: StakesId): Promise<void> {
   };
   say('正在找人…');
   const mc = new MatchClient({
-    url: matchUrl(matchTierOf(stakes)),
+    url: matchUrl(matchTierOf(stakes, fun)),
     onWaiting: (n, size, leftMs) => {
       count = n;
       seats = size;
@@ -1252,7 +1253,7 @@ async function quickMatch(stakes: StakesId): Promise<void> {
       stop();
       entered = true;
       closeDialog();
-      enterRoom({ code, userId: cloud.userId(), host: false, at: Date.now(), match: true });
+      enterRoom({ code, userId: cloud.userId(), host: false, at: Date.now(), match: true, ...(fun ? { fun: true as const } : {}) });
     },
     onHasRoom: (code) => {
       stop();
@@ -1284,11 +1285,12 @@ async function quickMatch(stakes: StakesId): Promise<void> {
   if (entered) return;
   stop();
   // 人点了"不等了"，或者房间说转单机、卡片到点自己关了（pick 是 null）；点了"取消"什么都不开
-  if (pick === 'solo' || (pick === null && soloNow)) void matchSolo(stakes);
+  if (pick === 'solo' || (pick === null && soloNow)) void matchSolo(stakes, fun, level);
 }
 
 /** 匹配没排到人：同一档开一桌单机，6 人桌，钱包够就带满一份（不够少带一点，和选桌一样） */
-function matchSolo(stakes: StakesId): Promise<void> {
+function matchSolo(stakes: StakesId, fun: boolean, level: number): Promise<void> {
+  if (fun) return start(FUN_STAKES, MATCH_TABLE, stakesOf(FUN_STAKES).max, true, level);
   const st = stakesOf(stakes);
   return start(stakes, MATCH_TABLE, topBuyIn(st, wallet?.balance ?? 0), false);
 }
@@ -1367,7 +1369,7 @@ async function leaveRoom(goHome: boolean): Promise<void> {
   const ok = await dialog(
     stage,
     '离开房间',
-    seated && playing ? (site.standalone ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
+    seated && playing ? (noWallet() ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
     [
       { label: '留下', value: 'no' },
       { label: '离开', value: 'yes', primary: true },
@@ -1659,6 +1661,9 @@ function drawRoom(s: OnlineState): void {
   }
 }
 
+/** 这一桌的筹码不碰钱包：单独部署，或者娱乐房间（0.21.0） */
+const noWallet = (): boolean => site.standalone || online?.fun === true;
+
 /** 钱包够带多少（按大盲取整，最多 full）；不知道钱包时按 full */
 const affordable = (full: number, bb: number): number => (wallet ? Math.min(full, Math.floor(wallet.balance / bb) * bb) : full);
 
@@ -1734,9 +1739,11 @@ function drawRoomTop(s: OnlineState): void {
   // 旁观中（docs/social.md 1.4）：开打了、我没坐下也没绑着座位（离座回来的有"回到我的座位"）
   const watching = s.room?.status === 'playing' && (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
   const kind = online?.match ? '快速匹配' : `好友房 ${s.code}`;
-  setText(where, `${watching ? '旁观中 · ' : ''}${kind}${st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : ''}`);
+  // 娱乐房间（0.21.0）不写档位：筹码不算数，盲注照小桌
+  const table = online?.fun ? ' · 娱乐 · 筹码不算数' : st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : '';
+  setText(where, `${watching ? '旁观中 · ' : ''}${kind}${table}`);
   toggle(where, 'watching', watching);
-  setText(walletChip, wallet ? `钱包 ${chips(wallet.balance)}` : '');
+  setText(walletChip, wallet && !online?.fun ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', false);
   setText(leaveBtn, '离开');
 }
@@ -1767,10 +1774,10 @@ async function roomRebuy(): Promise<void> {
   const seated = mine?.owner === 'player';
   const full = seated ? st.max - mine.stack : st.max;
   // 钱包不够补满：补钱包够的（平台 0.10.2），最少一个大盲（没坐上的最少这一档的最少买入）
-  const add = Math.max(Math.min(full, seated ? st.bb : st.min), affordable(full, st.bb));
+  const add = noWallet() ? full : Math.max(Math.min(full, seated ? st.bb : st.min), affordable(full, st.bb));
   const later = mine?.status !== 'out' && v.phase !== 'idle' ? '，这一手打完上桌' : '';
   const to = seated ? `补到 ${chips(mine.stack + add)}` : '上桌';
-  const msg = site.standalone ? `带 ${chips(add)} ${to}${later}。` : `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`;
+  const msg = noWallet() ? `带 ${chips(add)} ${to}${later}。` : `从钱包带 ${chips(add)} ${to}${later}（钱包里有 ${wallet ? chips(wallet.balance) : '—'}）。`;
   const ok = await dialog(stage, '补码', msg, [
     { label: '算了', value: 'no' },
     { label: '补码', value: 'yes', primary: true },

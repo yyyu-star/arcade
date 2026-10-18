@@ -24,6 +24,8 @@ export interface SavedRoom {
   at: number;
   /** 快速匹配排到的桌（0.20.0）：刷新后回来也按陌生人桌对待（聊天看"和陌生人打字聊天"、藏起房间码和叫人） */
   match?: true;
+  /** 娱乐档排到的（0.21.0）：刷新后连上以前也不提钱包 */
+  fun?: true;
 }
 
 export interface OnlineState {
@@ -97,6 +99,11 @@ export class Online {
   /** 是快速匹配的桌：房间说了算（RoomInfo.match），还没连上时看本机记的 */
   get match(): boolean {
     return this.s.room ? this.s.room.match === true : this.saved.match === true;
+  }
+
+  /** 是娱乐房间（0.21.0，快速匹配的娱乐档）：筹码不算数、不碰钱包。房间发来开局选项以前看本机记的 */
+  get fun(): boolean {
+    return this.s.opts ? this.s.opts.fun === true : this.saved.fun === true;
   }
 
   get mySeat(): number {
@@ -190,7 +197,7 @@ export class Online {
   private onStatus(st: ClientStatus, code?: number, reason?: string): void {
     this.s = { ...this.s, status: st };
     this.redraw();
-    if (st === 'closed' && code !== undefined && code !== 1000) this.ui.ended(closeText(code, reason), code);
+    if (st === 'closed' && code !== undefined && code !== 1000) this.ui.ended(closeText(code, reason, this.fun), code);
   }
 }
 
@@ -228,10 +235,11 @@ const STANDALONE_TEXTS: RoomTexts = {
   roomClosed: '房间关了',
   quota: '今天联机的人太多了，这一手打完先散了，单机照常玩',
 };
-const texts = (): RoomTexts => (site.standalone ? STANDALONE_TEXTS : TEXTS);
+const texts = (noWallet = false): RoomTexts => (site.standalone || noWallet ? STANDALONE_TEXTS : TEXTS);
 
 export const createError = (e: string): string => createText(e, texts());
-export const closeText = (code: number, reason?: string): string => kitCloseText(code, reason, texts());
+/** fun：娱乐房间（0.21.0）也不提结回钱包 */
+export const closeText = (code: number, reason?: string, fun = false): string => kitCloseText(code, reason, texts(fun));
 
 /** 房间拒了一个操作：大多是"牌局已经变了"这类，按最新状态重来就行 */
 export function errorText(code: string): string {
