@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { placeBubble } from '../src/fun-logic.ts';
+import { CHAT_CSS } from '../src/table-chat.ts';
 import { bubbleZones, checkPrefsKey, checkStorageKey, hintSeatFor, styleButton, type FunSeat } from '../src/table-fun.ts';
 
 describe('checkStorageKey', () => {
@@ -127,5 +128,20 @@ describe('styleButton（"互动"按钮的大小参数）', () => {
     const c = fake();
     styleButton(c as unknown as HTMLElement, { fontSize: 4, icon: Number.NaN });
     expect([c.style['fontSize'], c.style['--atf-icon']]).toEqual(['12px', '22px']);
+  });
+});
+
+describe('电脑版聊天框的快捷短语（0.20.2）', () => {
+  it('最多两行、多出的框内滚动，按钮压到 32 像素：框不比 0.20.0 高，大屏不会因为换行被判放不下而默认收起', () => {
+    const rule = /\.atc-dock \.atc-quick\{([^}]*)\}/.exec(CHAT_CSS)?.[1] ?? '';
+    expect(rule).toContain('flex-wrap:wrap');
+    expect(rule).toContain('overflow-y:auto');
+    const max = Number(/max-height:(\d+)px/.exec(rule)?.[1]);
+    const chip = Number(/\.atc-dock \.atc-quick \.atf-chip\{[^}]*min-height:(\d+)px/.exec(CHAT_CSS)?.[1]);
+    // 两行按钮加一个 6 像素的间距放得下，三行放不下
+    expect(max).toBeGreaterThanOrEqual(2 * chip + 6);
+    expect(max).toBeLessThan(3 * chip + 2 * 6);
+    // 手机输入条那排不受影响：还是一行横着滑
+    expect(/\.atc-quick\{[^}]*overflow-x:auto/.test(CHAT_CSS)).toBe(true);
   });
 });

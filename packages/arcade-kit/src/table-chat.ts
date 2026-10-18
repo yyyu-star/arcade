@@ -77,7 +77,8 @@ export const CHAT_CSS = `
 .atc-quick{display:flex;gap:6px;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;flex-shrink:0;padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}
 .atc-quick::-webkit-scrollbar{display:none}
 .atc-quick .atf-chip{flex:none;white-space:nowrap;font-size:.8em}
-.atc-dock .atc-quick{flex-wrap:wrap;overflow:visible;padding-right:0;-webkit-mask-image:none;mask-image:none}
+.atc-dock .atc-quick{flex-wrap:wrap;overflow-x:hidden;overflow-y:auto;max-height:70px;padding-right:0;-webkit-mask-image:none;mask-image:none}
+.atc-dock .atc-quick .atf-chip{min-height:32px;padding:0 10px}
 .atc-row{display:flex;gap:6px;align-items:center}
 .atc-row .atf-input{font-size:max(16px,.85em)}
 .atc-row .atf-chip{flex:none}
@@ -279,8 +280,8 @@ export class ChatUi {
     d.style.width = `${fixed?.width ?? w}px`;
     const log = d.querySelector<HTMLElement>('.atc-log')!;
     const line = (this.font - 2) * 0.9 * 1.45 + 2;
-    // 按内容高度：最少两行（空的时候那句提示），最多 5 行；展开后最多半屏
-    log.style.minHeight = `${Math.round(line * 2)}px`;
+    // 按内容高度：最少一行（空的时候那句提示一行放得下；0.20.2 起快捷短语占两行，这里让出一行，框的总高度和 0.20.0 一样），最多 5 行；展开后最多半屏
+    log.style.minHeight = `${Math.round(line)}px`;
     log.style.maxHeight = `${Math.round(this.prefs.long ? Math.min(view.height * 0.5, line * ChatUi.KEEP) : line * 5)}px`;
     const input = d.querySelector<HTMLInputElement>('.atc-input');
     if (input) input.disabled = !this.h.canSend();
