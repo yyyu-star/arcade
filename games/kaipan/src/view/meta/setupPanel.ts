@@ -71,6 +71,12 @@ function phoneGeo(v: { w: number; h: number }): Geo {
   };
 }
 
+/** 筹码数（「12,000」这样带逗号的）一万以上写成「1.2万」：手机档位卡窄，写短不截 */
+function chipsShort(text: string): string {
+  const n = Number(text.replace(/,/g, ''));
+  return Number.isFinite(n) && n >= 10_000 ? `${Math.round(n / 1000) / 10}万` : text;
+}
+
 /** 多难：一排 4 颗星，亮 n 颗（高手之后的几级都是满星）。originX 1 时右边对齐 x。 */
 function addStars(scene: Phaser.Scene, x: number, y: number, n: number, size: number, originX: 0 | 1 = 0): Phaser.GameObjects.Container {
   const step = size + 2;
@@ -160,8 +166,6 @@ export class SetupPanel extends Dialog {
   private gear = 1;
   private readonly cardLines = new Map<LiveTier, { lev: Phaser.GameObjects.Text; win: Phaser.GameObjects.Text }>();
   private startBtn: Button | null = null;
-  /** 手机档位卡上两行小字的可用宽度（放不下就截） */
-  private tierRoom = 0;
 
   constructor(scene: Phaser.Scene, opts: SetupOpts) {
     const g = phoneLayout(scene) ? phoneGeo(phonePanel(scene)) : DESKTOP;
@@ -214,7 +218,7 @@ export class SetupPanel extends Dialog {
     this.inner.add([this.diffText, this.diffDesc, this.stack, this.diffStars]);
     // 0.11.0 实盘：档位卡下面多了一排杠杆，杠杆的风险和钱包那两行往下挪
     if (this.live) {
-      this.diffText.setY(g === DESKTOP ? 566 : 294).setFontSize(g === DESKTOP ? 16 : 14);
+      this.diffText.setY(g === DESKTOP ? 566 : 314).setFontSize(g === DESKTOP ? 16 : 14);
       if (g === DESKTOP) this.diffDesc.setY(588);
       else {
         this.diffText.setOrigin(0.5, 0);
@@ -453,10 +457,9 @@ export class SetupPanel extends Dialog {
     const desk = this.g === DESKTOP;
     const gap = desk ? 16 : 8;
     const cw = desk ? 260 : Math.floor((this.g.w - this.g.side * 2 - gap * 3) / 4);
-    const ch = desk ? 106 : 72;
-    this.tierRoom = cw - 20;
-    // 上面是人设的一句介绍（电脑到 y≈400），卡片从它下面开始；下面是杠杆那一排
-    const y = desk ? 406 : 188;
+    const ch = desk ? 106 : 78;
+    // 上面是人设的一句介绍（电脑到 y≈400；手机上只有人设那一行，到 y≈194），卡片从它下面开始；下面是杠杆那一排
+    const y = desk ? 406 : 198;
     const x0 = (this.g.w - (cw * LIVE_TIERS.length + gap * (LIVE_TIERS.length - 1))) / 2;
     LIVE_TIERS.forEach((t, i) => {
       const x = x0 + i * (cw + gap);
@@ -465,14 +468,15 @@ export class SetupPanel extends Dialog {
       const d = difficultiesView()[t.difficulty - 1];
       const card = tierCard(t);
       c.add(addSlice(s, 0, 0, cw, ch, 'card_holding'));
-      c.add(addText(s, 14, desk ? 10 : 4, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
-      c.add(addStars(s, cw - 14, desk ? 22 : 13, card.stars, desk ? 18 : 14, 1));
-      const sy = desk ? 42 : 29;
+      c.add(addText(s, 14, desk ? 10 : 8, t.name, { size: desk ? TYPE.title : TYPE.label + 2, bold: true, color: COLOR.ink }));
+      c.add(addStars(s, cw - 14, desk ? 22 : 17, card.stars, desk ? 18 : 14, 1));
+      const sy = desk ? 42 : 35;
       c.add(addGlyph(s, 26, sy, 'moneybag', desk ? 28 : 22));
       c.add(addText(s, 44, sy, chips(t.stake), { size: desk ? TYPE.big : TYPE.title + 2, bold: true, num: true, color: COLOR.accentDark, originY: 0.5 }));
       const small = { size: desk ? TYPE.label : TYPE.label - 1, color: COLOR.muted };
-      const lev = addText(s, 14, desk ? 60 : 40, `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${card.lev}`, small);
-      const win = addText(s, 14, desk ? 78 : 55, `最多赢 ${card.win} · 最多输 ${card.lose}`, small);
+      // 手机上卡只有三行：涨跌倍数挪到筹码数右边，每档都一样的「约几分钟」只在悬停里
+      const lev = desk ? addText(s, 14, 60, '', small) : addText(s, cw - 10, sy, '', { ...small, originX: 1, originY: 0.5 });
+      const win = addText(s, 14, desk ? 78 : 52, '', small);
       c.add([lev, win]);
       this.cardLines.set(t.id, { lev, win });
       if (!afford) c.setAlpha(0.5);
@@ -510,7 +514,7 @@ export class SetupPanel extends Dialog {
     const bw = desk ? 150 : 118;
     const bh = desk ? 34 : 28;
     const gap = desk ? 12 : 8;
-    const y = desk ? 520 : 262;
+    const y = desk ? 520 : 282;
     const x0 = (this.g.w - (bw * 3 + gap * 2)) / 2;
     const btns: Button[] = [];
     [1, 2, 3].forEach((x, i) => {
@@ -623,10 +627,9 @@ export class SetupPanel extends Dialog {
       const k = tierCard(t, this.gear);
       const lines = this.cardLines.get(t.id);
       const ph = this.g !== DESKTOP;
-      lines?.lev.setText(`约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${k.lev}`);
-      // 手机上卡窄（SE 约 160）：赢输两个筹码数写短句，数字不截（全句在悬停里）
-      lines?.win.setText(ph ? `赢≤${k.win} 输≤${k.lose}` : `最多赢 ${k.win} · 最多输 ${k.lose}`);
-      if (ph && lines) fitWidth(lines.lev, this.tierRoom);
+      lines?.lev.setText(ph ? `×${k.lev}` : `约 ${LIVE_MINUTES} 分钟 · 涨跌 ×${k.lev}`);
+      // 手机上卡窄（SE 约 160）：赢输写短句，一万以上写成「万」，数字不截（全句在悬停里）
+      lines?.win.setText(ph ? `赢≤${chipsShort(k.win)} 输≤${chipsShort(k.lose)}` : `最多赢 ${k.win} · 最多输 ${k.lose}`);
     }
     // 第一行：开不了的原因，或者这一档杠杆的风险；第二行：钱包余额 + 规则
     const hard = block && block !== '钱包不够这一档';

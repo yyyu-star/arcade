@@ -1616,7 +1616,8 @@ async function liveShots(browser: Browser): Promise<void> {
     await dialogOpen(ctx, 'setup:tier:small');
     expect(w.calls.some((c) => c.action === 'refund' && c.body.ref === ref) && (await rec(ctx)) === null, '再打开面板前先收回没开成的那一份');
     // 0.6.8 桌上有别处的一份不再拦开新局：提示一句，给「回去接着打」「原样退回」
-    expect(await hasText(ctx, '你还有一局实盘没结（2,000 筹码）'), '另一台设备上有一局时应提示还有一局没结');
+    // 手机上底下一排窄，写短句（0.19.1）
+    expect(await hasText(ctx, PHONE ? '没结的实盘 2,000' : '你还有一局实盘没结（2,000 筹码）'), '另一台设备上有一局时应提示还有一局没结');
     const c0 = await controls(ctx);
     expect('setup:aside:resume' in c0 && 'setup:aside:refund' in c0, `给「回去接着打」「原样退回」（${Object.keys(c0).join(',')}）`);
     await shot(ctx, 'l10-setup-elsewhere');
