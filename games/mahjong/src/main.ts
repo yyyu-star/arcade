@@ -100,6 +100,8 @@ const speedBtn = button('icon', top, '', () => {
 // 声音：点"声"打开一个小面板（音量滑块 + 静音），再点或点别处收起
 const soundBtn = button('icon', top, '', () => {
   volBox.hidden = !volBox.hidden;
+  // 弹幕开关的字跟着这一桌的互动组件（开局才有）
+  paintTop();
 });
 const volBox = el('div', 'vol', stage);
 volBox.hidden = true;
@@ -145,6 +147,11 @@ const chatBtn = button('act soft', volBox, '', () => {
   setChatOff(!chatOff());
   paintTop();
 });
+// 弹幕（kit 0.19.0）：和 kit 聊天框、面板里的"弹幕"同一份开关（存在 mahjong.chat）；对局里才有
+const danBtn = button('act soft', volBox, '', () => {
+  fun?.setDanmaku(!fun.danmaku());
+  paintTop();
+});
 document.addEventListener('pointerdown', (e) => {
   if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
@@ -164,6 +171,8 @@ function paintTop(): void {
   ambBtn.textContent = prefs.ambience ? '茶馆声：开' : '茶馆声：关';
   chatBtn.textContent = chatOff() ? '聊天：不看' : '聊天：开';
   chatBtn.hidden = !online && !solo;
+  danBtn.textContent = fun?.danmaku() ? '弹幕：开' : '弹幕：关';
+  danBtn.hidden = !fun;
   leaveBtn.hidden = !solo && !online;
   speedBtn.hidden = !solo;
   shareBtn.hidden = !online || online.state.room?.status === 'over';
@@ -949,10 +958,28 @@ function newFun(
         const m = t.seatMeta(seat);
         if (!m || m.empty) return null;
         const tp = temper(seat);
-        return { rect: t.avatarRect(seat), name: m.name, me: seat === me(), bot: m.bot, ...(tp ? { temper: tp } : {}) };
+        return { rect: t.avatarRect(seat), plate: t.plateRect(seat), name: m.name, me: seat === me(), bot: m.bot, ...(tp ? { temper: tp } : {}) };
       }),
-    avoid: () => t.avoidRects(),
+    // 顶栏也不能盖：上面两家的气泡往上冒会压住房间号和"离开"
+    avoid: () => [...t.avoidRects(), top.getBoundingClientRect()],
     button: () => (me() === null ? null : t.funSlot()),
+    center: () => t.centerRects(),
+    chatDock: () => t.chatDock(),
+    // 手机上的"聊天"按钮放在右下那家名牌正上方、右边对齐：挨着"互动"放右边会压到这家名牌，摞在"互动"上面又压住操作条（碰杠胡过、换牌）
+    chatButton: () => {
+      const m = me();
+      if (m === null) return null;
+      const r = t.funSlot();
+      const plate = t.plateRect((m + 1) % 4);
+      return { left: plate.right - r.width, top: plate.top - r.height - 8, width: r.width, height: r.height };
+    },
+    // 弹幕在对家那一排下面、中控盘上面飘
+    danmakuArea: () => {
+      const from = t.topRowBottom() + 6;
+      const r = t.root.getBoundingClientRect();
+      const bottom = t.centerRects()[0]?.top ?? r.top + r.height * 0.55;
+      return bottom - from > 40 ? { left: r.left, top: from, width: r.width, height: bottom - from } : null;
+    },
     send,
     canSend: () => me() !== null,
     scope: () => scope,

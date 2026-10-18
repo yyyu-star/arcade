@@ -5,7 +5,7 @@
  * 底线不变：人人一样、免费，不挂筹码；只是画面和声音，不停计时；电脑出牌读不到这里任何东西。
  */
 import { playFunSound } from 'arcade-kit/fun';
-import { TableFun, type ChatResultLike, type FunSeat } from 'arcade-kit/table-fun';
+import { TableFun, type ChatResultLike, type FunSeat, type RectLike } from 'arcade-kit/table-fun';
 import { audioOut } from './sound.ts';
 import { MOOD_LINES, PHRASES } from './text.ts';
 
@@ -29,8 +29,13 @@ export interface FunWiring {
   onHit?(seat: number): void;
   /** 首次"点头像扔道具"的提示冒在哪个座位；null = 现在别冒（kit 0.17.0，过 2 秒再问） */
   hintSeat?(): number | null;
-  /** 好友房聊天（kit 0.18.0）：只有好友房给；单机没有聊天 */
+  /** 聊天（kit 0.18.0 好友房、0.18.1 单机的 localChat） */
   chat?(text: string): ChatResultLike;
+  /** 聊天的摆放（kit 0.19.0）：中间信息区、电脑版聊天框、手机版"聊天"按钮、弹幕区 */
+  center(): RectLike[];
+  chatDock(): RectLike | null;
+  chatButton(): RectLike | null;
+  danmakuArea(): RectLike | null;
 }
 
 export function createFun(w: FunWiring): TableFun {
@@ -55,6 +60,12 @@ export function createFun(w: FunWiring): TableFun {
     ...(w.hintSeat ? { hintSeat: w.hintSeat } : {}),
     // 设置里"聊天：不看"只管别人说的（自己说的照常显示），和"互动"分开
     ...(w.chat ? { chat: w.chat, chatEnabled: () => !chatOff() } : {}),
+    center: w.center,
+    chatDock: w.chatDock,
+    chatButton: w.chatButton,
+    danmakuArea: w.danmakuArea,
+    // 省内存设备（art.ts 写的 data-lite）弹幕默认关；弹幕开关存在 kit 默认的 mahjong.chat
+    lite: () => document.documentElement.dataset.lite === '1',
     // 冒烟看流水（开发服务器上才挂到 window）
     ...(import.meta.env.DEV ? { log: (line: string) => ((window as { __funLog?: string[] }).__funLog ??= []).push(line) } : {}),
   });
