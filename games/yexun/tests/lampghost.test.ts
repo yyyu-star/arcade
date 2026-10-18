@@ -34,10 +34,10 @@ function census(mode: 'vigil' | 'raid', danger: Danger, minute: number, ticks: n
 }
 
 describe('提灯鬼', () => {
-  it('登记：编号接着往后，图鉴有名字，火 ×0.6', () => {
+  it('登记：编号接着往后，图鉴有名字，火 ×0.5', () => {
     expect(LAMP).toBe(ENEMIES.length - 1);
     expect(MONSTER_INFO.lampghost.name).toBe('提灯鬼');
-    expect(ENEMY_BY_KIND.lampghost.vs?.火).toBe(0.6);
+    expect(ENEMY_BY_KIND.lampghost.vs?.火).toBe(0.5);
     expect(ENEMY_BY_KIND.lampghost.elite).toBeUndefined();
   });
 
@@ -63,13 +63,12 @@ describe('提灯鬼', () => {
     expect(census('raid', 5, 8, 900).lamp).toBe(0);
   });
 
-  it('伤害：火法器 ×0.6，符 ×1.2，镇 ×1.15，剑不变', () => {
+  it('伤害：火法器 ×0.5，木 ×1.2，镇 ×1.15，剑不变（1.1 第四轮：克火、不再欺负木流派）', () => {
     const vs = ENEMY_BY_KIND.lampghost.vs;
     const of = (id: keyof typeof WEAPONS): number => multiplier(vs, WEAPONS[id].type, WEAPONS[id].el);
     const fire = Object.values(WEAPONS).find((d) => d.el === '火' && d.type !== '符' && d.type !== '镇')!;
-    expect(multiplier(vs, fire.type, '火')).toBeCloseTo(0.6);
-    const talisman = Object.values(WEAPONS).find((d) => d.type === '符' && d.el !== '火')!;
-    expect(of(talisman.id)).toBeCloseTo(1.2);
+    expect(multiplier(vs, fire.type, '火')).toBeCloseTo(0.5);
+    expect(of('petals')).toBeCloseTo(1.2);
     expect(multiplier(vs, '镇', '金')).toBeCloseTo(1.15);
     expect(multiplier(vs, '剑', '金')).toBe(1);
   });

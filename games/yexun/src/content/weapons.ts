@@ -447,11 +447,11 @@ export const MERGES: readonly MergeDef[] = [
 /** 双修的数值（拍、单位）。强度参照现有合成：只给一点额外输出，不翻倍 */
 export const DUAL_FX = {
   /** 符剑合璧：贴符后几拍炸、炸多大、伤害是符咒伤害的几成 */
-  seal: { delay: 36, area: 84, mul: 0.7 },
+  seal: { delay: 36, area: 84, mul: 0.5 },
   /** 焚天金钟：外圈半径（再乘范围加成）、内沿占比、几拍烧一下、伤害是葫芦伤害的几成；盾碎时留几摊火、火摊伤害占比 */
-  ring: { radius: 120, inner: 0.55, every: 15, mul: 0.3, pools: 5, poolMul: 0.5, poolLife: 90, poolR: 40 },
+  ring: { radius: 120, inner: 0.55, every: 15, mul: 0.22, pools: 5, poolMul: 0.35, poolLife: 90, poolR: 40 },
   /** 铃落桃花：花瓣每拍朝最近的怪挪多远、多远内才追、落点多大 */
-  petal: { speed: 6, reach: 240, bonusR: 8 },
+  petal: { speed: 6, reach: 180, bonusR: 4 },
 } as const;
 
 export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];
