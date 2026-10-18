@@ -387,6 +387,18 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部屏蔽' }).click();
   await page.locator('.atf-btn').click();
   await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部恢复' }).click();
+  // 单机聊天（0.19.3，kit 的 localChat）：顶栏有聊天开关，聊天页说一句，冒在我自己头上；链接不让发
+  if (!(await page.locator('.chat-toggle').isVisible())) throw new Error('solo: chat toggle should show');
+  await page.locator('.atf-btn').click();
+  await page.locator('.atf-box [data-key="fun:tab:chat"]').click();
+  await page.locator('[data-key="fun:chatInput"]').fill('这把稳了');
+  await page.locator('[data-key="fun:chatSend"]').click();
+  await page.locator('.atf-say', { hasText: '这把稳了' }).waitFor({ timeout: 5_000 });
+  await shot(page, 'solo-chat');
+  await page.locator('[data-key="fun:chatInput"]').fill('看 example.com');
+  await page.locator('[data-key="fun:chatSend"]').click();
+  await page.locator('.atf-note', { hasText: '链接' }).waitFor({ timeout: 5_000 });
+  await page.locator('.atf-away').dispatchEvent('pointerdown');
   await page.locator('.seat[data-seat="1"] .plate').click();
   await page.locator('.read-card .rc-tag').waitFor({ timeout: 5_000 });
   log('solo fun: prop, own sticker, phrase, block all, read card');

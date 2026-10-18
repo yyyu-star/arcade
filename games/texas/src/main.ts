@@ -4,6 +4,7 @@
  * 规则在 src/core，流程在 solo.ts，这里只把它们和画面连起来。
  */
 import { detectPlatform } from 'arcade-kit/client';
+import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
 import { DIFFICULTY_NAME, difficultyOf, stakesOf, type StakesId } from './core/stakes.ts';
@@ -93,7 +94,7 @@ speedBtn.type = 'button';
 // 互动总开关（docs/table-fun.md 第 5 节"互动：开 / 不看"）：0.13.0 起面板是 kit 的，开关挪到顶栏，和声音、快慢放在一起
 const funOffBtn = el('button', 'icon fun-toggle', top);
 funOffBtn.type = 'button';
-// 聊天开关（0.19.0，kit 0.18 的"聊天：开 / 不看"，和互动分开）：只有好友房有聊天，单机不显示
+// 聊天开关（0.19.0，kit 0.18 的"聊天：开 / 不看"，和互动分开）：进桌时显示（0.19.3 起单机也有聊天）
 const chatBtn = el('button', 'icon chat-toggle hidden', top);
 chatBtn.type = 'button';
 const soundBtn = el('button', 'icon sound', top);
@@ -692,13 +693,16 @@ function openFun(scope: string): void {
     canSend: () => funReady(),
     enabled: () => !funOff,
     // 好友房才有聊天（kit 0.18）：房间过滤、限速后只转发，不进状态、不存
-    ...(online ? { chat: (text: string) => online!.chat(text), chatEnabled: () => !chatOff } : {}),
+    // 聊天（kit 0.18）：好友房经房间转发；单机（0.19.3，所有者要求）用 kit 的 localChat 在本机过一遍和房间一样的过滤、限速，
+    // 只冒在我自己头上。电脑不读聊天（公平：说什么都不影响电脑怎么打、怎么起哄）
+    chat: online ? (text: string) => online!.chat(text) : localChat((text, masked) => tf?.chat(ME, text, masked)),
+    chatEnabled: () => !chatOff,
     scope: () => scope,
     localBots: !online,
     sound: (prop, phase) => funSound(prop, phase),
     onHit: (seat) => tableView.hit(seat),
   });
-  toggle(chatBtn, 'hidden', !online);
+  toggle(chatBtn, 'hidden', false);
   drawChatBtn();
   syncFun();
 }

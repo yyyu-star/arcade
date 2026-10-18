@@ -116,7 +116,8 @@ export function dealerSpots(g: Geo, size: number): Pt[] {
   if (g.tall) return [];
   const f = felt(g);
   const seats = Array.from({ length: size }, (_, k) => seatPos(k, 0, size, g)).filter((p) => p.y < 200);
-  return [0.5, 0.68, 0.32]
+  // 0.66 / 0.34 是离顶上座位刚好够远的最后一档：顶栏右边按钮多了（0.19.3 单机也有聊天开关）68% 处会碰到，往里挪一点
+  return [0.5, 0.68, 0.32, 0.66, 0.34]
     .map((fx) => g.w * fx)
     .filter((x) => seats.every((p) => Math.abs(p.x - x) >= DEALER_ROOM))
     .map((x) => {

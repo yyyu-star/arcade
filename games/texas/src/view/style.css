@@ -163,6 +163,8 @@ body::before {
   pointer-events: none;
 }
 .topbar > * { pointer-events: auto; }
+/* 右边一排圆按钮挨紧一点（0.19.3 单机也多了聊天开关）：不然 16:9 电脑上 6 人桌顶边站不下荷官 */
+.topbar .icon + .icon { margin-left: calc(var(--s-1) - var(--s-3)); }
 /* 次按钮（暗玻璃）：顶栏、左下角、好友房里的这些都长一个样 */
 .home, .icon, .pill {
   display: inline-flex;
