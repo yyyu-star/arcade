@@ -38,7 +38,7 @@
     "wrangler": "^4.149.0"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.20.1",
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.20.2",
     "phaser": "^4.2.1"
   }
 }
