@@ -87,7 +87,7 @@ export interface MenuState {
   /** 咒印开了没有（撑到过一次天亮） */
   cursesOpen: boolean;
   /** 实盘能不能选（有平台钱包）、上次是不是在实盘、选的档位 */
-  live: { available: boolean; on: boolean; tier: LiveTier };
+  live: { available: boolean; on: boolean; tier: LiveTier; offWhy?: string };
   /** 每张图开了没有（MAP_UNLOCK） */
   maps: Record<MapId, boolean>;
   /** 夜探：还没进过夜探（第一次固定教学镇，只有一个开始按钮） */
@@ -248,13 +248,18 @@ export class Home {
       this.ui.innerHTML = top + title + '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button><div class="yx-hint">只管走位，法器自己出手</div><button type="button" class="yx-mother" data-a="select">其他玩法：夜探、实盘</button>';
     } else {
       const d = Math.min(s.danger, s.dangerOpen) as Danger;
-      const plan = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
+      const q = quickLive(s);
+      const fun = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
+      // 上次是实盘：按钮上写清带入多少，一点就带入；开不了实盘就按娱乐开，并说为什么
+      const plan = q ? `${q.raid ? `夜探${RAID_TEMPLATES[q.raid].name}` : '守夜雪原'} · ${LIVE_TIERS[q.tier].name}档 ${LIVE_TIERS[q.tier].stake.toLocaleString('zh-CN')}` : fun;
+      const why = q || !s.live.on ? '' : `${quickOffWhy(s)}，这次按娱乐开`;
       const b = bestText(s.best[d]);
       this.ui.innerHTML =
         top +
         title +
         '<div class="yx-quick">' +
-        `<button type="button" class="yx-big yx-go" data-a="quick"><span>开始</span><small>${plan}</small></button>` +
+        `<button type="button" class="yx-big yx-go" data-a="quick"><span>${q ? '开始实盘' : '开始'}</span><small>${plan}</small></button>` +
+        (why ? `<div class="yx-mwhy">${esc(why)}</div>` : '') +
         '<button type="button" class="yx-big ghost yx-pick" data-a="select">选模式 / 地图</button>' +
         '</div>' +
         '<div class="yx-stats">' +
@@ -448,10 +453,10 @@ export class Select {
         const t = this.live.tier;
         startOff = !raidTierOk(t);
         note = raidTierOk(t) ? raidLiveNote(t as RaidLiveTier, this.tpl) : '豪华档只有守夜；夜探先开小档';
-        pick = `<div class="yx-pickgrid yx-towns">${townCards}</div>${tiers}`;
+        pick = `<div class="yx-pickgrid yx-towns">${townCards}</div>`;
       } else {
         note = `危险 ${LIVE_TIERS[this.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>${liveNote(this.live.tier)}`;
-        pick = tiers;
+        pick = '';
       }
     } else {
       pick = raid ? `<div class="yx-pickgrid yx-towns">${townCards}</div>` : `<div class="yx-pickgrid yx-maps" aria-label="地图">${mapCards}</div>`;
@@ -472,7 +477,8 @@ export class Select {
       const best = raid ? '' : `<div class="yx-best">${s.best[this.diff] ? `最好：${bt.big} · ${bt.small}` : `${DANGERS[this.diff].blurb} · 还没玩过`}</div>`;
       opts = `${dg}<div class="yx-chips">${prep}${endless}</div>${best}`;
     } else {
-      opts = `<div class="yx-livenote">${note}</div>`;
+      // 档位、说明、开始排成一列：选多少 → 怎么算 → 开始
+      opts = `${tiers}<div class="yx-livenote">${note}</div>`;
     }
     const vault = raid && s.vault && !live ? `<button type="button" class="yx-chip yx-vaultbtn" data-a="vault"><b>藏宝阁</b><small>${s.vault.got} / ${s.vault.total}</small></button>` : '';
     const aside = `<div class="yx-aside"><div class="yx-opts">${opts}</div><div class="yx-startbar"><button type="button" class="yx-big" data-a="go"${startOff ? ' disabled' : ''}>${startLabel}</button>${vault}</div></div>`;
@@ -481,6 +487,20 @@ export class Select {
     for (const cv of this.root.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]')) drawMapThumb(cv, MAPS[cv.dataset.thumb as MapId]);
     this.root.scrollTop = keep;
   }
+}
+
+/** 主页一键开的实盘：上次选了实盘、现在开得了，夜探还要过了教学镇、档位开着；否则 null（按娱乐开） */
+function quickLive(s: MenuState): { tier: LiveTier; raid?: RaidLiveTemplate } | null {
+  if (!s.live.on || !s.live.available) return null;
+  if (s.lastMode !== 'raid') return { tier: s.live.tier };
+  return !s.raidFirst && raidTierOk(s.live.tier) ? { tier: s.live.tier, raid: s.raidTpl } : null;
+}
+
+/** 上次选了实盘、这次却按娱乐开的原因（主页按钮下面那行字） */
+function quickOffWhy(s: MenuState): string {
+  if (!s.live.available) return s.live.offWhy ?? '现在开不了实盘';
+  if (s.raidFirst) return '第一次夜探先走教学镇';
+  return `夜探没有${LIVE_TIERS[s.live.tier].name}档`;
 }
 
 /** 夜探实盘能开的档（豪华档只有守夜；中、大档看 RAID_LIVE.open） */
@@ -499,10 +519,10 @@ export class Menu {
   onRaid: (template: RaidTemplateId, danger: Danger) => void = () => undefined;
   /** 打开藏宝阁 */
   onVault: () => void = () => undefined;
-  /** 实盘开局（固定小道士、雪原，档位定危险档） */
-  onLive: (tier: LiveTier) => void = () => undefined;
+  /** 实盘开局（固定小道士、雪原，档位定危险档）；fallback：主页一键开时带入失败，玩家选"按娱乐开"走这里 */
+  onLive: (tier: LiveTier, fallback?: () => void) => void = () => undefined;
   /** 夜探实盘开局（档位、镇子；固定小道士，不带加成） */
-  onRaidLive: (tier: LiveTier, template: RaidLiveTemplate) => void = () => undefined;
+  onRaidLive: (tier: LiveTier, template: RaidLiveTemplate, fallback?: () => void) => void = () => undefined;
   /** 切娱乐 / 实盘、换档位（main 记进存档） */
   onLiveMode: (on: boolean, tier: LiveTier) => void = () => undefined;
   /** 打开开局准备（角色、咒印、加成） */
@@ -548,8 +568,16 @@ export class Menu {
     this.show(this.state!, 'select');
   }
 
-  /** 主页的"开始"：一步直达，用上次的模式、地图、危险档；实盘要花筹码，不在这里一键进，去选模式屏里点 */
+  /** 主页的"开始"：一步直达，按上次的完整选择（娱乐 / 实盘、模式、镇子或地图、档位）；实盘开不了或带入失败就按娱乐开 */
   quick(): void {
+    const q = quickLive(this.state!);
+    const fun = (): void => this.quickFun();
+    if (!q) return fun();
+    if (q.raid) this.onRaidLive(q.tier, q.raid, fun);
+    else this.onLive(q.tier, fun);
+  }
+
+  private quickFun(): void {
     const s = this.state!;
     const d = Math.min(s.danger, s.dangerOpen) as Danger;
     if (s.lastMode === 'raid') return this.onRaid(s.raidFirst ? 'teach' : s.raidTpl, d);
