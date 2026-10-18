@@ -150,6 +150,13 @@ dev 和 preview 监听 0.0.0.0，方便同一局域网里的手机、平板直�
 - 每个克隆先执行 `git config core.hooksPath tools/git-hooks`：本地拦住直接推 main 和 force push。被拦了就改走 PR，不用 `--no-verify` 绕过。
 - 分支名 `<模块>/<简短说明>`；一个 PR 只改一个模块，标题以模块名开头（合并用 Squash，标题就是 main 上的提交信息）。
 - 提交：只暂存明确的路径，禁止 `git add -A` 或 `git add .`；提交信息以模块名开头；不 force push，不改写已推送的历史。
+- 开 PR 前自查这五条（2026-10-18 起；一晚 79 个 PR 里打回和上线后热修的，几乎都栽在这几处）：
+  1. 每个要部署的 PR 都升版本：`package.json` 和 lockfile 一起改，`CHANGELOG.md` 写带日期的版本段，不攒"未发布"段（合并就会上线，版本要能和线上对上）；
+  2. 金额、筹码数字不截断：放不下就换短说法（"最多输赢 X"、"4万"），不用"…"截；
+  3. 新 CSS 限定在所属界面的根节点下（菜单、对局、面板各自加前缀），不写裸类名，免得串到别的界面；
+  4. 截图验收至少一张不开机器人代打的真实画面；改到实盘、联机的，真走一遍实盘、联机；
+  5. 分支从最新 `origin/main` 拉，提交前看 `git diff origin/main...HEAD` 只有本模块。
+- 按模块攒批：一个模块同时最多一个在审的 PR，零碎改动攒进下一版；线上坏了、安全问题、金额显示错的热修例外，随到随发。不同模块可以同时部署（`tools/verify-latest.sh`）。
 - 合并前：模块里 `npm test` 和构建通过、PR 上 CI 全绿、审阅意见全部处理完。合并后 CI 构建打包，维护者在 production 环境上批准后才部署，再到线上实际打开验证（版本号、主流程、控制台零报错）。
 - 审阅：作者按 CONTRIBUTING.md 的审阅清单（完整、正确、独立、不耦合、高效、简洁）自查，审阅人读完整个 diff；守门代理审过的 PR 由维护者（主线）复核后在 CI 全绿时合并。没有自动合并。
   改 `.github/`、`tools/`、`CONTRIBUTING.md`、`AGENTS.md`，以及模块的 `package.json`、lockfile、构建测试配置、脚本、隐藏文件、wrangler 配置的 PR 由维护者本人审阅（[docs/review-policy.md](docs/review-policy.md) 第 6 节）。
