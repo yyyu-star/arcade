@@ -121,7 +121,7 @@ async function boot(): Promise<void> {
   const cloud = startCloud({
     onApplied: () => {
       Object.assign(save, loadSave());
-      if (menu.root.style.display !== 'none') menu.show(menuState());
+      if (menu.visible) menu.show(menuState());
     },
   });
   saveHooks.onWrite = () => cloud.touch('profile');
@@ -255,6 +255,9 @@ async function boot(): Promise<void> {
     charFace: icon(heroKey(charOpen(save, save.character) ? save.character : 'xiaodao'), 64),
     curses: save.cleared >= 0 ? save.curses : [],
     cursesOpen: save.cleared >= 0,
+    lastMode: save.lastMode,
+    raidTpl: save.raidTpl,
+    mobIcon: icon,
     // 有平台登录、收到过 501（单独部署）就藏起来
     live: { available: LIVE_OPEN && hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
   });
@@ -608,6 +611,7 @@ async function boot(): Promise<void> {
   };
 
   menu.onStart = (d, m, endless) => {
+    save.lastMode = 'vigil';
     wantEndless = endless;
     void startRun(d, m);
   };
@@ -718,6 +722,9 @@ async function boot(): Promise<void> {
     const ms = menuState();
     const teach = template === 'teach';
     const danger = (teach ? 0 : Math.min(picked, dangerOpen(save))) as Danger;
+    save.lastMode = 'raid';
+    if (!teach) save.raidTpl = template;
+    writeSave(save);
     const seed = (Math.random() * 0x100000000) >>> 0;
     void startRun(danger, save.map, false, { seed, mode: 'raid', danger, raid: { template }, character: ms.character, perks: save.perks, assist: save.assist });
   };
@@ -740,7 +747,7 @@ async function boot(): Promise<void> {
   result.onBigTown = () => menu.onRaid('guzhen', save.danger);
   result.onMenu = () => {
     result.hide();
-    menu.show(menuState());
+    menu.show(menuState(), 'home');
   };
 
   game.events.once(Phaser.Core.Events.READY, () => {

@@ -167,10 +167,10 @@ try {
     const errs: string[] = [];
     const page = await open('', errs, { width: 390, height: 844 }, () => localStorage.setItem('yexun.save', JSON.stringify({ v: 1, runs: 1 })));
     await page.route((u: URL) => u.pathname === '/' && u.search === '', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>大厅</title>' }));
-    await page.locator('.yx-modes').waitFor({ state: 'visible' }).catch(() => fail('竖屏没有出现完整菜单'));
+    await page.locator('.yx-homescreen .yx-quick').waitFor({ state: 'visible' }).catch(() => fail('竖屏没有出现完整主页'));
     // 不用 force：按钮被别的元素盖住时 playwright 会超时，正好就是要抓的问题
-    await Promise.all([page.waitForURL(`${ORIGIN}/`, { timeout: 20_000 }).catch(() => fail('竖屏菜单点回大厅没有去 /')), page.locator('.yx-menu .yx-home').click({ timeout: 10_000 }).catch(() => fail('竖屏菜单的回大厅点不到（被盖住）'))]);
-    if (page.url() === `${ORIGIN}/`) ok('竖屏菜单点回大厅：去了 /');
+    await Promise.all([page.waitForURL(`${ORIGIN}/`, { timeout: 20_000 }).catch(() => fail('竖屏主页点回大厅没有去 /')), page.locator('.yx-homescreen .yx-home').click({ timeout: 10_000 }).catch(() => fail('竖屏菜单的回大厅点不到（被盖住）'))]);
+    if (page.url() === `${ORIGIN}/`) ok('竖屏主页点回大厅：去了 /');
     report('竖屏菜单回大厅', errs);
     await page.context().close();
   }

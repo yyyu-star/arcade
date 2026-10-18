@@ -8,9 +8,11 @@ import { drawMapThumb } from '../art/terrain.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
 import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, type LiveTier } from '../../content/live.ts';
-import { RAID_LIVE, RAID_LIVE_TIERS, RAID_TEMPLATES, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
+import { RAID_LIVE, RAID_TEMPLATES, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
 import type { TreasureTier } from '../../content/treasures.ts';
-import type { Best } from '../../platform/save.ts';
+import { RAID_REGIONS, VIGIL_REGIONS, type Region } from '../../content/regions.ts';
+import type { Best, LastMode, RaidPick } from '../../platform/save.ts';
+import { MONSTER_INFO } from './codex.ts';
 import { drawFlakes, drawModeScene, drawTitleLive, drawTitleStill, makeFlakes, type Flake } from '../art/sprites7.ts';
 import './screens.css';
 
@@ -92,10 +94,15 @@ export interface MenuState {
   raidFirst?: boolean;
   /** 夜探卡上"藏宝阁 3/45"那个按钮（没传就不显示） */
   vault?: { got: number; total: number };
+  /** 上次开的模式、夜探选的镇子（主页"开始"一步直达用） */
+  lastMode: LastMode;
+  raidTpl: RaidPick;
+  /** 图集里一帧画成小图（特色怪头像用） */
+  mobIcon: (key: string, px?: number) => string;
 }
 
 /** 夜探卡能选的镇子（教学镇不在里面：第一次固定进） */
-const RAID_PICK: readonly RaidTemplateId[] = ['guzhen', 'dukou', 'shansi'];
+const RAID_PICK: readonly RaidPick[] = ['guzhen', 'dukou', 'shansi'];
 
 /** 模式卡上的小场景图（画一次缓存成 data URL） */
 const sceneCache = new Map<string, string>();
@@ -115,130 +122,117 @@ function sceneUrl(kind: 'watch' | 'raid', w: number, h: number): string {
   return u;
 }
 
-export class Menu {
-  readonly root: HTMLDivElement;
-  private readonly art: HTMLCanvasElement;
-  private readonly ui: HTMLDivElement;
+/** 主视觉（月、灯笼、飘雪）：静底图画一次，动的（月晕、灯笼、飘雪）每帧叠；尺寸变了才重画底图。设备像素最多 2 倍（省内存设备同） */
+class TitleArt {
+  readonly canvas: HTMLCanvasElement;
   private raf = 0;
   private artSize = '';
   private still: HTMLCanvasElement | null = null;
   private info: ReturnType<typeof drawTitleStill> | null = null;
   private flakes: Flake[] = [];
   private last = 0;
-  private diff: Danger = 0;
-  private map: MapId = 'snow';
-  private tpl: RaidTemplateId = 'guzhen';
-  private readonly toggles: Toggle[];
-  onStart: (d: Danger, map: MapId, endless: boolean) => void = () => undefined;
-  /** 无尽：天亮不收工，一直打到倒下（撑到过一次天亮才开） */
-  private endless = false;
-  onBoards: () => void = () => undefined;
-  onReplays: () => void = () => undefined;
-  onDaily: () => void = () => undefined;
-  /** 夜探开局：镇子（第一次是 'teach'）和危险档（教学镇固定 0；其余用守夜那一排选的档） */
-  onRaid: (template: RaidTemplateId, danger: Danger) => void = () => undefined;
-  /** 打开藏宝阁 */
-  onVault: () => void = () => undefined;
-  /** 实盘开局（固定小道士、雪原，档位定危险档） */
-  onLive: (tier: LiveTier) => void = () => undefined;
-  /** 夜探实盘开局（档位、镇子；固定小道士，不带加成） */
-  onRaidLive: (tier: LiveTier, template: RaidLiveTemplate) => void = () => undefined;
-  /** 切娱乐 / 实盘、换档位（main 记进存档） */
-  onLiveMode: (on: boolean, tier: LiveTier) => void = () => undefined;
-  private live: MenuState['live'] = { available: false, on: false, tier: 'small' };
-  private lastState: MenuState | null = null;
-  /** 打开开局准备（角色、咒印、加成） */
-  onPrep: (tab: 'char' | 'curse' | 'perk') => void = () => undefined;
-  onClick: () => void = () => undefined;
-  /** 图鉴和成就 */
-  onCodex: () => void = () => undefined;
 
-  constructor(parent: HTMLElement, toggles: Toggle[]) {
-    this.root = layer(parent, 'yx-menu');
-    this.art = document.createElement('canvas');
-    this.art.className = 'yx-art';
-    this.art.setAttribute('aria-hidden', 'true');
+  private readonly host: HTMLElement;
+
+  constructor(host: HTMLElement) {
+    this.host = host;
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'yx-art';
+    this.canvas.setAttribute('aria-hidden', 'true');
+  }
+
+  start(): void {
+    cancelAnimationFrame(this.raf);
+    const frame = (now: number): void => {
+      const w = this.host.clientWidth;
+      const h = this.host.clientHeight;
+      if (w < 2 || h < 2) {
+        this.raf = requestAnimationFrame(frame);
+        return;
+      }
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const sizeKey = `${w}x${h}@${dpr}`;
+      if (sizeKey !== this.artSize) {
+        this.artSize = sizeKey;
+        this.canvas.width = Math.round(w * dpr);
+        this.canvas.height = Math.round(h * dpr);
+        const st = document.createElement('canvas');
+        st.width = this.canvas.width;
+        st.height = this.canvas.height;
+        const sc = st.getContext('2d')!;
+        sc.scale(dpr, dpr);
+        this.info = drawTitleStill(sc, w, h);
+        this.still = st;
+        this.flakes = makeFlakes(w < 600 ? 50 : 90, w, h);
+      }
+      const c = this.canvas.getContext('2d')!;
+      const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 0.016;
+      this.last = now;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(this.still!, 0, 0);
+      c.scale(dpr, dpr);
+      drawTitleLive(c, w, h, this.info!, now);
+      drawFlakes(c, this.flakes, w, h, dt, now);
+      this.raf = requestAnimationFrame(frame);
+    };
+    this.last = 0;
+    this.raf = requestAnimationFrame(frame);
+  }
+
+  stop(): void {
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
+}
+
+/** 顶上的"大厅"按钮（两屏都有，回大厅两步内到） */
+const HOME_BTN = `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>`;
+
+const bestText = (b: Best | undefined): { big: string; small: string } =>
+  !b ? { big: '还没玩过', small: '' } : { big: b.won ? '天亮了' : mmss(b.ticks / 30), small: `斩 ${b.kills.toLocaleString('zh-CN')}` };
+
+// ───────────────────────── 主页 ─────────────────────────
+/** 第一屏：标题 + 大"开始"（用上次的模式和地图，一步直达）+ 去选模式/地图 + 战绩小卡。第一次进来只有一个大按钮（13.7） */
+export class Home {
+  readonly root: HTMLDivElement;
+  private readonly ui: HTMLDivElement;
+  private readonly art: TitleArt;
+  private readonly toggles: Toggle[];
+
+  private readonly m: Menu;
+
+  constructor(parent: HTMLElement, toggles: Toggle[], m: Menu) {
+    this.m = m;
+    this.root = layer(parent, 'yx-menu yx-homescreen');
     this.ui = document.createElement('div');
     this.ui.className = 'yx-menu-ui';
-    this.root.append(this.art, this.ui);
+    this.art = new TitleArt(this.root);
+    this.root.append(this.art.canvas, this.ui);
     this.toggles = toggles;
     onAction(this.root, {
       ...bindToggles(this.root, toggles),
-      start: () => (this.live.on && this.live.available ? this.onLive(this.live.tier) : this.onStart(this.diff, this.map, this.endless)),
-      mode: (el) => {
-        this.live = { ...this.live, on: el.dataset.m === 'live' };
-        this.onLiveMode(this.live.on, this.live.tier);
-        if (this.lastState) this.show({ ...this.lastState, live: this.live });
-      },
-      tier: (el) => {
-        this.live = { ...this.live, tier: el.dataset.t as LiveTier };
-        this.onLiveMode(this.live.on, this.live.tier);
-        if (this.lastState) this.show({ ...this.lastState, live: this.live });
-      },
-      raid: () => {
-        if (this.lastState?.raidFirst) return this.onRaid('teach', 0);
-        if (this.live.on && this.live.available) {
-          const t = this.live.tier;
-          if (t !== 'luxe' && RAID_LIVE.open.includes(t) && this.tpl !== 'teach') this.onRaidLive(t, this.tpl);
-          return;
-        }
-        this.onRaid(this.tpl, this.diff);
-      },
-      tpl: (el) => {
-        this.tpl = el.dataset.t as RaidTemplateId;
-        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="tpl"]')) b.classList.toggle('on', b.dataset.t === this.tpl);
-        const note = this.root.querySelector('.yx-tplnote');
-        if (note) note.textContent = RAID_TEMPLATES[this.tpl].blurb;
-        const ln = this.root.querySelector('.yx-raidlivenote');
-        if (ln && this.live.tier !== 'luxe' && RAID_LIVE.open.includes(this.live.tier) && this.tpl !== 'teach') ln.innerHTML = raidLiveNote(this.live.tier, this.tpl);
-      },
-      vault: () => this.onVault(),
-      map: (el) => {
-        if (el.classList.contains('locked')) return;
-        this.map = el.dataset.m as MapId;
-        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="map"]')) b.classList.toggle('on', b.dataset.m === this.map);
-      },
-      prep: (el) => this.onPrep(el.dataset.t as 'char' | 'curse' | 'perk'),
-      diff: (el) => {
-        if (el.classList.contains('locked')) return;
-        this.diff = Number(el.dataset.d) as Danger;
-        for (const b of this.root.querySelectorAll<HTMLElement>('[data-a="diff"]')) b.classList.toggle('on', Number(b.dataset.d) === this.diff);
-        this.renderBest();
-      },
+      start: () => this.m.quick(),
+      quick: () => this.m.quick(),
+      select: () => this.m.openSelect(),
       settings: () => this.root.classList.toggle('show-settings'),
-      codex: () => this.onCodex(),
-      boards: () => this.onBoards(),
-      replays: () => this.onReplays(),
-      daily: () => this.onDaily(),
-      endless: (el) => {
-        this.endless = !this.endless;
-        el.classList.toggle('on', this.endless);
-      },
+      codex: () => this.m.onCodex(),
+      boards: () => this.m.onBoards(),
+      replays: () => this.m.onReplays(),
+      daily: () => this.m.onDaily(),
       home: () => {
         location.href = '/';
       },
     });
-    this.root.addEventListener('click', () => this.onClick());
+    this.root.addEventListener('click', () => this.m.onClick());
   }
 
-  private best: MenuState['best'] = {};
-
-  private renderBest(): void {
-    const el = this.ui.querySelector('.yx-best');
-    if (!el) return;
-    const b = this.best[this.diff];
-    el.textContent = !b ? `${DANGERS[this.diff].blurb} · 还没玩过` : b.won ? `最好：天亮了 · 斩 ${b.kills.toLocaleString('zh-CN')}` : `最好：撑了 ${mmss(b.ticks / 30)} · 斩 ${b.kills.toLocaleString('zh-CN')}`;
+  get shown(): boolean {
+    return this.root.style.display !== 'none';
   }
 
   show(s: MenuState): void {
-    this.diff = Math.min(s.danger, s.dangerOpen) as Danger;
-    this.lastState = s;
-    this.live = s.live;
-    const live = s.live.available && s.live.on;
-    this.map = s.maps[s.map] ? s.map : 'snow';
-    this.best = s.best;
     const top =
-      `<button type="button" class="yx-btn yx-home" data-a="home" aria-label="回大厅">${HOME_SVG}</button>` +
+      HOME_BTN +
       `<button type="button" class="yx-btn yx-gear" data-a="settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-.1-1.3 2-1.6-2-3.4-2.4.9a8 8 0 0 0-2.2-1.3L15 2.8h-4l-.4 2.5a8 8 0 0 0-2.2 1.3L6 5.7 4 9.1l2 1.6L5.9 12l.1 1.3-2 1.6 2 3.4 2.4-.9a8 8 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a8 8 0 0 0 2.2-1.3l2.4.9 2-3.4-2-1.6.1-1.3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>` +
       `<div class="yx-settings">${togglesHtml(this.toggles)}</div>` +
       (s.firstTime
@@ -251,130 +245,315 @@ export class Menu {
           '</div>');
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     if (s.firstTime) {
-      this.ui.innerHTML =
-        top +
-        title +
-        '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button>' +
-        '<div class="yx-hint">只管走位，法器自己出手</div>';
+      this.ui.innerHTML = top + title + '<button type="button" class="yx-big yx-go" data-a="start">开始守夜</button><div class="yx-hint">只管走位，法器自己出手</div>';
     } else {
-      const chips = DANGER_IDS.map((d) => {
-        const locked = d > s.dangerOpen;
-        return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? LOCK_SVG : '★'.repeat(DANGERS[d].stars)}</small></button>`;
-      }).join('');
-      const modeChips = s.live.available
-        ? `<div class="yx-chips yx-modesw"><button type="button" class="yx-chip${live ? '' : ' on'}" data-a="mode" data-m="fun"><b>娱乐</b><small>不花筹码</small></button><button type="button" class="yx-chip${live ? ' on' : ''}" data-a="mode" data-m="live"><b>实盘</b><small>带一份筹码</small></button></div>`
-        : '';
-      const liveHtml =
-        `<div class="yx-chips yx-tiers">${LIVE_TIER_IDS.map((t) => `<button type="button" class="yx-chip${t === s.live.tier ? ' on' : ''}" data-a="tier" data-t="${t}"><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('')}</div>` +
-        `<div class="yx-livenote">危险 ${LIVE_TIERS[s.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>${liveNote(s.live.tier)}</div>`;
-      const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
-      const prep =
-        `<button type="button" class="yx-chip yx-prep yx-prepchar" data-a="prep" data-t="char">${s.charFace ? `<img alt="" src="${s.charFace}">` : ''}<b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
-        (s.cursesOpen ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
-        `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
-      // 地图卡：缩略图 + 名字 + 一句话 + 解锁条件；锁着的也摆出来，写清怎么开。横向滑动，手机竖屏一屏看三张多一点
-      const maps = MAP_IDS.map((m) => {
-        const locked = !s.maps[m];
-        const u = MAP_UNLOCK[m];
-        return (
-          `<button type="button" class="yx-mapcard${m === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${m}"${locked ? ` aria-disabled="true" title="${u ? `${u.text}解锁` : ''}"` : ''}>` +
-          `<canvas class="yx-thumb" data-thumb="${m}" width="144" height="144" aria-hidden="true"></canvas>` +
-          `<b>${MAPS[m].name}</b>` +
-          (m === 'yizhuang' ? '<i class="yx-hard">难</i>' : '') +
-          (locked && u ? `<em>${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[m].blurb}</small>`) +
-          '</button>'
-        );
-      }).join('');
-      const endless = s.cursesOpen ? `<div class="yx-chips"><button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button></div>` : '';
+      const d = Math.min(s.danger, s.dangerOpen) as Danger;
+      const plan = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
+      const b = bestText(s.best[d]);
       this.ui.innerHTML =
         top +
         title +
-        '<div class="yx-modes">' +
-        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><div class="yx-mode-head"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></div>${modeChips}${live ? liveHtml : `<div class="yx-chips yx-dangers" aria-label="危险档">${chips}</div><div class="yx-maprow" aria-label="地图">${maps}</div>${endless}<div class="yx-chips">${prep}</div><div class="yx-best"></div>`}<button type="button" class="yx-big" data-a="start">开始</button></div>` +
-        `<div class="yx-mode"><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><div class="yx-mode-head"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></div>${this.raidHtml(s, live)}</div>` +
+        '<div class="yx-quick">' +
+        `<button type="button" class="yx-big yx-go" data-a="quick"><span>开始</span><small>${plan}</small></button>` +
+        '<button type="button" class="yx-big ghost yx-pick" data-a="select">选模式 / 地图</button>' +
+        '</div>' +
+        '<div class="yx-stats">' +
+        `<div><span>危险 ${d} 最好</span><b>${b.big}</b><small>${b.small}</small></div>` +
+        `<div><span>铜钱</span><b><i class="yx-coin"></i>${s.coins.toLocaleString('zh-CN')}</b><small>${s.character === 'xiaodao' ? '' : CHARACTERS[s.character].name}</small></div>` +
         '</div>';
-      this.renderBest();
-      for (const cv of this.root.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]')) drawMapThumb(cv, MAPS[cv.dataset.thumb as MapId]);
     }
     this.root.style.display = '';
-    this.startArt();
-  }
-
-  /** 夜探卡的内容：第一次只有教学镇一个按钮；之后三个镇子可选，危险档沿用守夜那一排 */
-  private raidHtml(s: MenuState, live: boolean): string {
-    const vault = s.vault ? `<button type="button" class="yx-chip yx-vaultbtn" data-a="vault"><b>藏宝阁</b><small>${s.vault.got} / ${s.vault.total}</small></button>` : '';
-    if (s.raidFirst) {
-      return (
-        `<div class="yx-raidnote"><b>${RAID_TEMPLATES.teach.name}</b>${RAID_TEMPLATES.teach.blurb}</div>` +
-        '<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid">开始夜探</button></div>'
-      );
-    }
-    const chips = RAID_PICK.map((t) => `<button type="button" class="yx-chip yx-tpl${t === this.tpl ? ' on' : ''}" data-a="tpl" data-t="${t}"><b>${RAID_TEMPLATES[t].name}</b></button>`).join('');
-    if (live) {
-      // 实盘：档位和守夜共用一排（点哪边都一样），豪华档只有守夜
-      const tier = s.live.tier;
-      const tiers = RAID_LIVE_TIERS.map((t) => `<button type="button" class="yx-chip${t === tier ? ' on' : ''}" data-a="tier" data-t="${t}"><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('');
-      const tpl = this.tpl === 'teach' ? 'guzhen' : this.tpl;
-      const open = tier !== 'luxe' && RAID_LIVE.open.includes(tier);
-      const note = tier === 'luxe' ? '豪华档只有守夜；夜探先开小档' : !open ? '夜探的中、大档还在调，先开小档' : raidLiveNote(tier, tpl);
-      return (
-        `<div class="yx-chips yx-tpls" aria-label="镇子">${chips}</div>` +
-        `<div class="yx-chips yx-tiers">${tiers}</div>` +
-        `<div class="yx-livenote yx-raidlivenote">${note}</div>` +
-        `<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid"${open ? '' : ' disabled'}>开始夜探</button>${vault}</div>`
-      );
-    }
-    return (
-      `<div class="yx-chips yx-tpls" aria-label="镇子">${chips}</div>` +
-      `<div class="yx-tplnote">${RAID_TEMPLATES[this.tpl].blurb}</div>` +
-      `<div class="yx-chips yx-raidbtns"><button type="button" class="yx-big" data-a="raid">开始夜探</button>${vault}</div>`
-    );
+    this.art.start();
   }
 
   hide(): void {
     this.root.style.display = 'none';
     this.root.classList.remove('show-settings');
-    cancelAnimationFrame(this.raf);
-    this.raf = 0;
+    this.art.stop();
+  }
+}
+
+// ───────────────────────── 选模式 / 地图 ─────────────────────────
+type Kind = 'vigil' | 'raid';
+
+/** 第二屏：最上面娱乐 | 实盘（有钱包才出现），下面守夜 / 夜探两张模式卡，再是地图（或镇子）大卡；难度、角色加成、开始在右栏（窄屏在底部） */
+export class Select {
+  readonly root: HTMLDivElement;
+  private readonly ui: HTMLDivElement;
+  private readonly art: TitleArt;
+  private kind: Kind = 'vigil';
+  private diff: Danger = 0;
+  private map: MapId = 'snow';
+  private tpl: RaidPick = 'guzhen';
+  private endless = false;
+  private live: MenuState['live'] = { available: false, on: false, tier: 'small' };
+  private s: MenuState | null = null;
+  /** 从主页点进来时按存档重新取"上次的模式和地图"；在这一屏里点来点去、开角色页再回来不重置 */
+  private fresh = true;
+
+  private readonly m: Menu;
+
+  constructor(parent: HTMLElement, m: Menu) {
+    this.m = m;
+    this.root = layer(parent, 'yx-menu yx-selscreen');
+    this.ui = document.createElement('div');
+    this.ui.className = 'yx-menu-ui';
+    this.art = new TitleArt(this.root);
+    this.root.append(this.art.canvas, this.ui);
+    onAction(this.root, {
+      back: () => this.m.show(this.s!, 'home'),
+      home: () => {
+        location.href = '/';
+      },
+      lv: (el) => {
+        this.live = { ...this.live, on: el.dataset.m === 'live' };
+        this.fixTier();
+        this.m.onLiveMode(this.live.on, this.live.tier);
+        this.render();
+      },
+      kind: (el) => {
+        if (el.getAttribute('aria-disabled') === 'true') return;
+        this.kind = el.dataset.k as Kind;
+        this.fixTier();
+        this.render();
+      },
+      tier: (el) => {
+        this.live = { ...this.live, tier: el.dataset.t as LiveTier };
+        this.m.onLiveMode(this.live.on, this.live.tier);
+        this.render();
+      },
+      map: (el) => {
+        if (el.getAttribute('aria-disabled') === 'true') return;
+        this.map = el.dataset.m as MapId;
+        this.render();
+      },
+      tpl: (el) => {
+        this.tpl = el.dataset.t as RaidPick;
+        this.render();
+      },
+      diff: (el) => {
+        if (el.getAttribute('aria-disabled') === 'true') return;
+        this.diff = Number(el.dataset.d) as Danger;
+        this.render();
+      },
+      endless: () => {
+        this.endless = !this.endless;
+        this.render();
+      },
+      prep: (el) => this.m.onPrep(el.dataset.t as 'char' | 'curse' | 'perk'),
+      vault: () => this.m.onVault(),
+      go: () => this.go(),
+    });
+    this.root.addEventListener('click', () => this.m.onClick());
   }
 
-  /** 主视觉：静的底图画一次，动的（月晕、灯笼、飘雪）每帧叠；尺寸变了才重画底图。设备像素最多 2 倍（省内存设备同） */
-  private startArt(): void {
-    cancelAnimationFrame(this.raf);
-    const frame = (now: number): void => {
-      const w = this.root.clientWidth;
-      const h = this.root.clientHeight;
-      if (w < 2 || h < 2) {
-        this.raf = requestAnimationFrame(frame);
-        return;
-      }
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const sizeKey = `${w}x${h}@${dpr}`;
-      if (sizeKey !== this.artSize) {
-        this.artSize = sizeKey;
-        this.art.width = Math.round(w * dpr);
-        this.art.height = Math.round(h * dpr);
-        const st = document.createElement('canvas');
-        st.width = this.art.width;
-        st.height = this.art.height;
-        const sc = st.getContext('2d')!;
-        sc.scale(dpr, dpr);
-        this.info = drawTitleStill(sc, w, h);
-        this.still = st;
-        this.flakes = makeFlakes(w < 600 ? 50 : 90, w, h);
-      }
-      const c = this.art.getContext('2d')!;
-      const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 0.016;
-      this.last = now;
-      c.setTransform(1, 0, 0, 1, 0, 0);
-      c.drawImage(this.still!, 0, 0);
-      c.scale(dpr, dpr);
-      drawTitleLive(c, w, h, this.info!, now);
-      drawFlakes(c, this.flakes, w, h, dt, now);
-      this.raf = requestAnimationFrame(frame);
+  get shown(): boolean {
+    return this.root.style.display !== 'none';
+  }
+
+  /** 从主页点进来：下次 show 按存档重取 */
+  enter(): void {
+    this.fresh = true;
+  }
+
+  /** 实盘里夜探只开 RAID_LIVE.open 里的档（豪华档只有守夜）：当前档开不了就换成第一个能开的 */
+  private fixTier(): void {
+    if (this.live.on && this.kind === 'raid' && !raidTierOk(this.live.tier) && RAID_LIVE.open.length) this.live = { ...this.live, tier: RAID_LIVE.open[0]! };
+  }
+
+  private go(): void {
+    const s = this.s!;
+    const live = this.live.available && this.live.on;
+    if (this.kind === 'vigil') return live ? this.m.onLive(this.live.tier) : this.m.onStart(this.diff, this.map, this.endless);
+    if (s.raidFirst) return this.m.onRaid('teach', 0);
+    if (live) return raidTierOk(this.live.tier) ? this.m.onRaidLive(this.live.tier as RaidLiveTier, this.tpl) : undefined;
+    this.m.onRaid(this.tpl, this.diff);
+  }
+
+  show(s: MenuState): void {
+    this.s = s;
+    this.live = s.live;
+    if (this.fresh) {
+      this.fresh = false;
+      this.kind = s.lastMode === 'raid' && !s.raidFirst ? 'raid' : 'vigil';
+      this.tpl = s.raidTpl;
+      this.endless = false;
+      this.diff = Math.min(s.danger, s.dangerOpen) as Danger;
+      this.map = s.maps[s.map] ? s.map : 'snow';
+      if (this.live.on && this.live.available) this.fixTier();
+    }
+    this.diff = Math.min(this.diff, s.dangerOpen) as Danger;
+    if (!s.maps[this.map]) this.map = 'snow';
+    this.render();
+    this.root.style.display = '';
+    this.art.start();
+  }
+
+  hide(): void {
+    this.root.style.display = 'none';
+    this.art.stop();
+  }
+
+  private render(): void {
+    const s = this.s!;
+    const live = this.live.available && this.live.on;
+    const raid = this.kind === 'raid';
+    const keep = this.root.scrollTop;
+    const esc2 = esc;
+    const heads = (r: Region | undefined, names: boolean): string => {
+      if (!r) return '<span class="yx-mobs"><em>只有常规怪</em></span>';
+      const list = r.mobs.map((x) => ({ k: x.kind, n: MONSTER_INFO[x.kind].name }));
+      return `<span class="yx-mobs">${list.map((x) => `<img class="yx-mob" alt="${esc2(x.n)}" title="${esc2(x.n)}" src="${s.mobIcon(x.k, 48)}">`).join('')}${names ? `<em>${list.map((x) => x.n).join('、')}</em>` : ''}</span>`;
     };
-    this.last = 0;
-    this.raf = requestAnimationFrame(frame);
+    const top = HOME_BTN + '<div class="yx-more"><button type="button" class="yx-btn" data-a="back" aria-label="返回主页">‹ 返回</button></div>';
+    const lvSw = this.live.available
+      ? `<div class="yx-chips yx-modesw yx-selfx"><button type="button" class="yx-chip${live ? '' : ' on'}" data-a="lv" data-m="fun"><b>娱乐</b><small>不花筹码</small></button><button type="button" class="yx-chip${live ? ' on' : ''}" data-a="lv" data-m="live"><b>实盘</b><small>带一份筹码</small></button></div>`
+      : '';
+    // 模式卡：实盘里夜探一档都没开就灰着
+    const raidOff = live && RAID_LIVE.open.length === 0;
+    const kinds =
+      '<div class="yx-kinds">' +
+      `<button type="button" class="yx-kind${raid ? '' : ' on'}" data-a="kind" data-k="vigil"><img class="yx-scene" alt="" src="${sceneUrl('watch', 320, 100)}"><span class="yx-kindtxt"><span class="yx-moon"></span><b>守夜</b><em>15 分钟 · 撑到天亮</em></span></button>` +
+      `<button type="button" class="yx-kind${raid ? ' on' : ''}${raidOff ? ' locked' : ''}" data-a="kind" data-k="raid"${raidOff ? ' aria-disabled="true"' : ''}><img class="yx-scene" alt="" src="${sceneUrl('raid', 320, 100)}"><span class="yx-kindtxt"><span class="yx-lamp"></span><b>夜探</b><em>搜宝、打怪、找门撤离</em></span></button>` +
+      '</div>';
+
+    // 地图 / 镇子大卡
+    const mapCards = MAP_IDS.map((id) => {
+      const locked = !s.maps[id];
+      const u = MAP_UNLOCK[id];
+      return (
+        `<button type="button" class="yx-card yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${u ? `${u.text}解锁` : ''}"` : ''}>` +
+        `<canvas class="yx-thumb" data-thumb="${id}" width="144" height="144" aria-hidden="true"></canvas>` +
+        `<span class="yx-cardtxt"><b>${MAPS[id].name}</b>${id === 'yizhuang' ? '<i class="yx-hard">难</i>' : ''}` +
+        (locked && u ? `<em class="yx-unlock">${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[id].blurb}</small>${heads(VIGIL_REGIONS[id], true)}`) +
+        '</span></button>'
+      );
+    }).join('');
+    const townCards = RAID_PICK.map(
+      (t) =>
+        `<button type="button" class="yx-card yx-towncard${t === this.tpl ? ' on' : ''}" data-a="tpl" data-t="${t}"><span class="yx-cardtxt"><b>${RAID_TEMPLATES[t].name}</b><small>${RAID_TEMPLATES[t].blurb}</small>${heads(RAID_REGIONS[t], true)}</span></button>`,
+    ).join('');
+    const tierOn = (t: LiveTier): boolean => !raid || raidTierOk(t);
+    const tiers = `<div class="yx-chips yx-tiers">${LIVE_TIER_IDS.map((t) => `<button type="button" class="yx-chip${t === this.live.tier ? ' on' : ''}${tierOn(t) ? '' : ' locked'}" data-a="tier" data-t="${t}"${tierOn(t) ? '' : ' disabled aria-disabled="true"'}><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('')}</div>`;
+
+    let pick: string;
+    let opts = '';
+    let note = '';
+    let startLabel = raid ? '开始夜探' : '开始';
+    let startOff = false;
+    if (raid && s.raidFirst) {
+      pick = `<div class="yx-raidnote"><b>${RAID_TEMPLATES.teach.name}</b>${RAID_TEMPLATES.teach.blurb}</div>`;
+    } else if (live) {
+      if (raid) {
+        const t = this.live.tier;
+        startOff = !raidTierOk(t);
+        note = raidTierOk(t) ? raidLiveNote(t as RaidLiveTier, this.tpl) : '豪华档只有守夜；夜探先开小档';
+        pick = `<div class="yx-pickgrid yx-towns">${townCards}</div>${tiers}`;
+      } else {
+        note = `危险 ${LIVE_TIERS[this.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>${liveNote(this.live.tier)}`;
+        pick = tiers;
+      }
+    } else {
+      pick = raid ? `<div class="yx-pickgrid yx-towns">${townCards}</div>` : `<div class="yx-pickgrid yx-maps" aria-label="地图">${mapCards}</div>`;
+    }
+    if (!live) {
+      const dangers = DANGER_IDS.map((d) => {
+        const locked = d > s.dangerOpen;
+        return `<button type="button" class="yx-chip yx-danger${d === this.diff ? ' on' : ''}${locked ? ' locked' : ''}" data-a="diff" data-d="${d}"${locked ? ' aria-disabled="true" title="撑到天亮解锁下一档"' : ''}><b>${d}</b><small>${locked ? LOCK_SVG : '★'.repeat(DANGERS[d].stars)}</small></button>`;
+      }).join('');
+      const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
+      const prep =
+        `<button type="button" class="yx-chip yx-prep yx-prepchar" data-a="prep" data-t="char">${s.charFace ? `<img alt="" src="${s.charFace}">` : ''}<b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
+        (s.cursesOpen && !raid ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
+        `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
+      const endless = s.cursesOpen && !raid ? `<button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button>` : '';
+      const dg = raid && s.raidFirst ? '' : `<div class="yx-chips yx-dangers" aria-label="危险档">${dangers}</div>`;
+      const bt = bestText(s.best[this.diff]);
+      const best = raid ? '' : `<div class="yx-best">${s.best[this.diff] ? `最好：${bt.big} · ${bt.small}` : `${DANGERS[this.diff].blurb} · 还没玩过`}</div>`;
+      opts = `${dg}<div class="yx-chips">${prep}${endless}</div>${best}`;
+    } else {
+      opts = `<div class="yx-livenote">${note}</div>`;
+    }
+    const vault = raid && s.vault && !live ? `<button type="button" class="yx-chip yx-vaultbtn" data-a="vault"><b>藏宝阁</b><small>${s.vault.got} / ${s.vault.total}</small></button>` : '';
+    const aside = `<div class="yx-aside"><div class="yx-opts">${opts}</div><div class="yx-startbar"><button type="button" class="yx-big" data-a="go"${startOff ? ' disabled' : ''}>${startLabel}</button>${vault}</div></div>`;
+
+    this.ui.innerHTML = `${top}<div class="yx-sel">${lvSw}${kinds}<div class="yx-pickarea">${pick}</div>${aside}</div>`;
+    for (const cv of this.root.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]')) drawMapThumb(cv, MAPS[cv.dataset.thumb as MapId]);
+    this.root.scrollTop = keep;
+  }
+}
+
+/** 夜探实盘能开的档（豪华档只有守夜；中、大档看 RAID_LIVE.open） */
+function raidTierOk(t: LiveTier): boolean {
+  return t !== 'luxe' && RAID_LIVE.open.includes(t);
+}
+
+// ───────────────────────── 开始菜单（两屏的总管） ─────────────────────────
+/** 主页 → 选模式/地图 → 对局。对外的回调和以前的一页菜单一样，main.ts 只接线 */
+export class Menu {
+  onStart: (d: Danger, map: MapId, endless: boolean) => void = () => undefined;
+  onBoards: () => void = () => undefined;
+  onReplays: () => void = () => undefined;
+  onDaily: () => void = () => undefined;
+  /** 夜探开局：镇子（第一次是 'teach'）和危险档（教学镇固定 0；其余用选的档） */
+  onRaid: (template: RaidTemplateId, danger: Danger) => void = () => undefined;
+  /** 打开藏宝阁 */
+  onVault: () => void = () => undefined;
+  /** 实盘开局（固定小道士、雪原，档位定危险档） */
+  onLive: (tier: LiveTier) => void = () => undefined;
+  /** 夜探实盘开局（档位、镇子；固定小道士，不带加成） */
+  onRaidLive: (tier: LiveTier, template: RaidLiveTemplate) => void = () => undefined;
+  /** 切娱乐 / 实盘、换档位（main 记进存档） */
+  onLiveMode: (on: boolean, tier: LiveTier) => void = () => undefined;
+  /** 打开开局准备（角色、咒印、加成） */
+  onPrep: (tab: 'char' | 'curse' | 'perk') => void = () => undefined;
+  onClick: () => void = () => undefined;
+  /** 图鉴和成就 */
+  onCodex: () => void = () => undefined;
+
+  private readonly home: Home;
+  private readonly select: Select;
+  private screen: 'home' | 'select' = 'home';
+  private state: MenuState | null = null;
+
+  constructor(parent: HTMLElement, toggles: Toggle[]) {
+    this.home = new Home(parent, toggles, this);
+    this.select = new Select(parent, this);
+  }
+
+  get visible(): boolean {
+    return this.home.shown || this.select.shown;
+  }
+
+  /** 显示哪一屏；不指定就回到上次停的那一屏（角色页、图鉴关掉后回到原处） */
+  show(s: MenuState, to: 'home' | 'select' = this.screen): void {
+    this.state = s;
+    this.screen = to;
+    if (to === 'home') {
+      this.select.hide();
+      this.home.show(s);
+    } else {
+      this.home.hide();
+      this.select.show(s);
+    }
+  }
+
+  hide(): void {
+    this.home.hide();
+    this.select.hide();
+  }
+
+  openSelect(): void {
+    this.select.enter();
+    this.show(this.state!, 'select');
+  }
+
+  /** 主页的"开始"：一步直达，用上次的模式、地图、危险档；实盘要花筹码，不在这里一键进，去选模式屏里点 */
+  quick(): void {
+    const s = this.state!;
+    const d = Math.min(s.danger, s.dangerOpen) as Danger;
+    if (s.lastMode === 'raid') return this.onRaid(s.raidFirst ? 'teach' : s.raidTpl, d);
+    this.onStart(d, s.maps[s.map] ? s.map : 'snow', false);
   }
 }
 

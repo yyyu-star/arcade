@@ -68,7 +68,15 @@ export interface Save {
   /** 菜单上次停在实盘、选的哪一档（本机） */
   liveOn: boolean;
   liveTier: LiveTier;
+  /** 上次开的模式、夜探选的镇子（主页"开始"一步直达用；本机偏好，不上云） */
+  lastMode: LastMode;
+  raidTpl: RaidPick;
 }
+
+export type LastMode = 'vigil' | 'raid';
+/** 夜探能选的三个镇（教学镇是第一次固定进的，不记） */
+export type RaidPick = 'guzhen' | 'dukou' | 'shansi';
+export const RAID_PICKS: readonly RaidPick[] = ['guzhen', 'dukou', 'shansi'];
 
 /** 流水超过这么多条，最旧的并成一个数（并过的流水在两台设备上可能各算一次，所以留得够长：几百局才会碰到） */
 const LEDGER_MAX = 400;
@@ -101,6 +109,8 @@ export const fresh = (): Save => ({
   assistAsked: false,
   liveOn: false,
   liveTier: 'small',
+  lastMode: 'vigil',
+  raidTpl: 'guzhen',
 });
 
 const num = (v: unknown, min = 0, max = 1e12): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, Math.floor(v))) : null);
@@ -170,6 +180,8 @@ export function reviveSave(o: unknown): Save | null {
   s.assistAsked = r.assistAsked === true;
   s.liveOn = r.liveOn === true;
   if (isLiveTier(r.liveTier)) s.liveTier = r.liveTier;
+  if (r.lastMode === 'vigil' || r.lastMode === 'raid') s.lastMode = r.lastMode;
+  if ((RAID_PICKS as readonly unknown[]).includes(r.raidTpl)) s.raidTpl = r.raidTpl as RaidPick;
   return s;
 }
 
@@ -483,8 +495,8 @@ export function mergeSave(local: Save, cloud: Save): Save {
 }
 
 /** 上云的内容：去掉只在本机有意义的字段 */
-export function savePayload(s: Save): Omit<Save, 'difficulty' | 'map' | 'danger' | 'character' | 'curses' | 'streak' | 'assist' | 'tipsOff' | 'liveOn' | 'liveTier'> {
-  const { difficulty: _d, map: _m, danger: _g, character: _c, curses: _u, streak: _s, assist: _a, tipsOff: _t, liveOn: _l, liveTier: _lt, ...rest } = s;
+export function savePayload(s: Save): Omit<Save, 'difficulty' | 'map' | 'danger' | 'character' | 'curses' | 'streak' | 'assist' | 'tipsOff' | 'liveOn' | 'liveTier' | 'lastMode' | 'raidTpl'> {
+  const { difficulty: _d, map: _m, danger: _g, character: _c, curses: _u, streak: _s, assist: _a, tipsOff: _t, liveOn: _l, liveTier: _lt, lastMode: _lm, raidTpl: _rt, ...rest } = s;
   return rest;
 }
 
