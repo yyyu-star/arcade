@@ -267,6 +267,7 @@ export function seatPlayer(t0: Table, seat: number, amount: number, start = true
   const st = stakesOf(t.stakes);
   if (!Number.isSafeInteger(amount) || amount < st.min || amount > st.max) return { error: 'bad_amount' };
   t.seats[seat] = { ...emptySeat(), owner: 'player', stack: amount };
+  forget(t, seat);
   t.bank += amount;
   if (start) autoStart(t);
   return t;
@@ -726,6 +727,15 @@ function removeSeat(t: Table, seat: number): void {
   if (s.owner === 'house') t.house = (t.house ?? 0) - s.stack;
   if (s.owner === 'player' && s.stack > 0) t.out.push({ id: `p${++t.opSeq}`, seat, amount: s.stack });
   t.seats[seat] = emptySeat();
+  forget(t, seat);
+}
+
+/**
+ * 座位换了人（0.19.1）：上一个人留着等亮的底牌作废。不清的话，停着时有人离桌、别人马上坐进同一个座位，
+ * view 会把上一个人的两张当成新来的人的 kept 下发（主线审 0.19.0 时指出）
+ */
+function forget(t: Table, seat: number): void {
+  if (t.kept?.[seat]) t.kept[seat] = [];
 }
 
 function putHouse(t: Table, seat: number): void {
@@ -739,6 +749,7 @@ function putHouse(t: Table, seat: number): void {
   const persona = lv >= 5 ? STRONG.find((i) => !used.has(i))! : free.find((i) => (x -= w[i]!) < 0)!;
   const stack = t.bb * (HOUSE_MIN_BB + r.below(HOUSE_MAX_BB - HOUSE_MIN_BB + 1));
   t.seats[seat] = { ...emptySeat(), owner: 'house', persona, stack, form: drawForm(r), start: stack };
+  forget(t, seat);
   t.bank += stack;
   t.house = (t.house ?? 0) + stack;
 }

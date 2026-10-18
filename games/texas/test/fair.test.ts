@@ -256,6 +256,7 @@ describe('视图里只有该看到的牌', () => {
     const g = stream([5, 0xfa3, 2, 3, 4, 5, 6, 7], 'fair-show');
     let held = 0;
     let showed = 0;
+    let swaps = 0;
     for (let n = 0; n < 30; n++) {
       const size = 2 + g.below(8);
       let t = newTable('small', size, Array.from({ length: 8 }, () => g.u32()), { holdHands: true, level: g.below(6) });
@@ -268,6 +269,17 @@ describe('视图里只有该看到的牌', () => {
         }
         if (!t.hold) break;
         held++;
+        // 停着时随机有人离桌、别人马上坐进同一个座位（0.19.1）：上一个人的牌对新来的人也是别人的
+        const orig = t.kept!.map((c) => [...c]);
+        const swapped = new Set<number>();
+        for (let i = 0; i < size; i++) {
+          if (g.below(5) !== 0) continue;
+          t = ok(apply(t, i, { t: 'leave' }));
+          if (t.seats[i]!.owner !== 'none') continue;
+          t = ok(g.below(2) ? seatPlayer(t, i, stakesOf('small').max, false) : seatHouse(t, i, false));
+          swapped.add(i);
+          swaps++;
+        }
         // 随机几家亮一张或两张（摊牌亮过的会被拒，跳过）
         for (let i = 0; i < size; i++) {
           if (g.below(3) !== 0) continue;
@@ -284,7 +296,9 @@ describe('视图里只有该看到的牌', () => {
           expect(v.kept ?? []).toEqual(t.kept![me]!.length === 2 ? t.kept![me] : []);
           // 别人这一手的底牌：没亮的那几张不许出现在视图的任何牌字段里
           const open = new Set<number>([...v.board, ...(v.lastHand?.board ?? []), ...(v.kept ?? []), ...h.shown.flatMap((x) => x.hole), ...(h.showed ?? []).flatMap((x) => x.cards)]);
-          const secret = t.kept!.flatMap((c, i) => (i === me ? [] : c)).filter((c) => !open.has(c));
+          if (swapped.has(me)) expect(v.kept).toBeUndefined();
+          // 换过人的座位：上一个人的牌连新坐下的人自己也不许看到
+          const secret = orig.flatMap((c, i) => (i === me && !swapped.has(me) ? [] : c)).filter((c) => !open.has(c));
           const cards: number[] = [];
           const walk = (x: unknown, key: string): void => {
             if (Array.isArray(x)) {
@@ -303,5 +317,6 @@ describe('视图里只有该看到的牌', () => {
     }
     expect(held).toBeGreaterThan(100);
     expect(showed).toBeGreaterThan(50);
+    expect(swaps).toBeGreaterThan(20);
   });
 });
