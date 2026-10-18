@@ -14,6 +14,7 @@ import {
   danmakuSpeed,
   pickLane,
   placeBeside,
+  dockFits,
   placeDock,
   seatColor,
   BOT_REACT,
@@ -618,6 +619,16 @@ describe('聊天的版式（0.19.0）', () => {
     expect(placeDock(desk, 360, 300, [hand])).toEqual({ left: 1920 - 12 - 360, top: 768 });
     const right = { left: 1500, top: 700, width: 420, height: 380 };
     expect(placeDock(desk, 360, 300, [hand, right])).toEqual({ left: 12, top: 97 });
+  });
+
+  it('电脑版聊天框四个角都会压到东西时 dockFits 为假（默认收起，0.20.0）；有一个角空着就为真', () => {
+    const lap = { width: 1280, height: 720 };
+    const hand = { left: 0, top: 460, width: 1280, height: 260 };
+    const leftSeat = { left: 40, top: 220, width: 100, height: 120 };
+    const rightSeat = { left: 1140, top: 210, width: 100, height: 120 };
+    expect(dockFits(lap, 300, 216, [hand, leftSeat, rightSeat])).toBe(false);
+    expect(dockFits(lap, 300, 216, [hand, leftSeat])).toBe(true);
+    expect(dockFits(desk, 360, 300, [{ left: 0, top: 800, width: 1500, height: 280 }])).toBe(true);
   });
 
   it('手机输入条：贴在下半屏手牌、按钮上面；它们占了大半屏就贴屏幕底', () => {

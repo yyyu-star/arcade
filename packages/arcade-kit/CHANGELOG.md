@@ -10,9 +10,11 @@
   都连上就和最后一个人进房同一步开打，等满 `RoomLimits.matchJoinMs`（20 秒）没来的电脑代打、来了交还；外人进房 4004，`start` 回 `not_host`，等人时不能换座；
   打完、关房还每个人的名额（`kitReleaseMany`）。`RoomInfo.match` 告诉页面这是匹配桌。好友房行为不变。
 - **页面** `MatchClient`（`onWaiting`、`onMatched`、`onHasRoom`、`onSolo`，断线不重连）和转单机的默认文案 `MATCH_TEXT`（"今天联机局数用完了，先和电脑打"等）。
+- **聊天框放不下就先收着**（掼蛋 0.24.0 线上问题）：电脑版聊天框四个角都会压到头像、名牌、出牌区时（新纯函数 `dockFits`，按排出来的真实高度判断），玩家又没自己展开或收起过，默认收成"聊天"小按钮。
+  掼蛋 1280×720 上它原来压在左上角，盖住左家的头像和剩余张数、点不到他；1920 放得下照常展开（截图核对过）。
 - 额度：匹配桌也占每天的开房名额（`dailyRoomsPerUser`，默认 6，游戏 `vars.KIT_QUOTA` 里改）；全站开房数一张桌只记 1。
 - 文档：docs/match.md 改成实现版（陌生人打字聊天默认开、设置里能关，开放公开注册时重新评估；屏蔽名单直接用平台 0.25.0 的 RPC）；README 加"快速匹配"一节。
-- 测试：`match.test.ts` 16 条、`client.test.ts` 加 3 条（MatchClient）；`FlakyMeter` 改拦 `kitReserveMany` / `kitReleaseMany` / `kitPeek`。
+- 测试：`match.test.ts` 16 条、`client.test.ts` 加 3 条（MatchClient）、`fun-logic` 加 1 条（dockFits）；`FlakyMeter` 改拦 `kitReserveMany` / `kitReleaseMany` / `kitPeek`。
   反证五处（外人能进、不自动开打、不按 joinBy 开、没来的不托管、只还第一个人的名额）各有测试失败。
 
 ## 0.19.1（2026-10-18）

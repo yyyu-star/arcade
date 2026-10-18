@@ -4,7 +4,7 @@
  * 和 table-fun.ts 同样的规矩：import 时不碰 DOM；动画只动 transform、opacity；量位置只在摆放（refresh）和出一条弹幕时。
  */
 import { CHAT_MAX, chatRejectText, type ChatBlockWhy } from './chat.js';
-import { DANMAKU, barBottom, chatFont, chatMode, danmakuLanes, danmakuSpeed, pickLane, placeBeside, placeDock, seatColor, type Box, type ChatMode } from './fun-logic.js';
+import { DANMAKU, barBottom, chatFont, chatMode, danmakuLanes, danmakuSpeed, dockFits, pickLane, placeBeside, placeDock, seatColor, type Box, type ChatMode } from './fun-logic.js';
 
 export type ChatResultLike = { ok: true } | { ok: false; code: string; why?: ChatBlockWhy; waitMs?: number };
 
@@ -20,7 +20,7 @@ export interface ChatLine {
 interface ChatPrefs {
   /** 弹幕开关；没设过：系统要求减少动态效果、或省内存模式时默认关，其余默认开 */
   danmaku?: boolean;
-  /** 电脑版聊天框收起来了 */
+  /** 电脑版聊天框收起来了；没设过：四个角都会压到东西（dockFits）时默认收着（0.20.0），其余默认展开 */
   folded?: boolean;
   /** 电脑版聊天框的记录展开成长条 */
   long?: boolean;
@@ -230,7 +230,15 @@ export class ChatUi {
   private drawDesk(view: { width: number; height: number }): void {
     const w = Math.round(this.font * 17);
     const fixed = this.h.dock?.() ?? null;
-    if (this.prefs.folded) {
+    // 没自己收起、展开过：四个角都会压到东西（dockFits，0.20.0）就默认收着。先排出来量真实高度再判断，不靠估
+    let folded = this.prefs.folded === true;
+    if (this.prefs.folded === undefined && !fixed) {
+      const d = this.layoutDock(view, w, null);
+      folded = !dockFits(view, w, d.offsetHeight || 260, this.h.blocked());
+      if (folded) this.clearDesk();
+      else return;
+    }
+    if (folded) {
       if (this.dockEl) this.clearDesk();
       if (!this.pill) {
         const p = this.el('button', 'atc-pill');
@@ -251,6 +259,15 @@ export class ChatUi {
       this.pill.style.transform = `translate(${at.left}px,${at.top}px)`;
       return;
     }
+    this.layoutDock(view, w, fixed);
+  }
+
+  /** 排出电脑版聊天框（大小、记录高度），放到 fixed 或 placeDock 挑的角上，返回它 */
+  private layoutDock(view: { width: number; height: number }, w: number, fixed: Box | null): HTMLDivElement {
+    if (this.pill) {
+      this.pill.remove();
+      this.pill = null;
+    }
     if (!this.dockEl) this.dockEl = this.buildDock();
     const d = this.dockEl;
     d.style.fontSize = `${this.font - 2}px`;
@@ -265,6 +282,7 @@ export class ChatUi {
     const at = fixed ? { left: fixed.left, top: fixed.top } : placeDock(view, w, d.offsetHeight || 260, this.h.blocked());
     d.style.transform = `translate(${at.left}px,${at.top}px)`;
     log.scrollTop = log.scrollHeight;
+    return d;
   }
 
   private buildDock(): HTMLDivElement {
