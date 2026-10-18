@@ -1,6 +1,6 @@
 /**
  * 开局选的东西：咒印、角色、永久加成（DESIGN.md 3.7、3.8、13.2）。规则效果在核心里按这些表算；
- * 解锁条件和铜钱怎么花在 `src/platform/save.ts`。实盘不开咒印、不带加成、固定小道士（4.1）。
+ * 解锁条件和铜钱怎么花在 `src/platform/save.ts`。实盘不开咒印、不带加成，角色和地图可选已解锁的（4.1）。
  */
 import type { WeaponId } from './weapons.ts';
 

@@ -128,7 +128,7 @@ export interface Setup {
   firstRun?: boolean;
   /** 地图（缺省雪原） */
   map?: MapId;
-  /** 角色（缺省小道士；实盘固定小道士） */
+  /** 角色（缺省小道士；实盘可选已解锁的，结回乘角色系数） */
   character?: CharacterId;
   /** 咒印，最多 MAX_CURSES 条（实盘为空） */
   curses?: readonly CurseId[];

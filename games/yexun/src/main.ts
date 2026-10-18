@@ -188,7 +188,7 @@ async function boot(): Promise<void> {
     result.onShare = () => void prepared.share();
   };
   /** 上一局是不是实盘、哪一档（"再来一局"照样来） */
-  let lastLive: { tier: LiveTier; raid?: RaidLiveTemplate } | null = null;
+  let lastLive: { tier: LiveTier; raid?: RaidLiveTemplate; map?: MapId } | null = null;
   let liveTier: LiveTier = 'small';
   /** 结回以后的那一份记录 → 结算页那一行 */
   const recordText = (rec: Readonly<LiveRecord> | null): string => {
@@ -691,19 +691,23 @@ async function boot(): Promise<void> {
     save.liveTier = tier;
     writeSave(save);
   };
-  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate, fallback?: () => void): Promise<void> => {
+  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate, pickMap?: MapId, fallback?: () => void): Promise<void> => {
     if (raid && tier === 'luxe') return;
+    // 实盘带已解锁的角色和地图（0.3.6），没解锁的退回小道士、雪原；加成、咒印照旧不带
+    const character = menuState().character;
+    const map = !raid && pickMap && mapOpen(save, pickMap) ? pickMap : 'snow';
     const seed = (Math.random() * 0x100000000) >>> 0;
-    const r = await live.buyin(tier, seed, raid);
+    const r = await live.buyin(tier, seed, raid, character, map);
     if (r.ok) {
       liveTier = tier;
-      lastLive = raid ? { tier, raid } : { tier };
+      lastLive = raid ? { tier, raid } : { tier, map };
       // 记下这次的完整选择，主页"开始"下次照它一键开
       save.lastMode = raid ? 'raid' : 'vigil';
       if (raid) save.raidTpl = raid;
+      else save.map = map;
       writeSave(save);
       const danger = raid ? (RAID_LIVE.danger[tier as Exclude<LiveTier, 'luxe'>] as Danger) : LIVE_TIERS[tier].danger;
-      return startRun(danger, 'snow', true, liveSetup(tier, seed, raid), 'live');
+      return startRun(danger, map, true, liveSetup(tier, seed, raid, character, map), 'live');
     }
     const o = r.outcome;
     const why =
@@ -726,8 +730,8 @@ async function boot(): Promise<void> {
     if (fallback) return confirm.ask(`${why}，这次按娱乐开吧`, '按娱乐开', '回菜单', (ok) => (ok ? fallback() : menu.show(menuState())));
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
-  menu.onLive = (tier, fallback) => void startLive(tier, undefined, fallback);
-  menu.onRaidLive = (tier, tpl, fallback) => void startLive(tier, tpl, fallback);
+  menu.onLive = (tier, map, fallback) => void startLive(tier, undefined, map, fallback);
+  menu.onRaidLive = (tier, tpl, fallback) => void startLive(tier, tpl, undefined, fallback);
   // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
   menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
     const ms = menuState();
@@ -749,7 +753,7 @@ async function boot(): Promise<void> {
     vault.show();
   };
   result.onAgain = () => {
-    if (lastLive) return void startLive(lastLive.tier, lastLive.raid);
+    if (lastLive) return void startLive(lastLive.tier, lastLive.raid, lastLive.map);
     if (world?.setup.mode === 'raid') return menu.onRaid(world.setup.raid?.template ?? 'guzhen', world.setup.danger);
     if (dailyDate) return void startDaily();
     wantEndless = !!world?.setup.endless;

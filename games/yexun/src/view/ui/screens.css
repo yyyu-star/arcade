@@ -462,7 +462,7 @@
   .yx-sel .yx-opts small { white-space: nowrap; }
   /* 头像挂在角色卡右上角，卡变宽以后会压住名字，给它让出位置 */
   .yx-sel .yx-prepchar { padding-right: 26px; }
-  .yx-sel .yx-opts > :is(.yx-best, :only-child) { grid-column: 1 / -1; }
+  .yx-sel .yx-opts > :is(.yx-best, .yx-livenote, :only-child) { grid-column: 1 / -1; }
   .yx-sel .yx-startbar { flex-direction: column; align-self: stretch; justify-content: center; }
   .yx-sel .yx-startbar .yx-big { flex: none; min-height: 72px; font-size: 28px; }
 }

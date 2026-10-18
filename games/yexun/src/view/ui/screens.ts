@@ -7,8 +7,8 @@ import { MAP_IDS, MAP_UNLOCK, MAPS, type MapId } from '../../content/maps.ts';
 import { drawMapThumb } from '../art/terrain.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
-import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, VIGIL_BOSS_ADD_BP, type LiveTier } from '../../content/live.ts';
-import { RAID_LIVE, RAID_TEMPLATES, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
+import { LIVE_TIER_IDS, LIVE_TIERS, vigilBp, type LiveTier } from '../../content/live.ts';
+import { RAID_LIVE, RAID_TEMPLATES, raidCharCoef, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
 import type { TreasureTier } from '../../content/treasures.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, type Region } from '../../content/regions.ts';
 import type { Best, LastMode, RaidPick } from '../../platform/save.ts';
@@ -251,7 +251,7 @@ export class Home {
       const q = quickLive(s);
       const fun = s.lastMode === 'raid' && !s.raidFirst ? `夜探 · ${RAID_TEMPLATES[s.raidTpl].name} · 危险 ${d}` : s.lastMode === 'raid' ? '夜探 · 教学镇' : `守夜 · ${MAPS[s.maps[s.map] ? s.map : 'snow'].name} · 危险 ${d}`;
       // 上次是实盘：按钮上写清带入多少，一点就带入；开不了实盘就按娱乐开，并说为什么
-      const plan = q ? `${q.raid ? `夜探${RAID_TEMPLATES[q.raid].name}` : '守夜雪原'} · ${LIVE_TIERS[q.tier].name}档 ${LIVE_TIERS[q.tier].stake.toLocaleString('zh-CN')}` : fun;
+      const plan = q ? `${q.raid ? `夜探${RAID_TEMPLATES[q.raid].name}` : `守夜${MAPS[s.maps[s.map] ? s.map : 'snow'].name}`} · ${LIVE_TIERS[q.tier].name}档 ${LIVE_TIERS[q.tier].stake.toLocaleString('zh-CN')}` : fun;
       const why = q || !s.live.on ? '' : `${quickOffWhy(s)}，这次按娱乐开`;
       const b = bestText(s.best[d]);
       this.ui.innerHTML =
@@ -369,7 +369,7 @@ export class Select {
   private go(): void {
     const s = this.s!;
     const live = this.live.available && this.live.on;
-    if (this.kind === 'vigil') return live ? this.m.onLive(this.live.tier) : this.m.onStart(this.diff, this.map, this.endless);
+    if (this.kind === 'vigil') return live ? this.m.onLive(this.live.tier, this.map) : this.m.onStart(this.diff, this.map, this.endless);
     if (s.raidFirst) return this.m.onRaid('teach', 0);
     if (live) return raidTierOk(this.live.tier) ? this.m.onRaidLive(this.live.tier as RaidLiveTier, this.tpl) : undefined;
     this.m.onRaid(this.tpl, this.diff);
@@ -452,15 +452,16 @@ export class Select {
       if (raid) {
         const t = this.live.tier;
         startOff = !raidTierOk(t);
-        note = raidTierOk(t) ? raidLiveNote(t as RaidLiveTier, this.tpl) : '豪华档只有守夜；夜探先开小档';
+        note = raidTierOk(t) ? raidLiveNote(t as RaidLiveTier, this.tpl, s.character) : '豪华档只有守夜；夜探先开小档';
         pick = `<div class="yx-pickgrid yx-towns">${townCards}</div>`;
       } else {
-        note = `危险 ${LIVE_TIERS[this.live.tier].danger} · 固定小道士、雪原，不带加成和咒印<br>${liveNote(this.live.tier)}`;
-        pick = '';
+        note = `危险 ${LIVE_TIERS[this.live.tier].danger} · 不带加成和咒印<br>${liveNote(this.live.tier, s.character, this.map)}`;
+        pick = `<div class="yx-pickgrid yx-maps" aria-label="地图">${mapCards}</div>`;
       }
     } else {
       pick = raid ? `<div class="yx-pickgrid yx-towns">${townCards}</div>` : `<div class="yx-pickgrid yx-maps" aria-label="地图">${mapCards}</div>`;
     }
+    const charChip = `<button type="button" class="yx-chip yx-prep yx-prepchar" data-a="prep" data-t="char">${s.charFace ? `<img alt="" src="${s.charFace}">` : ''}<b>${CHARACTERS[s.character].name}</b><small>角色</small></button>`;
     if (!live) {
       const dangers = DANGER_IDS.map((d) => {
         const locked = d > s.dangerOpen;
@@ -468,7 +469,7 @@ export class Select {
       }).join('');
       const curse = s.curses.length ? s.curses.map((c) => CURSES[c].name).join('') : '无';
       const prep =
-        `<button type="button" class="yx-chip yx-prep yx-prepchar" data-a="prep" data-t="char">${s.charFace ? `<img alt="" src="${s.charFace}">` : ''}<b>${CHARACTERS[s.character].name}</b><small>角色</small></button>` +
+        charChip +
         (s.cursesOpen && !raid ? `<button type="button" class="yx-chip yx-prep${s.curses.length ? ' hot' : ''}" data-a="prep" data-t="curse"><b>${curse}</b><small>咒印</small></button>` : '') +
         `<button type="button" class="yx-chip yx-prep" data-a="prep" data-t="perk"><b><span class="yx-coin"></span>${s.coins.toLocaleString('zh-CN')}</b><small>加成</small></button>`;
       const endless = s.cursesOpen && !raid ? `<button type="button" class="yx-chip yx-map${this.endless ? ' on' : ''}" data-a="endless"><b>无尽</b><small>天亮不收工</small></button>` : '';
@@ -478,7 +479,8 @@ export class Select {
       opts = `${dg}<div class="yx-chips">${prep}${endless}</div>${best}`;
     } else {
       // 档位、说明、开始排成一列：选多少 → 怎么算 → 开始
-      opts = `${tiers}<div class="yx-livenote">${note}</div>`;
+      // 实盘能换已解锁的角色和地图（各自有实盘系数，DESIGN 4.2a），加成、咒印不带
+      opts = `${tiers}${raid && s.raidFirst ? '' : `<div class="yx-chips">${charChip}</div>`}<div class="yx-livenote">${note}</div>`;
     }
     const vault = raid && s.vault && !live ? `<button type="button" class="yx-chip yx-vaultbtn" data-a="vault"><b>藏宝阁</b><small>${s.vault.got} / ${s.vault.total}</small></button>` : '';
     const aside = `<div class="yx-aside"><div class="yx-opts">${opts}</div><div class="yx-startbar"><button type="button" class="yx-big" data-a="go"${startOff ? ' disabled' : ''}>${startLabel}</button>${vault}</div></div>`;
@@ -519,9 +521,9 @@ export class Menu {
   onRaid: (template: RaidTemplateId, danger: Danger) => void = () => undefined;
   /** 打开藏宝阁 */
   onVault: () => void = () => undefined;
-  /** 实盘开局（固定小道士、雪原，档位定危险档）；fallback：主页一键开时带入失败，玩家选"按娱乐开"走这里 */
-  onLive: (tier: LiveTier, fallback?: () => void) => void = () => undefined;
-  /** 夜探实盘开局（档位、镇子；固定小道士，不带加成） */
+  /** 实盘开局（档位定危险档；地图选的、角色用存档里的，不带加成和咒印）；fallback：主页一键开时带入失败，玩家选"按娱乐开"走这里 */
+  onLive: (tier: LiveTier, map: MapId, fallback?: () => void) => void = () => undefined;
+  /** 夜探实盘开局（档位、镇子；角色用存档里的，不带加成） */
   onRaidLive: (tier: LiveTier, template: RaidLiveTemplate, fallback?: () => void) => void = () => undefined;
   /** 切娱乐 / 实盘、换档位（main 记进存档） */
   onLiveMode: (on: boolean, tier: LiveTier) => void = () => undefined;
@@ -574,7 +576,7 @@ export class Menu {
     const fun = (): void => this.quickFun();
     if (!q) return fun();
     if (q.raid) this.onRaidLive(q.tier, q.raid, fun);
-    else this.onLive(q.tier, fun);
+    else this.onLive(q.tier, this.state!.maps[this.state!.map] ? this.state!.map : 'snow', fun);
   }
 
   private quickFun(): void {
@@ -954,14 +956,18 @@ export class Tips {
 
 /** 实盘守夜的一句话说明：天亮、尸王各结回几份按这一档的 dawnBp 算（倍数按档拟合，四档不同） */
 /** 夜探实盘的说明：危险档、多少价值算一份、上限 */
-function raidLiveNote(tier: RaidLiveTier, tpl: RaidLiveTemplate): string {
-  const base = RAID_LIVE.base[tier][tpl];
-  return `危险 ${RAID_LIVE.danger[tier]} · 固定小道士，不带加成<br>撤出来至少拿回 1 份，待满 ${RAID_LIVE.floorRamp[tier] / 1800} 分钟再撤保底 ${RAID_LIVE.floor[tier]} 份；带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物算 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
+/** 夜探实盘说明：角色系数乘在算好的倍数上（settle.ts），这里把它折进"多少铜钱算 1 份"和保底里，写的就是这个角色实际拿到的 */
+function raidLiveNote(tier: RaidLiveTier, tpl: RaidLiveTemplate, character: CharacterId): string {
+  const c = raidCharCoef(character, tier, tpl) ?? 10_000;
+  const base = Math.round((RAID_LIVE.base[tier][tpl] * 10_000) / c);
+  const floor = Math.max(1, Math.floor(RAID_LIVE.floor[tier] * c) / 10_000);
+  return `危险 ${RAID_LIVE.danger[tier]} · 不带加成<br>撤出来至少拿回 1 份，待满 ${RAID_LIVE.floorRamp[tier] / 1800} 分钟再撤保底 ${Number(floor.toFixed(2))} 份；带出 ${base.toLocaleString('zh-CN')} 铜钱的宝物算 1 份，最多 ${RAID_LIVE.cap} 份；没撤出这一份就没了`;
 }
 
-function liveNote(tier: LiveTier): string {
-  const dawn = LIVE_TIERS[tier].dawnBp;
-  const boss = Math.min(LIVE_MAX_BP, dawn + VIGIL_BOSS_ADD_BP);
+/** 守夜实盘说明：按选的角色、地图算（各有实盘系数） */
+function liveNote(tier: LiveTier, character: CharacterId, map: MapId): string {
+  const dawn = vigilBp(tier, 0, true, false, character, map);
+  const boss = vigilBp(tier, 0, true, true, character, map);
   const f = (bp: number): string => (bp / 10_000).toFixed(2).replace(/0$/, '');
   return `撑过 3 分钟开始回钱，越久越多：天亮 ${f(dawn)} 份，打倒尸王 ${f(boss)} 份；最多输这一份`;
 }
