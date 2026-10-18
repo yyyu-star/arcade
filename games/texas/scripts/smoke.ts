@@ -387,6 +387,11 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部屏蔽' }).click();
   await page.locator('.atf-btn').click();
   await page.locator('.atf-box [data-key="fun:blockAll"]', { hasText: '全部恢复' }).click();
+  // 电脑版聊天框（kit 0.19，0.19.4）：放得下就常驻、不压下注按钮；1280×720 的 6 人桌放不下，第一次进桌收成"聊天"小按钮
+  const dock = page.locator('[data-key="chat:dock"], [data-key="chat:open"]').first();
+  await dock.waitFor({ timeout: 5_000 });
+  const db = (await dock.boundingBox())!;
+  if (db.x + db.width > DESK_W / 2 && db.y + db.height > DESK_H * 0.7) throw new Error(`desktop chat dock sits on the bet buttons ${JSON.stringify(db)}`);
   // 单机聊天（0.19.3，kit 的 localChat）：顶栏有聊天开关，聊天页说一句，冒在我自己头上；链接不让发
   if (!(await page.locator('.chat-toggle').isVisible())) throw new Error('solo: chat toggle should show');
   await page.locator('.atf-btn').click();
@@ -761,7 +766,30 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   for (const p of [hp, bp]) await p.locator('.atf-say', { hasText: '这把我跟到底' }).waitFor({ timeout: 5_000 });
   await shot(hp, 'chat-host');
   await ap.locator('.atf-away').dispatchEvent('pointerdown');
-  log('chat: seen on the other screens');
+  // kit 0.19 的聊天（0.19.4）：手机竖屏"聊天"按钮挨着"互动"，不压任何座位的头像和名牌
+  await bp.setViewportSize({ width: 390, height: 844 });
+  await bp.waitForTimeout(500);
+  const cb = await bp.locator('[data-key="chat:button"]').boundingBox();
+  if (!cb) throw new Error('portrait: no chat button');
+  for (const e of await bp.locator('.seat:not(.empty) :is(.avatar, .plate)').all()) {
+    const r = await e.boundingBox();
+    if (r && r.x < cb.x + cb.width && cb.x < r.x + r.width && r.y < cb.y + cb.height && cb.y < r.y + r.height) throw new Error(`portrait: chat button covers a seat ${JSON.stringify(r)}`);
+  }
+  await shot(bp, 'chat-phone-portrait');
+  await bp.setViewportSize(PHONE.viewport);
+  // 房主把弹幕关了：1 号再说一句，房主那边只冒气泡、不飘弹幕（电脑版聊天框收起时先点开）
+  if (await hp.locator('[data-key="chat:open"]').isVisible()) await hp.locator('[data-key="chat:open"]').click();
+  await hp.locator('[data-key="chat:danmaku"]').click();
+  await ap.waitForTimeout(3_100);
+  await ap.locator('.atf-btn').click();
+  await ap.locator('.atf-box [data-key="fun:tab:chat"]').click();
+  await ap.locator('[data-key="fun:chatInput"]').fill('弹幕关了也看得到');
+  await ap.locator('[data-key="fun:chatSend"]').click();
+  await hp.locator('.atf-say', { hasText: '弹幕关了也看得到' }).waitFor({ timeout: 5_000 });
+  if (await hp.locator('.atc-dms', { hasText: '弹幕关了也看得到' }).count()) throw new Error('host turned danmaku off but still sees it');
+  await shot(hp, 'chat-host-danmaku-off');
+  await ap.locator('.atf-away').dispatchEvent('pointerdown');
+  log('chat: seen on the other screens, portrait button clear, danmaku off works');
 
   // 打到一半手机刷新：不自动进房（0.2.3），标题页有"回到房间"，点了回到原来的座位
   // 带着房间记录启动页面不能报错（0.3.7：原来先画大厅、后建云存档，这里一刷新就是 pageerror、大厅画不出来；结尾的零报错核对会抓到）

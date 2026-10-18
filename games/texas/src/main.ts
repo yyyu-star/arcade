@@ -669,6 +669,8 @@ const MENU_SAYS = ['就这？', '跟啊，怕了？', '好牌，服了'] as cons
  */
 function openFun(scope: string): void {
   tf?.destroy();
+  // kit 建组件时读聊天设置：要先收起再建
+  foldChatIfCrowded();
   tf = new TableFun({
     storageKey: 'texas',
     phrases: TAUNTS,
@@ -680,10 +682,16 @@ function openFun(scope: string): void {
         const rect = s.owner === 'none' ? null : tableView.avatarRect(i);
         if (!rect) return null;
         const bot = s.owner === 'house';
-        return { rect, name: i === me ? myName : nameAt(v!, i, null), me: i === me, bot, ...(bot ? { temper: temperOf(s.persona) } : {}) };
+        const plate = tableView.plateRect(i);
+        return { rect, ...(plate ? { plate } : {}), name: i === me ? myName : nameAt(v!, i, null), me: i === me, bot, ...(bot ? { temper: temperOf(s.persona) } : {}) };
       });
     },
     avoid: () => tableView.keepOut(),
+    // kit 0.19 的聊天：中间的公共牌、底池弹幕不横穿；省内存的设备弹幕默认关（scene.ts 判断，根上的 .lowfx）
+    center: () => tableView.centerRects(),
+    lite: () => document.documentElement.classList.contains('lowfx'),
+    // 电脑版聊天框：自己挑一个不压座位、不压下注按钮的地方（顶栏、左下"互动"那一排、两手之间那一栏也算在要躲的里面）
+    chatDock: () => (chatFolded() ? tableView.chatDock(120, 48, dockAvoid()) : tableView.chatDock(340, 220, dockAvoid())),
     button: () => (funSlot.classList.contains('hidden') ? null : funSlot.getBoundingClientRect()),
     send: (id, to) => {
       toggle(funHints, 'hidden', true);
@@ -705,6 +713,26 @@ function openFun(scope: string): void {
   toggle(chatBtn, 'hidden', false);
   drawChatBtn();
   syncFun();
+}
+
+/** 聊天框要躲的：顶栏、左下"互动"那一排、两手之间那一栏 */
+function dockAvoid(): DOMRect[] {
+  return [top, betweenBar, ...hud.children].map((e) => e.getBoundingClientRect());
+}
+
+/** kit 的聊天设置（texas.chat）：电脑版聊天框收起了没有 */
+function chatFolded(): boolean {
+  return readJson<{ folded?: unknown }>(KEYS.chat)?.folded === true;
+}
+
+/**
+ * 电脑版聊天框放不下（1280×720 的 6 人桌，哪儿都要盖住座位、按钮或公共牌）：第一次进桌先收成"聊天"小按钮，点开再看。
+ * 只在玩家自己没收起、展开过（texas.chat 里还没有 folded）时做一次；kit 没有公开的"默认收起"参数，这里写它的设置（已请主线让 kit 加正式参数）
+ */
+function foldChatIfCrowded(): void {
+  const prefs = readJson<Record<string, unknown>>(KEYS.chat) ?? {};
+  if (typeof prefs.folded === 'boolean' || window.innerWidth < 960) return;
+  if (!tableView.dockFits(340, 220, dockAvoid())) writeJson(KEYS.chat, { ...prefs, folded: true });
 }
 
 function drawChatBtn(): void {

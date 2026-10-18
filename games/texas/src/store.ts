@@ -15,6 +15,8 @@ export const KEYS = {
   fun: 'texas.fun',
   /** 0.12.0 及以前自己记的按人屏蔽（sessionStorage），0.13.0 起换成 kit 的 texas.fun.blocked，只用来清掉 */
   funMuted: 'texas.fun.muted',
+  /** kit 0.19 的聊天设置（TableFun 的 prefsKey 默认值，kit 自己读写：弹幕开关 danmaku、电脑版聊天框收起 folded、记录展开 long） */
+  chat: 'texas.chat',
   stats: 'texas.stats',
   meta: 'texas.cloud',
   preSync: 'texas.stats.pre-sync',

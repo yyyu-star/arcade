@@ -155,6 +155,8 @@ export class TableView {
   private people: SeatPeople[] | null = null;
   private clockAnim: Animation | null = null;
   private readonly opts: TableViewOpts;
+  /** 聊天框的位置（chatDock）：同一个窗口、同一桌人只算一次 */
+  private dockAt: { key: string; cost: number; at: { left: number; top: number; width: number; height: number } } | null = null;
 
   constructor(parent: HTMLElement, opts: TableViewOpts) {
     this.opts = opts;
@@ -537,6 +539,71 @@ export class TableView {
     if (!n || n.root.classList.contains('empty')) return null;
     const r = n.avatar.getBoundingClientRect();
     return r.width > 0 ? r : null;
+  }
+
+  /**
+   * 名牌和筹码那一块（kit 0.19 的 plate：气泡、弹幕、聊天按钮都避开）；我自己的连头像和底牌一起算，说话不盖自己的牌
+   */
+  plateRect(seat: number): DOMRect | null {
+    const n = this.seats[seat];
+    if (!n || n.root.classList.contains('empty')) return null;
+    const parts = [n.plate, ...(seat === this.me ? [n.avatar, ...n.cards.filter((c) => !c.classList.contains('hidden'))] : [])];
+    return union(parts.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0));
+  }
+
+  /** 牌桌中间的信息区（kit 0.19 的 center）：公共牌、底池、一手的结果条，弹幕不横穿、聊天框和气泡不压 */
+  centerRects(): DOMRect[] {
+    const board = union(this.boardCards.map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0));
+    return [board, ...[this.potEl, this.resultEl].map((e) => e.getBoundingClientRect())].filter((r): r is DOMRect => !!r && r.width > 0 && r.height > 0);
+  }
+
+  /**
+   * 电脑版常驻聊天框放哪（kit 0.19 的 chatDock，屏幕坐标）：kit 自己只试屏幕四个角，德州的四个角都有座位或下注按钮（实测 1920 落在右下的按钮上）。
+   * 这里在整个屏幕上每 16×8 像素试一格，挑盖得最不要紧的：公共牌最要紧，名牌上的名字和筹码数、面前下的注、下注区其次，头像和底牌再次，空桌面不算；一样的先左后上。
+   * 1920 上落在左边两个座位中间的空当；1280×720 的 6 人桌没有空当，落在左下那家的牌和公共牌之间。
+   * 底牌、下的注、公共牌、下注区都按版式算（没发牌、没下注、没轮到我时节点藏着，量不到），同一个窗口、同一桌人只算一次：
+   * kit 每次重画都来问，按当时的筹码算会让聊天框跟着下注跳来跳去
+   */
+  chatDock(w: number, h: number, extra: readonly DOMRect[]): { left: number; top: number; width: number; height: number } {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const live = this.seats.flatMap((n, i) => (n.root.classList.contains('empty') ? [] : [i]));
+    const key = `${vw}x${vh}:${w}x${h}:${this.me}:${live.join(',')}`;
+    if (this.dockAt?.key === key) return this.dockAt.at;
+    const box = this.root.getBoundingClientRect();
+    const k = box.width / this.g.w;
+    const at = (c: Pt, hw: number, hh: number): DOMRect => new DOMRect(box.left + (c.x - hw) * k, box.top + (c.y - hh) * k, 2 * hw * k, 2 * hh * k);
+    const b0 = boardPos(this.g, 0);
+    const b4 = boardPos(this.g, 4);
+    const board = at({ x: (b0.x + b4.x) / 2, y: b0.y }, (b4.x - b0.x) / 2 + 36, 48);
+    // 右下的下注区（赔率条、快捷下注、三个大按钮）
+    const bets = new DOMRect(box.left + box.width / 2 + 100 * k, box.bottom - 190 * k, box.width / 2 - 100 * k, 190 * k);
+    const rect = (e: Element): DOMRect => e.getBoundingClientRect();
+    const block: [DOMRect, number][] = [
+      [board, 30],
+      ...live.flatMap((i): [DOMRect, number][] => {
+        const n = this.seats[i]!;
+        return [[rect(n.plate), 10], [at(this.betPt(i), 44, 18), 10], [rect(n.avatar), i === this.me ? 10 : 4], [at(this.holePt(i, 0), 32, 44), 2], [at(this.holePt(i, 1), 32, 44), 2]];
+      }),
+      ...[bets, ...extra].map((r): [DOMRect, number] => [r, 10]),
+    ];
+    const live2 = block.filter(([r]) => r.width > 0 && r.height > 0);
+    const hit = (l: number, t: number): number =>
+      live2.reduce((a, [r, k2]) => a + k2 * Math.max(0, Math.min(l + w, r.right) - Math.max(l, r.left)) * Math.max(0, Math.min(t + h, r.bottom) - Math.max(t, r.top)), 0);
+    let best = { left: 16, top: 64, cost: Infinity };
+    for (let left = 16; left + w <= vw - 16; left += 16)
+      for (let top = 64; top + h <= vh - 8; top += 8) {
+        const cost = hit(left, top);
+        if (cost < best.cost) best = { left, top, cost };
+      }
+    this.dockAt = { key, cost: best.cost, at: { left: best.left, top: best.top, width: w, height: h } };
+    return this.dockAt.at;
+  }
+
+  /** 这么大的聊天框有没有一个什么都不盖的地方（chatDock 算过的） */
+  dockFits(w: number, h: number, extra: readonly DOMRect[]): boolean {
+    this.chatDock(w, h, extra);
+    return this.dockAt!.cost === 0;
   }
 
   /**
@@ -1230,4 +1297,12 @@ function flipIn(c: HTMLElement, ms: number): void {
 /** 池子收进筹码时鼓一下 */
 function bump(e: HTMLElement): void {
   e.animate([{ transform: 'translate(-50%, -50%) scale(1)' }, { transform: 'translate(-50%, -50%) scale(1.12)' }, { transform: 'translate(-50%, -50%) scale(1)' }], { duration: 300 });
+}
+
+/** 几个矩形的外框；一个都没有回 null */
+function union(rs: readonly DOMRect[]): DOMRect | null {
+  if (!rs.length) return null;
+  const l = Math.min(...rs.map((r) => r.left));
+  const t = Math.min(...rs.map((r) => r.top));
+  return new DOMRect(l, t, Math.max(...rs.map((r) => r.right)) - l, Math.max(...rs.map((r) => r.bottom)) - t);
 }
