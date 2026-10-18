@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type Compone
 import { GAMES, type GameEntry } from './games.ts';
 import { CoinIcon, EmptyArt, LogoMark, PeopleIcon, ShieldIcon, SpeakerIcon, TrophyIcon } from './icons.tsx';
 import { setSoundOn, soundOn, subscribeSound } from './sound.ts';
-import { onlineUrl, playUrl } from './play.ts';
+import { playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api, type Overtake } from './api.ts';
 import { useSession } from './session.tsx';
@@ -130,17 +130,10 @@ function GameCard({ game }: { game: GameEntry }) {
         ) : loading && !slow ? (
           <span className="card__play card__play--disabled">请稍等…</span>
         ) : user || unknown ? (
-          <div className="card__actions">
-            <a className="card__play" href={playUrl(game)}>
-              进入游戏
-            </a>
-            {game.online && (
-              <a className="card__play card__play--alt" href={onlineUrl(game)!}>
-                <PeopleIcon />
-                {game.online.label}
-              </a>
-            )}
-          </div>
+          // 只有一个按钮（0.25.1，所有者 10-18）：好友房在游戏里开、进；叫人、邀请、好友页的"加入"都直接链到游戏的 ?room=
+          <a className="card__play" href={playUrl(game)}>
+            进入游戏
+          </a>
         ) : (
           // 测试期要登录才能玩（游戏那边也会挡）：登录后直接回这个游戏
           <Link className="card__play" href={`/login?from=${game.id}`}>

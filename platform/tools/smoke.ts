@@ -505,25 +505,17 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   check((await enter.getAttribute('href')) === '/games/kaipan/', '登录后"进入游戏"应该指向 /games/kaipan/');
   check((await friend.page.getByRole('link', { name: '管理' }).count()) === 0, '普通用户不该看到"管理"');
   await shot(friend.page, 'friend-home');
-  console.log('登录后掼蛋卡片有"好友房"：指向 /games/guandan/?online=1，点了就去；开盘卡片没有');
-  const online = friend.page.locator('.card', { hasText: '掼蛋' }).getByRole('link', { name: '好友房' });
-  check((await online.getAttribute('href')) === '/games/guandan/?online=1', '"好友房"应该指向 /games/guandan/?online=1');
-  check((await friend.page.locator('.card', { hasText: '开盘' }).getByRole('link', { name: '好友房' }).count()) === 0, '开盘不该有"好友房"');
-  console.log('德州扑克的卡片：进入游戏、好友房（?online=1）；三张封面都画得出来');
+  // 0.25.1：大厅卡片只有一个"进入游戏"，铺满卡片正文宽；好友房在游戏里开、进（所有者 10-18），标签照旧写"好友房"
+  console.log('每张能玩的卡片只有一个"进入游戏"，指向游戏首页、铺满卡片；同一行卡片的按钮一样高；没有"好友房"按钮');
+  for (const [name, path] of [['掼蛋', '/games/guandan/'], ['德州扑克', '/games/texas/'], ['雀馆', '/games/mahjong/'], ['飞驰', '/games/racing/'], ['夜巡', '/games/yexun/']] as const) {
+    const card = friend.page.locator('.card', { hasText: name });
+    const links = card.getByRole('link');
+    check((await links.count()) === 1, `${name}卡片上应该只有一个按钮，实际 ${await links.count()} 个`);
+    check((await links.first().getAttribute('href')) === path, `${name}"进入游戏"应该指向 ${path}`);
+  }
   const texas = friend.page.locator('.card', { hasText: '德州扑克' });
-  check((await texas.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/texas/', '德州"进入游戏"应该指向 /games/texas/');
-  check((await texas.getByRole('link', { name: '好友房' }).getAttribute('href')) === '/games/texas/?online=1', '德州"好友房"应该指向 /games/texas/?online=1');
-  // 麻将的好友房（0.10.16）
-  const mahjong = friend.page.locator('.card', { hasText: '雀馆' }).getByRole('link', { name: '好友房' });
-  check((await mahjong.getAttribute('href')) === '/games/mahjong/?online=1', '麻将"好友房"应该指向 /games/mahjong/?online=1');
-  // 《飞驰》（0.10.24 起能玩）：进入游戏、好友房（?online=1）
-  const racing = friend.page.locator('.card', { hasText: '飞驰' });
-  check((await racing.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/racing/', '飞驰"进入游戏"应该指向 /games/racing/');
-  check((await racing.getByRole('link', { name: '好友房' }).getAttribute('href')) === '/games/racing/?online=1', '飞驰"好友房"应该指向 /games/racing/?online=1');
-  // 《夜巡》（0.22.0）：单机，只有"进入游戏"，没有好友房
-  const yexun = friend.page.locator('.card', { hasText: '夜巡' });
-  check((await yexun.getByRole('link', { name: '进入游戏' }).getAttribute('href')) === '/games/yexun/', '夜巡"进入游戏"应该指向 /games/yexun/');
-  check((await yexun.getByRole('link', { name: '好友房' }).count()) === 0, '夜巡不该有"好友房"');
+  check((await texas.locator('.card__tags').getByText('好友房', { exact: true }).count()) === 1, '德州卡片上的标签还写着"好友房"');
+  await cardButtonsFit(friend.page, '大厅');
   for (const img of await friend.page.locator('.card__cover').all()) {
     await img.scrollIntoViewIfNeeded();
     await img.evaluate((el: HTMLImageElement) => el.decode());
@@ -535,9 +527,8 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await friend.page.evaluate(() => window.scrollTo(0, 0));
   // 本地没有掼蛋的 Worker，平台对 /games/* 回 404，这里只看跳到了哪
   expectHttp(404, '/games/guandan/');
-  await Promise.all([friend.page.waitForURL(`${BASE}/games/guandan/?online=1`), online.click()]);
+  await Promise.all([friend.page.waitForURL(`${BASE}/games/guandan/`), friend.page.locator('.card', { hasText: '掼蛋' }).getByRole('link', { name: '进入游戏' }).click()]);
   await friend.page.goto(`${BASE}/`);
-  await friend.page.locator('.card', { hasText: '掼蛋' }).getByRole('link', { name: '好友房' }).waitFor();
   await friend.page.goto(`${BASE}/admin`);
   await friend.page.waitForURL(`${BASE}/`);
   check((await friend.page.getByRole('heading', { name: '给朋友建个账号' }).count()) === 0, '普通用户进不了管理界面');
@@ -1105,7 +1096,7 @@ async function mobile(browser: Browser): Promise<void> {
   await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }], feed: FAKE_FEED });
   await fakeFeedFiles(page);
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
-  // 登录后的首页：掼蛋卡片的"进入游戏""好友房"并排，都至少 44 高
+  // 登录后的首页：掼蛋卡片只有"进入游戏"（0.25.1），至少 44 高
   await page.goto(`${BASE}/`);
   const overtake = page.getByTestId('nudge-overtake');
   await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
@@ -1117,11 +1108,8 @@ async function mobile(browser: Browser): Promise<void> {
   check((await strip.getByRole('link', { name: /看全部/ }).getAttribute('href')) === '/friends', '"看全部"该进好友页');
   await shot(page, 'mobile-home-overtake');
   const guandan = page.locator('.card', { hasText: '掼蛋' });
-  await guandan.getByRole('link', { name: '好友房' }).waitFor();
-  for (const name of ['进入游戏', '好友房']) {
-    const box = await guandan.getByRole('link', { name }).boundingBox();
-    check(box && box.height >= 44, `首页"${name}"不到 44 高（${box?.height ?? 0}）`);
-  }
+  const enterBox = await guandan.getByRole('link', { name: '进入游戏' }).boundingBox();
+  check(enterBox && enterBox.height >= 44, `首页"进入游戏"不到 44 高（${enterBox?.height ?? 0}）`);
   await guandan.scrollIntoViewIfNeeded();
   await shot(page, 'mobile-home-signed-in');
   await page.goto(`${BASE}/me`);
@@ -1772,9 +1760,27 @@ async function loginNext(browser: Browser): Promise<void> {
  * 电脑版排版（0.23.0）：在 1280、1920 宽各看一次——主区不能还是中间一窄列（至少占内容区的 85%），整页不能横着滑；各截一张。
  * 看完把窗口恢复成原来的大小
  */
+/** 大厅游戏卡（0.25.1）：每张只有一个按钮，铺满卡片正文宽；同一行的卡片按钮在同一高度 */
+async function cardButtonsFit(page: Page, where: string): Promise<void> {
+  const cards = await page.locator('.card:not(.card--placeholder)').evaluateAll((els) =>
+    els.map((c) => {
+      const body = c.querySelector('.card__body')!;
+      const b = body.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(body).paddingLeft) + parseFloat(getComputedStyle(body).paddingRight);
+      const btns = [...c.querySelectorAll('.card__play')].map((e) => e.getBoundingClientRect());
+      return { top: Math.round(c.getBoundingClientRect().top), n: btns.length, bottom: Math.round(btns[0]?.bottom ?? 0), full: !!btns[0] && Math.abs(btns[0].width - (b.width - pad)) < 2 };
+    }),
+  );
+  check(cards.every((c) => c.n === 1 && c.full), `${where}：每张卡只该有一个铺满的按钮：${JSON.stringify(cards)}`);
+  const rows = new Map<number, Set<number>>();
+  for (const c of cards) rows.set(c.top, (rows.get(c.top) ?? new Set<number>()).add(c.bottom));
+  check([...rows.values()].every((r) => r.size === 1), `${where}：同一行卡片的按钮应该在同一高度：${JSON.stringify(cards)}`);
+}
+
 async function deskLayout(page: Page, name: string): Promise<void> {
   const before = page.viewportSize()!;
-  for (const width of [1280, 1920]) {
+  // 大厅多看一个 2560 宽（所有者 10-18 是在 2560 宽屏上看出卡片按钮叠着的）
+  for (const width of name === 'home' ? [1280, 1920, 2560] : [1280, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
     const m = await page.evaluate(() => {
       const shell = document.querySelector('.page')!;
@@ -1784,6 +1790,7 @@ async function deskLayout(page: Page, name: string): Promise<void> {
     });
     check(m.main >= m.inner * 0.85, `${name}（${width} 宽）主区还是窄列：${Math.round(m.main)} / ${Math.round(m.inner)}`);
     check(m.scroll <= 0, `${name}（${width} 宽）整页能横着滑：多出 ${m.scroll}px`);
+    if (name === 'home') await cardButtonsFit(page, `大厅 ${width} 宽`);
     await shot(page, `${name}-desk-${width}`);
   }
   await page.setViewportSize(before);
@@ -1818,7 +1825,10 @@ async function deskPages(browser: Browser): Promise<void> {
       await page.goto(`${BASE}${path}`);
       await ready(page);
       if (screen === 'desktop') await deskLayout(page, name);
-      else await shot(page, `${name}-phone`);
+      else {
+        if (name === 'home') await cardButtonsFit(page, '大厅 手机竖屏');
+        await shot(page, `${name}-phone`);
+      }
     }
     await ctx.close();
   }

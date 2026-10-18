@@ -38,11 +38,6 @@ export interface GameEntry {
    */
   daily?: true | readonly DailySub[];
   /**
-   * 好友房入口：大厅卡片上"进入游戏"旁边多一个按钮，链到游戏地址加上 query（游戏自己认这个参数，掼蛋把 online=1 当作直接打开好友房面板）。
-   * 平台不做开关：游戏关掉联机时这个链接照样打开游戏首页。登录后才露（好友房要登录）
-   */
-  online?: { label: string; query: string };
-  /**
    * 不用平台钱包的游戏（只有娱乐模式）写 false：排行榜的"本周净赢"不给它开标签，管理页的筹码趋势不给它开一列（都只会是空的）。
    * 只管界面上的这两处；接口的白名单仍是 GAME_IDS
    */
@@ -85,7 +80,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/guandan/',
     devUrl: 'http://localhost:5174/',
     status: 'playable',
-    online: { label: '好友房', query: 'online=1' },
   },
   {
     id: 'texas',
@@ -97,7 +91,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/texas/',
     devUrl: 'http://localhost:5175/',
     status: 'playable',
-    online: { label: '好友房', query: 'online=1' },
   },
   {
     id: 'mahjong',
@@ -109,7 +102,6 @@ export const GAMES: readonly GameEntry[] = [
     path: '/games/mahjong/',
     devUrl: 'http://localhost:5176/',
     status: 'playable',
-    online: { label: '好友房', query: 'online=1' },
   },
   {
     // 外部贡献者的游戏（0.10.22 先登记成"即将上线"，0.10.24 游戏线上验证后改成能玩）
@@ -124,7 +116,6 @@ export const GAMES: readonly GameEntry[] = [
     status: 'playable',
     // 只有娱乐模式，不碰钱包（游戏 README）
     wallet: false,
-    online: { label: '好友房', query: 'online=1' },
   },
   {
     // 夜巡 1.0 整体验收通过后才登记上线（主线 2026-10-16：不先登记"即将上线"）。榜名照夜巡交分用的（games/yexun/src/online/score.ts）
