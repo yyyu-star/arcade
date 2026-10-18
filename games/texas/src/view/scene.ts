@@ -102,7 +102,10 @@ export function mountScene(app: HTMLElement, stage: HTMLElement): HTMLDivElement
     p.style.cssText = `left:${x}%;top:${y}%;animation-duration:${s}s;animation-delay:${delay}s`;
   }
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  scene.classList.toggle('still', reduced || lowMemory());
+  const still = reduced || lowMemory();
+  scene.classList.toggle('still', still);
+  // 牌桌上的特效（fx.ts、荷官）也按这个降级：根上挂 .lowfx
+  document.documentElement.classList.toggle('lowfx', still);
   const follow = (): void => {
     scene.classList.toggle('table', stage.classList.contains('at-table') || stage.classList.contains('in-room'));
     scene.classList.toggle('tall', stage.classList.contains('tall'));

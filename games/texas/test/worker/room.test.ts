@@ -529,7 +529,8 @@ describe('搭子战绩（0.17.0，平台 15.19）', () => {
     await waitFor(async () => (await togetherOf(ids[2]!)).length === 2);
     const created = (await inspect(code)).persist!.createdAt;
     const first = await togetherOf(ids[2]!);
-    expect(first.map((x) => x.op)).toEqual([togetherOp(code, created, 0), togetherOp(code, created, 1)]);
+    // 两场是各自发出去的（不 await），到平台的先后不定（kit #261 的 CI 挂过一次），只比有哪几场
+    expect(first.map((x) => x.op).sort()).toEqual([togetherOp(code, created, 0), togetherOp(code, created, 1)].sort());
     for (const x of first) {
       expect(x.game).toBe('texas');
       expect(x.players).toHaveLength(2);

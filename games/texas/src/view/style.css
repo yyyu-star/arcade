@@ -510,6 +510,9 @@ body::before {
 .seat.hit :is(.bubble, .badge) { opacity: 0; }
 /* 顶上的座位：头像上方是桌边、下方是下注，放在头像左边（底牌在右边） */
 .seat.top .bubble { left: auto; right: 38px; top: -16px; transform: none; }
+/* 加注面板打开时整个往上挪开的座位（table.ts 的 avoid）：头像上方压着上一家的名牌，动作签放到名牌朝桌心那一侧（0.18.3） */
+.seat.shifted.right .bubble { left: auto; right: 62px; top: 36px; transform: none; }
+.seat.shifted.left .bubble { left: 62px; top: 36px; transform: none; }
 /* 贴着左边的顶上座位（6、7 人桌左上角）：头像左边放不下，放头像正上方（0.3.1） */
 .seat.top.edge .bubble { left: 50%; right: auto; top: -64px; transform: translateX(-50%); }
 

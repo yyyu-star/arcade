@@ -107,6 +107,26 @@ export function buttonPos(p: Pt, g: Geo, mine: boolean): Pt {
   return mine ? { x: b.x - 96, y: b.y - 12 } : { x: b.x - 64, y: b.y };
 }
 
+/**
+ * 荷官（0.18.3）能站的地方：桌子顶边上离顶上的座位左右都够远的点，按先后试（中间、右边 32% 处、左边 32% 处）。
+ * 横屏才有；7–9 人桌顶上坐满了，一个都没有。点在桌边上，荷官按它摆、牌从它上面一点发出来。
+ * 还要不碰顶栏（左边"在哪一桌"的字、右边的按钮，长短随玩法变），那一步在 table.ts 按实际位置挑
+ */
+export function dealerSpots(g: Geo, size: number): Pt[] {
+  if (g.tall) return [];
+  const f = felt(g);
+  const seats = Array.from({ length: size }, (_, k) => seatPos(k, 0, size, g)).filter((p) => p.y < 200);
+  return [0.5, 0.68, 0.32]
+    .map((fx) => g.w * fx)
+    .filter((x) => seats.every((p) => Math.abs(p.x - x) >= DEALER_ROOM))
+    .map((x) => {
+      const t = (x - f.cx) / f.rx;
+      return { x, y: f.cy - f.ry * Math.sqrt(1 - t * t) };
+    });
+}
+/** 荷官左右各要让出多宽（头像 60、名牌 108、旁边的底牌和动作签都算上） */
+const DEALER_ROOM = 150;
+
 /** 公共牌：5 张的中心（竖屏桌子窄，挨得近一点） */
 export const boardPos = (g: Geo, i: number): Pt => ({ x: g.w / 2 + (i - 2) * (g.tall ? 62 : 66), y: felt(g).cy - 18 });
 /** 池子在公共牌下面（0.1.1：原来在上面，和顶上座位的下注、庄家按钮挤在一起） */

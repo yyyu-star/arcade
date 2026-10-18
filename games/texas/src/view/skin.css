@@ -309,3 +309,45 @@ html, body, body::before { background: var(--night); }
 @media (pointer: coarse), (prefers-reduced-motion: reduce) {
   .seat.acting::after, .seat.win::before { animation: none; }
 }
+
+/* ---------- 荷官（dealer.ts，0.18.3）：站在桌子顶边后面，svg 底边比桌边高 7（木边宽 17，压住腰，手搭在木边上） ---------- */
+.dealer-guy {
+  position: absolute;
+  /* 画的是 80 × 96，缩到 0.8：再大头就顶到顶栏里 */
+  width: 64px;
+  height: 77px;
+  transform: translate(-50%, calc(-100% - 7px));
+  pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55));
+}
+.dealer-guy svg { display: block; width: 100%; height: 100%; }
+.dealer-guy .arm { transform-box: view-box; transform-origin: 62px 70px; transition: transform .16s ease-out; }
+.dealer-guy.dealing .arm { transform: rotate(-38deg) translate(-2px, -4px); }
+.dealer-guy .eyes { transform-box: view-box; transform-origin: 40px 33px; animation: blink 4.6s infinite; }
+@keyframes blink { 0%, 95%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+.lowfx .dealer-guy .eyes { animation: none; }
+.lowfx .dealer-guy .arm { transition: none; }
+
+/* ---------- 关键时刻（fx.ts，0.18.3）：金币、全下聚光、大锅金边 ---------- */
+.fx-coin {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6cf, #f3c86b 45%, #b8862e 80%);
+  box-shadow: inset 0 0 0 2px rgba(124, 85, 19, .55), 0 0 8px rgba(255, 214, 110, .7);
+}
+.fx-spot {
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle 120px at calc(var(--x) + 40px) calc(var(--y) + 40px), rgba(255, 230, 160, .14), transparent 70%, rgba(0, 0, 0, .55) 100%);
+}
+.fx-glow {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 60px 18px rgba(255, 205, 100, .55);
+}
+
+/* 进桌：桌面从光里推近（只动 scale 和 opacity，不和 .screen 别的 transform 打架） */
+.stage.at-table .screen { animation: table-in .45s ease-out; }
+@keyframes table-in { from { opacity: 0; scale: 1.04; } }

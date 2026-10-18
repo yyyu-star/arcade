@@ -16,7 +16,9 @@ import type { Action, HandResult, LogEntry, Owner, Status } from '../core/table.
 import type { View } from '../core/view.ts';
 import { avatarSvg, chipPile, HUMAN_BG, makeCard, ME_LOOK, setCard } from './art.ts';
 import { el, setText, toggle } from './dom.ts';
-import { betPos, boardPos, buttonPos, deckPos, felt, isTop, potPos, resultPos, seatPos, type Geo, type Pt } from './layout.ts';
+import { betPos, boardPos, buttonPos, dealerSpots, deckPos, felt, isTop, potPos, resultPos, seatPos, type Geo, type Pt } from './layout.ts';
+import { Dealer } from './dealer.ts';
+import { coinBurst, edgeGlow, spotlight } from './fx.ts';
 import { play } from './sound.ts';
 import type { StickerId } from 'arcade-kit/fun';
 import { bluffer, putIn } from '../core/fame.ts';
@@ -128,6 +130,10 @@ export class TableView {
   readonly root: HTMLDivElement;
   private readonly feltEl: HTMLDivElement;
   private readonly markEl: HTMLDivElement;
+  /** 荷官（0.18.3）：站在桌子顶边后面，牌从他手里发出、收回他那里；没地方站时照旧从庄家位置发、收回桌心 */
+  private readonly croupier: Dealer;
+  /** 荷官现在站的点（没站是 null） */
+  private croupierAt: Pt | null = null;
   private readonly potEl: HTMLDivElement;
   private readonly potMain: HTMLDivElement;
   private readonly potSides: HTMLDivElement;
@@ -155,6 +161,7 @@ export class TableView {
     this.root = el('div', 'table', parent);
     this.feltEl = el('div', 'felt', this.root);
     this.markEl = el('div', 'felt-mark', this.feltEl, '德州扑克');
+    this.croupier = new Dealer(this.root, this.feltEl);
     this.potEl = el('div', 'pot', this.root);
     this.potMain = el('div', 'pot-main', this.potEl);
     this.potSides = el('div', 'pot-sides', this.potEl);
@@ -177,6 +184,7 @@ export class TableView {
   /** 桌心的字：主题房的名字（0.18.1，rooms.ts） */
   setMark(text: string): void {
     setText(this.markEl, text);
+    this.placeCroupier();
   }
 
   avoid(r: DOMRect | null): void {
@@ -206,6 +214,7 @@ export class TableView {
       if (!r || i === this.me || !overlap(box, r)) {
         n.root.style.translate = '';
         toggle(n.root, 'tucked', false);
+        toggle(n.root, 'shifted', false);
         continue;
       }
       const fits = (b: Box): boolean => b.top >= stage.top && b.left >= stage.left && !overlap(b, r) && boxes.every((o, k) => k === i || !overlap(b, o));
@@ -220,6 +229,8 @@ export class TableView {
       else if (fits(shift(box, left, 0))) move = [left, 0, shift(box, left, 0)];
       else if (fits(shift(plate, 0, tuck))) move = [0, tuck, shift(plate, 0, tuck)];
       toggle(n.root, 'tucked', move[2] !== box && move[2].bottom - move[2].top < box.bottom - box.top);
+      // 整个挪开的座位：动作签换到名牌朝桌心那一侧（0.18.3），头像上方那一格现在是别人的名牌
+      toggle(n.root, 'shifted', move[2] !== box && !n.root.classList.contains('tucked'));
       // 挪过去的座位也算占了地方，后面的座位别再挪到这里
       boxes[i] = move[2];
       n.root.style.translate = move[0] || move[1] ? `${Math.round(move[0] / scale)}px ${Math.round(move[1] / scale)}px` : '';
@@ -265,6 +276,7 @@ export class TableView {
     Object.assign(this.feltEl.style, { left: `${f.cx - f.rx}px`, top: `${f.cy - f.ry}px`, width: `${f.rx * 2}px`, height: `${f.ry * 2}px` });
     place(this.potEl, potPos(g));
     place(this.resultEl, resultPos(g));
+    this.placeCroupier();
     this.boardCards.forEach((c, i) => place(c, boardPos(g, i)));
     const size = this.seats.length;
     this.seats.forEach((s, i) => {
@@ -327,6 +339,8 @@ export class TableView {
         await this.muck(seat, f);
       } else if (put > 0) {
         play(log?.allin ? 'allin' : 'chip');
+        // 全下（不算交盲注交到没钱）：桌子暗下去、聚光打在他身上（0.18.3）
+        if (log?.allin && log.act !== 'sb' && log.act !== 'bb') spotlight(this.fx, this.seatPt(seat), this.opts.pace());
         await this.fly(chipNode(put), this.seatPt(seat), this.betPt(seat), MS.chip);
         s.stack -= put;
         s.bet += put;
@@ -392,7 +406,11 @@ export class TableView {
     f.result = r;
     this.draw(f);
     // 大池子（40 个大盲以上）收给赢家：筹码哗啦一串
-    if (r.pots.reduce((a, p) => a + p.amount, 0) >= 40 * f.bb) play('bigpot');
+    const big = r.pots.reduce((a, p) => a + p.amount, 0) >= 40 * f.bb;
+    if (big) {
+      play('bigpot');
+      edgeGlow(this.fx, this.opts.pace());
+    }
     for (const [k, pot] of r.pots.entries()) {
       await Promise.all(
         pot.winners.map(async (w) => {
@@ -413,6 +431,8 @@ export class TableView {
     else if (!r.byFold && r.shown.some((x) => x.seat === this.me)) play('lose');
     const winners = new Set(r.pots.flatMap((p) => p.winners.map((x) => x.seat)));
     for (const seat of winners) {
+      // 赢家头像里迸出金币（0.18.3；大锅更多更远）
+      coinBurst(this.fx, this.seatPt(seat), this.opts.pace(), big, isTop(this.seatPt(seat), this.g));
       this.float(seat, `+${chips(r.pots.reduce((a, p) => a + (p.winners.find((x) => x.seat === seat)?.won ?? 0), 0))}`);
     }
     this.afterHand(f, r, winners, bluffs, log);
@@ -536,7 +556,7 @@ export class TableView {
       s.win = false;
       s.tag = '';
     });
-    f.board.forEach((_, i) => out.push(this.flyFrom(this.boardCards[i]!, boardPos(this.g, i), deckPos(this.g), MS.clear)));
+    f.board.forEach((_, i) => out.push(this.flyFrom(this.boardCards[i]!, boardPos(this.g, i), this.deckPt(), MS.clear)));
     f.board = [];
     f.result = null;
     f.pots = [];
@@ -579,12 +599,13 @@ export class TableView {
       const i = (v.button + k) % size;
       if (dealt[i]) order.push(i);
     }
-    const from = buttonPos(this.seatPt(v.button), this.g, v.button === this.me);
+    const from = this.croupierAt ? this.deckPt() : buttonPos(this.seatPt(v.button), this.g, v.button === this.me);
     const target = frameOf(v);
     const flights: Promise<void>[] = [];
     let n = 0;
     // 发牌总时长按两圈 12 张封顶：9 人桌 18 张照 170 毫秒一张要 3 秒多（0.3.0 实打嫌一手太慢）
     const gap = MS.dealGap * Math.min(1, 12 / (order.length * 2));
+    this.croupier.deal((gap * order.length * 2 + MS.dealFly) * this.opts.pace());
     for (let round = 0; round < 2; round++) {
       for (const i of order) {
         const delay = n++ * gap;
@@ -633,7 +654,8 @@ export class TableView {
     for (let i = from; i < board.length; i++) {
       await this.pause((i < 3 ? (i === from ? MS.street * 0.5 : MS.flopGap) : MS.street) * slow);
       play('card');
-      await this.fly(backNode('board'), deckPos(this.g), boardPos(this.g, i), MS.boardFly);
+      this.croupier.deal(MS.boardFly * this.opts.pace());
+      await this.fly(backNode('board'), this.deckPt(), boardPos(this.g, i), MS.boardFly);
       f.board = board.slice(0, i + 1);
       this.draw(f);
       play('flip');
@@ -651,7 +673,7 @@ export class TableView {
     if (!quiet) s.status = 'folded';
     this.draw(f);
     const flights = [];
-    for (let k = 0; k < n; k++) flights.push(this.fly(backNode(seat === this.me ? 'mine' : 'small'), this.holePt(seat, k), deckPos(this.g), MS.muck, 0.4));
+    for (let k = 0; k < n; k++) flights.push(this.fly(backNode(seat === this.me ? 'mine' : 'small'), this.holePt(seat, k), this.deckPt(), MS.muck, 0.4));
     await Promise.all(flights);
   }
 
@@ -721,6 +743,33 @@ export class TableView {
   }
 
   // ---------- 位置 ----------
+
+  /** 牌从哪里发出、收回哪里：荷官的右手（dealer.ts 的画法，缩到 0.8 后手在桌边上方 15、右边 15），没有荷官就是桌心 */
+  private deckPt(): Pt {
+    const d = this.croupierAt;
+    return d ? { x: d.x + 15, y: d.y - 15 } : deckPos(this.g);
+  }
+
+  /**
+   * 荷官站哪：layout 给的几个点里挑第一个不碰顶栏的（顶栏左边的字随玩法变长短，按实际位置量）；都碰就不出现。
+   * 摆座位时、顶栏的字变了时（setMark 跟着 drawTop 来）各挑一次
+   */
+  private placeCroupier(): void {
+    const bar = [...(this.root.closest('.stage')?.querySelectorAll('.topbar > :not(.spacer)') ?? [])]
+      .map((e) => e.getBoundingClientRect())
+      .filter((b) => b.width > 0);
+    this.croupierAt = null;
+    for (const p of dealerSpots(this.g, this.seats.length)) {
+      this.croupier.place(p);
+      const r = this.croupier.root.getBoundingClientRect();
+      // 没显示（标题页时牌桌是藏着的）量不出来：先按第一个点摆着，进桌后顶栏一变会再挑
+      if (r.width === 0 || bar.every((b) => b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom)) {
+        this.croupierAt = p;
+        return;
+      }
+    }
+    this.croupier.place(null);
+  }
 
   private seatPt(i: number): Pt {
     return seatPos(i, this.me, this.seats.length, this.g);

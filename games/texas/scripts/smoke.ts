@@ -206,8 +206,9 @@ const coveredSeats = (page: Page): Promise<number> =>
 /** 座位之间互相压着的对数（头像、名牌；0.9.0：原来挪开的座位会压到别的座位上，上面那个检查看不出来） */
 const seatOverlaps = (page: Page): Promise<number> =>
   page.evaluate(() => {
+    // 0.18.3 起连动作签一起算：挪开的座位的签原来压在上一家的名牌上
     const boxes = [...document.querySelectorAll('.seat:not(.empty)')].map((seat) =>
-      [...seat.querySelectorAll(seat.classList.contains('tucked') ? '.plate' : '.avatar, .plate')].map((e) => e.getBoundingClientRect()),
+      [...seat.querySelectorAll(seat.classList.contains('tucked') ? '.plate' : '.avatar, .plate, .bubble.on')].map((e) => e.getBoundingClientRect()),
     );
     let n = 0;
     for (let i = 0; i < boxes.length; i++)
@@ -352,6 +353,8 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   if ((await handText(page)) !== 0 || (await page.locator('.seat.me .card.up').count())) throw new Error('dealt before the tips were closed');
   await skipTips(page);
   await page.locator('.seat.me .card.up').first().waitFor();
+  // 荷官（0.18.3）：电脑上 6 人桌站在桌子顶边
+  if ((await page.locator('.dealer-guy:not(.hidden)').count()) !== 1) throw new Error('desktop 6-seat table should show the dealer');
   // 互动（docs/table-fun.md，0.13.0 起是 kit 的 TableFun）：点 1 号电脑的头像扔一个道具，点自己的头像发一个表情；
   // "互动"面板里发一句；全部屏蔽、再全部恢复；点名牌看对手
   await page.locator('.atf-hot[data-seat="1"]').click();
