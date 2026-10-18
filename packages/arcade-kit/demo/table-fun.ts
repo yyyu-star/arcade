@@ -20,7 +20,8 @@ const fun = new TableFun({
   theme: demoTheme,
   phrases: PHRASES,
   named: [3, 4, 2],
-  seats: (): FunSeat[] => who.map(([name, bot, temper], i) => ({ rect: $(`s${i}`).getBoundingClientRect(), name, me: i === 0, bot, temper })),
+  seats: (): FunSeat[] =>
+    who.map(([name, bot, temper], i) => ({ rect: $(`s${i}`).getBoundingClientRect(), plate: $(`s${i}`).querySelector('span')!.getBoundingClientRect(), name, me: i === 0, bot, temper })),
   avoid: () => [$('hand').getBoundingClientRect(), $('act').getBoundingClientRect()],
   button: () => {
     const r = $('s0').getBoundingClientRect();
@@ -48,6 +49,13 @@ const fun = new TableFun({
     return { ok: true };
   },
 });
+
+// 弹幕和记录的样子（0.19.0）：三家电脑轮流说一句
+const LINES = ['这把牌不错', '谁先出？', '我要炸了啊', '稳住稳住，别急', '哈哈哈哈', '今天手气真好', '下一把我来带飞，都跟上', '你们打得太快了'];
+let n = 0;
+$('chatter').onclick = () => {
+  for (let k = 0; k < 6; k++) setTimeout(() => fun.chat(1 + (n % 3), LINES[n++ % LINES.length]!), k * 700);
+};
 
 $('moment').onclick = () => {
   fun.banner('炸弹！', '我 炸了 右家');

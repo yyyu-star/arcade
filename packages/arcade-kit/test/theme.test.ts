@@ -7,6 +7,7 @@ import { themeVars, safeThemeValue, type KitTheme } from '../src/theme.ts';
 import funSrc from '../src/fun.ts?raw';
 import shareSrc from '../src/share.ts?raw';
 import socialSrc from '../src/social.ts?raw';
+import tableChatSrc from '../src/table-chat.ts?raw';
 import tableFunSrc from '../src/table-fun.ts?raw';
 import themeSrc from '../src/theme.ts?raw';
 
@@ -65,6 +66,7 @@ describe('默认值不变的守卫', () => {
     ['share.ts', shareSrc, 8],
     ['social.ts', socialSrc, 20],
     ['table-fun.ts', tableFunSrc, 20],
+    ['table-chat.ts', tableChatSrc, 10],
   ])('%s：每个 var(--ak- 都带默认值', (_n, src, min) => {
     const r = check(src);
     expect(r.total).toBeGreaterThanOrEqual(min);
@@ -78,7 +80,7 @@ describe('默认值不变的守卫', () => {
   it('只用 theme.ts 里列的变量名', () => {
     const known = new Set([...themeSrc.matchAll(/'(--ak-[a-z-]+)'/g)].map((m) => m[1]));
     expect(known.size).toBe(11);
-    for (const src of [shareSrc, socialSrc, tableFunSrc, funSrc]) {
+    for (const src of [shareSrc, socialSrc, tableFunSrc, tableChatSrc, funSrc]) {
       for (const m of src.matchAll(/var\((--ak-[a-z-]+)/g)) expect(known.has(m[1]!), m[1]).toBe(true);
     }
   });

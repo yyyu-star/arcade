@@ -14,7 +14,7 @@
       #s3 { left: 40px; top: 22%; }
       #hand { position: absolute; left: 160px; right: 20px; bottom: 10px; height: 120px; background: rgba(255, 255, 255, .15); border-radius: 8px; }
       #act { position: absolute; left: 35%; right: 20%; bottom: 140px; height: 50px; background: rgba(0, 0, 0, .3); border-radius: 8px; }
-      .bar { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+      .bar { position: absolute; left: 160px; top: 10px; display: flex; gap: 6px; }
       button { font: inherit; padding: 6px 10px; }
       .hit { animation: hit .35s; }
       @keyframes hit { 25% { transform: translateX(-6px) scale(.94); } 50% { transform: translateX(6px) scale(.97); } 75% { transform: translateX(-3px); } }
@@ -28,7 +28,7 @@
     <div class="seat" id="s3"><span>左家·高冷</span></div>
     <div id="hand"></div>
     <div id="act"></div>
-    <div class="bar"><button id="moment">名场面：我炸了右家</button></div>
+    <div class="bar"><button id="chatter">电脑们说几句</button><button id="moment">名场面：我炸了右家</button></div>
     <script type="module" src="./table-fun.ts"></script>
   </body>
 </html>

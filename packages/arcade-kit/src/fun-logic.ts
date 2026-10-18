@@ -346,6 +346,122 @@ export function placeBubble(anchor: Box, w: number, h: number, view: { width: nu
   return { left: best!.left, top: best!.top };
 }
 
+// ---------- 聊天的版式（0.19.0，docs/chat.md 第 5 节） ----------
+
+/** 电脑版（牌桌一角常驻聊天框）还是手机版（"聊天"按钮 + 贴底输入条）：按可见区大小分，不看指针（无头浏览器报的指针不可靠） */
+export type ChatMode = 'desk' | 'phone';
+export function chatMode(view: { width: number; height: number }): ChatMode {
+  return view.width >= 960 && view.height >= 560 ? 'desk' : 'phone';
+}
+
+/** 气泡、弹幕、聊天框的字号：电脑 18–22px 按短边放大，手机 ≥ 15px（所有者：电脑上气泡太小） */
+export function chatFont(view: { width: number; height: number }, mode: ChatMode = chatMode(view)): number {
+  const m = Math.min(view.width, view.height);
+  return mode === 'desk' ? Math.max(18, Math.min(22, Math.round(m / 48))) : m >= 480 ? 16 : 15;
+}
+
+/** 弹幕的数字：同屏上限、轨道数、横穿一屏的时长和速度上下限（px/秒）、条与条的间距、排队上限 */
+export const DANMAKU = { maxDesk: 12, maxPhone: 6, lanesDesk: 6, lanesPhone: 4, crossMs: 8000, minSpeed: 90, maxSpeed: 260, gap: 32, queue: 8 } as const;
+
+/** 弹幕速度（px/毫秒）：横穿 area 宽度约 crossMs，夹在上下限里；所有条同一速度，后一条追不上前一条 */
+export function danmakuSpeed(width: number): number {
+  return Math.max(DANMAKU.minSpeed, Math.min(DANMAKU.maxSpeed, (width * 1000) / DANMAKU.crossMs)) / 1000;
+}
+
+/**
+ * 弹幕轨道（每条轨道的 top）：在 area 里按 4px 一档往下找高 lineH 的横条，和 blocked（手牌、按钮、名牌、头像、聊天框）一点不压的优先，
+ * 从上往下贪心取、互不重叠；一条不压的都没有时只取压得最少的那一条（宁可从边上擦过也要看得见）。多了均匀挑 max 条，按从上到下排
+ */
+export function danmakuLanes(area: Box, lineH: number, blocked: readonly Box[], max: number, step = 4): number[] {
+  if (max <= 0 || lineH <= 0 || area.height < lineH) return [];
+  const cost = (top: number): number => blocked.reduce((s, b) => s + overlap({ left: area.left, top, width: area.width, height: lineH }, b), 0);
+  const free: number[] = [];
+  let best = area.top;
+  let bestCost = Infinity;
+  for (let top = area.top; top + lineH <= area.top + area.height + 0.5; top += step) {
+    const c = cost(top);
+    if (c < bestCost) {
+      best = top;
+      bestCost = c;
+    }
+    if (c === 0 && (free.length === 0 || top >= free[free.length - 1]! + lineH)) free.push(top);
+  }
+  if (free.length === 0) return [best];
+  if (free.length <= max) return free;
+  const k = free.length / max;
+  return Array.from({ length: max }, (_, i) => free[Math.floor(i * k)]!);
+}
+
+/**
+ * 挨着 anchor 放一个 w×h 的东西（手机版"聊天"按钮挨着"互动"按钮）：右、左、上、下依次试，中线对齐，
+ * 夹在可见区里，和 anchor、avoid 压得最少的胜出
+ */
+export function placeBeside(anchor: Box, w: number, h: number, view: { width: number; height: number }, avoid: readonly Box[] = [], margin = 4, gap = 8): { left: number; top: number } {
+  const cx = anchor.left + anchor.width / 2 - w / 2;
+  const cy = anchor.top + anchor.height / 2 - h / 2;
+  const order = [
+    { left: anchor.left + anchor.width + gap, top: cy },
+    { left: anchor.left - gap - w, top: cy },
+    { left: cx, top: anchor.top - gap - h },
+    { left: cx, top: anchor.top + anchor.height + gap },
+  ];
+  let best = order[0]!;
+  let bestCost = Infinity;
+  for (const p of order) {
+    const c = { left: Math.max(margin, Math.min(view.width - margin - w, p.left)), top: Math.max(margin, Math.min(view.height - margin - h, p.top)), width: w, height: h };
+    const cost = [anchor, ...avoid].reduce((s, b) => s + overlap(c, b), 0);
+    if (cost < bestCost) {
+      best = c;
+      bestCost = cost;
+      if (cost === 0) break;
+    }
+  }
+  return { left: best.left, top: best.top };
+}
+
+/** 挑一条空出来的轨道：freeAt[i] 是第 i 条轨道上一条的尾巴离开起点的时刻；从上往下第一条到点的，都没到点 -1 */
+export function pickLane(freeAt: readonly number[], now: number): number {
+  return freeAt.findIndex((t) => t <= now);
+}
+
+/**
+ * 电脑版聊天框（w×h）放牌桌哪个角：左下、右下、左上、右上依次试，和禁区压得最少的胜出（游戏给了位置就不用这个）。
+ * 上面两个角从屏幕高度的 9% 往下：几个游戏的顶栏（回大厅、设置）都在那一条里，kit 不知道它们的位置
+ */
+export function placeDock(view: { width: number; height: number }, w: number, h: number, avoid: readonly Box[] = [], margin = 12): { left: number; top: number } {
+  const l = margin;
+  const r = Math.max(margin, view.width - margin - w);
+  const t = Math.max(margin, Math.round(view.height * 0.09));
+  const b = Math.max(margin, view.height - margin - h);
+  let best = { left: l, top: b };
+  let bestCost = Infinity;
+  for (const c of [{ left: l, top: b }, { left: r, top: b }, { left: l, top: t }, { left: r, top: t }]) {
+    const cost = avoid.reduce((s, x) => s + overlap({ ...c, width: w, height: h }, x), 0);
+    if (cost < bestCost) {
+      best = c;
+      bestCost = cost;
+      if (cost === 0) break;
+    }
+  }
+  return best;
+}
+
+/**
+ * 手机版输入条的底边（y）：贴在下半屏手牌、操作按钮的上面，不挡它们；上面留不下 h 高（那些东西占了大半屏）就贴屏幕底。
+ * 键盘弹起时页面另按可见区再往上挪
+ */
+export function barBottom(view: { width: number; height: number }, h: number, avoid: readonly Box[] = [], margin = 8): number {
+  const low = avoid.filter((b) => b.top > view.height * 0.4 && b.width > 0 && b.height > 0).map((b) => b.top);
+  const y = low.length ? Math.min(...low) - margin : view.height - margin;
+  return y - h < view.height * 0.12 ? view.height - margin : y;
+}
+
+/** 聊天记录、弹幕里名字的颜色：按座位号，自己另用金色高亮 */
+export const SEAT_COLORS = ['#ffd36a', '#7fd0ff', '#ff9f8a', '#a8e07a', '#d4a2ff', '#ffb86b', '#6fe3d0', '#ff8fc7'] as const;
+export function seatColor(seat: number): string {
+  return SEAT_COLORS[((seat % SEAT_COLORS.length) + SEAT_COLORS.length) % SEAT_COLORS.length]!;
+}
+
 // ---------- 编号 ----------
 
 /**
