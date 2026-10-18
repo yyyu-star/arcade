@@ -10,6 +10,8 @@
  * 好友房：房主从平台大厅的"好友房"（?online=1）进来开房，三个人（一部手机）同桌打满 10 手（两手之间房间停一会儿、大家看同一个倒计时）、
  * 手机刷新后不自动进房、点标题页的"回到房间"回到座位，第四个人接管电脑座位，都离开后房间结束、房主再点"开房间"开出新的（不 409）、
  * 都离开后结算页、结回钱包（--only room 只跑这段）。
+ * 快速匹配（--only match，0.20.0）：两个人点小桌的"快速匹配"，等满 15 秒排到同一张 6 人桌（没有房间码、叫人），关了陌生人聊天的那个连接不带 chat=1，
+ * 打两手、离开结回钱包；排队时点"取消"回选桌；只有一个人排时转成同一档的单机。
  * 桌面那一段开"快"动画（0.55 倍）省时间；默认速度的节奏用 scripts/capture.ts 连拍看。
  * 单独部署（--only standalone，不带 --only 时也跑）：原样的 wrangler.jsonc 另起一个 wrangler dev，不接假平台：站点根跳到游戏首页，
  * 没有钱包、云存档、实盘，"大厅"回游戏首页；单机娱乐打两手、离桌；两个游客（一个带昵称）开好友房打两手、离开（DESIGN.md 10.1）。
@@ -869,6 +871,72 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await Promise.all([host.close(), a.close(), b.close(), d.close()]);
 }
 
+/** 快速匹配：见文件头 */
+async function match(browser: Browser, base: string): Promise<void> {
+  const one = await newContext(browser, base, 'smoke-m1');
+  const two = await newContext(browser, base, 'smoke-m2');
+  // 第二个人关了陌生人聊天（顶栏聊天开关的中间一档）
+  await two.addInitScript(() => localStorage.setItem('texas.settings', JSON.stringify({ fast: true, strangerChat: false })));
+  await one.addInitScript(() => localStorage.setItem('texas.settings', JSON.stringify({ fast: true })));
+  const [p1, p2] = await Promise.all([one.newPage(), two.newPage()]);
+  const sockets = new Map<Page, string[]>([[p1, []], [p2, []]]);
+  for (const [p, tag] of [[p1, 'm1'], [p2, 'm2']] as const) {
+    watch(p, `match-${tag}`);
+    p.on('websocket', (ws) => sockets.get(p)!.push(ws.url()));
+    await p.goto(`${base}/games/texas/`);
+    await p.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+    await enter(p, '实盘');
+    await p.locator('.lobby .pill.match').waitFor();
+  }
+  // 取消：卡片关掉，还在选桌
+  await p1.locator('.lobby .pill.match').click();
+  await p1.locator('.match-card').waitFor();
+  await p1.locator('.d-btn.primary', { hasText: '取消' }).click();
+  await p1.locator('.match-card').waitFor({ state: 'detached' });
+  await p1.waitForTimeout(1_500);
+  if (await p1.locator('.stage.at-table').count()) throw new Error('match: cancel should stay in the lobby');
+
+  const before = await balance(p1);
+  await Promise.all([p1, p2].map((p) => p.locator('.lobby .pill.match').click()));
+  await p1.locator('.match-card .mc-wait', { hasText: '已有 2/6 人' }).waitFor({ timeout: 10_000 });
+  await shot(p1, 'match-waiting');
+  // 排队等满 15 秒，人齐（排进来的两个都进了房间）自动开打
+  for (const p of [p1, p2]) await p.locator('.stage.in-room.at-table').waitFor({ timeout: 45_000 });
+  for (const [p, tag] of [[p1, 'm1'], [p2, 'm2']] as const) {
+    if (await p.locator('.invite-btn').isVisible()) throw new Error(`[${tag}] match table: no invite button`);
+    const where = (await p.locator('.topbar .where').textContent()) ?? '';
+    if (!where.startsWith('快速匹配') || /\d{6}/.test(where)) throw new Error(`[${tag}] match table title: ${where}`);
+  }
+  const roomWs = (p: Page): string => sockets.get(p)!.find((u) => /\/rooms\/\d{6}/.test(u)) ?? '';
+  if (!roomWs(p1).includes('chat=1')) throw new Error(`match: chat on should connect with chat=1: ${roomWs(p1)}`);
+  if (!roomWs(p2) || roomWs(p2).includes('chat=1')) throw new Error(`match: stranger chat off should connect without chat=1: ${roomWs(p2)}`);
+  // 1280×720 的 6 人桌放不下聊天框：第一次进桌（座位都坐上人以后才判断）先收成"聊天"小按钮
+  if (DESK_W <= 1280) await p1.locator('.atc-pill').waitFor({ timeout: 15_000 });
+  await shot(p1, 'match-table');
+  await Promise.all([playRoom(p1, 2, 'm1'), playRoom(p2, 2, 'm2')]);
+  for (const [p, tag] of [[p2, 'm2'], [p1, 'm1']] as const) {
+    await p.locator('.leave').click();
+    await p.locator('.dialog').waitFor();
+    await p.locator('.d-btn.primary').click();
+    await p.locator('.summary').waitFor({ timeout: 5_000 });
+    await p.locator('.d-btn.primary').click();
+    await p.locator('.lobby').waitFor();
+    log(tag, 'left the match table, wallet', await settled(p, tag));
+  }
+  log('match wallet', before, '->', await balance(p1));
+
+  // 只有一个人排：15 秒后说一句，转成同一档的单机
+  await enter(p1, '实盘');
+  await p1.locator('.lobby .pill.match').click();
+  await p1.locator('.stage.at-table').waitFor({ timeout: 45_000 });
+  const said = await p1.evaluate(() => (window as { __said?: string[] }).__said ?? []);
+  if (!said.some((t) => t.includes('现在没人在排'))) throw new Error(`match alone: expected the solo note, said ${said.join(' | ')}`);
+  if (await p1.locator('.stage.in-room').count()) throw new Error('match alone: should be a solo table');
+  await skipTips(p1);
+  await shot(p1, 'match-solo');
+  await Promise.all([one.close(), two.close()]);
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -983,6 +1051,11 @@ async function portraitLobby(browser: Browser, base: string): Promise<void> {
     await onScreen('.friends.join .code-in', 'room code');
     if (!(await page.locator('.friends.open .pill', { hasText: '开房间' }).isVisible())) throw new Error(`${tag}: 开房间 missing`);
     await shot(page, `${tag}-friends`);
+    // 快速匹配（0.20.0）挨着"坐下开打"，最窄的屏也整个看得见
+    await enter(page, '实盘', phone);
+    const m = await page.locator('.lobby .pill.match').boundingBox();
+    if (!m || m.x < 0 || m.x + m.width > width) throw new Error(`${tag}: 快速匹配 should fit the width, got ${JSON.stringify(m)}`);
+    await shot(page, `${tag}-real`);
     await ctx.close();
   }
 }
@@ -998,6 +1071,7 @@ async function main(): Promise<void> {
         if (!only || only === 'mobile') await mobile(browser, base);
         if (!only || only === 'mobile' || only === 'portrait') await portraitLobby(browser, base);
         if (!only || only === 'room') await room(browser, base);
+        if (!only || only === 'match') await match(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

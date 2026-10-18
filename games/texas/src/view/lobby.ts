@@ -36,6 +36,8 @@ export interface LobbyHandlers {
   start(stakes: StakesId, size: number, amount: number, practice: boolean, level?: number): void;
   resume(): void;
   relief(): void;
+  /** 快速匹配（0.20.0）：这一档排队找真人，一桌 6 人；只有实盘、有钱包时有 */
+  match(stakes: StakesId): void;
   /** 好友房：用现在选的档位和人数开一个；输码进房；回到上次的房间 */
   openRoom(stakes: StakesId, size: number): void;
   joinRoom(code: string): void;
@@ -64,6 +66,7 @@ export class Lobby {
   private readonly slider: HTMLInputElement;
   private readonly buyAmt: HTMLSpanElement;
   private readonly startBtn: HTMLButtonElement;
+  private readonly matchBtn: HTMLButtonElement;
   private readonly openBtn: HTMLButtonElement;
   private readonly codeIn: HTMLInputElement;
   private readonly joinBtn: HTMLButtonElement;
@@ -213,6 +216,9 @@ export class Lobby {
     this.startBtn = button(go, 'start', '坐下开打', () =>
       this.wait(this.startBtn, () => (this.fun() ? this.h.start(FUN_STAKES, this.size, Number(this.slider.value), true, FUN_LEVEL[this.diff]) : this.h.start(this.stakes, this.size, Number(this.slider.value), false))),
     );
+
+    // 快速匹配（0.20.0，DESIGN.md 6.11）：实盘才有，挨着"坐下开打"；人数按匹配桌的 6 人，带这一档的满买入（和好友房一样）
+    this.matchBtn = button(go, 'pill match', '快速匹配', () => h.match(this.stakes));
 
     // 好友房（0.17.4）：开房间放在"坐下开打"的位置，用上面选的档位和人数，买入固定是这一档的满买入
     const open = (this.openRow = el('div', 'friends open', panel));
@@ -429,6 +435,9 @@ export class Lobby {
     setText(this.buyAmt, ok ? chips(Number(this.slider.value)) : `钱包要有 ${chips(st.min)}`);
     // 本机一次只摆一桌单机（没打完的先接着打）；钱包里别处还有德州的份不影响（平台 0.9.5 起可以同时有好几份）
     this.startBtn.disabled = busy || !ok || !!resume;
+    // 匹配桌是实盘：没钱包（单独部署、连不上）不给；钱包够这一档的最少买入才能排（不够一整份的，坐下时少带一点，和好友房一样）
+    toggle(this.matchBtn, 'hidden', fun || this.alone || !wallet);
+    this.matchBtn.disabled = busy || !ok;
     const back = this.s.room;
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
     // （0.3.0：好友房不设多余的限制）
@@ -448,7 +457,7 @@ export class Lobby {
 }
 
 /** 实盘带多少的上限：这一档的满买入，钱包不够就按大盲取整少带，至少这一档的最少买入（平台 0.10.2） */
-function topBuyIn(st: { min: number; max: number; bb: number }, bal: number): number {
+export function topBuyIn(st: { min: number; max: number; bb: number }, bal: number): number {
   return Math.max(st.min, Math.min(st.max, Math.floor(bal / st.bb) * st.bb));
 }
 

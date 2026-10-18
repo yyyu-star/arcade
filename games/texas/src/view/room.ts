@@ -28,6 +28,8 @@ export class RoomPanel {
   private readonly waitNote: HTMLDivElement;
   /** 坐下的真人不到两个（0.4.0）：开打灰掉，说一句为什么 */
   private readonly twoNote: HTMLDivElement;
+  /** 快速匹配桌（0.20.0）：没有房间码、叫不了人、不用选座、不用点开打，只说一句在等谁 */
+  private readonly matchNote: HTMLDivElement;
   private readonly banner: HTMLDivElement;
   private readonly bannerText: HTMLSpanElement;
   private readonly retryBtn: HTMLButtonElement;
@@ -51,6 +53,7 @@ export class RoomPanel {
       this.seats.push({ box, name, sit });
     }
     this.twoNote = el('div', 'rw-two hidden', this.root);
+    this.matchNote = el('div', 'rw-match hidden', this.root, '排到了！人到齐就开打，没来的座位电脑替他打');
     const go = el('div', 'rw-go', this.root);
     button(go, 'pill', '离开房间', () => h.leave());
     this.startBtn = button(go, 'start', '开打', () => h.start());
@@ -71,7 +74,10 @@ export class RoomPanel {
     toggle(this.retryBtn, 'hidden', s?.status !== 'failed');
     if (!s || !waiting) return;
 
-    setText(this.code, `${s.code.slice(0, 3)} ${s.code.slice(3)}`);
+    const match = s.room?.match === true;
+    toggle(this.root, 'match', match);
+    toggle(this.matchNote, 'hidden', !match);
+    setText(this.code, match ? '' : `${s.code.slice(0, 3)} ${s.code.slice(3)}`);
     // 档位和人数开房时就定了（房间发来的），进房的人一眼知道要带多少
     const o = s.opts;
     const st = o ? stakesOf(o.stakes) : null;
@@ -96,8 +102,13 @@ export class RoomPanel {
       toggle(x.box, 'me', i === mine);
       toggle(x.box, 'taken', info.kind !== 'empty');
       setText(x.name, info.kind === 'empty' ? '空位' : (info.name ?? '玩家'));
-      toggle(x.sit, 'hidden', info.kind !== 'empty' || !used);
+      toggle(x.sit, 'hidden', match || info.kind !== 'empty' || !used);
     });
+    // 匹配桌由房间自己开打（人齐或等满 20 秒），点了也只回 not_host
+    if (match) {
+      for (const e of [this.twoNote, this.startBtn, this.waitNote]) toggle(e, 'hidden', true);
+      return;
+    }
     // 坐着的人都给"开打"（0.3.5）：房间不下发谁是房主，房主换了设备、页面被顶掉后本机不知道自己是房主，按钮一藏房间就只能干等；
     // 不是房主的点了由 kit 回 not_host，提示一句。没坐下的看"等房主开打"
     const canStart = s.host || mine !== null;

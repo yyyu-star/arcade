@@ -882,6 +882,8 @@ body::before {
 }
 .buy-amt { width: 76px; text-align: right; font-weight: 800; color: var(--gold); }
 .go-row { display: flex; gap: var(--s-3); margin-top: var(--s-3); }
+/* 快速匹配（0.20.0）挨着"坐下开打"，和它一样高 */
+.lobby .go-row .pill.match { height: 52px; padding: 0 var(--s-5); font-size: var(--fs-4); font-weight: 800; }
 .start {
   flex: 1;
   height: 52px;
@@ -1071,6 +1073,9 @@ body::before {
 .rw-go .start { flex: 1; }
 .rw-wait { flex: 1; text-align: center; font-size: var(--fs-4); color: var(--muted); }
 .rw-two { text-align: center; font-size: var(--fs-3); color: var(--gold); }
+/* 快速匹配桌（0.20.0）：没有房间码和"叫朋友来"，只说一句在等谁 */
+.room-wait.match .rw-head { display: none; }
+.room-wait .rw-match { text-align: center; font-size: var(--fs-4); font-weight: 800; color: var(--gold); }
 .room-banner {
   position: absolute;
   left: 50%; top: 56px;
@@ -1133,6 +1138,11 @@ body::before {
 .d-body { margin-top: var(--s-2); font-size: var(--fs-4); line-height: 1.6; color: var(--ink); }
 .d-buttons { display: flex; justify-content: flex-end; gap: var(--s-3); margin-top: var(--s-4); }
 .d-btn { min-width: 96px; height: 44px; padding: 0 var(--s-4); border-radius: var(--r-3); border: 1px solid var(--line-2); background: rgba(255, 255, 255, .06); font-size: var(--fs-4); font-weight: 700; }
+/* 快速匹配的排队卡（0.20.0） */
+.dialog .match-card { display: grid; gap: var(--s-2); }
+.dialog .match-card .mc-tier { font-weight: 800; }
+.dialog .match-card .mc-wait { font-size: var(--fs-5); font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; }
+.dialog .match-card .mc-tip { font-size: var(--fs-3); color: var(--muted); }
 .topup-line { display: flex; align-items: center; gap: var(--s-3); }
 .topup-note { font-size: var(--fs-2); color: var(--muted); }
 

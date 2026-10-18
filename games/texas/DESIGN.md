@@ -1314,6 +1314,24 @@ kit 0.1.1 的房间是"开局时定好座位、全局只有一个 32 位种子�
 测试：`test/room.test.ts` 查四个人陆续走、最后散桌时六对每对正好一场，赢没赢和一份的净输赢对得上；`test/worker/room.test.ts` 在 workerd 里走一遍（假钱包的 `together`），
 查 op、每对一场、驱逐后重报不加。做过反证：把还坐着的人并进同一场，两条都会失败。
 
+### 6.11 快速匹配（0.20.0，kit 0.20.0 的 `MatchQueue`，设计在 kit 的 docs/match.md）
+
+选桌的实盘页"坐下开打"旁边多一个"快速匹配"：按选中的档位排队找真人，凑出来的桌就是一间好友房（同一个 `TexasRoom`，同样的规则、钱包、写入），只是没有房间码。
+
+- **只开实盘四档**（主线定）：`real-small`、`real-mid`、`real-big`、`real-lux`（`src/room/match.ts`），一律 **6 人桌、每人带这一档的满买入**（和好友房一样，`matchRoomOptions`）。
+  娱乐档要房间先有不记筹码的模式，另做。单独部署没有钱包、没有实盘，不开匹配：Worker 给空档位表，排队一律 4004，页面也不显示按钮。
+- **排队**：每档一个排队 DO（`worker/match.ts` 的 `Queue`，绑定 `MATCH`，迁移 v2），不写存储。等 15 秒，两个人以上就开一桌，人不够 6 个的座位电脑补；
+  只剩自己一个、今天的局数用完、联机忙时转成同一档的单机（照常从钱包带入），说一句 kit 的 `MATCH_TEXT`。排队卡写"已有 n/6 人 · 还剩 s 秒"，
+  "不等了，和电脑打"马上开单机，"取消"回选桌。已经有一间开着的房间（比如另一台设备上排到的）就回那一间。
+- **匹配桌**（`RoomInfo.match`）：只有排进来的人能进（别人拿到房间码也是 4004），没有房主、不用选座，人到齐或等满 20 秒房间自己开打。
+  所以等人页不显示房间码、"叫朋友来"、"坐这里"和"开打"，只说一句"排到了！人到齐就开打"；牌桌上没有"叫朋友来"，不能接管电脑座位，标题写"快速匹配"，
+  报位置只报"在玩德州"（不给房间码），分享卡的链接不带房间码。其余（实盘至少两个真人、离开结回、颁奖、搭子战绩）和好友房一样。
+- **陌生人聊天**：顶栏的聊天开关变成三档"开 → 不和陌生人 → 不看"（`texas.settings` 的 `strangerChat`，默认开）。"不和陌生人"时进匹配桌的连接不带 `chat=1`，
+  房间根本不转聊天过来，自己也没有聊天页；好友房、单机照常。打到一半换回"开"要下回进桌才收得到（连接已经建好了）。
+- **测试**：`test/match.test.ts` 用 kit 的 `matchConfigErrors` 查配置，加两条反证（10 人桌、不存在的档位）；`test/worker/room.test.ts` 在 workerd 里排两个人，
+  查排到同一间、`room.match`、自动开打、6 人桌、各扣满买入、每步写入 ≤ 2；不开的档位、没钱包、没绑 `MATCH` 都 4004。冒烟 `--only match` 走一遍取消、两人排到同一桌、
+  关了陌生人聊天的连接不带 `chat=1`、打两手离开结回钱包、一个人转单机。
+
 ## 7. 和掼蛋怎么分 DO 写额度
 
 全账户 DO 写入每天 10 万行（UTC 0 点重置，超了直接失败），掼蛋 0.3.0 默认到 6 万就停。
@@ -1387,14 +1405,14 @@ kit 0.1.1 的房间是"开局时定好座位、全局只有一个 32 位种子�
 | `texas.session` | 单机正在打的那一桌（状态 + 场次 id + 账号 id），刷新后接着打 |
 | `texas.stats` | 战绩（云存档的 `stats` 槽） |
 | `texas.cloud` | 云存档元数据（5.5） |
-| `texas.settings` | 聊天"不看" `chatOff`（0.19.0，好友房顶栏的开关）、音效开关 `sound` 和音量 `volume`（0.8 或 0.35，喇叭按钮三档轮换）、动画速度 `fast`、自动下一手 `autoNext`（主页面存），加上大厅记的上次选的 `stakes`、`size`、`mode`、娱乐难度 `diff`（0.12.0；两边合并着写，互不覆盖；不同步） |
+| `texas.settings` | 聊天"不看" `chatOff`（0.19.0，顶栏的开关）、不和陌生人聊 `strangerChat: false`（0.20.0，快速匹配桌，6.11）、音效开关 `sound` 和音量 `volume`（0.8 或 0.35，喇叭按钮三档轮换）、动画速度 `fast`、自动下一手 `autoNext`（主页面存），加上大厅记的上次选的 `stakes`、`size`、`mode`、娱乐难度 `diff`（0.12.0；两边合并着写，互不覆盖；不同步） |
 | `texas.fun` | 互动的总开关 `off`（"互动：不看"，顶栏的笑脸按钮，不同步；0.11.0 起屏蔽名单不在这里） |
 | `texas.fun.blocked`（sessionStorage） | 按人屏蔽了谁（按名字：真人昵称、电脑性格名），按房间分开，只对这个标签页有效。kit 的 TableFun 记的（0.13.0，13.7） |
 | `texas.hint.fun` | kit 的首次提示出过了（只出一次） |
 | `texas.chat` | kit 0.19 的聊天设置：弹幕开关 `danmaku`、电脑版聊天框收起 `folded`、记录展开 `long`（kit 读写；德州只在放不下时第一次写 `folded`，0.19.4） |
 | `texas.stats.pre-sync` | 云存档合并前本地战绩的备份，存不下就暂停同步（5.5） |
 | `texas.stats.pre-switch.<uid>` | 换号时旧号的本地战绩备份；登录回旧号时并回，并回的内容上传成功后，这个键改名为 `<键>.restored`（即 `texas.stats.pre-switch.<uid>.restored`，留作记录） |
-| `texas.room` | 现在在的好友房 `{code, userId, host, at}`（host：是不是我开的，房间不下发房主是谁）。刷新后 6 小时内标题页给"回到房间"横幅，不自动进；点"离开房间"、房间关了或没了就清掉 |
+| `texas.room` | 现在在的好友房 `{code, userId, host, at, match?}`（host：是不是我开的，房间不下发房主是谁；match：快速匹配桌，0.20.0）。刷新后 6 小时内标题页给"回到房间"横幅，不自动进；点"离开房间"、房间关了或没了就清掉 |
 | `texas.lastRoom` | 上一次进的好友房：钱包里还有好友房那一份时，横幅按它给码；同上清掉 |
 
 `texas.hosted`（0.2.2 及以前"我开的房间"）已经不再用，页面启动时只清掉旧值。`texas.fun.muted`（0.12.0 及以前自己记的按人屏蔽，sessionStorage）同样只清掉。
@@ -1507,7 +1525,7 @@ games/texas/
 ├─ src/fun/         互动里德州自己的：短语表 taunts、名场面和互动性格 moments（其余是 kit 的 table-fun）
 ├─ src/room/        好友房的规则（接 kit 的 RoomGame，纯函数，房间和页面共用）
 ├─ src/net/         钱包 wallet、云存档 cloud（连房间在 src/online.ts，用 kit 的 RoomClient）
-├─ worker/          texas Worker：登录闸门、单机带入结回（转平台钱包）、好友房 TexasRoom DO
+├─ worker/          texas Worker：登录闸门、单机带入结回（转平台钱包）、好友房 TexasRoom DO、快速匹配的排队 Queue DO（match.ts）
 ├─ test/           规则、电脑的 vitest（Node）；test/worker/ 是 Worker、钱包、房间的 vitest（workerd，配置 test/wrangler.test.jsonc）；
 │                  test/standalone/ 是单独部署的（配置 test/wrangler.standalone.jsonc，入口就是 worker/main.ts）
 ├─ scripts/        smoke.ts（冒烟）  sim.ts + vs.ts（模拟，vs 是多线程部分）  capture.ts（连拍看节奏）  gen-preflop.ts（生成翻牌前胜率表）
@@ -1515,9 +1533,9 @@ games/texas/
                     本地试平台模式用 gitignore 掉的 wrangler.local.jsonc。
                     不写路由和 zone（本站的路由 `<站点>/games/texas`、`<站点>/games/texas/*` 与 SITE_ORIGIN 由部署流程用 GitHub production secret `SITE_HOST` 注入；没设 SITE_ORIGIN 时 Worker 认请求自己的来源，kit 0.9.0）；
                     workers_dev: true（单独部署用 workers.dev，本站部署时关掉）、preview_urls: false；
-                    run_worker_first：/、/api/me（单独部署用）、首页三个路径、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*；
-                    绑定 ROOM（类 TexasRoom）、METER（DO）；不写 ARCADE、WALLET、GATE（本站部署时按 tools/workers.json 补：ARCADE 服务、WALLET 服务 arcade 的 WalletService、props.game = texas，GATE=login）；
-                    vars KIT_QUOTA（每天的写入预算、每人开房数、互动的限流，数见 wrangler.jsonc 和第 7 节）；迁移 v1 TexasRoom + RoomMeter（new_sqlite_classes；发布前没部署过，不用分版本）
+                    run_worker_first：/、/api/me（单独部署用）、首页三个路径、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*（排队 rooms/match/<档位> 也在里面）；
+                    绑定 ROOM（类 TexasRoom）、METER（DO）、MATCH（类 Queue，0.20.0）；不写 ARCADE、WALLET、GATE（本站部署时按 tools/workers.json 补：ARCADE 服务、WALLET 服务 arcade 的 WalletService、props.game = texas，GATE=login）；
+                    vars KIT_QUOTA（每天的写入预算、每人开房数、互动的限流，数见 wrangler.jsonc 和第 7 节）；迁移 v1 TexasRoom + RoomMeter（new_sqlite_classes；发布前没部署过，不用分版本）、v2 Queue（0.20.0，已上线以后新加的类要新的一版）
 ```
 
 ### 10.1 单独部署（0.7.0）

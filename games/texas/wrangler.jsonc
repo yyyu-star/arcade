@@ -20,11 +20,15 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "TexasRoom" },
-      { "name": "METER", "class_name": "RoomMeter" }
+      { "name": "METER", "class_name": "RoomMeter" },
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
-  // 德州之前没部署过，一个 v1 就够；钱包是平台的，没有 Wallet
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] }],
+  // v1：德州第一次部署时的房间和计量（钱包是平台的，没有 Wallet）；v2：快速匹配的排队 Queue（0.20.0，kit 0.20.0，DESIGN.md 6.11）
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TexasRoom", "RoomMeter"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
   "vars": {
     // 德州每天的 DO 写入预算（DESIGN.md 第 7 节）：到 busy 不开新房，到 stop 收场。
     // 每人开房：同时 5 个（0.2.4 维护者定：不让玩家感到限制）；每天 30 个（0.17.1 安全审计：从 100 调低，正常玩家一天开不了这么多，主要防脚本刷）。

@@ -22,6 +22,8 @@ export interface SavedRoom {
   /** 是我开的（房间不下发房主是谁，只有开房的人自己知道） */
   host: boolean;
   at: number;
+  /** 快速匹配排到的桌（0.20.0）：刷新后回来也按陌生人桌对待（聊天看"和陌生人打字聊天"、藏起房间码和叫人） */
+  match?: true;
 }
 
 export interface OnlineState {
@@ -62,14 +64,20 @@ export class Online {
   private readonly client: RoomClient<RoomAction, RoomView>;
   private readonly ui: OnlineUi;
   private s: OnlineState;
+  private readonly saved: SavedRoom;
   /** 已经摆在画面上的视图（播到哪了） */
   private shown: RoomView | null = null;
   private readonly queue: { view: RoomView | null; delay: number; fresh: boolean }[] = [];
   private playing = false;
 
   /** name：单独部署时游客的昵称，带在进房地址上（kit 的 ?name=） */
-  constructor(saved: SavedRoom, ui: OnlineUi, opts: { url?: string; name?: string | null } = {}) {
+  /** 这条连接带不带聊天（kit 传了 onChat 才带 chat=1）：陌生人桌按设置"和陌生人打字聊天"，进房时定下，中途改了下次进房生效 */
+  readonly chatOn: boolean;
+
+  constructor(saved: SavedRoom, ui: OnlineUi, opts: { url?: string; name?: string | null; chat?: boolean } = {}) {
     this.ui = ui;
+    this.saved = saved;
+    this.chatOn = opts.chat ?? true;
     this.s = { code: saved.code, host: saved.host, opts: null, status: 'connecting', room: null, you: null, view: null, busy: false };
     this.client = new RoomClient<RoomAction, RoomView>({
       url: opts.url ?? withNickname(roomUrl(saved.code), opts.name),
@@ -77,8 +85,7 @@ export class Online {
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, code, reason) => this.onStatus(st, code, reason),
       onEmote: (seat, id, to, bot) => this.ui.emote(seat, id, to, bot),
-      onChat: (seat, text, masked) => this.ui.chat(seat, text, masked),
-      onChatError: (code) => this.ui.chatError(code),
+      ...(this.chatOn ? { onChat: (seat: number, text: string, masked: boolean) => this.ui.chat(seat, text, masked), onChatError: (code: string) => this.ui.chatError(code) } : {}),
     });
   }
 
@@ -87,6 +94,11 @@ export class Online {
   }
 
   /** 我在牌桌上的座位：坐着的、离座了还绑着的，都没有就按 0 号摆（旁观） */
+  /** 是快速匹配的桌：房间说了算（RoomInfo.match），还没连上时看本机记的 */
+  get match(): boolean {
+    return this.s.room ? this.s.room.match === true : this.saved.match === true;
+  }
+
   get mySeat(): number {
     return this.s.you?.seat ?? this.s.you?.bound ?? 0;
   }
@@ -180,6 +192,14 @@ export class Online {
     this.redraw();
     if (st === 'closed' && code !== undefined && code !== 1000) this.ui.ended(closeText(code, reason), code);
   }
+}
+
+/** 快速匹配排队的地址（0.20.0）：rooms/match/<档位>，同样按相对路径 */
+export function matchUrl(tier: string): string {
+  const u = new URL(`rooms/match/${tier}`, location.href);
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+  u.search = '';
+  return u.toString();
 }
 
 /** 房间的 WebSocket 地址：页面在 /games/texas/ 下，相对路径就对 */

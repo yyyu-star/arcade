@@ -88,7 +88,7 @@ curl -b '__Host-sid=me' http://localhost:8775/api/wallet
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/texas)
 
 `wrangler.jsonc` 是能原样部署的独立配置：点上面的按钮，或者 fork 后在本目录 `npm ci && npm run deploy`（先 `npx wrangler login`），
-部署到你自己 Cloudflare 账号的 `texas.<你的子域>.workers.dev`，打开根路径会跳到 `/games/texas/`。只用到 Workers、静态资源和两个 Durable Object（免费版就够）。
+部署到你自己 Cloudflare 账号的 `texas.<你的子域>.workers.dev`，打开根路径会跳到 `/games/texas/`。只用到 Workers、静态资源和三个 Durable Object（免费版就够；快速匹配的排队单独部署不开）。
 
 单独部署有的和没有的（细节见 DESIGN.md 10.1）：
 
@@ -136,7 +136,7 @@ PR 上只测试不部署。在本仓库里不对正式环境手动部署（`npm 
 | `src/net/` | `wallet.ts` 钱包（看钱包、领补给走平台的 `/api/wallet*`，单机带入结回走德州 Worker）、`cloud.ts` 云存档（战绩槽 `stats`，按平台的推荐做法） |
 | `src/fun/` | 互动里德州自己的那部分：`taunts.ts` 短语表、`moments.ts` 名场面怎么认和电脑的互动性格（菜单、面板、电脑怎么回是 kit 的 `arcade-kit/table-fun`） |
 | `src/room/` | 好友房的规则：把牌桌接到 kit 的 `RoomGame` 上（纯函数，房间和页面共用） |
-| `worker/` | texas Worker：`main.ts` 路由、登录闸门（`arcade-kit/auth` 经平台 `/api/me` 认人，单独部署认游客）和单机带入结回（转平台钱包，client 模式）、`platform.ts` 平台钱包 RPC 的类型、`room.ts` 好友房 DO（server 模式调平台钱包） |
+| `worker/` | texas Worker：`main.ts` 路由、登录闸门（`arcade-kit/auth` 经平台 `/api/me` 认人，单独部署认游客）和单机带入结回（转平台钱包，client 模式）、`platform.ts` 平台钱包 RPC 的类型、`room.ts` 好友房 DO（server 模式调平台钱包）、`match.ts` 快速匹配的排队 DO（kit 的 `MatchQueue`，只开实盘四档） |
 | `test/` | vitest；`bots.ts` 是机器人对打的驱动（测试和 `scripts/sim.ts` 共用）；`test/worker/` 跑在 workerd 里；`arcade.dev.ts` 假平台（钱包用 `arcade-kit/testing`）、`dev-entry.ts` 本地入口（测试、冒烟、本地试用，不部署） |
 | `scripts/` | `sim.ts` 模拟和实测（`npm run sim -- --vs [每格场数] [档位,...] [策略,...]`：每档 × 每种策略一个玩家对电脑，打印每百手大盲）、`vs.ts` 是它的多线程部分（`--vs` 和性格混桌）、`gen-preflop.ts` 生成胜率表、`smoke.ts` 冒烟、`capture.ts` 连拍看节奏 |
 

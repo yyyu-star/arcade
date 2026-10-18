@@ -6,21 +6,25 @@
  * - /games/texas/api/solo/* 是单机的带入、结回（5.4）：经服务绑定 WALLET 调平台钱包（client 模式）；看钱包、领补给页面直接走平台的 /api/wallet；
  * - /games/texas/rooms（开房）、/games/texas/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（6）；
  *   开房的请求体 { opts } 是档位和人数，交给 kit 开房时校验、定下（kit 0.4.0），进房的人都看得到；
+ * - /games/texas/rooms/match/<档位> 是快速匹配的排队（kit 0.20.0 的 acceptMatch，6.11）：只开实盘四档；没有钱包（单独部署）一档都不开，没绑 MATCH 也回 4004；
  * - 别的路径不经过这里（wrangler.jsonc 的 run_worker_first 只列了上面这些），由静态资源直接回。
  *
  * 带入、结回要过两道：CSRF（X-Arcade: 1 且 Origin 是本站）、登录；额度、每日上限、写入次数都由平台钱包管（docs/economy.md 第 3、4 节）。
  */
 import { sameOrigin, whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
-import { acceptCreate, acceptJoin, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import { CLOSE } from 'arcade-kit/protocol';
+import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
 import { PERSONAS } from '../src/ai/personas.ts';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
+import { MATCH_PATH, MATCH_TIERS } from '../src/room/match.ts';
 import type { WalletReply } from '../src/net/wallet.ts';
 import { GAME, soloOp, WALLET_ID, type PlatformWallet } from './platform.ts';
 import type { TexasRoom } from './room.ts';
 
 export { RoomMeter } from 'arcade-kit/meter';
 export { TexasRoom } from './room.ts';
+export { Queue } from './match.ts';
 
 export interface Env extends MeterEnv {
   ASSETS: Fetcher;
@@ -28,6 +32,8 @@ export interface Env extends MeterEnv {
   /** 平台钱包（服务绑定，entrypoint WalletService，props.game = texas）；单独部署没有 */
   WALLET?: PlatformWallet;
   ROOM: DurableObjectNamespace<TexasRoom>;
+  /** 快速匹配的排队（kit 0.20.0，worker/match.ts 的 Queue）；没绑就不开匹配 */
+  MATCH?: DurableObjectNamespace;
   /** off 以外（包括没配）都要登录 */
   GATE?: string;
   /** 写请求的 Origin 只认它（正式站由部署流程注入）；没设就认请求自己的 origin（kit 0.9.0） */
@@ -38,6 +44,7 @@ const BASE = '/games/texas';
 const SOLO = `${BASE}/api/solo/`;
 const ROOMS = `${BASE}/rooms`;
 const JOIN = /^\/games\/texas\/rooms\/([^/]+)\/ws$/;
+const MATCH = new RegExp(`^${MATCH_PATH}/([a-z0-9-]+)$`);
 /**
  * 单独部署时的游客（kit 0.10）：首页、开房、进房传同一份。电脑人物的名字不许当昵称（真人不能冒充电脑）；
  * cookie 用 kit 默认的，同一个站点下单独部署的几个游戏共用一个游客身份
@@ -75,10 +82,25 @@ export default {
     if (path === ROOMS) return acceptCreate(request, env, { siteOrigin: env.SITE_ORIGIN, options: await roomOpts(request), guest: GUEST });
     const join = JOIN.exec(path);
     if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: env.SITE_ORIGIN, guest: GUEST });
+    const match = MATCH.exec(path);
+    if (match) {
+      if (!env.MATCH) return refuseSocket(request);
+      // 匹配桌都是实盘：没有钱包（单独部署）一档都不开，kit 对不在 tiers 里的档位回 4004
+      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: env.SITE_ORIGIN, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : [] });
+    }
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
 
+
+/** 不开匹配时：WebSocket 照常握手再用 4004 关（和"没有这个房间"一样，页面的 MatchClient 按关闭码转单机）；不是 WebSocket 的回 426 */
+function refuseSocket(request: Request): Response {
+  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('expected websocket', { status: 426 });
+  const pair = new WebSocketPair();
+  pair[1].accept();
+  pair[1].close(CLOSE.noRoom, 'no match');
+  return new Response(null, { status: 101, webSocket: pair[0] });
+}
 
 /**
  * 游戏页的安全响应头（0.17.1，安全审计低危；DESIGN.md 10.3）。页面只经这里出去（首页三个路径都过登录闸门），别的静态资源不是文档，不用带。
