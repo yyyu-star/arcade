@@ -1466,22 +1466,15 @@ button {
   height: max(48px, var(--tap, 48px));
   pointer-events: none;
 }
-/* kit 的"互动"按钮浮在舞台外面（屏幕像素），字是固定的 13 像素：电脑上舞台放大后成了大框小字。
- * 按舞台的缩放（viewport.ts 写的 --stage-scale）放大字和图标，横排，和牌桌上别的按钮一个样子（0.16.2） */
+/* kit 的"互动"按钮浮在舞台外面（屏幕像素）：字号、图标、横排由 kit 0.20.1 的 buttonStyle 给（view/fun.ts 的 buttonStyle），
+ * 这里只管颜色和圆角，和牌桌上别的按钮一个样子 */
 html .atf-btn {
-  flex-direction: row;
-  gap: calc(6px * var(--stage-scale, 1));
-  font-size: max(13px, calc(var(--fs-lg) * var(--stage-scale, 1)));
   border: 1px solid #ffffff26;
   border-radius: calc(var(--r-md) * var(--stage-scale, 1));
   background: linear-gradient(#ffffff38, #ffffff1a), #2a4a3c;
   box-shadow:
     inset 0 1px 0 #ffffff40,
     0 3px 0 #0006;
-}
-html .atf-btn svg {
-  width: max(18px, calc(24px * var(--stage-scale, 1)));
-  height: max(18px, calc(24px * var(--stage-scale, 1)));
 }
 /* 碰杠胡过：大、醒目，浮在手牌右上方 */
 .bar .act {

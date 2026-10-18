@@ -5,7 +5,7 @@
  * 底线不变：人人一样、免费，不挂筹码；只是画面和声音，不停计时；电脑出牌读不到这里任何东西。
  */
 import { playFunSound } from 'arcade-kit/fun';
-import { TableFun, type ChatResultLike, type FunSeat, type RectLike } from 'arcade-kit/table-fun';
+import { TableFun, type ButtonStyle, type ChatResultLike, type FunSeat, type RectLike } from 'arcade-kit/table-fun';
 import { audioOut } from './sound.ts';
 import { MOOD_LINES, PHRASES } from './text.ts';
 
@@ -60,6 +60,7 @@ export function createFun(w: FunWiring): TableFun {
     ...(w.hintSeat ? { hintSeat: w.hintSeat } : {}),
     // 设置里"聊天：不看"只管别人说的（自己说的照常显示），和"互动"分开
     ...(w.chat ? { chat: w.chat, chatEnabled: () => !chatOff() } : {}),
+    buttonStyle,
     center: w.center,
     chatDock: w.chatDock,
     chatButton: w.chatButton,
@@ -69,6 +70,16 @@ export function createFun(w: FunWiring): TableFun {
     // 冒烟看流水（开发服务器上才挂到 window）
     ...(import.meta.env.DEV ? { log: (line: string) => ((window as { __funLog?: string[] }).__funLog ??= []).push(line) } : {}),
   });
+}
+
+/**
+ * "互动""聊天"按钮的大小（kit 0.20.1 的 buttonStyle，以前在 style.css 里硬改 .atf-btn）：按钮浮在舞台外面（屏幕像素），
+ * 字号跟牌桌上别的按钮的 --fs-lg 走、按舞台缩放（viewport.ts 写的 --stage-scale）换成屏幕像素，电脑上舞台放大后不是大框小字
+ */
+function buttonStyle(): ButtonStyle {
+  const s = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) || 1;
+  const fsLg = Math.max(18, 16 * Math.max(1, 1 / s));
+  return { row: true, fontSize: Math.max(13, fsLg * s), icon: Math.max(18, 24 * s) };
 }
 
 export function funOff(): boolean {

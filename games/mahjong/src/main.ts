@@ -1087,7 +1087,7 @@ function newFun(
         const m = t.seatMeta(seat);
         if (!m || m.empty) return null;
         const tp = temper(seat);
-        return { rect: t.avatarRect(seat), plate: t.plateRect(seat), name: m.name, me: seat === me(), bot: m.bot, ...(tp ? { temper: tp } : {}) };
+        return { rect: t.avatarRect(seat), plate: t.plateRect(seat), marks: t.marks(seat), name: m.name, me: seat === me(), bot: m.bot, ...(tp ? { temper: tp } : {}) };
       }),
     // 顶栏也不能盖：上面两家的气泡往上冒会压住房间号和"离开"。
     // 自己的手牌再多算两遍：kit 按压住的面积挑位置，竖屏自己名牌四周都有东西，只算一遍时气泡常落在左边几张手牌上（#292 截图），
