@@ -80,3 +80,21 @@
   .yx-pick-text { font-size: 13px; }
   .yx-picks-bar button { min-width: 84px; font-size: 14px; }
 }
+
+/* 手机竖屏：三张卡竖排（左图右字），整列放得下、不被两边切；点击区整张卡，远大于 44 */
+@media (max-width: 600px) and (orientation: portrait) {
+  .yx-picks { justify-content: center; padding: 0 10px; gap: 8px; }
+  .yx-picks-lv { font-size: 34px; }
+  .yx-picks-row { flex-direction: column; gap: 8px; width: 100%; max-width: 380px; }
+  .yx-pick {
+    width: 100%; min-height: 0; padding: 8px 10px 8px 56px; gap: 3px;
+    align-items: flex-start; text-align: left;
+  }
+  .yx-pick:hover, .yx-pick.focus { transform: translateY(-2px); }
+  .yx-pick img { position: absolute; left: 10px; top: 10px; width: 40px; height: 40px; }
+  .yx-pick-key { left: auto; right: 8px; top: 6px; }
+  .yx-pick-name { font-size: 16px; }
+  .yx-pick-text { font-size: 13px; text-align: left; }
+  .yx-pick-hint, .yx-pick-counter, .yx-pick-set { margin-top: 0; text-align: left; }
+  .yx-picks-bar { flex-wrap: wrap; justify-content: center; }
+}

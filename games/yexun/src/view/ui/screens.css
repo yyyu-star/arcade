@@ -411,11 +411,11 @@
 .yx-kind.locked { opacity: 0.45; cursor: default; }
 
 .yx-pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
-.yx-card {
+.yx-mcard {
   position: relative; display: flex; align-items: center; gap: 10px; min-height: 88px; padding: 8px 10px; box-sizing: border-box; text-align: left;
   border: 3px solid var(--ink); border-radius: 12px; background: #fbf5e4; box-shadow: 0 3px 0 var(--ink); font: inherit; color: var(--ink); cursor: pointer;
 }
-.yx-card .yx-thumb { width: 64px; height: 64px; flex: none; border-radius: 8px; border: 2px solid var(--ink); display: block; }
+.yx-mcard .yx-thumb { width: 64px; height: 64px; flex: none; border-radius: 8px; border: 2px solid var(--ink); display: block; }
 .yx-cardtxt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .yx-cardtxt b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 22px; line-height: 1.1; letter-spacing: 2px; }
 .yx-cardtxt small { font-size: 12px; line-height: 1.3; color: #5a4a3a; }
@@ -424,12 +424,12 @@
 .yx-mobs em { font-style: normal; font-size: 12px; line-height: 1.2; color: #5a4a3a; }
 /* 浅色底盘：怪的描边是深色，压在选中的深色卡上看不见 */
 .yx-mob { width: 30px; height: 30px; box-sizing: border-box; padding: 2px; object-fit: contain; border-radius: 50%; background: rgba(246, 239, 220, 0.92); border: 1.5px solid rgba(23, 19, 28, 0.35); }
-.yx-card .yx-hard { position: absolute; top: 4px; right: 4px; font-style: normal; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
-.yx-card.on { background: var(--ink); color: #fbf5e4; box-shadow: 0 3px 0 var(--ink), 0 0 0 3px var(--gold); }
-.yx-card.on small, .yx-card.on .yx-mobs em { color: #e6dcc0; }
-.yx-card.locked { cursor: default; }
-.yx-card.locked .yx-thumb { filter: saturate(0.6) brightness(0.85); }
-.yx-card.locked b { opacity: 0.6; }
+.yx-mcard .yx-hard { position: absolute; top: 4px; right: 4px; font-style: normal; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
+.yx-mcard.on { background: var(--ink); color: #fbf5e4; box-shadow: 0 3px 0 var(--ink), 0 0 0 3px var(--gold); }
+.yx-mcard.on small, .yx-mcard.on .yx-mobs em { color: #e6dcc0; }
+.yx-mcard.locked { cursor: default; }
+.yx-mcard.locked .yx-thumb { filter: saturate(0.6) brightness(0.85); }
+.yx-mcard.locked b { opacity: 0.6; }
 .yx-towncard { min-height: 96px; }
 .yx-pickarea > .yx-raidnote { padding: 12px; border: 3px solid var(--ink); border-radius: 12px; background: #fbf5e4; box-shadow: 0 3px 0 var(--ink); }
 .yx-pickarea > .yx-tiers .yx-chip { min-height: 56px; }
@@ -477,8 +477,8 @@
   .yx-kinds { gap: 6px; }
   .yx-pickarea { gap: 6px; }
   .yx-pickgrid { grid-template-columns: 1fr; gap: 4px; }
-  .yx-card { min-height: 44px; padding: 2px 6px; gap: 8px; }
-  .yx-card .yx-thumb { width: 34px; height: 34px; }
+  .yx-mcard { min-height: 44px; padding: 2px 6px; gap: 8px; }
+  .yx-mcard .yx-thumb { width: 34px; height: 34px; }
   .yx-cardtxt { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
   .yx-cardtxt b { font-size: 18px; letter-spacing: 0; }
   .yx-cardtxt small, .yx-mobs em { display: none; }

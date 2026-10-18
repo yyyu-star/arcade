@@ -422,7 +422,7 @@ export class Select {
       const locked = !s.maps[id];
       const u = MAP_UNLOCK[id];
       return (
-        `<button type="button" class="yx-card yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${u ? `${u.text}解锁` : ''}"` : ''}>` +
+        `<button type="button" class="yx-mcard yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${u ? `${u.text}解锁` : ''}"` : ''}>` +
         `<canvas class="yx-thumb" data-thumb="${id}" width="144" height="144" aria-hidden="true"></canvas>` +
         `<span class="yx-cardtxt"><b>${MAPS[id].name}</b>${id === 'yizhuang' ? '<i class="yx-hard">难</i>' : ''}` +
         (locked && u ? `<em class="yx-unlock">${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[id].blurb}</small>${heads(VIGIL_REGIONS[id], true)}`) +
@@ -431,7 +431,7 @@ export class Select {
     }).join('');
     const townCards = RAID_PICK.map(
       (t) =>
-        `<button type="button" class="yx-card yx-towncard${t === this.tpl ? ' on' : ''}" data-a="tpl" data-t="${t}"><span class="yx-cardtxt"><b>${RAID_TEMPLATES[t].name}</b><small>${RAID_TEMPLATES[t].blurb}</small>${heads(RAID_REGIONS[t], true)}</span></button>`,
+        `<button type="button" class="yx-mcard yx-towncard${t === this.tpl ? ' on' : ''}" data-a="tpl" data-t="${t}"><span class="yx-cardtxt"><b>${RAID_TEMPLATES[t].name}</b><small>${RAID_TEMPLATES[t].blurb}</small>${heads(RAID_REGIONS[t], true)}</span></button>`,
     ).join('');
     const tierOn = (t: LiveTier): boolean => !raid || raidTierOk(t);
     const tiers = `<div class="yx-chips yx-tiers">${LIVE_TIER_IDS.map((t) => `<button type="button" class="yx-chip${t === this.live.tier ? ' on' : ''}${tierOn(t) ? '' : ' locked'}" data-a="tier" data-t="${t}"${tierOn(t) ? '' : ' disabled aria-disabled="true"'}><b>${LIVE_TIERS[t].name}</b><small>${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}</small></button>`).join('')}</div>`;

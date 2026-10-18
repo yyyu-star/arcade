@@ -99,7 +99,10 @@ export class Hud {
     const root = el('div', 'yx-hud', parent);
     this.root = root;
     // 左上：回大厅 + 头像 + 血条护盾
-    const tl = el('div', 'yx-tl', root);
+    // 顶栏三块（左上、计时、右上）放进一个容器：电脑上它不生成盒子（display: contents，三块各自贴边或居中），
+    // 手机竖屏和大屏上它是一行 flex / 网格，三块自然排开、不会叠
+    const top = el('div', 'yx-top', root);
+    const tl = el('div', 'yx-tl', top);
     const home = el('button', 'yx-btn yx-home', tl);
     this.homeBtn = home;
     home.type = 'button';
@@ -123,18 +126,20 @@ export class Hud {
     // 顶部：经验条 + 计时
     const xp = el('div', 'yx-xp', root);
     this.xpFill = el('div', 'yx-fill', xp);
-    const timer = el('div', 'yx-timer', root);
+    const timer = el('div', 'yx-timer', top);
     this.timer = timer;
     el('span', 'yx-moon', timer);
     const tcol = el('div', 'yx-tcol', timer);
     this.tlabel = el('span', 'yx-tlabel', tcol, '离天亮');
     this.time = el('span', 'yx-time', tcol, '15:00');
     // 右上：击杀、铜钱、暂停
-    const tr = el('div', 'yx-tr', root);
-    const k = el('div', 'yx-stat', tr);
+    const tr = el('div', 'yx-tr', top);
+    // 击杀和铜钱合成一个胶囊，两个数字并排
+    const caps = el('div', 'yx-stat yx-caps', tr);
+    const k = el('span', 'yx-cap', caps);
     el('span', 'yx-ico yx-ico-kill', k);
     this.kills = el('span', '', k, '0');
-    const c = el('div', 'yx-stat', tr);
+    const c = el('span', 'yx-cap', caps);
     el('span', 'yx-ico yx-ico-coin', c);
     this.coins = el('span', '', c, '0');
     // 夜探的背包件数（守夜不显示）

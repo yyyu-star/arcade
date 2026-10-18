@@ -155,6 +155,7 @@ export class Cards {
     this.bar = bar;
     this.root.appendChild(bar);
     this.root.classList.remove('banning');
+    this.root.classList.add('open');
     this.root.style.display = '';
     this.setFocus(0);
     this.onShow(firstTime);
@@ -182,6 +183,7 @@ export class Cards {
     if (code === Pick.Reroll && this.counts.rerolls <= 0) return;
     const cb = this.onPick;
     this.onPick = null;
+    this.root.classList.remove('open');
     this.root.style.display = 'none';
     cb(code);
   }

@@ -174,6 +174,64 @@ try {
     report('竖屏菜单回大厅', errs);
     await page.context().close();
   }
+  // 7) 对局 HUD 各块互不相交：手机竖屏、横屏 × 守夜、夜探；打开固定摇杆（和小地图都在左边）、不带 auto（新手提示条也在）
+  if (want(7)) {
+    const fixedStick = (): void => localStorage.setItem('yexun.settings', JSON.stringify({ fixedStick: true }));
+    const views = [
+      { name: '竖屏', size: { width: 390, height: 844 } },
+      { name: '横屏', size: { width: 844, height: 390 } },
+    ];
+    const modes = [
+      { name: '守夜', query: 'play' },
+      { name: '夜探', query: 'raid=guzhen' },
+    ];
+    // 要互相避开的块：顶栏各件、夜探目标条和背包、小地图、法器格、提示条、固定摇杆
+    const BLOCKS = ['.yx-hud .yx-home', '.yx-hud .yx-card', '.yx-hud .yx-timer', '.yx-hud .yx-caps', '.yx-hud .yx-pause', '.yx-hud .yx-bag', '.yx-hud .yx-rs', '.yx-hud .yx-mm', '.yx-hud .yx-slots', '.yx-tip', '.yx-stick'];
+    for (const v of views) {
+      for (const m of modes) {
+        const errs: string[] = [];
+        const tag = `HUD ${v.name}${m.name}`;
+        const page = await open(m.query, errs, v.size, fixedStick);
+        await startRun(page);
+        await page.waitForTimeout(2500);
+        const res = await page.evaluate((sels) => {
+          const seen: { sel: string; x: number; y: number; w: number; h: number }[] = [];
+          for (const sel of sels) {
+            const e = document.querySelector<HTMLElement>(sel);
+            if (!e) continue;
+            const r = e.getBoundingClientRect();
+            if (r.width < 1 || r.height < 1 || getComputedStyle(e).visibility === 'hidden') continue;
+            seen.push({ sel, x: r.left, y: r.top, w: r.width, h: r.height });
+          }
+          const hit: string[] = [];
+          for (let i = 0; i < seen.length; i++) {
+            for (let j = i + 1; j < seen.length; j++) {
+              const a = seen[i]!;
+              const b = seen[j]!;
+              const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+              const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+              if (ox > 1 && oy > 1) hit.push(`${a.sel} 与 ${b.sel} 相交 ${Math.round(ox)}×${Math.round(oy)}（${[a, b].map((q) => `${Math.round(q.x)},${Math.round(q.y)} ${Math.round(q.w)}×${Math.round(q.h)}`).join(' / ')}）`);
+            }
+          }
+          const out = seen.filter((a) => a.x < -1 || a.y < -1 || a.x + a.w > innerWidth + 1 || a.y + a.h > innerHeight + 1).map((a) => `${a.sel} 超出屏幕`);
+          return { names: seen.map((a) => a.sel), problems: [...hit, ...out] };
+        }, BLOCKS);
+        // 血条、计时一定要看得见（竖屏曾经被盖住）
+        for (const need of ['.yx-hud .yx-hp', '.yx-hud .yx-timer', '.yx-hud .yx-caps']) if (!res.names.includes(need) && need !== '.yx-hud .yx-hp') fail(`${tag} 找不到 ${need}`);
+        const hp = await page.locator('.yx-hud .yx-hp').boundingBox();
+        if (!hp || hp.width < 30 || hp.height < 8) fail(`${tag} 血条太小或看不见：${JSON.stringify(hp)}`);
+        // 头像血条那块只有一行高：0.3.0 菜单的地图卡也叫 .yx-card，样式串过来把它撑成一个高纸框（血条挤成小点）
+        const card = await page.locator('.yx-hud .yx-card').boundingBox();
+        if (!card || card.height > 64) fail(`${tag} 头像血条那块被撑高了：${JSON.stringify(card)}`);
+        if (!res.names.includes('.yx-stick')) fail(`${tag} 固定摇杆没有显示，没法检查和小地图是否相交`);
+        if (m.name === '夜探' && !res.names.includes('.yx-hud .yx-mm')) fail(`${tag} 看不到小地图`);
+        res.problems.forEach((p) => fail(`${tag} ${p}`));
+        if (!res.problems.length) ok(`${tag} 各块互不相交（${res.names.length} 块）`);
+        report(tag, errs);
+        await page.context().close();
+      }
+    }
+  }
 } finally {
   await browser.close();
   await server.close();

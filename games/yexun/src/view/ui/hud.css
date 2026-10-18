@@ -19,17 +19,24 @@
   inset: 0;
   pointer-events: none;
   color: var(--ink);
-  font: 700 calc(15px * var(--s)) / 1.2 system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  font: 700 calc(15px * var(--s, 1)) / 1.2 system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-variant-numeric: tabular-nums;
 }
 @media (max-height: 500px) {
   .yx-hud { --s: 0.8; }
 }
+/* 电脑大屏（1920 这一档）整体放大一档 */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .yx-hud { --s: 1.25; }
+}
+
+/* 顶栏容器：默认不生成盒子，左上、计时、右上各自定位（手机横屏、1280 的老样子） */
+.yx-hud .yx-top { display: contents; }
 
 .yx-btn {
   pointer-events: auto;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: max(44px, calc(44px * var(--s, 1)));
+  min-height: max(44px, calc(44px * var(--s, 1)));
   border: 2.5px solid var(--ink);
   border-radius: 12px;
   background: var(--paper);
@@ -43,17 +50,17 @@
   font: inherit;
   cursor: pointer;
 }
-.yx-btn svg { width: 22px; height: 22px; }
+.yx-hud .yx-btn svg { width: calc(22px * var(--s, 1)); height: calc(22px * var(--s, 1)); }
 .yx-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 
 /* 左上 */
-.yx-tl { position: absolute; left: 10px; top: 10px; display: flex; align-items: flex-start; gap: 10px; }
-.yx-home span { font-size: 14px; }
-.yx-card { display: flex; align-items: center; gap: calc(8px * var(--s)); }
+.yx-hud .yx-tl { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: 10px; display: flex; align-items: flex-start; gap: 10px; }
+.yx-hud .yx-home span { font-size: calc(14px * var(--s, 1)); }
+.yx-card { display: flex; align-items: center; gap: calc(8px * var(--s, 1)); }
 .yx-avatar {
   position: relative;
-  width: calc(54px * var(--s));
-  height: calc(54px * var(--s));
+  width: calc(54px * var(--s, 1));
+  height: calc(54px * var(--s, 1));
   border: 3px solid var(--ink);
   border-radius: 50%;
   background: radial-gradient(circle at 40% 35%, #fff8e6, #e9d7ae);
@@ -64,29 +71,29 @@
 .yx-avatar img { position: absolute; left: -6%; top: 6%; width: 112%; }
 .yx-lv {
   position: absolute; right: -2px; bottom: -2px;
-  min-width: calc(22px * var(--s)); padding: 0 3px;
+  min-width: calc(22px * var(--s, 1)); padding: 0 3px;
   border: 2px solid var(--ink); border-radius: 8px;
   background: var(--red); color: #fff;
-  font-size: calc(12px * var(--s)); text-align: center; line-height: calc(18px * var(--s));
+  font-size: calc(12px * var(--s, 1)); text-align: center; line-height: calc(18px * var(--s, 1));
 }
 .yx-bars { display: flex; flex-direction: column; gap: 4px; }
 .yx-bar {
   position: relative;
-  width: calc(190px * var(--s));
-  height: calc(18px * var(--s));
+  width: calc(190px * var(--s, 1));
+  height: calc(18px * var(--s, 1));
   border: 2.5px solid var(--ink);
   border-radius: 6px;
   background: #3a3140;
   overflow: hidden;
   box-shadow: 0 2px 0 var(--ink);
 }
-.yx-sh { height: calc(11px * var(--s)); width: calc(150px * var(--s)); }
+.yx-sh { height: calc(11px * var(--s, 1)); width: calc(150px * var(--s, 1)); }
 .yx-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.15s ease-out; }
 .yx-hp .yx-fill { background: linear-gradient(#ff8a7a, #e0453a 55%, #b8312a); }
 .yx-sh .yx-fill { background: linear-gradient(#a8dcff, #4ba3e6 60%, #2f7cc0); }
 .yx-bar-text {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  color: #fff; font-size: calc(12px * var(--s));
+  color: #fff; font-size: calc(12px * var(--s, 1));
   text-shadow: -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink);
 }
 
@@ -105,14 +112,14 @@
   box-shadow: 0 3px 0 var(--ink);
 }
 .yx-moon {
-  width: calc(26px * var(--s)); height: calc(26px * var(--s)); border-radius: 50%;
+  width: calc(26px * var(--s, 1)); height: calc(26px * var(--s, 1)); border-radius: 50%;
   background: radial-gradient(circle at 65% 40%, transparent 46%, #f6e7b0 48%);
   box-shadow: 0 0 10px rgba(246, 231, 176, 0.6);
   transform: rotate(-20deg);
 }
 .yx-tcol { display: flex; flex-direction: column; align-items: center; }
-.yx-tlabel { font-size: calc(11px * var(--s)); opacity: 0.75; letter-spacing: 2px; }
-.yx-time { font-size: calc(26px * var(--s)); line-height: 1; letter-spacing: 1px; }
+.yx-tlabel { font-size: calc(11px * var(--s, 1)); opacity: 0.75; letter-spacing: 2px; }
+.yx-time { font-size: calc(26px * var(--s, 1)); line-height: 1; letter-spacing: 1px; }
 
 /* 夜探：14:00 起顶上的倒计时醒目，最后 30 秒变红闪 */
 .yx-timer.warn { background: rgba(120, 70, 16, 0.92); }
@@ -126,27 +133,30 @@
 
 /* 撤离箭头：贴着屏幕边，位置由脚本写（transform），图标按朝向转 */
 .yx-xa { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
-.yx-xa-ico { position: absolute; left: 0; top: 0; width: calc(40px * var(--s)); height: calc(40px * var(--s)); animation: yx-xa 0.8s ease-in-out infinite alternate; }
+.yx-xa-ico { position: absolute; left: 0; top: 0; width: calc(40px * var(--s, 1)); height: calc(40px * var(--s, 1)); animation: yx-xa 0.8s ease-in-out infinite alternate; }
 .yx-xa-ico svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 4px rgba(255, 210, 58, 0.8)); }
 @keyframes yx-xa { from { opacity: 0.75; } to { opacity: 1; } }
 .yx-xa.gb .yx-xa-ico svg { filter: drop-shadow(0 0 4px rgba(255, 138, 42, 0.8)); }
 .yx-xa-text {
   position: absolute; left: 0; top: 0; white-space: nowrap;
   padding: 2px 8px; border: 2px solid var(--ink); border-radius: 8px;
-  background: rgba(28, 34, 48, 0.9); color: #ffe9a0; font-size: calc(13px * var(--s));
+  background: rgba(28, 34, 48, 0.9); color: #ffe9a0; font-size: calc(13px * var(--s, 1));
 }
 .yx-xa.gb .yx-xa-text { color: #ffd9a8; }
 
 /* 右上 */
-.yx-tr { position: absolute; right: 10px; top: 10px; display: flex; align-items: center; gap: 8px; }
+.yx-hud .yx-tr { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: 10px; display: flex; align-items: center; gap: 8px; }
 .yx-stat {
-  display: flex; align-items: center; gap: 6px; height: calc(32px * var(--s));
+  display: flex; align-items: center; gap: 6px; height: calc(32px * var(--s, 1));
   padding: 0 10px 0 6px;
   border: 2.5px solid var(--ink); border-radius: 10px;
   background: var(--paper); box-shadow: 0 3px 0 var(--ink);
-  font-size: calc(16px * var(--s));
+  font-size: calc(16px * var(--s, 1));
 }
-.yx-ico { width: calc(20px * var(--s)); height: calc(20px * var(--s)); flex: none; }
+/* 击杀 + 铜钱：一个胶囊，两段并排 */
+.yx-hud .yx-caps { gap: calc(10px * var(--s, 1)); padding: 0 calc(10px * var(--s, 1)) 0 calc(6px * var(--s, 1)); white-space: nowrap; }
+.yx-hud .yx-cap { display: inline-flex; align-items: center; gap: 4px; }
+.yx-ico { width: calc(20px * var(--s, 1)); height: calc(20px * var(--s, 1)); flex: none; }
 .yx-ico-kill {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1.5c-4.4 0-7.5 3-7.5 7 0 2.4 1.2 4 2.6 4.9V16a1.5 1.5 0 0 0 1.5 1.5h6.8a1.5 1.5 0 0 0 1.5-1.5v-2.6c1.4-.9 2.6-2.5 2.6-4.9 0-4-3.1-7-7.5-7z' fill='%23f4f1ea' stroke='%2317131c' stroke-width='1.8'/%3E%3Cellipse cx='7' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cellipse cx='13' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cpath d='M8.2 14.4v2.4M11.8 14.4v2.4' stroke='%2317131c' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat;
 }
@@ -162,23 +172,23 @@
 /* 右侧：法器格，冷却用一圈扇形遮罩 */
 .yx-side {
   position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%);
-  display: flex; align-items: center; gap: calc(6px * var(--s)); pointer-events: none;
+  display: flex; align-items: center; gap: calc(6px * var(--s, 1)); pointer-events: none;
 }
 .yx-slots, .yx-passives {
-  display: flex; flex-direction: column; gap: calc(8px * var(--s));
-  padding: calc(8px * var(--s)) calc(7px * var(--s)) calc(10px * var(--s));
+  display: flex; flex-direction: column; gap: calc(8px * var(--s, 1));
+  padding: calc(8px * var(--s, 1)) calc(7px * var(--s, 1)) calc(10px * var(--s, 1));
   border-radius: 14px; background: rgba(23, 19, 28, 0.32); box-shadow: inset 0 0 0 1.5px rgba(246, 239, 220, 0.25);
 }
-.yx-passives { gap: calc(5px * var(--s)); padding: calc(6px * var(--s)); }
+.yx-passives { gap: calc(5px * var(--s, 1)); padding: calc(6px * var(--s, 1)); }
 .yx-pass {
-  position: relative; width: calc(28px * var(--s)); height: calc(28px * var(--s));
+  position: relative; width: calc(28px * var(--s, 1)); height: calc(28px * var(--s, 1));
   border: 2px solid var(--ink); border-radius: 7px; background: linear-gradient(#fbf5e6, #e9dcbc);
 }
 .yx-pass img { position: absolute; inset: 6%; width: 88%; height: 88%; }
 .yx-pass .yx-slot-lv { left: -5px; bottom: -5px; font-size: 9px; line-height: 11px; min-width: 12px; }
 .yx-slot {
   position: relative;
-  width: calc(46px * var(--s)); height: calc(46px * var(--s));
+  width: calc(46px * var(--s, 1)); height: calc(46px * var(--s, 1));
   border: 2.5px solid var(--ink); border-radius: 10px;
   background: linear-gradient(#fbf5e6, #e9dcbc);
   box-shadow: 0 3px 0 var(--ink);
@@ -195,7 +205,7 @@
 
 /* 连斩横幅：毛笔字 + 墨点，数字一变就弹一下 */
 .yx-combo {
-  position: absolute; left: calc(26px * var(--s)); top: 30%;
+  position: absolute; left: calc(26px * var(--s, 1)); top: 30%;
   display: flex; align-items: baseline; gap: 2px;
   font-family: 'YxBrush', serif; font-weight: 400;
   opacity: 0; transform: rotate(-6deg);
@@ -204,13 +214,13 @@
 .yx-combo.on { opacity: 1; }
 .yx-combo.pop .yx-combo-num { animation: yx-pop 0.22s ease-out; }
 .yx-combo-num {
-  font-size: calc(88px * var(--s)); line-height: 1; color: var(--ink);
+  font-size: calc(88px * var(--s, 1)); line-height: 1; color: var(--ink);
   -webkit-text-stroke: 6px #fff; paint-order: stroke fill;
   text-shadow: 3px 4px 0 rgba(23, 19, 28, 0.2);
 }
 .yx-combo-word {
-  font-size: calc(46px * var(--s)); color: var(--red);
-  margin-top: calc(36px * var(--s));
+  font-size: calc(46px * var(--s, 1)); color: var(--red);
+  margin-top: calc(36px * var(--s, 1));
   -webkit-text-stroke: 5px #fff; paint-order: stroke fill;
   text-shadow: 2px 3px 0 rgba(23, 19, 28, 0.25);
 }
@@ -224,8 +234,8 @@
 }
 
 /* 手机：虚拟摇杆（按下处出现，松手消失） */
-.yx-stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(246, 239, 220, 0.55); background: rgba(23, 19, 28, 0.18); pointer-events: none; }
-.yx-stick b { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; border: 3px solid var(--ink); background: rgba(246, 239, 220, 0.9); box-shadow: 0 3px 0 var(--ink); }
+.yx-stick { position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 2.5px solid rgba(246, 239, 220, 0.4); background: rgba(23, 19, 28, 0.1); pointer-events: none; }
+.yx-stick b { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2.5px solid var(--ink); background: rgba(246, 239, 220, 0.78); box-shadow: 0 2px 0 var(--ink); }
 
 /* 月光暗角：四边偏冷偏暗，中间亮（只是一层渐变，不进画布） */
 .yx-vignette {
@@ -235,3 +245,66 @@
 
 /* 摇杆层：铺满全屏、在 HUD 下面，按哪儿摇杆就出现在哪儿；HUD 的按钮在上层，点按钮不算走路 */
 .yx-touch { position: absolute; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* ── 新手提示条：缩成一行小条，放在顶栏和夜探目标条下面，不盖主角、小地图和摇杆 ──
+ * 条本身在 screens.css 里（.yx-tip），这里只改位置和大小，选择器多一层 #stage 压过去 */
+#stage .yx-tip {
+  top: 124px; bottom: auto; padding: 0 0 0 12px; gap: 4px; border-radius: 12px;
+  background: rgba(251, 245, 228, 0.9); box-shadow: 0 2px 0 var(--ink); max-width: calc(100% - 16px);
+}
+#stage .yx-tip span { font-size: 13px; }
+#stage .yx-tip button { font-size: 12px; background: none; }
+/* 选卡时提示条让开：竖屏下它正好压在"升到 N 级"上，选卡时也用不上走位提示 */
+#stage:has(.yx-picks.open) .yx-tip { visibility: hidden; }
+@media (max-height: 500px) { #stage .yx-tip { top: 108px; } }
+
+/* ── 手机竖屏：顶栏并成一行（大厅、头像血条、计时、胶囊、暂停），夜探的背包在第二行右边 ── */
+@media (max-width: 600px) and (orientation: portrait) {
+  .yx-hud .yx-top {
+    position: absolute; display: flex; align-items: center; gap: 4px;
+    left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); top: 12px;
+  }
+  .yx-hud .yx-tl, .yx-hud .yx-tr, .yx-hud .yx-timer { position: static; transform: none; }
+  .yx-hud .yx-tl { flex: 1 1 0; min-width: 0; gap: 4px; align-items: center; }
+  .yx-hud .yx-tr { display: contents; }
+  .yx-hud .yx-home span { display: none; }
+  .yx-hud .yx-home { padding: 0; flex: none; }
+  .yx-hud .yx-card { flex: 1 1 0; min-width: 0; gap: 3px; }
+  .yx-hud .yx-avatar { width: 34px; height: 34px; flex: none; border-width: 2.5px; }
+  .yx-hud .yx-lv { min-width: 16px; font-size: 10px; line-height: 12px; right: -4px; bottom: -4px; }
+  .yx-hud .yx-bars { flex: 1 1 0; min-width: 0; gap: 3px; }
+  .yx-hud .yx-bar { width: 100%; min-width: 0; height: 16px; }
+  .yx-hud .yx-sh { width: 72%; height: 9px; }
+  .yx-hud .yx-bar-text { display: none; }
+  .yx-hud .yx-timer { flex: none; padding: 4px 8px; gap: 0; }
+  .yx-hud .yx-moon, .yx-hud .yx-tlabel { display: none; }
+  .yx-hud .yx-time { font-size: 20px; }
+  .yx-hud .yx-caps { flex: none; height: 34px; gap: 6px; padding: 0 7px 0 4px; font-size: 13px; }
+  .yx-hud .yx-cap { gap: 2px; }
+  .yx-hud .yx-ico { width: 14px; height: 14px; }
+  .yx-hud .yx-pause { flex: none; padding: 0; }
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
+  .yx-hud .yx-bagpanel { top: 112px; right: 8px; }
+  .yx-hud .yx-rs { top: 152px; }
+  .yx-hud .yx-rs.lower { top: 190px; }
+  .yx-hud .yx-mm { left: max(8px, env(safe-area-inset-left, 0px)); top: 108px; bottom: auto; width: 80px; height: 80px; }
+  #stage .yx-tip { top: 204px; }
+}
+
+/* ── 电脑（≥1000 宽、≥600 高）：左上、中间、右上收进居中的一排，不再散在三个角 ── */
+@media (min-width: 1000px) and (min-height: 600px) {
+  .yx-hud .yx-top {
+    position: absolute; left: 0; right: 0; top: calc(14px * var(--s, 1)); margin: 0 auto;
+    width: min(94%, calc(960px * var(--s, 1)));
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; column-gap: calc(24px * var(--s, 1));
+  }
+  .yx-hud .yx-tl, .yx-hud .yx-tr, .yx-hud .yx-timer { position: static; transform: none; }
+  .yx-hud .yx-tl { justify-self: start; gap: calc(10px * var(--s, 1)); }
+  .yx-hud .yx-tr { justify-self: end; gap: calc(8px * var(--s, 1)); }
+  .yx-hud .yx-timer { justify-self: center; }
+  .yx-hud .yx-xa-text { font-size: calc(13px * var(--s, 1)); }
+  .yx-hud .yx-side { right: max(24px, 2vw); }
+  .yx-hud .yx-slot-lv { font-size: calc(11px * var(--s, 1)); line-height: calc(14px * var(--s, 1)); }
+  #stage .yx-tip { top: 150px; }
+  .yx-hud .yx-combo { left: max(26px, 6vw); }
+}
