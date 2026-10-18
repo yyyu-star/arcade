@@ -503,11 +503,18 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
   - 横幅：一炮双响 / 三响、杠上开花、抢杠胡、天胡、地胡、海底捞月、龙七对、金钩钓、清一色、封顶，胡牌的牌面放完后挂一条（kit 的 `banner`），记进一场的总结算。
   - 好友房聊天（0.19.0，kit 0.18.0，`docs/chat.md`）：房间 `chat: true`，kit 过滤（链接、号码、微信 QQ 整条拒发，脏话打码）、按座位限速后只转发给带 `chat=1` 的连接，不写存储、不进快照，电脑不读；
     页面 `Online` 把 onChat / onChatError 交给 TableFun 的 `chat` / `chatError`（房间座位号就是牌桌座位号，不用换算）；声音面板"聊天：开 / 不看"（`mahjong.chatOff`，只在好友房出现），不看只挡别人说的。
+    0.21.0 起三档轮着切（开 / 不和陌生人 / 不看，同一个键，见第 8 节）：不和陌生人只管匹配桌，进房时不给 onChat（连接不带 chat=1）、牌桌不给聊天；好友房、单机当"开"。
     房间测试走真实进房路由测转发、拒发手机号、没带 chat=1 的旧页面收不到。
     摆放（0.20.0，kit 0.19.0）：plate 是整块名牌加头上的倒计时（`table.ts` 的 `plateRect`）；center 是中控盘和四家弃牌区；电脑版聊天框（chatDock）在左上家名牌下面、左家竖排手牌右边，
     kit 自己挑会放到左下压住我的名牌；手机版"聊天"按钮在右下家名牌正上方（挨着"互动"会压名牌，摞上去会压操作条）；弹幕在对家那排下面、中控盘上面；顶栏也加进 avoid（上家的气泡会盖房间号）。
     弹幕开关存在 kit 默认的 `mahjong.chat`，声音面板"弹幕：开 / 关"接同一份。
     单机（0.19.2）：TableFun 传 kit 的 `localChat((t, m) => fun.chat(0, t, m))`，过滤、限速和房间一样，只在本地显示；说的话不进 `Solo`、不给电脑（`test/arch.test.ts`：规则、电脑、`solo.ts` 不 import `arcade-kit/chat`、`table-fun`）。
+  - 快速匹配（0.21.0，kit 0.20.0 的 `MatchQueue` / `MatchClient`，设计在 kit 的 `docs/match.md`）：
+    - 档位（`src/game/match.ts`，Worker 和页面共用）：`fun` 一个，实盘每档一个 `real-<档位>`；一桌最多 4 个真人；开桌选项和好友房开房一样（默认玩法、默认规则），房间照常用 `options` 校验，`test/match-tier.test.ts` 用 kit 的 `matchConfigErrors` 核对（附阳性对照）。
+    - Worker：`worker/match.ts` 的 `Queue`（DO 绑定 `MATCH`，迁移 v2）；路由 `GET /games/mahjong/rooms/match/<档位>` 接 `acceptMatch`，在 `rooms/*` 下面，`run_worker_first` 不用改；没有钱包（单独部署）只开 `fun`；没绑 `MATCH` 回 4004。
+    - 页面：选桌页"快速匹配"→ 排队卡（`main.ts` 的 `quickMatch`）；排到了照好友房进房，地址栏多带 `match=1`（刷新前就知道是匹配桌，聊天选择照样生效），房间信息到了以 `room.match` 为准。
+      匹配桌不摆房间号、叫朋友、选座、开打，分享卡链接不带房间号，好友位置只报"在玩雀馆"；转单机先说 kit 的 `MATCH_TEXT` 一秒，`replaced` 不开单机。
+    - 测试：`test/worker/match.test.ts`（入口导出、四人同桌自动开打、实盘档带档位、外人 4004、不认得的档位 4004、没钱包的实盘档 4004）；冒烟 `smoke:match`。
   - 设置：总开关"互动：开 / 不看"在顶栏"声"的小面板里（`mahjong.comms`）；"屏蔽他""全部屏蔽"在 kit 的菜单和面板里，按房间分开（sessionStorage）。只是自己不看，牌局照常。
   - 0.10.1 去掉了自己那套（菜单、面板、冷却、连击回敬、电脑反应、按性格的台词 `VOICES`、催促炸弹）：kit 里没有催促炸弹，规范也没有，不另做。
 - **动作字和音效**：碰用大字"碰！"；杠、胡、自摸（0.9.0）在那家的牌河上弹出金色大字加一圈粒子（`view/fx.ts`，只动 transform/opacity，减少动态效果时只淡入淡出）；
@@ -605,7 +612,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | `mahjong.solo` | 单机打到一半的一场（状态 + 钱包 ref 和 op），回来接着打 |
 | `mahjong.prefs` | 声音、茶馆底噪（0.17.4）、振动、速度、上次选的档位、娱乐难度和玩法 |
 | `mahjong.comms` | 互动的总开关关着（"不看"） |
-| `mahjong.chatOff` | 好友房聊天关着（"聊天：不看"，0.19.0） |
+| `mahjong.chatOff` | 聊天三档：没有是开，`1` 是"不看"（0.19.0），`stranger` 是"不和陌生人"（0.21.0，匹配桌不收不说） |
 | `mahjong.chat` | kit 的聊天设置：弹幕开关、电脑版聊天框收没收起（0.20.0） |
 | `mahjong.nick` | 单独部署时好友房里的昵称 |
 | `mahjong.guide` | 新手引导看过没有 |
@@ -648,6 +655,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 - 冒烟（无头浏览器，控制台零报错）：
   - `npm run smoke`：`?online=1` 入口；横屏、竖屏各打一场单机（加速），回大厅确认、听牌提示、往上拖出牌、胡牌亮牌、结算页"分享"出预览、规则表；
   - `npm run build:cf && npm run smoke:room`：本地 wrangler dev + 假平台，两个浏览器开娱乐房（叫朋友来面板、报位置、互动、第三个人中途旁观和坐下、离座）、实盘小档房（带入、离座结回）、打完一整场"再来一场"跟进新房间；
+  - `npm run build:cf && npm run smoke:match`：两个浏览器排娱乐到同一张匹配桌（不摆房间号、叫朋友；选"不和陌生人"的连接不带 chat=1，自己的气泡不压手牌）、实盘小档各带一份、取消留在选桌页、一个人 15 秒转单机；
   - `npm run build:cf && npm run smoke:standalone`：模块的 `wrangler.jsonc` 原样起（没有平台），两个游客：选桌页只有娱乐、单机一局、好友房开打和扔道具；
   - 画面自查：`node scripts/capture.ts land|port|se-land|se-port` 截图并报互相压住的元素（iPhone SE 尺寸，0.3.5）。
   - 还没进冒烟：双指放大、省内存设备（DOM 牌桌没有画布，后者影响小）——见收尾审计 C。

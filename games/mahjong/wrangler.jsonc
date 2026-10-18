@@ -19,10 +19,16 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "MahjongRoom" },
-      { "name": "METER", "class_name": "RoomMeter" }
+      { "name": "METER", "class_name": "RoomMeter" },
+      // 快速匹配的排队（0.21.0，worker/match.ts，kit 的 MatchQueue）：每个档位一个对象，凑够人用 ROOM 开桌
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter"] }],
+  // v1 不动（已部署）；v2 只新加排队类
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
   "vars": {
     // 每天的 DO 写入预算（DESIGN.md 第 9 节，一房约 800 行）：到 busy 不开新房，到 stop 收场。
     // 每人开房同时 5 个、每天 30 个：正常一场 40 分钟起，一天开不了这么多，卡的是脚本刷房（安全审计低危）；全站上限照 kit 默认

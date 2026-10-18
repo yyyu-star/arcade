@@ -230,6 +230,11 @@ export class TableUi<V extends TableView, A> {
     return [this.myHand.getBoundingClientRect(), this.bar.getBoundingClientRect()].filter((r) => r.width > 0);
   }
 
+  /** 自己的手牌（互动的气泡加倍避开它，见 main.ts 的 newFun） */
+  handRect(): DOMRect {
+    return this.myHand.getBoundingClientRect();
+  }
+
   /** 名牌（头像、名字、筹码、缺门和状态签整块，kit 0.19.0 的 plate）：气泡、弹幕、聊天按钮都避开，自己的气泡不盖自己的筹码数 */
   plateRect(seat: number): DOMRect {
     const b = this.badges[this.rel(seat)]!;

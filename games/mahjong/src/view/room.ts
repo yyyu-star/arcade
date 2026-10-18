@@ -11,6 +11,8 @@ import { button, el } from './dom.ts';
 import { num, STAKES_NAME, VARIANT_NAME, walletError } from './text.ts';
 
 export interface WaitingProps {
+  /** 快速匹配排到的桌（0.21.0）：人已经坐好，到齐（或等满 20 秒）自动开打；不摆房间号、叫朋友、选座、开打 */
+  match?: boolean;
   code: string;
   room: RoomInfo;
   you: You | null;
@@ -36,6 +38,7 @@ function rulesLine(o: RoomOpts | null): string {
 
 export function renderWaiting(box: HTMLElement, p: WaitingProps): void {
   box.replaceChildren();
+  if (p.match) return matchWaiting(box, p);
   const head = el('div', 'room-head', box);
   el('div', 'room-label', head, '房间号');
   el('div', 'room-code', head, p.code);
@@ -67,6 +70,26 @@ export function renderWaiting(box: HTMLElement, p: WaitingProps): void {
   button('act soft', row, '离开房间', p.onLeave);
   if (p.host) button('act go big', row, '开打', p.onStart).disabled = few;
   else el('span', 'room-wait', row, few ? '等朋友坐下' : '等房主开打');
+}
+
+/** 匹配桌等人进来：只看谁到了，到齐或等满就开打 */
+function matchWaiting(box: HTMLElement, p: WaitingProps): void {
+  const head = el('div', 'room-head', box);
+  el('div', 'room-label', head, '快速匹配');
+  el('div', 'room-rules', head, rulesLine(p.opts));
+  const seats = el('div', 'room-seats', box);
+  p.room.seats.forEach((s, i) => {
+    const mine = p.you?.seat === i;
+    const card = el('div', `room-seat${mine ? ' me' : ''}${s.kind === 'empty' ? ' empty' : ''}`, seats);
+    const name = s.kind === 'human' ? (s.name ?? '玩家') : '电脑';
+    el('div', 'avatar', card).innerHTML = avatarSvg(name, s.kind !== 'human');
+    el('div', 'name', card, `${name}${mine ? '（我）' : ''}`);
+    if (s.kind === 'human' && s.away) el('div', 'tag', card, '还没进来');
+  });
+  el('p', 'room-hint', box, '凑好一桌了：人到齐就开打，没进来的先由电脑替他打，进来了交还给他。');
+  const row = el('div', 'go-row', box);
+  button('act soft', row, '离开', p.onLeave);
+  el('span', 'room-wait', row, '马上开打');
 }
 
 /** 没入座时能坐哪：自己坐过的座位（离座了也还是他的），或者没绑人的电脑座位（kit 的座位绑人规则） */

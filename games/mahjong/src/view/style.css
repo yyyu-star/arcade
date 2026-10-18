@@ -1941,6 +1941,30 @@ html .atf-btn svg {
   font-size: var(--fs-xs);
   opacity: 0.6;
 }
+/* 快速匹配的排队卡（0.21.0）：档位一条小签，下面一行大字"已有几人、还剩几秒"（数字不换行、不截） */
+.mask.match .dialog {
+  min-width: min(360px, 94%);
+  text-align: center;
+}
+.mask.match .dialog h2 {
+  margin-right: 0;
+}
+.mask.match .match-tier {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: #ffffff14;
+  color: var(--gold);
+  font-size: var(--fs-sm);
+}
+.mask.match .match-wait {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-lg);
+  font-weight: bold;
+}
+.mask.match .row {
+  flex-wrap: wrap;
+}
 /* 规则小册子和新手引导是宣纸卡片（docs/art-v3.md 第 7 节 ⑤b）：米色纸、茶褐字、朱红小标题，和牌桌上的深色玻璃面板分开，一看就是"说明书" */
 .mask:is(.rules, .guide) .dialog {
   --ink: #3b2414;

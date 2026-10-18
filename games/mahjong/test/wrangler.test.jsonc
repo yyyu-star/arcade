@@ -9,10 +9,14 @@
     "bindings": [
       { "name": "ROOM", "class_name": "MahjongRoom" },
       { "name": "METER", "class_name": "RoomMeter" },
-      { "name": "FAKE_BANK", "class_name": "FakeBank" }
+      { "name": "FAKE_BANK", "class_name": "FakeBank" },
+      { "name": "MATCH", "class_name": "Queue" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter", "FakeBank"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MahjongRoom", "RoomMeter", "FakeBank"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
   "services": [{ "binding": "WALLET", "service": "mahjong-test", "entrypoint": "WalletService", "props": { "game": "mahjong" } }],
   "vars": {
     "GATE": "login",

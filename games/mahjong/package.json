@@ -1,7 +1,7 @@
 {
   "name": "mahjong",
   "private": true,
-  "version": "0.20.0",
+  "version": "0.21.0",
   "type": "module",
   "license": "MIT",
   "description": "雀馆：一套麻将引擎 + 多个玩法，第一个玩法川麻·血战到底；单机对电脑和好友房，筹码无任何现金价值",
@@ -18,10 +18,11 @@
     "sim": "node scripts/sim.ts",
     "smoke": "node scripts/smoke.ts",
     "smoke:room": "node scripts/smoke-room.ts",
-    "smoke:standalone": "node scripts/smoke-standalone.ts"
+    "smoke:standalone": "node scripts/smoke-standalone.ts",
+    "smoke:match": "node scripts/smoke-match.ts"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.19.0"
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.20.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.2",

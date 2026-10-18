@@ -2,13 +2,20 @@
  * 本地试 Worker 时代替平台的假 arcade（冒烟 scripts/smoke-room.ts），不部署：
  * cookie __Host-sid=<id> 就认作这个人，没有就是没登录；钱包用 kit 的假钱包 arcade-kit/testing（RPC 和浏览器的 /api/wallet*）；
  * 好友：报位置、问邀请收下就回（没有邀请）；好友列表只有一个在线的"老王"，叫他来就回一个邀请号（冒烟走一遍"叫朋友来"面板）。
+ * 快速匹配的排队经 RPC 问屏蔽名单（平台 0.25.0 的 blockedAmong），所以是 WorkerEntrypoint；这里谁也没屏蔽谁。
  */
+import { WorkerEntrypoint } from 'cloudflare:workers';
 import { walletHttp, type FakeEnv } from 'arcade-kit/testing';
 
 export { FakeBank, WalletService } from 'arcade-kit/testing';
 
-export default {
-  async fetch(request: Request, env: FakeEnv): Promise<Response> {
+export default class Arcade extends WorkerEntrypoint<FakeEnv> {
+  blockedAmong(): [string, string][] {
+    return [];
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const env = this.env;
     const wallet = await walletHttp(request, env);
     if (wallet) return wallet;
     // 好友（docs/social.md 1.2、1.3，kit 的 social 部件每 2 分钟报位置、每 30 秒问邀请）：报了就收下，没有邀请
@@ -18,5 +25,5 @@ export default {
     if (path === '/api/friends') return Response.json({ friends: [{ userId: 'friend-wang', displayName: '老王', online: true }] });
     const sid = /__Host-sid=([^;]+)/.exec(request.headers.get('cookie') ?? '')?.[1];
     return Response.json({ user: sid ? { id: sid, displayName: `本地${sid}` } : null });
-  },
-};
+  }
+}

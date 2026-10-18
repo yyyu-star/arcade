@@ -40,6 +40,7 @@ node scripts/strength.ts 1200 0,2,3 5   # 一个性格对固定三家的强弱�
 node scripts/stake-room.ts 1500 venues   # 好友房实盘桌：两个普通真人对电脑的期望（DESIGN.md 4.1）
 npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场
 npm run build:cf && npm run smoke:room  # 好友房两个浏览器（本地 wrangler dev + 假平台）
+npm run build:cf && npm run smoke:match  # 快速匹配：两个浏览器同档同桌、取消、一个人转单机
 npm run build:cf && npm run smoke:standalone  # 单独部署：wrangler.jsonc 原样起，两个游客
 npm run build:cf && npm run dev:worker  # 本地整套（Worker + 页面 + 假平台），端口由系统分配，打开它打印的地址；登录用 __Host-sid cookie（见 test/arcade.dev.ts）
 node scripts/capture.ts se-port 40      # 截图到 shots/，并报互相压住的元素（land|port|se-land|se-port）
