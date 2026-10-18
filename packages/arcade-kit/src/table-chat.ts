@@ -51,6 +51,8 @@ export interface ChatHost {
   styleButton(b: HTMLElement): void;
   /** 游戏指定电脑版聊天框的位置（只用 left、top、width），不给就自己挑角 */
   dock?(): Box | null;
+  /** 游戏指定没点过时默认收不收（0.20.1） */
+  folded?(): boolean;
   /** 游戏指定手机版"聊天"按钮的位置，不给就挨着"互动"按钮 */
   chatButton?(): Box | null;
   /** 游戏指定弹幕区，不给就是牌桌上半部分 */
@@ -230,9 +232,11 @@ export class ChatUi {
   private drawDesk(view: { width: number; height: number }): void {
     const w = Math.round(this.font * 17);
     const fixed = this.h.dock?.() ?? null;
-    // 没自己收起、展开过：四个角都会压到东西（dockFits，0.20.0）就默认收着。先排出来量真实高度再判断，不靠估
+    // 没自己收起、展开过：游戏说了默认收不收就听它的（0.20.1）；没说、也没指定位置时，四个角都会压到东西（dockFits，0.20.0）就默认收着。先排出来量真实高度再判断，不靠估
     let folded = this.prefs.folded === true;
-    if (this.prefs.folded === undefined && !fixed) {
+    const want = this.prefs.folded === undefined ? this.h.folded?.() : undefined;
+    if (want !== undefined) folded = want;
+    else if (this.prefs.folded === undefined && !fixed) {
       const d = this.layoutDock(view, w, null);
       folded = !dockFits(view, w, d.offsetHeight || 260, this.h.blocked());
       if (folded) this.clearDesk();

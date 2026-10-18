@@ -302,7 +302,7 @@ const fun = new TableFun({
   })),
   avoid: () => [handRect(), actionBarRect()],    // 菜单、面板尽量不盖；放不下时选盖得最少的位置
   button: () => funButtonRect(),                 // "互动"按钮放哪；null 不画（没坐下）
-  buttonStyle: () => ({ scale: stageScale, row: true }),  // 可选（0.18.2）：按钮字和图标跟着牌桌放大（≥ 1），row = 图标和字横排；别再覆盖 .atf-btn
+  buttonStyle: () => ({ scale: stageScale, row: true }),  // 可选（0.18.2）：按钮字和图标跟着牌桌放大（≥ 1），row = 图标和字横排；0.20.1 起也可直接给 fontSize、icon（像素）；别再覆盖 .atf-btn
   send: (id, to) => (online ? client.emote(id, to) : fun.receive(0, id, to)),
   canSend: () => seated,
   hintSeat: () => (trickEmpty(1) ? 1 : null),     // 首次提示冒在哪家头像旁；null = 现在会挡住出牌，过 2 秒再问（0.17.0，不给就挑第一个电脑）
@@ -379,6 +379,7 @@ protected override onEmote(from: number, id: number, to?: number): void {
     seats: () => view.seats.map((s, i) => s && ({ rect: avatarRect(i), plate: plateRect(i), name: s.name, me: i === 0 })),  // plate：名字和筹码那块，气泡、弹幕、聊天按钮都避开
     center: () => [potRect(), wallRect(), discardRect()],   // 牌桌中间的信息区（剩余张数、底池、牌墩、弃牌区）：弹幕不横穿、聊天框和气泡不压
     chatDock: () => ({ left: 24, top: tableTop + 12, width: 340, height: 0 }),  // 电脑版聊天框放哪（只用 left/top/width）；不给就自己挑角，可能压到牌墙
+    chatFolded: () => true,  // 可选（0.20.1）：玩家没点过收起/展开时默认收着（给了 chatDock 也生效）；不给就是放不下才收
     chatButton: () => chatButtonRect(),                      // 手机版"聊天"按钮放哪；不给就挨着"互动"按钮，挤的牌桌（手机横屏）最好给
     danmakuArea: () => tableUpperHalf(),                      // 弹幕区；不给是屏幕 8%–58%，上沿压到对家那排名牌下面
     lite: () => settings.lowmem,                              // 省内存模式：弹幕默认关
@@ -389,7 +390,8 @@ protected override onEmote(from: number, id: number, to?: number): void {
 
   冒烟用的 `controls()` 多了：电脑版 `chat:dock`、`chat:input`、`chat:send`、`chat:phrase<i>`、`chat:danmaku`、`chat:more`、`chat:fold`（收起后是 `chat:open`）；
   手机版 `chat:button`、`chat:bar`、`chat:input`、`chat:send`、`chat:phrase<i>`、`chat:history`、`chat:close`；面板聊天页多一个 `fun:danmaku`。`log` 多 `弹幕 开|关`、`聊天 输入条`。
-- **互动按钮的尺寸参数**（0.18.2）：`buttonStyle: () => ({ scale: stageScale, row: true })`，字（13px）和图标（22px）一起按 `scale`（≥ 1）放大，`row` 横排；手机的"聊天"按钮照同样画。
+- **互动按钮的尺寸参数**（0.18.2）：`buttonStyle: () => ({ scale: stageScale, row: true })`，字（13px）和图标（22px）一起按 `scale`（≥ 1）放大，`row` 横排；
+  0.20.1 起可以直接给 `fontSize`、`icon`（像素，优先于 `scale`）。手机的"聊天"按钮照同样画。
   用它替掉游戏自己对 `.atf-btn` 的 CSS 覆盖；不传就不写行内样式，旧的覆盖照样生效（迁移不急）。
 - 演示页 `demo/table-fun.html` 里能直接试：右上聊天框打字，"电脑们说几句"看弹幕排轨道（单机演示，右家隔一秒回一句）。
 
