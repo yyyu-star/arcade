@@ -1105,7 +1105,11 @@ function newFun(
       if (m === null) return null;
       const r = t.funSlot();
       const plate = t.plateRect((m + 1) % 4);
-      return { left: plate.right - r.width, top: plate.top - r.height - 8, width: r.width, height: r.height };
+      const b = { left: plate.right - r.width, top: plate.top - r.height - 8, width: r.width, height: r.height };
+      // 手机横屏右家那一竖排牌背一直伸到名牌上面，按钮会压住它（10-18 体检 844×390）：挪到那一排左边
+      const col = t.handOf((m + 1) % 4);
+      if (col.width > 0 && b.left < col.right && col.left < b.left + b.width && b.top < col.bottom && col.top < b.top + b.height) b.left = col.left - b.width - 8;
+      return b;
     },
     // 弹幕在对家那一排下面、中控盘上面飘
     danmakuArea: () => {
