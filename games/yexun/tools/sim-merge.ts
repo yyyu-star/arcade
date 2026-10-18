@@ -17,6 +17,8 @@ interface Part {
   /** sim.ts 的 --mode：raid 时每局是 [撤没撤出, 带出价值, 待了几拍] */
   mode?: string;
   from?: number;
+  /** sim.ts --nodual 的对照臂（和正常臂分开拼） */
+  noDual?: boolean;
   runs: [number, number, number, ...number[]][];
 }
 
@@ -35,7 +37,7 @@ if (!files.length) throw new Error('没有找到 json');
 const groups = new Map<string, Part[]>();
 for (const f of files)
   for (const c of JSON.parse(readFileSync(f, 'utf8')) as Part[]) {
-    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}`;
+    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}${c.noDual ? '|不合' : ''}`;
     groups.set(k, [...(groups.get(k) ?? []), c]);
   }
 
@@ -57,7 +59,7 @@ for (const k of order) {
   const runs = parts.flatMap((p) => p.runs);
   const [map, diff, skill, build] = k.split('|');
   const mode = parts[0]!.mode;
-  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, mode, from: parts[0]!.from ?? 0, runs });
+  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, mode, ...(parts[0]!.noDual ? { noDual: true } : {}), from: parts[0]!.from ?? 0, runs });
   const n = runs.length;
   const win = mean(runs.map((r) => r[0]));
   const tier = mode === 'raid' ? undefined : tierOfDanger(Number(diff));
@@ -69,7 +71,7 @@ for (const k of order) {
       mode === 'raid' ? map : map === 'snow' ? '雪原' : '义庄',
       diff,
       skill,
-      build,
+      parts[0]!.noDual ? `${build}（不合双修）` : build,
       n,
       `${(win * 100).toFixed(0)}% ±${(200 * Math.sqrt((win * (1 - win)) / n)).toFixed(0)}`,
       mode === 'raid' ? `带出 ${mean(runs.filter((r) => r[0] === 1).map((r) => r[1])).toFixed(0)}` : `${(mean(runs.map((r) => r[1])) * 100).toFixed(0)}%`,

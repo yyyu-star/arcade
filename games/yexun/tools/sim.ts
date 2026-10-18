@@ -70,8 +70,8 @@ export function runRaid(seed: number, danger: Danger, who: string, build: Build,
   return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0, duals: dualsOf(w), dualTick: -1, killer: won ? -1 : w.hurtBy };
 }
 
-export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow', character: CharacterId = 'xiaodao'): RunResult {
-  const w = createWorld({ seed, mode: 'vigil', danger, map, character });
+export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow', character: CharacterId = 'xiaodao', noDual = false): RunResult {
+  const w = createWorld({ seed, mode: 'vigil', danger, map, character, ...(noDual ? { noDual } : {}) });
   const bot = new Bot(skill, build, seed);
   let firstLevel = -1;
   let levels3 = 0;
@@ -114,13 +114,15 @@ interface Task {
   raid: boolean;
   /** 守夜的出战角色（--char） */
   char: CharacterId;
+  /** --nodual：双修对照臂（条件满足也不合） */
+  noDual: boolean;
   seeds: number[];
 }
 
 if (!isMainThread) {
   // 常驻工作线程：每个进程只启动一次（导入核心和内容表要几百毫秒），一直接活到被关掉
   parentPort!.on('message', (t: Task) => {
-    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId, t.char))) });
+    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId, t.char, t.noDual))) });
   });
 } else if (process.argv[1]?.endsWith('sim.ts')) {
   const arg = (name: string, def: string): string => {
@@ -143,6 +145,8 @@ if (!isMainThread) {
   const maps = arg('--map', raid ? 'guzhen,dukou,shansi' : 'snow').split(',');
   const map = maps[0]!;
   const char = arg('--char', 'xiaodao') as CharacterId;
+  // 双修对照臂：同一批种子再跑一遍、双修条件满足也不合，和正常臂按种子配对比净强度（1.1 双修验收，主线 10-18）
+  const noDual = process.argv.includes('--nodual');
 
   const cells: (Cell & { map: string })[] = [];
   for (const m of raid ? maps : [map])
@@ -159,7 +163,7 @@ if (!isMainThread) {
       const seeds: number[] = [];
       for (let s = from; s < Math.min(n, from + chunk); s++) seeds.push(seedFrom + s + 1);
       owner.push({ cell: ci, from });
-      tasks.push({ id: tid++, cell, map: cell.map, raid, char, seeds });
+      tasks.push({ id: tid++, cell, map: cell.map, raid, char, noDual, seeds });
     }
   });
 
@@ -253,7 +257,7 @@ if (!isMainThread) {
     // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍, 双修几件, 第一次双修的拍, 死因]；夜探每局 [撤没撤出, 带出价值, 待了几拍, 双修几件, -1, 死因]（mode 字段区分）
     writeFileSync(
       jsonOut,
-      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer]) }))),
+      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', ...(noDual ? { noDual } : {}), from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer]) }))),
     );
     console.log(`每局结局写到 ${jsonOut}`);
   }

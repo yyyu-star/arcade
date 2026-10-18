@@ -2876,7 +2876,7 @@ function applyChoice(w: World, c: Choice): void {
 function openChest(w: World): void {
   for (let m = 0; m < MERGES.length; m++) {
     const def = MERGES[m]!;
-    if (w.merges.includes(def.id)) continue;
+    if (w.merges.includes(def.id) || (def.dual && w.setup.noDual)) continue;
     const a = w.weapons.find((o) => o.id === def.a);
     const b = w.weapons.find((o) => o.id === def.b);
     // 老的三个合成要两件都进化；双修（1.1）门槛低一点：一件进化、另一件满级就行（机器人每 20 局只合成 1–2 次，玩家更难见到）

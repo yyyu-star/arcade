@@ -14,7 +14,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 19;
+export const RULES_VERSION = 20;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -138,6 +138,11 @@ export interface Setup {
   assist?: boolean;
   /** 无尽：天亮不收工，一直打到倒下 */
   endless?: boolean;
+  /**
+   * 模拟器的对照臂：双修条件满足了也不合（宝箱照常给进化或升级）。只给 tools/sim.ts 量双修的净强度用，
+   * 界面不开、录像和存档里不会有（缺省 false，不改变任何正常对局）
+   */
+  noDual?: boolean;
 }
 
 /** 整理开局设置：咒印去重、截到上限，加成等级截到表里的最高级（录像和存档里来的数据不一定干净） */

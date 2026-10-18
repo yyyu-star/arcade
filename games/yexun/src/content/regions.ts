@@ -70,7 +70,7 @@ export const VIGIL_REGIONS: Partial<Record<MapId, Region>> = {
 export const RAID_REGIONS: Partial<Record<RaidTemplateId, Region>> = {
   guzhen: { mobs: [{ kind: 'nightwatch', share: [[2, 0.1], [6, 0.15]] }] },
   dukou: { mobs: [{ kind: 'drown', share: [[2, 0.12], [6, 0.18]] }] },
-  shansi: { mobs: [{ kind: 'stonemonk', share: [[3, 0.08], [7, 0.12]] }] },
+  shansi: { mobs: [{ kind: 'stonemonk', share: [[3, 0.12], [7, 0.18]] }] },
 };
 
 function shareOf(m: RegionMob, minute: number): number {
