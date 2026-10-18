@@ -51,8 +51,8 @@ const dualsOf = (w: { merges: readonly string[] }): number => w.merges.filter((i
 export const RAID_LEAVE: Record<string, number> = { novice: 0, normal: 600 * 30, greedy: 780 * 30 };
 
 /** 夜探一局：RaidBot 指路（去哪），守夜的机器人躲怪、选卡；返回结局和带出价值 */
-export function runRaid(seed: number, danger: Danger, who: string, build: Build, template: RaidTemplateId): RunResult {
-  const w = createWorld({ seed, mode: 'raid', danger, raid: { template } });
+export function runRaid(seed: number, danger: Danger, who: string, build: Build, template: RaidTemplateId, character: CharacterId = 'xiaodao'): RunResult {
+  const w = createWorld({ seed, mode: 'raid', danger, raid: { template }, character });
   const bot = new Bot(who === 'novice' ? 'novice' : 'normal', build, seed);
   const leave = RAID_LEAVE[who] ?? 0;
   const guide = new RaidBot(w.raid!, leave);
@@ -122,7 +122,7 @@ interface Task {
 if (!isMainThread) {
   // 常驻工作线程：每个进程只启动一次（导入核心和内容表要几百毫秒），一直接活到被关掉
   parentPort!.on('message', (t: Task) => {
-    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId, t.char, t.noDual))) });
+    parentPort!.postMessage({ id: t.id, rs: t.seeds.map((s) => (t.raid ? runRaid(s, t.cell.diff, t.cell.skill, t.cell.build, t.map as RaidTemplateId, t.char) : runOne(s, t.cell.diff, t.cell.skill as Skill, t.cell.build, t.map as MapId, t.char, t.noDual))) });
   });
 } else if (process.argv[1]?.endsWith('sim.ts')) {
   const arg = (name: string, def: string): string => {
@@ -172,7 +172,7 @@ if (!isMainThread) {
   const ev = (rs: RunResult[], diff: Danger): string => {
     const tier = tierOfDanger(diff);
     if (!tier) return '-';
-    const xs = rs.map((r) => vigilBp(tier, r.ticks, r.won, r.boss) / 10_000 - 1);
+    const xs = rs.map((r) => vigilBp(tier, r.ticks, r.won, r.boss, char, map as MapId) / 10_000 - 1);
     const m = mean(xs);
     const sd = Math.sqrt(mean(xs.map((x) => (x - m) * (x - m))));
     return `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(Math.max(1, xs.length))).toFixed(2)}`;
@@ -257,7 +257,7 @@ if (!isMainThread) {
     // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍, 双修几件, 第一次双修的拍, 死因]；夜探每局 [撤没撤出, 带出价值, 待了几拍, 双修几件, -1, 死因]（mode 字段区分）
     writeFileSync(
       jsonOut,
-      JSON.stringify(cells.map((c, i) => ({ ...c, mode: raid ? 'raid' : 'vigil', ...(noDual ? { noDual } : {}), from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer]) }))),
+      JSON.stringify(cells.map((c, i) => ({ ...c, char, mode: raid ? 'raid' : 'vigil', ...(noDual ? { noDual } : {}), from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer]) }))),
     );
     console.log(`每局结局写到 ${jsonOut}`);
   }

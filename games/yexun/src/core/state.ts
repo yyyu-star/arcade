@@ -366,7 +366,7 @@ export class World {
     this.rerolls = setup.curses?.includes('noreroll') ? 0 : 2 + perk('shuaxin') * PERK_FX.shuaxin;
     this.revives = perk('fuhuo') * PERK_FX.fuhuo;
     this.cardCount = 3 + perk('kapian') * PERK_FX.kapian;
-    this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger }) : null;
+    this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger, character: setup.character }) : null;
     this.arenaW = this.raid ? this.raid.map.size : ARENA.w;
     this.arenaH = this.raid ? this.raid.map.size : ARENA.h;
     const def = MAPS[setup.map ?? 'snow'];

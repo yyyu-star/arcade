@@ -2,6 +2,8 @@
  * 实盘（DESIGN.md 第 4 节）：档位、开局配置、结回倍数。Worker 只从这里取档位表和 liveReturn，不引规则核心（整个核心会被打进 Worker）。
  * 倍数曲线第 7 步按模拟器每格 2,000 局配到 balance.md 第 2 节的区间：形状四档共用，天亮倍数每档一个（DESIGN.md 4.2）。
  */
+import type { MapId } from './maps.ts';
+import type { CharacterId } from './meta.ts';
 import type { Danger } from './waves.ts';
 
 /**
@@ -55,11 +57,32 @@ export const VIGIL_SHAPE: readonly (readonly [number, number])[] = [
 /** 打倒尸王比撑到天亮多结回多少（万分比），总数不超过 LIVE_MAX_BP */
 export const VIGIL_BOSS_ADD_BP = 2_000;
 
-/** 实盘档 tier 的守夜撑了 ticks 拍（每秒 30 拍）、赢没赢、打没打倒尸王 → 结回倍数（万分比，整数） */
-export function vigilBp(tier: LiveTier, ticks: number, won: boolean, bossKilled: boolean): number {
-  const dawn = LIVE_TIERS[tier].dawnBp;
+/**
+ * 实盘可以选已解锁的角色和地图（0.3.6，DESIGN.md 4.1、4.2）。各角色、各地图的实盘期望若比同档最高、最低差出 0.15 份以上，
+ * 就在这里给一个单独的系数（万分比，乘在这一档的 dawnBp 上，没写 = 10_000 = 不调）；不改角色、地图本身的数值，不改对局规则。
+ * 难度随档位涨得快的角色、地图（比如义庄）在各档需要的补偿不一样，所以系数按档写。
+ * 角色和地图分开扫、各自对着小道士、雪原拟合，两个系数相乘（不做全组合）。夜探的角色系数在 explore.ts 的 RAID_LIVE.charBp。
+ */
+export type LiveCoef<K extends string> = Partial<Record<K, Partial<Record<LiveTier, number>>>>;
+export const LIVE_CHAR_BP: LiveCoef<CharacterId> = {
+  fushi: { medium: 10_900, large: 11_500, luxe: 10_900 },
+  jianxia: { medium: 11_200, large: 12_100, luxe: 11_100 },
+  pang: { medium: 9_100, large: 9_200, luxe: 8_000 },
+  caiyao: { medium: 10_600, large: 11_200 },
+  gengfu: { large: 10_900, luxe: 10_800 },
+};
+export const LIVE_MAP_BP: LiveCoef<MapId> = {
+  yizhuang: { small: 10_800, medium: 14_200, large: 15_400, luxe: 23_700 },
+  bamboo: { medium: 8_900, large: 9_000, luxe: 8_900 },
+  icelake: { medium: 11_100, large: 12_400, luxe: 12_900 },
+  riverbank: { luxe: 10_800 },
+};
+
+/** 实盘档 tier 的守夜撑了 ticks 拍（每秒 30 拍）、赢没赢、打没打倒尸王 → 结回倍数（万分比，整数）；角色、地图缺省 = 小道士、雪原 */
+export function vigilBp(tier: LiveTier, ticks: number, won: boolean, bossKilled: boolean, character: CharacterId = 'xiaodao', map: MapId = 'snow'): number {
+  const dawn = Math.floor((Math.floor((LIVE_TIERS[tier].dawnBp * (LIVE_CHAR_BP[character]?.[tier] ?? 10_000)) / 10_000) * (LIVE_MAP_BP[map]?.[tier] ?? 10_000)) / 10_000);
   if (bossKilled) return Math.min(LIVE_MAX_BP, dawn + VIGIL_BOSS_ADD_BP);
-  if (won) return dawn;
+  if (won) return Math.min(LIVE_MAX_BP, dawn);
   // 按拍插值：整数运算，浏览器和 Worker、各平台算出来一样
   const t = Math.max(0, Math.floor(ticks));
   let share = VIGIL_SHAPE[VIGIL_SHAPE.length - 1]![1];
@@ -70,7 +93,7 @@ export function vigilBp(tier: LiveTier, ticks: number, won: boolean, bossKilled:
     share = t <= s0 * 30 ? b0 : b0 + Math.floor(((b1 - b0) * (t - s0 * 30)) / ((s1 - s0) * 30));
     break;
   }
-  return Math.floor((share * dawn) / 10_000);
+  return Math.min(LIVE_MAX_BP, Math.floor((share * dawn) / 10_000));
 }
 
 /** 危险档对应的实盘档（模拟器按它算期望；危险 1、5 没有实盘，返回 undefined） */

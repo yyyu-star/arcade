@@ -8,12 +8,18 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tierOfDanger, vigilBp } from '../src/content/live.ts';
+import { RAID_LIVE, RAID_LIVE_TIERS, type RaidLiveTemplate } from '../src/content/explore.ts';
+import { liveBp } from '../src/explore/settle.ts';
+import type { CharacterId } from '../src/content/meta.ts';
+import type { MapId } from '../src/content/maps.ts';
 
 interface Part {
   diff: number;
   skill: string;
   build: string;
   map: string;
+  /** 出战角色（sim.ts --char；老文件没有 = 小道士） */
+  char?: string;
   /** sim.ts 的 --mode：raid 时每局是 [撤没撤出, 带出价值, 待了几拍] */
   mode?: string;
   from?: number;
@@ -37,7 +43,7 @@ if (!files.length) throw new Error('没有找到 json');
 const groups = new Map<string, Part[]>();
 for (const f of files)
   for (const c of JSON.parse(readFileSync(f, 'utf8')) as Part[]) {
-    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}${c.noDual ? '|不合' : ''}`;
+    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}|${c.char ?? 'xiaodao'}${c.noDual ? '|不合' : ''}`;
     groups.set(k, [...(groups.get(k) ?? []), c]);
   }
 
@@ -45,9 +51,9 @@ const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / Math.max(
 const merged: Part[] = [];
 const lines: string[] = [];
 const order = [...groups.keys()].sort((a, b) => {
-  const [ma, da, sa, ba] = a.split('|');
-  const [mb, db, sb, bb] = b.split('|');
-  return ma!.localeCompare(mb!) || Number(da) - Number(db) || (sa === sb ? 0 : sa === 'novice' ? -1 : 1) || ba!.localeCompare(bb!);
+  const [ma, da, sa, ba, ca] = a.split('|');
+  const [mb, db, sb, bb, cb] = b.split('|');
+  return ma!.localeCompare(mb!) || Number(da) - Number(db) || (sa === sb ? 0 : sa === 'novice' ? -1 : 1) || ba!.localeCompare(bb!) || ca!.localeCompare(cb!);
 });
 for (const k of order) {
   const parts = groups.get(k)!.sort((a, b) => (a.from ?? 0) - (b.from ?? 0));
@@ -57,18 +63,25 @@ for (const k of order) {
     at += p.runs.length;
   }
   const runs = parts.flatMap((p) => p.runs);
-  const [map, diff, skill, build] = k.split('|');
+  const [map, diff, skill, build, char] = k.split('|');
   const mode = parts[0]!.mode;
-  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, mode, ...(parts[0]!.noDual ? { noDual: true } : {}), from: parts[0]!.from ?? 0, runs });
+  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, char, mode, ...(parts[0]!.noDual ? { noDual: true } : {}), from: parts[0]!.from ?? 0, runs });
   const n = runs.length;
   const win = mean(runs.map((r) => r[0]));
   const tier = mode === 'raid' ? undefined : tierOfDanger(Number(diff));
-  const xs = tier ? runs.map((r) => vigilBp(tier, r[2], r[0] === 1, r[1] === 1) / 10_000 - 1) : [];
+  const rtier = mode === 'raid' ? RAID_LIVE_TIERS.find((t) => RAID_LIVE.danger[t] === Number(diff)) : undefined;
+  // 守夜：地图和角色都按这一格的；夜探：撤出才有倍数（保底按撤出的拍数涨），再乘角色系数
+  const xs = tier
+    ? runs.map((r) => vigilBp(tier, r[2], r[0] === 1, r[1] === 1, char as CharacterId, map as MapId) / 10_000 - 1)
+    : rtier
+      ? runs.map((r) => (r[0] === 1 ? liveBp(r[1], rtier, map as RaidLiveTemplate, r[2], char as CharacterId) : 0) / 10_000 - 1)
+      : [];
   const m = mean(xs);
   const sd = Math.sqrt(mean(xs.map((x) => (x - m) * (x - m))));
   lines.push(
     [
-      mode === 'raid' ? map : map === 'snow' ? '雪原' : '义庄',
+      map,
+      char,
       diff,
       skill,
       parts[0]!.noDual ? `${build}（不合双修）` : build,
@@ -76,11 +89,11 @@ for (const k of order) {
       `${(win * 100).toFixed(0)}% ±${(200 * Math.sqrt((win * (1 - win)) / n)).toFixed(0)}`,
       mode === 'raid' ? `带出 ${mean(runs.filter((r) => r[0] === 1).map((r) => r[1])).toFixed(0)}` : `${(mean(runs.map((r) => r[1])) * 100).toFixed(0)}%`,
       `${(mean(runs.map((r) => r[2])) / 1800).toFixed(1)} 分`,
-      tier ? `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(n)).toFixed(2)}` : '-',
+      tier || rtier ? `${m >= 0 ? '+' : ''}${m.toFixed(2)} ±${((2 * sd) / Math.sqrt(n)).toFixed(2)}` : '-',
     ].join(' | '),
   );
 }
-console.log('地图 | 危险 | 玩家 | 流派 | 局数 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 实盘期望 ±2SE（份）');
+console.log('地图 | 角色 | 危险 | 玩家 | 流派 | 局数 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 实盘期望 ±2SE（份）');
 for (const l of lines) console.log(l);
 if (out) {
   writeFileSync(out, JSON.stringify(merged));

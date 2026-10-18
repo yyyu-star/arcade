@@ -3,6 +3,7 @@
  * 规则在 `src/explore/`，这里只放数。时间以拍计（每秒 30 拍），距离以单位计（主角半径 14，每拍走 3）。
  */
 import type { EnemyDef, EnemyKind } from './enemies.ts';
+import type { CharacterId } from './meta.ts';
 import type { Minute } from './waves.ts';
 
 const S = 30;
@@ -308,7 +309,26 @@ export const RAID_LIVE = {
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
   danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
   open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],
+  /**
+   * 角色系数（万分比，默认 10_000；0.3.6 实盘可选已解锁的角色）：乘在按保底、封顶算好的倍数上，结果仍至少 1 份、最多封顶（liveMultiplier）。
+   * 某角色同档的实盘期望比最高、最低的差出 0.15 份以上才单独给，按档写，不改角色本身的数值。
+   */
+  charBp: {
+    fushi: { small: { guzhen: 9_200, dukou: 9_200 }, medium: { guzhen: 8_900, dukou: 9_200, shansi: 9_500 }, large: { guzhen: 9_200, dukou: 9_000 } },
+    jianxia: { small: { guzhen: 9_500, dukou: 9_600 }, medium: 9_700, large: { guzhen: 9_500, dukou: 9_300 } },
+    pang: { small: 8_800, medium: { guzhen: 8_300, dukou: 8_600, shansi: 7_800 }, large: { guzhen: 7_700, dukou: 8_000, shansi: 7_100 } },
+    gengfu: { small: 9_600, medium: { guzhen: 9_500, dukou: 9_600, shansi: 8_900 }, large: { shansi: 9_300 } },
+    caiyao: { small: { guzhen: 8_800, dukou: 9_000, shansi: 8_500 }, medium: { guzhen: 8_300, dukou: 8_700, shansi: 7_800 }, large: { guzhen: 8_200, dukou: 8_500, shansi: 7_700 } },
+  } as Partial<Record<CharacterId, Partial<Record<RaidLiveTier, RaidCharCoef>>>>,
 };
+
+/** 角色系数：一个数 = 这一档三个镇子都用；写成按镇子分的，没写的镇子 = 10_000（有的角色在山寺比在古镇、渡口强得多） */
+export type RaidCharCoef = number | Partial<Record<RaidLiveTemplate, number>>;
+/** 这个角色在这一档、这个镇子的实盘系数（万分比）；没登记 = undefined */
+export function raidCharCoef(character: CharacterId, tier: RaidLiveTier, template: RaidLiveTemplate): number | undefined {
+  const c = RAID_LIVE.charBp[character]?.[tier];
+  return typeof c === 'object' ? (c[template] ?? 10_000) : c;
+}
 export type RaidLiveTier = 'small' | 'medium' | 'large';
 /** 能开实盘的镇子（教学镇不能） */
 export type RaidLiveTemplate = Exclude<RaidTemplateId, 'teach'>;

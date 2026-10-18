@@ -9,6 +9,7 @@
  *   守夜的录像和金标准指纹不受影响。
  */
 import type { RaidLiveTier, RaidTemplateId } from '../content/explore.ts';
+import type { CharacterId } from '../content/meta.ts';
 
 /** 开一局夜探要的东西（核心的 Setup 里加 `mode: 'raid'` 和 `raid: RaidSetup`） */
 export interface RaidSetup {
@@ -18,6 +19,8 @@ export interface RaidSetup {
   danger: number;
   /** 实盘档位；娱乐不填。教学镇不能开实盘 */
   live?: RaidLiveTier;
+  /** 出战角色：实盘结回按它乘角色系数（RAID_LIVE.charBp）；玩法本身不看它（核心的角色在 Setup.character） */
+  character?: CharacterId;
 }
 
 /** 事件出口：核心的 `Events`（结构上满足） */
