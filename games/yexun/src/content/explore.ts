@@ -302,9 +302,9 @@ export const RAID_LIVE = {
   floor: { small: 1.6, medium: 1.6, large: 1.25 } as Record<RaidLiveTier, number>,
   floorRamp: { small: 5 * 60 * 30, medium: 10 * 60 * 30, large: 8 * 60 * 30 } as Record<RaidLiveTier, number>,
   base: {
-    small: { guzhen: 213, dukou: 173, shansi: 205 },
-    medium: { guzhen: 190, dukou: 164, shansi: 156 },
-    large: { guzhen: 159, dukou: 129, shansi: 105 },
+    small: { guzhen: 210, dukou: 174, shansi: 208 },
+    medium: { guzhen: 202, dukou: 162, shansi: 148 },
+    large: { guzhen: 175, dukou: 132, shansi: 101 },
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
   danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
   open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],
