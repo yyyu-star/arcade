@@ -55,6 +55,8 @@ export interface FunSeat {
   temper?: FunTemper;
   /** 名牌、筹码数这些挂在头像旁的东西（屏幕矩形，0.18.2）：气泡避开它们，不盖住名字和钱数 */
   plate?: RectLike;
+  /** 头像旁别的小标签（缺门签、庄家、托管……，屏幕矩形，0.20.1）：和名牌一样，气泡和首次提示不盖 */
+  marks?: readonly RectLike[];
 }
 
 /**
@@ -249,7 +251,7 @@ export interface ButtonStyle {
 /**
  * 头像旁的气泡（含首次提示"点头像扔道具"）要避开哪些地方（0.20.1）：
  * - 软的（压一点还行）：游戏的禁区、桌上出的牌、正在冒的别的气泡、别人的头像；
- * - 硬的（代价 ×3）：叠在气泡上面的按钮、聊天框（0.19.1，竖屏自己的气泡被"互动"按钮压住），以及各家的名牌——
+ * - 硬的（代价 ×3）：叠在气泡上面的按钮、聊天框（0.19.1，竖屏自己的气泡被"互动"按钮压住），以及各家的名牌和头像旁的标签（marks，麻将的缺门签）——
  *   名字和筹码数是小字，气泡底色不透明，压一点就看不清是谁、剩多少（0.18.2 当软的，提示还是会盖住对家的名牌，所有者 10-18 报）
  */
 export function bubbleZones(
@@ -262,6 +264,7 @@ export function bubbleZones(
   seats.forEach((o, i) => {
     if (!o) return;
     if (o.plate) hard.push(o.plate);
+    if (o.marks) hard.push(...o.marks);
     if (i !== seat) avoid.push(o.rect);
   });
   return { avoid, hard };

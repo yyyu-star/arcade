@@ -77,6 +77,7 @@ export const CHAT_CSS = `
 .atc-quick{display:flex;gap:6px;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;flex-shrink:0;padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}
 .atc-quick::-webkit-scrollbar{display:none}
 .atc-quick .atf-chip{flex:none;white-space:nowrap;font-size:.8em}
+.atc-dock .atc-quick{flex-wrap:wrap;overflow:visible;padding-right:0;-webkit-mask-image:none;mask-image:none}
 .atc-row{display:flex;gap:6px;align-items:center}
 .atc-row .atf-input{font-size:max(16px,.85em)}
 .atc-row .atf-chip{flex:none}

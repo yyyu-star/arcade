@@ -299,6 +299,7 @@ const fun = new TableFun({
     rect: avatarRect(i),                         // 屏幕矩形（CSS 像素）；DOM 头像直接 getBoundingClientRect()
     name: s.name, me: i === 0, bot: s.bot, temper: s.temper,   // temper：'rowdy' | 'normal' | 'cool'
     plate: plateRect(i),                         // 可选（0.18.2）：名字和筹码那一块，气泡不盖它
+    marks: tagRects(i),                          // 可选（0.20.1）：头像旁的小标签（缺门、庄家……），气泡和首次提示不盖
   })),
   avoid: () => [handRect(), actionBarRect()],    // 菜单、面板尽量不盖；放不下时选盖得最少的位置
   button: () => funButtonRect(),                 // "互动"按钮放哪；null 不画（没坐下）

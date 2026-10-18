@@ -74,6 +74,19 @@ describe('头像旁的气泡避开哪里（bubbleZones，0.20.1）', () => {
     expect(old.left < top.plate!.left + top.plate!.width && top.plate!.left < old.left + 150).toBe(true);
   });
 
+  it('头像旁的标签（marks，麻将的缺门签）也是硬的：首次提示换一侧，不压住右上家的缺门（麻将体检）', () => {
+    // 右上家：头像左边挂着缺门签，提示原来朝屏幕中心（左边）冒、正好压住它
+    const tr: FunSeat = { rect: { left: 700, top: 40, width: 60, height: 60 }, marks: [{ left: 650, top: 40, width: 44, height: 28 }], name: '东家', bot: true };
+    const z = bubbleZones([me, tr], 1, { avoid: [], over: [] });
+    expect(z.hard).toEqual([me.plate, ...tr.marks!]);
+    const at = placeBubble(tr.rect, 150, 30, view, z.avoid, z.hard);
+    const m = tr.marks![0]!;
+    expect(at.left < m.left + m.width && m.left < at.left + 150 && at.top < m.top + m.height && m.top < at.top + 30).toBe(false);
+    // 反证：不给 marks 就压上去
+    const bare = placeBubble(tr.rect, 150, 30, view, z.avoid, [me.plate!]);
+    expect(bare.left < m.left + m.width && m.left < bare.left + 150 && bare.top < m.top + m.height && m.top < bare.top + 30).toBe(true);
+  });
+
   it('竖屏自己的气泡：叠在上面的"互动"按钮照样是硬的（0.19.1 已修，这里守住接线）', () => {
     const port = { width: 390, height: 844 };
     const self: FunSeat = { rect: { left: 20, top: 700, width: 60, height: 60 }, name: '我', me: true };
