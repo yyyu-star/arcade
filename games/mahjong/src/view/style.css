@@ -1873,6 +1873,9 @@ html .atf-btn svg {
 @media (max-width: 600px) {
   [data-orient='port'] .topbar > .title .var { display: none; }
 }
+@media (max-width: 380px) {
+  [data-orient='port'] .topbar > .title .pre { display: none; }
+}
 /* 头像右边、手牌抬起来（离底 78）也碰不到 */
 [data-orient='port'] .fun-slot { left: 204px; bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }

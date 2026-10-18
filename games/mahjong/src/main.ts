@@ -562,7 +562,12 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
     screen.className = 'screen game';
     screen.replaceChildren();
     const st = stakesOf(rv.stakes)!;
-    title.textContent = `好友房 ${s.code} · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`;
+    // 房间号要念给朋友听，窄竖屏顶栏放不下时藏掉后面的档位（.var），不截号码（0.19.1）；
+    // iPhone SE 这么窄连"好友房"三个字也放不下，再藏掉它（.pre），只留号码
+    title.replaceChildren();
+    el('span', 'pre', title, '好友房 ');
+    title.append(s.code);
+    el('span', 'var', title, ` · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`);
     table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => online?.play(a));
     rotateTip(stage);
     lastPrompt = false;

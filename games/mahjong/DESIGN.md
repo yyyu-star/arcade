@@ -720,3 +720,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.18.0 | 手机专项：手牌点按区往上撑、竖屏舞台高 920–1240 宽 560–700（去黑边）、选档页排版、smoke 加省内存一段 |
 | 0.18.1 | 竖屏选档页空白处挂主页的茶馆画（`.lobby-art`，容器高不到 260 不画） |
 | 0.19.0 | 好友房聊天（kit 0.18.0）：房间 `chat: true`，页面 onChat 交给 TableFun，设置"聊天：开 / 不看" |
+| 0.19.1 | 好友房顶栏房间号不截：窄竖屏藏档位（`.var`，≤600 宽），≤380 宽再藏"好友房"（`.pre`） |
