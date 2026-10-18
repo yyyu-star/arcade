@@ -890,7 +890,8 @@ async function match(browser: Browser, base: string): Promise<void> {
   }
   // 取消：卡片关掉，还在选桌
   await p1.locator('.lobby .pill.match').click();
-  await p1.locator('.match-card').waitFor();
+  // 等连上排队（卡上有"已有 n 人"）再点：连接还没建好就关，浏览器会记一条 WebSocket 警告
+  await p1.locator('.match-card .mc-wait', { hasText: '已有' }).waitFor({ timeout: 10_000 });
   await p1.locator('.d-btn.primary', { hasText: '取消' }).click();
   await p1.locator('.match-card').waitFor({ state: 'detached' });
   await p1.waitForTimeout(1_500);
@@ -912,6 +913,11 @@ async function match(browser: Browser, base: string): Promise<void> {
   if (!roomWs(p2) || roomWs(p2).includes('chat=1')) throw new Error(`match: stranger chat off should connect without chat=1: ${roomWs(p2)}`);
   // 1280×720 的 6 人桌放不下聊天框：第一次进桌（座位都坐上人以后才判断）先收成"聊天"小按钮
   if (DESK_W <= 1280) await p1.locator('.atc-pill').waitFor({ timeout: 15_000 });
+  // 1920 放得下：聊天框展开着（kit 0.20.1 的 chatFolded 曾让 1920 也默认收起，0.20.2 修了）
+  if (DESK_W >= 1600) {
+    await p1.waitForTimeout(1_500);
+    if (!(await p1.locator('[data-key="chat:dock"]').isVisible())) throw new Error('match table at 1920: chat dock should be open');
+  }
   await shot(p1, 'match-table');
   await Promise.all([playRoom(p1, 2, 'm1'), playRoom(p2, 2, 'm2')]);
   for (const [p, tag] of [[p2, 'm2'], [p1, 'm1']] as const) {

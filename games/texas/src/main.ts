@@ -6,7 +6,7 @@
 import { detectPlatform, MATCH_TEXT, MatchClient } from 'arcade-kit/client';
 import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
-import { chatMode as chatLayout } from 'arcade-kit/fun-logic';
+import { chatFont, chatMode as chatLayout } from 'arcade-kit/fun-logic';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
 import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
@@ -678,8 +678,8 @@ const MENU_SAYS = ['就这？', '跟啊，怕了？', '好牌，服了'] as cons
  */
 function openFun(scope: string): void {
   tf?.destroy();
-  // kit 建组件时读聊天设置：要先收起再建
-  foldChatIfCrowded();
+  // 单机这时牌桌已经摆好，量得出挤不挤；好友房还在等人页，等座位坐满再量（drawRoom）
+  crowded = online ? null : !dockFitsNow();
   tf = new TableFun({
     storageKey: 'texas',
     phrases: TAUNTS,
@@ -700,7 +700,17 @@ function openFun(scope: string): void {
     center: () => tableView.centerRects(),
     lite: () => document.documentElement.classList.contains('lowfx'),
     // 电脑版聊天框：自己挑一个不压座位、不压下注按钮的地方（顶栏、左下"互动"那一排、两手之间那一栏也算在要躲的里面）
-    chatDock: () => (chatFolded() ? tableView.chatDock(120, 48, dockAvoid()) : tableView.chatDock(340, 220, dockAvoid())),
+    chatDock: () => {
+      const d = dockSize();
+      return chatFolded() ? tableView.chatDock(120, 48, dockAvoid()) : tableView.chatDock(d.w, d.h, dockAvoid());
+    },
+    // 玩家自己没点过收起、展开时：放不下就默认收着（kit 0.20.1）
+    chatFolded: () => crowded === true,
+    // 大屏上舞台放大到 1.5–2 倍，"互动""聊天"按钮的字（13 px）和图标（22 px）跟着放大，手机上不缩小（kit 0.20.1）
+    buttonStyle: () => {
+      const k = Math.max(1, getFit().scale);
+      return { fontSize: Math.round(13 * k), icon: Math.round(22 * k) };
+    },
     button: () => (funSlot.classList.contains('hidden') ? null : funSlot.getBoundingClientRect()),
     send: (id, to) => {
       toggle(funHints, 'hidden', true);
@@ -725,26 +735,37 @@ function openFun(scope: string): void {
   syncFun();
 }
 
+/**
+ * kit 的电脑版聊天框多大：画出来了按实际的量；还没画时按 kit 的字号估（宽是字号的 17 倍，高约 12 倍）。
+ * 0.21.1 以前写死 340×220，kit 0.20.2 的聊天框在 1920 上高到 237，底边压住了左下座位的"大盲"（10-18 截图）
+ */
+function dockSize(): { w: number; h: number } {
+  const el = document.querySelector<HTMLElement>('[data-key="chat:dock"]');
+  if (el && el.offsetHeight > 0) return { w: el.offsetWidth, h: el.offsetHeight };
+  const font = chatFont({ width: window.innerWidth, height: window.innerHeight });
+  return { w: Math.round(font * 17), h: Math.round(font * 12) };
+}
+
+const dockFitsNow = (): boolean => {
+  const d = dockSize();
+  return tableView.dockFits(d.w, d.h, dockAvoid());
+};
+
 /** 聊天框要躲的：顶栏、左下"互动"那一排、两手之间那一栏 */
 function dockAvoid(): DOMRect[] {
   return [top, betweenBar, ...hud.children].map((e) => e.getBoundingClientRect());
 }
 
-/** kit 的聊天设置（texas.chat）：电脑版聊天框收起了没有 */
-function chatFolded(): boolean {
-  return readJson<{ folded?: unknown }>(KEYS.chat)?.folded === true;
-}
-
 /**
- * 电脑版聊天框放不下（1280×720 的 6 人桌，哪儿都要盖住座位、按钮或公共牌）：第一次进桌先收成"聊天"小按钮，点开再看。
- * 只在玩家自己没收起、展开过（texas.chat 里还没有 folded）时做一次；kit 没有公开的"默认收起"参数，这里写它的设置（已请主线让 kit 加正式参数）
+ * 这一桌的电脑版聊天框放不下（1280×720 的 6 人桌，哪儿都要盖住座位、按钮或公共牌）：进桌时量一次，量完不再变，免得座位一变聊天框一会儿收一会儿开。
+ * null 是好友房还没坐满、没量
  */
-function foldChatIfCrowded(): boolean {
-  const prefs = readJson<Record<string, unknown>>(KEYS.chat) ?? {};
-  if (typeof prefs.folded === 'boolean' || window.innerWidth < 960) return false;
-  if (tableView.dockFits(340, 220, dockAvoid())) return false;
-  writeJson(KEYS.chat, { ...prefs, folded: true });
-  return true;
+let crowded: boolean | null = null;
+
+/** 电脑版聊天框现在是收着的（玩家自己点过的以 kit 记的设置 texas.chat 为准，没点过看 crowded）：收着时只给小按钮找位置 */
+function chatFolded(): boolean {
+  const own = readJson<{ folded?: unknown }>(KEYS.chat)?.folded;
+  return typeof own === 'boolean' ? own : crowded === true;
 }
 
 /** 聊天开关三档（0.20.0）：开 → 不和陌生人（快速匹配桌不聊，好友房、单机照常）→ 不看 */
@@ -1341,7 +1362,6 @@ function enterRoom(r: SavedRoom): void {
   lastRefused = null;
   wasBuying = false;
   laidOut = { size: 0, me: -1 };
-  roomFoldCheck = true;
   stage.classList.add('in-room');
   closeDialog();
   // 换了房间、离开以后，旧连接还没播完的帧和状态回调一律不理
@@ -1576,9 +1596,6 @@ function flushBots(): void {
 }
 
 /** 人数或我的座位变了：重摆牌桌（我永远在正下方）；摆了回 true */
-/** 这一间房还没按坐满的牌桌判断过聊天框放不放得下（enterRoom 置上，drawRoom 判断一次） */
-let roomFoldCheck = false;
-
 function layOut(size: number, me: number): boolean {
   if (laidOut.size === size && laidOut.me === me) return false;
   laidOut = { size, me };
@@ -1624,11 +1641,10 @@ function drawRoom(s: OnlineState): void {
   toggle(twoNote, 'hidden', !v.needTwo);
   if (v.needTwo) toggle(betweenBar, 'hidden', false);
   if (!s.busy && animating === 0) tableView.show(v);
-  // 进房时还在等人页、牌桌没排座位，量不出聊天框挤不挤：等座位都坐上人（真人带入完）再看一次，要收起就重建组件
-  // （kit 只在建的时候读这个设置；之前说过的几句会丢，只发生在这台设备第一次进桌）
-  if (roomFoldCheck && !s.busy && animating === 0 && v.seats.every((x) => x.owner !== 'none')) {
-    roomFoldCheck = false;
-    if (foldChatIfCrowded()) openFun(`room:${s.code}`);
+  // 进房时还在等人页、牌桌没排座位，量不出聊天框挤不挤：等座位都坐上人（真人带入完）再量一次，kit 下次摆的时候按它收不收
+  if (crowded === null && !s.busy && animating === 0 && v.seats.every((x) => x.owner !== 'none')) {
+    crowded = !dockFitsNow();
+    tf?.refresh();
   }
 
   setText(handNo, v.handNo ? `第 ${v.handNo} 手` : '');
