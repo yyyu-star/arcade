@@ -297,9 +297,11 @@ const fun = new TableFun({
   seats: (): (FunSeat | null)[] => view.seats.map((s, i) => s && ({
     rect: avatarRect(i),                         // 屏幕矩形（CSS 像素）；DOM 头像直接 getBoundingClientRect()
     name: s.name, me: i === 0, bot: s.bot, temper: s.temper,   // temper：'rowdy' | 'normal' | 'cool'
+    plate: plateRect(i),                         // 可选（0.18.2）：名字和筹码那一块，气泡不盖它
   })),
   avoid: () => [handRect(), actionBarRect()],    // 菜单、面板尽量不盖；放不下时选盖得最少的位置
   button: () => funButtonRect(),                 // "互动"按钮放哪；null 不画（没坐下）
+  buttonStyle: () => ({ scale: stageScale, row: true }),  // 可选（0.18.2）：按钮字和图标跟着牌桌放大（≥ 1），row = 图标和字横排；别再覆盖 .atf-btn
   send: (id, to) => (online ? client.emote(id, to) : fun.receive(0, id, to)),
   canSend: () => seated,
   hintSeat: () => (trickEmpty(1) ? 1 : null),     // 首次提示冒在哪家头像旁；null = 现在会挡住出牌，过 2 秒再问（0.17.0，不给就挑第一个电脑）
@@ -314,6 +316,8 @@ client.onEmote = (m) => fun.receive(m.from, m.id, m.to);   // 好友房收到的
 
 - **画布游戏**（Phaser 等）：`rect` 传头像换算到屏幕后的矩形，算法是 `canvas.getBoundingClientRect()` 的左上角加上"世界坐标 × 画布在屏幕上的缩放"。
   组件每次用到时现问，座位挪了、窗口变了都跟得上；窗口尺寸变了它自己 `refresh()`，游戏重排头像后也调一次。
+- **气泡位置**（0.18.2）：先朝牌桌中间那侧放，再试另一侧、上、下，挑和"互动"按钮、各家名牌（`plate`）、别家头像、`avoid` 盖得最少的一个；
+  纯函数 `placeBubble(anchor, w, h, view, avoid)` 在 `fun-logic` 里。
 - **房间的编号数**：`RoomGame.emotes` 填 `funIdCount(PHRASES.length)`（短语 + 12 表情 + 8 道具）。
 - **名场面**：游戏从**公开事件**里认出来，调 `fun.moment({ kind: 'moment', moment: 'bomb', winners: [0], losers: [1, 3], hand: 第几手 })`，
   单机时电脑按性格冲赢家撇嘴、或得意一下；要横幅就 `fun.banner('炸弹！', '小王 炸了 老李')`。

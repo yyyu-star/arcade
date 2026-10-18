@@ -315,6 +315,37 @@ export function placeMenu(anchor: Box, want: number, h: number, view: { width: n
   return { left: best!.left, top: best!.top };
 }
 
+/**
+ * 头像旁的一句话（w×h）放哪（0.18.2）：先试朝屏幕中心那一侧、和头像顶边对齐（原来的样子），再试另一侧、头像上方、下方；
+ * 夹在可见区里（留 margin），和头像本身、"互动"按钮、各家名牌筹码、禁区压得最少的那个胜出，一样少时按试的顺序。
+ * 竖屏自己的气泡原来总在右边、被"互动"按钮压住半截，点头像的提示盖住对家的名字和筹码（麻将报）
+ */
+export function placeBubble(anchor: Box, w: number, h: number, view: { width: number; height: number }, avoid: readonly Box[] = [], margin = 4, gap = 6): { left: number; top: number } {
+  const cx = anchor.left + anchor.width / 2;
+  const right = { left: anchor.left + anchor.width + gap, top: anchor.top - gap };
+  const left = { left: anchor.left - gap - w, top: anchor.top - gap };
+  const above = { left: cx - w / 2, top: anchor.top - gap - h };
+  const below = { left: cx - w / 2, top: anchor.top + anchor.height + gap };
+  const order = cx < view.width / 2 ? [right, left, above, below] : [left, right, above, below];
+  const clamp = (p: { left: number; top: number }): Box => ({
+    left: Math.max(margin, Math.min(view.width - margin - w, p.left)),
+    top: Math.max(margin, Math.min(view.height - margin - h, p.top)),
+    width: w,
+    height: h,
+  });
+  let best: Box | null = null;
+  let bestCost = Infinity;
+  for (const c of order.map(clamp)) {
+    const cost = [anchor, ...avoid].reduce((s, b) => s + overlap(c, b), 0);
+    if (cost < bestCost) {
+      best = c;
+      bestCost = cost;
+      if (cost === 0) break;
+    }
+  }
+  return { left: best!.left, top: best!.top };
+}
+
 // ---------- 编号 ----------
 
 /**

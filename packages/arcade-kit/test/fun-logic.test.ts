@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  placeBubble,
   BOT_REACT,
   COUNTER,
   FUN_TIMING,
@@ -361,6 +362,34 @@ describe('botReact：名场面', () => {
     expect(botReact(moment(), { seat: 2, temper: 'rowdy' }, newBotState(), T0, zero)).toBeNull();
     const none: FunEvent = { kind: 'moment', moment: 'x', winners: [], losers: [1], hand: 1 };
     expect(botReact(none, { seat: 1, temper: 'rowdy' }, newBotState(), T0, zero)).toBeNull();
+  });
+});
+
+describe('placeBubble（0.18.2）', () => {
+  const view = { width: 390, height: 844 };
+  const me = { left: 20, top: 700, width: 60, height: 60 };
+  it('没东西挡：朝屏幕中心那侧、和头像顶边对齐（和以前一样）', () => {
+    expect(placeBubble(me, 120, 30, view)).toEqual({ left: 86, top: 694 });
+    const right = { left: 310, top: 300, width: 60, height: 60 };
+    expect(placeBubble(right, 120, 30, view)).toEqual({ left: 184, top: 294 });
+  });
+  it('右边是"互动"按钮（竖屏自己）：换到头像上方，不压按钮', () => {
+    const btn = { left: 86, top: 700, width: 60, height: 60 };
+    const at = placeBubble(me, 120, 30, view, [btn]);
+    expect(at.top + 30).toBeLessThanOrEqual(me.top);
+    expect(at.left + 120 <= btn.left || at.top + 30 <= btn.top).toBe(true);
+  });
+  it('朝中心那侧是对家的名牌：换一侧，不盖名字和筹码', () => {
+    const top = { left: 165, top: 80, width: 60, height: 60 };
+    const plate = { left: 231, top: 74, width: 100, height: 40 };
+    const at = placeBubble(top, 90, 30, view, [plate]);
+    expect(at.left + 90).toBeLessThanOrEqual(top.left);
+  });
+  it('四边都挡：选压得最少的，夹在屏幕里', () => {
+    const all = [{ left: 0, top: 0, width: 390, height: 844 }];
+    const at = placeBubble(me, 120, 30, view, all);
+    expect(at.left).toBeGreaterThanOrEqual(4);
+    expect(at.top + 30).toBeLessThanOrEqual(840);
   });
 });
 

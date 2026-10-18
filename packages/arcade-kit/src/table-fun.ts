@@ -22,6 +22,7 @@ import {
   funItem,
   newBotState,
   fitMenuWidth,
+  placeBubble,
   placeMenu,
   propId,
   stickerId,
@@ -49,6 +50,8 @@ export interface FunSeat {
   bot?: boolean;
   /** 电脑的互动性格，默认 normal */
   temper?: FunTemper;
+  /** 名牌、筹码数这些挂在头像旁的东西（屏幕矩形，0.18.2）：气泡避开它们，不盖住名字和钱数 */
+  plate?: RectLike;
 }
 
 /**
@@ -76,6 +79,11 @@ export interface TableFunOptions {
   avoid?(): readonly RectLike[];
   /** "互动"按钮放哪（屏幕矩形，组件画按钮）；null 就不画（比如没坐下） */
   button?(): RectLike | null;
+  /**
+   * "互动"按钮的样子（0.18.2，替掉游戏自己对 .atf-btn 的 CSS 覆盖）：scale 把字（13px）和图标（22px）一起放大（舞台放大了的大屏用，最小 1）；
+   * row 为 true 时图标和字横排。每次 refresh 现问
+   */
+  buttonStyle?(): { scale?: number; row?: boolean };
   /** 发出去：好友房走 kit emote，单机直接回给 receive */
   send(id: number, to?: number): void;
   /** 现在能不能发（好友房：坐下了才能），默认能 */
@@ -165,7 +173,7 @@ const CSS = `
 .atf-cool{position:absolute;inset:0;border-radius:var(--ak-radius-btn,10px);background:rgba(0,0,0,.5);pointer-events:none}
 .atf-cool::after{content:'';position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--ak-title,#f3d98b);animation:atf-spin .7s linear infinite}
 .atf-btn{position:absolute;left:0;top:0;pointer-events:auto;min-width:44px;min-height:44px;border-radius:var(--ak-radius-btn,22px);border:2px solid var(--ak-border,#d4a64a);background:var(--ak-soft,#5a3a22);color:var(--ak-fg,#fff6e0);font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px 6px;box-sizing:border-box}
-.atf-btn svg{width:22px;height:22px}
+.atf-btn svg{width:var(--atf-icon,22px);height:var(--atf-icon,22px)}
 .atf-btn.atf-dot::after{content:'';position:absolute;right:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#e8323a;border:2px solid var(--ak-fg,#fff6e0)}
 .atf-say{white-space:normal;max-width:240px;word-break:break-all;font-weight:600}
 .atf-log{display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.4;min-height:44px}
@@ -316,6 +324,12 @@ export class TableFun {
         this.ui.appendChild(b);
         this.btn = b;
       }
+      const st = this.o.buttonStyle?.() ?? {};
+      const k = Math.max(1, st.scale ?? 1);
+      this.btn.style.fontSize = `${13 * k}px`;
+      this.btn.style.flexDirection = st.row ? 'row' : '';
+      this.btn.style.gap = st.row ? `${6 * k}px` : '';
+      this.btn.style.setProperty('--atf-icon', `${22 * k}px`);
       this.btn.style.width = `${Math.max(44, r.width)}px`;
       this.btn.style.height = `${Math.max(44, r.height)}px`;
       this.btn.style.transform = `translate(${r.left}px,${r.top}px)`;
@@ -856,11 +870,17 @@ export class TableFun {
     const b = this.el('div', `atf-bubble ${cls}`.trim(), text);
     this.layer.el.appendChild(b);
     const w = Math.min(cls ? 240 : 220, b.offsetWidth || text.length * 15 + 24);
-    const cx = s.rect.left + s.rect.width / 2;
-    const right = cx < window.innerWidth / 2;
-    const x = Math.max(4, Math.min(window.innerWidth - w - 4, right ? s.rect.left + s.rect.width + 6 : s.rect.left - 6 - w));
-    const y = Math.max(4, s.rect.top - 6);
-    b.style.transform = `translate(${x}px,${y}px)`;
+    const h = b.offsetHeight || 32;
+    // 避开"互动"按钮、各家的名牌筹码和别人的头像（0.18.2）：原来总往朝中心那侧放，竖屏自己的气泡被按钮压住半截
+    const avoid: RectLike[] = [...(this.o.avoid?.() ?? [])];
+    if (this.btn) avoid.push(this.btn.getBoundingClientRect());
+    this.o.seats().forEach((o, i) => {
+      if (!o) return;
+      if (o.plate) avoid.push(o.plate);
+      if (i !== seat) avoid.push(o.rect);
+    });
+    const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid);
+    b.style.transform = `translate(${at.left}px,${at.top}px)`;
     void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160).then(() => anim(b, [{ opacity: 1 }, { opacity: 0 }], 260, ms)).then(() => b.remove());
     return b;
   }
