@@ -7,7 +7,7 @@
  * - 座位上是谁（真人昵称、电脑、掉线、代打）写进 labels.ts 的 seatIdentity，牌桌的头像和名牌按它画。
  * - 房间码记在本机（guandan.room），刷新页面或回到标题页还能回到这个房间；房间散了就忘掉。
  */
-import { RoomClient, type ClientStatus, type RoomClientOptions, type WebSocketLike } from 'arcade-kit/client';
+import { RoomClient, type ChatSendResult, type ClientStatus, type RoomClientOptions, type WebSocketLike } from 'arcade-kit/client';
 import { CLOSE, CLOSE_REASON, EMOTE_ERRORS, type CreateError, type DownMsg, type RoomInfo } from 'arcade-kit/protocol';
 import { PERSONAS, SEAT_PERSONA, decide, situationOf, tiltOf } from '../ai/index.ts';
 import type { Action, GameEvent, NextPreview, PlayerView } from '../core/index.ts';
@@ -279,6 +279,9 @@ export class NetSession implements TableSession {
         // 快捷短语：房间给的是真实座位，换成画面上的（我 = 0），detail 是"座位:编号"
         // detail："画面座位:编号" 或 "画面座位:编号:画面对象座位"
         // "说话人:编号:对象:电脑"（画面座位；没对象是空串，电脑发的末尾是 1）
+        // 聊天（kit 0.18.0）：文字里可能有冒号，不走 emit 的字符串，直接交给牌桌挂的 chatSink（座位换成画面上的）
+        onChat: (seat, text, masked) => this.chatSink?.(rotation(this.mySeat ?? 0).seat(seat), text, masked),
+        onChatError: (code) => this.chatErrorSink?.(code),
         onEmote: (seat, id, to, bot) => {
           const r = rotation(this.mySeat ?? 0);
           this.emit('emote', `${r.seat(seat)}:${id}:${to === undefined ? '' : r.seat(to)}:${bot ? 1 : 0}`);
@@ -475,6 +478,15 @@ export class NetSession implements TableSession {
 
   start(): void {
     this.client.start();
+  }
+
+  /** 牌桌挂上来收聊天的（画面座位）；牌桌关了置回 null，这时收到的丢掉（聊天不补发） */
+  chatSink: ((seat: number, text: string, masked: boolean) => void) | null = null;
+  chatErrorSink: ((code: string) => void) | null = null;
+
+  /** 说一句（kit 的 RoomClient.chat：本地先过一遍过滤和节奏，不行直接返回原因） */
+  chat(text: string): ChatSendResult {
+    return this.client.chat(text);
   }
 
   /** 发一句快捷短语、表情或道具（编号见 src/net/emotes.ts）；toView 是画面座位，转成真实座位再发 */

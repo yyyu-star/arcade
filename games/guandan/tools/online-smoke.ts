@@ -276,6 +276,27 @@ async function main(): Promise<void> {
     await host.page.waitForTimeout(900);
     await shot(host, '52c-online-prop');
     notes.push('道具：1 号点房主头像扔番茄，房主头像上糊了一层');
+    // 聊天（0.22.0，kit 0.18.0）：1 号开互动面板的"聊天"页打一句，房主看到 1 号说话；再打一个手机号，本地就拦下、说为什么
+    const pt = async (k: string): Promise<void> => {
+      await until(say, k, `!!g.controls()['${k}']`);
+      const r = (await say.page.evaluate((kk) => window.__game!.controls()[kk], k))!;
+      await say.page.mouse.click(r.x, r.y);
+    };
+    await pt('fun:button');
+    await pt('fun:tab:chat');
+    await pt('fun:chatInput');
+    await say.page.keyboard.type('这把稳了');
+    await say.page.keyboard.press('Enter');
+    await until(host, '房主看到 1 号说话', "g.fxLog.includes('聊天 1')", 10_000);
+    await until(say, '自己也看到', "g.fxLog.includes('聊天 0')", 10_000);
+    await say.page.keyboard.type('加我 138 0013 8000');
+    await say.page.keyboard.press('Enter');
+    const why = await say.page.evaluate(() => document.querySelector('.atf-note')?.textContent ?? '');
+    if (!why.includes('不能发号码')) throw new Error(`手机号没拦下：${why}`);
+    await shot(say, '52d-online-chat');
+    // 收起面板：点面板外（kit 的面板点外面就关）
+    await say.page.mouse.click(chat.x, chat.y);
+    notes.push('聊天：1 号打"这把稳了"，房主看到；手机号本地拦下（"不能发号码"）');
     // 牌桌上也能叫朋友（0.6.1；0.13.1 起是 kit 的"叫朋友来"面板）：打开、按 Esc 关掉，不报错。本地栈的假平台没有好友接口，面板说"好友列表暂时打不开"
     const inv = (await host.page.evaluate(() => window.__game!.controls()))['invite']!;
     assert(inv, '好友房牌桌上应该有"叫朋友来"');

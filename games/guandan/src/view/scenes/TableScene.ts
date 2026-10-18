@@ -295,6 +295,8 @@ export class TableScene extends Phaser.Scene {
       // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒
       hintSeat: () => [1, 3].find((v) => !this.isMe(v) && !this.trick.occupied(v)) ?? null,
       enabled: () => getSettings().taunts,
+      // 好友房聊天（0.22.0）：只在好友房给，单机没有聊天页
+      ...(net ? { chat: (t: string) => net.chat(t), chatEnabled: () => getSettings().chat } : {}),
       scope: () => net?.code ?? 'solo',
       localBots: !net,
       moodLines: MOOD_LINES,
@@ -314,7 +316,15 @@ export class TableScene extends Phaser.Scene {
     if (!net) this.time.addEvent({ delay: 500, loop: true, callback: () => this.tickSoloUrge() });
     // 弹窗（结算、设置、确认框……）开着时互动层整个藏起来：DOM 层在画布上面，不藏会挡住弹窗上的按钮
     this.time.addEvent({ delay: 200, loop: true, callback: () => this.syncFunShown() });
+    if (net) {
+      net.chatSink = (seat, t, masked) => {
+        if (seat === ME || (getSettings().chat && !this.fun?.isBlocked(seat))) audio.sfx('taunt');
+        this.fun?.chat(seat, t, masked);
+      };
+      net.chatErrorSink = (code) => this.fun?.chatError(code);
+    }
     this.events.once('shutdown', () => {
+      if (net) net.chatSink = net.chatErrorSink = null;
       this.fun?.destroy();
       this.fun = null;
       stopFlash();

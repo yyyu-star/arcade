@@ -361,6 +361,8 @@ export const guandanRoom: Omit<RoomGame<NetState, NetAction, NetView, RoomOpts, 
   seatCount: () => 4,
   // 快捷短语（kit 0.6.0）：房间只认编号，文字在 emotes.ts
   emotes: EMOTE_COUNT,
+  // 好友房打字聊天（kit 0.18.0，仓库根 docs/social.md 3.1）：房间过滤、限速后只转发，不进状态、不写存储；电脑不读
+  chat: true,
   // 房间开局给 256 位熵（arcade-kit 0.2.0 的 begin），当发牌的密钥；状态里不留种子。规则版本由核心自己记进状态
   begin: (entropy, _rv, setup) => {
     const { state, events } = createKeyedGame(entropy);

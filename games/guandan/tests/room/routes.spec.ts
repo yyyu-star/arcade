@@ -9,7 +9,7 @@ import { env } from 'cloudflare:workers';
 import worker from '../../worker/index.ts';
 import * as main from '../../worker/main.ts';
 import type { Env } from '../../worker/gate.ts';
-import { ROOMS, SITE, cookie, freezeClock, join, openRoom, refusedWith, truth, upgrade } from './helpers.ts';
+import { ROOMS, SITE, advance, cookie, freezeClock, join, openRoom, refusedWith, truth, upgrade, type Conn } from './helpers.ts';
 
 beforeEach(() => freezeClock());
 
@@ -115,5 +115,28 @@ describe('ONLINE 开关', () => {
   it('没有 ROOM 绑定时按关着处理', async () => {
     const res = await call(new Request(ROOMS, { method: 'POST', headers: { origin: SITE, cookie: cookie('u1') } }), { ROOM: undefined });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('好友房聊天（0.22.0，kit 0.18.0）', () => {
+  it('走真的进房路由：带 chat=1 的连接收到入座的人说的话（脏话打码）；号码整条拒发；没带 chat=1 的收不到', async () => {
+    const code = await openRoom('u1');
+    const a = (await join(code, 'u1', true)).conn;
+    const b = (await join(code, 'u2', true)).conn;
+    const old = (await join(code, 'u3')).conn;
+    expect((await join(code, 'u4', true)).welcome.chat).toEqual({ ms: 3000, perMin: 10, max: 30 });
+    b.send({ t: 'sit', seat: 1 });
+    await b.waitFor(() => b.msgs.some((m) => (m.t === 'state' || m.t === 'welcome') && m.you.seat === 1), 'sit');
+    const said = (c: Conn) => c.msgs.filter((m) => (m as { t: string }).t === 'chat') as unknown as { seat: number; text: string; masked?: true }[];
+    b.send({ t: 'chat', text: '傻逼 好牌' });
+    await a.waitFor(() => said(a).length === 1, 'chat');
+    expect(said(a)[0]).toEqual({ t: 'chat', seat: 1, text: '** 好牌', masked: true });
+    advance(3_000);
+    b.send({ t: 'chat', text: '加我 138 0013 8000' });
+    await b.waitFor(() => b.msgs.some((m) => m.t === 'error' && m.code === 'chat_blocked'), 'blocked');
+    a.send({ t: 'chat', text: '赢了 1,000,000' });
+    await b.waitFor(() => said(b).some((m) => m.seat === 0), 'chat 0');
+    expect(said(b).map((m) => m.text)).toEqual(['** 好牌', '赢了 1,000,000']);
+    expect(said(old)).toEqual([]);
   });
 });

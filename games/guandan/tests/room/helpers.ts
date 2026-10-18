@@ -42,8 +42,8 @@ export async function openRoom(userId: string, stake?: string): Promise<string> 
   return ((await res.json()) as { code: string }).code;
 }
 
-export function upgrade(code: string, userId: string | null, opts: { origin?: string; cv?: number } = {}): Promise<Response> {
-  return exports.default.fetch(`${ROOMS}/${code}/ws?cv=${opts.cv ?? CLIENT_VERSION}`, {
+export function upgrade(code: string, userId: string | null, opts: { origin?: string; cv?: number; chat?: boolean } = {}): Promise<Response> {
+  return exports.default.fetch(`${ROOMS}/${code}/ws?cv=${opts.cv ?? CLIENT_VERSION}${opts.chat ? '&chat=1' : ''}`, {
     headers: { upgrade: 'websocket', cookie: cookie(userId), origin: opts.origin ?? SITE },
   });
 }
@@ -163,8 +163,8 @@ export class Conn {
   }
 }
 
-export async function join(code: string, userId: string): Promise<{ conn: Conn; welcome: WelcomeMsg<NetView> }> {
-  const res = await upgrade(code, userId);
+export async function join(code: string, userId: string, chat = false): Promise<{ conn: Conn; welcome: WelcomeMsg<NetView> }> {
+  const res = await upgrade(code, userId, { chat });
   if (res.status !== 101 || !res.webSocket) throw new Error(`upgrade failed: ${res.status}`);
   const conn = new Conn(res.webSocket, userId);
   const welcome = (await conn.next()) as WelcomeMsg<NetView>;

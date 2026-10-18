@@ -66,6 +66,10 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   y += P;
   row(colL, y, '牌背');
   seg(colL, y, [{ label: '红', value: '0' }, { label: '绿', value: '1' }], String(s.back), (v) => updateSettings({ back: Number(v) as 0 | 1 }));
+  // 好友房聊天（0.22.0）：放左栏最后，右栏的地方规则已经排到底了
+  y += P;
+  row(colL, y, '聊天');
+  seg(colL, y, [{ label: '开', value: '1' }, { label: '不看', value: '0' }], s.chat ? '1' : '0', (v) => updateSettings({ chat: v === '1' }));
 
   // 右栏。别人（好友房的人、单机的电脑）的互动（短语、表情、道具，docs/table-fun.md 第 5 节）：关掉就不看也不听，单机的电脑也不发（自己照样能发）
   y = top;

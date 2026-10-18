@@ -109,6 +109,8 @@ export interface Settings {
   counter: boolean;
   /** 牌桌互动开 / 不看（0.6.0，设置里叫"互动"）：关掉后好友房里别人的、单机电脑的短语、表情、道具都不播，电脑也不反应 */
   taunts: boolean;
+  /** 好友房聊天开 / 不看（0.22.0，和"互动"分开：有人想关掉嘲讽但想看朋友说话）：不看时别人说的不冒气泡、不进记录，自己也没有聊天页 */
+  chat: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -122,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   back: 0,
   counter: true,
   taunts: true,
+  chat: true,
 };
 
 export const SPEED_FACTOR: Record<SpeedSetting, number> = { slow: 0.7, normal: 1, fast: 1.7 };
