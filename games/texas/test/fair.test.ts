@@ -251,4 +251,57 @@ describe('视图里只有该看到的牌', () => {
     expect(hands).toBeGreaterThan(300);
     expect(shows).toBeGreaterThan(100);
   });
+
+  it('一手打完停着（0.19.0 亮牌）：kept 只给自己、主动亮的只是那家自己的牌，别人没亮的牌哪里都没有', () => {
+    const g = stream([5, 0xfa3, 2, 3, 4, 5, 6, 7], 'fair-show');
+    let held = 0;
+    let showed = 0;
+    for (let n = 0; n < 30; n++) {
+      const size = 2 + g.below(8);
+      let t = newTable('small', size, Array.from({ length: 8 }, () => g.u32()), { holdHands: true, level: g.below(6) });
+      for (let i = 0; i < size; i++) t = ok(seatPlayer(t, i, stakesOf('small').max, false));
+      t = deal(t);
+      for (let k = 0; k < 3000 && t.handNo <= 8; k++) {
+        if (t.toAct !== null) {
+          t = ok(apply(t, t.toAct, aiAction(t, t.toAct)));
+          continue;
+        }
+        if (!t.hold) break;
+        held++;
+        // 随机几家亮一张或两张（摊牌亮过的会被拒，跳过）
+        for (let i = 0; i < size; i++) {
+          if (g.below(3) !== 0) continue;
+          const r = apply(t, i, { t: 'show', cards: g.below(2) ? [0, 1] : [g.below(2)] });
+          if (!isFail(r)) t = r;
+        }
+        const h = t.lastHand!;
+        for (const x of h.showed ?? []) {
+          showed++;
+          expect(x.cards.every((c) => t.kept![x.seat]!.includes(c))).toBe(true);
+        }
+        for (let me = 0; me < size; me++) {
+          const v = view(t, me);
+          expect(v.kept ?? []).toEqual(t.kept![me]!.length === 2 ? t.kept![me] : []);
+          // 别人这一手的底牌：没亮的那几张不许出现在视图的任何牌字段里
+          const open = new Set<number>([...v.board, ...(v.lastHand?.board ?? []), ...(v.kept ?? []), ...h.shown.flatMap((x) => x.hole), ...(h.showed ?? []).flatMap((x) => x.cards)]);
+          const secret = t.kept!.flatMap((c, i) => (i === me ? [] : c)).filter((c) => !open.has(c));
+          const cards: number[] = [];
+          const walk = (x: unknown, key: string): void => {
+            if (Array.isArray(x)) {
+              if (['hole', 'kept', 'cards', 'board'].includes(key)) cards.push(...(x as number[]));
+              else x.forEach((y) => walk(y, key));
+            } else if (x && typeof x === 'object') for (const [k2, y] of Object.entries(x)) walk(y, k2);
+          };
+          walk(v, '');
+          expect(cards.filter((c) => secret.includes(c))).toEqual([]);
+          expect(Object.keys(v.lastHand!).every((k2) => ['board', 'byFold', 'handNo', 'pots', 'shown', 'uncalled', 'showed'].includes(k2))).toBe(true);
+          expect(JSON.stringify(v)).not.toContain('"kept":[[');
+        }
+        t = deal(t);
+        if (t.toAct === null) break;
+      }
+    }
+    expect(held).toBeGreaterThan(100);
+    expect(showed).toBeGreaterThan(50);
+  });
 });

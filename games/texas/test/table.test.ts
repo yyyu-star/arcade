@@ -441,3 +441,60 @@ describe('一手打完先停着（holdHands，0.1.1）', () => {
     expect(t).toMatchObject({ phase: 'idle', hold: true });
   });
 });
+
+describe('主动亮牌（0.19.0）', () => {
+  /** 两个真人，0 号弃牌、1 号不用亮就赢：停着等下一手 */
+  const ended = (): Table => {
+    let t: Table = newTable('small', 2, SEED, { holdHands: true });
+    t = must(seatPlayer(t, 0, 2000, false));
+    t = must(seatPlayer(t, 1, 2000, false));
+    t = rig(deal(t), { 0: 'Ah Ad', 1: '2c 7d' }, '3h 8s 9c Jd Kh');
+    return must(apply(t, t.toAct!, FOLD));
+  };
+
+  it('停着时亮自己刚才的一张、再亮两张；亮的牌就是他的；发下一手就收掉留着的底牌', () => {
+    let t = ended();
+    const folder = t.lastHand!.pots[0]!.winners[0]!.seat === 0 ? 1 : 0;
+    const hole = t.kept![folder]!;
+    expect(hole).toHaveLength(2);
+    t = must(apply(t, folder, { t: 'show', cards: [1] }));
+    expect(t.lastHand!.showed).toEqual([{ seat: folder, cards: [hole[1]] }]);
+    expect(apply(t, folder, { t: 'show', cards: [1] })).toEqual({ error: 'already_shown' });
+    t = must(apply(t, folder, { t: 'show', cards: [0] }));
+    expect(t.lastHand!.showed).toEqual([{ seat: folder, cards: hole }]);
+    // 赢家也能亮（诈唬了给大家看）
+    t = must(apply(t, 1 - folder, { t: 'show', cards: [0, 1] }));
+    expect(t.lastHand!.showed).toHaveLength(2);
+    conserve(t);
+    t = deal(t);
+    expect(t.kept).toBeUndefined();
+    expect(apply(t, folder, { t: 'show', cards: [0] })).toEqual({ error: 'cannot_show' });
+  });
+
+  it('不在停着时、形状不对、摊牌已经亮过的都不收', () => {
+    const t = ended();
+    for (const cards of [[], [2], [0, 0], [0, 1, 1], 'x', [0.5]] as unknown as number[][]) expect(apply(t, 0, { t: 'show', cards })).toEqual({ error: 'bad_cards' });
+    // 还在打：不能亮
+    let live: Table = newTable('small', 2, SEED, { holdHands: true });
+    live = must(seatPlayer(live, 0, 2000, false));
+    live = must(seatPlayer(live, 1, 2000, false));
+    live = deal(live);
+    expect(apply(live, 0, { t: 'show', cards: [0] })).toEqual({ error: 'cannot_show' });
+    // 摊牌了：亮过的不用再亮
+    let sd = rig(live, { 0: 'Ah Ad', 1: '2c 7d' }, '3h 8s 9c Jd Kh');
+    while (sd.toAct !== null) {
+      const s = sd.toAct;
+      const r = apply(sd, s, ALLIN);
+      sd = must(isFail(r) ? apply(sd, s, CALL) : r);
+    }
+    const shown = sd.lastHand!.shown.map((x) => x.seat);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(apply(sd, shown[0]!, { t: 'show', cards: [0] })).toEqual({ error: 'already_shown' });
+  });
+
+  it('没开 holdHands（模拟器）：不留底牌，也就亮不了', () => {
+    const t = setup([1000, 1000, 1000], 1);
+    const r = must(apply(t, t.toAct!, FOLD));
+    expect(r.kept).toBeUndefined();
+  });
+});

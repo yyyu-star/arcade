@@ -14,6 +14,7 @@
 | 荷官半身像（0.18.3） | 自己画的 SVG | `src/view/dealer.ts` |
 | 赢牌的金币、全下聚光、大锅金边（0.18.3） | CSS 渐变 | `src/view/fx.ts`、`src/view/skin.css` |
 | 主页模式卡的图标（两张牌、一摞筹码、两个人，0.18.0） | 自己画的 24 格 SVG | `src/view/lobby.ts` |
+| 亮牌那一块、顶栏聊天开关的图标（0.19.0） | 自己画的 24 格 SVG，牌面同牌桌 | `src/view/showbar.ts`、`src/main.ts` |
 | 音效 | WebAudio 现合成 | `src/view/sound.ts` |
 | 表情包、道具 | 共用包 arcade-kit 自己画的（来源见它的说明） | `arcade-kit` |
 | 文字 | 系统字体，不下载字体文件 | `src/view/style.css` 的 `--font` |

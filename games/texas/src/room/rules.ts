@@ -232,9 +232,17 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
       if (n === undefined) return { t: 'rebuy' };
       return Number.isSafeInteger(n) && (n as number) > 0 ? { t: 'rebuy', amount: n as number } : null;
     }
+    // 亮牌（0.19.0）：只收 [0]、[1]、[0, 1] 这几种，别的形状不进规则
+    if (a.t === 'show') {
+      const c = (raw as { cards?: unknown }).cards;
+      return Array.isArray(c) && c.length >= 1 && c.length <= 2 && c.every((k) => k === 0 || k === 1) && new Set(c).size === c.length ? { t: 'show', cards: [...(c as number[])] } : null;
+    }
     return typeof a.t === 'string' && SIMPLE.has(a.t) ? ({ t: a.t } as RoomAction) : null;
   },
-  free: (a) => a.t === 'away' || a.t === 'back' || a.t === 'rebuy',
+  // 亮牌（0.19.0）在两手之间的停顿里发，不轮流；停顿不因它重新计时（kit 的 pause）
+  free: (a) => a.t === 'away' || a.t === 'back' || a.t === 'rebuy' || a.t === 'show',
+  // 好友房聊天（kit 0.18.0，docs/chat.md）：kit 过滤、限速后只转发，不进状态、不写存储，电脑不读
+  chat: true,
 
   apply(s, seat, a) {
     if (s.closed) return { error: 'closed' };
@@ -284,7 +292,10 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     const v = tableView(s.t, seat);
     const mine = seat === null ? undefined : s.t.seats[seat];
     // 接管时电脑还在打的这一手、还没坐上桌：这个座位的牌不是他的
-    if (mine?.owner !== 'player') v.hole = [];
+    if (mine?.owner !== 'player') {
+      v.hole = [];
+      delete v.kept;
+    }
     return {
       ...v,
       size: s.t.seats.length,

@@ -217,6 +217,9 @@ const seatOverlaps = (page: Page): Promise<number> =>
     return n;
   });
 
+/** 单机亮过牌没有（一场只试一次） */
+let soloShowed = false;
+
 async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks = false): Promise<void> {
   let k = 0;
   let held = !checks;
@@ -232,6 +235,15 @@ async function playUntil(page: Page, hands: number, shotAt: Set<number>, checks 
     if (no > hands) return;
     if (await page.locator('.next-hand').isVisible()) {
       if (no === hands) return;
+      // 主动亮牌（0.19.0，单机）：第一次有亮牌那一块就点"都亮"，我的两张翻开、那一块收起
+      if (checks && !soloShowed && (await page.locator('.show-cards').isVisible())) {
+        soloShowed = true;
+        await page.locator('.show-cards .sc-both').click();
+        await page.waitForFunction(() => document.querySelectorAll('.seat.me .card.up').length === 2, null, { timeout: 5_000 });
+        if (await page.locator('.show-cards').isVisible()) throw new Error('solo show: bar should hide after showing both');
+        await shot(page, 'solo-show');
+        log('solo: showed both cards at hand', no);
+      }
       if (!held) {
         held = true;
         await assertHeld(page, 'desk');
@@ -379,6 +391,7 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await page.locator('.read-card .rc-tag').waitFor({ timeout: 5_000 });
   log('solo fun: prop, own sticker, phrase, block all, read card');
   await playUntil(page, HANDS, new Set([1, 5, -1]), true);
+  if (!soloShowed) throw new Error('solo: never got the show-cards bar');
   await shot(page, 'after-hands');
   // 补码：先歇一手，这一手打完牌桌停下，再补码、回来
   const rest = page.locator('.hud .pill', { hasText: '歇一手' });
@@ -550,6 +563,9 @@ const handNo = async (page: Page): Promise<number> =>
 const roomPauses: Record<string, number[]> = {};
 
 /** 好友房里自动打到第 n 手：轮到就跟注过牌（偶尔弃牌），输光了补码；两手之间看到倒计时就量一下停了多久 */
+/** 房主亮过牌没有（一场只试一次） */
+let roomShowed = false;
+
 async function playRoom(page: Page, hands: number, tag: string, shotAt: Set<number> = new Set()): Promise<void> {
   let k = 0;
   let paused: { no: number; at: number } | null = null;
@@ -562,6 +578,14 @@ async function playRoom(page: Page, hands: number, tag: string, shotAt: Set<numb
       paused = null;
     }
     if (no > hands) return;
+    // 主动亮牌（0.19.0）：房主第一次看到亮牌那一块就亮一张，自己座位上那张翻过来（经房间转一圈回来的视图）
+    if (tag === 'host' && !roomShowed && (await page.locator('.show-cards').isVisible())) {
+      roomShowed = true;
+      await page.locator('.show-cards .sc-card').first().click();
+      await page.locator('.seat.me .card.up').first().waitFor({ timeout: 5_000 });
+      await shot(page, 'room-show');
+      log('host showed a card at hand', no);
+    }
     if (!paused && (await page.locator('.room-pause').isVisible())) {
       if (await page.locator('.next-hand').isVisible()) throw new Error(`[${tag}] room shows "下一手"`);
       if (!(roomPauses[tag]?.length)) await shot(page, `room-${tag}-pause`);
@@ -716,6 +740,16 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await shot(bp, 'fun-taunt-phone');
   await shot(hp, 'fun-taunt-host');
   log('fun: prop and taunt seen on the other screens');
+  // 好友房聊天（0.19.0，kit 0.18）：1 号从互动面板的聊天页说一句，房主和手机上都冒气泡；顶栏有聊天开关
+  if (!(await hp.locator('.chat-toggle').isVisible())) throw new Error('room: chat toggle should show');
+  await ap.locator('.atf-btn').click();
+  await ap.locator('.atf-box [data-key="fun:tab:chat"]').click();
+  await ap.locator('[data-key="fun:chatInput"]').fill('这把我跟到底');
+  await ap.locator('[data-key="fun:chatSend"]').click();
+  for (const p of [hp, bp]) await p.locator('.atf-say', { hasText: '这把我跟到底' }).waitFor({ timeout: 5_000 });
+  await shot(hp, 'chat-host');
+  await ap.locator('.atf-away').dispatchEvent('pointerdown');
+  log('chat: seen on the other screens');
 
   // 打到一半手机刷新：不自动进房（0.2.3），标题页有"回到房间"，点了回到原来的座位
   // 带着房间记录启动页面不能报错（0.3.7：原来先画大厅、后建云存档，这里一刷新就是 pageerror、大厅画不出来；结尾的零报错核对会抓到）
@@ -753,6 +787,7 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   })();
   await Promise.all([phone, late, playRoom(hp, hands, 'host', new Set([4])), playRoom(ap, hands, 'a', new Set([3]))]);
   await shot(hp, 'room-after');
+  if (!roomShowed) throw new Error('host never got the show-cards bar');
   // 两手之间房间停着（HAND_PAUSE_MS），大家看同一个倒计时：看到倒计时以后至少过了几秒才发
   for (const tag of ['host', 'a']) {
     const ms = roomPauses[tag] ?? [];

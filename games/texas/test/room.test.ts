@@ -573,6 +573,29 @@ describe('一手打完停一会儿（0.1.1，kit 0.5.0 的 pause）', () => {
     conserve(s.t);
   });
 
+  it('亮牌（0.19.0）：停着时亮自己的，所有人（含旁观）都看到；不轮流、不改停顿；形状不对的不进规则；发下一手后不能亮', () => {
+    let s = drive(settleAll(begin(['human', 'human', 'ai', 'ai'])));
+    for (let k = 0; k < 50 && s.t.handNo === 1 && !s.t.hold; k++) {
+      const seat = G.turn(s);
+      if (seat === null) break;
+      s = act(s, seat, s.kinds[seat] === 'human' ? { t: 'fold' } : G.ai(s, seat));
+    }
+    expect(s.t.hold).toBe(true);
+    const mine = G.view(s, 0).kept!;
+    expect(mine).toHaveLength(2);
+    expect(G.view(s, 1).kept).not.toEqual(mine);
+    expect(G.view(s, null).kept).toBeUndefined();
+    for (const raw of [{ t: 'show' }, { t: 'show', cards: [3] }, { t: 'show', cards: [0, 0] }, { t: 'show', cards: '0' }]) expect(G.parse(raw)).toBeNull();
+    const a = G.parse({ t: 'show', cards: [1], extra: 1 }) as RoomAction;
+    expect(a).toEqual({ t: 'show', cards: [1] });
+    expect(G.free!(a)).toBe(true);
+    s = act(s, 0, a);
+    for (const who of [0, 1, null]) expect(G.view(s, who).lastHand!.showed).toEqual([{ seat: 0, cards: [mine[1]] }]);
+    expect(G.pause!(s)).toBe(HAND_PAUSE_MS);
+    s = G.resume!(s);
+    expect(G.apply(s, 0, { t: 'show', cards: [0] })).toEqual({ error: 'cannot_show' });
+  });
+
   it('房间要关时不再停：pause 为 null', () => {
     // 两个真人才发牌（0.4.0）：真人都弃，电脑打完这一手
     let s = drive(settleAll(begin(['human', 'human', 'ai'])));

@@ -11,7 +11,7 @@ import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
 import { createError, createRoom, isRoomCode, Online, type OnlineState, type OnlineUi, type SavedRoom } from './online.ts';
-import { OPENING_MS, TURN_MS, TWO_NOTE, type RoomView } from './room/rules.ts';
+import { HAND_PAUSE_MS, OPENING_MS, TURN_MS, TWO_NOTE, type RoomView } from './room/rules.ts';
 import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, type WalletApi, type WalletReply, type WalletView } from './net/wallet.ts';
 import { site, twoText } from './site.ts';
 import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from './store.ts';
@@ -34,6 +34,7 @@ import { PROPS, propId, TableFun, type FunSeat } from 'arcade-kit/table-fun';
 import { loadFunOff, saveFunOff, suggest } from './view/fun.ts';
 import { readLines, Reads, styleTag } from './view/reads.ts';
 import { RoomPanel } from './view/room.ts';
+import { SHOW_MS, ShowBar } from './view/showbar.ts';
 import { funSound, play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableView } from './view/table.ts';
 import { chips, personaName } from './view/text.ts';
@@ -92,6 +93,9 @@ speedBtn.type = 'button';
 // 互动总开关（docs/table-fun.md 第 5 节"互动：开 / 不看"）：0.13.0 起面板是 kit 的，开关挪到顶栏，和声音、快慢放在一起
 const funOffBtn = el('button', 'icon fun-toggle', top);
 funOffBtn.type = 'button';
+// 聊天开关（0.19.0，kit 0.18 的"聊天：开 / 不看"，和互动分开）：只有好友房有聊天，单机不显示
+const chatBtn = el('button', 'icon chat-toggle hidden', top);
+chatBtn.type = 'button';
 const soundBtn = el('button', 'icon sound', top);
 soundBtn.type = 'button';
 const leaveBtn = el('button', 'pill leave', top, '离桌');
@@ -100,6 +104,8 @@ leaveBtn.type = 'button';
 const screen = el('div', 'screen', stage);
 /** 互动"不看"（texas.fun）。菜单、面板、冷却、连击回敬、按人屏蔽、首次提示、电脑的反应都是 kit 的 TableFun（0.13.0，docs/table-fun.md 第 0 节） */
 let funOff = loadFunOff(localStorage, sessionStorage);
+/** 聊天"不看"（texas.settings 的 chatOff）：别人说的不冒气泡、不进记录，自己也没有聊天页 */
+let chatOff = readSettings().chatOff === true;
 /** 牌桌上的互动组件：进桌时建、离桌时拆；单机的电脑由它在本地反应，好友房的由房间算（worker/room.ts） */
 let tf: TableFun | null = null;
 /**
@@ -167,6 +173,8 @@ autoBtn.type = 'button';
 const nextBtn = el('button', 'next-hand', betweenBar);
 nextBtn.type = 'button';
 nextBtn.innerHTML = `<span class="next-ring hidden">${RING}</span><span>下一手</span>`;
+// 主动亮牌（0.19.0）：放在这一栏最前面
+const showBar = new ShowBar(betweenBar, (cards) => showMine(cards));
 // 好友房带入被拒（0.2.5）：一直挂在我的座位上面，写清楚为什么、怎么办，点了重新带入。原来只弹一句，人就卡在空座位上
 const rebuyBox = el('div', 'rebuy-cta hidden', screen);
 const rebuyText = el('span', 'rc-why', rebuyBox);
@@ -487,6 +495,19 @@ function enterTable(): void {
   void tips().then(() => drive(s.table.handNo === 0 && s.between ? s.next() : s.flush()));
 }
 
+/** 亮我刚才的牌：好友房交给房间，单机在本机做 */
+function showMine(cards: number[]): void {
+  if (online) online.act({ t: 'show', cards });
+  else if (solo) void solo.showCards(cards).then(() => refresh());
+}
+
+/** 亮牌那一块：一手打完停着、我在这一手里、摊牌时没亮过才有；key 换了（新的一手）重新计时 */
+function drawShow(v: View, key: string, until: number | null): void {
+  const me = v.me;
+  if (!v.hold || me === null || v.lastHand?.shown.some((x) => x.seat === me)) return showBar.hide();
+  showBar.draw(v.kept, v.lastHand?.showed?.find((x) => x.seat === me)?.cards ?? [], key, until);
+}
+
 /** 发下一手（点了"下一手"、自动下一手倒数完） */
 function nextHand(): void {
   stopCountdown();
@@ -559,6 +580,8 @@ function refresh(): void {
   drawTop();
   // 第一手由进桌时看完提示自己发，不给"下一手"
   drawBetween(s.between && v.handNo > 0 && animating === 0 && !s.busted && !asking);
+  if (!v.hold) showBar.hide();
+  else if (animating === 0) drawShow(v, `s${v.handNo}`, null);
   const auto = bar.update(v, animating === 0 && !s.closing);
   if (auto) {
     void drive(s.act(auto));
@@ -576,6 +599,8 @@ function refresh(): void {
 async function onStep(st: Step): Promise<void> {
   // 坐下那一笔买入回话时牌桌还没摆出来，进桌时会整个摆一遍；离桌时电脑快进打完的那一手不用播
   if (!stage.classList.contains('at-table') || st.action?.t === 'leave') return;
+  // 亮牌只翻牌：不收两手之间那一栏、不停自动下一手的倒数
+  if (st.action?.t === 'show') return tableView.play(view(st.prev, ME), view(st.next, ME), st.seat, st.action);
   animating++;
   bar.update(view(st.prev, ME), false);
   drawBetween(false);
@@ -666,17 +691,37 @@ function openFun(scope: string): void {
     },
     canSend: () => funReady(),
     enabled: () => !funOff,
+    // 好友房才有聊天（kit 0.18）：房间过滤、限速后只转发，不进状态、不存
+    ...(online ? { chat: (text: string) => online!.chat(text), chatEnabled: () => !chatOff } : {}),
     scope: () => scope,
     localBots: !online,
     sound: (prop, phase) => funSound(prop, phase),
     onHit: (seat) => tableView.hit(seat),
   });
+  toggle(chatBtn, 'hidden', !online);
+  drawChatBtn();
   syncFun();
 }
+
+function drawChatBtn(): void {
+  chatBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H10l-4.5 3.5V15.5H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>${chatOff ? '<path d="M4 4l16 16" stroke="currentColor" stroke-width="2"/>' : '<path d="M8 10.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+  chatBtn.setAttribute('aria-label', chatOff ? '聊天：不看（点一下打开）' : '聊天：开（点一下不看）');
+  chatBtn.title = chatBtn.getAttribute('aria-label')!;
+  toggle(chatBtn, 'sel', !chatOff);
+}
+
+chatBtn.addEventListener('click', () => {
+  chatOff = !chatOff;
+  patchSettings({ chatOff });
+  drawChatBtn();
+  // kit 每次开面板、每收到一句都现问 chatEnabled，不用重建组件（重建会丢掉内存里的聊天记录）
+  toast(chatOff ? '聊天：不看（别人说的话不显示，自己也不能说）' : '聊天：开');
+});
 
 function closeFun(): void {
   tf?.destroy();
   tf = null;
+  toggle(chatBtn, 'hidden', true);
   toggle(funHints, 'hidden', true);
   toggle(funSlot, 'hidden', true);
   document.body.classList.remove('texas-fun-idle');
@@ -1327,6 +1372,12 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
   },
   // 真人发的即时画；房间替电脑发的（0.6.1，kit 0.10 的 botEmote）房间一算完就到：一手打完那一下页面多半还在播这一手，排着播完再交给 kit
   // （kit 收到电脑座位发来的会再晚 0.9 秒播、配一句话，像人看一眼再回）
+  chat: (seat, text, masked) => {
+    if (mine()) tf?.chat(seat, text, masked);
+  },
+  chatError: (code) => {
+    if (mine()) tf?.chatError(code);
+  },
   emote: (seat, id, to, bot) => {
     if (!mine()) return;
     if (!bot) return tf?.receive(seat, id, to);
@@ -1394,6 +1445,10 @@ function drawRoom(s: OnlineState): void {
   // 一手和一手之间也在计时的，是开打时在等这个人的买入（OPENING_MS）
   tableView.setClock(s.busy ? null : (turn?.seat ?? null), turn?.deadline ?? null, v.phase === 'idle' ? OPENING_MS : TURN_MS);
   drawRoomPause(s.busy || animating > 0 ? null : (s.room.pause?.until ?? null));
+  // 亮牌：房间停顿的前 SHOW_MS（停顿从这一手最后一帧播完算，和倒计时圈同一个起点）
+  const until = s.room.pause?.until;
+  if (!v.hold) showBar.hide();
+  else if (until && !s.busy && animating === 0) drawShow(v, `${s.code}:${v.handNo}`, until - (HAND_PAUSE_MS - SHOW_MS));
   toggle(twoNote, 'hidden', !v.needTwo);
   if (v.needTwo) toggle(betweenBar, 'hidden', false);
   if (!s.busy && animating === 0) tableView.show(v);

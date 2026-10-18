@@ -249,6 +249,15 @@ export class Solo {
     return null;
   }
 
+  /** 一手打完停着时亮我刚才的牌（0.19.0）：不发牌、不算数，只摆给大家看 */
+  async showCards(cards: number[]): Promise<string | null> {
+    if (this.busy) return 'busy';
+    const st = this.step(ME, { t: 'show', cards });
+    if (typeof st === 'string') return st;
+    await this.show(st);
+    return null;
+  }
+
   /** 补码（我不在这一手里时）：先在钱包扣，再上桌 */
   async topUp(amount: number): Promise<string | null> {
     const me = this.s.table.seats[ME]!;

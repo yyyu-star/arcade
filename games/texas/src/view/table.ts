@@ -350,6 +350,10 @@ export class TableView {
         play('check');
         await this.pause(MS.check);
       }
+    } else if (seat !== null && action?.t === 'show') {
+      // 主动亮牌（0.19.0）：翻牌的声音、头像跳一下，牌由 show(next) 摆出来
+      play('reveal');
+      this.pop(seat);
     } else if (seat !== null && action?.t === 'leave' && prev.seats[seat]?.status === 'active') {
       play('fold');
       await this.muck(seat, f);
@@ -1033,6 +1037,9 @@ function frameOf(v: View): Frame {
     bb: v.bb,
     seats: v.seats.map((s, i) => {
       const sh = r?.shown.find((x) => x.seat === i);
+      // 一手打完后主动亮的（0.19.0）：亮的那张翻开，没亮的盖着
+      const sw = r?.showed?.find((x) => x.seat === i);
+      const kept = i === v.me ? v.kept : undefined;
       return {
         owner: s.owner,
         persona: s.persona,
@@ -1041,7 +1048,7 @@ function frameOf(v: View): Frame {
         status: s.status,
         away: s.away,
         leaving: s.leaving,
-        cards: sh ? [...sh.hole] : s.status === 'active' || s.status === 'allin' ? (i === v.me && v.hole.length ? [...v.hole] : [null, null]) : [],
+        cards: sh ? [...sh.hole] : sw ? (kept ?? [null, null]).map((c, k) => (kept ? (sw.cards.includes(c!) ? c : null) : (sw.cards[k] ?? null))) : s.status === 'active' || s.status === 'allin' ? (i === v.me && v.hole.length ? [...v.hole] : [null, null]) : [],
         hand: sh && !r!.byFold ? showName(v.log, sh) : '',
         win: !!r?.pots.some((p) => p.winners.some((w) => w.seat === i)),
         tag: tags[i] ?? (s.status === 'folded' ? '弃牌' : ''),

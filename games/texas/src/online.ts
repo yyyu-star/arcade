@@ -4,7 +4,7 @@
  * 房间说了算：页面只发意图（坐下、开打、出手、补码、离座），收到的状态整个替换本地的；断线重连拿全量快照整桌重画。
  * 一步里电脑接着出的几手是几帧，按顺序一帧一帧播（每帧带房间给的停顿）；落下太多（切回前台、重连）就不播了，直接摆最新的。
  */
-import { closeText as kitCloseText, createRoom as kitCreateRoom, createText, RoomClient, withNickname, type ClientStatus, type CreateResult, type RoomTexts } from 'arcade-kit/client';
+import { closeText as kitCloseText, createRoom as kitCreateRoom, createText, RoomClient, withNickname, type ChatSendResult, type ClientStatus, type CreateResult, type RoomTexts } from 'arcade-kit/client';
 import { EMOTE_ERRORS, type DownMsg, type RoomInfo, type You } from 'arcade-kit/protocol';
 import type { LastAct, RoomAction, RoomOpts, RoomView } from './room/rules.ts';
 import { site } from './site.ts';
@@ -49,6 +49,10 @@ export interface OnlineUi {
    * bot：房间替电脑座位发的（0.6.1，kit 0.10 的 botEmote），即时到，不跟着帧的播放延迟走
    */
   emote(seat: number, id: number, to?: number, bot?: boolean): void;
+  /** 有人说了一句（0.19.0，kit 0.18 的好友房聊天）：房间过滤、打码后的字，我自己说的也会回来 */
+  chat(seat: number, text: string, masked: boolean): void;
+  /** 房间拒了我的一句（本地已经先挡过一遍，一般是刚重连、节奏刚调过） */
+  chatError(code: string): void;
   /** 房间停了（关了、被顶掉、连不上）：text 给人看，final 为 true 时不会再连 */
   ended(text: string, code: number): void;
   wait(ms: number): Promise<void>;
@@ -73,6 +77,8 @@ export class Online {
       onMessage: (m) => this.onMessage(m),
       onStatus: (st, code, reason) => this.onStatus(st, code, reason),
       onEmote: (seat, id, to, bot) => this.ui.emote(seat, id, to, bot),
+      onChat: (seat, text, masked) => this.ui.chat(seat, text, masked),
+      onChatError: (code) => this.ui.chatError(code),
     });
   }
 
@@ -102,6 +108,10 @@ export class Online {
   /** 发一句嘲讽、一个表情、扔一个道具（编号；to 是对哪个座位）。限频由 kit 在本地排队，被拒了不提示 */
   emote(id: number, to?: number): void {
     this.client.emote(id, to);
+  }
+  /** 说一句（kit 先在本地查一遍，不行直接回原因，互动面板的聊天页照着提示） */
+  chat(text: string): ChatSendResult {
+    return this.client.chat(text);
   }
   retry(): void {
     this.client.retry();

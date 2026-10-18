@@ -1277,6 +1277,14 @@ body::before {
 .room-pause circle { stroke: var(--gold); }
 .auto-next { height: 40px; padding: 0 var(--s-3); border-radius: var(--r-3); border: 1px solid var(--line-2); background: var(--btn-glass); font-size: var(--fs-3); color: var(--muted); }
 .room-pause { display: flex; align-items: center; gap: var(--s-2); height: 44px; padding: 0 var(--s-4) 0 var(--s-2); border-radius: var(--r-pill); background: rgba(0, 0, 0, .5); font-size: var(--fs-4); font-weight: 700; color: #f1e9d2; }
+/* 主动亮牌（0.19.0）：两张小牌点哪张亮哪张，亮过的压暗；和倒计时同一种底 */
+.between .show-cards { display: flex; align-items: center; gap: var(--s-2); height: 56px; padding: 0 var(--s-2) 0 var(--s-4); border-radius: var(--r-pill); background: rgba(0, 0, 0, .5); animation: rise .25s ease-out; }
+.between .sc-label { font-size: var(--fs-4); font-weight: 700; color: #f1e9d2; }
+.between .sc-card { position: relative; padding: 0; border: 0; background: none; border-radius: 4px; transition: transform .15s ease; }
+.between .sc-card .card { position: relative; display: block; transform: none; }
+.between .sc-card:not(:disabled):hover { transform: translateY(-3px); }
+.between .sc-card:disabled { opacity: .45; }
+.between .sc-both { height: 40px; padding: 0 var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--line-2); background: var(--btn-glass); font-size: var(--fs-3); font-weight: 700; color: var(--gold); }
 /* 好友房能打的真人不到两个（0.4.0）：和倒计时同一个样子，只有字 */
 .two-note { display: flex; align-items: center; min-height: 44px; padding: 0 var(--s-4); border-radius: var(--r-pill); background: rgba(0, 0, 0, .5); font-size: var(--fs-4); font-weight: 700; color: #f1e9d2; }
 

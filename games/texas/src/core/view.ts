@@ -59,6 +59,8 @@ export interface View {
   /** 我这个座位这一场的状态和坐下时的筹码（0.5.0，SeatState.form / start）：只下发自己的，电脑据此浮动、看领先落后 */
   form?: number[];
   start?: number;
+  /** 一手打完停着时我刚才的两张底牌（0.19.0，主动亮牌用）：只有自己的；别人的、没在这一手里的不带 */
+  kept?: Card[];
 }
 
 export function view(t: Table, me: number | null): View {
@@ -99,6 +101,7 @@ export function view(t: Table, me: number | null): View {
     level: levelOf(t),
     ...(me !== null && t.seats[me]?.form ? { form: [...t.seats[me]!.form!] } : {}),
     ...(me !== null && t.seats[me]?.start ? { start: t.seats[me]!.start! } : {}),
+    ...(me !== null && t.hold && t.kept?.[me]?.length === 2 ? { kept: [...t.kept[me]!] } : {}),
   };
 }
 
@@ -114,5 +117,6 @@ function handResult(h: HandResult): HandResult {
     pots: h.pots.map((p) => ({ amount: p.amount, winners: p.winners.map((w) => ({ seat: w.seat, won: w.won })) })),
     uncalled: h.uncalled && { seat: h.uncalled.seat, amount: h.uncalled.amount },
     byFold: h.byFold,
+    ...(h.showed ? { showed: h.showed.map((x) => ({ seat: x.seat, cards: [...x.cards] })) } : {}),
   };
 }

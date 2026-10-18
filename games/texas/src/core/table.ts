@@ -104,6 +104,11 @@ export interface HandResult {
   uncalled: { seat: number; amount: number } | null;
   /** 别人都弃了，没摊牌 */
   byFold: boolean;
+  /**
+   * 一手打完后自己主动亮的牌（0.19.0）：每家一条，cards 里是亮的那一张或两张。不算摊牌，不比大小，只给大家看；
+   * 摊牌时已经亮过的不能再亮
+   */
+  showed?: { seat: number; cards: Card[] }[];
 }
 
 /** 离开牌桌、等结回钱包的筹码 */
@@ -151,6 +156,11 @@ export interface Table {
    */
   holdHands?: boolean;
   hold?: boolean;
+  /**
+   * 刚打完的这一手每个座位的底牌（0.19.0，主动亮牌用）：只在一手打完停着（hold）时有，发下一手就删。
+   * 和底牌一样是隐藏信息：view 只给这个座位自己的那两张（View.kept）
+   */
+  kept?: Card[][];
   /** 至少几个真人能打才发牌（0.4.0，好友房是 2：不能一个人带电脑赢实盘）；没填是 1（单机、模拟器、老存档） */
   minHumans?: number;
   /** 电脑的强弱档（0.5.0，stakes.ts 的 LEVELS）：场地按档位定（SOLO_LEVEL、ROOM_LEVEL）；没填的看 strong，再没有按单机的 */
@@ -174,7 +184,9 @@ export type Action =
   | { t: 'away' }
   | { t: 'back' }
   /** 离桌：手里有牌就先弃，这一手打完结算 */
-  | { t: 'leave' };
+  | { t: 'leave' }
+  /** 一手打完停着时亮自己刚才的底牌（0.19.0）：cards 是第几张（0、1），一张或两张；可以先亮一张再亮两张 */
+  | { t: 'show'; cards: number[] };
 
 export type Fail = { error: string };
 export const isFail = (x: unknown): x is Fail => typeof x === 'object' && x !== null && 'error' in x;
@@ -288,6 +300,7 @@ export function addChips(t0: Table, seat: number, amount: number, start = true):
 export function deal(t0: Table): Table {
   const t = structuredClone(t0);
   if (t.hold) t.hold = false;
+  delete t.kept;
   if (t.phase === 'idle') {
     for (let i = 0; i < t.seats.length; i++) refill(t, i);
     startHand(t);
@@ -390,6 +403,8 @@ export function apply(t0: Table, seat: number, a: Action): Table | Fail {
     }
     case 'leave':
       return leave(structuredClone(t0), seat);
+    case 'show':
+      return showCards(t0, seat, a.cards);
     default:
       break;
   }
@@ -644,6 +659,8 @@ function showdown(t: Table): void {
 function finishHand(t: Table, r: Omit<HandResult, 'handNo' | 'board' | 'uncalled'>): void {
   t.lastHand = { handNo: t.handNo, board: [...t.board], uncalled: t.uncalled, ...r };
   t.uncalled = null;
+  // 停着等下一手时留下各家的底牌，好让人主动亮（离桌的座位下面会清空，留下的牌也作废）；不停着的直接发下一手，没有亮牌的时候
+  if (t.holdHands) t.kept = t.seats.map((s) => (s.status === 'out' || s.leaving ? [] : [...s.hole]));
   const won = new Array<number>(t.seats.length).fill(0);
   for (const p of r.pots) for (const w of p.winners) won[w.seat]! += w.won;
   for (let i = 0; i < t.seats.length; i++) {
@@ -676,6 +693,24 @@ function finishHand(t: Table, r: Omit<HandResult, 'handNo' | 'board' | 'uncalled
   t.runout = false;
   if (t.holdHands) t.hold = true;
   else startHand(t);
+}
+
+/**
+ * 主动亮牌（0.19.0）：只在一手打完停着时，亮自己刚才的一张或两张。摊牌已经亮了的不用再亮；
+ * 同一家再亮一次（先一张、再两张）就换掉原来那条，亮过的不能收回
+ */
+function showCards(t0: Table, seat: number, cards: unknown): Table | Fail {
+  const hole = t0.kept?.[seat];
+  if (!t0.hold || !t0.lastHand || !hole || hole.length !== 2) return { error: 'cannot_show' };
+  if (!Array.isArray(cards) || cards.length < 1 || cards.length > 2 || !cards.every((k) => k === 0 || k === 1) || new Set(cards).size !== cards.length) return { error: 'bad_cards' };
+  if (t0.lastHand.shown.some((x) => x.seat === seat)) return { error: 'already_shown' };
+  const before = t0.lastHand.showed?.find((x) => x.seat === seat)?.cards ?? [];
+  const picked = hole.filter((c, k) => cards.includes(k) || before.includes(c));
+  if (picked.length === before.length) return { error: 'already_shown' };
+  const t = structuredClone(t0);
+  const r = t.lastHand!;
+  r.showed = [...(r.showed ?? []).filter((x) => x.seat !== seat), { seat, cards: picked }];
+  return t;
 }
 
 /** 上头的手数：0 以下就删掉字段（状态里不留 tilt: 0，和没有这个字段的旧状态一样） */
