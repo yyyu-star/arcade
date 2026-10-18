@@ -204,12 +204,12 @@ export class FlakyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
 
 /**
  * 0.20.0 快速匹配：一桌最多 4 个真人（档位 duo 是 2 个），每小时最多排 5 次（测上限不用连 31 次）。
- * fakeBlocks 不为 null 时代替平台的 blockedAmong（测试用 runInDurableObject 设）
+ * fakeBlocks 不为 null 时代替平台的 blockedAmong（测试用 runInDurableObject 设）；默认空名单，免得每次凑桌都去调测试里只会 fetch 的假平台、刷一屏 workerd 的报错
  */
 export class ToyQueue extends MatchQueue<Env> {
   protected readonly seats = 4;
   protected override readonly perHour = 5;
-  fakeBlocks: [string, string][] | null = null;
+  fakeBlocks: [string, string][] | null = [];
   protected override tableSize(tier: string): number {
     return tier === 'duo' ? 2 : this.seats;
   }

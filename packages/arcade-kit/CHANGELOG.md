@@ -12,7 +12,7 @@
 - **页面** `MatchClient`（`onWaiting`、`onMatched`、`onHasRoom`、`onSolo`，断线不重连）和转单机的默认文案 `MATCH_TEXT`（"今天联机局数用完了，先和电脑打"等）。
 - 额度：匹配桌也占每天的开房名额（`dailyRoomsPerUser`，默认 6，游戏 `vars.KIT_QUOTA` 里改）；全站开房数一张桌只记 1。
 - 文档：docs/match.md 改成实现版（陌生人打字聊天默认开、设置里能关，开放公开注册时重新评估；屏蔽名单直接用平台 0.25.0 的 RPC）；README 加"快速匹配"一节。
-- 测试：`match.test.ts` 15 条、`client.test.ts` 加 3 条（MatchClient）；`FlakyMeter` 改拦 `kitReserveMany` / `kitReleaseMany` / `kitPeek`。
+- 测试：`match.test.ts` 16 条、`client.test.ts` 加 3 条（MatchClient）；`FlakyMeter` 改拦 `kitReserveMany` / `kitReleaseMany` / `kitPeek`。
   反证五处（外人能进、不自动开打、不按 joinBy 开、没来的不托管、只还第一个人的名额）各有测试失败。
 
 ## 0.19.1（2026-10-18）

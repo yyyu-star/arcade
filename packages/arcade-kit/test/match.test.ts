@@ -138,9 +138,22 @@ describe('排队', () => {
     expect(x).toBe(y);
     expect(k2.closed).toBeNull();
     await runInDurableObject(queueStub('duo'), (q: ToyQueue) => {
-      q.fakeBlocks = null;
+      q.fakeBlocks = [];
     });
     k2.ws.close(1000);
+  });
+
+  it('平台没有 blockedAmong（调用出错）就跳过，照常凑', async () => {
+    await runInDurableObject(queueStub('four'), (q: ToyQueue) => {
+      q.fakeBlocks = null;
+    });
+    const cs = [];
+    for (const u of ['v1', 'v2', 'v3', 'v4']) cs.push(await enqueue('four', u));
+    const codes = await Promise.all(cs.map(matchedCode));
+    expect(new Set(codes).size).toBe(1);
+    await runInDurableObject(queueStub('four'), (q: ToyQueue) => {
+      q.fakeBlocks = [];
+    });
   });
 
   it('排队连接只收不发：发东西就断开', async () => {
@@ -176,11 +189,12 @@ describe('匹配桌', () => {
   it('只有排进来的人能进；不能开打、等人时不能换座', async () => {
     const code = await duo('p1', 'p2');
     expect(await refusedWith(await upgrade(code, 'stranger'))).toBe(4004);
-    const { conn } = await join(code, 'p1');
+    const { conn, welcome } = await join(code, 'p1');
     open.push(conn);
     conn.send({ t: 'start' });
     expect(await conn.until((m) => m.t === 'error')).toMatchObject({ code: 'not_host' });
-    conn.send({ t: 'sit', seat: 3 });
+    // 座位是随机排的：挑一个不是自己的空位
+    conn.send({ t: 'sit', seat: welcome.room.seats.findIndex((s, i) => s.kind === 'empty' && i !== welcome.you.seat) });
     expect(await conn.until((m) => m.t === 'error')).toMatchObject({ code: 'seat_taken' });
   });
 
