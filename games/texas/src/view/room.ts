@@ -1,11 +1,13 @@
 /**
  * 好友房的等人页（开打前）和连接提示条。开打以后用的是牌桌（table.ts），这里只管"等大家坐好"那一屏。
+ * 0.18.4（美术 v3 第 5 步）：座位画成桌边的椅子——中间一张这一间主题房的桌面，用到的座位从正下方顺时针沿桌边排开。
  */
 import { stakesOf } from '../core/stakes.ts';
 import type { OnlineState } from '../online.ts';
 import { SEATS } from '../room/rules.ts';
 import { site, twoText } from '../site.ts';
 import { el, setText, toggle } from './dom.ts';
+import { ROOM_NAME } from './rooms.ts';
 import { chips } from './text.ts';
 
 export interface WaitHandlers {
@@ -20,6 +22,7 @@ export class RoomPanel {
   readonly root: HTMLDivElement;
   private readonly code: HTMLDivElement;
   private readonly info: HTMLDivElement;
+  private readonly mark: HTMLDivElement;
   private readonly seats: { box: HTMLDivElement; name: HTMLSpanElement; sit: HTMLButtonElement }[] = [];
   private readonly startBtn: HTMLButtonElement;
   private readonly waitNote: HTMLDivElement;
@@ -38,6 +41,8 @@ export class RoomPanel {
     button(head, 'pill go rw-invite', '叫朋友来', () => h.invite());
     this.info = el('div', 'rw-info', this.root);
     const grid = el('div', 'rw-seats', this.root);
+    el('div', 'rw-felt', grid);
+    this.mark = el('div', 'rw-mark', grid);
     for (let i = 0; i < SEATS; i++) {
       const box = el('div', 'rw-seat', grid);
       el('span', 'rw-no', box, `${i + 1} 号`);
@@ -78,8 +83,13 @@ export class RoomPanel {
         : '',
     );
     const size = o?.size ?? SEATS;
+    setText(this.mark, o ? ROOM_NAME[o.stakes] : '');
     const mine = s.you?.seat ?? null;
     this.seats.forEach((x, i) => {
+      // 椅子沿桌边：1 号在正下方，往左手边（顺时针）一圈；按百分比摆，横屏竖屏都跟着容器的椭圆走
+      const a = Math.PI / 2 + (2 * Math.PI * i) / size;
+      x.box.style.left = `${50 + 41 * Math.cos(a)}%`;
+      x.box.style.top = `${50 + 40 * Math.sin(a)}%`;
       const info = s.room!.seats[i]!;
       const used = i < size;
       toggle(x.box, 'hidden', !used && info.kind === 'empty');

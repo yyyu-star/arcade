@@ -1018,23 +1018,52 @@ body::before {
 .rw-invite { height: 48px; padding: 0 var(--s-5); font-size: var(--fs-5); font-weight: 900; }
 .invite-btn { font-weight: 800; }
 .rw-info { margin-top: var(--s-2); font-size: var(--fs-2); line-height: 1.5; color: var(--muted); }
-.rw-seats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); margin-top: var(--s-3); }
-.rw-seat {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  height: 54px;
-  padding: 0 var(--s-3);
-  border-radius: var(--r-3);
-  border: 1px dashed rgba(255, 255, 255, .22);
-  background: rgba(255, 255, 255, .03);
+/* 0.18.4：等人页是一张桌子，座位是桌边的椅子（room.ts 按百分比沿椭圆摆）；桌面颜色跟主题房走（rooms.css 的 --felt-*、--wood-*） */
+.rw-seats { position: relative; height: 272px; margin-top: var(--s-3); }
+.rw-felt {
+  position: absolute;
+  left: 13%; right: 13%; top: 17%; bottom: 17%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse closest-side, transparent 88%, var(--felt-line, rgba(243, 200, 107, .42)) 89% 92%, transparent 93%),
+    radial-gradient(ellipse at 50% 40%, var(--felt-hi, #238257), var(--felt, #16613f) 55%, var(--felt-lo, #0a3624));
+  box-shadow: 0 0 0 10px var(--wood, #6b3d1d), 0 0 0 12px var(--wood-lo, #2a1608), 0 10px 24px rgba(0, 0, 0, .6);
 }
+.rw-mark {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--fs-6);
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: rgba(255, 255, 255, .16);
+  white-space: nowrap;
+}
+.rw-seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-0);
+  width: 124px;
+  height: 58px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-4);
+  border: 1px dashed rgba(255, 255, 255, .22);
+  background: rgba(8, 16, 12, .82);
+  z-index: 1;
+}
+.rw-seat:not(.taken) :is(.rw-no, .rw-name) { display: none; }
+.rw-seat .rw-no { line-height: 1; }
 .rw-seat.taken { border-style: solid; border-color: rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .07); }
 .rw-seat.me { border-color: var(--gold); background: rgba(243, 200, 107, .12); }
 .rw-no { font-size: var(--fs-2); color: var(--faint); flex: none; }
-.rw-name { flex: 1; min-width: 0; font-size: var(--fs-4); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-name { max-width: 100%; font-size: var(--fs-4); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-seat:not(.taken) .rw-name { font-weight: 400; color: #6f7b74; }
 .rw-sit { height: 40px; padding: 0 var(--s-3); flex: none; }
+.rw-seat:not(.taken) .rw-sit { height: 44px; width: 100%; }
 .rw-go { display: flex; align-items: center; gap: var(--s-3); margin-top: var(--s-4); }
 .rw-go .pill { height: 44px; }
 .rw-go .start { flex: 1; }
@@ -1137,7 +1166,8 @@ body::before {
 .stage.tall .side { width: 100%; max-height: none; }
 .stage.tall .panel { padding: var(--s-4); }
 .stage.tall .room-wait { width: calc(100% - 24px); max-width: none; }
-.stage.tall .rw-seats { grid-template-columns: repeat(2, 1fr); }
+.stage.tall .rw-seats { height: 520px; }
+.stage.tall .rw-felt { left: 22%; right: 22%; top: 12%; bottom: 12%; }
 .stage.tall .rw-head { flex-wrap: wrap; }
 
 /* ---------- 动画 ---------- */
@@ -1178,7 +1208,8 @@ body::before {
 .sum-award.worst { background: rgba(255, 155, 143, .1); border-color: rgba(255, 155, 143, .3); }
 .sum-award-t { font-size: var(--fs-3); font-weight: 700; color: var(--gold); }
 .sum-award.worst .sum-award-t { color: #ff9b8f; }
-.sum-award-n { font-size: var(--fs-8); font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 名字长了折成两行、字小一号（0.18.4：原来一行截成"本机sm…"，谁得的奖看不出来） */
+.sum-award-n { font-size: var(--fs-6); font-weight: 800; line-height: 1.2; overflow: hidden; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sum-award-l { font-size: var(--fs-2); line-height: 1.4; color: #d9d2bd; }
 @keyframes sum-award-in { from { opacity: 0; transform: scale(.85); } }
 .sum-grid { display: grid; grid-template-columns: auto 1fr; gap: var(--s-2) var(--s-4); align-items: baseline; }
@@ -1187,6 +1218,29 @@ body::before {
 .sum-v.plus { color: #8ff0b4; }
 .sum-v.minus { color: #ff9b8f; }
 .sum-note { margin: var(--s-3) 0 0; font-size: var(--fs-3); line-height: 1.55; color: #d9d2bd; }
+.sum-share { margin-top: var(--s-4); }
+/* 这一场的大字（0.18.4）：赢了金色加一圈慢慢转的光，输了柔和的红，平手白 */
+.sum-hero { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-1); margin-bottom: var(--s-4); padding: var(--s-3) var(--s-4); border-radius: var(--r-4); overflow: hidden; }
+.sum-net { position: relative; font-size: 44px; font-weight: 900; line-height: 1.05; letter-spacing: 1px; }
+.sum-mood { position: relative; font-size: var(--fs-3); color: var(--muted); }
+.sum-hero.win { background: linear-gradient(rgba(243, 200, 107, .2), rgba(243, 200, 107, .05)); border: 1px solid rgba(243, 200, 107, .45); }
+.sum-hero.win .sum-net { color: var(--gold); text-shadow: 0 0 18px rgba(255, 214, 110, .55); }
+.sum-hero.win .sum-mood { color: #f2e2b4; }
+.sum-hero.win::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 360px; height: 360px;
+  margin: -180px 0 0 -180px;
+  background: repeating-conic-gradient(rgba(255, 220, 130, .16) 0 6deg, transparent 6deg 18deg);
+  -webkit-mask-image: radial-gradient(circle, #000 10%, transparent 65%);
+  mask-image: radial-gradient(circle, #000 10%, transparent 65%);
+  animation: skin-spin 18s linear infinite;
+}
+.sum-hero.lose { background: rgba(255, 155, 143, .07); border: 1px solid rgba(255, 155, 143, .22); }
+.sum-hero.lose .sum-net { color: #ff9b8f; }
+.sum-hero.even { background: rgba(255, 255, 255, .05); border: 1px solid var(--line); }
+.lowfx .sum-hero.win::before { animation: none; }
 
 /* ---------- 两手之间（0.1.1）：下一手、自动下一手；好友房是大家一起的倒计时 ---------- */
 .between {

@@ -456,9 +456,11 @@ async function summary(page: Page, name: string): Promise<number> {
   await page.locator('.summary').waitFor({ timeout: 20_000 });
   const text = (await page.locator('.dialog').textContent()) ?? '';
   for (const w of ['带上桌', '这一场']) if (!text.includes(w)) throw new Error(`summary lacks ${w}: ${text}`);
+  if ((await page.locator('.sum-hero').count()) !== 1) throw new Error('summary should lead with the big +/− line');
   const buttons = await page.locator('.dialog .d-btn').allTextContents();
   if (buttons.join() !== '回标题') throw new Error(`summary buttons: ${buttons.join()}`);
-  const net = ((await page.locator('.sum-v').nth(2).textContent()) ?? '').replace(/,/g, '');
+  // 0.18.4 起这一场的 +/− 是最上面的大字
+  const net = ((await page.locator('.sum-hero .sum-net').textContent()) ?? '').replace(/,/g, '');
   await shot(page, name);
   // 分享卡（docs/social.md 1.1，kit 的 share）：无头浏览器不能带文件分享，出预览层；看一眼再关，结算页还在
   if (await page.locator('.sum-share').isVisible()) {
@@ -682,6 +684,17 @@ async function roomFlow(browser: Browser, base: string, pages: [Page, string][])
   await hp.locator('.rw-seat.taken').nth(2).waitFor();
   await shot(hp, 'room-wait-host');
   await shot(bp, 'room-wait-phone');
+  // 等人页画成桌子（0.18.4）：竖屏也得把椅子都放在桌子那块里、不压到下面的按钮
+  await bp.setViewportSize({ width: 390, height: 844 });
+  await bp.waitForTimeout(400);
+  await shot(bp, 'room-wait-portrait');
+  const box = await bp.locator('.rw-seats').boundingBox();
+  const go = await bp.locator('.rw-go').boundingBox();
+  for (const s of await bp.locator('.rw-seat:not(.hidden)').all()) {
+    const r = await s.boundingBox();
+    if (!box || !go || !r || r.x < 0 || r.x + r.width > 390 || r.y + r.height > go.y) throw new Error(`portrait waiting room: seat out of place ${JSON.stringify(r)}`);
+  }
+  await bp.setViewportSize(PHONE.viewport);
   // 坐着的人都有"开打"（0.3.5）：不是房主的点了，房间回 not_host，冒一句，还在等
   await ap.locator('.rw-go .start').click();
   await ap.locator('.toast.on', { hasText: '只有开房的人能开打' }).waitFor({ timeout: 5_000 });

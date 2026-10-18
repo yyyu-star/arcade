@@ -2,6 +2,7 @@
  * 一场打完的结算页（0.1.1，试玩反馈："离桌直接回到标题页，只看到余额变了"）：单机离桌、好友房离开或房间关了时弹出。
  * 写清带上桌多少、结回多少、这一场 +/−，打了几手、赢了几手、最大的一手；到顶、输光各一句温和的话。
  * 只有一个"回标题"按钮，不放"再来一场"（快乐为主、不诱导，docs/economy.md 第 0 节）。
+ * 0.18.4（美术 v3 第 5 步）：最上面一块大字写这一场 +/−，赢了金色带光、输了一句宽心话，不再和别的行长得一样。
  */
 import { dialog } from './dialog.ts';
 import { el } from './dom.ts';
@@ -46,11 +47,11 @@ export interface RoomSummaryRow {
 /** 单机：离桌以后的这一场 */
 export function soloSummary(parent: HTMLElement, s: SoloSummary): Promise<unknown> {
   const body = el('div', 'summary');
-  const grid = el('div', 'sum-grid', body);
   const net = s.left - s.buyin;
+  hero(body, net, s.hands > 0);
+  const grid = el('div', 'sum-grid', body);
   row(grid, '带上桌', chips(s.buyin));
   row(grid, s.practice ? '剩下' : '结回钱包', s.refused ? '没结上' : s.out === null ? `${chips(s.left)}（${s.pending ?? '连上后自动结回'}）` : chips(s.practice ? s.left : s.out));
-  row(grid, '这一场', signed(net), net > 0 ? 'plus' : net < 0 ? 'minus' : '');
   row(grid, '打了', s.hands ? `${s.hands} 手，赢了 ${s.won} 手` : '还没打完一手');
   if (s.best) row(grid, '最大的一手', `${s.best.value === null ? '别人都弃牌' : handName(s.best.value)}，赢 ${chips(s.best.won)}`);
   const notes: string[] = [];
@@ -75,6 +76,8 @@ export function roomSummary(
 ): Promise<unknown> {
   const body = el('div', 'summary');
   if (note) el('p', 'sum-note', body, note);
+  const me = rows.find((r) => r.me);
+  if (me) hero(body, me.net, true);
   awardBox(body, awards);
   const grid = el('div', 'sum-grid', body);
   const sorted = [...rows].sort((a, b) => Number(b.me) - Number(a.me) || b.net - a.net);
@@ -113,6 +116,14 @@ function awardBox(body: HTMLElement, awards: Award[]): void {
     el('div', 'sum-award-n', card, a.name);
     el('div', 'sum-award-l', card, a.line);
   }
+}
+
+/** 这一场的大字：赢了金色、输了柔和的红，各配一句（不嘲讽、不催着再来） */
+function hero(body: HTMLElement, net: number, played: boolean): void {
+  const mood = net > 0 ? 'win' : net < 0 ? 'lose' : 'even';
+  const box = el('div', `sum-hero ${mood}`, body);
+  el('b', 'sum-net', box, signed(net));
+  el('span', 'sum-mood', box, !played ? '还没打完一手' : mood === 'win' ? '这一场赢了！' : mood === 'lose' ? '牌有起落，下次手气就来了' : '不输不赢，打了个平手');
 }
 
 function row(grid: HTMLElement, label: string, value: string, cls = ''): void {
