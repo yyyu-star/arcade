@@ -841,7 +841,10 @@ function playSolo(s: Solo): void {
   screen.className = 'screen game';
   screen.replaceChildren();
   const st = stakesOf(s.stakes)!;
-  title.textContent = `${VARIANT_NAME['sichuan-xuezhan']} · ${st.wallet ? `实盘 ${num(st.share)}` : `娱乐·${LEVEL_NAME[s.save.level ?? 'easy']}`}`;
+  // 玩法名单独一段：竖屏顶栏放不下时 CSS 藏掉它，留下档位（不缩字）
+  title.replaceChildren();
+  el('span', 'var', title, `${VARIANT_NAME['sichuan-xuezhan']} · `);
+  title.append(st.wallet ? `实盘 ${num(st.share)}` : `娱乐·${LEVEL_NAME[s.save.level ?? 'easy']}`);
   table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => {
     const err = s.act(a as XzAction);
     if (err && err !== 'busy') play('click');

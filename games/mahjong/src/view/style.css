@@ -23,12 +23,14 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
-  /* 字号 */
-  --fs-xs: 12px;
-  --fs-sm: 14px;
-  --fs-md: 16px;
-  --fs-lg: 18px;
-  --fs-xl: 20px;
+  /* 字号：手机上舞台缩到 0.67–0.7 倍，14px 的字到屏幕上只剩 9.4px（0.17.5 手机审计）。viewport.ts 写 --fs-k = max(1, 1/缩放)，
+   * 每档给一个屏幕上的下限：xs 12px、sm 14px（分数、局数这些数字多用它）、md 15、lg 16、xl 17；2xl 往上缩完也够大，不动。
+   * 电脑和 iPad 上 --fs-k 是 1，跟原来一样 */
+  --fs-xs: calc(12px * var(--fs-k, 1));
+  --fs-sm: calc(14px * var(--fs-k, 1));
+  --fs-md: max(16px, calc(15px * var(--fs-k, 1)));
+  --fs-lg: max(18px, calc(16px * var(--fs-k, 1)));
+  --fs-xl: max(20px, calc(17px * var(--fs-k, 1)));
   --fs-2xl: 24px;
   --fs-3xl: 28px;
   /* 圆角 */
@@ -86,6 +88,7 @@ body {
   left: env(safe-area-inset-left, 0px);
 }
 .stage {
+  font-size: var(--fs-md);
   position: absolute;
   left: 50%;
   top: 50%;
@@ -334,7 +337,8 @@ button {
 }
 .join input,
 .nick input {
-  height: 44px;
+  /* 输入框没法用 ::after 撑点按区：直接按 --tap 定高，屏幕上至少 44 */
+  height: max(44px, var(--tap));
   font: inherit;
   font-size: var(--fs-lg);
   padding: 0 var(--sp-3);
@@ -714,6 +718,18 @@ button {
   position: absolute;
   inset: min(0px, calc((100% - var(--tap)) / 2)) min(0px, calc((100% - var(--tap)) / 2));
 }
+/* 不是按钮样式、外观也小于 --tap 的几处能点的东西（0.17.5 手机审计）：头像（点了扔道具）、规则设置的折叠行、小册子的页签、音量滑块。
+ * 同样用看不见的 ::after 把点按区撑到 --tap，外观不变 */
+.badge .avatar::after,
+.rules-opts summary::after,
+.rules .tab::after {
+  content: '';
+  position: absolute;
+  inset: min(0px, calc((100% - var(--tap)) / 2)) min(0px, calc((100% - var(--tap)) / 2));
+}
+.rules-opts summary {
+  position: relative;
+}
 @media (hover: hover) {
   :is(.act, .pill, .icon, .chip, .stake, .link, .home, .dialog .x):not(:disabled, .off):hover {
     filter: brightness(1.12);
@@ -948,7 +964,7 @@ button {
 /* 庄、缺门、托管这些小标记一个样子：圆角小牌、浅色描边，只按颜色区分 */
 .badge .dealer,
 .tag {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   /* 连上下 1 像素描边一共 16 高：头像牌不能再高（横屏左右两家下面紧挨着牌墙） */
   line-height: 14px;
   font-weight: 700;
@@ -1008,7 +1024,7 @@ button {
   height: 34px;
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   transform: rotate(-12deg);
   box-shadow: 0 2px 6px #0008;
 }
@@ -1199,14 +1215,17 @@ button {
 }
 .center .wall-label {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
+  /* 手机上字号放大后三行要挤进盘子，两行小字行高收紧（0.17.6） */
+  line-height: 1.15;
   letter-spacing: 0.3em;
   text-indent: 0.3em;
   opacity: 0.75;
 }
 .center .round {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  line-height: 1.15;
   opacity: 0.9;
 }
 /* 四边的方向灯：轮到谁谁那边亮，外面再出一个箭头指着他 */
@@ -1451,7 +1470,7 @@ html .atf-btn svg {
   border-radius: 6px;
   background: var(--gold);
   color: #3a2a00;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 15px;
   font-weight: 700;
 }
@@ -1756,13 +1775,16 @@ html .atf-btn svg {
 [data-orient='land'] .side.r2 { left: 50%; top: 14px; transform: translateX(-50%); }
 [data-orient='land'] .side.r1 { right: 22px; top: 237px; transform: translateY(-50%); }
 [data-orient='land'] .side.r3 { left: 22px; top: 237px; transform: translateY(-50%); }
-[data-orient='land'] .center { left: 422px; top: 185px; height: 104px; }
+/* 高 112 和竖屏一样：手机上字号放大后（0.17.6）104 高放不下数字、"剩余"、局数三行 */
+[data-orient='land'] .center { left: 422px; top: 181px; height: 112px; }
 [data-orient='land'] .river .tile { width: 29px; height: 41px; }
 [data-orient='land'] .river.r2 { left: 380px; bottom: 341px; width: 240px; flex-wrap: wrap-reverse; flex-direction: row-reverse; }
 [data-orient='land'] .river.r0 { left: 380px; top: 295px; width: 240px; }
 [data-orient='land'] .river.r3 { left: 196px; top: 175px; width: 180px; flex-direction: row-reverse; }
 [data-orient='land'] .river.r1 { left: 624px; top: 175px; width: 180px; }
 [data-orient='land'] .bar { right: 176px; bottom: 96px; height: 64px; }
+/* 横屏同理：换牌那句长提示加两个按钮会伸到左边"互动"底下，提示挪到按钮上面一行、靠右对齐（0.17.6） */
+[data-orient='land'] .bar .hint { position: absolute; right: 0; bottom: calc(100% + var(--sp-2)); }
 /* "互动"按钮（kit 的 table-fun 画，view/fun.ts）放在这个空位：自己头像右边（名牌最长约 194），不进手牌那一排 */
 [data-orient='land'] .fun-slot { left: 212px; bottom: 102px; }
 [data-orient='land'] .banner.r0 { left: 50%; top: 66%; }
@@ -1804,6 +1826,11 @@ html .atf-btn svg {
 [data-orient='port'] .river.r3 { left: 100px; top: calc(var(--c) - 74px); width: 108px; flex-direction: row-reverse; }
 [data-orient='port'] .river.r1 { left: 352px; top: calc(var(--c) - 74px); width: 108px; }
 [data-orient='port'] .bar { left: 50%; bottom: 162px; height: 64px; transform: translateX(-50%); justify-content: center; }
+/* 竖屏一行放不下提示加三个按钮（字号放大以后，0.17.6）：提示挪到按钮上面一行，不缩字 */
+[data-orient='port'] .bar .hint { position: absolute; left: 50%; bottom: calc(100% + var(--sp-2)); transform: translateX(-50%); }
+@media (max-width: 600px) {
+  [data-orient='port'] .topbar > .title .var { display: none; }
+}
 /* 头像右边、手牌抬起来（离底 78）也碰不到 */
 [data-orient='port'] .fun-slot { left: 204px; bottom: 84px; }
 [data-orient='port'] .banner { font-size: 44px; }
@@ -2191,14 +2218,27 @@ html .atf-btn svg {
 }
 .vol input {
   width: 160px;
+  /* 滑块本身只有十来像素高，点按区撑到 --tap（屏幕上 44） */
+  height: max(44px, var(--tap));
+  margin: calc((max(44px, var(--tap)) - 20px) / -2) 0;
   accent-color: var(--gold);
+}
+/* 竖屏放不下一行（字号放大以后）：折成两行，滑块单独一行 */
+[data-orient='port'] .vol {
+  left: var(--sp-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+[data-orient='port'] .vol input {
+  flex: 1 0 100%;
 }
 
 /* 竖屏第一次进牌桌的"横过来玩更舒服"（view/guide.ts）：顶上居中一小条，手机图标转一下，点击穿透 */
 .rotate-tip {
   position: absolute;
   left: 50%;
-  top: 300px;
+  /* 在中间横幅（"换给上家"这些，竖屏在 34% 高）上面，不压住它 */
+  top: 210px;
   z-index: 70;
   display: flex;
   align-items: center;

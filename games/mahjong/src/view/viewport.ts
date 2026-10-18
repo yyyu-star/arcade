@@ -49,6 +49,8 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onChange: (o
     stage.style.setProperty('--tap', `${Math.ceil(44 / s)}px`);
     // kit 的"互动"按钮浮在舞台外面（屏幕像素），按这个倍数放大字和图标（style.css 的 .atf-btn）
     document.documentElement.style.setProperty('--stage-scale', s.toFixed(3));
+    // 字号同理：缩小的舞台上按倍数把字放回来，屏幕上的字不小于写的数（style.css 的 --fs-*）
+    document.documentElement.style.setProperty('--fs-k', Math.max(1, 1 / s).toFixed(3));
     if (o !== orient) {
       orient = o;
       stage.dataset.orient = o;
