@@ -54,8 +54,38 @@ export function worldWidthFor(w: number, h: number): number {
 /** 渲染倍数（1..3）：按实际可见区域 × DPR，iOS 封顶 2，省内存模式 1；算法见 device.ts。 */
 export const RENDER_SCALE = pickRenderScale();
 
-/** 字号只用几级，保证手机横屏上最小字也有约 10 CSS 像素（720 高缩到 390 时 ×0.54）。 */
+/**
+ * 字号只用几级（世界坐标）。电脑、平板上最小的 18 也有 16 CSS 像素以上；手机横屏整张画布缩到 ×0.52–0.54，18 只剩 9–10 像素，
+ * 由 typeFloor 的手机档托底（0.21.0 手机专项）。
+ */
 export const TYPE = { huge: 68, big: 40, title: 28, body: 23, label: 20, small: 18 } as const;
+
+/** 手机档的下限（CSS 像素）：字 12、数字 14（主线 2026-10-17 定） */
+export const TYPE_FLOOR_PX = { text: 12, num: 14 } as const;
+
+/**
+ * 字号下限（世界坐标）：按当前缩放，正文 12、数字 14 CSS 像素合多少。电脑 1:1、iPad 横屏 ×0.92 时比 TYPE 最小的 18 还小，等于不起作用；
+ * SE 横屏（667×375，×0.52）正文 24、数字 27。ui/kit.ts 的 text() 一律按它托底；放不下的地方删字，不缩字。窗口变了画面重建时重新算
+ */
+export function typeFloor(num: boolean): number {
+  if (typeof window === 'undefined') return 0;
+  const b = appBox();
+  return floorFor(b.w, b.h, num);
+}
+
+/**
+ * 手机档：字号下限已经比 TYPE.small 大（画布缩到 2/3 以下，手机横屏），排不下的地方按它删字（"本副打"、A×N 角标、说明行）。
+ * iPad 横屏（×0.92）、电脑都不是
+ */
+export function phoneType(): boolean {
+  return typeFloor(false) > TYPE.small;
+}
+
+/** 可见区域 w×h CSS 像素时的字号下限（纯函数，测试用） */
+export function floorFor(w: number, h: number, num: boolean): number {
+  const k = Math.min(w / worldWidthFor(w, h), h / GAME_HEIGHT);
+  return Math.ceil((num ? TYPE_FLOOR_PX.num : TYPE_FLOOR_PX.text) / k);
+}
 
 /** 间距刻度（世界坐标，4 的倍数）：留白、间隔只用这几级，不再到处写死数字 */
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

@@ -51,7 +51,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   （电脑"想一会儿"再出、等玩家、弹结算）。画面不自己判断牌型和大小：能否出牌用 `interpret` + `beats`，提示用 `hintList`（首条 null = 建议不要），
   一副结束时的"下副谁进贡"用 `dispatch(state, nextDeal)` 推演（纯函数，不改当前状态）。
 - 世界坐标高 720，宽 1280..1720 随窗口宽高比变（`worldWidthFor`）；画布按 `RENDER_SCALE`（1..3）倍像素绘制，相机同倍 zoom，
-  Text 的 resolution 同倍，SVG 按目标像素栅格化（`textures.ts`）。新加文字一律走 `ui/kit.ts` 的 `text()`，最小字号 18（手机上约 10 CSS 像素）。
+  Text 的 resolution 同倍，SVG 按目标像素栅格化（`textures.ts`）。新加文字一律走 `ui/kit.ts` 的 `text()`，最小字号 18；手机横屏 `text()` 按 `theme.ts` 的 `typeFloor` 托底到字 12、纯数字 14 CSS 像素（0.21.0），
+  放不下的地方按 `phoneType()` 删字（`fitWidth` 截断、少放一行），不缩字。改了画面跑 `npm run shot -- --gallery --audit --sizes 667x375,844x390` 看 `audit.md`。
 - 尺寸一律按实际可见区域（`device.ts` 的 `appBox`：visualViewport 量出的区域扣掉安全区），不用 `screen` 和 `100vh`——iOS Safari 的这两个是
   工具栏收起时的最大值，按它排顶栏会被地址栏盖住。`#app` 由 JS 钉成像素大小，CSS 里的 100vh/100dvh 只是 JS 跑之前的兜底（0.1.10）。
   尺寸没变不写、双指放大中不跟（`fitAppToViewport` 返回是否改了，改了才 `scale.refresh()`）。重建画面（换世界宽度 + `scene.restart`）会丢选牌、

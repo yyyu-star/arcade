@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { makeCard, type Card } from '../../core/index.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { CardView } from '../table/card.ts';
-import { text } from './kit.ts';
+import { fitWidth, text } from './kit.ts';
 
 const C = (spec: string): Card[] => {
   // 简写："S3 H7 SJ BJ"（S 黑桃 H 红桃 C 梅花 D 方块，SJ 小王 BJ 大王）
@@ -58,8 +58,13 @@ export function patternTile(scene: Phaser.Scene, x: number, y: number, p: Patter
   g.fillStyle(p.bomb ? 0xfbe3d8 : 0xf3e6c9, 1).fillRoundedRect(-w / 2, -58, w, 116, 12);
   g.lineStyle(2, p.bomb ? COLOR.red : 0xc9b48e, 1).strokeRoundedRect(-w / 2, -58, w, 116, 12);
   c.add(g);
-  c.add(text(scene, -w / 2 + 14, -38, p.name, { size: TYPE.body, bold: true, color: p.bomb ? COLOR.red : COLOR.ink, ox: 0 }));
-  c.add(text(scene, w / 2 - 12, -38, p.note, { size: TYPE.small, color: COLOR.muted, ox: 1 }));
+  const name = text(scene, -w / 2 + 14, -38, p.name, { size: TYPE.body, bold: true, color: p.bomb ? COLOR.red : COLOR.ink, ox: 0 });
+  c.add(name);
+  // 手机上字托底到 12 像素，"三连对 3 个连着的对子"这种一行放不下：说明从尾巴删字，剩不到三个字就不写（示例牌本身就说明了）
+  const room = w - 26 - name.width - 10;
+  const note = fitWidth(text(scene, w / 2 - 12, -38, p.note, { size: TYPE.small, color: COLOR.muted, ox: 1 }), room);
+  if (Array.from(note.text).length >= 4) c.add(note);
+  else note.destroy();
   // 示例牌放大到 54 宽（art-v3，手机上 44 宽的牌看不清点数）；6 张时总宽 184，格子 254 放得下
   const step = p.cards.length > 5 ? 26 : 32;
   const span = (p.cards.length - 1) * step;

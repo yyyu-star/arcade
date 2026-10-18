@@ -81,7 +81,8 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   };
   const rule = (label: string, items: { label: string; value: string }[], cur: string, pick: (v: string) => void): void => {
     y += P;
-    b.add(text(scene, colR, y, label, { size: TYPE.label, ox: 0 }));
+    // 手机上字托底到 12 像素，最长的一条（12 个字）会伸进右边的选项：按宽度折行
+    b.add(text(scene, colR, y, label, { size: TYPE.label, ox: 0, wrap: 250, align: 'left' }));
     b.add(segmented(scene, colR + 300, y, items, cur, pick, 92, P));
   };
   y -= P * 0.2;

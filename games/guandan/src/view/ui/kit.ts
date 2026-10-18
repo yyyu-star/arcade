@@ -3,7 +3,7 @@
  * 底板全用 Graphics 画（矢量，相机 zoom 后依然锐利），尺寸随用随定，不需要预烘焙贴图。
  */
 import Phaser from 'phaser';
-import { BUTTON, COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, RADIUS, RENDER_SCALE, SHADOW, TYPE, css, minHit } from '../theme.ts';
+import { BUTTON, COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, RADIUS, RENDER_SCALE, SHADOW, TYPE, css, minHit, typeFloor } from '../theme.ts';
 import { audio } from '../audio.ts';
 import { focusable, pushLayer } from './focus.ts';
 
@@ -64,11 +64,15 @@ function cjkWrap(text: string, obj: Phaser.GameObjects.Text, width: number): str
   return out;
 }
 
+/** 按数字托底的字：数字加上 ×、%、+-、小数点、斜杠和空格（"27"、"A×2" 不算，"×2" 算） */
+const NUMERIC = /^[\d\s×%+\-.,/:]+$/;
+
 export function text(scene: Phaser.Scene, x: number, y: number, str: string, o: TextOpts = {}): Phaser.GameObjects.Text {
   const family = o.font === 'title' ? FONT_TITLE : o.font === 'num' ? FONT_NUM : FONT;
   const style: Phaser.Types.GameObjects.Text.TextStyle = {
     fontFamily: family,
-    fontSize: `${o.size ?? TYPE.body}px`,
+    // 手机横屏按 typeFloor 托底：字 ≥ 12、纯数字（张数、比分、点数）≥ 14 CSS 像素
+    fontSize: `${Math.max(o.size ?? TYPE.body, typeFloor(o.font === 'num' || NUMERIC.test(str)))}px`,
     fontStyle: o.bold ? 'bold' : 'normal',
     color: css(o.color ?? COLOR.ink),
     align: o.align ?? 'center',
@@ -83,6 +87,17 @@ export function text(scene: Phaser.Scene, x: number, y: number, str: string, o: 
   const w = o.wrap;
   if (w !== undefined) style.wordWrap = { callback: (t: string, obj: Phaser.GameObjects.Text) => cjkWrap(t, obj, w) };
   return scene.add.text(x, y, str, style).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
+}
+
+/** 宽过 max 就从尾巴上删字、补"…"（手机档字号托底以后放不下的一行：删字，不缩字） */
+export function fitWidth(t: Phaser.GameObjects.Text, max: number): Phaser.GameObjects.Text {
+  if (t.width <= max) return t;
+  const chars = Array.from(t.text);
+  while (chars.length > 1 && t.width > max) {
+    chars.pop();
+    t.setText(`${chars.join('')}…`);
+  }
+  return t;
 }
 
 /** 按比例调亮调暗（×f），和美术那边按 [-1,1] 往黑白拉的 shade 不同 */

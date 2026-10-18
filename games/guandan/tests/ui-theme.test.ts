@@ -3,7 +3,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { NAME_MAX, fullSeatName, seatName, setSeatIdentities } from '../src/view/labels.ts';
-import { THEME_CSS, hitFor } from '../src/view/theme.ts';
+import { THEME_CSS, TYPE, floorFor, hitFor } from '../src/view/theme.ts';
 
 const viewSources = import.meta.glob(['../src/view/**/*.ts', '../src/main.ts'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
@@ -17,6 +17,23 @@ describe('点按区域至少 44 CSS 像素', () => {
     expect(hitFor(667, 375)).toBe(85);
     // 再小也封顶，免得按钮的点按区域盖满半屏
     expect(hitFor(320, 160)).toBe(96);
+  });
+});
+
+describe('手机档字号下限（0.21.0）：字 ≥ 12、数字 ≥ 14 CSS 像素', () => {
+  it('电脑、iPad 横屏比最小的 18 还小，不起作用；手机横屏托到 24 / 27 上下', () => {
+    expect(floorFor(1280, 720, false)).toBeLessThanOrEqual(TYPE.small);
+    expect(floorFor(1280, 720, true)).toBeLessThanOrEqual(TYPE.small);
+    expect(floorFor(1180, 820, true)).toBeLessThanOrEqual(TYPE.small);
+    expect(floorFor(667, 375, false)).toBe(24);
+    expect(floorFor(667, 375, true)).toBe(27);
+    expect(floorFor(844, 390, false)).toBe(23);
+    // 换回 CSS 像素一定不小于下限
+    for (const [w, h] of [[667, 375], [844, 390], [568, 320]] as const) {
+      const k = Math.min(w / 1280, h / 720);
+      expect(floorFor(w, h, false) * k).toBeGreaterThanOrEqual(12);
+      expect(floorFor(w, h, true) * k).toBeGreaterThanOrEqual(14);
+    }
   });
 });
 
