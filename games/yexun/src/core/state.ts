@@ -14,7 +14,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 18;
+export const RULES_VERSION = 19;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
