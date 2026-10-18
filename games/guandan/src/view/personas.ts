@@ -131,11 +131,12 @@ export interface Think {
 
 /**
  * 电脑的思考时间（毫秒，再经 dur 换算）：不要最快，跟牌稍慢，领出要想想，出炸弹前犹豫一下；要紧的一手再多想一会儿。
- * 太快了看不清谁出了什么，也没有"在博弈"的感觉；太慢又拖，所以封在 450–2600 毫秒。rand 给测试用
+ * 太快了看不清谁出了什么，也没有"在博弈"的感觉；太慢又拖。0.25.0 所有者嫌一把太慢，整体压到原来的约 6 成：
+ * 不要 0.3–0.5 秒、跟牌 0.5–0.9、领出 0.7–1.1、炸弹约 1 秒（再按性格、状态伸缩），封在 300–1600 毫秒。rand 给测试用
  */
 export function thinkTime(t: Think, rand: () => number = Math.random): number {
-  let ms = t.kind === 'pass' ? 550 : t.kind === 'bomb' ? 1500 : t.lead ? 1100 : 850;
-  ms += rand() * (t.kind === 'pass' ? 350 : 600);
+  let ms = t.kind === 'pass' ? 300 : t.kind === 'bomb' ? 950 : t.lead ? 700 : 500;
+  ms += rand() * (t.kind === 'pass' ? 200 : t.kind === 'bomb' ? 100 : 400);
   if (t.persona) {
     const tempo = TEMPO[t.persona];
     ms *= t.kind === 'bomb' ? tempo.bomb : tempo.base;
@@ -143,5 +144,9 @@ export function thinkTime(t: Think, rand: () => number = Math.random): number {
     ms *= 1 - (t.form ?? 0) * 0.12 - (t.tilt ?? 0) * 0.15 * (PERSONAS[t.persona].tilt > 0.5 ? 1 : 0.3);
   }
   if (t.tense && t.kind !== 'pass') ms *= 1.25;
-  return Math.round(Math.min(2600, Math.max(450, ms)));
+  return Math.round(Math.min(THINK_MAX, Math.max(THINK_MIN, ms)));
 }
+
+/** 思考时间的上下限（毫秒） */
+export const THINK_MIN = 300;
+export const THINK_MAX = 1600;

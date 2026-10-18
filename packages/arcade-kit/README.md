@@ -297,9 +297,11 @@ const fun = new TableFun({
   seats: (): (FunSeat | null)[] => view.seats.map((s, i) => s && ({
     rect: avatarRect(i),                         // 屏幕矩形（CSS 像素）；DOM 头像直接 getBoundingClientRect()
     name: s.name, me: i === 0, bot: s.bot, temper: s.temper,   // temper：'rowdy' | 'normal' | 'cool'
+    plate: plateRect(i),                         // 可选（0.18.2）：名字和筹码那一块，气泡不盖它
   })),
   avoid: () => [handRect(), actionBarRect()],    // 菜单、面板尽量不盖；放不下时选盖得最少的位置
   button: () => funButtonRect(),                 // "互动"按钮放哪；null 不画（没坐下）
+  buttonStyle: () => ({ scale: stageScale, row: true }),  // 可选（0.18.2）：按钮字和图标跟着牌桌放大（≥ 1），row = 图标和字横排；别再覆盖 .atf-btn
   send: (id, to) => (online ? client.emote(id, to) : fun.receive(0, id, to)),
   canSend: () => seated,
   hintSeat: () => (trickEmpty(1) ? 1 : null),     // 首次提示冒在哪家头像旁；null = 现在会挡住出牌，过 2 秒再问（0.17.0，不给就挑第一个电脑）
@@ -314,6 +316,8 @@ client.onEmote = (m) => fun.receive(m.from, m.id, m.to);   // 好友房收到的
 
 - **画布游戏**（Phaser 等）：`rect` 传头像换算到屏幕后的矩形，算法是 `canvas.getBoundingClientRect()` 的左上角加上"世界坐标 × 画布在屏幕上的缩放"。
   组件每次用到时现问，座位挪了、窗口变了都跟得上；窗口尺寸变了它自己 `refresh()`，游戏重排头像后也调一次。
+- **气泡位置**（0.18.2）：先朝牌桌中间那侧放，再试另一侧、上、下，挑和"互动"按钮、各家名牌（`plate`）、别家头像、`avoid` 盖得最少的一个；
+  纯函数 `placeBubble(anchor, w, h, view, avoid)` 在 `fun-logic` 里；聊天的版式（`chatMode`、`chatFont`、`danmakuLanes`、`pickLane`、`placeDock`、`barBottom`、`placeBeside`、`seatColor`，0.19.0）也在那里。
 - **房间的编号数**：`RoomGame.emotes` 填 `funIdCount(PHRASES.length)`（短语 + 12 表情 + 8 道具）。
 - **名场面**：游戏从**公开事件**里认出来，调 `fun.moment({ kind: 'moment', moment: 'bomb', winners: [0], losers: [1, 3], hand: 第几手 })`，
   单机时电脑按性格冲赢家撇嘴、或得意一下；要横幅就 `fun.banner('炸弹！', '小王 炸了 老李')`。
@@ -359,12 +363,34 @@ protected override onEmote(from: number, id: number, to?: number): void {
   传了 `onChat` 连接才带 `chat=1`，房间只给这样的连接发（旧页面不认识这条消息），所以不加 `PROTOCOL_VERSION`。
 - `client.chat(text)` 先在本地过一遍和房间一样的检查，不行直接返回原因（`chatRejectText(code, why)` 给说法）：链接"不能发链接"，号码"不能发号码，金额请写成 1,000,000"——
   标准千分位的金额（≤ 10 位）放行；太快的带 `waitMs`，"发送"按钮倒计时。
-- 界面：头像旁冒 4 秒气泡（能折行，同一个人后一条顶掉前一条）；"互动"面板多一个"聊天"页：最近 30 条（只在内存里）、输入框（16px，iOS 不放大页面）和"发送"，回车发；
+- 界面（0.18.0 的样子，0.19.0 的改动见下面）：头像旁冒 4 秒气泡（能折行，同一个人后一条顶掉前一条）；"互动"面板多一个"聊天"页：最近 30 条（只在内存里）、输入框（16px，iOS 不放大页面）和"发送"，回车发；
   键盘弹出时按 `visualViewport` 把面板挪到键盘上面；收起时有新消息，"互动"按钮上一个小红点。被屏蔽（单个、全部）的人说的不显示。
 - 平台的屏蔽名单（`docs/social.md` 3.1）要平台出一个 RPC，出了以后 kit 小版本接上（docs/chat.md 第 6 节，主线定的 B 方案）；现在只有 kit 的本地屏蔽。
 - **单机也能聊**（0.18.1）：`localChat(say, opts?)` 返回一个和 `client.chat` 一样用法的发送函数（结果同是 `ChatSendResult`），过同一套过滤和限速（默认 3 秒一条、一分钟 10 条，`words`、`ms`、`perMin` 可改），
   行就调 `say(打码后的字, masked)`。只在本机显示自己说的，不发到任何地方、不存；电脑不读、不回。接法：`const send = localChat((t, m) => fun.chat(mySeat, t, m)); new TableFun({ ..., chat: send })`。
-- 演示页 `demo/table-fun.html` 里能点开"聊天"页试（单机演示，右家隔一秒回一句）。
+- **0.19.0 聊天打磨**（`docs/chat.md` 第 5 节）：电脑上牌桌一角常驻聊天框（记录、快捷短语、输入框，可收起），手机上"互动"旁边一个"聊天"按钮（未读红点）+ 贴在手牌上面的输入条；
+  所有人说的话从右往左飘弹幕（"弹幕：开 / 关"，默认开，减少动态效果或省内存时默认关）；气泡按屏幕放大（电脑 18–22px、手机 ≥ 15px），最多两行，停 5 秒。
+  游戏不改代码就能用；要摆得准，给这几个（都可选）：
+
+  ```ts
+  new TableFun({
+    ...,
+    seats: () => view.seats.map((s, i) => s && ({ rect: avatarRect(i), plate: plateRect(i), name: s.name, me: i === 0 })),  // plate：名字和筹码那块，气泡、弹幕、聊天按钮都避开
+    center: () => [potRect(), wallRect(), discardRect()],   // 牌桌中间的信息区（剩余张数、底池、牌墩、弃牌区）：弹幕不横穿、聊天框和气泡不压
+    chatDock: () => ({ left: 24, top: tableTop + 12, width: 340, height: 0 }),  // 电脑版聊天框放哪（只用 left/top/width）；不给就自己挑角，可能压到牌墙
+    chatButton: () => chatButtonRect(),                      // 手机版"聊天"按钮放哪；不给就挨着"互动"按钮，挤的牌桌（手机横屏）最好给
+    danmakuArea: () => tableUpperHalf(),                      // 弹幕区；不给是屏幕 8%–58%，上沿压到对家那排名牌下面
+    lite: () => settings.lowmem,                              // 省内存模式：弹幕默认关
+    prefsKey: 'mygame.chat',                                  // 弹幕开关等存在哪；默认 '<storageKey>.chat'
+  });
+  settingsRow('弹幕', fun.danmaku(), (on) => fun.setDanmaku(on));  // 游戏设置里接同一份开关（可选）
+  ```
+
+  冒烟用的 `controls()` 多了：电脑版 `chat:dock`、`chat:input`、`chat:send`、`chat:phrase<i>`、`chat:danmaku`、`chat:more`、`chat:fold`（收起后是 `chat:open`）；
+  手机版 `chat:button`、`chat:bar`、`chat:input`、`chat:send`、`chat:phrase<i>`、`chat:history`、`chat:close`；面板聊天页多一个 `fun:danmaku`。`log` 多 `弹幕 开|关`、`聊天 输入条`。
+- **互动按钮的尺寸参数**（0.18.2）：`buttonStyle: () => ({ scale: stageScale, row: true })`，字（13px）和图标（22px）一起按 `scale`（≥ 1）放大，`row` 横排；手机的"聊天"按钮照同样画。
+  用它替掉游戏自己对 `.atf-btn` 的 CSS 覆盖；不传就不写行内样式，旧的覆盖照样生效（迁移不急）。
+- 演示页 `demo/table-fun.html` 里能直接试：右上聊天框打字，"电脑们说几句"看弹幕排轨道（单机演示，右家隔一秒回一句）。
 
 ## 分享卡和邀请（share、social，0.12.0）
 
@@ -674,6 +700,7 @@ packages/arcade-kit/
 │  ├─ fun.ts、fun-art.ts  快捷短语、表情、道具的画面层
 │  ├─ fun-logic.ts   牌桌互动的规则：冷却、护盾、连击、回敬、电脑反应、菜单位置（纯函数）
 │  ├─ table-fun.ts   牌桌互动组件 TableFun（DOM：头像菜单、面板、提示、聊天页）
+│  ├─ table-chat.ts  TableFun 里的聊天界面（0.19.0：电脑聊天框、手机输入条、弹幕、记录；不单独导出）
 │  ├─ chat.ts、chat-words.ts  好友房聊天的过滤和打码词表（纯函数）
 │  ├─ share.ts       分享卡（Canvas 画战绩图、系统分享或预览）
 │  ├─ qr.ts          二维码编码器（字节模式、纠错 M、版本 1–10，纯函数，分享卡用）

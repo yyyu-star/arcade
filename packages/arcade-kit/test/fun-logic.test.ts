@@ -5,6 +5,17 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  placeBubble,
+  DANMAKU,
+  barBottom,
+  chatFont,
+  chatMode,
+  danmakuLanes,
+  danmakuSpeed,
+  pickLane,
+  placeBeside,
+  placeDock,
+  seatColor,
   BOT_REACT,
   COUNTER,
   FUN_TIMING,
@@ -364,6 +375,43 @@ describe('botReact：名场面', () => {
   });
 });
 
+describe('placeBubble（0.18.2、0.19.1）', () => {
+  const view = { width: 390, height: 844 };
+  const me = { left: 20, top: 700, width: 60, height: 60 };
+  it('没东西挡：朝屏幕中心那侧、和头像顶边对齐（和以前一样）', () => {
+    expect(placeBubble(me, 120, 30, view)).toEqual({ left: 86, top: 694 });
+    const right = { left: 310, top: 300, width: 60, height: 60 };
+    expect(placeBubble(right, 120, 30, view)).toEqual({ left: 184, top: 294 });
+  });
+  it('右边是"互动"按钮（竖屏自己）：换到头像上方，不压按钮', () => {
+    const btn = { left: 86, top: 700, width: 60, height: 60 };
+    const at = placeBubble(me, 120, 30, view, [btn]);
+    expect(at.top + 30).toBeLessThanOrEqual(me.top);
+    expect(at.left + 120 <= btn.left || at.top + 30 <= btn.top).toBe(true);
+  });
+  it('朝中心那侧是对家的名牌：换一侧，不盖名字和筹码', () => {
+    const top = { left: 165, top: 80, width: 60, height: 60 };
+    const plate = { left: 231, top: 74, width: 100, height: 40 };
+    const at = placeBubble(top, 90, 30, view, [plate]);
+    expect(at.left + 90).toBeLessThanOrEqual(top.left);
+  });
+  it('压到叠在上面的按钮（hard）代价 ×3（0.19.1）：面积差不多时宁可擦一点名牌，也不钻到"互动"按钮底下', () => {
+    const edge = { left: 0, top: 700, width: 60, height: 60 };
+    const btn = { left: 66, top: 694, width: 40, height: 30 };
+    const plate = { left: 4, top: 664, width: 72, height: 30 };
+    const soft = [plate, { left: 94, top: 694, width: 30, height: 30 }, { left: 0, top: 766, width: 390, height: 78 }];
+    // 右边只压按钮 1200 + 900，上边压名牌 2160：按面积算选右边，按钮当 hard 算就换到上边
+    expect(placeBubble(edge, 120, 30, view, [...soft, btn])).toEqual({ left: 66, top: 694 });
+    expect(placeBubble(edge, 120, 30, view, soft, [btn])).toEqual({ left: 4, top: 664 });
+  });
+  it('四边都挡：选压得最少的，夹在屏幕里', () => {
+    const all = [{ left: 0, top: 0, width: 390, height: 844 }];
+    const at = placeBubble(me, 120, 30, view, all);
+    expect(at.left).toBeGreaterThanOrEqual(4);
+    expect(at.top + 30).toBeLessThanOrEqual(840);
+  });
+});
+
 describe('placeMenu', () => {
   const view = { width: 800, height: 600 };
   const W = 200;
@@ -499,5 +547,98 @@ describe('房间用的换算', () => {
     }
     expect(seen.size).toBeGreaterThan(3);
     expect(stickerMood('sleep')).toBeNull();
+  });
+});
+
+describe('聊天的版式（0.19.0）', () => {
+  const desk = { width: 1920, height: 1080 };
+  const phone = { width: 390, height: 844 };
+  const overlaps = (a: { left: number; top: number; width: number; height: number }, b: typeof a): boolean =>
+    a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+
+  it('电脑 / 手机按可见区分：宽 ≥ 960 且高 ≥ 560 是电脑；手机横屏、窄窗口都是手机', () => {
+    expect(chatMode(desk)).toBe('desk');
+    expect(chatMode({ width: 1280, height: 720 })).toBe('desk');
+    expect(chatMode({ width: 1024, height: 768 })).toBe('desk');
+    expect(chatMode(phone)).toBe('phone');
+    expect(chatMode({ width: 844, height: 390 })).toBe('phone');
+    expect(chatMode({ width: 1280, height: 500 })).toBe('phone');
+  });
+
+  it('字号：电脑 18–22px 跟着短边，手机 ≥ 15px', () => {
+    expect(chatFont(desk)).toBe(22);
+    expect(chatFont({ width: 1280, height: 720 })).toBe(18);
+    expect(chatFont({ width: 3840, height: 2160 })).toBe(22);
+    expect(chatFont(phone)).toBe(15);
+    expect(chatFont({ width: 1024, height: 600 }, 'phone')).toBe(16);
+    for (const v of [desk, phone, { width: 844, height: 390 }, { width: 1280, height: 720 }]) {
+      const f = chatFont(v);
+      expect(chatMode(v) === 'desk' ? f >= 18 && f <= 22 : f >= 15).toBe(true);
+    }
+  });
+
+  it('弹幕速度：横穿一屏约 8 秒，夹在上下限里', () => {
+    expect(danmakuSpeed(1920)).toBeCloseTo(0.24);
+    expect(danmakuSpeed(390)).toBeCloseTo(DANMAKU.minSpeed / 1000);
+    expect(danmakuSpeed(10_000)).toBeCloseTo(DANMAKU.maxSpeed / 1000);
+  });
+
+  it('弹幕轨道：不压名牌、头像、中间信息区；互不重叠；多了均匀挑', () => {
+    const area = { left: 0, top: 100, width: 1000, height: 400 };
+    const plate = { left: 20, top: 180, width: 120, height: 60 };
+    const center = { left: 400, top: 300, width: 200, height: 120 };
+    const lanes = danmakuLanes(area, 40, [plate, center], 6);
+    expect(lanes.length).toBeGreaterThanOrEqual(2);
+    for (const t of lanes) {
+      const row = { left: 0, top: t, width: 1000, height: 40 };
+      expect(overlaps(row, plate) || overlaps(row, center), `lane ${t}`).toBe(false);
+    }
+    for (let i = 1; i < lanes.length; i++) expect(lanes[i]! - lanes[i - 1]!).toBeGreaterThanOrEqual(40);
+    expect(danmakuLanes(area, 40, [], 3)).toHaveLength(3);
+  });
+
+  it('弹幕轨道：整片都被挡时只取压得最少的一条；区域放不下一行或 max 为 0 时没有轨道', () => {
+    const area = { left: 0, top: 0, width: 100, height: 100 };
+    const lanes = danmakuLanes(area, 20, [{ left: 0, top: 0, width: 100, height: 60 }, { left: 0, top: 60, width: 30, height: 40 }], 4);
+    expect(lanes).toEqual([60]);
+    expect(danmakuLanes({ ...area, height: 10 }, 20, [], 4)).toEqual([]);
+    expect(danmakuLanes(area, 20, [], 0)).toEqual([]);
+  });
+
+  it('挑轨道：从上往下第一条空出来的，都没空 -1', () => {
+    expect(pickLane([0, 0], 5)).toBe(0);
+    expect(pickLane([10, 3], 5)).toBe(1);
+    expect(pickLane([10, 9], 5)).toBe(-1);
+    expect(pickLane([], 5)).toBe(-1);
+  });
+
+  it('电脑版聊天框：左下被手牌占了就去右下、再去上面；上面两个角从屏高 9% 往下（不压顶栏）', () => {
+    const hand = { left: 0, top: 800, width: 1500, height: 280 };
+    expect(placeDock(desk, 360, 300, [])).toEqual({ left: 12, top: 1080 - 12 - 300 });
+    expect(placeDock(desk, 360, 300, [hand])).toEqual({ left: 1920 - 12 - 360, top: 768 });
+    const right = { left: 1500, top: 700, width: 420, height: 380 };
+    expect(placeDock(desk, 360, 300, [hand, right])).toEqual({ left: 12, top: 97 });
+  });
+
+  it('手机输入条：贴在下半屏手牌、按钮上面；它们占了大半屏就贴屏幕底', () => {
+    const hand = { left: 0, top: 760, width: 390, height: 84 };
+    const btn = { left: 140, top: 700, width: 60, height: 50 };
+    const avatarTop = { left: 0, top: 100, width: 60, height: 60 };
+    expect(barBottom(phone, 120, [hand, btn, avatarTop])).toBe(692);
+    expect(barBottom(phone, 120, [])).toBe(836);
+    expect(barBottom(phone, 120, [{ left: 0, top: 350, width: 390, height: 494 }])).toBe(342);
+    expect(barBottom({ width: 844, height: 390 }, 140, [{ left: 0, top: 170, width: 844, height: 220 }])).toBe(382);
+  });
+
+  it('"聊天"按钮挨着"互动"按钮：先右后左再上下，避开禁区', () => {
+    const btn = { left: 100, top: 700, width: 60, height: 50 };
+    expect(placeBeside(btn, 60, 50, phone, [])).toEqual({ left: 168, top: 700 });
+    expect(placeBeside(btn, 60, 50, phone, [{ left: 160, top: 690, width: 200, height: 80 }])).toEqual({ left: 32, top: 700 });
+  });
+
+  it('名字颜色按座位，循环使用，负数也不出错', () => {
+    expect(seatColor(0)).toBe(seatColor(8));
+    expect(seatColor(1)).not.toBe(seatColor(2));
+    expect(seatColor(-1)).toMatch(/^#/);
   });
 });

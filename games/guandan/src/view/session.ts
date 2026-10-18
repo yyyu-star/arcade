@@ -4,7 +4,7 @@
  */
 import { decide, styleOf, type PersonaId } from '../ai/index.ts';
 import { botFor, type SoloLevel, type Venue } from '../ai/venue.ts';
-import { createGame, dispatch, eventsFor, hashSeed, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../core/index.ts';
+import { SHORT_END_LEVEL, createGame, dispatch, eventsFor, hashSeed, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../core/index.ts';
 import { clearSave, getSettings, loadSave, recordDeal, recordGame, writeSave } from './store.ts';
 
 export const ME = 0;
@@ -80,7 +80,8 @@ export class Session implements TableSession {
 
   static fresh(seed: string, options?: Partial<Options>, difficulty?: SoloLevel): Session {
     const s = getSettings();
-    const { state, events } = createGame(seed, options ?? s.rules);
+    // 局长（0.25.0）只管娱乐单机：实盘的 stake.ts 自己用默认规则开，不经这里
+    const { state, events } = createGame(seed, options ?? { ...s.rules, ...(s.length === 'short' ? { endLevel: SHORT_END_LEVEL } : {}) });
     const ses = new Session(state, events, difficulty ?? s.difficulty);
     ses.save();
     return ses;

@@ -195,7 +195,6 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 }
 .btn--primary, .card__play { background: linear-gradient(180deg, var(--accent), var(--accent-deep)); color: var(--white); text-shadow: 0 1px 0 rgb(110 40 0 / 35%); }
 .btn--danger { background: var(--danger); color: var(--white); }
-.card__play--alt { background: var(--white); color: var(--ink); text-shadow: none; }
 .btn--small { min-height: 36px; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); box-shadow: var(--sh-sm); }
 .btn--big { font-size: var(--fs-lg); padding: var(--s-3) var(--s-6); }
 @media (hover: hover) {
@@ -298,8 +297,8 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 /* 标签和按钮一起贴着卡片底边：同一行卡片简介长短不一时，标签和按钮照样对齐 */
 .card__tags { list-style: none; padding: 0; margin: auto 0 0; padding-top: var(--s-1); display: flex; flex-wrap: wrap; gap: 6px; }
 .card__tags li { font-size: var(--fs-xs); line-height: 20px; padding: 0 var(--s-3); border: var(--bw-thin) solid var(--line); border-radius: var(--r-pill); background: var(--white); }
-.card__actions { padding-top: var(--s-2); display: flex; flex-wrap: wrap; gap: var(--s-3); }
-.card__play { min-width: 128px; }
+/* 卡片上只有一个按钮（0.25.1）：铺满卡片正文宽；标签那行用 margin-top: auto 把它压到卡底，同一行的卡按钮一样高 */
+.card__body > .card__play { align-self: stretch; margin-top: var(--s-2); }
 /* "今天 N 人玩过"：骑在封面和正文的分界线右边（0.10.26 起；原来压在封面右上角，挡住封面上的标题字），只盖住封面底边一小条 */
 .card__body { position: relative; }
 .card__playing {
@@ -316,8 +315,6 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
   .card--placeholder { min-height: 88px; }
-  /* 手机上两个按钮并排各占一半，好点 */
-  .card__actions .card__play { flex: 1 1 0; min-width: 0; padding: var(--s-3) var(--s-2); }
 }
 
 /* ---------- 面板、表单 ---------- */

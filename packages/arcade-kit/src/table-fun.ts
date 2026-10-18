@@ -10,11 +10,13 @@
  * - 公平：人人一样、免费；只是画面和声音，不停计时、不改规则；电脑的出牌不读这些。电脑的反应只在画面层（单机）或房间的互动钩子里算。
  * - kit 不认识任何游戏：短语表、名场面的映射、电脑人物都由游戏给。
  */
-import { CHAT_MAX, chatRejectText, type ChatBlockWhy } from './chat.js';
+import { chatRejectText } from './chat.js';
+import { CHAT_CSS, ChatUi, checkPrefsKey, type ChatResultLike } from './table-chat.js';
 import { applyTheme, type KitTheme } from './theme.js';
 import { PROPS, STICKERS, createFunLayer, propSvg, showSticker, stickerSvg, throwAt, type FunLayer, type FunPhase, type PropId, type RectLike, type StickerId } from './fun.js';
 import {
   BOT_REACT,
+  chatFont,
   FUN_TIMING,
   FunCooldown,
   FunTally,
@@ -22,6 +24,7 @@ import {
   funItem,
   newBotState,
   fitMenuWidth,
+  placeBubble,
   placeMenu,
   propId,
   stickerId,
@@ -36,7 +39,8 @@ import {
 } from './fun-logic.js';
 
 export * from './fun-logic.js';
-export type { RectLike };
+export type { RectLike, ChatResultLike };
+export { checkPrefsKey };
 
 /** 一个座位此刻的样子（每次用到时现问，座位换人、头像挪了都跟得上） */
 export interface FunSeat {
@@ -49,6 +53,8 @@ export interface FunSeat {
   bot?: boolean;
   /** 电脑的互动性格，默认 normal */
   temper?: FunTemper;
+  /** 名牌、筹码数这些挂在头像旁的东西（屏幕矩形，0.18.2）：气泡避开它们，不盖住名字和钱数 */
+  plate?: RectLike;
 }
 
 /**
@@ -76,6 +82,11 @@ export interface TableFunOptions {
   avoid?(): readonly RectLike[];
   /** "互动"按钮放哪（屏幕矩形，组件画按钮）；null 就不画（比如没坐下） */
   button?(): RectLike | null;
+  /**
+   * "互动"按钮的样子（0.18.2，替掉游戏自己对 .atf-btn 的 CSS 覆盖）：scale 把字（13px）和图标（22px）一起放大（舞台放大了的大屏用，最小 1）；
+   * row 为 true 时图标和字横排。每次 refresh 现问
+   */
+  buttonStyle?(): { scale?: number; row?: boolean };
   /** 发出去：好友房走 kit emote，单机直接回给 receive */
   send(id: number, to?: number): void;
   /** 现在能不能发（好友房：坐下了才能），默认能 */
@@ -92,6 +103,25 @@ export interface TableFunOptions {
   chat?(text: string): ChatResultLike;
   /** 设置里"聊天：开 / 不看"（和"互动"分开）：不看时别人说的不冒气泡、不进记录，自己也没有聊天页；默认开 */
   chatEnabled?(): boolean;
+  /**
+   * 聊天的设置（弹幕开关、电脑版聊天框收没收起）存在哪个 localStorage key（0.19.0）：必须是 `<storageKey>.<名字>`，比如 'texas.chat'；
+   * 默认 `<storageKey>.chat`，游戏不用传
+   */
+  prefsKey?: string;
+  /** 省内存模式（0.19.0）：开着时弹幕默认关（用户自己打开了照样飘）。不给就看 navigator.deviceMemory ≤ 2 */
+  lite?(): boolean;
+  /** 电脑版聊天框放哪（0.19.0，用 left、top、width）：不给就在牌桌四个角里挑一个不压手牌、按钮、名牌的 */
+  chatDock?(): RectLike | null;
+  /**
+   * 弹幕在哪个区域飘（0.19.0）：不给就是屏幕 8%–58%，上沿压到最上面一排座位的头像、名牌下面；轨道自动避开手牌、按钮、名牌、头像、center
+   */
+  danmakuArea?(): RectLike | null;
+  /** 手机版"聊天"按钮放哪（0.19.0，屏幕矩形）：不给就挨着"互动"按钮，先右后左再上下挑不压东西的一侧；挤的牌桌（手机横屏）最好给 */
+  chatButton?(): RectLike | null;
+  /**
+   * 牌桌中间的信息区（0.19.0）：剩余张数、底池、牌墩、出牌区、弃牌区这些，弹幕不横穿、聊天框和气泡不压。可以给几块
+   */
+  center?(): RectLike[];
   /** 设置里"互动：开 / 不看"，关了别人的一律不播，单机电脑也不反应；默认开 */
   enabled?(): boolean;
   /** 屏蔽名单按这个分开（房间码；单机一个固定值），默认 'solo' */
@@ -129,10 +159,8 @@ const DEFAULT_LINES: Record<FunMood, readonly string[]> = {
 const HINT_TEXT = '点头像扔道具，长按连扔';
 
 /** RoomClient.chat 的结果里组件要看的部分（不 import client.ts，单机的游戏也能用组件） */
-export type ChatResultLike = { ok: true } | { ok: false; code: string; why?: ChatBlockWhy; waitMs?: number };
-
-/** 聊天：气泡停多久、页面里记最近几条（只在内存里） */
-export const CHAT_UI = { bubbleMs: 4000, keep: 30 } as const;
+/** 聊天：气泡停多久（0.19.0 起 5 秒）、页面里记最近几条（只在内存里） */
+export const CHAT_UI = { bubbleMs: 5000, keep: 30 } as const;
 
 /**
  * 首次提示冒在哪个座位（纯函数，测试直接测）：游戏给了 pick 就听它的，它给的座位空着或不存在当作"现在不行"；
@@ -165,27 +193,39 @@ const CSS = `
 .atf-cool{position:absolute;inset:0;border-radius:var(--ak-radius-btn,10px);background:rgba(0,0,0,.5);pointer-events:none}
 .atf-cool::after{content:'';position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:var(--ak-title,#f3d98b);animation:atf-spin .7s linear infinite}
 .atf-btn{position:absolute;left:0;top:0;pointer-events:auto;min-width:44px;min-height:44px;border-radius:var(--ak-radius-btn,22px);border:2px solid var(--ak-border,#d4a64a);background:var(--ak-soft,#5a3a22);color:var(--ak-fg,#fff6e0);font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px 6px;box-sizing:border-box}
-.atf-btn svg{width:22px;height:22px}
+.atf-btn svg{width:var(--atf-icon,22px);height:var(--atf-icon,22px)}
 .atf-btn.atf-dot::after{content:'';position:absolute;right:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#e8323a;border:2px solid var(--ak-fg,#fff6e0)}
-.atf-say{white-space:normal;max-width:240px;word-break:break-all;font-weight:600}
+.atf-say{font-weight:600}
 .atf-log{display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.4;min-height:44px}
 .atf-log b{color:var(--ak-title,#f3d98b);font-weight:700;margin-right:4px}
 .atf-log .atf-empty{opacity:.6}
 .atf-input{flex:1;min-width:0;min-height:44px;border:1px solid var(--ak-border,rgba(212,166,74,.6));border-radius:var(--ak-radius-btn,10px);background:#fffaf0;color:#2b1d14;font:inherit;font-size:16px;padding:0 10px;box-sizing:border-box}
 .atf-note{font-size:13px;margin:4px 4px 0;opacity:.85;min-height:18px}
 .atf-chip:disabled{opacity:.5;cursor:default}
-.atf-bubble{position:absolute;left:0;top:0;max-width:220px;padding:6px 12px;border-radius:var(--ak-radius,14px);background:#fffaf0;color:#2b1d14;font-size:15px;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.atf-bubble{position:absolute;left:0;top:0;z-index:2;max-width:240px;padding:.35em .75em;border-radius:var(--ak-radius,14px);background:#fffaf0;color:#2b1d14;font-size:15px;line-height:1.3;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.35);white-space:normal;word-break:break-all;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;pointer-events:none}
 .atf-flash{position:absolute;left:0;top:0;font-size:26px;font-weight:900;color:var(--ak-title,#f3d98b);-webkit-text-stroke:1.5px #2b1d14;pointer-events:none;white-space:nowrap}
 .atf-banner{position:absolute;left:50%;top:18%;padding:10px 34px;background:linear-gradient(#c8323a,#8a1a20);border:2px solid var(--ak-title,#f3d98b);border-radius:6px;color:var(--ak-fg,#fff6e0);font-size:28px;font-weight:900;letter-spacing:4px;text-align:center;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
 .atf-banner small{display:block;font-size:15px;letter-spacing:1px;color:var(--ak-title,#f3d98b)}
 @keyframes atf-pop{from{opacity:0;scale:.92}to{opacity:1;scale:1}}
 @keyframes atf-spin{to{transform:rotate(360deg)}}
-`;
+${CHAT_CSS}`;
 
 const SMILE = '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle cx="32" cy="32" r="24"/><circle cx="23" cy="27" r="2.5" fill="currentColor"/><circle cx="41" cy="27" r="2.5" fill="currentColor"/><path d="M20 37Q32 49 44 37"/></svg>';
 
 type Rect = { left: number; top: number; width: number; height: number };
 type Tab = 'phrase' | 'sticker' | 'prop' | 'chat';
+
+/**
+ * "互动" / "聊天"按钮的尺寸参数（0.18.2）：游戏没给 buttonStyle 就不写行内样式（不然会盖掉还没迁过来的游戏自己对 .atf-btn 的 CSS）
+ */
+export function styleButton(b: HTMLElement, st: { scale?: number; row?: boolean } | undefined): void {
+  const k = Math.max(1, st?.scale ?? 1);
+  b.style.fontSize = st ? `${13 * k}px` : '';
+  b.style.flexDirection = st?.row ? 'row' : '';
+  b.style.gap = st?.row ? `${6 * k}px` : '';
+  if (st) b.style.setProperty('--atf-icon', `${22 * k}px`);
+  else b.style.removeProperty('--atf-icon');
+}
 
 /** 挂子元素（Workers 的类型里也有一个 append，签名对不上，所以统一用 appendChild） */
 function add(parent: Node, ...kids: Node[]): void {
@@ -218,12 +258,13 @@ export class TableFun {
   private lastProp: PropId = 'tomato';
   private lastSticker: StickerId = 'smug';
   private timers = new Set<ReturnType<typeof setTimeout>>();
-  /** 聊天记录（最近 CHAT_UI.keep 条，只在内存里；关页面、换房间就没了） */
-  private chatLog: { seat: number; name: string; text: string }[] = [];
+  /** 聊天框、输入条、弹幕、记录（0.19.0，table-chat.ts） */
+  private readonly cui: ChatUi;
   private chatLogEl: HTMLElement | null = null;
   /** 每个人最近的那个聊天气泡：同一个人连说两条，后一条顶掉前一条 */
   private says = new Map<number, HTMLElement>();
-  private unread = false;
+  /** 正在显示的气泡：新气泡也避开它们，不叠在一起 */
+  private live = new Set<HTMLElement>();
   /** 键盘弹出时跟着可见区挪面板（输入框聚焦时挂上） */
   private vvFix: (() => void) | null = null;
   private dead = false;
@@ -232,6 +273,7 @@ export class TableFun {
   constructor(opts: TableFunOptions) {
     // 先查 key 再碰 DOM：不合格的不留下半个界面
     checkStorageKey(opts.storageKey);
+    const prefsKey = checkPrefsKey(opts.prefsKey ?? `${opts.storageKey}.chat`, opts.storageKey);
     this.o = opts;
     this.P = opts.phrases.length;
     this.doc = document;
@@ -248,6 +290,32 @@ export class TableFun {
     this.ui.style.zIndex = String(z + 1);
     applyTheme(this.ui, opts.theme);
     this.doc.body.appendChild(this.ui);
+    this.cui = new ChatUi({
+      ui: this.ui,
+      fx: this.layer.el,
+      prefsKey,
+      phrases: opts.phrases,
+      phrase: (i) => void this.pick(i),
+      send: (t) => this.o.chat!(t),
+      canSend: () => this.canSend(),
+      blocked: () => this.blocked(),
+      bubbles: () => [...this.live].map((e) => e.getBoundingClientRect()),
+      seatBoxes: () => this.o.seats().flatMap((x) => (x ? [x.rect, ...(x.plate ? [x.plate] : [])] : [])),
+      barBlocked: () => {
+        const me = this.o.seats().find((x) => !!x?.me);
+        return [...(this.o.avoid?.() ?? []), ...(this.btn ? [this.btn.getBoundingClientRect()] : []), ...(me ? [me.rect, ...(me.plate ? [me.plate] : [])] : [])];
+      },
+      button: () => (this.btn ? this.btn.getBoundingClientRect() : null),
+      styleButton: (b) => styleButton(b, this.o.buttonStyle?.()),
+      dock: () => this.o.chatDock?.() ?? null,
+      chatButton: () => this.o.chatButton?.() ?? null,
+      area: () => this.o.danmakuArea?.() ?? null,
+      lite: () => this.o.lite?.() ?? ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 2,
+      history: () => this.openPanel('chat'),
+      later: (ms, fn) => this.later(ms, fn),
+      now: () => this.now(),
+      ...(opts.log ? { log: opts.log } : {}),
+    });
     window.addEventListener('resize', this.onResize);
     this.refresh();
     this.later(1500, () => this.hint());
@@ -307,7 +375,6 @@ export class TableFun {
         b.className = 'atf-btn';
         b.type = 'button';
         b.innerHTML = `${SMILE}<span>互动</span>`;
-        b.classList.toggle('atf-dot', this.unread);
         b.addEventListener('click', (e) => {
           e.stopPropagation();
           if (this.open?.dataset['kind'] === 'panel') this.closeAll();
@@ -316,10 +383,33 @@ export class TableFun {
         this.ui.appendChild(b);
         this.btn = b;
       }
+      styleButton(this.btn, this.o.buttonStyle?.());
       this.btn.style.width = `${Math.max(44, r.width)}px`;
       this.btn.style.height = `${Math.max(44, r.height)}px`;
       this.btn.style.transform = `translate(${r.left}px,${r.top}px)`;
     }
+    this.cui.refresh(this.chatOn());
+  }
+
+  /** 聊天框、弹幕、气泡不能盖的地方：游戏的禁区、"互动"按钮、各家头像和名牌 */
+  private blocked(): RectLike[] {
+    const out: RectLike[] = [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? [])];
+    if (this.btn) out.push(this.btn.getBoundingClientRect());
+    for (const s of this.o.seats()) {
+      if (!s) continue;
+      out.push(s.rect);
+      if (s.plate) out.push(s.plate);
+    }
+    return out;
+  }
+
+  /** 弹幕开着吗（游戏设置里显示用，0.19.0） */
+  danmaku(): boolean {
+    return this.cui.danmaku();
+  }
+  /** 游戏设置里改弹幕开关（和聊天框、面板里的"弹幕"按钮同一份设置） */
+  setDanmaku(on: boolean): void {
+    this.cui.setDanmaku(on);
   }
 
   /** 头像热区：点一下开菜单（别人）或表情菜单（自己）；按住 longPressMs 直接扔上次的道具 / 发上次的表情 */
@@ -505,6 +595,7 @@ export class TableFun {
   /** "互动"按钮：短语 / 表情 / 道具三个页签；道具页先选人再选道具 */
   openPanel(tab: Tab = this.tab): void {
     if (!this.canSend() || !this.btn) return;
+    this.cui.closeBar();
     this.tab = tab;
     const r = this.btn.getBoundingClientRect();
     const hasChat = this.chatOn();
@@ -570,6 +661,7 @@ export class TableFun {
   closeAll(): void {
     this.open?.remove();
     this.open = null;
+    this.cui.bindLog(null, this.chatLogEl);
     this.chatLogEl = null;
     this.unhookViewport();
   }
@@ -580,84 +672,21 @@ export class TableFun {
     return !!this.o.chat && (this.o.chatEnabled?.() ?? true);
   }
 
-  /** 聊天页：上面最近 30 条（新的在下），下面一行输入框 + 发送，再下面一行小字（还能打几个字、为什么没发出去） */
+  /** 聊天页：上面最近 30 条（新的在下，名字按座位配色），弹幕开关，下面一行输入框 + 发送，再下面一行小字（还能打几个字、为什么没发出去） */
   private chatBody(b: HTMLDivElement, body: HTMLDivElement): void {
-    this.setUnread(false);
+    this.cui.setUnread(false);
     // 记录自己滚，输入框一直在下面看得见
     const log = this.el('div', 'atf-log atf-scroll');
     log.style.maxHeight = '160px';
     this.chatLogEl = log;
-    this.renderLog();
-    add(body, log);
-    const row = this.el('div', 'atf-row');
+    this.cui.bindLog(log);
+    const dm = this.cui.chip(this.cui.danmakuLabel(), 'fun:danmaku', () => this.cui.setDanmaku(!this.cui.danmaku()), 'atf-soft');
+    dm.style.marginTop = '6px';
+    const { row, note, input } = this.cui.inputRow('fun');
     row.style.marginTop = '8px';
-    row.style.flexWrap = 'nowrap';
-    const input = this.el('input', 'atf-input');
-    input.type = 'text';
-    input.enterKeyHint = 'send';
-    input.autocomplete = 'off';
-    input.placeholder = '说点什么';
-    input.dataset['key'] = 'fun:chatInput';
-    const send = this.chip('发送', 'fun:chatSend', () => go());
-    const note = this.el('div', 'atf-note');
-    const left = (): void => {
-      const n = CHAT_MAX - Array.from(input.value.trim()).length;
-      note.textContent = n < 0 ? `多了 ${-n} 个字` : `还能打 ${n} 个字`;
-      send.disabled = n < 0 || send.dataset['wait'] === '1';
-    };
-    const go = (): void => {
-      if (!input.value.trim() || send.disabled) return;
-      const r = this.o.chat!(input.value);
-      if (r.ok) {
-        input.value = '';
-        left();
-        return;
-      }
-      note.textContent = chatRejectText(r.code, r.why);
-      if (r.code === 'chat_too_fast' && r.waitMs) this.countdown(send, r.waitMs, left);
-    };
-    input.addEventListener('input', left);
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter' && !e.isComposing) go();
-    });
     input.addEventListener('focus', () => this.hookViewport(b));
-    add(row, input, send);
-    add(body, row, note);
-    left();
+    add(body, log, dm, row, note);
     body.style.maxHeight = '';
-    log.scrollTop = log.scrollHeight;
-  }
-
-  /** 被限速时"发送"按钮倒计时，到点恢复 */
-  private countdown(btn: HTMLButtonElement, ms: number, done: () => void): void {
-    btn.dataset['wait'] = '1';
-    btn.disabled = true;
-    const end = this.now() + ms;
-    const tick = (): void => {
-      const s = Math.ceil((end - this.now()) / 1000);
-      if (s <= 0 || !btn.isConnected) {
-        btn.textContent = '发送';
-        delete btn.dataset['wait'];
-        done();
-        return;
-      }
-      btn.textContent = `${s} 秒`;
-      this.later(Math.min(1000, end - this.now()), tick);
-    };
-    tick();
-  }
-
-  private renderLog(): void {
-    const log = this.chatLogEl;
-    if (!log) return;
-    log.replaceChildren();
-    if (this.chatLog.length === 0) add(log, this.el('div', 'atf-empty', '还没人说话。这里的话不保存，房间散了就没了'));
-    for (const m of this.chatLog) {
-      const row = this.el('div', '');
-      add(row, this.el('b', '', `${m.name}：`), this.doc.createTextNode(m.text));
-      add(log, row);
-    }
     log.scrollTop = log.scrollHeight;
   }
 
@@ -691,11 +720,6 @@ export class TableFun {
     this.vvFix = null;
   }
 
-  private setUnread(on: boolean): void {
-    this.unread = on;
-    this.btn?.classList.toggle('atf-dot', on);
-  }
-
   /**
    * 有人说了一句（好友房 RoomClient 的 onChat 交进来）：头像旁冒 4 秒气泡、记进聊天页。
    * 别人说的在"聊天：不看"、被屏蔽（单个或全部屏蔽）时一律不显示；面板没开在聊天页时"互动"按钮上亮个小红点
@@ -705,25 +729,25 @@ export class TableFun {
     const src = this.seat(from);
     if (!src) return;
     if (!src.me && (!(this.o.chatEnabled?.() ?? true) || this.isBlocked(from))) return;
-    this.chatLog.push({ seat: from, name: src.me ? '我' : src.name, text });
-    while (this.chatLog.length > CHAT_UI.keep) this.chatLog.shift();
-    this.says.get(from)?.remove();
+    const old = this.says.get(from);
+    if (old) {
+      this.live.delete(old);
+      old.remove();
+    }
     const bb = this.bubble(from, text, CHAT_UI.bubbleMs, 'atf-say');
     if (bb) this.says.set(from, bb);
-    if (this.chatLogEl) this.renderLog();
-    else if (!src.me) this.setUnread(true);
+    this.cui.push({ seat: from, name: src.me ? '我' : src.name, text, me: !!src.me }, !!this.chatLogEl);
     this.o.log?.(`聊天 ${from}`);
   }
 
   /** 房间拒了一条（RoomClient 的 onChatError）：聊天页开着就在小字那行说一声 */
   chatError(code: string): void {
-    const note = this.open?.querySelector<HTMLElement>('.atf-note');
-    if (note) note.textContent = chatRejectText(code);
+    this.cui.note(chatRejectText(code));
   }
 
   /** 有菜单或面板开着（游戏可以据此暂停自己的快捷键） */
   isOpen(): boolean {
-    return this.open !== null;
+    return this.open !== null || this.cui.typing();
   }
 
   // ───────────── 屏蔽（只是自己不看；这一局 / 这个房间有效） ─────────────
@@ -778,7 +802,10 @@ export class TableFun {
     if (!src || (!src.me && (!this.enabled() || this.isBlocked(from)))) return;
     if (it.kind === 'phrase') {
       const t = to !== undefined && to !== from ? this.seat(to) : null;
-      this.bubble(from, `${t ? `@${t.name} ` : ''}${this.o.phrases[it.index] ?? ''}`);
+      const say = `${t ? `@${t.name} ` : ''}${this.o.phrases[it.index] ?? ''}`;
+      this.bubble(from, say);
+      // 短语也是说话：有聊天的时候进记录、飘弹幕（0.19.0）
+      if (this.chatOn()) this.cui.push({ seat: from, name: src.me ? '我' : src.name, text: say, me: !!src.me }, !!this.chatLogEl);
       this.o.log?.(`短语 ${from}:${it.index}`);
     } else if (it.kind === 'sticker') {
       const name = STICKERS[it.index]!;
@@ -849,19 +876,41 @@ export class TableFun {
 
   // ───────────── 小效果 ─────────────
 
-  /** 头像旁的一句话：朝屏幕中间那侧冒，2.4 秒后淡出；cls 加样式（聊天的气泡能折行） */
+  /**
+   * 头像旁的一句话：2.4 秒后淡出（聊天 5 秒）。字号跟着屏幕（0.19.0：电脑 18–22px、手机 ≥ 15px），最多两行折行；
+   * 位置挑不压"互动"按钮、聊天框、各家名牌筹码和别人头像的一侧
+   */
   bubble(seat: number, text: string, ms = 2400, cls = ''): HTMLElement | undefined {
     const s = this.seat(seat);
     if (!s) return undefined;
     const b = this.el('div', `atf-bubble ${cls}`.trim(), text);
+    const view = { width: window.innerWidth, height: window.innerHeight };
+    const fs = chatFont(view);
+    // 一行约 16 个字：30 个字的聊天两行放得下
+    const maxW = Math.min(fs * 16 + 24, view.width - 16);
+    b.style.fontSize = `${fs}px`;
+    b.style.maxWidth = `${maxW}px`;
     this.layer.el.appendChild(b);
-    const w = Math.min(cls ? 240 : 220, b.offsetWidth || text.length * 15 + 24);
-    const cx = s.rect.left + s.rect.width / 2;
-    const right = cx < window.innerWidth / 2;
-    const x = Math.max(4, Math.min(window.innerWidth - w - 4, right ? s.rect.left + s.rect.width + 6 : s.rect.left - 6 - w));
-    const y = Math.max(4, s.rect.top - 6);
-    b.style.transform = `translate(${x}px,${y}px)`;
-    void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160).then(() => anim(b, [{ opacity: 1 }, { opacity: 0 }], 260, ms)).then(() => b.remove());
+    const w = Math.min(maxW, b.offsetWidth || text.length * fs + 24);
+    const h = b.offsetHeight || fs * 1.6;
+    // 避开"互动"按钮、各家的名牌筹码和别人的头像（0.18.2）：原来总往朝中心那侧放，竖屏自己的气泡被按钮压住半截
+    // 按钮、聊天框叠在气泡上面（DOM 层在效果层之上），压到了字就看不见：单独当"硬"禁区，代价 ×3（0.19.1）
+    const avoid: RectLike[] = [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())];
+    const hard: RectLike[] = [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])];
+    this.o.seats().forEach((o, i) => {
+      if (!o) return;
+      if (o.plate) avoid.push(o.plate);
+      if (i !== seat) avoid.push(o.rect);
+    });
+    const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid, hard);
+    b.style.transform = `translate(${at.left}px,${at.top}px)`;
+    this.live.add(b);
+    void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160)
+      .then(() => anim(b, [{ opacity: 1 }, { opacity: 0 }], 260, ms))
+      .then(() => {
+        this.live.delete(b);
+        b.remove();
+      });
     return b;
   }
 
@@ -933,13 +982,15 @@ export class TableFun {
     this.hots.forEach((h, i) => {
       if (h.style.display !== 'none') out[`fun:seat${i}`] = c(h);
     });
-    this.open?.querySelectorAll<HTMLElement>('[data-key]').forEach((e) => (out[e.dataset['key']!] = c(e)));
+    // 菜单、面板、聊天框、手机的"聊天"按钮和输入条（data-key 在 .atf-ui 里唯一）
+    this.ui.querySelectorAll<HTMLElement>('[data-key]').forEach((e) => (out[e.dataset['key']!] = c(e)));
     return out;
   }
 
   destroy(): void {
     this.dead = true;
     this.unhookViewport();
+    this.cui.destroy();
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     window.removeEventListener('resize', this.onResize);

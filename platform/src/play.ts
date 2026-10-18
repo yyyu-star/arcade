@@ -6,11 +6,6 @@ export function playUrl(g: GameEntry): string {
   return import.meta.env.DEV && g.devUrl ? g.devUrl : g.path;
 }
 
-/** 好友房入口的地址；游戏没有好友房时为 null。 */
-export function onlineUrl(g: GameEntry): string | null {
-  return g.online ? `${playUrl(g)}?${g.online.query}` : null;
-}
-
 /**
  * /login?from=<id> 登录后回哪里：只认游戏目录里的 id，别的值（包括网址）一律不认，
  * 免得这个链接被拿来把人带到外站（docs/platform-backend.md 5.7）。

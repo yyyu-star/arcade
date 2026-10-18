@@ -504,6 +504,9 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
   - 好友房聊天（0.19.0，kit 0.18.0，`docs/chat.md`）：房间 `chat: true`，kit 过滤（链接、号码、微信 QQ 整条拒发，脏话打码）、按座位限速后只转发给带 `chat=1` 的连接，不写存储、不进快照，电脑不读；
     页面 `Online` 把 onChat / onChatError 交给 TableFun 的 `chat` / `chatError`（房间座位号就是牌桌座位号，不用换算）；声音面板"聊天：开 / 不看"（`mahjong.chatOff`，只在好友房出现），不看只挡别人说的。
     房间测试走真实进房路由测转发、拒发手机号、没带 chat=1 的旧页面收不到。
+    摆放（0.20.0，kit 0.19.0）：plate 是整块名牌加头上的倒计时（`table.ts` 的 `plateRect`）；center 是中控盘和四家弃牌区；电脑版聊天框（chatDock）在左上家名牌下面、左家竖排手牌右边，
+    kit 自己挑会放到左下压住我的名牌；手机版"聊天"按钮在右下家名牌正上方（挨着"互动"会压名牌，摞上去会压操作条）；弹幕在对家那排下面、中控盘上面；顶栏也加进 avoid（上家的气泡会盖房间号）。
+    弹幕开关存在 kit 默认的 `mahjong.chat`，声音面板"弹幕：开 / 关"接同一份。
     单机（0.19.2）：TableFun 传 kit 的 `localChat((t, m) => fun.chat(0, t, m))`，过滤、限速和房间一样，只在本地显示；说的话不进 `Solo`、不给电脑（`test/arch.test.ts`：规则、电脑、`solo.ts` 不 import `arcade-kit/chat`、`table-fun`）。
   - 设置：总开关"互动：开 / 不看"在顶栏"声"的小面板里（`mahjong.comms`）；"屏蔽他""全部屏蔽"在 kit 的菜单和面板里，按房间分开（sessionStorage）。只是自己不看，牌局照常。
   - 0.10.1 去掉了自己那套（菜单、面板、冷却、连击回敬、电脑反应、按性格的台词 `VOICES`、催促炸弹）：kit 里没有催促炸弹，规范也没有，不另做。
@@ -603,6 +606,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | `mahjong.prefs` | 声音、茶馆底噪（0.17.4）、振动、速度、上次选的档位、娱乐难度和玩法 |
 | `mahjong.comms` | 互动的总开关关着（"不看"） |
 | `mahjong.chatOff` | 好友房聊天关着（"聊天：不看"，0.19.0） |
+| `mahjong.chat` | kit 的聊天设置：弹幕开关、电脑版聊天框收没收起（0.20.0） |
 | `mahjong.nick` | 单独部署时好友房里的昵称 |
 | `mahjong.guide` | 新手引导看过没有 |
 | `mahjong.hint.rotate` | 竖屏"横过来玩更舒服"的提示出过没有 |
@@ -723,3 +727,4 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
 | 0.19.0 | 好友房聊天（kit 0.18.0）：房间 `chat: true`，页面 onChat 交给 TableFun，设置"聊天：开 / 不看" |
 | 0.19.1 | 好友房顶栏房间号不截：窄竖屏藏档位（`.var`，≤600 宽），≤380 宽再藏"好友房"（`.pre`） |
 | 0.19.2 | 单机聊天（kit 0.18.1 的 `localChat`）：只在本地冒气泡，电脑、`Solo` 不读（`test/arch.test.ts` 守着） |
+| 0.20.0 | 聊天打磨（kit 0.19.0）：传 plate、center、chatDock、chatButton、danmakuArea、lite；声音面板"弹幕：开 / 关" |

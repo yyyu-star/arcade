@@ -14,7 +14,7 @@ export const SHARE_ACCENT = '#b3202a';
 /** 这一张分享的是什么 */
 export type ShareKind =
   /** 娱乐：整局打完（单机或好友房） */
-  | { kind: 'game'; win: boolean; room: string | null }
+  | { kind: 'game'; win: boolean; room: string | null; /** 赢下整局要做到的（labels.ts 的 goalWord，0.25.0）；不给是"过 A" */ goal?: string }
   /** 实盘：一场结算（单机或好友房）；points 是这一场的分，chips 是折成的筹码 */
   | { kind: 'stake'; tier: keyof typeof TIER_NAME; points: number; chips: number; deals: number; room: string | null };
 
@@ -27,7 +27,7 @@ export function myTitle(titles: readonly Title[]): Title | null {
 function lineOf(k: ShareKind, log: MatchLog, title: Title | null): string {
   if (title) return `${TITLE_INFO[title.id].name}：${title.why}`;
   if (log.firsts[0]! > 0) return `拿了 ${log.firsts[0]} 次头游`;
-  if (k.kind === 'game') return k.win ? '和对家一路打过 A' : '差一点就过 A 了，下局再来';
+  if (k.kind === 'game') return k.win ? `和对家一路${(k.goal ?? '过 A').replace('过', '打过')}` : `差一点就${!k.goal || k.goal === '过 A' ? '过 A 了' : k.goal}，下局再来`;
   return k.points > 0 ? '赢了一场实盘' : k.points < 0 ? '这场手气差了点' : '不输不赢，打了个平手';
 }
 
@@ -60,11 +60,11 @@ export function shareCardOf(k: ShareKind, log: MatchLog, titles: readonly Title[
   ];
   const big =
     k.kind === 'game'
-      ? { value: k.win ? '胜利' : '惜败', label: k.win ? '我方先过 A' : '对方先过了 A' }
+      ? { value: k.win ? '胜利' : '惜败', label: k.win ? `我方先${k.goal ?? '过 A'}` : `对方先${!k.goal || k.goal === '过 A' ? '过了 A' : k.goal}` }
       : { value: signed(k.chips), label: `筹码（${signed(k.points)} 分）` };
   return {
     game: '掼蛋',
-    title: k.kind === 'game' ? `${where} · 打到 A` : `${where} · 实盘${TIER_NAME[k.tier]}`,
+    title: k.kind === 'game' ? `${where} · ${k.goal && k.goal !== '过 A' ? `短局${k.goal}` : '打到 A'}` : `${where} · 实盘${TIER_NAME[k.tier]}`,
     big,
     stats,
     line: aw ? aw.line : lineOf(k, log, title),

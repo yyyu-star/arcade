@@ -3,7 +3,7 @@
  * 组件本身要 DOM，在 demo/table-fun.html 里看；这里只测纯函数（import 时不碰 DOM，Node 里能直接引）
  */
 import { describe, expect, it } from 'vitest';
-import { checkStorageKey, hintSeatFor, type FunSeat } from '../src/table-fun.ts';
+import { checkPrefsKey, checkStorageKey, hintSeatFor, type FunSeat } from '../src/table-fun.ts';
 
 describe('checkStorageKey', () => {
   it('游戏 id 的写法：小写字母、数字、连字符，最多 32 位', () => {
@@ -39,5 +39,16 @@ describe('hintSeatFor（首次提示冒在哪个座位，0.17.0）', () => {
     expect(hintSeatFor(seats, () => 2)).toBe(null);
     expect(hintSeatFor(seats, () => 9)).toBe(null);
     expect(hintSeatFor(seats, () => 1.5)).toBe(null);
+  });
+});
+
+describe('checkPrefsKey（聊天设置的存储 key，0.19.0）', () => {
+  it('只认 <游戏id>.<名字>：带游戏前缀，小写字母、数字、连字符', () => {
+    for (const k of ['texas.chat', 'mahjong.chat-prefs', 'my-game.ui.chat']) expect(checkPrefsKey(k, k.split('.')[0]!)).toBe(k);
+  });
+  it('别的游戏的前缀、没有点、大写、空格、平台前缀、超长、不是字符串：抛错', () => {
+    for (const k of ['guandan.chat', 'texas', 'texas.', 'texas.Chat', 'texas. chat', 'arcade.chat', `texas.${'a'.repeat(60)}`, 3, undefined]) {
+      expect(() => checkPrefsKey(k, 'texas'), String(k)).toThrow(/prefsKey/);
+    }
   });
 });

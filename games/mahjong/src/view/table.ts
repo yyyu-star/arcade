@@ -230,6 +230,41 @@ export class TableUi<V extends TableView, A> {
     return [this.myHand.getBoundingClientRect(), this.bar.getBoundingClientRect()].filter((r) => r.width > 0);
   }
 
+  /** 名牌（头像、名字、筹码、缺门和状态签整块，kit 0.19.0 的 plate）：气泡、弹幕、聊天按钮都避开，自己的气泡不盖自己的筹码数 */
+  plateRect(seat: number): DOMRect {
+    const b = this.badges[this.rel(seat)]!;
+    const r = b.getBoundingClientRect();
+    // 倒计时的数字挂在名牌外面（头上），一起算进去，气泡不压它
+    const c = b.querySelector('.clock')?.getBoundingClientRect();
+    if (!c || c.width === 0) return r;
+    const left = Math.min(r.left, c.left);
+    const top = Math.min(r.top, c.top);
+    return new DOMRect(left, top, Math.max(r.right, c.right) - left, Math.max(r.bottom, c.bottom) - top);
+  }
+
+  /** 牌桌中间的信息区（kit 0.19.0 的 center）：中控盘（剩余张数、局数）和四家的弃牌区；弹幕不横穿、聊天框和气泡不压 */
+  centerRects(): DOMRect[] {
+    return [this.center, ...this.rivers].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+  }
+
+  /**
+   * 电脑版聊天框（kit 0.19.0 的 chatDock，横屏才有）：左上那家名牌下面、左家竖排手牌右边，弃牌区上面那块空呢子；
+   * kit 自己挑角会放到左下，压住我的头像和筹码
+   */
+  chatDock(): DOMRect | null {
+    if (this.root.closest<HTMLElement>('[data-orient]')?.dataset.orient !== 'land') return null;
+    const top = this.badges[3]!.getBoundingClientRect();
+    const side = this.hands[3]!.parentElement!.getBoundingClientRect();
+    const left = side.right + 12;
+    const right = this.center.getBoundingClientRect().left - 12;
+    return new DOMRect(left, top.bottom + 10, Math.min(340, right - left), 0);
+  }
+
+  /** 对家那一排（头像、名牌、手牌）的下沿：弹幕从这儿往下飘，不压上面两家的名牌 */
+  topRowBottom(): number {
+    return Math.max(...[this.badges[2]!, this.badges[3]!, this.hands[2]!.parentElement!].map((e) => e.getBoundingClientRect().bottom));
+  }
+
   /** "互动"按钮的位置：牌桌上留的空位（自己头像右边，style.css 按横竖屏摆） */
   funSlot(): DOMRect {
     return this.slot.getBoundingClientRect();

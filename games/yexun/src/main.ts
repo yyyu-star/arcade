@@ -259,7 +259,12 @@ async function boot(): Promise<void> {
     raidTpl: save.raidTpl,
     mobIcon: icon,
     // 有平台登录、收到过 501（单独部署）就藏起来
-    live: { available: LIVE_OPEN && hasLoginHint() && !live.unavailable, on: save.liveOn, tier: save.liveTier },
+    live: {
+      available: LIVE_OPEN && hasLoginHint() && !live.unavailable,
+      on: save.liveOn,
+      tier: save.liveTier,
+      offWhy: !LIVE_OPEN ? '实盘暂停开放' : !hasLoginHint() ? '没登录' : live.unavailable ? '这里没有钱包' : undefined,
+    },
   });
   const refreshPrep = (): void => {
     writeSave(save);
@@ -686,13 +691,17 @@ async function boot(): Promise<void> {
     save.liveTier = tier;
     writeSave(save);
   };
-  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate): Promise<void> => {
+  const startLive = async (tier: LiveTier, raid?: RaidLiveTemplate, fallback?: () => void): Promise<void> => {
     if (raid && tier === 'luxe') return;
     const seed = (Math.random() * 0x100000000) >>> 0;
     const r = await live.buyin(tier, seed, raid);
     if (r.ok) {
       liveTier = tier;
       lastLive = raid ? { tier, raid } : { tier };
+      // 记下这次的完整选择，主页"开始"下次照它一键开
+      save.lastMode = raid ? 'raid' : 'vigil';
+      if (raid) save.raidTpl = raid;
+      writeSave(save);
       const danger = raid ? (RAID_LIVE.danger[tier as Exclude<LiveTier, 'luxe'>] as Danger) : LIVE_TIERS[tier].danger;
       return startRun(danger, 'snow', true, liveSetup(tier, seed, raid), 'live');
     }
@@ -713,10 +722,12 @@ async function boot(): Promise<void> {
           : o.kind === 'unavailable'
             ? '这里没有钱包，实盘不可用'
             : '带入出了问题，过一会儿再试';
+    // 主页一键开的：说明原因，给一个"按娱乐开"
+    if (fallback) return confirm.ask(`${why}，这次按娱乐开吧`, '按娱乐开', '回菜单', (ok) => (ok ? fallback() : menu.show(menuState())));
     confirm.ask(why, '知道了', '回菜单', () => menu.show(menuState()));
   };
-  menu.onLive = (tier) => void startLive(tier);
-  menu.onRaidLive = (tier, tpl) => void startLive(tier, tpl);
+  menu.onLive = (tier, fallback) => void startLive(tier, undefined, fallback);
+  menu.onRaidLive = (tier, tpl, fallback) => void startLive(tier, tpl, fallback);
   // 夜探（第 6 步）：第一次固定教学镇、危险 0；之后选模板和危险档。带角色和加成，不带咒印
   menu.onRaid = (template: RaidTemplateId, picked: Danger) => {
     const ms = menuState();

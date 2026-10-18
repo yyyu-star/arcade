@@ -116,7 +116,8 @@ async function soloFun(page: Page, name: string): Promise<void> {
   await tap('fun:tab:chat');
   await page.fill('[data-key="fun:chatInput"]', '加我 13800138000');
   await page.click('[data-key="fun:chatSend"]');
-  if (!/号码/.test((await page.textContent('.atf-note')) ?? '')) throw new Error('单机聊天发手机号没被拦下');
+  // kit 0.19.0 起电脑版还有常驻聊天框，页面上不止一行提示：等说"号码"的那一行
+  if (!(await page.waitForSelector('.atf-note:has-text("号码")', { timeout: 2_000 }).catch(() => null))) throw new Error('单机聊天发手机号没被拦下');
   await page.fill('[data-key="fun:chatInput"]', '这把稳了');
   await page.click('[data-key="fun:chatSend"]');
   if (!(await page.waitForSelector('.atf-say:has-text("这把稳了")', { timeout: 3_000 }).catch(() => null))) throw new Error('单机聊天说的话没冒气泡');

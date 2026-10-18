@@ -7,7 +7,7 @@ import { audio } from '../audio.ts';
 import { levelName } from '../labels.ts';
 import { Session, randomSeed } from '../session.ts';
 import { SOLO_DEALS } from '../../stake/index.ts';
-import { LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed } from '../stake-text.ts';
+import { LENGTH_CARD, LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed } from '../stake-text.ts';
 import { StakeSession, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
 import { getSettings, getStats, loadSave, updateSettings } from '../store.ts';
 import { COLOR, RADIUS, TYPE, minHit } from '../theme.ts';
@@ -206,7 +206,10 @@ export class TitleScene extends Phaser.Scene {
   /** 主按钮：有娱乐存档时"继续上局"，没有就"快速开始"（按上次选的难度直接开一局娱乐） */
   private addQuick(primary: (key: string, label: string, sub: string, fn: () => void) => unknown, saved: string | null): void {
     if (saved) primary('continue', '继续上局', saved, () => this.continueGame());
-    else primary('quick', '快速开始', `娱乐 · ${LEVEL_CARD[getSettings().difficulty].name}`, () => this.newGame());
+    else {
+      const s = getSettings();
+      primary('quick', '快速开始', `娱乐 · ${LEVEL_CARD[s.difficulty].name} · ${LENGTH_CARD[s.length].name}`, () => this.newGame());
+    }
   }
 
   /** 弹层（规则、设置、战绩）开着时不重建画面；关掉后 root 已销毁，scene 为空 */
@@ -231,8 +234,9 @@ export class TitleScene extends Phaser.Scene {
 
   /** 娱乐：先选难度（docs/balance.md 第 3 节：新手 / 普通 / 高手），有存档时再确认一次 */
   pickFun(saved: string | null): void {
-    this.overlay = openLevelPicker(this, getSettings().difficulty, (difficulty) => {
-      updateSettings({ difficulty });
+    const s = getSettings();
+    this.overlay = openLevelPicker(this, s.difficulty, s.length, (difficulty, length) => {
+      updateSettings({ difficulty, length });
       if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newGame());
       else this.newGame();
     });

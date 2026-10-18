@@ -10,6 +10,7 @@ import { hintList } from '../../ai/index.ts';
 import {
   beats,
   canPass,
+  endLevelOf,
   hint,
   interpret,
   isBomb,
@@ -27,7 +28,7 @@ import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { dur, tweenP, wait } from '../anim.ts';
-import { PLACE_NAMES, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
+import { PLACE_NAMES, goalWord, levelName, playDetail, playLabel, seatIdentity, seatName, seatPerson } from '../labels.ts';
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
@@ -43,6 +44,7 @@ import { suggestFor } from '../suggest.ts';
 import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog, type Title } from '../../stake/titles.ts';
 import { AWARD_NAME, matchAwards, winnerOf, type Award } from '../../net/awards.ts';
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
+import { LOW_MEMORY } from '../device.ts';
 import { COLOR, TYPE, css, minHit, phoneType } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
 import { join } from '../online.ts';
@@ -272,6 +274,7 @@ export class TableScene extends Phaser.Scene {
     const mh = minHit();
     // "互动"按钮夹在我的头像（中心 x 60）和"理牌"之间
     const left = 60 + Math.max(72, mh) / 2;
+    const lp = Math.max(56, mh);
     const bw = Math.max(48, Math.min(Math.max(56, mh), this.btnSort.x - this.btnSort.width / 2 - left));
     const bh = Math.max(64, mh);
     const free = (): boolean => this.overlay === null && !hasLayer(this);
@@ -287,10 +290,33 @@ export class TableScene extends Phaser.Scene {
       seats: () => this.seats.map((sv, v): FunSeat => {
         const id = net ? seatIdentity[v] : null;
         const persona = net ? id?.persona : this.ses.botStyle(v)?.persona;
-        return { rect: this.screenRect(sv.a), name: seatName(v), me: this.isMe(v), bot: net ? !!id && !id.human : v !== ME, temper: persona ? TEMPER[persona] : 'normal' };
+        const p = sv.plateBox();
+        return {
+          rect: this.screenRect(sv.a),
+          ...(p ? { plate: this.worldRect(p.x, p.y, p.w, p.h) } : {}),
+          name: seatName(v),
+          me: this.isMe(v),
+          bot: net ? !!id && !id.human : v !== ME,
+          temper: persona ? TEMPER[persona] : 'normal',
+        };
       }),
       avoid: () => [this.worldRect(0, BUTTON_Y - 40, W, worldH - BUTTON_Y + 40)],
+      // 桌上各家出的牌：弹幕不横穿、气泡不压（kit 0.19.0）
+      center: () => this.trick.boxes().map((b) => this.worldRect(b.x, b.y, b.w, b.h)),
       button: () => (seated() ? this.worldRect(left, 390 - bh / 2, bw, bh) : null),
+      // 手机上的"聊天"按钮放顶栏左边（"大厅"和邀请后面的空处）：牌桌左下已经挤着我的头像、"互动"和"理牌"，
+      // kit 默认挨着"互动"放会把我自己的气泡挤到按钮底下（kit 0.19.0 截图）
+      chatButton: () => (seated() ? this.worldRect(126 + (net ? lp + 16 : 0) + 12, 4, lp, Math.max(48, mh)) : null),
+      // 弹幕只在左右两家之间、对家名牌下沿到"轮到你"那行提示（BUTTON_Y - 50）上面飘：手机横屏上下都挤，横穿整屏一定会压到左右两家的名牌
+      danmakuArea: () => {
+        const [l, r, t] = [this.seats[3]!, this.seats[1]!, this.seats[2]!];
+        const pb = t.plateBox();
+        const x0 = l.a.ax + l.a.size / 2 + 40;
+        const x1 = r.a.ax - r.a.size / 2 - 40;
+        const y0 = pb ? pb.y + pb.h + 4 : t.a.ay + t.a.size / 2 + 40;
+        return this.worldRect(x0, y0, x1 - x0, BUTTON_Y - 72 - y0);
+      },
+      lite: () => LOW_MEMORY > 0,
       send,
       canSend: () => seated() && free(),
       // 首次提示"点头像扔道具"冒在右家或左家头像旁，气泡朝桌心伸，那家刚出的牌还在就会被盖住：等它的出牌区空了再冒
@@ -1333,7 +1359,9 @@ export class TableScene extends Phaser.Scene {
         this.hand.setHand([], e.level, { animate: false });
         this.buildTopBar(W);
         audio.sfx('deal');
-        await bigWord(this, `第 ${e.dealNo} 副`, { sub: `打 ${levelName(e.level)}${e.level === 14 ? ' · 过 A 就赢' : ''}`, size: TYPE.huge, hold: 500 });
+        const end = endLevelOf(this.ses.view());
+        const goal = end < 14 ? ` · 短局，升到 ${levelName(end)} 就赢` : e.level === 14 ? ' · 过 A 就赢' : '';
+        await bigWord(this, `第 ${e.dealNo} 副`, { sub: `打 ${levelName(e.level)}${goal}`, size: TYPE.huge, hold: 500 });
         const v = this.ses.view();
         this.hand.setHand(v.hand, v.level, { animate: false });
         this.dealToOthers(W / 2, 250);
@@ -1395,11 +1423,11 @@ export class TableScene extends Phaser.Scene {
         this.trick.showPass(e.seat);
         audio.sfx('pass');
         this.talk(e.seat, 'pass');
-        await wait(this, 220);
+        await wait(this, 180);
         break;
       case 'trickWon': {
-        // 一墩打完：停一下让人看清是谁的牌收了这一墩，再清桌
-        await wait(this, 950);
+        // 一墩打完：停一下让人看清是谁的牌收了这一墩，再清桌（0.25.0 从 950 缩到 650：所有者嫌一把太慢，这是每墩都要等的）
+        await wait(this, 650);
         audio.sfx('collect');
         await this.trick.clearAll();
         if (e.jiefeng) {
@@ -1437,8 +1465,8 @@ export class TableScene extends Phaser.Scene {
       case 'dealEnd':
         this.funMoment(dealMoment(e.result));
         this.feedDeal(e.result);
-        // 最后一手和名次章留在桌上看清楚，再弹结算
-        await wait(this, 1500);
+        // 最后一手和名次章留在桌上看清楚，再弹结算（0.25.0：1500 → 1100）
+        await wait(this, 1100);
         break;
       case 'gameOver':
         break;
@@ -1784,12 +1812,13 @@ export class TableScene extends Phaser.Scene {
       if (teamOf(seat) === v.winner) this.tweens.add({ targets: img, y: -134, duration: dur(420), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       b.add(text(this, x, -48, seatName(seat), { size: TYPE.label, bold: true, color: teamOf(seat) === 0 ? COLOR.teamUs : COLOR.teamThem }));
     });
-    b.add(text(this, 0, 18, watch ? `${this.side(v.winner)}先过 A，赢下整局` : win ? '我方先过 A，赢下整局！' : '对方先过了 A，下局再来', { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
+    const goal = goalWord(endLevelOf(v));
+    b.add(text(this, 0, 18, watch ? `${this.side(v.winner)}先${goal}，赢下整局` : win ? `我方先${goal}，赢下整局！` : `对方先${goal === '过 A' ? '过了 A' : goal}，下局再来`, { size: TYPE.title, bold: true, color: win ? COLOR.red : COLOR.muted, font: 'title' }));
     // 整局的称号：一行排开，按钮上方
     this.logMatch();
     const titles = matchTitles(this.matchLog);
     // 分享（art-v3）：按钮行正中带字的"晒战绩"，不再是右上角一个小图标
-    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null }, awards, 200);
+    if (!watch) this.addShare(b, 0, 170, { kind: 'game', win, room: this.net?.code ?? null, goal }, awards, 200);
     if (titles.length && !awards) b.add(text(this, 0, 114, titles.map((t) => this.titleLine(t, false)).join('    '), { size: TYPE.small, bold: true, color: COLOR.redDark }));
     if (this.net && watch) {
       // 旁观的人：看完结果回首页（"再来一场"是这一桌的人一起换房间，不带旁观的）

@@ -166,7 +166,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 掼蛋自己多的在 `table/nudge.ts`：公开事件后的顺手提示（`suggest.ts`）、好友房里轮到的人想了 8 秒以上别人能扔的"催促炸弹"、
     单机里我想了 8 秒以上爱闹的电脑按 `URGE_P` 扔一个催促炸弹（`slowUrge`，每手最多判一次，走 kit 的收，同样受护盾）。收到的短语、表情配掼蛋自己的提示音（`funIn`）。
   - 好友房聊天（0.22.0，kit 0.18.0 的 chat，设计在 kit 的 `docs/chat.md`）：房间 `rules.ts` 写 `chat: true`；页面 `NetSession` 的 `onChat` 换成画面座位交给 `chatSink`（牌桌挂上、关时摘掉），
-    `TableFun` 给 `chat` / `chatEnabled`（设置"聊天：开 / 不看"，`guandan.settings` 的 `chat`）；单机（0.23.0）用 kit 0.18.1 的 `localChat`，只在自己头像旁冒，不发不存，电脑不读。房间只转发不存，规则、电脑都不读；`tests/room/routes.spec.ts` 走真路由核对，`online-smoke` 里 1 号打一句、房主看到。
+    `TableFun` 给 `chat` / `chatEnabled`（设置"聊天：开 / 不看"，`guandan.settings` 的 `chat`）；0.24.0 起 kit 0.19.0 的聊天框、手机"聊天"按钮（掼蛋指定在顶栏 `chatButton`）、弹幕，牌桌给 `plate`（`SeatView.plateBox`）和 `center`（`TrickView.boxes`）让它避开；单机（0.23.0）用 kit 0.18.1 的 `localChat`，只在自己头像旁冒，不发不存，电脑不读。房间只转发不存，规则、电脑都不读；`tests/room/routes.spec.ts` 走真路由核对，`online-smoke` 里 1 号打一句、房主看到。
   - 设置里能整个关掉（字段名仍是 `taunts`）；点头像"屏蔽他"、面板里"全部屏蔽"只管这个房间（kit 存 sessionStorage `guandan.fun.blocked`）。冒烟点的控件是 kit 的名字（`fun:button`、`fun:seat3`、`fun:prop0`……，换成世界坐标放进 `controls()`）。
   - 轮到我：提示音、振动、后台标题闪（振动和标题闪在 `attention.ts`），最后 5 秒嘀嗒；轮到的人想了 8 秒以上别人能扔"催促炸弹"，纯画面。
   - 称号和每副复盘只用公开信息（出牌记录、名次），电脑决策不读表情。
@@ -209,7 +209,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
 | `npm run stake-smoke` / `node tools/stake-sim.ts` | 单机实盘冒烟（本地栈 + 假钱包）/ 实盘计分模拟 |
-| `npm run ai-sim -- solo\|room\|style\|time` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时（docs/ai.md） |
+| `npm run ai-sim -- solo\|room\|style\|time\|length` | 电脑的场地强弱、好友房实盘每档、性格风格指标、单次决策耗时、一局多长（docs/ai.md） |
 | `npm run dev` / `npm run preview` | 0.0.0.0:5174 / 4174 |
 
 ## 5. 浏览器存储 key（全部 `guandan.` 前缀）
@@ -217,7 +217,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | key | 内容 |
 |---|---|
 | `guandan.save` | 进行中的整局：`{ v, state: GameState, difficulty, counted, dealsCounted }`；整局结束即删除 |
-| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`） |
+| `guandan.settings` | 音量、静音、背景音、动画速度、难度、地方规则、牌背、记牌器开关、互动开关（字段名仍是 `taunts`）、娱乐单机的局长 `length`（`short` / `full`，0.25.0） |
 | `guandan.stats` | 战绩：局数、胜局、连胜、最高连胜、副数、头游次数 |
 | `guandan.tutorial` | 新手引导是否看过 |
 | `guandan.errors` | 最近 20 条未捕获错误（兜底面板写入） |
@@ -229,11 +229,12 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.stake` | 单机实盘这一场（0.4.0 起）：`{ v, userId, ref, tier, share, until, match: { tier, deals }, state, settle }`；只在本机、不进云同步；结回或退回后删，过了 `until` 打开标题页时删 |
 | `guandan.a2hs` | 标题页"添加到主屏幕玩更大"提示点过 ✕（值 1，0.1.10 起） |
 | `guandan.nick` | 单独部署时好友房里的昵称（字符串，0.8.0 起；有平台时不用，昵称以平台账号为准） |
+| `guandan.chat` | 聊天的界面设置：弹幕开关、电脑版聊天框收起、记录展开（0.24.0；由 kit 0.19.0 的 table-fun 按 `storageKey: 'guandan'` 读写） |
 | `guandan.hint.fun` | 首次进牌桌冒过"点头像扔道具，长按连扔"了（0.11.0；0.12.0 起由 kit 的 table-fun 读写），只出一次 |
 | `guandan.fun.blocked` | sessionStorage：点头像"屏蔽他"屏蔽了谁（0.12.0 起由 kit 的 table-fun 读写，按房间码分开、记座位和名字，那个座位换了人就不算；0.6.0–0.11.x 是 `guandan.blocked`） |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 
-新增 key 必须带前缀、只在 `src/view/store.ts` 里读写（kit 的 table-fun 按 `storageKey: 'guandan'` 自己读写的两个除外），并补进这张表。
+新增 key 必须带前缀、只在 `src/view/store.ts` 里读写（kit 的 table-fun 按 `storageKey: 'guandan'` 自己读写的三个除外），并补进这张表。
 
 ## 6. 待办（不阻塞）
 

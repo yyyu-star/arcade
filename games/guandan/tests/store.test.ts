@@ -51,3 +51,28 @@ describe('难度兼容旧值', () => {
     expect(store.loadSave()?.difficulty).toBe('novice');
   });
 });
+
+describe('局长（0.25.0）', () => {
+  it('默认短局；旧设置没有这一项、认不得的值都按短局；选了完整记住', async () => {
+    expect((await fresh()).getSettings().length).toBe('short');
+    mem.set('guandan.settings', JSON.stringify({ v: 1, volume: 0.4, difficulty: 'pro' }));
+    vi.resetModules();
+    expect((await fresh()).getSettings().length).toBe('short');
+    mem.set('guandan.settings', JSON.stringify({ v: 1, length: 'forever' }));
+    vi.resetModules();
+    const store = await fresh();
+    expect(store.getSettings().length).toBe('short');
+    store.updateSettings({ length: 'full' });
+    vi.resetModules();
+    expect((await fresh()).getSettings().length).toBe('full');
+  });
+
+  it('娱乐单机按局长开：短局终点 10，完整是 A；实盘（stake.ts 用 createGame 默认）不受影响', async () => {
+    const store = await fresh();
+    const { Session } = await import('../src/view/session.ts');
+    expect(Session.fresh('len-1').view().options.endLevel).toBe(10);
+    store.updateSettings({ length: 'full' });
+    expect(Session.fresh('len-2').view().options.endLevel).toBe(14);
+    expect(createGame('len-3').state.options.endLevel).toBe(14);
+  });
+});

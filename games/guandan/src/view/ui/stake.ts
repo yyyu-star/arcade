@@ -6,10 +6,11 @@
 import type Phaser from 'phaser';
 import { SOLO_LEVELS, type SoloLevel } from '../../ai/venue.ts';
 import { SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
-import { LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
+import { LENGTH_CARD, LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
 import { COLOR, TYPE, phoneType } from '../theme.ts';
-import { Button, fitWidth, modal, text, type Modal } from './kit.ts';
+import { Button, fitWidth, modal, segmented, text, type Modal } from './kit.ts';
+import type { GameLength } from '../store.ts';
 
 function reg(m: Modal, key: string, b: Button): Button {
   m.body.add(b);
@@ -17,14 +18,44 @@ function reg(m: Modal, key: string, b: Button): Button {
   return b;
 }
 
-/** 娱乐选难度：新手 / 普通 / 高手，每档一行（电脑多强、一场多久、适合谁）；当前设置的那档描金边 */
-export function openLevelPicker(scene: Phaser.Scene, current: SoloLevel, onPick: (level: SoloLevel) => void): Modal {
-  const m = modal(scene, 900, 430);
+/**
+ * 娱乐选难度：上面一排选局长（短局打到 10 / 完整打过 A，0.25.0），下面新手 / 普通 / 高手每档一行（电脑多强、一局多久、适合谁）；
+ * 当前设置的那档描金边，时间那行跟着局长换
+ */
+export function openLevelPicker(
+  scene: Phaser.Scene,
+  current: SoloLevel,
+  length: GameLength,
+  onPick: (level: SoloLevel, length: GameLength) => void,
+): Modal {
+  const m = modal(scene, 900, 500);
   const b = m.body;
   const phone = phoneType();
-  b.add(text(scene, 0, -170, '选难度', { size: TYPE.title, bold: true, color: COLOR.redDark }));
+  let len = length;
+  b.add(text(scene, 0, -205, '选难度', { size: TYPE.title, bold: true, color: COLOR.redDark }));
+  const lens: GameLength[] = ['short', 'full'];
+  const times: Phaser.GameObjects.Text[] = [];
+  // 手机上字托底到 12 像素，整句会压到右边"适合谁"那段：只留"一局约 N 分钟"
+  const timeOf = (lv: SoloLevel): string => {
+    const t = len === 'short' ? LEVEL_CARD[lv].short : LEVEL_CARD[lv].time;
+    return phone ? t.split('，')[0]! : t;
+  };
+  const seg = segmented(
+    scene,
+    -165,
+    -145,
+    lens.map((l) => ({ label: `${LENGTH_CARD[l].name} · ${LENGTH_CARD[l].goal}`, value: l })),
+    len,
+    (v) => {
+      len = v as GameLength;
+      SOLO_LEVELS.forEach((lv, i) => times[i]!.setText(timeOf(lv)));
+    },
+    330,
+  );
+  b.add(seg);
+  m.body.setData('seg:length', seg);
   SOLO_LEVELS.forEach((lv, i) => {
-    const y = -95 + i * 92;
+    const y = -60 + i * 92;
     const c = LEVEL_CARD[lv];
     const g = scene.add.graphics();
     g.fillStyle(i % 2 ? 0xf3e4c4 : 0xf8ecd2, 1).fillRoundedRect(-420, y - 40, 840, 80, 12);
@@ -32,12 +63,13 @@ export function openLevelPicker(scene: Phaser.Scene, current: SoloLevel, onPick:
     b.add(g);
     b.add(text(scene, -390, y, c.name, { size: TYPE.title, bold: true, color: COLOR.redDark, ox: 0 }));
     b.add(text(scene, -250, y - 15, `电脑 ${stars(c.stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
-    // 手机上字托底到 12 像素，整句会压到右边"适合谁"那段：只留"一局约 N 分钟"
-    b.add(text(scene, -250, y + 17, phone ? c.time.split('，')[0]! : c.time, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
+    const t = text(scene, -250, y + 17, timeOf(lv), { size: TYPE.small, color: COLOR.muted, ox: 0 });
+    times.push(t);
+    b.add(t);
     b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250, align: 'left' }));
-    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv)), 'play'));
+    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play'));
   });
-  b.add(text(scene, 0, 168, '随时能在设置里换', { size: TYPE.small, color: COLOR.muted }));
+  b.add(text(scene, 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
   return m;
 }
 

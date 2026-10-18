@@ -128,4 +128,4 @@ if (r.error) 显示 r.error（大白话中文），state 不变
 ## 8. 配置项 `options`
 
 见 `src/core/options.ts` 和 `docs/rules.md`：`fullHouseJokerPair`（三带二能否带王对，默认是）、`maxBombSize`（10）、
-`aFailLimit`（打 A 失败几次退回 2，默认 3，0 = 不退回）、`returnMaxRank`（还贡上限 10）、`antiTributeCombined`（双下合计两张大王抗贡，默认是）。
+`aFailLimit`（打 A 失败几次退回 2，默认 3，0 = 不退回）、`endLevel`（打到几结束，默认 14 = 过 A；小于 14 时升到这一级就赢，0.25.0 的短局是 10，`endLevelOf(state)` 读，旧存档没有按 14）、`returnMaxRank`（还贡上限 10）、`antiTributeCombined`（双下合计两张大王抗贡，默认是）。
