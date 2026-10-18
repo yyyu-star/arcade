@@ -1,4 +1,4 @@
-/* 雀馆的样式。舞台是设计尺寸（横屏 1000×560、竖屏 560 宽、高 920–1120 随屏幕比例），viewport.ts 等比缩放；safe-area 由 #app 让出来。
+/* 雀馆的样式。舞台是设计尺寸（横屏 1000×560、竖屏 560×1120），宽高随屏幕比例变（横屏宽 1000–1500，竖屏高 920–1240、宽 560–700），viewport.ts 等比缩放；safe-area 由 #app 让出来。
  * 下面的尺寸都是舞台里的设计像素。间距、字号、圆角、阴影只用这里的刻度；牌桌上各块的绝对位置（文件末尾两段布局）是例外，按牌桌几何定。 */
 :root {
   /* 颜色 */
@@ -518,6 +518,14 @@ button {
   padding-top: 40px;
   gap: var(--sp-3);
 }
+/* 横屏只有 560 高：店名和玩法顶栏上已经写着，选桌页不重复，档位和规则设置往上挪一行（0.18.0 手机专项） */
+[data-orient='land'] .screen.lobby .lobby-head .variant {
+  display: none;
+}
+/* 竖屏高：内容整块放在开打按钮上面的中间，不再全挤在顶上、中间空一大块（go-row 也是 margin-top: auto，两段平分空白） */
+[data-orient='port'] .screen.lobby > .lobby-head {
+  margin-top: auto;
+}
 /* 选桌页的标题是模式名（娱乐 / 实盘 / 好友房），比主页的店名小一号 */
 .screen.lobby .lobby-head h1 {
   font-size: 44px;
@@ -530,7 +538,11 @@ button {
   column-gap: var(--sp-4);
 }
 [data-orient='land'] .rules-opts summary { grid-column: 1 / -1; }
-/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边露出茶馆的板壁（art.css，0.17.1） */
+/* 横屏牌桌还是 1000 宽的几何，舞台变宽时居中，两边露出茶馆的板壁（art.css，0.17.1）；竖屏同理，560 宽（iPad 竖着拿，0.18.0） */
+[data-orient='port'] .table {
+  inset: 0 auto 0 calc(50% - 280px);
+  width: 560px;
+}
 [data-orient='land'] .table {
   inset: 0 auto 0 calc(50% - 500px);
   width: 1000px;
@@ -1356,6 +1368,14 @@ button {
 .my-hand .tile {
   position: relative;
 }
+/* 能点的手牌把点按区往上撑到 --tap 高（屏幕上 44）：竖屏手机上每张牌只有 25×35 像素（0.18.0 手机专项）。
+ * 宽度没法撑，14 张已经铺满一排；往上撑的那截是牌和头像、按钮之间的空呢子，不压别的东西。
+ * 不能点的牌（.off）不撑；.ban 用的 ::after 只出现在不能点的牌上，不冲突 */
+.my-hand .tile:not(.off)::after {
+  content: '';
+  position: absolute;
+  inset: min(0px, calc(100% - var(--tap))) 0 0;
+}
 .my-hand .tile.off {
   cursor: default;
 }
@@ -1794,7 +1814,7 @@ html .atf-btn svg {
 /* 换三张的方向写在中控盘上方，不压盘，也不压底下的定缺按钮（0.17.3） */
 [data-orient='land'] .banner.swap { left: 50%; top: 30%; }
 
-/* ---------- 竖屏布局（舞台 560 × 920–1120，牌桌高 1080 − --cut） ----------
+/* ---------- 竖屏布局（舞台 560 × 920–1240，牌桌高 1080 − --cut；--cut 在高过 1120 时是负数） ----------
  * 上下两截贴边：顶上对家一排、两个上角是上家（左）和对家（右）的头像；底下自己的手牌一排、上面左角我、右角下家的头像，
  * 再往上是浮着的碰杠胡过。中间一截（左右两家竖排、四个牌河、中控盘）以 C = 537 − --cut/2 为中心（比正中偏下 40：底下常有浮着的按钮和听牌提示）（viewport.ts 按屏幕比例写 --cut，
  * 最多 200）；屏幕越高，上下牌河离中控盘越远（--spread，0–50），留白匀开，不全挤在中间。 */

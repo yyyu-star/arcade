@@ -123,6 +123,40 @@ async function soloFun(page: Page, name: string): Promise<void> {
   await page.close();
 }
 
+// 省内存模式（AGENTS.md 第 4 节，0.18.0）：SE 竖屏、触屏、减少动态效果。麻将是 DOM 渲染、没有 WebGL，lite 只关常驻小动画、发牌过场、
+// 结算的飞筹码；这里看 lite 标记写上了、从主页进牌桌换牌定缺打几手，控制台零报错
+{
+  const page = await browser.newPage({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  const errors: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && !/502|Bad Gateway/.test(m.text()) && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(() => localStorage.setItem('mahjong.guide', '1'));
+  await page.goto(`http://127.0.0.1:${port}/games/mahjong/?turbo`);
+  await page.waitForSelector('.home-main');
+  if ((await page.evaluate(() => document.documentElement.dataset.lite)) !== '1') errors.push('省内存标记没写上');
+  await page.click('.home-main .quick');
+  await page.waitForSelector('text=帮我选');
+  await page.click('text=帮我选');
+  await page.click('button:has-text("换出")');
+  await page.waitForSelector('.act.que.best');
+  await page.click('.act.que.best');
+  let turns = 0;
+  for (const until = Date.now() + 60_000; turns < 3 && Date.now() < until; ) {
+    await page.waitForTimeout(200);
+    for (const b of ['.act.ron', '.act.pass']) if (await page.$(b)) await page.click(b, { force: true }).catch(() => {});
+    const t = (await page.$$('.my-hand.turn .tile:not(.off)')).at(-1);
+    if (!t) continue;
+    await t.click({ force: true }).catch(() => {});
+    await t.click({ force: true }).catch(() => {});
+    turns++;
+  }
+  if (turns < 3) errors.push(`省内存模式下只打出 ${turns} 手`);
+  const ok = errors.length === 0;
+  failed ||= !ok;
+  console.log(`lite: ${ok ? 'ok，省内存标记生效、打了 3 手、控制台零报错' : errors.join('\n')}`);
+  await page.close();
+}
+
 for (const [name, viewport] of [
   ['land', { width: 1280, height: 720 }],
   ['port', { width: 390, height: 844 }],
