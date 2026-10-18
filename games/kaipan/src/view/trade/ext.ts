@@ -219,19 +219,23 @@ export class BankPanel extends Dialog {
     const b = bankView(s);
     const ph = phoneLayout(scene);
     // 手机（0.5.5）摆成两栏：左栏账本、规则、安全线；右栏可以押 / 已押出。一栏竖排放不进 444 高
-    const W = ph ? 940 : 720;
+    // 0.19.0 手机世界变小（718–960×404）：窄了两栏都收窄、利息挪进按钮的悬停；矮了行距收紧
+    const V = viewOf(scene);
+    const narrow = ph && V.w < 900;
+    const short = ph && V.h < 420;
+    const W = ph ? Math.min(940, V.w - 16) : 720;
     const L0 = 24;
-    const LW = ph ? 400 : W - 48;
-    const R0 = ph ? 450 : 24;
+    const LW = ph ? (narrow ? 316 : 400) : W - 48;
+    const R0 = ph ? (narrow ? 352 : 450) : 24;
     const RW = W - 24 - R0;
-    const step = ph ? 48 : 54;
-    const lineH = ph ? 42 : 46;
+    const step = ph ? (short ? 42 : 48) : 54;
+    const lineH = ph ? (short ? 36 : 42) : 46;
     const rows = b.open ? Math.max(1, b.offers.length) + Math.max(1, b.loans.length) : 0;
     // 0.5.1：账本下加一条「安全线」小图（欠钱时）或「没欠钱」签，再加一条规则小纸条；押东西两段各有小标题
     const H = ph
       ? Math.max(76 + 92 + 44 + (b.callAt !== null ? 90 : 44) + (b.open ? 0 : 100), b.open ? 76 + 48 + rows * step : 0) + 64
       : (b.open ? 236 + rows * 54 + 48 : 300) + (b.callAt !== null ? 64 : 44) + 44;
-    super(scene, W, H, '银行');
+    super(scene, W, ph ? Math.min(H, V.h - 12) : H, '银行');
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
       this.inner.add(o);
       return o;
@@ -258,7 +262,7 @@ export class BankPanel extends Dialog {
     cells.forEach(([k, v, c], i) => {
       const x = L0 + i * cw + cw / 2;
       add(addText(scene, x, boxY + 12, k, { size: TYPE.label, color: COLOR.muted, originX: 0.5 }));
-      add(addText(scene, x, boxY + 32, v, { size: TYPE.big - 4, bold: true, num: true, color: c, originX: 0.5 }));
+      add(addText(scene, x, boxY + 32, v, { size: narrow ? TYPE.title : TYPE.big - 4, bold: true, num: true, color: c, originX: 0.5 }));
     });
     let y = boxY + 92;
     // 规则小纸条（0.5 只在「?」里，0.5.1 放回卡面，一行图标 + 两句）
@@ -311,6 +315,8 @@ export class BankPanel extends Dialog {
       }));
       const amtX = ph ? Math.max(R0 + 112, R0 + 48 + nameW + 12) : 300;
       const intX = ph ? amtX + 74 : 400;
+      // 窄屏上不写「息…/月」（按钮的悬停里有）
+      const showInt = !narrow;
       const btnW = ph ? 108 : 120;
       const btnX = R0 + RW - 16 - btnW;
       const btnY = (lineH - 34) / 2;
@@ -328,8 +334,8 @@ export class BankPanel extends Dialog {
       for (const o of b.offers) {
         line(y, COLOR.paperHi, COLOR.edge, COLLATERAL_GLYPH[o.id] ?? 'bag', o.name, o.lost);
         add(addText(scene, amtX, y + mid, moneyShort(o.amount, true), { size: TYPE.title + 2, bold: true, num: true, color: o.lost ? COLOR.dim : COLOR.up, originY: 0.5 }));
-        add(addText(scene, intX, y + mid, `息${moneyShort(o.interest)}/月`, { size: TYPE.label + 1, num: true, color: COLOR.muted, originY: 0.5 }));
-        if (o.error) add(addText(scene, R0 + RW - 16, y + mid, o.lost ? '被收走了' : o.error, { size: TYPE.label, color: COLOR.dim, originX: 1, originY: 0.5, wrap: ph ? RW - (intX - R0) - 100 : 180 }));
+        if (showInt) add(addText(scene, intX, y + mid, `息${moneyShort(o.interest)}/月`, { size: TYPE.label + 1, num: true, color: COLOR.muted, originY: 0.5 }));
+        if (o.error) add(addText(scene, R0 + RW - 16, y + mid, o.lost ? '被收走了' : o.error, { size: TYPE.label, color: COLOR.dim, originX: 1, originY: 0.5, wrap: ph ? RW - ((showInt ? intX : amtX + 60) - R0) - 20 : 180 }));
         else {
           const btn = new Button(scene, btnX, y + btnY, { width: btnW, height: 34, label: '押给银行', variant: 'primary', fontSize: TYPE.label + 2, sound: null, onClick: () => (this.close(), onAct({ type: 'borrow', id: o.id })) });
           btn.tooltip(() => ({ title: o.name, body: `借 ${formatMoney(o.amount)} · 每月利息 ${formatMoney(o.interest)}` }));
@@ -344,7 +350,7 @@ export class BankPanel extends Dialog {
       for (const l of b.loans) {
         line(y, 0xfff1c4, COLOR.gold, COLLATERAL_GLYPH[l.id] ?? 'bag', l.name, false);
         add(addText(scene, amtX, y + mid, moneyShort(-l.amount), { size: TYPE.title + 2, bold: true, num: true, color: COLOR.down, originY: 0.5 }));
-        add(addText(scene, intX, y + mid, `息${moneyShort(l.interest)}/月`, { size: TYPE.label + 1, num: true, color: COLOR.muted, originY: 0.5 }));
+        if (showInt) add(addText(scene, intX, y + mid, `息${moneyShort(l.interest)}/月`, { size: TYPE.label + 1, num: true, color: COLOR.muted, originY: 0.5 }));
         if (!ph) {
           add(addGlyph(scene, 494, y + 23, 'calendar', 18));
           add(addText(scene, 506, y + 23, `${l.month}月借`, { size: TYPE.label, color: COLOR.muted, originY: 0.5 }));

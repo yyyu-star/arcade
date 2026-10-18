@@ -1,11 +1,12 @@
 /**
- * 手机竖屏时盖一层"请横过来"的提示（纯 CSS 媒体查询控制显隐，转过来自动消失）。
+ * 手机、平板竖屏时盖一层"请横过来"的提示（纯 CSS 媒体查询控制显隐，转过来自动消失）。
+ * 宽到 1024 都算：iPad 竖屏牌桌只剩 820×461 也打不了，按 820 划线时 iPad Air、mini 弹、Pro 11（834）不弹，同类设备不一样（0.20.1）。
  * 左上角留一个"大厅"按钮：竖屏时牌桌整个被盖住，不放这里就回不去平台首页。
  */
 import { titleArtSvg } from './art/index.ts';
 import { mountThemeCss } from './theme.ts';
 
-const QUERY = '(orientation: portrait) and (max-width: 820px)';
+const QUERY = '(orientation: portrait) and (max-width: 1024px)';
 
 const ICON = `
 <svg viewBox="0 0 160 140" width="160" height="140" aria-hidden="true">
@@ -42,7 +43,7 @@ export function mountRotateHint(onLobby: () => void): void {
   // 和主页同一张背景（art-v3，人物和灯笼是单独的精灵、不在图里）。竖屏按高铺满后横向取 30%，正好把月洞窗留在中间；
   // CSS 背景图只在竖屏真显示出来时才栅格化
   el.style.setProperty('--rh-art', `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(titleArtSvg(1280, 720))}")`);
-  el.innerHTML = `<button id="rh-lobby" class="gd-btn" type="button">${HOUSE}大厅</button>${ICON}<div>把手机横过来</div><span>牌桌是横的，横屏才排得下 27 张牌</span>`;
+  el.innerHTML = `<button id="rh-lobby" class="gd-btn" type="button">${HOUSE}大厅</button>${ICON}<div>把屏幕横过来</div><span>牌桌是横的，横屏才排得下 27 张牌</span>`;
   el.querySelector('#rh-lobby')!.addEventListener('click', onLobby);
   document.body.appendChild(el);
 }

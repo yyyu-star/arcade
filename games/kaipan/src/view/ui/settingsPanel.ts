@@ -7,7 +7,7 @@ import { Slider } from './slider.ts';
 import { addText } from './text.ts';
 import { loadTutorial, setTutorialOn, tutorialActive } from '../tutorial.ts';
 import { HINT_AUTO_RUNS, hintsOn, loadViewPrefs, saveViewPrefs } from '../meta/prefs.ts';
-import { phoneLayout } from '../viewport.ts';
+import { phoneLayout, viewOf } from '../viewport.ts';
 
 interface SettingsPanelOpts {
   /** 游戏内打开时提供「返回主菜单」 */
@@ -39,6 +39,30 @@ const ROW = 50;
  */
 const PHONE_UI = { w: 940, h: 430, label: 32, ctrl: 150, row: [46, 52], note: [520, 386] } as const;
 
+/**
+ * 0.19.0 手机世界变小（718–960×404）后按看得见的范围算：面板最大 940×430，SE 上是 702×392。
+ * 矮了就收行距（音量 36、其余 44 / 46）、底下一排按钮下移；窄了音量条短一点，说明小字往左挪。
+ */
+function phoneGeo(v: { w: number; h: number }) {
+  const w = Math.min(PHONE_UI.w, v.w - 16);
+  const h = Math.min(PHONE_UI.h, v.h - 12);
+  const short = h < 420;
+  const narrow = w < 900;
+  return {
+    ...PHONE_UI,
+    w,
+    h,
+    top: short ? 80 : 88,
+    top1: short ? 80 : 96,
+    volRow: short ? 36 : 38,
+    row: short ? [44, 46] : PHONE_UI.row,
+    note: narrow ? [430, 386] : PHONE_UI.note,
+    slider: narrow ? 220 : 280,
+    footY: short ? 50 : 60,
+    doneY: short ? 52 : 64,
+  };
+}
+
 const SPEEDS: [AnimSpeed, string][] = [
   [0, '关闭'],
   [1, '1×'],
@@ -62,8 +86,9 @@ export class SettingsPanel extends Dialog {
   constructor(scene: Phaser.Scene, opts: SettingsPanelOpts) {
     const startScheme = getSettings().colorScheme;
     const phone = phoneLayout(scene);
+    const P = phoneGeo(viewOf(scene));
     let toLobby = false;
-    super(scene, phone ? PHONE_UI.w : W, phone ? PHONE_UI.h : H, '设置', () => opts.onClosed?.(getSettings().colorScheme !== startScheme, toLobby));
+    super(scene, phone ? P.w : W, phone ? P.h : H, '设置', () => opts.onClosed?.(getSettings().colorScheme !== startScheme, toLobby));
     this.phone = phone;
     this.box = this.inner;
     const pages = phone ? [scene.add.container(0, 0), scene.add.container(0, 0)] : [];
@@ -72,23 +97,23 @@ export class SettingsPanel extends Dialog {
       this.box = pages[0]!;
       this.tabs(pages);
     }
-    let col: { label: number; ctrl: number } = phone ? PHONE_UI : COLS[0]!;
+    let col: { label: number; ctrl: number } = phone ? P : COLS[0]!;
     let page = 0;
     // 0.18.1 手机第一页有七行（0.17.0 加了「月底账单」），对局里底下还有「回到主菜单」「回大厅」：从 88 起、音量三行收到 38，最后一行的按钮底边 359，不再压到底下按钮（顶边 370）
-    let y = phone ? 88 : 96;
+    let y = phone ? P.top : 96;
     let lastAt = y;
     const row = (label: string, pitch?: number): number => {
       this.box.add(addText(scene, col.label, y, label, { size: 15, color: COLOR.muted, originY: 0.5 }));
       const at = y;
       lastAt = at;
-      y += pitch ?? (phone ? PHONE_UI.row[page]! : ROW);
+      y += pitch ?? (phone ? P.row[page]! : ROW);
       return at;
     };
     const note = (text: string): Phaser.GameObjects.Text => {
       if (phone) {
         // 手机：写在上一行按钮的右边，不另占一行
-        const nx = PHONE_UI.note[page]!;
-        const t = addText(scene, nx, lastAt, text, { size: 13, color: COLOR.muted, wrap: PHONE_UI.w - nx - 32, originY: 0.5, lineSpacing: 2 });
+        const nx = P.note[page]!;
+        const t = addText(scene, nx, lastAt, text, { size: 13, color: COLOR.muted, wrap: P.w - nx - 32, originY: 0.5, lineSpacing: 2 });
         this.box.add(t);
         return t;
       }
@@ -99,9 +124,10 @@ export class SettingsPanel extends Dialog {
     };
 
     const volume = (label: string, field: 'masterVolume' | 'sfxVolume' | 'musicVolume'): void => {
-      const at = row(label, phone ? 38 : undefined);
-      const pct = addText(scene, col.ctrl + 300, at, '', { size: 15, num: true, originY: 0.5 });
-      const slider = new Slider(scene, col.ctrl, at, 280, getSettings()[field], (v) => updateSettings({ [field]: v }));
+      const at = row(label, phone ? P.volRow : undefined);
+      const sw = phone ? P.slider : 280;
+      const pct = addText(scene, col.ctrl + sw + 20, at, '', { size: 15, num: true, originY: 0.5 });
+      const slider = new Slider(scene, col.ctrl, at, sw, getSettings()[field], (v) => updateSettings({ [field]: v }));
       this.box.add([slider, pct]);
       this.groups.push({ refresh: (s) => pct.setText(`${Math.round(s[field] * 100)}%`) });
     };
@@ -132,10 +158,10 @@ export class SettingsPanel extends Dialog {
       return { mode, b };
     });
     for (const x of bb) x.b.setSelected(x.mode === loadViewPrefs().bill);
-    note('月底账单一张张算给你看（每月不到 2 秒，点一下就跳过）；简短就直接出结果');
+    note(phone ? '每月不到 2 秒，点一下就跳过' : '月底账单一张张算给你看（每月不到 2 秒，点一下就跳过）；简短就直接出结果');
 
-    col = phone ? PHONE_UI : COLS[1]!;
-    y = 96;
+    col = phone ? P : COLS[1]!;
+    y = phone ? P.top1 : 96;
     if (phone) {
       page = 1;
       this.box = pages[1]!;
@@ -214,13 +240,13 @@ export class SettingsPanel extends Dialog {
     };
     refreshHelp();
 
-    const close = new Button(scene, this.dw - 32 - 130, this.dh - 64, { width: 130, height: 44, label: '完成', variant: 'primary', fontSize: 16 });
+    const close = new Button(scene, this.dw - 32 - 130, this.dh - (phone ? P.doneY : 64), { width: 130, height: 44, label: '完成', variant: 'primary', fontSize: 16 });
     close.setHandler(() => this.close());
     this.inner.add(close);
     this.named['settings:done'] = close;
     if (opts.onMenu) {
       const onMenu = opts.onMenu;
-      const menu = new Button(scene, COLS[0]!.label, this.dh - 60, { width: 150, height: 40, label: '回到主菜单', fontSize: 15 });
+      const menu = new Button(scene, COLS[0]!.label, this.dh - (phone ? P.footY : 60), { width: 150, height: 40, label: '回到主菜单', fontSize: 15 });
       menu.setHandler(() => {
         this.close();
         onMenu();
@@ -229,7 +255,7 @@ export class SettingsPanel extends Dialog {
       this.named['settings:menu'] = menu;
     }
     if (opts.lobby) {
-      const lobby = new Button(scene, COLS[0]!.label + (opts.onMenu ? 162 : 0), this.dh - 60, { width: 120, height: 40, label: '回大厅', icon: 'house', fontSize: 15 });
+      const lobby = new Button(scene, COLS[0]!.label + (opts.onMenu ? 162 : 0), this.dh - (phone ? P.footY : 60), { width: 120, height: 40, label: '回大厅', icon: 'house', fontSize: 15 });
       lobby.setHandler(() => {
         toLobby = true;
         this.close();
@@ -239,7 +265,7 @@ export class SettingsPanel extends Dialog {
     }
     if (opts.onQuitLive) {
       const onQuit = opts.onQuitLive;
-      const quit = new Button(scene, COLS[0]!.label + (opts.onMenu ? 162 : 0) + (opts.lobby ? 132 : 0), this.dh - 60, { width: 120, height: 40, label: '提前收手', fontSize: 15 });
+      const quit = new Button(scene, COLS[0]!.label + (opts.onMenu ? 162 : 0) + (opts.lobby ? 132 : 0), this.dh - (phone ? P.footY : 60), { width: 120, height: 40, label: '提前收手', fontSize: 15 });
       // 先告诉调用方是收手关的，再关：关的时候 onClosed 是同步调的，要能认出来不去重建画面
       quit.setHandler(() => {
         onQuit();

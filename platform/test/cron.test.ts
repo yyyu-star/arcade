@@ -3,7 +3,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { exports } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runCleanup } from '../worker/api/cron';
-import worker from '../worker/index';
+import Arcade from '../worker/index';
 import { count, env, registerUser, resetAll } from './helpers';
 
 const DAY = 86_400_000;
@@ -73,10 +73,23 @@ describe('Cron 清理', () => {
     expect(await count('SELECT COUNT(*) AS n FROM sessions')).toBe(1);
   });
 
+  it('scheduled 不信调用方给的将来时间：清理最晚按现在算（还没过期的会话不删）', async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO sessions VALUES ('live', 'u', ?1, ?1, ?2)").bind(now, now + DAY),
+      env.DB.prepare("INSERT INTO sessions VALUES ('gone', 'u', 1, 1, ?1)").bind(now - DAY),
+    ]);
+    const ctx = createExecutionContext();
+    await new Arcade(ctx, env).scheduled(createScheduledController({ scheduledTime: now + 10 * 365 * DAY, cron: '17 19 * * *' }));
+    await waitOnExecutionContext(ctx);
+    expect(await count("SELECT COUNT(*) AS n FROM sessions WHERE token_hash = 'live'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM sessions WHERE token_hash = 'gone'")).toBe(0);
+  });
+
   it('scheduled 入口会跑清理', async () => {
     await env.DB.prepare('INSERT INTO sessions VALUES (?1, ?2, 1, 1, 2)').bind('s', 'u').run();
     const ctx = createExecutionContext();
-    await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 19 * * *' }), env, ctx);
+    await new Arcade(ctx, env).scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 19 * * *' }));
     await waitOnExecutionContext(ctx);
     expect(await count('SELECT COUNT(*) AS n FROM sessions')).toBe(0);
   });

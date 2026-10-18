@@ -49,10 +49,12 @@ export class MarketScreen {
     const lines = scene.add.graphics();
     lines.fillStyle(0xffffff, 0.035);
     for (let k = 4; k < h; k += 6) lines.fillRect(x + 4, y + k, w - 8, 1);
-    this.weather = addGlyph(scene, x + 18, y + 16, 'sun', 24);
-    this.mkt = addText(scene, x + 34, y + 16, '', { size: 13, bold: true, color: COLOR.screenText, originY: 0.5 });
+    // 0.19.0 手机上小屏矮到 46：两行字各往上收一点
+    const row1 = PHONE ? y + 13 : y + 16;
+    this.weather = addGlyph(scene, x + 18, row1, 'sun', PHONE ? 22 : 24);
+    this.mkt = addText(scene, x + 34, row1, '', { size: 13, bold: true, color: COLOR.screenText, originY: 0.5 });
     this.big = PHONE
-      ? addText(scene, x + w / 2, y + 41, '', { size: 17, bold: true, num: true, color: COLOR.screenText, originX: 0.5, originY: 0.5 })
+      ? addText(scene, x + w / 2, y + h - 13, '', { size: 17, bold: true, num: true, color: COLOR.screenText, originX: 0.5, originY: 0.5 })
       : addText(scene, x + w - 10, y + 16, '', { size: 17, bold: true, num: true, color: COLOR.screenText, originX: 1, originY: 0.5 });
     // 走势
     scene.add.rectangle(x + 8, y + 32, 176, 54, 0x000000, 0.18).setOrigin(0, 0).setRounded(6).setVisible(!PHONE);

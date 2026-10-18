@@ -7,6 +7,8 @@ declare const process: {
   exit(code?: number): never;
   cwd(): string;
   execPath: string;
+  /** tools/shot.ts 被 timeout 停时先打出已记下的失败 */
+  once(event: 'SIGTERM', fn: () => void): void;
 };
 // tools/sim.ts 读年度包用（与 tools/art/node-art.d.ts 里的同名声明合并）
 declare module 'node:fs' {

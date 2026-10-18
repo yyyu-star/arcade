@@ -7,7 +7,7 @@ import { sparkles } from '../fx/particles.ts';
 import { billLine, billStatus, dailyTag, dayLabel, levelHint, shortItemName } from '../labels.ts';
 import type { Rect } from '../rect.ts';
 import { sound } from '../sound.ts';
-import { COLOR, ITEM_KIND_COLOR, PHONE, TYPE, signColor, textOn } from '../theme.ts';
+import { COLOR, ITEM_KIND_COLOR, PHONE, TYPE, VIEW, signColor, textOn } from '../theme.ts';
 import { hasArt, itemKey } from '../assets.ts';
 import { addGlyph, addImage, addPill, addWood } from '../ui/art.ts';
 import { Button } from '../ui/button.ts';
@@ -18,6 +18,8 @@ import { MOOD_WORD, term } from '../glossary.ts';
 /** 大环境方向：只决定顶栏箭头和颜色（文字说明在日历提示里）。 */
 const MOOD_SIGN: Record<Mood, number> = { bull: 1, flat: 0, bear: -1 };
 import { TOP } from './layout.ts';
+import { phoneTopBar } from './topBarGeo.ts';
+import { moneyShort } from '../ui/dialog.ts';
 import { isLiveRun, marginWarn } from '../live.ts';
 import { chips, levText } from '../liveText.ts';
 import { lobbyLabel } from '../lobby.ts';
@@ -30,17 +32,7 @@ import { lobbyLabel } from '../lobby.ts';
  * goalX：有月度目标时「目标 + 要还的钱」那一块的左边（账户那一列收窄到 accW）；billLeft：没有目标时那一块的左边。
  */
 const TB = PHONE
-  ? {
-      lobby: { x: 4, y: 6, w: 40, h: 40, iconDy: 13, iconS: 18 },
-      calIcon: { x: 66, y: 18, s: 22 }, day: { x: 82, y: 6, size: 16 }, calPill: { x: 54, y: 29, h: 18 }, calTextX: 62, row2Y: 38,
-      calHit: { x: 50, y: 4, w: 136, h: 44 }, flagsRight: 182, flagY: 29,
-      accLabel: { x: 216, y: 38 }, wallet: { x: 200, y: 18, s: 24 }, account: { x: 216, y: 3, size: 22 }, accHit: { x: 186, y: 4, w: 202, h: 44 }, accWideW: 222,
-      goalX: 392, billLeft: 416, billRight: 640, billBox: { y: 6, h: 40 }, hourglass: { x: 604, y: 18, s: 18 }, daysLeft: { x: 616, y: 18 },
-      billY: 6, billNoteY: 38, goalIconY: 18, goalWordY: 38, goalBarY: 34, goalBarW: 90, houseY: 38, houseNoGoalY: 18, billTitleSize: 17,
-      itemsX: 646, itemsY: 4, itemsW: 214, itemsWExt: 146, rowIconY: 23, rowChipY: 23, row2Y0: 11, row2H: 23, row2Icon: 21,
-      bank: { x: 798, y: 6, w: 60, h: 40 }, bankIconDy: 14, bankIconS: 20,
-      help: { x: 864, y: 7, w: 42, h: 38 }, settings: { x: 912, y: 7, w: 40, h: 38 }, gear: { x: 932, y: 26, r: 10 }, rollY: 48,
-    }
+  ? phoneTopBar(VIEW.w)
   : {
       lobby: { x: 16, y: 10, w: 52, h: 46, iconDy: 15, iconS: 22 },
       calIcon: { x: 94, y: 26, s: 26 }, day: { x: 112, y: 14, size: TYPE.title }, calPill: { x: 84, y: 39, h: 18 }, calTextX: 92, row2Y: 48,
@@ -413,6 +405,8 @@ export class TopBarView {
       }
       this.bill.setPosition(GOAL_X + 14 + this.goalTagW, TB.billY).setFontSize(15);
       this.bill.setText(`${g.text}${state}`);
+      // 0.19.0 窄顶栏：目标一行不压到右边的沙漏和天数
+      if (PHONE) fitWidth(this.bill, TB.hourglass.x - 12 - this.bill.x, 3);
       setColor(this.bill, mt.goal.failed ? COLOR.muted : mt.goal.done ? COLOR.up : COLOR.ink);
       this.daysLeft.setText(`${mt.daysLeft}`).setVisible(true);
       this.hourglass.setVisible(true);
@@ -433,6 +427,8 @@ export class TopBarView {
           ? st.status === 'short' || st.status === 'credit' ? `差${gap}` : formatMoney(b.amount)
           : st.status === 'short' ? `差${gap} · 会出局` : st.status === 'credit' ? `差${gap} · 信用卡垫` : `${b.name} ${formatMoney(b.amount)}`,
       );
+      // 0.19.0 窄顶栏：放不下先换短写法（¥1.1万），再截
+      if (PHONE && this.billNote.x + this.billNote.width > TB.billRight - 4 && !(st.status === 'short' || st.status === 'credit')) this.billNote.setText(moneyShort(b.amount));
       fitWidth(this.billNote, TB.billRight - this.billNote.x - 4);
       setColor(this.billNote, alarm ? COLOR.danger : st.status === 'tight' ? COLOR.accentDark : COLOR.ink);
     } else {
@@ -502,6 +498,9 @@ export class TopBarView {
       bag.setInteractive();
       bindTooltip(bag, () => ({ x: ITEMS_X, y: TB.itemsY, w: 36, h: 36 }), () => ({ title: '道具栏（空）', body: '月底还完钱，三选一的奖励里可以挑道具。' }));
       const hint = addText(this.scene, 36, TB.rowChipY, '月底挑道具', { size: 11, color: COLOR.muted, originY: 0.5 });
+      // 0.19.0 手机顶栏窄时道具栏只剩几十宽：放不下就只留背包（说明在悬停里）
+      if (36 + hint.width > this.itemsW) hint.setText('道具');
+      if (36 + hint.width > this.itemsW) hint.setVisible(false);
       this.items.add([bag, hint]);
       return;
     }

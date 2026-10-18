@@ -169,7 +169,8 @@ export class RecapCard {
     const W0 = RECAP_RECT.w - PAD * 2;
     const all = [...r.lines.map((l) => `${l.head} ${l.money}：${l.why}`), ...r.effects];
     const canExpand = all.length > 0 || r.headline !== '';
-    const chips = this.brief || this.expanded ? [] : r.lines.slice(0, 4);
+    // 0.19.0 手机上小结窄（SE 约 292）：一枚至少 96 宽，放不下的几只点「详情」看
+    const chips = this.brief || this.expanded ? [] : r.lines.slice(0, RECAP_RECT.w < 600 ? Math.max(1, Math.min(4, Math.floor((W0 + 8) / 96))) : 4);
     const texts = this.expanded ? [r.headline, ...all.slice(0, 4)].map((t, i) => addText(s, 0, 0, t, { size: i === 0 ? 14 : 12, bold: i === 0, color: COLOR.ink, wrap: W0, lineSpacing: 2 })) : [];
     const bodyH = texts.reduce((n, t) => n + Math.min(t.height, 34) + 3, 0);
     // 账户层效果（借钱、押跌利息……）：收起时变成「图标 + 金额」小签（0.5.1 找回）
@@ -190,11 +191,14 @@ export class RecapCard {
     // 最精彩的一件事：星星 + 一句（放不下就截短，整句在详情里）
     if (r.star) {
       const sx = pct.x + pct.width + 22;
-      root.add(addGlyph(s, sx, y + 30, 'star', 22));
       const room = x + RECAP_RECT.w - PAD - 60 - (sx + 16) - (this.catBtn ? 32 : 0);
-      const st = addText(s, sx + 16, y + 21, arrowize(r.star.replace(/^(今天|昨天)最精彩：/, '')), { size: 14, bold: true, color: COLOR.accentDark });
-      fitWidth(st, room, 4);
-      root.add(st);
+      // 窄卡上放不下四个字就不写（整句在详情里）
+      if (room >= 60) {
+        root.add(addGlyph(s, sx, y + 30, 'star', 22));
+        const st = addText(s, sx + 16, y + 21, arrowize(r.star.replace(/^(今天|昨天)最精彩：/, '')), { size: 14, bold: true, color: COLOR.accentDark });
+        fitWidth(st, room, 4);
+        root.add(st);
+      }
     }
     // 每只一枚：小人头像 + 箭头数字 + 钱 + 最大原因（短签）+ 贡献小条（0.5.1 找回原因与占比）
     const chipW = Math.min(220, (W0 + 8) / Math.max(1, chips.length));
@@ -207,24 +211,26 @@ export class RecapCard {
       root.add(s.add.rectangle(cx, cy, cw, 56, 0xffffff, 0.7).setOrigin(0, 0).setRounded(10).setStrokeStyle(2, COLOR.edge, 1));
       // 手机横屏一张只有百来宽：头像缩小，只写涨跌和钱，原因放进悬停；「说对了」放在卡里底下那条的位置
       if (cw < 140) {
-        root.add(addImage(s, cx + 17, cy + 26, stockKey(l.stockId, faceOf(l.ret)), 30));
-        if (l.short) root.add(addGlyph(s, cx + 28, cy + 10, 'bear', 14));
-        root.add(addText(s, cx + 34, cy + 2, pctArrow(l.ret), { size: 15, bold: true, num: true, color: c }));
-        const mt = addText(s, cx + 34, cy + 20, l.money, { size: 13, bold: true, num: true, color: c });
-        if (mt.width > cw - 38) mt.setText(moneyShort(l.amount, true));
+        // 0.19.0 更窄（SE）时不放头像，涨跌和钱靠左（哪只看悬停）
+        const tx = cw < 110 ? cx + 8 : cx + 34;
+        if (cw >= 110) root.add(addImage(s, cx + 17, cy + 26, stockKey(l.stockId, faceOf(l.ret)), 30));
+        if (l.short) root.add(addGlyph(s, cw < 110 ? cx + cw - 12 : cx + 28, cy + 10, 'bear', 14));
+        root.add(addText(s, tx, cy + 2, pctArrow(l.ret), { size: 15, bold: true, num: true, color: c }));
+        const mt = addText(s, tx, cy + 20, l.money, { size: 13, bold: true, num: true, color: c });
+        if (mt.width > cx + cw - 4 - tx) mt.setText(moneyShort(l.amount, true));
         root.add(mt);
         if (l.called) {
           const ct = addText(s, 0, cy + 46, `${l.called}说对了`, { size: 13, bold: true, color: COLOR.white, originY: 0.5 });
-          if (ct.width > cw - 46) ct.setText(`${l.called}对了`);
-          if (ct.width > cw - 46) ct.setText('说对了');
-          const pw = Math.min(cw - 36, ct.width + 10);
-          root.add(addPill(s, cx + 32, cy + 37, pw, 18, COLOR.accentDark));
-          ct.setX(cx + 37);
+          if (ct.width > cw - (tx - cx) - 12) ct.setText(`${l.called}对了`);
+          if (ct.width > cw - (tx - cx) - 12) ct.setText('说对了');
+          const pw = Math.min(cw - (tx - cx) - 2, ct.width + 10);
+          root.add(addPill(s, tx - 2, cy + 37, pw, 18, COLOR.accentDark));
+          ct.setX(tx + 3);
           root.add(ct);
         } else {
-          const bw = Math.max(4, Math.round(((cw - 42) * Math.abs(l.amount)) / maxAmt));
-          root.add(s.add.rectangle(cx + 34, cy + 42, cw - 42, 6, COLOR.paperLo).setOrigin(0, 0).setRounded(3));
-          root.add(s.add.rectangle(cx + 34, cy + 42, bw, 6, c).setOrigin(0, 0).setRounded(3));
+          const bw = Math.max(4, Math.round(((cw - (tx - cx) - 8) * Math.abs(l.amount)) / maxAmt));
+          root.add(s.add.rectangle(tx, cy + 42, cw - (tx - cx) - 8, 6, COLOR.paperLo).setOrigin(0, 0).setRounded(3));
+          root.add(s.add.rectangle(tx, cy + 42, bw, 6, c).setOrigin(0, 0).setRounded(3));
         }
         const hit = s.add.rectangle(cx, cy, cw, 56, 0xffffff, 0.001).setOrigin(0, 0).setInteractive();
         bindTooltip(hit, () => ({ x: cx, y: cy, w: cw, h: 56 }), () => ({ title: l.head, body: `${l.money}：${l.why}${l.called ? `\n${l.called}之前在群里说对了这个风口的方向` : ''}` }));

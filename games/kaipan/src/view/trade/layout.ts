@@ -1,9 +1,9 @@
 import type { Rect } from '../rect.ts';
-import { PHONE } from '../theme.ts';
+import { PHONE, VIEW } from '../theme.ts';
 
 /**
  * 交易主场景的布局，见设计稿第 10 节。电脑是 1280×720 的世界；
- * 手机横屏（0.5.5）是 960×444：持仓在左上、收盘小结在左下、开盘键在右下角旁边，
+ * 手机横屏（0.5.5 起）：持仓在左上、收盘小结在左下、开盘键在右下角旁边，
  * 右边一块用标签页在「群聊」和「风口」之间切换（三块都摆开字就小得看不清）。
  */
 const DESKTOP = {
@@ -26,20 +26,36 @@ const DESKTOP = {
   TABS: null as Rect | null,
 } satisfies Record<string, Rect | null>;
 
-const MOBILE: typeof DESKTOP = {
-  TOP: { x: 4, y: 4, w: 952, h: 46 },
-  BOARD: { x: 616, y: 102, w: 338, h: 338 },
-  PHONE: { x: 616, y: 102, w: 338, h: 338 },
-  SLOTS: { x: 8, y: 56, w: 600, h: 222 },
-  MONITOR: { x: 462, y: 284, w: 146, h: 58 },
-  OPEN: { x: 462, y: 350, w: 146, h: 86 },
-  RECAP: { x: 8, y: 284, w: 448, h: 154 },
-  HINT: { x: 8, y: 284, w: 448, h: 154 },
-  // 标签页是手机上点得最多的地方：高 46（844×390 上约 40px），下沿再往下撑一点点击区见 tabs.ts
-  TABS: { x: 616, y: 52, w: 338, h: 46 },
-};
+/**
+ * 手机（0.19.0）：世界宽 718–960、高 404（见 theme.ts 的 phoneWorld），各块按宽度算。
+ * 右边群聊 / 风口一块占宽度的三分之一多（256–338），左边是持仓、下面是小结和开盘键。
+ */
+export function mobileLayout(W: number, H: number): typeof DESKTOP {
+  const panelW = Math.max(256, Math.min(338, Math.round(W * 0.355)));
+  const px = W - 6 - panelW;
+  const leftW = px - 16;
+  const slotsY = 54;
+  const slotsH = 214;
+  const lowY = slotsY + slotsH + 6;
+  const lowH = H - 4 - lowY;
+  const openW = 140;
+  const ox = 8 + leftW - openW;
+  const recap = { x: 8, y: lowY, w: leftW - openW - 8, h: lowH };
+  return {
+    TOP: { x: 4, y: 4, w: W - 8, h: 46 },
+    BOARD: { x: px, y: 100, w: panelW, h: H - 104 },
+    PHONE: { x: px, y: 100, w: panelW, h: H - 104 },
+    SLOTS: { x: 8, y: slotsY, w: leftW, h: slotsH },
+    MONITOR: { x: ox, y: lowY, w: openW, h: 46 },
+    OPEN: { x: ox, y: lowY + 50, w: openW, h: lowH - 50 },
+    RECAP: recap,
+    HINT: recap,
+    // 标签页是手机上点得最多的地方：高 46（SE 上约 43px），下沿再往下撑一点点击区见 tabs.ts
+    TABS: { x: px, y: 52, w: panelW, h: 46 },
+  };
+}
 
-const L = PHONE ? MOBILE : DESKTOP;
+const L = PHONE ? mobileLayout(VIEW.w, VIEW.h) : DESKTOP;
 
 export const TOP: Rect = L.TOP;
 export const BOARD: Rect = L.BOARD;

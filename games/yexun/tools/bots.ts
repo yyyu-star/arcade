@@ -307,7 +307,7 @@ export class Bot {
     for (const m of MERGES) {
       if (!m.dual || w.merges.includes(m.id)) continue;
       const other = c.id === m.a ? m.b : c.id === m.b ? m.a : null;
-      if (other && w.weapons.some((o) => o.id === other)) return 20;
+      if (other && w.weapons.some((o) => o.id === other)) return 35;
     }
     return 0;
   }

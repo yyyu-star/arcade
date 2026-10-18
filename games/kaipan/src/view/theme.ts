@@ -135,8 +135,27 @@ export const PHONE = ((): boolean => {
   });
 })();
 
-/** 实际的世界尺寸：电脑 1280×720，手机横屏 960×444。适配过手机的界面按它布局。 */
-export const VIEW = PHONE ? { w: 960, h: 444 } : { w: GAME_WIDTH, h: GAME_HEIGHT };
+/**
+ * 0.19.0 手机世界：高固定 404，宽按屏幕横过来的长宽比算（718–960，取偶数）。
+ * 以前一律 960×444，在 667×375 的 iPhone SE 上只缩到 0.695 倍，13 号字只有 9 像素、50 的点击区只有 35 像素；
+ * 现在 SE 是 718×404（0.928 倍：13 号约 12.1px、50 约 46px），844×390 是 874×404（0.965 倍）。
+ * 比 718/404 更方的屏（很少见）宽取 718，多出来的高由 EXPAND 补背景；比 960/404 更长的屏宽取 960，多出来的宽同样补背景。
+ * 开局时按当时的窗口定下来（转屏只是同一块画布换方向铺满，收放地址栏只差几个像素，由 EXPAND 吸收）。
+ */
+export const PHONE_H = 404;
+export const PHONE_W = { min: 718, max: 960 } as const;
+export function phoneWorld(w: number, h: number): { w: number; h: number } {
+  const long = Math.max(w, h);
+  const short = Math.max(1, Math.min(w, h));
+  const raw = Math.round((PHONE_H * long) / short / 2) * 2;
+  return { w: Math.min(PHONE_W.max, Math.max(PHONE_W.min, raw)), h: PHONE_H };
+}
+/** 还没按新世界重排的手机场景（0.19.0 只重排了交易页）：仍按旧的 960×444 布局，整体缩放进可见区，和以前看到的一样大 */
+export const LEGACY_PHONE = { w: 960, h: 444 } as const;
+
+/** 实际的世界尺寸：电脑 1280×720，手机横屏见 phoneWorld。适配过手机的界面按它布局。 */
+export const VIEW =
+  PHONE && typeof window !== 'undefined' ? phoneWorld(window.innerWidth || 844, window.innerHeight || 390) : { w: GAME_WIDTH, h: GAME_HEIGHT };
 
 /**
  * 0.5.9 省内存的设备：iOS（含报成 Mac 的 iPad）和触屏手机平板。iOS Safari 的网页进程内存超了会直接"网页已崩溃"，

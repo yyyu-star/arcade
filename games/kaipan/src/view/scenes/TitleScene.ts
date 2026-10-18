@@ -80,7 +80,8 @@ const CLOUDS: readonly [number, number, number][] = [[192, 376, 1], [1104, 336, 
 type Item = { key: string; label: string; fn: () => void };
 
 export class TitleScene extends BaseScene {
-  protected override readonly phoneReady = PHONE;
+  // 0.19.0 手机世界改成 718–960×404，主页还没重排（0.19.1）：先按旧的 960×444 整体缩放进来
+  protected override readonly phoneReady = PHONE ? ('legacy' as const) : false;
   private buttons: Record<string, Button> = {};
   private room: Room | null = null;
   private profile: Profile = emptyProfile();

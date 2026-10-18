@@ -33,7 +33,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    // 手机横屏直接按 960×444 布局（VIEW 在电脑上就是 1280×720）
+    // 手机横屏直接按手机世界布局（VIEW，见 theme.ts 的 phoneWorld；电脑上是 1280×720）
     setupCamera(this, PHONE);
     const cx = VIEW.w / 2;
     const cy = VIEW.h / 2;

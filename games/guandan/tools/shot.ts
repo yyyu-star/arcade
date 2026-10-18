@@ -198,6 +198,52 @@ async function shot(ctx: Ctx, file: string): Promise<void> {
   const path = `${OUT}/${file}.png`;
   await ctx.page.screenshot({ path });
   shots.push(path);
+  if (AUDIT) await auditShot(ctx, file);
+}
+
+/**
+ * 手机审计（--audit，和 --gallery 一起用）：每张截图顺带量一遍，按页面 CSS 像素记下
+ * 字 < 12px（纯数字 < 14px）、点按区域 < 44×44 的；画布里的读调试桥 texts()/hits()，DOM 的读计算样式。最后汇总进 audit.md
+ */
+const AUDIT = process.argv.includes('--audit');
+const audits: string[] = [];
+async function auditShot(ctx: Ctx, file: string): Promise<void> {
+  const r = await ctx.page.evaluate(() => {
+    const g = window.__game;
+    const canvasTexts = g ? g.texts() : [];
+    const canvasHits = g ? g.hits() : [];
+    const domTexts: { s: string; px: number }[] = [];
+    const domHits: { s: string; w: number; h: number }[] = [];
+    const vis = (e: Element): boolean => {
+      const st = getComputedStyle(e);
+      const b = e.getBoundingClientRect();
+      return st.display !== 'none' && st.visibility !== 'hidden' && Number(st.opacity) > 0.05 && b.width > 0 && b.height > 0 && b.bottom > 0 && b.top < innerHeight;
+    };
+    for (const e of Array.from(document.body.querySelectorAll('*'))) {
+      if (e.closest('canvas, svg, script, style') || !vis(e)) continue;
+      const own = Array.from(e.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent ?? '').join('').trim();
+      if (own) domTexts.push({ s: own.slice(0, 24), px: parseFloat(getComputedStyle(e).fontSize) });
+      if (e.matches('button, a[href], input, [role=button]')) {
+        const b = e.getBoundingClientRect();
+        domHits.push({ s: (e.textContent ?? e.getAttribute('aria-label') ?? e.id).trim().slice(0, 16), w: Math.round(b.width), h: Math.round(b.height) });
+      }
+    }
+    return { canvasTexts, canvasHits, domTexts, domHits };
+  });
+  const num = (t: string): boolean => /^[\d\s×+\-.:/%（）()]+$/.test(t);
+  const small = [...r.canvasTexts, ...r.domTexts].filter((t) => t.px < (num(t.s) ? 14 : 12));
+  const tiny = [
+    ...r.canvasHits.map((h) => ({ s: h.kind, w: Math.round(h.w), h: Math.round(h.h) })),
+    ...r.domHits,
+  ].filter((h) => h.w < 44 || h.h < 44);
+  const minText = Math.min(...[...r.canvasTexts, ...r.domTexts].map((t) => t.px), Infinity);
+  const lines = [`### ${file}`, `- 最小字 ${minText === Infinity ? '—' : `${minText}px`}；字太小 ${small.length} 处；点按区域不到 44 的 ${tiny.length} 处`];
+  // 同一句字只列一次（按字号最小的那次）
+  const seen = new Map<string, number>();
+  for (const t of small) seen.set(t.s, Math.min(seen.get(t.s) ?? Infinity, t.px));
+  for (const [t, px] of [...seen].sort((a, b) => a[1] - b[1]).slice(0, 12)) lines.push(`  - 字 ${px}px：${t}`);
+  for (const h of tiny.slice(0, 12)) lines.push(`  - 点按 ${h.w}×${h.h}：${h.s}`);
+  audits.push(lines.join('\n'));
 }
 
 async function controls(ctx: Ctx): Promise<Record<string, { x: number; y: number; enabled?: boolean; visible?: boolean }>> {
@@ -1035,21 +1081,32 @@ async function gallerySize(browser: Browser, z: GallerySize): Promise<void> {
 }
 
 async function gallery(browser: Browser): Promise<void> {
-  const sizes: GallerySize[] = [
-    { prefix: '1280', w: 1280, h: 720, dpr: 1, touch: false },
-    { prefix: '1920', w: 1920, h: 1080, dpr: 1, touch: false },
-    { prefix: '844', w: 844, h: 390, dpr: 2, touch: true },
-  ];
+  // --sizes 667x375,844x390,1180x820：换一组尺寸（手机审计用）；宽 < 1400 的按触屏、2 倍
+  const si = process.argv.indexOf('--sizes');
+  const sizes: GallerySize[] = si > 0
+    ? process.argv[si + 1]!.split(',').map((z: string): GallerySize => {
+      const [w, h] = z.split('x').map(Number) as [number, number];
+      return { prefix: String(w), w, h, dpr: w < 1400 ? 2 : 1, touch: w < 1400 };
+    })
+    : [
+      { prefix: '1280', w: 1280, h: 720, dpr: 1, touch: false },
+      { prefix: '1920', w: 1920, h: 1080, dpr: 1, touch: false },
+      { prefix: '844', w: 844, h: 390, dpr: 2, touch: true },
+    ];
   for (const z of sizes) {
     const t = Date.now();
     await gallerySize(browser, z);
     notes.push(`图集 ${z.prefix}：${Math.round((Date.now() - t) / 1000)} 秒`);
   }
-  // 手机竖屏："请横过来"
-  const pt = await open(browser, '图集竖屏', 'debug=1', { w: 390, h: 844, dpr: 2, touch: true, noWait: true });
-  await pt.page.waitForTimeout(1500);
-  await shot(pt, '390-13-portrait');
-  await pt.page.context().close();
+  // 手机竖屏："请横过来"（审计时 SE、普通手机、iPad 竖着各看一张）
+  const portraits = AUDIT ? [[375, 667], [390, 844], [820, 1180]] : [[390, 844]];
+  for (const [w, h] of portraits) {
+    const pt = await open(browser, `图集竖屏${w}`, 'debug=1', { w: w!, h: h!, dpr: 2, touch: true, noWait: true });
+    await pt.page.waitForTimeout(1500);
+    await shot(pt, `${w}-13-portrait`);
+    await pt.page.context().close();
+  }
+  if (AUDIT) writeFileSync(`${OUT}/audit.md`, `# 手机审计（tools/shot.ts --gallery --audit）\n\n${audits.join('\n\n')}\n`);
 }
 
 async function look(browser: Browser): Promise<void> {
