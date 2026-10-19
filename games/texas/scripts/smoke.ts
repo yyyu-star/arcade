@@ -964,6 +964,86 @@ async function match(browser: Browser, base: string): Promise<void> {
   await Promise.all([one.close(), two.close()]);
 }
 
+/**
+ * 竖屏打磨（--only tall，0.21.3）：五档竖屏（SE 375×667、安卓 360×780、390×844、414×896、430×932）各截单机 6 人桌、打开聊天条、发一句冒气泡、点头像出互动菜单；
+ * SE 再截一张好友房（两个人坐下开打，顶上那一排不换行）。看谁压了谁用，控制台零报错照样算
+ */
+const TALL: [string, number, number][] = [
+  ['se', 375, 667],
+  ['360', 360, 780],
+  ['390', 390, 844],
+  ['414', 414, 896],
+  ['430', 430, 932],
+];
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const tallDevice = (width: number, height: number) => ({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IPHONE });
+
+async function tall(browser: Browser, base: string): Promise<void> {
+  for (const [tag, width, height] of TALL) {
+    const ctx = await newContext(browser, base, `smoke-tall-${tag}`, tallDevice(width, height));
+    await ctx.addInitScript(() => localStorage.setItem('texas.settings', JSON.stringify({ fast: true })));
+    const page = await ctx.newPage();
+    watch(page, `tall-${tag}`);
+    await page.goto(`${base}/games/texas/`);
+    await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+    await page.locator('.qstart').tap();
+    await skipTips(page);
+    if (!(await page.locator('.stage.tall').count())) throw new Error(`${tag}: portrait layout not used`);
+    // 轮到我、操作按钮亮着的时候截：手牌、公共牌、按钮都在
+    await page.locator('.actions.on').waitFor({ timeout: 60_000 });
+    await shot(page, `tall-${tag}-table`);
+    // 跟到翻牌：公共牌摆出来再截一张（看公共牌有没有被筹码、座位挡住）
+    for (let i = 0; i < 300 && (await page.locator('.card.board.up').count()) < 3; i++) {
+      if (await page.locator('.actions.on').isVisible()) await page.locator('.act.call').tap().catch(() => {});
+      await page.waitForTimeout(150);
+    }
+    await page.locator('.actions.on').waitFor({ timeout: 30_000 }).catch(() => {});
+    await shot(page, `tall-${tag}-board`);
+    await page.locator('[data-key="chat:button"]').tap();
+    await page.locator('.atc-input').waitFor();
+    await shot(page, `tall-${tag}-chat`);
+    await page.locator('.atc-input').fill('这把我跟了');
+    await page.locator('.atc-input').press('Enter');
+    await page.waitForTimeout(400);
+    await page.locator('[data-key="chat:close"]').tap().catch(() => {});
+    await page.waitForTimeout(300);
+    await shot(page, `tall-${tag}-bubble`);
+    // 头像上盖着 kit 的热区（atf-hot），点它
+    await page.locator('.atf-hot[data-seat="2"]').tap();
+    await page.waitForTimeout(400);
+    await shot(page, `tall-${tag}-menu`);
+    await ctx.close();
+  }
+  // 好友房：最窄的 SE 上的房主开 6 人房（顶上那一排最挤：互动、聊天、第几手、歇一手、叫朋友来），电脑上的朋友进来坐下，开打
+  const host = await newContext(browser, base, 'smoke-tall-host', tallDevice(375, 667));
+  const pal = await newContext(browser, base, 'smoke-tall-pal');
+  const [hp, pp] = await Promise.all([host.newPage(), pal.newPage()]);
+  watch(hp, 'tall-room-host');
+  watch(pp, 'tall-room-pal');
+  for (const p of [hp, pp]) {
+    await p.goto(`${base}/games/texas/`);
+    await p.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+  }
+  await enter(hp, '好友房', true);
+  await hp.locator('.friends .pill', { hasText: '开房间' }).tap();
+  await hp.locator('.rw-seat.me').waitFor();
+  const code = ((await hp.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
+  await pp.goto(`${base}/games/texas/?room=${code}`);
+  await pp.locator('.rw-seat').nth(1).locator('.rw-sit').click();
+  await pp.locator('.rw-seat.me').waitFor();
+  await hp.locator('.rw-go .start').tap();
+  await hp.locator('.stage.at-table').waitFor({ timeout: 30_000 });
+  await hp.locator('.seat.me .card.up').first().waitFor({ timeout: 30_000 });
+  await skipTips(hp);
+  await shot(hp, 'tall-se-room');
+  // 换行了的话第二行的中线比第一行低一大截
+  const mids = await hp.locator('.hud > :not(.hidden)').evaluateAll((es) =>
+    es.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0).map((r) => r.top + r.height / 2),
+  );
+  if (Math.max(...mids) - Math.min(...mids) > 30) throw new Error(`tall room: the top row wrapped ${mids.map(Math.round).join(',')}`);
+  await Promise.all([host.close(), pal.close()]);
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1099,6 +1179,7 @@ async function main(): Promise<void> {
         if (!only || only === 'mobile' || only === 'portrait') await portraitLobby(browser, base);
         if (!only || only === 'room') await room(browser, base);
         if (!only || only === 'match') await match(browser, base);
+        if (only === 'tall') await tall(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

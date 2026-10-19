@@ -370,6 +370,8 @@ body::before {
 .card.mine .c-pip { width: 17px; height: 17px; }
 .card.mine .c-big { width: 32px; height: 32px; }
 .card.board.hidden, .card.gone { visibility: hidden; }
+/* 竖屏的公共牌缩小一点（0.21.3）：桌子窄，58 宽的 5 张两头压到左右座位的名牌（layout.ts 的 boardPos 间距 54） */
+.stage.tall .card.board { width: 50px; height: 70px; }
 .card.fly { z-index: 30; }
 .showdown .card.up:not(.best) .c-face { filter: brightness(.55); }
 .card.best { box-shadow: 0 0 0 2px var(--gold), 0 0 14px rgba(243, 200, 107, .7); border-radius: 6px; }
@@ -1144,6 +1146,8 @@ body::before {
 /* 顶栏下面第二行：第几手、歇一手、嘲讽；桌子从 150 往下 */
 .stage.tall .hud { top: 60px; bottom: auto; left: var(--s-3); right: var(--s-3); flex-wrap: wrap; }
 .stage.tall .hud .hand-no { margin-right: auto; }
+/* 竖屏"互动""聊天"两个占位并排（0.21.3）：窄一点，SE 上好友房那一排还要放"歇一手""叫朋友来"，不换行 */
+.stage.tall .hud .fun-slot { width: calc(64px * var(--ui)); }
 
 /* 竖屏我的动作气泡（"小盲 10"）：放在头像左边，不压右边的底牌 */
 .stage.tall .seat.me .bubble { left: -150px; top: 22px; transform: translateX(-100%); }

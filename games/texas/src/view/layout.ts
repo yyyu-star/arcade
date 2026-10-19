@@ -91,7 +91,12 @@ export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
   // 我的：底边在底牌上面一点（.bet.mine 按底边摆），往上长不碰底池
   if (mine) return { x: f.cx, y: p.y - 100 };
   // 竖屏桌子窄、座位挤：顶上的放在名牌正下方，两边的放在名牌朝桌心那一侧、底牌下面，不碰动作签、底牌和名牌（0.10.0 审阅）
-  if (g.tall) return isTop(p, g) ? { x: p.x, y: p.y + 104 } : { x: p.x + (p.x < f.cx ? 1 : -1) * 124, y: p.y + 44 };
+  // 0.21.3（10-19 竖屏打磨）：上半边两侧的原来按座位往下 44，正好落在公共牌上；改成公共牌上方那一条，左右让开顶上座位的下注
+  if (g.tall) {
+    if (isTop(p, g)) return { x: p.x, y: p.y + 104 };
+    const dir = p.x < f.cx ? 1 : -1;
+    return p.y < f.cy ? { x: p.x + dir * 112, y: TALL_BOARD_Y(g) - 59 } : { x: p.x + dir * 124, y: p.y + 44 };
+  }
   // 往桌心走 42%，但离座位 90–130 之间（0.18.2）：只按比例时顶上的座位离桌心近，筹码贴着名牌，两边的离得远，筹码跑到桌子中间，看着不齐
   const dx = f.cx - p.x;
   const dy = f.cy - p.y;
@@ -102,6 +107,8 @@ export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
 
 /** 庄家按钮：在下注的位置旁边偏一点 */
 export function buttonPos(p: Pt, g: Geo, mine: boolean): Pt {
+  // 竖屏别人的（0.21.3）：按下注摆会落到公共牌、别人的下注上；两侧的贴在头像朝外的上角（像角标：底牌在朝桌心那边，动作签在正上方），顶上的放名牌右下
+  if (g.tall && !mine) return isTop(p, g) ? { x: p.x + 84, y: p.y + 62 } : { x: p.x - (p.x < felt(g).cx ? 1 : -1) * 32, y: p.y - 26 };
   const b = betPos(p, g, mine);
   // 别人的放在下注那摞筹码的左边（数字在右边），不压数字
   return mine ? { x: b.x - 96, y: b.y - 12 } : { x: b.x - 64, y: b.y };
@@ -128,14 +135,20 @@ export function dealerSpots(g: Geo, size: number): Pt[] {
 /** 荷官左右各要让出多宽（头像 60、名牌 108、旁边的底牌和动作签都算上） */
 const DEALER_ROOM = 150;
 
+/**
+ * 竖屏公共牌那一行的中心（0.21.3）：比桌心低一点，上面让出一条放上半边两侧座位的下注。
+ * 竖屏的公共牌也缩小了（style.css 的 .stage.tall .card.board，50 宽、间距 54）：原来 5 张两头压到左右座位的名牌（10-19 截图）
+ */
+const TALL_BOARD_Y = (g: Geo): number => felt(g).cy + 16;
 /** 公共牌：5 张的中心（竖屏桌子窄，挨得近一点） */
-export const boardPos = (g: Geo, i: number): Pt => ({ x: g.w / 2 + (i - 2) * (g.tall ? 62 : 66), y: felt(g).cy - 18 });
+export const boardPos = (g: Geo, i: number): Pt =>
+  g.tall ? { x: g.w / 2 + (i - 2) * 54, y: TALL_BOARD_Y(g) } : { x: g.w / 2 + (i - 2) * 66, y: felt(g).cy - 18 };
 /** 池子在公共牌下面（0.1.1：原来在上面，和顶上座位的下注、庄家按钮挤在一起） */
-export const potPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 54 });
+export const potPos = (g: Geo): Pt => ({ x: g.w / 2, y: g.tall ? TALL_BOARD_Y(g) + 70 : felt(g).cy + 54 });
 /** 一手的结果条：公共牌和池子下面（0.1.1：放在上面会盖住顶上座位的庄家按钮），按上边摆；0.18.2 往上挪 12，两行的结果不压我的底牌 */
-export const resultPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy + 64 });
+export const resultPos = (g: Geo): Pt => ({ x: g.w / 2, y: g.tall ? TALL_BOARD_Y(g) + 80 : felt(g).cy + 64 });
 /** 牌堆：发牌从这里出，弃的牌、收的牌飞回这里。在桌子正中（公共牌的位置） */
-export const deckPos = (g: Geo): Pt => ({ x: g.w / 2, y: felt(g).cy - 18 });
+export const deckPos = (g: Geo): Pt => (g.tall ? { x: g.w / 2, y: TALL_BOARD_Y(g) } : { x: g.w / 2, y: felt(g).cy - 18 });
 
 /**
  * 按看得见的区域算舞台：高比宽大 1.5 倍以上（手机竖着拿）用竖屏舞台，否则横屏（平板竖着也用横屏，上下留边）

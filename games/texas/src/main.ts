@@ -161,8 +161,8 @@ const spectate = el('span', 'spectate hidden', hud, '也可以点蓝圈的座位
 const funSlot = el('div', 'fun-slot hidden', hud);
 // 放在这一行最前面：后面的"补码""歇一手"一显一隐，这个位置也不挪（kit 的按钮按矩形摆，挪了会压到别的按钮）
 hud.prepend(funSlot);
-// 手机横屏的"聊天"按钮（kit 0.19 的 chatButton）也在这一行占个位，挨着"互动"：不给的话 kit 把它摆在互动右边，压住"第几手""歇一手"（10-18 手机横屏截图）。
-// 电脑是聊天框、竖屏 kit 摆在互动下面，都不占这个位
+// 手机的"聊天"按钮（kit 0.19 的 chatButton）也在这一行占个位，挨着"互动"：不给的话 kit 把它摆在互动旁边，横屏压住"第几手""歇一手"（10-18），
+// 竖屏摆在互动下面压住左上的座位（10-19）。电脑是聊天框，不占这个位
 const chatSlot = el('div', 'fun-slot chat-slot hidden', hud);
 funSlot.after(chatSlot);
 // 开打以后也能叫人（0.3.0）：朋友点开链接看着，点亮着的电脑座位就能接管
@@ -725,6 +725,7 @@ function openFun(scope: string): void {
     chat: online ? (text: string) => online!.chat(text) : localChat((text, masked) => tf?.chat(ME, text, masked)),
     chatEnabled: chatOn,
     chatButton: () => (chatSlot.classList.contains('hidden') ? null : chatSlot.getBoundingClientRect()),
+    danmakuArea: () => tallDanmaku(),
     scope: () => scope,
     localBots: !online,
     sound: (prop, phase) => funSound(prop, phase),
@@ -750,6 +751,21 @@ const dockFitsNow = (): boolean => {
   const d = dockSize();
   return tableView.dockFits(d.w, d.h, dockAvoid());
 };
+
+/**
+ * 竖屏的弹幕走我的座位和操作区之间那一截空地（10-19）：kit 默认在屏幕 8%–58% 飘，竖屏那里全是座位和公共牌，弹幕总压着别人的名牌。
+ * 空地不到两行高（比如加注面板展开了）就交回 kit 默认
+ */
+function tallDanmaku(): { left: number; top: number; width: number; height: number } | null {
+  if (!stage.classList.contains('tall')) return null;
+  const me = mySeat();
+  const plate = me === null ? null : tableView.plateRect(me);
+  const acts = bar.root.getBoundingClientRect();
+  if (!plate || acts.height <= 0) return null;
+  const top = plate.bottom + 8;
+  const height = acts.top - 8 - top;
+  return height >= 72 ? { left: 8, top, width: window.innerWidth - 16, height } : null;
+}
 
 /** 聊天框要躲的：顶栏、左下"互动"那一排、两手之间那一栏 */
 function dockAvoid(): DOMRect[] {
@@ -827,7 +843,7 @@ function funReady(): boolean {
 function syncFun(): void {
   if (!tf) return;
   toggle(funSlot, 'hidden', !funReady());
-  const phoneRow = chatLayout({ width: window.innerWidth, height: window.innerHeight }) === 'phone' && !stage.classList.contains('tall');
+  const phoneRow = chatLayout({ width: window.innerWidth, height: window.innerHeight }) === 'phone';
   toggle(chatSlot, 'hidden', !(funReady() && chatOn() && phoneRow));
   document.body.classList.toggle('texas-fun-idle', !funReady());
   tf.refresh();
