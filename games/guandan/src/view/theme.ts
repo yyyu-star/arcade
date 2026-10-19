@@ -93,6 +93,11 @@ export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const RADIUS = { sm: 8, md: 12, lg: 14, xl: 22 } as const;
 /** 投影：一律往下偏、同一个浓度，光从正上方来 */
 export const SHADOW = { dy: 4, alpha: 0.35 } as const;
+/**
+ * 卡通描边（0.27.0，仓库统一的卡通风格，配色表在 docs/art-v3.md 第 7 节）：按钮、面板、名牌一律深墨色描边、实色下沿，
+ * 下沿按下时下沉（不用半透明黑投影），平涂不叠渐变
+ */
+export const OUTLINE = { color: 0x2b1d14, width: 3, ledge: 4 } as const;
 
 /**
  * 点按区域的下限：44 CSS 像素合多少世界坐标。电脑上 1280×720 是 1:1，就是 44；手机横屏 844×390 缩到 ×0.54，要 82。
@@ -113,12 +118,12 @@ export function hitFor(w: number, h: number): number {
 
 /** 按钮的几种配色：主按钮红、要紧的金、确认绿、次要木色、联机蓝。按下、悬停、禁用由 kit.ts 按同一套规则算 */
 export const BUTTON = {
-  red: { fill: 0xc0282f, text: 0xfff3d6, rim: 0xf0c66e },
-  gold: { fill: 0xe6b450, text: 0x4a2a0c, rim: 0xfff0c0 },
-  green: { fill: 0x2f8a55, text: 0xf2fff4, rim: 0xb8e6c4 },
-  wood: { fill: 0x7a4a26, text: 0xffeccb, rim: 0xd7a55b },
-  blue: { fill: 0x2f68b0, text: 0xeef6ff, rim: 0xa8cdf5 },
-  off: { fill: 0x5d5049, text: 0xb5aaa0, rim: 0x8a7d70 },
+  red: { fill: 0xe0403a, text: 0xffffff, rim: 0xff9a84 },
+  gold: { fill: 0xffc53d, text: 0x2b1d14, rim: 0xfff0b8 },
+  green: { fill: 0x3cb55e, text: 0xffffff, rim: 0xa8ecb8 },
+  wood: { fill: 0xa8683a, text: 0xfff6e0, rim: 0xe6b37a },
+  blue: { fill: 0x3d8ae6, text: 0xffffff, rim: 0xa8d0ff },
+  off: { fill: 0x9a8f86, text: 0xf2ece4, rim: 0xc4bab0 },
 } as const;
 /** 键盘焦点框的颜色：金色在红、木、绿底上都看得见 */
 export const FOCUS_RING = 0xffd54a;
@@ -136,7 +141,7 @@ export const THEME_CSS = `
   --gd-red: ${css(COLOR.red)}; --gd-red-dark: ${css(COLOR.redDark)}; --gd-gold: ${css(COLOR.gold)}; --gd-gold-light: ${css(COLOR.goldLight)};
   --gd-wood: ${css(COLOR.wood)}; --gd-paper: ${css(COLOR.paper)}; --gd-ink: ${css(COLOR.ink)}; --gd-muted: ${css(COLOR.muted)};
   --gd-green: ${css(BUTTON.green.fill)}; --gd-felt: ${css(COLOR.felt)}; --gd-felt-dark: ${css(COLOR.feltDark)}; --gd-focus: ${css(FOCUS_RING)};
-  --gd-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+  --gd-shadow: 0 4px 0 #2b1d14; --gd-line: 3px solid #2b1d14;
   --gd-hit: 44px;
   /* kit 的 DOM 组件（邀请横条、叫朋友来、分享预览、互动菜单）跟着掼蛋的红金木色（kit 0.16 的主题变量，靠继承生效） */
   --ak-bg: rgba(43, 29, 20, 0.97); --ak-fg: #fff6e0; --ak-accent: var(--gd-red); --ak-accent-fg: #fff6e0;
@@ -144,18 +149,18 @@ export const THEME_CSS = `
 }
 /* 统一的按钮：常态、悬停、按下（下沉）、禁用、键盘焦点、加载中 */
 .gd-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--gd-s2); min-height: var(--gd-hit); padding: 0 var(--gd-s4);
-  border: 2px solid rgba(255, 240, 192, 0.55); border-radius: var(--gd-r-md); background: var(--gd-red); color: #fff3d6;
+  border: var(--gd-line); border-radius: var(--gd-r-md); background: ${css(BUTTON.red.fill)}; color: #fff;
   font: bold 16px/1 var(--gd-font); box-shadow: var(--gd-shadow); cursor: pointer; position: relative;
   transition: transform 80ms ease-out, filter 120ms, box-shadow 80ms; -webkit-tap-highlight-color: transparent; }
 .gd-btn:hover:not(:disabled) { filter: brightness(1.08); }
-.gd-btn:active:not(:disabled) { transform: translateY(2px) scale(0.97); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
-.gd-btn:disabled { background: #5d5049; color: #b5aaa0; border-color: #8a7d70; cursor: default; box-shadow: none; }
+.gd-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #2b1d14; }
+.gd-btn:disabled { background: ${css(BUTTON.off.fill)}; color: ${css(BUTTON.off.text)}; cursor: default; box-shadow: none; }
 .gd-btn:focus-visible { outline: 3px solid var(--gd-focus); outline-offset: 2px; }
 .gd-btn.is-loading { color: transparent; pointer-events: none; }
 .gd-btn.is-loading::after { content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%;
   border: 3px solid rgba(255, 243, 214, 0.35); border-top-color: #fff3d6; animation: gd-spin 0.8s linear infinite; }
-.gd-btn.gd-2 { background: #7a6555; }
-.gd-btn.gd-big { min-height: 56px; font-size: 22px; background: var(--gd-green); }
+.gd-btn.gd-2 { background: ${css(BUTTON.wood.fill)}; }
+.gd-btn.gd-big { min-height: 56px; font-size: 22px; background: ${css(BUTTON.green.fill)}; }
 @keyframes gd-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .gd-btn { transition: none; } .gd-btn.is-loading::after { animation-duration: 2.4s; } }
 `;

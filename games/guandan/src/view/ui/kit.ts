@@ -3,7 +3,7 @@
  * 底板全用 Graphics 画（矢量，相机 zoom 后依然锐利），尺寸随用随定，不需要预烘焙贴图。
  */
 import Phaser from 'phaser';
-import { BUTTON, COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, RADIUS, RENDER_SCALE, SHADOW, TYPE, css, minHit, typeFloor } from '../theme.ts';
+import { BUTTON, COLOR, FONT, FONT_NUM, FONT_TITLE, GAME_HEIGHT, OUTLINE, RADIUS, RENDER_SCALE, SHADOW, TYPE, css, minHit, typeFloor } from '../theme.ts';
 import { audio } from '../audio.ts';
 import { focusable, pushLayer } from './focus.ts';
 
@@ -111,30 +111,24 @@ function shade(c: number, f: number): number {
 export type ButtonStyle = Exclude<keyof typeof BUTTON, 'off'>;
 
 /**
- * 圆角按钮底板：漆面（0.10.0）。不用渐变填充（Canvas 渲染不支持），用几层叠出来：上半亮、下沿暗、顶上一道高光，金边外加一圈细亮线。
- * 按下时面板下沉 2、投影跟着收。
+ * 圆角按钮底板：卡通平涂（0.27.0，原来是几层叠出来的漆面）。深墨描边，底下一条深墨实色下沿，按下时面板下沉到下沿上；
+ * 顶上一道浅色高光（rim）让平涂不发闷。Canvas 渲染也能画（不用渐变）
  */
 function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
   g.clear();
-  const dy = pressed ? 2 : 0;
+  const L = OUTLINE.ledge;
+  const dy = pressed ? L - 1 : 0;
   const top = -h / 2 + dy;
-  const fh = h - 4;
-  g.fillStyle(0x000000, SHADOW.alpha);
-  g.fillRoundedRect(-w / 2, -h / 2 + SHADOW.dy + 1, w, h, r);
-  g.fillStyle(shade(fill, 0.55), 1);
-  g.fillRoundedRect(-w / 2, -h / 2 + 3 + dy, w, h - 3, r);
-  g.fillStyle(shade(fill, 0.82), 1);
-  g.fillRoundedRect(-w / 2, top, w, fh, r);
+  const fh = h - L;
+  // 下沿：描边色的实心底，比面板低 L
+  g.fillStyle(OUTLINE.color, 1);
+  g.fillRoundedRect(-w / 2, -h / 2 + L, w, fh, r);
   g.fillStyle(fill, 1);
-  g.fillRoundedRect(-w / 2, top, w, fh * 0.78, r);
-  g.fillStyle(shade(fill, 1.14), 1);
-  g.fillRoundedRect(-w / 2 + 2, top + 2, w - 4, fh * 0.46, { tl: r - 2, tr: r - 2, bl: 8, br: 8 });
-  g.fillStyle(0xffffff, 0.22);
-  g.fillRoundedRect(-w / 2 + 6, top + 4, w - 12, fh * 0.2, { tl: r - 5, tr: r - 5, bl: 4, br: 4 });
-  g.lineStyle(2.5, rim, 0.95);
-  g.strokeRoundedRect(-w / 2 + 1, top + 1, w - 2, fh - 2, r - 1);
-  g.lineStyle(1, 0xffffff, 0.18);
-  g.strokeRoundedRect(-w / 2 + 4, top + 4, w - 8, fh - 8, Math.max(2, r - 4));
+  g.fillRoundedRect(-w / 2, top, w, fh, r);
+  g.fillStyle(rim, 0.55);
+  g.fillRoundedRect(-w / 2 + 6, top + 4, w - 12, Math.max(4, fh * 0.16), { tl: r - 5, tr: r - 5, bl: 3, br: 3 });
+  g.lineStyle(OUTLINE.width, OUTLINE.color, 1);
+  g.strokeRoundedRect(-w / 2, top, w, fh, r);
 }
 
 /**
@@ -351,10 +345,10 @@ export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: stri
   const r = size / 2;
   const paint = (lit: boolean): void => {
     g.clear();
-    g.fillStyle(0x000000, SHADOW.alpha * 0.85).fillCircle(0, 3, r);
-    g.fillStyle(0x4a2a14, 1).fillCircle(0, 0, r);
-    g.fillStyle(lit ? 0x82502a : 0x6b3f20, 1).fillCircle(0, -1, r - 3);
-    g.lineStyle(2, lit ? COLOR.goldLight : COLOR.gold, lit ? 1 : 0.85).strokeCircle(0, -1, r - 3);
+    // 卡通圆钮（0.27.0）：木色平涂、深墨描边、实色下沿
+    g.fillStyle(OUTLINE.color, 1).fillCircle(0, 3, r - 1);
+    g.fillStyle(lit ? shade(BUTTON.wood.fill, 1.12) : BUTTON.wood.fill, 1).fillCircle(0, -1, r - 2);
+    g.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeCircle(0, -1, r - 2);
   };
   paint(false);
   c.add(g);
@@ -391,26 +385,26 @@ export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: stri
   return c;
 }
 
-/** 纸面面板：木框 + 金线 + 象牙底，可带红色标题飘带。原点在面板中心。 */
+/** 纸面面板：奶油底、深墨描边、实色下沿（0.27.0 卡通风格，原来是木框金线），可带红色标题飘带。原点在面板中心。 */
 export function panel(scene: Phaser.Scene, w: number, h: number, title?: string): Phaser.GameObjects.Container {
   const c = scene.add.container(0, 0);
   const g = scene.add.graphics();
-  g.fillStyle(0x000000, 0.4).fillRoundedRect(-w / 2 + 2, -h / 2 + 10, w, h, 22);
-  g.fillStyle(0x4a2814, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 22);
-  g.fillStyle(0x7a4a26, 1).fillRoundedRect(-w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 18);
-  g.fillStyle(COLOR.paper, 1).fillRoundedRect(-w / 2 + 14, -h / 2 + 14, w - 28, h - 28, 12);
-  g.lineStyle(2, COLOR.gold, 1).strokeRoundedRect(-w / 2 + 9, -h / 2 + 9, w - 18, h - 18, 15);
-  g.lineStyle(1.5, 0xe2c99a, 1).strokeRoundedRect(-w / 2 + 20, -h / 2 + 20, w - 40, h - 40, 9);
+  g.fillStyle(OUTLINE.color, 1).fillRoundedRect(-w / 2, -h / 2 + 8, w, h, 16);
+  g.fillStyle(COLOR.paper, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 16);
+  g.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, 16);
+  g.lineStyle(2, COLOR.gold, 0.9).strokeRoundedRect(-w / 2 + 10, -h / 2 + 10, w - 20, h - 20, 10);
   c.add(g);
   if (title) {
     const tw = Math.max(220, title.length * 34 + 90);
     const rg = scene.add.graphics();
     const ty = -h / 2 + 4;
-    rg.fillStyle(0x000000, 0.3).fillRoundedRect(-tw / 2, ty - 22 + 4, tw, 50, 12);
     rg.fillStyle(COLOR.redDark, 1).fillTriangle(-tw / 2 - 26, ty - 10, -tw / 2 + 6, ty - 18, -tw / 2 + 6, ty + 22);
     rg.fillTriangle(tw / 2 + 26, ty - 10, tw / 2 - 6, ty - 18, tw / 2 - 6, ty + 22);
-    rg.fillStyle(COLOR.red, 1).fillRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
-    rg.lineStyle(2, COLOR.gold, 1).strokeRoundedRect(-tw / 2 + 4, ty - 18, tw - 8, 40, 9);
+    rg.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeTriangle(-tw / 2 - 26, ty - 10, -tw / 2 + 6, ty - 18, -tw / 2 + 6, ty + 22);
+    rg.strokeTriangle(tw / 2 + 26, ty - 10, tw / 2 - 6, ty - 18, tw / 2 - 6, ty + 22);
+    rg.fillStyle(OUTLINE.color, 1).fillRoundedRect(-tw / 2, ty - 22 + OUTLINE.ledge, tw, 48, 12);
+    rg.fillStyle(BUTTON.red.fill, 1).fillRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
+    rg.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
     c.add(rg);
     c.add(text(scene, 0, ty + 1, title, { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'title', stroke: COLOR.redDark, strokeWidth: 3 }));
   }
@@ -532,13 +526,13 @@ export function segmented(
   const paint = (): void => {
     for (const b of btns) {
       const on = b.v === cur;
-      const base = on ? COLOR.red : 0xeadbc0;
+      const base = on ? BUTTON.red.fill : 0xf6ead2;
       const fill = b.down ? shade(base, 0.9) : b.hover && !on ? 0xf4e8d0 : base;
       const dy = b.down ? 2 : 0;
       b.g.clear();
       b.g.fillStyle(fill, 1).fillRoundedRect(-itemW / 2 + 3, -h / 2 + dy, itemW - 6, h, RADIUS.md);
-      b.g.lineStyle(2, on ? COLOR.gold : b.hover ? COLOR.goldDark : 0xc9b48e, 1).strokeRoundedRect(-itemW / 2 + 3, -h / 2 + dy, itemW - 6, h, RADIUS.md);
-      b.t.setColor(css(on ? COLOR.goldLight : COLOR.ink));
+      b.g.lineStyle(on ? OUTLINE.width : 2, on || b.hover ? OUTLINE.color : 0x8a7560, 1).strokeRoundedRect(-itemW / 2 + 3, -h / 2 + dy, itemW - 6, h, RADIUS.md);
+      b.t.setColor(css(on ? COLOR.white : COLOR.ink));
       b.t.y = dy;
     }
   };

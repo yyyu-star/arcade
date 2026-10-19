@@ -100,9 +100,10 @@ export class SeatView {
     const ny = this.a.size / 2 + 14;
     const nw = Math.max(64, this.nameText.width + 26);
     const g = this.plate.clear();
-    g.fillStyle(0x000000, 0.35).fillRoundedRect(-nw / 2, ny - 14 + 2, nw, 28, 14);
+    // 卡通名牌（0.27.0）：深墨描边、实色下沿；队色留在左边的小圆点上
+    g.fillStyle(0x2b1d14, 1).fillRoundedRect(-nw / 2, ny - 14 + 3, nw, 28, 14);
     g.fillStyle(id === 'me' ? team : PERSONAS[id].color, 1).fillRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
-    g.lineStyle(2, team, 1).strokeRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
+    g.lineStyle(2.5, 0x2b1d14, 1).strokeRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
     g.fillStyle(team, 1).fillCircle(-nw / 2 + 2, ny, 6);
     // 角标只在联机时出现：电脑座位一直带着，真人托管、走开时也带上（电脑在替他打）
     this.badge.setVisible(!!who && (!who.human || who.auto || !!who.afk));
