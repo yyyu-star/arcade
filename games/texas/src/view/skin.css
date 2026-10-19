@@ -724,3 +724,7 @@ body .scene::after { background: radial-gradient(ellipse 85% 75% at 50% 45%, tra
 .stage :is(.banner, .fun-hint, .rw-seat) { background-image: var(--cg-sheen); }
 .stage .hand-no { text-shadow: 0 0 3px var(--cg-cream), 0 0 3px var(--cg-cream), 0 0 6px var(--cg-cream); }
 .stage .lobby .title { color: #f7c43a; -webkit-text-fill-color: #f7c43a; }
+
+/* 卡通第二版补：结束页说明字和锦标赛名次行原来按深色弹窗配（浅字、白色半透明底），奶油弹窗上看不清 */
+.mask .dialog .sum-note { color: #6b5338; }
+.mask .dialog .tour-top li { background: rgba(43, 29, 20, .07); }
