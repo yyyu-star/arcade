@@ -3,14 +3,14 @@
  * - 板子：深色边框（每条赛道一个颜色），上边框印着赛道名和指北针，里面一圈棋盘格边，地图四周留白；
  * - 地图：地面 → 场景（scenes.ts）→ 弯外缓冲区（慢弯红斜纹、快弯砂石点加轮胎墙）→ 维修区 → 林子 → 看台 → 赛道；
  *   赛道是一块干净的深色路面，格线淡，每 5 格一道白线，红白路肩只在弯里，红色弯道线，黑白格起终点和发车框；
- * - 标注（labels，单独一层，跟着缩放重画）：限速盾牌全图时放大到屏幕上约 30 像素；放大以后才出现格号、"3·2·1"制动牌、弯名飘带。
- *   你前面的下一个弯，盾牌描一圈金边。
+ * - 标注（labels，单独一层，跟着缩放重画）：限速是路边的一块限速牌，牌杆从赛道边沿着弯道线方向垂直伸出（全图时放大到屏幕上约 24 像素）；
+ *   放大以后才出现格号、"3·2·1"制动牌，和弯外写着"T 几 + 弯名"的小名牌（不写数字）。你前面的下一个弯，限速牌描一圈金边。
  * 地图（draw）开局在浏览器里烘焙成一张位图（board.ts），标注、车、飘字是矢量。
  */
 import { geometry, type Geometry, type Pt } from '../track/shape.ts';
 import type { Track } from '../track/types.ts';
 import { C, distanceField, f1, FONT, LW, poly, type Rect, seeded } from './mapkit.ts';
-import { along, bendRange, signSpot } from './paint.ts';
+import { along, bendRange } from './paint.ts';
 import { sceneOf, type Scene } from './scenes.ts';
 import { CAR_COLORS } from './text.ts';
 
@@ -37,9 +37,20 @@ export interface Shield {
   /** 第几个弯（0 起） */
   i: number;
   name: string;
+  /** 弯名牌的位置：横着放、竖屏转 90° 时各一套（占的地方不一样） */
   x: number;
   y: number;
+  rx: number;
+  ry: number;
+  /** 名牌半宽 */
+  hw: number;
+  /** 限速牌立在哪一侧（往左偏为正）；牌杆从赛道边沿着弯道线方向垂直伸出去 */
+  side: number;
 }
+
+/** 限速牌的半径、牌杆离开路边多远（不缩放时） */
+const SIGN_R = 12;
+const POLE = 10;
 
 export interface MapArt {
   geo: Geometry;
@@ -50,17 +61,10 @@ export interface MapArt {
   draw(o: { detail: boolean; rot: boolean; grain?: boolean }): string;
   /** 标注层。k 是屏幕上 1 个单位多少像素，next 是要描金边的弯 */
   labels(o: { k: number; rot: boolean; next: number }): string;
+  /** 这个弯的限速牌在哪（不缩放时） */
+  sign(at: number): Pt;
 }
 
-/** 盾牌连飘带大约占的一块（以盾牌中心为原点） */
-const SHIELD_BODY = [
-  [0, -20],
-  [-38, 34],
-  [38, 34],
-  [0, 44],
-  [-18, 0],
-  [18, 0],
-] as const;
 
 const cache = new Map<string, MapArt>();
 
@@ -102,35 +106,98 @@ function build(track: Track): MapArt {
   for (let k = 0; k <= pitSpan; k++) pitCells.add(Math.floor(pitFrom + k) % N);
   const field = distanceField(geo, N, map, pitCells);
 
-  // ---------- 弯道盾牌：立在弯道线外侧；压着赛道、或者和前面的弯挤在一起时，在附近挑个不压赛道、不挤别人的位置 ----------
-  const shields: Shield[] = track.corners.map((c, i) => ({ at: c.at, limit: c.limit, i, name: names[i] ?? '', ...signSpot(track, geo, c.at) }));
-  const body = (p: Pt): number => Math.min(...SHIELD_BODY.map(([dx, dy]) => field.near(p.x + dx, p.y + dy)));
-  for (let j = 0; j < shields.length; j++) {
-    const s = shields[j]!;
-    const others = shields.slice(0, j);
-    if (body(s) >= 6 && others.every((o) => Math.hypot(o.x - s.x, o.y - s.y) > 95)) continue;
-    const e = geo.edges[s.at]!;
-    const side = bends[j]!.side;
-    const nx = Math.sin(e.angle) * side;
-    const ny = -Math.cos(e.angle) * side;
-    const tx = Math.cos(e.angle);
-    const ty = Math.sin(e.angle);
-    let best = { x: s.x, y: s.y };
-    let bp = Infinity;
-    for (const o of [0, 25, 50, 75, 100])
-      for (const t of [-120, -90, -60, -30, 0, 30, 60, 90, 120]) {
-        const p = { x: s.x + nx * o + tx * t, y: s.y + ny * o + ty * t };
-        const crowd = others.length ? Math.min(...others.map((q) => Math.hypot(q.x - p.x, q.y - p.y))) : Infinity;
-        const pen = (crowd < 95 ? 1000 + (95 - crowd) * 10 : 0) + (body(p) < 6 ? 5000 : 0) + (inMap(p.x, p.y, 20) ? 0 : 5000) + o + Math.abs(t) * 0.6;
-        if (pen < bp) {
-          bp = pen;
-          best = p;
-        }
+  // ---------- 弯名牌：立在弯道线外端旁边；压着赛道、或者和别的名牌挤在一起时，在附近挑个位置，离弯道线越近越好 ----------
+  const shields: Shield[] = track.corners.map((c, i) => {
+    const name = names[i] ?? '';
+    const hw = ((name ? `T${i + 1} ${name}` : `T${i + 1}`).length * 10 + 24) / 2;
+    return { at: c.at, limit: c.limit, i, name, x: 0, y: 0, rx: 0, ry: 0, hw, side: bends[i]!.side };
+  });
+  /** 限速牌中心：立在 side 那侧，sc 是缩放倍数（全图时牌子放大，杆子跟着加长），extra 是再往外伸多少 */
+  const signAt = (sh: Shield, sc: number, side = sh.side, extra = 0): Pt => {
+    const e = geo.edges[sh.at]!;
+    const d = W / 2 + 2 + (POLE + SIGN_R) * sc + extra;
+    return { x: e.c.x + Math.sin(e.angle) * side * d, y: e.c.y - Math.cos(e.angle) * side * d };
+  };
+  /**
+   * 某个缩放下每块限速牌放哪：默认立在 sh.side 那侧；和前面的牌子叠上了（挨得近的两个弯），先换到路的另一侧，再不行把杆子加长。
+   * 牌子不压路（另一侧挨着别的赛道就不换过去）
+   */
+  const layoutCache = new Map<number, { side: number; p: Pt }[]>();
+  const signLayout = (sc: number): { side: number; p: Pt }[] => {
+    const hit = layoutCache.get(sc);
+    if (hit) return hit;
+    const r = SIGN_R * sc;
+    const out: { side: number; p: Pt }[] = [];
+    for (const sh of shields) {
+      const tries: [number, number][] = [
+        [sh.side, 0],
+        [-sh.side, 0],
+        [sh.side, 2.2 * r],
+        [-sh.side, 2.2 * r],
+        [sh.side, 4.4 * r],
+      ];
+      let pick = { side: sh.side, p: signAt(sh, sc) };
+      for (const [side, extra] of tries) {
+        const p = signAt(sh, sc, side, extra);
+        if (field.near(p.x, p.y) <= r + 1) continue;
+        if (out.some((q) => Math.hypot(q.p.x - p.x, q.p.y - p.y) < 2 * r + 3)) continue;
+        pick = { side, p };
+        break;
       }
-    s.x = best.x;
-    s.y = best.y;
+      out.push(pick);
+    }
+    layoutCache.set(sc, out);
+    return out;
+  };
+  // 牌子默认立在弯外；弯外那边挨着别的赛道、或者出了板子，就立到弯里
+  for (const sh of shields) {
+    const fits = (): boolean => {
+      const p = signAt(sh, 1);
+      return field.near(p.x, p.y) > SIGN_R + 2 && inMap(p.x, p.y, SIGN_R);
+    };
+    if (!fits()) {
+      sh.side = -sh.side;
+      if (!fits()) sh.side = -sh.side;
+    }
   }
-  const blocked = (x: number, y: number, m: number): boolean => shields.some((s) => Math.abs(s.x - x) < 42 + m && Math.abs(s.y + 12 - y) < 40 + m);
+  const signs = signLayout(1).map((x) => x.p);
+  const place = (rot: boolean): Pt[] => {
+    const out: Pt[] = [];
+    shields.forEach((sh, j) => {
+      // 名牌占的一块：横着是宽 2hw、高 24；竖屏转了 90° 是宽 24、高 2hw
+      const [hx, hy] = rot ? [13, sh.hw] : [sh.hw, 13];
+      const body = (p: Pt): number => Math.min(...[[0, 0], [-hx, -hy], [hx, -hy], [-hx, hy], [hx, hy], [-hx, 0], [hx, 0], [0, -hy], [0, hy]].map(([dx, dy]) => field.near(p.x + dx!, p.y + dy!)));
+      const e = geo.edges[sh.at]!;
+      const side = bends[j]!.side;
+      const nx = Math.sin(e.angle) * side;
+      const ny = -Math.cos(e.angle) * side;
+      const tx = Math.cos(e.angle);
+      const ty = Math.sin(e.angle);
+      const ax = e.c.x + nx * (W / 2 + 4);
+      const ay = e.c.y + ny * (W / 2 + 4);
+      let best = { x: ax + nx * 30, y: ay + ny * 30 };
+      let bp = Infinity;
+      for (let o = 8; o <= 130; o += 6)
+        for (let t = -90; t <= 90; t += 10) {
+          const p = { x: ax + nx * o + tx * t, y: ay + ny * o + ty * t };
+          const crowd = out.some((q, k) => Math.abs(q.x - p.x) < hx + (rot ? 13 : shields[k]!.hw) + 6 && Math.abs(q.y - p.y) < hy + (rot ? shields[k]!.hw : 13) + 6);
+          const onSign = signs.some((q) => Math.abs(q.x - p.x) < hx + SIGN_R + 4 && Math.abs(q.y - p.y) < hy + SIGN_R + 4);
+          const pen = (crowd || onSign ? 1000 : 0) + (body(p) < 4 ? 5000 : 0) + (inMap(p.x, p.y, 20) ? 0 : 5000) + Math.hypot(p.x - ax, p.y - ay);
+          if (pen < bp) {
+            bp = pen;
+            best = p;
+          }
+        }
+      out.push(best);
+    });
+    return out;
+  };
+  place(false).forEach((p, i) => Object.assign(shields[i]!, { x: p.x, y: p.y }));
+  place(true).forEach((p, i) => Object.assign(shields[i]!, { rx: p.x, ry: p.y }));
+  // 场景（湖、山、树）避开两套名牌的位置
+  const blocked = (x: number, y: number, m: number): boolean =>
+    shields.some((s) => (Math.abs(s.x - x) < s.hw + m && Math.abs(s.y - y) < 13 + m) || (Math.abs(s.rx - x) < 13 + m && Math.abs(s.ry - y) < s.hw + m)) ||
+    signs.some((q) => Math.hypot(q.x - x, q.y - y) < SIGN_R + 6 + m);
 
   // ---------- 场景、林子 ----------
   const scene: Scene = sceneOf({ id: track.id, map, cx, cy, near: field.near, clear: field.clear, blocked, inMap });
@@ -295,24 +362,40 @@ function build(track: Track): MapArt {
         }
       });
     }
-    // 限速盾牌：缩小了也保持屏幕上约 30 像素高；下一个弯描金边、大一圈
-    const sc = Math.max(1, 30 / (36 * o.k));
-    for (const sh of shields) {
+    // 限速牌：路边竖一根牌杆，从赛道边沿着弯道线的方向垂直伸出去，杆头一块白底红圈黑字的圆牌——弯道线顺着杆子指到牌子，对不错弯，路面上不压东西。
+    // 缩小了牌子保持屏幕上约 24 像素宽（杆子跟着加长，牌子不压路）；下一个弯描一圈金边
+    const ds = Math.max(1, 1 / o.k);
+    const lay = signLayout(Math.round(ds * 10) / 10);
+    shields.forEach((sh, i) => {
+      const e = geo.edges[sh.at]!;
       const hot = o.next === sh.at;
-      s += `<g class="shield" transform="translate(${f1(sh.x)} ${f1(sh.y)})${turn} scale(${f1(sc * (hot ? 1.2 : 1))})">`;
-      if (hot) s += `<path d="M-21 -23h42v21c0 14 -12 22 -21 27c-9 -5 -21 -13 -21 -27z" fill="${C.gold}" stroke="${C.ink}" stroke-width="${LW.minor}"/>`;
-      s += `<path d="M-17 -19h34v18c0 11 -10 18 -17 22c-7 -4 -17 -11 -17 -22z" fill="${C.red}" stroke="${C.ink}" stroke-width="${LW.major}"/><text y="6" font-family="${FONT}" font-size="21" font-weight="900" text-anchor="middle" fill="${C.paper}">${sh.limit}</text>`;
-      if (detail) {
+      const { side, p } = lay[i]!;
+      const nx = Math.sin(e.angle) * side;
+      const ny = -Math.cos(e.angle) * side;
+      const p0 = { x: e.c.x + nx * (W / 2 + 1), y: e.c.y + ny * (W / 2 + 1) };
+      s += `<path d="M${f1(p0.x)} ${f1(p0.y)}L${f1(p.x)} ${f1(p.y)}" stroke="${C.ink}" stroke-width="${f1(4 * Math.min(ds, 2))}" stroke-linecap="round"/><path d="M${f1(p0.x)} ${f1(p0.y)}L${f1(p.x)} ${f1(p.y)}" stroke="#9aa0a6" stroke-width="${f1(1.8 * Math.min(ds, 2))}" stroke-linecap="round"/>`;
+      s += `<g class="limit" transform="translate(${f1(p.x)} ${f1(p.y)})${turn} scale(${f1(ds)})">`;
+      if (hot) s += `<circle r="${SIGN_R + 3.5}" fill="${C.gold}" stroke="${C.ink}" stroke-width="${LW.minor}"/>`;
+      s += `<circle r="${SIGN_R}" fill="#fff" stroke="${C.ink}" stroke-width="${LW.minor}"/><circle r="${SIGN_R - 2.6}" fill="none" stroke="${C.red}" stroke-width="3.4"/><text y="5" font-family="${FONT}" font-size="14" font-weight="900" text-anchor="middle" fill="${C.ink}">${sh.limit}</text></g>`;
+    });
+    // 放大以后：弯外一块小名牌写"T 几 + 弯名"（不再写数字，限速只在弯道线上那一处），名牌被挤到别处时一条短虚线连回弯道线外端
+    if (detail)
+      for (const sh of shields) {
+        const e = geo.edges[sh.at]!;
+        const side = bends[sh.i]!.side;
+        const ax = e.c.x + Math.sin(e.angle) * side * (W / 2 + 3);
+        const ay = e.c.y - Math.cos(e.angle) * side * (W / 2 + 3);
+        const x = o.rot ? sh.rx : sh.x;
+        const y = o.rot ? sh.ry : sh.y;
+        if (Math.hypot(x - ax, y - ay) > 40) s += `<path d="M${f1(ax)} ${f1(ay)}L${f1(x)} ${f1(y)}" stroke="${C.ink}" stroke-width="${LW.decor}" stroke-dasharray="3 3" opacity=".7"/>`;
         const label = sh.name ? `T${sh.i + 1} ${sh.name}` : `T${sh.i + 1}`;
         const w = label.length * 10 + 12;
-        s += `<path d="M${f1(-w / 2 - 6)} 27h6v-2h${f1(w)}v2h6l-4 7l4 7h-6v2h${f1(-w)}v-2h-6l4 -7z" fill="${C.paper}" stroke="${C.ink}" stroke-width="${LW.minor}"/><text y="38" font-family="${FONT}" font-size="11" font-weight="700" text-anchor="middle" fill="${C.ink}">${label}</text>`;
+        s += `<g class="tag" transform="translate(${f1(x)} ${f1(y)})${turn}"><path d="M${f1(-w / 2 - 6)} -9h6v-2h${f1(w)}v2h6l-4 7l4 7h-6v2h${f1(-w)}v-2h-6l4 -7z" fill="${C.paper}" stroke="${C.ink}" stroke-width="${LW.minor}"/><text y="2" font-family="${FONT}" font-size="11" font-weight="700" text-anchor="middle" fill="${C.ink}">${label}</text></g>`;
       }
-      s += `</g>`;
-    }
     return s;
   };
 
-  return { geo, board, shields, draw, labels };
+  return { geo, board, shields, draw, labels, sign: (at: number) => signs[shields.findIndex((sh) => sh.at === at)]! };
 }
 
 /**

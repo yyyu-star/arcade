@@ -111,8 +111,8 @@ function shade(c: number, f: number): number {
 export type ButtonStyle = Exclude<keyof typeof BUTTON, 'off'>;
 
 /**
- * 圆角按钮底板：卡通平涂（0.27.0，原来是几层叠出来的漆面）。深墨描边，底下一条深墨实色下沿，按下时面板下沉到下沿上；
- * 顶上一道浅色高光（rim）让平涂不发闷。Canvas 渲染也能画（不用渐变）
+ * 圆角按钮底板：有质感的卡通（0.27.1，卡通第二版）。从下往上：柔和的环境投影、深墨实色下沿（按下时面板下沉到下沿上）、
+ * 三段轻渐变的面（下 8% 暗、中间本色、上 8% 亮，Canvas 渲染不支持渐变填充，用叠层画）、顶边一道半透明白高光、深墨描边
  */
 function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: number, rim: number, r: number = RADIUS.lg, pressed = false): void {
   g.clear();
@@ -120,13 +120,23 @@ function drawPlate(g: Phaser.GameObjects.Graphics, w: number, h: number, fill: n
   const dy = pressed ? L - 1 : 0;
   const top = -h / 2 + dy;
   const fh = h - L;
-  // 下沿：描边色的实心底，比面板低 L
+  // 环境投影：两层由浓到淡，按下时收一点
+  g.fillStyle(0x000000, pressed ? 0.12 : 0.16);
+  g.fillRoundedRect(-w / 2 - 2, -h / 2 + L + 4, w + 4, fh + 2, r + 2);
+  g.fillStyle(0x000000, pressed ? 0.08 : 0.12);
+  g.fillRoundedRect(-w / 2 - 4, -h / 2 + L + 7, w + 8, fh + 2, r + 4);
   g.fillStyle(OUTLINE.color, 1);
   g.fillRoundedRect(-w / 2, -h / 2 + L, w, fh, r);
-  g.fillStyle(fill, 1);
+  g.fillStyle(shade(fill, 0.92), 1);
   g.fillRoundedRect(-w / 2, top, w, fh, r);
-  g.fillStyle(rim, 0.55);
-  g.fillRoundedRect(-w / 2 + 6, top + 4, w - 12, Math.max(4, fh * 0.16), { tl: r - 5, tr: r - 5, bl: 3, br: 3 });
+  g.fillStyle(fill, 1);
+  g.fillRoundedRect(-w / 2, top, w, fh * 0.72, r);
+  g.fillStyle(shade(fill, 1.08), 1);
+  g.fillRoundedRect(-w / 2, top, w, fh * 0.4, { tl: r, tr: r, bl: 6, br: 6 });
+  g.fillStyle(rim, 0.4);
+  g.fillRoundedRect(-w / 2 + 6, top + 4, w - 12, Math.max(4, fh * 0.14), { tl: r - 5, tr: r - 5, bl: 3, br: 3 });
+  g.lineStyle(1, 0xffffff, 0.45);
+  g.lineBetween(-w / 2 + r, top + 2.5, w / 2 - r, top + 2.5);
   g.lineStyle(OUTLINE.width, OUTLINE.color, 1);
   g.strokeRoundedRect(-w / 2, top, w, fh, r);
 }
@@ -345,9 +355,13 @@ export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: stri
   const r = size / 2;
   const paint = (lit: boolean): void => {
     g.clear();
-    // 卡通圆钮（0.27.0）：木色平涂、深墨描边、实色下沿
+    // 卡通圆钮（0.27.1）：柔和投影、深墨下沿、木色上亮下暗、内圈金线、深墨描边
+    g.fillStyle(0x000000, 0.18).fillCircle(0, 6, r);
     g.fillStyle(OUTLINE.color, 1).fillCircle(0, 3, r - 1);
-    g.fillStyle(lit ? shade(BUTTON.wood.fill, 1.12) : BUTTON.wood.fill, 1).fillCircle(0, -1, r - 2);
+    const base = lit ? 0x82502a : 0x6b3f20;
+    g.fillStyle(base, 1).fillCircle(0, -1, r - 2);
+    g.fillStyle(shade(base, 1.18), 1).fillEllipse(0, -1 - r * 0.32, (r - 4) * 1.6, (r - 4) * 0.9);
+    g.lineStyle(2, lit ? COLOR.goldLight : COLOR.gold, lit ? 1 : 0.85).strokeCircle(0, -1, r - 6);
     g.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeCircle(0, -1, r - 2);
   };
   paint(false);
@@ -385,14 +399,26 @@ export function iconButton(scene: Phaser.Scene, x: number, y: number, icon: stri
   return c;
 }
 
-/** 纸面面板：奶油底、深墨描边、实色下沿（0.27.0 卡通风格，原来是木框金线），可带红色标题飘带。原点在面板中心。 */
+/**
+ * 纸面面板：木框 + 金线 + 象牙纸底（卡通第二版恢复 0.27.0 前的木框，外面套统一的深墨描边、实色下沿和柔和投影），
+ * 纸面上亮下暗一点、带几道极淡的横纹（程序画，纸感），可带红色标题飘带。原点在面板中心。
+ */
 export function panel(scene: Phaser.Scene, w: number, h: number, title?: string): Phaser.GameObjects.Container {
   const c = scene.add.container(0, 0);
   const g = scene.add.graphics();
+  g.fillStyle(0x000000, 0.22).fillRoundedRect(-w / 2 - 6, -h / 2 + 14, w + 12, h + 4, 22);
   g.fillStyle(OUTLINE.color, 1).fillRoundedRect(-w / 2, -h / 2 + 8, w, h, 16);
-  g.fillStyle(COLOR.paper, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 16);
+  g.fillStyle(0x6b3f20, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 16);
+  g.fillStyle(0x8a5530, 1).fillRoundedRect(-w / 2, -h / 2, w, h * 0.5, { tl: 16, tr: 16, bl: 0, br: 0 });
+  g.fillStyle(0xf3e3c0, 1).fillRoundedRect(-w / 2 + 12, -h / 2 + 12, w - 24, h - 24, 10);
+  g.fillStyle(COLOR.paper, 1).fillRoundedRect(-w / 2 + 12, -h / 2 + 12, w - 24, (h - 24) * 0.7, 10);
+  g.fillStyle(0xfffaf0, 1).fillRoundedRect(-w / 2 + 12, -h / 2 + 12, w - 24, (h - 24) * 0.3, { tl: 10, tr: 10, bl: 0, br: 0 });
+  // 纸纹：每隔 9 像素一道极淡的横线
+  g.lineStyle(1, 0x8a6a40, 0.05);
+  for (let y = -h / 2 + 24; y < h / 2 - 16; y += 9) g.lineBetween(-w / 2 + 16, y, w / 2 - 16, y);
+  g.lineStyle(2, COLOR.gold, 1).strokeRoundedRect(-w / 2 + 7, -h / 2 + 7, w - 14, h - 14, 13);
+  g.lineStyle(1.5, 0xe2c99a, 1).strokeRoundedRect(-w / 2 + 18, -h / 2 + 18, w - 36, h - 36, 8);
   g.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, 16);
-  g.lineStyle(2, COLOR.gold, 0.9).strokeRoundedRect(-w / 2 + 10, -h / 2 + 10, w - 20, h - 20, 10);
   c.add(g);
   if (title) {
     const tw = Math.max(220, title.length * 34 + 90);
@@ -403,7 +429,10 @@ export function panel(scene: Phaser.Scene, w: number, h: number, title?: string)
     rg.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeTriangle(-tw / 2 - 26, ty - 10, -tw / 2 + 6, ty - 18, -tw / 2 + 6, ty + 22);
     rg.strokeTriangle(tw / 2 + 26, ty - 10, tw / 2 - 6, ty - 18, tw / 2 - 6, ty + 22);
     rg.fillStyle(OUTLINE.color, 1).fillRoundedRect(-tw / 2, ty - 22 + OUTLINE.ledge, tw, 48, 12);
-    rg.fillStyle(BUTTON.red.fill, 1).fillRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
+    rg.fillStyle(COLOR.red, 1).fillRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
+    rg.fillStyle(BUTTON.red.fill, 1).fillRoundedRect(-tw / 2, ty - 22, tw, 26, { tl: 12, tr: 12, bl: 0, br: 0 });
+    rg.lineStyle(1, 0xffffff, 0.4).lineBetween(-tw / 2 + 12, ty - 19.5, tw / 2 - 12, ty - 19.5);
+    rg.lineStyle(2, COLOR.gold, 0.9).strokeRoundedRect(-tw / 2 + 5, ty - 17, tw - 10, 38, 8);
     rg.lineStyle(OUTLINE.width, OUTLINE.color, 1).strokeRoundedRect(-tw / 2, ty - 22, tw, 48, 12);
     c.add(rg);
     c.add(text(scene, 0, ty + 1, title, { size: TYPE.title, color: COLOR.goldLight, bold: true, font: 'title', stroke: COLOR.redDark, strokeWidth: 3 }));

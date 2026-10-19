@@ -100,9 +100,12 @@ export class SeatView {
     const ny = this.a.size / 2 + 14;
     const nw = Math.max(64, this.nameText.width + 26);
     const g = this.plate.clear();
-    // 卡通名牌（0.27.0）：深墨描边、实色下沿；队色留在左边的小圆点上
+    // 卡通名牌（0.27.0；0.27.1 补质感）：柔和投影、深墨下沿、上半提亮一点、顶边高光、深墨描边；队色留在左边的小圆点上
+    const pc = id === 'me' ? team : PERSONAS[id].color;
+    g.fillStyle(0x000000, 0.2).fillRoundedRect(-nw / 2 - 2, ny - 14 + 6, nw + 4, 28, 15);
     g.fillStyle(0x2b1d14, 1).fillRoundedRect(-nw / 2, ny - 14 + 3, nw, 28, 14);
-    g.fillStyle(id === 'me' ? team : PERSONAS[id].color, 1).fillRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
+    g.fillStyle(pc, 1).fillRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
+    g.fillStyle(0xffffff, 0.14).fillRoundedRect(-nw / 2 + 2, ny - 13, nw - 4, 11, { tl: 12, tr: 12, bl: 2, br: 2 });
     g.lineStyle(2.5, 0x2b1d14, 1).strokeRoundedRect(-nw / 2, ny - 14, nw, 28, 14);
     g.fillStyle(team, 1).fillCircle(-nw / 2 + 2, ny, 6);
     // 角标只在联机时出现：电脑座位一直带着，真人托管、走开时也带上（电脑在替他打）

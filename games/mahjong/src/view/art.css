@@ -344,131 +344,99 @@ html:has(.screen.room) body {
   }
 }
 
-/* ---------- 卡通风格（0.22.0，所有者 10-19 各游戏统一；配色表在 docs/cartoon.md） ----------
- * 平涂、2–3px 深色描边、圆角 12–16、按钮 4px 实色下沿（按下沉下去）。只改颜色、描边、阴影，不改任何块的尺寸和位置。
- * 主页、选桌、等人页换奶油底配深色字；牌桌的呢子换成平涂的青绿；名牌、弹窗是平涂深青绿配浅色字（里面的结算、规则配色都按深底调好，不跟着改）。 */
+/* ---------- 卡通风格（0.22.0 统一描边、圆角、下沿；0.22.1 补回质感，所有者 10-19；配色表在 docs/cartoon.md） ----------
+ * 统一的：2–3px 深棕描边、圆角 12–16、按钮实色下沿（按下沉下去）、标题粗体带实影。
+ * 质感（0.22.1）：表面上亮下暗的轻渐变 + 顶边 1px 白高光，实色下沿外再加一层柔和投影；茶馆的板壁、木框、呢子（织纹、绒点、暗角、顶灯暖光）
+ * 照 0.21 原样恢复（上面几段），这里不再盖掉。大面积是沉稳的木色和深青绿，亮的太阳黄只给主按钮、钱包数和星级。
+ * 只改颜色、描边、阴影，不改任何块的尺寸和位置。 */
 .stage {
   --c-ink: #2b1d14;
   --c-cream: #fff6e0;
-  --c-paper: #ffeec4;
   --c-teal: #17a37f;
-  --c-teal-dk: #0e6e56;
   --c-panel: #14584a;
   --c-sun: #ffc53d;
   --c-orange: #c4570b;
-  --ak-bg: #14584a;
+  /* 浮起来：实色下沿 + 柔和的环境投影 */
+  --c-lift: 0 4px 0 var(--c-ink), 0 7px 14px #0000004d;
+  --c-lift-sm: 0 3px 0 var(--c-ink), 0 5px 10px #00000040;
+  --c-hi: inset 0 1px 0 #ffffffb3;
   --ak-border: #2b1d14;
 }
-/* 奶油底的几页：平涂纸色 + 一点点圆点，不再是压暗的板壁 */
-.stage:has(> .screen.lobby),
-.stage:has(> .screen.front),
-.stage:has(> .screen.room),
-.stage .screen.lobby,
-.stage .screen.front,
-.stage .screen.room,
-[data-orient='port'] .stage .screen.lobby {
-  background: radial-gradient(#e9c98a 1.2px, transparent 1.6px) 0 0 / 22px 22px, var(--c-paper);
-  color: var(--c-ink);
-}
-html:has(.screen.lobby),
-html:has(.screen.front),
-html:has(.screen.room),
-html:has(.screen.lobby) body,
-html:has(.screen.front) body,
-html:has(.screen.room) body {
-  background: #f3dca6;
-}
-/* 牌桌：两边露出的板壁换暖黄纸色，木框平涂橙棕加深色描边，呢子平涂青绿（去掉暗角和织纹） */
-.stage:has(> .screen.game) {
-  background: radial-gradient(#e9c98a 1.2px, transparent 1.6px) 0 0 / 22px 22px, var(--c-paper);
-}
-html:has(.screen.game),
-html:has(.screen.game) body {
-  background: #f3dca6;
-}
-.stage .table::before {
-  background: #c9763a;
-}
+/* 牌桌外框：描一道深棕边（木纹、呢子照旧） */
 .stage .table {
-  box-shadow: inset 0 0 0 3px var(--c-ink);
+  box-shadow:
+    inset 0 1px 0 #ffd9a040,
+    inset 0 0 0 3px var(--c-ink);
 }
-.stage .table::after,
-[data-orient='port'] .stage .table::after {
-  background: radial-gradient(ellipse at 50% 45%, #22b089 0%, var(--c-teal) 60%, #12936f 100%);
-  box-shadow: inset 0 0 0 3px var(--c-ink), inset 0 6px 0 #0000001f;
-}
-/* 顶栏：奶油色一条，下边一道深色线 */
+/* 顶栏：深木色上亮下暗，底下一道深色线 */
 .stage .topbar {
-  background: var(--c-cream);
-  box-shadow: 0 3px 0 var(--c-ink);
-  color: var(--c-ink);
-}
-.stage .topbar .title {
-  opacity: 1;
-  font-weight: 700;
+  background: linear-gradient(#5a2e18, #3a1a0c);
+  box-shadow: inset 0 1px 0 #ffffff26, 0 3px 0 var(--c-ink), 0 5px 12px #00000059;
 }
 .stage .topbar .wallet-chip {
-  color: var(--c-orange);
+  color: var(--c-sun);
   font-weight: 800;
 }
 .stage :is(.home, .pill, .icon) {
-  background: #fff;
+  background: linear-gradient(#fffaf0, #f1e2c0);
   color: var(--c-ink);
   border: 2px solid var(--c-ink);
-  box-shadow: 0 2px 0 var(--c-ink);
+  box-shadow: var(--c-hi), 0 2px 0 var(--c-ink), 0 4px 8px #00000040;
   font-weight: 700;
 }
 .stage .home svg {
   fill: var(--c-teal);
 }
-.stage .vol {
-  background: var(--c-cream);
-  border: 2px solid var(--c-ink);
-  box-shadow: 0 4px 0 var(--c-ink);
+.stage .screen.lobby > .back {
+  background: linear-gradient(#fffaf0, #f1e2c0);
 }
-/* 按钮：白底深字，主按钮太阳黄；描边 + 4px 实色下沿，按下沉 3px */
+.stage .vol {
+  border: 2px solid var(--c-ink);
+  box-shadow: var(--c-hi), var(--c-lift);
+}
+/* 按钮：奶油白上亮下暗，主按钮太阳黄；描边 + 下沿 + 柔和投影，按下沉 3px */
 .stage .act {
   border: 2.5px solid var(--c-ink);
   border-radius: 14px;
-  background: #fff;
+  background: linear-gradient(#fffdf6, #f4e4c2);
   color: var(--c-ink);
   text-shadow: none;
-  box-shadow: 0 4px 0 var(--c-ink);
+  box-shadow: var(--c-hi), var(--c-lift);
 }
 .stage .act.soft {
-  background: var(--c-cream);
+  background: linear-gradient(#fff6e0, #ead6ac);
   font-weight: 700;
-  box-shadow: 0 3px 0 var(--c-ink);
+  box-shadow: var(--c-hi), var(--c-lift-sm);
 }
 .stage .act.go,
 .stage .act.quick {
-  background: var(--c-sun);
+  background: linear-gradient(#ffe07a, #ffc53d 55%, #f0a52a);
   border-color: var(--c-ink);
   color: var(--c-ink);
-  text-shadow: none;
+  text-shadow: 0 1px 0 #fff8;
 }
 .stage .act.ron {
-  background: #ef5340;
+  background: linear-gradient(#f56a55, #d8402e 60%, #b32e20);
   border-color: var(--c-ink);
   color: #fff;
   text-shadow: 0 2px 0 #0004;
 }
 .stage .act:not(:disabled):active {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 var(--c-ink);
+  box-shadow: var(--c-hi), 0 1px 0 var(--c-ink), 0 2px 4px #00000040;
 }
-/* 档位卡、模式卡、规则设置：奶油卡片，选中的换青绿底 */
+/* 档位卡、模式卡：一块块奶油色小木牌（纸色渐变 + 顶边高光），选中的换薄荷绿 */
 .stage :is(.stake, .mode) {
-  background: var(--c-cream);
+  background: linear-gradient(#fffaf0, #f3e3c0);
   border: 2.5px solid var(--c-ink);
   border-radius: 14px;
   color: var(--c-ink);
-  box-shadow: 0 4px 0 var(--c-ink);
+  box-shadow: var(--c-hi), var(--c-lift);
 }
 .stage .stake.on {
-  background: #c9f2e3;
+  background: linear-gradient(#e2fbf0, #b4e6d2);
   border-color: var(--c-ink);
-  box-shadow: 0 4px 0 var(--c-ink), 0 0 0 3px var(--c-teal);
+  box-shadow: var(--c-hi), var(--c-lift), 0 0 0 3px var(--c-teal);
 }
 .stage .stake .stars {
   color: var(--c-orange);
@@ -479,92 +447,70 @@ html:has(.screen.game) body {
   color: #5a4434;
 }
 .stage .rules-opts {
-  background: var(--c-cream);
   border: 2px solid var(--c-ink);
+  box-shadow: var(--c-hi), 0 4px 10px #0000004d;
 }
 .stage .chip {
-  border: 2px solid var(--c-ink);
-  background: #fff;
-  color: var(--c-ink);
+  border: 2px solid #f6efdc99;
 }
 .stage .chip.on {
-  background: var(--c-teal);
-  color: #fff;
+  border-color: var(--c-ink);
+  background: linear-gradient(#ffe07a, #f0a52a);
+  color: var(--c-ink);
 }
-.stage :is(.stakes-label, .wallet-note, .opt .label, .lobby-head .variant, .ver, .record) {
-  opacity: 1;
-  color: #5a4434;
-}
-.stage .link {
-  color: var(--c-teal-dk);
-  font-weight: 700;
-}
-/* 标题：青绿粗体压一道深色实影 */
+/* 标题：青绿粗体压深色实影，再晕一圈暖光（板壁上要压得住） */
 .stage .screen.lobby .lobby-head h1,
 .stage .home-head .brand {
   background: none;
-  color: var(--c-teal);
-  -webkit-text-fill-color: var(--c-teal);
+  color: #2fc89c;
+  -webkit-text-fill-color: #2fc89c;
   filter: none;
-  text-shadow: 0 3px 0 var(--c-ink);
+  text-shadow:
+    0 3px 0 var(--c-ink),
+    0 0 18px #ffb24d55;
 }
-.stage .pitch,
-.stage .home-head .variant {
-  color: var(--c-ink);
-}
-/* 主页的画、选桌页的画当一张插画卡：圆角加描边 */
+/* 主页、选桌页的画当一张插画卡：圆角加描边 */
 .stage :is(.home-art, .lobby-art) .scene {
   border: 3px solid var(--c-ink);
   border-radius: 16px;
 }
-/* 等人页 */
-.stage .room-code {
-  color: var(--c-teal-dk);
-}
+/* 等人页座位卡 */
 .stage .room-seat {
-  background: var(--c-cream);
+  background: linear-gradient(#fffaf0, #f3e3c0);
   border: 2.5px solid var(--c-ink);
-  box-shadow: 0 4px 0 var(--c-ink);
+  box-shadow: var(--c-hi), var(--c-lift);
   color: var(--c-ink);
 }
-.stage :is(.room-hint, .room-label, .room-rules, .room-wait) {
-  color: #5a4434;
-  opacity: 1;
-}
-/* 牌桌上的名牌、弹窗：平涂深青绿 + 深色描边 + 实影，字照旧是浅色 */
+/* 牌桌上的名牌：深青绿上亮下暗、顶边高光、柔和投影 */
 .stage .badge {
-  background: var(--c-panel);
+  background: linear-gradient(#1f7462, var(--c-panel) 55%, #0d3d33);
   border: 2.5px solid var(--c-ink);
-  box-shadow: 0 3px 0 var(--c-ink);
+  box-shadow: inset 0 1px 0 #ffffff33, var(--c-lift-sm);
 }
 .stage .badge.turn {
-  box-shadow: 0 3px 0 var(--c-ink), 0 0 0 3px var(--c-sun);
+  box-shadow: inset 0 1px 0 #ffffff33, var(--c-lift-sm), 0 0 0 3px var(--c-sun), 0 0 18px #ffc53d80;
 }
+/* 弹窗：保留窗棂底纹，换深青绿上亮下暗 + 描边 + 浮起 */
 .stage .dialog,
 .stage .mask.match .dialog {
-  background: var(--c-panel);
+  background:
+    var(--art-lattice, linear-gradient(transparent, transparent)) 0 0 / 40px 40px,
+    linear-gradient(#1f7462, var(--c-panel) 45%, #0d3d33);
   border: 3px solid var(--c-ink);
   border-radius: 16px;
-  box-shadow: 0 6px 0 var(--c-ink);
+  box-shadow: inset 0 1px 0 #ffffff2e, 0 6px 0 var(--c-ink), 0 12px 30px #00000080;
 }
 .stage .mask:is(.rules, .guide) .dialog {
   border: 3px solid var(--c-ink);
-  box-shadow: 0 6px 0 var(--c-ink);
+  box-shadow: inset 0 0 0 4px #f8eed6, 0 6px 0 var(--c-ink), 0 12px 30px #00000080;
 }
 /* kit 的"互动""聊天"按钮跟牌桌上的按钮一个样子 */
 html .atf-btn {
   border: 2.5px solid #2b1d14;
   border-radius: 14px;
-  background: #fff6e0;
+  background: linear-gradient(#fffdf6, #f4e4c2);
   color: #2b1d14;
-  box-shadow: 0 4px 0 #2b1d14;
-}
-/* 选桌页贴底的开打条：奶油底一道深色上沿（原来是压暗的板壁色）；"‹ 主页"和顶栏的按钮一个样子 */
-.stage .screen.lobby .go-row {
-  background: linear-gradient(#ffeec400, var(--c-paper) 30%);
-}
-.stage .screen.lobby > .back {
-  background: #fff;
+  box-shadow: inset 0 1px 0 #ffffffb3, 0 4px 0 #2b1d14, 0 7px 14px #0000004d;
 }
 .stage .join input,
 .stage .nick input {

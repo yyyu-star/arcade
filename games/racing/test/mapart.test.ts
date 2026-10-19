@@ -1,4 +1,4 @@
-/** 桌游地图板（DESIGN.md 第 8 节）：每次画出来一样，弯道盾牌不压赛道、不挤在一起，全图时只画大件。 */
+/** 桌游地图板（DESIGN.md 第 8 节）：每次画出来一样，限速牌立在弯道线延长线的路边、不压路不叠，弯名牌不压赛道、不叠在一起，全图时只画大件。 */
 import { describe, expect, it } from 'vitest';
 import { FIXED } from '../src/track/fixed.ts';
 import { geometry } from '../src/track/shape.ts';
@@ -18,36 +18,50 @@ describe('地图板', () => {
       expect(a).not.toMatch(/NaN|Infinity|undefined/);
     });
 
-    it(`${t.name}：每个弯一块盾牌，不压赛道，彼此隔开`, () => {
+    it(`${t.name}：每个弯一块弯名牌，横竖两套位置都不压赛道、不叠在一起、离弯道线不远`, () => {
       expect(art.shields.map((s) => s.at)).toEqual(t.corners.map((c) => c.at));
-      for (const s of art.shields) {
-        // 盾牌连飘带那一块（宽约 80、从上 20 到下 44）不压着路面
-        for (const [dx, dy] of [
-          [0, -20],
-          [-38, 34],
-          [38, 34],
-          [0, 44],
-        ] as const)
-          expect(near(s.x + dx, s.y + dy)).toBeGreaterThan(0);
-        // 盾牌在板子里面
-        expect(s.x).toBeGreaterThan(art.board.x);
-        expect(s.x).toBeLessThan(art.board.x + art.board.w);
-        expect(s.y).toBeGreaterThan(art.board.y);
-        expect(s.y).toBeLessThan(art.board.y + art.board.h);
+      for (const rot of [false, true]) {
+        const pos = art.shields.map((s) => ({ x: rot ? s.rx : s.x, y: rot ? s.ry : s.y, hx: rot ? 13 : s.hw, hy: rot ? s.hw : 13 }));
+        pos.forEach((p, i) => {
+          for (const [dx, dy] of [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]] as const) expect(near(p.x + dx * p.hx, p.y + dy * p.hy)).toBeGreaterThan(0);
+          const e = geo.edges[t.corners[i]!.at]!;
+          expect(Math.hypot(p.x - e.c.x, p.y - e.c.y)).toBeLessThan(220);
+          for (let j = i + 1; j < pos.length; j++) {
+            const q = pos[j]!;
+            expect(Math.abs(p.x - q.x) < p.hx + q.hx && Math.abs(p.y - q.y) < p.hy + q.hy).toBe(false);
+          }
+        });
       }
-      for (let i = 0; i < art.shields.length; i++)
-        for (let j = i + 1; j < art.shields.length; j++) {
-          const a = art.shields[i]!;
-          const b = art.shields[j]!;
-          expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(60);
-        }
     });
 
-    it(`${t.name}：全图时只有盾牌，放大了才有格号、制动牌、弯名`, () => {
+    it(`${t.name}：限速牌立在路边、在弯道线的延长线上，不压路；全图时只有限速牌，放大了才有弯名牌、格号、制动牌`, () => {
       const far = art.labels({ k: LOD / 2, rot: false, next: -1 });
       const close = art.labels({ k: 1, rot: false, next: t.corners[0]!.at });
-      expect((far.match(/class="shield"/g) ?? []).length).toBe(t.corners.length);
+      const at = [...close.matchAll(/class="limit" transform="translate\(([-\d.]+) ([-\d.]+)\)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+      expect(at.length).toBe(t.corners.length);
+      t.corners.forEach((c, i) => {
+        const e = geo.edges[c.at]!;
+        const p = at[i]!;
+        // 在弯道线（过 e.c、垂直于赛道方向）的延长线上：沿赛道方向的偏移是 0
+        expect(Math.abs((p.x - e.c.x) * Math.cos(e.angle) + (p.y - e.c.y) * Math.sin(e.angle))).toBeLessThan(0.2);
+        // 牌子整块在路外，离路边不远
+        expect(near(p.x, p.y)).toBeGreaterThan(12);
+        expect(Math.hypot(p.x - e.c.x, p.y - e.c.y)).toBeLessThan(geo.width / 2 + 30);
+      });
+      expect((far.match(/class="limit"/g) ?? []).length).toBe(t.corners.length);
+      // 挨得近的弯，牌子也不叠：放大时、全图时都查（全图时牌子放大了 sc 倍）
+      for (const [svg, sc] of [
+        [close, 1],
+        [far, 2 / LOD],
+      ] as const) {
+        const ps = [...svg.matchAll(/class="limit" transform="translate\(([-\d.]+) ([-\d.]+)\)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+        for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) expect(Math.hypot(ps[i]!.x - ps[j]!.x, ps[i]!.y - ps[j]!.y)).toBeGreaterThan(2 * 12 * sc);
+      }
+      expect(far).not.toContain('class="tag"');
       expect(far).not.toContain('T1');
+      expect((close.match(/class="tag"/g) ?? []).length).toBe(t.corners.length);
+      // 限速数字只有弯道线上那一处
+      expect((close.match(/class="limit"/g) ?? []).length).toBe(t.corners.length);
       expect(close).toContain('T1');
       // 制动牌每个弯 3 块，格号每 5 格一个
       expect((close.match(/<rect x="-6.5"/g) ?? []).length).toBe(t.corners.length * 3);
