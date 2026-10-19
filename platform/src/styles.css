@@ -157,6 +157,11 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 @media (min-width: 561px) and (max-height: 500px) {
   .top__logo { font-size: var(--fs-2xl); white-space: nowrap; }
 }
+/* 平板竖屏、窄窗口（0.25.4）：顶栏按钮都带字，标题那一列只剩约 230px（iPad 820 宽、管理员实测），40px 的大标题折成两行；
+ * 28px 也差几个像素（折成"小游戏街机 / 厅"），用 22px 放得下一行。不写 nowrap：更窄的窗口宁可折行，也不顶出屏幕 */
+@media (min-width: 561px) and (max-width: 959px) {
+  .top__logo { font-size: var(--fs-xl); }
+}
 
 /* ---------- 顶栏的小按钮（排行、好友、筹码、头像） ---------- */
 .topbar { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); white-space: nowrap; }
