@@ -1796,7 +1796,9 @@ function checkTakeProfit(me: number): void {
   }
   const v = online?.state.view;
   const net = v?.net[me];
-  if (!v || net === null || net === undefined || online!.state.status !== 'open') return;
+  // 只在手间停着（HAND_PAUSE_MS）时走：页面动画播完时服务端可能已经发了下一手（切后台、卡顿），这时离座会变成弃牌白丢盲注，
+  // 留到这一手打完再问（tpFired 不置位）
+  if (!v || v.phase !== 'idle' || net === null || net === undefined || online!.state.status !== 'open') return;
   const buyIn = stakesOf(v.stakes).max;
   if (!reached(takeProfit, buyIn, buyIn + net)) return;
   tpFired = true;
