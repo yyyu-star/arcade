@@ -1134,6 +1134,15 @@ body::before {
 .d-body { margin-top: var(--s-2); font-size: var(--fs-4); line-height: 1.6; color: var(--ink); }
 .d-buttons { display: flex; justify-content: flex-end; gap: var(--s-3); margin-top: var(--s-4); }
 .d-btn { min-width: 96px; height: 44px; padding: 0 var(--s-4); border-radius: var(--r-3); border: 1px solid var(--line-2); background: rgba(255, 255, 255, .06); font-size: var(--fs-4); font-weight: 700; }
+/* 止盈的选择框（0.22.0） */
+.dialog .tp-pick { display: grid; gap: var(--s-3); }
+.dialog .tp-pick .tp-note { font-size: var(--fs-3); color: var(--muted); }
+.dialog .tp-pick .tp-opts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.dialog .tp-pick .tp-opts .pill.sel { border-color: var(--gold); color: var(--gold); }
+.dialog .tp-pick .tp-own { display: flex; gap: var(--s-2); }
+.dialog .tp-pick .tp-amount { flex: 1; min-width: 0; height: 40px; padding: 0 var(--s-3); border-radius: var(--r-3); border: 1px solid var(--line-2); background: rgba(255, 255, 255, .06); color: var(--ink); font-size: var(--fs-4); }
+/* 选桌"带上桌"那一行末尾的止盈按钮 */
+.lobby .buyin .tp-pick-btn { flex: none; height: 36px; padding: 0 var(--s-3); font-size: var(--fs-3); }
 /* 快速匹配的排队卡（0.20.0） */
 .dialog .match-card { display: grid; gap: var(--s-2); }
 .dialog .match-card .mc-tier { font-weight: 800; }

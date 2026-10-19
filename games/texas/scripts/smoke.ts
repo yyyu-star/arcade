@@ -1056,6 +1056,60 @@ async function tall(browser: Browser, base: string): Promise<void> {
   await Promise.all([host.close(), pal.close()]);
 }
 
+/**
+ * 止盈（--only tp，0.22.0）：实盘小桌把止盈设成"赢 1"，一直跟注，赢到的那一手打完就自动离桌：
+ * 不问"离桌吗"、出结算页、钱包比坐下前多。大厅"带上桌"下面那一行显示同一个设置
+ */
+async function takeProfitFlow(browser: Browser, base: string): Promise<void> {
+  const ctx = await newContext(browser, base, 'smoke-tp');
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true, takeProfit: { kind: 'amount', amount: 1 } }));
+  });
+  const page = await ctx.newPage();
+  watch(page, 'tp');
+  const toasts: string[] = [];
+  await page.goto(`${base}/games/texas/`);
+  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+  const before = await balance(page);
+  await enter(page, '实盘');
+  const row = ((await page.locator('.lobby .tp-pick-btn').textContent()) ?? '').replace(/\s/g, '');
+  if (!row.includes('赢1')) throw new Error(`lobby take-profit button: ${row}`);
+  // 选桌多了止盈按钮也要整个放得下（1280×720 的"坐下开打"不出屏）
+  const go = await page.locator('.lobby .start').boundingBox();
+  if (!go || go.y + go.height > DESK_H) throw new Error(`lobby: 坐下开打 off screen ${JSON.stringify(go)}`);
+  await shot(page, 'tp-lobby');
+  await page.locator('.lobby .start').click();
+  await skipTips(page);
+  const deadline = Date.now() + 420_000;
+  while (!(await page.locator('.summary').isVisible())) {
+    if (Date.now() > deadline) {
+      await shot(page, 'debug-tp');
+      throw new Error('take profit never fired');
+    }
+    // 止盈自动走不问"离桌吗"；别的框（补码、输光了）点主按钮接着打
+    if (await page.locator('.d-title', { hasText: '离桌' }).isVisible()) throw new Error('take profit should not ask before leaving');
+    if (await page.locator('.dialog').isVisible()) {
+      await page.locator('.d-btn.primary').click().catch(() => {});
+      continue;
+    }
+    if (await page.locator('.actions.on').isVisible()) await page.locator('.act.call').click().catch(() => {});
+    // 顶上那条提示是同一个元素换字，边打边记
+    const t = (await page.locator('.toast').first().textContent()) ?? '';
+    if (t.includes('止盈了')) toasts.push(t);
+    await page.waitForTimeout(150);
+  }
+  await shot(page, 'tp-summary');
+  // 提示是同一个元素，淡出后字还在
+  toasts.push((await page.locator('.toast').first().textContent()) ?? '');
+  if (!toasts.some((t) => t.includes('止盈了 +'))) throw new Error(`take profit toast missing: ${toasts.join(' | ')}`);
+  await page.locator('.d-btn.primary').click();
+  await page.locator('.lobby').waitFor();
+  const after = await settled(page, 'tp');
+  if (after <= before) throw new Error(`take profit: wallet should grow, ${before} -> ${after}`);
+  log('take profit', before, '->', after, toasts[0]);
+  await ctx.close();
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1192,6 +1246,7 @@ async function main(): Promise<void> {
         if (!only || only === 'room') await room(browser, base);
         if (!only || only === 'match') await match(browser, base);
         if (only === 'tall') await tall(browser, base);
+        if (only === 'tp') await takeProfitFlow(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

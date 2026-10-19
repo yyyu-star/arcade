@@ -24,6 +24,7 @@ import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
 import { momentOf, temperOf } from './fun/moments.ts';
 import { tauntId, TAUNTS } from './fun/taunts.ts';
 import { askTopUp, closeDialog, dialog } from './view/dialog.ts';
+import { parseTakeProfit, reached, takeProfitLabel, TP_OFF, TP_PCTS, type TakeProfit } from './core/takeprofit.ts';
 import { roomSummary, soloSummary, type RoomSummaryRow, type SoloSummary } from './view/summary.ts';
 import { roomCard, soloCard } from './view/share.ts';
 import { prepareShare, type ShareCard } from 'arcade-kit/share';
@@ -103,6 +104,11 @@ const soundBtn = el('button', 'icon sound', top);
 soundBtn.type = 'button';
 const leaveBtn = el('button', 'pill leave', top, '离桌');
 leaveBtn.type = 'button';
+// 止盈开关（0.22.0）：坐着时改，和大厅"带上桌"下面那一行是同一个设置；放在聊天开关前面
+const tpBtn = el('button', 'icon tp-toggle hidden', top);
+tpBtn.type = 'button';
+top.insertBefore(tpBtn, chatBtn);
+tpBtn.addEventListener('click', () => void pickTakeProfit());
 
 const screen = el('div', 'screen', stage);
 /** 互动"不看"（texas.fun）。菜单、面板、冷却、连击回敬、按人屏蔽、首次提示、电脑的反应都是 kit 的 TableFun（0.13.0，docs/table-fun.md 第 0 节） */
@@ -111,6 +117,10 @@ let funOff = loadFunOff(localStorage, sessionStorage);
 let chatOff = readSettings().chatOff === true;
 /** 快速匹配桌上和陌生人聊不聊（0.20.0，texas.settings 的 strangerChat，默认聊）：不聊时进匹配桌不带 chat=1，好友房、单机照常 */
 let strangerChat = readSettings().strangerChat !== false;
+/** 止盈（0.22.0，texas.settings 的 takeProfit） */
+let takeProfit = parseTakeProfit(readSettings().takeProfit);
+/** 这一桌已经止盈走了（离桌要几步，别一手里叫两次） */
+let tpFired = false;
 /** 牌桌上的互动组件：进桌时建、离桌时拆；单机的电脑由它在本地反应，好友房的由房间算（worker/room.ts） */
 let tf: TableFun | null = null;
 /**
@@ -202,6 +212,7 @@ const lobby = new Lobby(stage, {
   relief,
   openRoom,
   match: (stakes, fun, level) => void quickMatch(stakes, fun, level),
+  takeProfit: () => void pickTakeProfit(),
   joinRoom,
   backToRoom,
   preview: (id) => {
@@ -314,6 +325,7 @@ async function boot(): Promise<void> {
   // 有没有平台（10.1），顺带拿昵称（平台的 /api/me）；问不到（平台抖了一下）按有平台算
   const p = await detectPlatform();
   site.standalone = p.platform === false;
+  drawTakeProfit();
   const u = p.platform === true ? (p.user as { displayName?: unknown } | null) : null;
   if (typeof u?.displayName === 'string' && u.displayName) myName = u.displayName;
   if (site.standalone) standaloneUi();
@@ -733,6 +745,9 @@ function openFun(scope: string): void {
   });
   toggle(chatBtn, 'hidden', false);
   drawChatBtn();
+  tpFired = false;
+  toggle(tpBtn, 'hidden', false);
+  drawTakeProfit();
   syncFun();
 }
 
@@ -824,6 +839,7 @@ function closeFun(): void {
   tf?.destroy();
   tf = null;
   toggle(chatBtn, 'hidden', true);
+  toggle(tpBtn, 'hidden', true);
   toggle(funHints, 'hidden', true);
   toggle(funSlot, 'hidden', true);
   document.body.classList.remove('texas-fun-idle');
@@ -853,6 +869,7 @@ function syncFun(): void {
 function handDone(prev: View, next: View, me: number | null): void {
   const h = handOver(prev, next);
   if (!h) return;
+  if (me !== null) checkTakeProfit(me);
   const sc = showcase(h.r, h.log);
   if (sc && tf && !funOff) {
     play('banner');
@@ -1007,11 +1024,12 @@ async function waitTopUp(s: Solo): Promise<void> {
 }
 
 /** 离桌回大厅：手里有牌就弃，筹码结回钱包 */
-async function leave(): Promise<boolean> {
+/** auto：止盈到了自动走（0.22.0），不问 */
+async function leave(auto = false): Promise<boolean> {
   const s = solo;
   if (!s) return true;
   const inHand = s.table.seats[ME]!.status === 'active';
-  if (!s.busted && !s.closing) {
+  if (!s.busted && !s.closing && !auto) {
     const back = s.session.practice ? '' : '桌上的筹码带回钱包。';
     const ok = await dialog(stage, '离桌', inHand ? `这一手会弃牌。${back}` : back || '回大厅，这一桌就结束了。', [
       { label: '接着打', value: 'no' },
@@ -1388,8 +1406,8 @@ function enterRoom(r: SavedRoom): void {
   drawRoom(o.state);
 }
 
-/** 离开房间：坐着的先离座（这一手弃牌，打完结回钱包），再断开 */
-async function leaveRoom(goHome: boolean): Promise<void> {
+/** 离开房间：坐着的先离座（这一手弃牌，打完结回钱包），再断开。auto：止盈到了自动走（0.22.0），不问 */
+async function leaveRoom(goHome: boolean, auto = false): Promise<void> {
   const o = online;
   if (!o) return;
   const st = o.state;
@@ -1416,15 +1434,17 @@ async function leaveRoom(goHome: boolean): Promise<void> {
     }
     return;
   }
-  const ok = await dialog(
-    stage,
-    '离开房间',
-    seated && playing ? (noWallet() ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
-    [
-      { label: '留下', value: 'no' },
-      { label: '离开', value: 'yes', primary: true },
-    ],
-  );
+  const ok = auto
+    ? 'yes'
+    : await dialog(
+        stage,
+        '离开房间',
+        seated && playing ? (noWallet() ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
+        [
+          { label: '留下', value: 'no' },
+          { label: '离开', value: 'yes', primary: true },
+        ],
+      );
   if (ok !== 'yes' || online !== o) return;
   // 确认的这一会儿断了：按断线的说
   if (seated && o.state.status !== 'open') return leaveRoom(goHome);
@@ -1709,6 +1729,80 @@ function drawRoom(s: OnlineState): void {
 
 /** 这一桌的筹码不碰钱包：单独部署，或者娱乐房间（0.21.0） */
 const noWallet = (): boolean => site.standalone || online?.fun === true;
+
+// ---------- 止盈（0.22.0，src/core/takeprofit.ts） ----------
+
+function drawTakeProfit(): void {
+  const on = takeProfit.kind !== 'off';
+  const label = takeProfitLabel(takeProfit, chips);
+  tpBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+  tpBtn.setAttribute('aria-label', `${label}（点一下改）`);
+  tpBtn.title = tpBtn.getAttribute('aria-label')!;
+  toggle(tpBtn, 'sel', on);
+  lobby.setTakeProfit(label);
+}
+
+/** 选止盈：关 / 赢 50% / 100% / 200% / 自定义金额（按这次带上桌的算） */
+async function pickTakeProfit(): Promise<void> {
+  let pick: TakeProfit | null = null;
+  const body = el('div', 'tp-pick');
+  el('div', 'tp-note', body, '这一桌净赢到这么多，一手打完就自动起身、结回钱包（娱乐桌只是离桌）');
+  const row = el('div', 'tp-opts', body);
+  const opts: [string, TakeProfit][] = [['关', TP_OFF], ...TP_PCTS.map((p): [string, TakeProfit] => [`赢 ${p}%`, { kind: 'pct', pct: p }])];
+  for (const [label, tp] of opts) {
+    const b = el('button', `pill${JSON.stringify(tp) === JSON.stringify(takeProfit) ? ' sel' : ''}`, row, label);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      pick = tp;
+      closeDialog();
+    });
+  }
+  const own = el('div', 'tp-own', body);
+  const input = el('input', 'tp-amount', own);
+  input.type = 'number';
+  input.inputMode = 'numeric';
+  input.min = '1';
+  input.placeholder = '自定义：赢多少';
+  if (takeProfit.kind === 'amount') input.value = String(takeProfit.amount);
+  const use = el('button', 'pill', own, '用这个');
+  use.type = 'button';
+  use.addEventListener('click', () => {
+    const n = Math.floor(Number(input.value));
+    if (!Number.isSafeInteger(n) || n <= 0) return void input.focus();
+    pick = { kind: 'amount', amount: n };
+    closeDialog();
+  });
+  await dialog(stage, '止盈', body, [{ label: '取消', value: 'cancel' }], true);
+  if (!pick) return;
+  takeProfit = pick;
+  patchSettings({ takeProfit });
+  drawTakeProfit();
+  toast(takeProfitLabel(takeProfit, chips));
+}
+
+/** 一手打完问一次：这一桌净赢够了就走（正在打的一手已经打完了）。单机按坐下加补码算带入，好友房按一份满买入 */
+function checkTakeProfit(me: number): void {
+  if (tpFired || takeProfit.kind === 'off') return;
+  if (solo) {
+    const s = solo;
+    if (s.busted || s.closing) return;
+    const buyIn = s.stats.buyin;
+    const now = s.table.seats[ME]!.stack + (s.session.held ?? 0);
+    if (!reached(takeProfit, buyIn, now)) return;
+    tpFired = true;
+    toast(`止盈了 +${chips(now - buyIn)}`);
+    void leave(true);
+    return;
+  }
+  const v = online?.state.view;
+  const net = v?.net[me];
+  if (!v || net === null || net === undefined || online!.state.status !== 'open') return;
+  const buyIn = stakesOf(v.stakes).max;
+  if (!reached(takeProfit, buyIn, buyIn + net)) return;
+  tpFired = true;
+  toast(`止盈了 +${chips(net)}`);
+  void leaveRoom(false, true);
+}
 
 /** 钱包够带多少（按大盲取整，最多 full）；不知道钱包时按 full */
 const affordable = (full: number, bb: number): number => (wallet ? Math.min(full, Math.floor(wallet.balance / bb) * bb) : full);

@@ -39,6 +39,8 @@ export interface LobbyHandlers {
   /** 快速匹配（0.20.0）：这一档排队找真人，一桌 6 人；只有实盘、有钱包时有 */
   /** 快速匹配：fun 是娱乐档（level 是选的难度，没排到人转单机时用） */
   match(stakes: StakesId, fun: boolean, level: number): void;
+  /** 止盈（0.22.0）：点了弹选择框 */
+  takeProfit(): void;
   /** 好友房：用现在选的档位和人数开一个；输码进房；回到上次的房间 */
   openRoom(stakes: StakesId, size: number): void;
   joinRoom(code: string): void;
@@ -68,6 +70,7 @@ export class Lobby {
   private readonly buyAmt: HTMLSpanElement;
   private readonly startBtn: HTMLButtonElement;
   private readonly matchBtn: HTMLButtonElement;
+  private readonly tpBtn: HTMLButtonElement;
   private readonly openBtn: HTMLButtonElement;
   private readonly codeIn: HTMLInputElement;
   private readonly joinBtn: HTMLButtonElement;
@@ -213,6 +216,8 @@ export class Lobby {
     this.slider.type = 'range';
     this.slider.addEventListener('input', () => this.draw());
     this.buyAmt = el('span', 'buy-amt', buy);
+    // 止盈（0.22.0）：坐下前就能设，和桌上顶栏的开关是同一个设置。挨在带多少后面，不另占一行（1280×720 的选桌放不下多一行）
+    this.tpBtn = button(buy, 'pill tp-pick-btn', '止盈：关', () => h.takeProfit());
     const go = (this.goRow = el('div', 'go-row', panel));
     this.startBtn = button(go, 'start', '坐下开打', () =>
       this.wait(this.startBtn, () => (this.fun() ? this.h.start(FUN_STAKES, this.size, Number(this.slider.value), true, FUN_LEVEL[this.diff]) : this.h.start(this.stakes, this.size, Number(this.slider.value), false))),
@@ -358,6 +363,11 @@ export class Lobby {
           .join('')
       : '<span class="ms-label">还没打过：点"快速开始"先来一把</span>';
     if (this.statsHtml !== html) this.statsEl.innerHTML = this.statsHtml = html;
+  }
+
+  /** 止盈按钮上的字（"止盈：关"、"止盈：赢 50%"……） */
+  setTakeProfit(text: string): void {
+    this.tpBtn.textContent = text;
   }
 
   private draw(): void {
