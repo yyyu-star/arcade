@@ -1,5 +1,5 @@
 /**
- * 沿赛道取点的小工具（mapart.ts 用）：偏移线、格线上的点、弯的范围、限速牌立在哪。
+ * 沿赛道取点的小工具（mapart.ts 用）：偏移线、格线上的点、弯的范围。
  */
 import type { Geometry, Pt } from '../track/shape.ts';
 import type { Track } from '../track/types.ts';
@@ -41,10 +41,4 @@ export function bendRange(track: Track, geo: Geometry, at: number): { from: numb
     end = at + k;
   }
   return { from: at - 1, to: end + 1, side: turn > 0 ? 1 : -1 };
-}
-
-/** 弯道限速牌立的地方：弯道线外侧、缓冲区外面 */
-export function signSpot(track: Track, geo: Geometry, at: number): { x: number; y: number } {
-  const p = edgePoint(geo, at, bendRange(track, geo, at).side * (geo.width / 2 + 46));
-  return { x: p.x, y: p.y };
 }

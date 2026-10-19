@@ -86,9 +86,11 @@ export class TitleScene extends Phaser.Scene {
 
     // 右边的面板：深漆底、金边
     const g = this.add.graphics().setDepth(10);
-    // 卡通风格（0.27.0）：暖棕面板、深墨描边、实色下沿，里面一圈金线
+    // 卡通风格（0.27.0；0.27.1 补质感）：柔和投影、深墨下沿、暖棕面板上亮下暗、深墨描边，里面一圈金线
+    g.fillStyle(0x000000, 0.25).fillRoundedRect(P.x - 6, P.y + 14, P.w + 12, P.h + 4, RADIUS.xl + 4);
     g.fillStyle(0x2b1d14, 1).fillRoundedRect(P.x, P.y + 8, P.w, P.h, RADIUS.xl);
-    g.fillStyle(0x3a2012, 0.94).fillRoundedRect(P.x, P.y, P.w, P.h, RADIUS.xl);
+    g.fillStyle(0x2a160c, 0.96).fillRoundedRect(P.x, P.y, P.w, P.h, RADIUS.xl);
+    g.fillStyle(0x4a2a16, 0.9).fillRoundedRect(P.x, P.y, P.w, P.h * 0.35, { tl: RADIUS.xl, tr: RADIUS.xl, bl: 0, br: 0 });
     g.lineStyle(3, 0x2b1d14, 1).strokeRoundedRect(P.x, P.y, P.w, P.h, RADIUS.xl);
     g.lineStyle(2, COLOR.gold, 0.8).strokeRoundedRect(P.x + 8, P.y + 8, P.w - 16, P.h - 16, RADIUS.xl - 6);
     const cx = P.x + P.w / 2;

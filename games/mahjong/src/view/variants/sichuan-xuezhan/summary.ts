@@ -50,7 +50,7 @@ export function roundSummary(v: XzView, names: string[], unit: string): HTMLElem
     const list = el('div', 'flows', box);
     for (const [key, amount] of flows) {
       const [kind, from, to] = key.split('|') as [string, string, string];
-      el('div', 'flow', list, `${PAY_KIND[kind] ?? kind}：${names[Number(from)]} → ${names[Number(to)]} ${amount}${unit}`);
+      el('div', 'flow', list, `${PAY_KIND[kind] ?? kind}：${names[Number(from)]} → ${names[Number(to)]} ${amount}${unit.replace(' ', '\u00a0')}`);
     }
   }
   return box;
