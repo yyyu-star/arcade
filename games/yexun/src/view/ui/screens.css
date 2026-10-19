@@ -246,6 +246,17 @@
 .yx-row3 { gap: 12px; }
 .yx-result-panel .yx-row3 .yx-big { min-height: 60px; font-size: 20px; flex: 1; }
 .yx-result-panel .yx-row3 .yx-again { flex: 1.5; font-size: 24px; }
+/* 手机竖屏：结算两栏放不下（右栏法器伤害和底下三个按钮被裁掉），改成上下排、整块能滑 */
+@media (orientation: portrait) and (max-width: 700px) {
+  .yx-result-panel { max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 12px 12px 14px; }
+  .yx-result-panel .yx-rhead .yx-brush { font-size: 48px; }
+  .yx-result-panel .yx-rmain { grid-template-columns: 1fr; gap: 10px; }
+  .yx-result-panel .yx-rrow { grid-template-columns: 30px 70px 1fr 60px; }
+  .yx-result-panel .yx-rcoins { flex-wrap: wrap; gap: 8px; font-size: 18px; }
+  .yx-result-panel .yx-row3 { gap: 8px; }
+  .yx-result-panel .yx-row3 .yx-big { min-width: 0; min-height: 50px; font-size: 16px; padding: 0 6px; }
+  .yx-result-panel .yx-row3 .yx-again { font-size: 19px; }
+}
 @keyframes yx-pop { from { opacity: 0; transform: scale(0.92) translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes yx-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes yx-stamp { from { opacity: 0; transform: rotate(-4deg) scale(2.2); } to { opacity: 1; transform: rotate(-4deg) scale(1); } }
