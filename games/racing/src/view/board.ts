@@ -489,9 +489,10 @@ export class Board {
       const pts: Pt[] = [{ x: c.x, y: c.y }, this.spot(this.ghostAt.pos, this.ghostAt.lane).p];
       const N = this.track.spaces;
       const span = this.ghostAt.pos - c.pos;
-      for (const sh of this.art.shields) {
-        const d = (sh.at - cellOf(this.track, c.pos) + N) % N;
-        if (d >= 1 && d <= span + 1) pts.push(sh);
+      // 路上要过的弯：把路边的限速牌也框进来
+      for (const k of this.track.corners) {
+        const d = (k.at - cellOf(this.track, c.pos) + N) % N;
+        if (d >= 1 && d <= span + 1) pts.push(this.art.sign(k.at));
       }
       const rp = pts.map((p) => this.rot(p));
       const pad = 50;
@@ -539,16 +540,16 @@ export class Board {
     return Math.min(s.w / this.cam.w, s.h / this.cam.h);
   }
 
-  /** 标注层：缩放跨过"全图"那条线、盾牌该换大小、下一个弯换了，才重画 */
+  /** 标注层：缩放跨过"全图"那条线、限速牌该换大小、下一个弯换了，才重画 */
   private paintLabels(): void {
     const k = this.zoomK();
     const detail = k >= LOD;
-    const sc = Math.round(Math.max(1, 30 / (36 * k)) * 10) / 10;
+    // 全图时限速牌放大的倍数按 0.1 一档取，档位内不重画（往上取整，保证换算回来的缩放仍低于"全图"那条线）
+    const sc = detail ? 1 : Math.ceil(10 / k) / 10;
     const key = `${detail}|${sc}|${this.nextCorner}|${this.turned}`;
     if (key === this.labelKey) return;
     this.labelKey = key;
-    // 盾牌大小按档位取，档位内不变
-    this.labelLayer.innerHTML = this.art.labels({ k: detail ? Math.max(k, LOD) : 30 / (36 * sc), rot: !!this.turned, next: this.nextCorner });
+    this.labelLayer.innerHTML = this.art.labels({ k: detail ? Math.max(k, LOD) : 1 / sc, rot: !!this.turned, next: this.nextCorner });
   }
 
   /** 画面外的车：屏幕边上、车所在那个方向一个小牌（颜色、号码、比我前后几格） */

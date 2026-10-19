@@ -2131,7 +2131,9 @@ html .atf-btn {
   box-shadow: inset 3px 0 0 var(--gold);
 }
 .summary .who {
-  width: 90px;
+  /* 至少 90 宽，有空就放宽到 8 个字左右（手机竖屏原来只露"本地q…"，10-19 试玩） */
+  min-width: 90px;
+  max-width: 8em;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2205,6 +2207,10 @@ html .atf-btn {
   line-height: 1.6;
   opacity: 0.85;
   columns: 2;
+}
+/* 手机竖屏两栏太窄，"160 分"的"分"会掉到下一行：改一栏（10-19 试玩） */
+[data-orient='port'] .summary .flows {
+  columns: 1;
 }
 .cheer {
   margin-top: var(--sp-3);
