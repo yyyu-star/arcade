@@ -52,19 +52,19 @@ export function LogoMark({ size = 48 }: { size?: number }) {
   return (
     <svg className="logo-mark" viewBox="0 0 50 50" width={size} height={size} aria-hidden="true" focusable="false">
       {/* 错开的实心影子画在图里，不用 CSS filter（filter 要单独合成一层，首屏多花时间） */}
-      <rect x="11" y="5" width="30" height="42" rx="6" fill="#3a2b33" />
-      <rect x="9" y="3" width="30" height="42" rx="6" fill="#f07a3a" stroke="#3a2b33" strokeWidth="3" />
-      <rect x="13" y="7" width="22" height="6" rx="2" fill="#ffd257" stroke="#3a2b33" strokeWidth="2" />
-      <rect x="13" y="15.5" width="22" height="15" rx="2" fill="#2b2140" stroke="#3a2b33" strokeWidth="2" />
+      <rect x="11" y="5" width="30" height="42" rx="6" fill="#2b1d14" />
+      <rect x="9" y="3" width="30" height="42" rx="6" fill="#f07a3a" stroke="#2b1d14" strokeWidth="3" />
+      <rect x="13" y="7" width="22" height="6" rx="2" fill="#ffd257" stroke="#2b1d14" strokeWidth="2" />
+      <rect x="13" y="15.5" width="22" height="15" rx="2" fill="#2b2140" stroke="#2b1d14" strokeWidth="2" />
       <path
         d="M19 18h2v2h-2zM27 18h2v2h-2zM17 20h14v2H17zM17 22h4v2h-4zM23 22h2v2h-2zM27 22h4v2h-4zM17 24h14v2H17zM19 26h2v2h-2zM27 26h2v2h-2z"
         fill="#7be0a0"
       />
-      <rect x="11" y="33" width="26" height="8" rx="2" fill="#ffe3c4" stroke="#3a2b33" strokeWidth="2" />
-      <path d="M18 37.5v-4" stroke="#3a2b33" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="18" cy="33" r="2.6" fill="#e0463a" stroke="#3a2b33" strokeWidth="1.5" />
-      <circle cx="27" cy="37" r="1.9" fill="#3fa7ff" stroke="#3a2b33" strokeWidth="1.2" />
-      <circle cx="32" cy="37" r="1.9" fill="#ffd257" stroke="#3a2b33" strokeWidth="1.2" />
+      <rect x="11" y="33" width="26" height="8" rx="2" fill="#ffe3c4" stroke="#2b1d14" strokeWidth="2" />
+      <path d="M18 37.5v-4" stroke="#2b1d14" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="18" cy="33" r="2.6" fill="#e0463a" stroke="#2b1d14" strokeWidth="1.5" />
+      <circle cx="27" cy="37" r="1.9" fill="#3fa7ff" stroke="#2b1d14" strokeWidth="1.2" />
+      <circle cx="32" cy="37" r="1.9" fill="#ffd257" stroke="#2b1d14" strokeWidth="1.2" />
     </svg>
   );
 }
@@ -73,16 +73,16 @@ export function LogoMark({ size = 48 }: { size?: number }) {
 export function EmptyArt() {
   return (
     <svg className="empty__art" viewBox="0 0 96 64" width="96" height="64" aria-hidden="true" focusable="false">
-      <ellipse cx="48" cy="58" rx="30" ry="4" fill="#3a2b33" opacity="0.12" />
+      <ellipse cx="48" cy="58" rx="30" ry="4" fill="#2b1d14" opacity="0.12" />
       <path
         d="M16 12h64a4 4 0 0 1 4 4v8a6 6 0 0 0 0 12v8a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4v-8a6 6 0 0 0 0-12v-8a4 4 0 0 1 4-4z"
         fill="#fff3d6"
-        stroke="#3a2b33"
+        stroke="#2b1d14"
         strokeWidth="3"
       />
-      <path d="M62 14v32" stroke="#3a2b33" strokeWidth="2" strokeDasharray="3 4" />
-      <path d="M28 26q3-3 6 0M42 26q3-3 6 0" fill="none" stroke="#3a2b33" strokeWidth="2.5" strokeLinecap="round" />
-      <ellipse cx="38" cy="36" rx="3.5" ry="4" fill="#3a2b33" />
+      <path d="M62 14v32" stroke="#2b1d14" strokeWidth="2" strokeDasharray="3 4" />
+      <path d="M28 26q3-3 6 0M42 26q3-3 6 0" fill="none" stroke="#2b1d14" strokeWidth="2.5" strokeLinecap="round" />
+      <ellipse cx="38" cy="36" rx="3.5" ry="4" fill="#2b1d14" />
       <circle cx="26" cy="33" r="2.5" fill="#f07a3a" opacity="0.45" />
       <circle cx="50" cy="33" r="2.5" fill="#f07a3a" opacity="0.45" />
       <path d="M70 24l4 0-4 6h4" fill="none" stroke="#b24c14" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

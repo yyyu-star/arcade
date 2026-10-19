@@ -8,9 +8,9 @@
   --paper: #fdf6e8;
   --surface: #fffaf0;
   --white: #fff;
-  --ink: #3a2b33;
+  --ink: #2b1d14;
   --muted: #74646a;
-  --line: #3a2b33;
+  --line: #2b1d14;
   --accent: #f07a3a;
   --accent-deep: #e0601f;
   /* 浅底上的橙色字：原来的 --accent 对比度不够读 */
@@ -53,10 +53,10 @@
   --bw-thin: 2px;
   --r-sm: 8px;
   --r-md: 12px;
-  --r-lg: 18px;
+  --r-lg: 16px;
   --r-pill: 999px;
-  --sh-sm: 2px 2px 0 var(--line);
-  --sh-md: 3px 3px 0 var(--line);
+  --sh-sm: 0 3px 0 var(--line);
+  --sh-md: 0 4px 0 var(--line);
   --sh-lg: 4px 4px 0 var(--line);
   --sh-lift: 6px 8px 0 var(--line);
 
@@ -193,14 +193,16 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   box-shadow: var(--sh-md); cursor: pointer;
   transition: transform var(--ease), box-shadow var(--ease), background-color var(--ease);
 }
-.btn--primary, .card__play { background: linear-gradient(180deg, var(--accent), var(--accent-deep)); color: var(--white); text-shadow: 0 1px 0 rgb(110 40 0 / 35%); }
+/* 卡通风格（0.25.2）：平涂、不用渐变；白字下面压一道深色，橙底上也看得清 */
+.btn--primary, .card__play { background: var(--accent-deep); color: var(--white); text-shadow: 0 1px 0 rgb(80 30 0 / 45%); }
 .btn--danger { background: var(--danger); color: var(--white); }
 .btn--small { min-height: 36px; padding: var(--s-1) var(--s-3); font-size: var(--fs-sm); box-shadow: var(--sh-sm); }
 .btn--big { font-size: var(--fs-lg); padding: var(--s-3) var(--s-6); }
 @media (hover: hover) {
-  .btn:hover:not(:disabled), .card__play:not(.card__play--disabled):hover, .account:hover { transform: translate(-1px, -1px); box-shadow: var(--sh-lg); }
+  .btn:hover:not(:disabled), .card__play:not(.card__play--disabled):hover, .account:hover { transform: translateY(-1px); box-shadow: 0 5px 0 var(--line); }
 }
-.btn:active:not(:disabled), .card__play:not(.card__play--disabled):active, .account:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--line); }
+/* 按下去：往下沉到阴影的位置（按钮的阴影是正下方的实色下沿） */
+.btn:active:not(:disabled), .card__play:not(.card__play--disabled):active, .account:active { transform: translateY(4px); box-shadow: 0 0 0 var(--line); }
 /* 禁用：灰底灰字、没有阴影（原来是半透明，橙按钮成了浅橙，看着像还能点） */
 .btn:disabled, .card__play--disabled { background: var(--soft); color: var(--muted); border-color: #b9aaa2; box-shadow: none; text-shadow: none; cursor: not-allowed; }
 /* 加载中：保留原来的颜色，前面一个小圈在转 */

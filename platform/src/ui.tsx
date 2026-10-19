@@ -98,10 +98,10 @@ export function RecoveryCodeCard({ code, username, onDone, doneText }: { code: s
     if (!g) return;
     g.fillStyle = '#fdf6e8';
     g.fillRect(0, 0, 720, 360);
-    g.strokeStyle = '#3a2b33';
+    g.strokeStyle = '#2b1d14';
     g.lineWidth = 6;
     g.strokeRect(12, 12, 696, 336);
-    g.fillStyle = '#3a2b33';
+    g.fillStyle = '#2b1d14';
     g.font = 'bold 30px system-ui, sans-serif';
     g.fillText('小游戏街机厅 · 恢复码', 48, 80);
     g.font = '22px system-ui, sans-serif';
