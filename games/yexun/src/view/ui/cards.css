@@ -39,15 +39,15 @@
   background: #17131c; color: #f6efdc; font-size: 13px; line-height: 22px;
 }
 .yx-pick-name { font-size: 19px; display: flex; align-items: center; gap: 6px; }
-.yx-pick-name em { font-style: normal; font-size: 12px; padding: 1px 6px; border-radius: 6px; background: #17131c; color: #f6efdc; }
+.yx-pick-name em { font-style: normal; font-size: 13px; padding: 1px 6px; border-radius: 6px; background: #17131c; color: #f6efdc; }
 .yx-pick-name em.new { background: #c8402f; }
 .yx-pick-text { font-size: 14px; font-weight: 600; text-align: center; color: #3a3140; }
-.yx-pick-hint { margin-top: auto; font-size: 12px; font-weight: 600; color: #7a4a20; background: rgba(242, 201, 76, 0.35); border-radius: 6px; padding: 2px 6px; text-align: center; }
-.yx-pick-tags { font-size: 11px; font-weight: 700; color: #7a6a52; letter-spacing: 1px; margin-top: -4px; }
-.yx-pick-counter { font-size: 12px; font-weight: 700; color: #6a3a3a; text-align: center; line-height: 1.25; }
-.yx-pick-set { font-size: 12px; font-weight: 700; color: #fbf5e4; background: #4a7a5a; border-radius: 6px; padding: 2px 6px; text-align: center; }
+.yx-pick-hint { margin-top: auto; font-size: 13px; font-weight: 600; color: #7a4a20; background: rgba(242, 201, 76, 0.35); border-radius: 6px; padding: 2px 6px; text-align: center; }
+.yx-pick-tags { font-size: 13px; font-weight: 700; color: #7a6a52; letter-spacing: 1px; margin-top: -4px; }
+.yx-pick-counter { font-size: 13px; font-weight: 700; color: #6a3a3a; text-align: center; line-height: 1.25; }
+.yx-pick-set { font-size: 13px; font-weight: 700; color: #fbf5e4; background: #4a7a5a; border-radius: 6px; padding: 2px 6px; text-align: center; }
 .yx-pick-merge {
-  display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; text-align: left; line-height: 1.2;
+  display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; text-align: left; line-height: 1.2;
   color: #17131c; background: color-mix(in srgb, var(--mc) 28%, #fbf5e4); border: 2px solid var(--mc); border-radius: 8px; padding: 2px 6px 2px 2px;
 }
 .yx-pick-merge b { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--mc); color: #fff; font: 400 12px/18px 'YxBrush', serif; text-align: center; -webkit-text-stroke: 0.6px #17131c; }
@@ -63,7 +63,7 @@
   font: inherit; font-size: 15px; box-shadow: 0 3px 0 #17131c; cursor: pointer;
 }
 .yx-picks-bar button b { color: #c8402f; }
-.yx-picks-bar button small { font-size: 11px; color: #7a6a52; }
+.yx-picks-bar button small { font-size: 13px; color: #7a6a52; }
 .yx-picks-bar button.on { background: #c8402f; color: #fbf5e4; }
 .yx-picks-bar button.on b { color: #fbf5e4; }
 .yx-picks-bar button:disabled { opacity: 0.45; cursor: default; }

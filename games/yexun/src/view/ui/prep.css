@@ -4,7 +4,7 @@
 .yx-panel.yx-prep { width: min(760px, 92vw); max-height: calc(var(--app-h, 100vh) - 40px); display: flex; flex-direction: column; gap: 10px; }
 .yx-prep-head { display: flex; align-items: center; gap: 10px; }
 .yx-ptabs { display: flex; gap: 6px; flex: 1; }
-.yx-ptab { min-width: 72px; min-height: 44px; border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
+.yx-ptab { min-width: 72px; min-height: 44px; border: 2.5px solid var(--ink); border-radius: 12px; background: #fbf5e4; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
 .yx-ptab.on { background: var(--ink); color: #fbf5e4; }
 .yx-pcoins { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; }
 .yx-pclose { width: 44px; height: 44px; font-size: 18px; }
@@ -17,11 +17,11 @@
 }
 .yx-pcard img { width: 40px; height: 40px; }
 .yx-pcard b { font-size: 16px; }
-.yx-pcard small { font-size: 11px; color: #8a6a3a; }
-.yx-pcard p { margin: 2px 0; font-size: 12px; line-height: 1.35; color: #3a3028; }
+.yx-pcard small { font-size: 13px; color: #8a6a3a; }
+.yx-pcard p { margin: 2px 0; font-size: 13px; line-height: 1.35; color: #3a3028; }
 .yx-pcard em { font-style: normal; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px; color: #b8322a; }
 .yx-pcard.on { background: #f2e2b0; box-shadow: inset 0 0 0 2px #b8892a; }
-.yx-pcard.locked em { color: #5a4a3a; font-weight: 400; font-size: 11px; }
+.yx-pcard.locked em { color: #5a4a3a; font-weight: 400; font-size: 13px; }
 .yx-pcard[aria-disabled='true'] { opacity: 0.55; cursor: default; }
 .yx-pcurse b { font-size: 26px; color: #6a2a6a; }
 .yx-pcurse.on { background: #3a2440; color: #fbf5e4; }
@@ -35,7 +35,7 @@
   .yx-pgrid { grid-template-columns: repeat(6, 1fr); }
   .yx-pperks { grid-template-columns: repeat(5, 1fr); }
   .yx-pcard img { width: 30px; height: 30px; }
-  .yx-pcard p { font-size: 11px; }
+  .yx-pcard p { font-size: 13px; }
 }
 
 /* 角色卡：头像大一点，锁着的灰掉 */
@@ -43,19 +43,19 @@
 .yx-pchar { gap: 3px; padding: 8px 6px 10px; }
 .yx-pface { width: 68px; height: 68px; display: flex; align-items: flex-end; justify-content: center; border-radius: 50%; background: radial-gradient(circle at 50% 70%, #fff6dc, #e8d8aa); border: 2px solid var(--ink); overflow: hidden; }
 .yx-pface img { width: 66px; height: auto; margin-bottom: -2px; }
-.yx-pchar .yx-pstart { display: flex; align-items: center; gap: 3px; font-size: 11px; color: #8a6a3a; }
+.yx-pchar .yx-pstart { display: flex; align-items: center; gap: 3px; font-size: 13px; color: #8a6a3a; }
 .yx-pchar .yx-pstart img { width: 18px; height: 18px; }
 .yx-pperkname { font-size: 13px; font-weight: 700; color: #b8322a; }
 .yx-pchar p { margin: 0; min-height: 2.7em; }
-.yx-plook { font-size: 11px; color: #7a6a58; }
-.yx-pline { display: block; font-size: 12px; line-height: 1.35; color: #5a2a6a; font-style: italic; }
+.yx-plook { font-size: 13px; color: #7a6a58; }
+.yx-pline { display: block; font-size: 13px; line-height: 1.35; color: #5a2a6a; font-style: italic; }
 .yx-pline::before { content: '“'; }
 .yx-pline::after { content: '”'; }
-.yx-pneed { font-size: 11px; line-height: 1.35; color: #5a4a3a; }
+.yx-pneed { font-size: 13px; line-height: 1.35; color: #5a4a3a; }
 .yx-pchar.locked { background: #d9d4c6; color: #4a4a4a; cursor: default; }
 .yx-pchar.locked .yx-pface { filter: grayscale(1) brightness(0.8); }
 .yx-pchar.locked .yx-pperkname { color: #6a6a6a; }
-.yx-pchar.locked em { color: #5a4a3a; font-weight: 400; font-size: 11px; }
+.yx-pchar.locked em { color: #5a4a3a; font-weight: 400; font-size: 13px; }
 .yx-pchar.locked[data-a='buychar'] { cursor: pointer; }
 .yx-pchar.locked[data-a='buychar'] em { color: #b8322a; font-weight: 700; font-size: 13px; }
 .yx-pchar[aria-disabled='true'] { opacity: 1; }

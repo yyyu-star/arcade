@@ -103,11 +103,14 @@
 .yx-chips { display: flex; gap: 6px; }
 .yx-chip {
   flex: 1; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  border: 2.5px solid var(--ink); border-radius: 10px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
+  border: 2.5px solid var(--ink); border-radius: 12px; background: #fbf5e4; font: inherit; color: var(--ink); cursor: pointer;
+  box-shadow: 0 3px 0 var(--ink);
 }
-.yx-chip small { font-size: 12px; color: #b8892a; letter-spacing: 1px; }
+/* 卡通风格（docs/palette.md）：按钮都有实色下沿、按下去下沉；小字用深一点的金，奶油底上看得清 */
+.yx-chip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.yx-chip small { font-size: 13px; color: #8f6110; letter-spacing: 1px; white-space: nowrap; }
 .yx-chip.on { background: var(--ink); color: #fbf5e4; }
-.yx-chip.yx-map small { letter-spacing: 0; font-size: 12px; padding: 0 4px; text-align: center; }
+.yx-chip.yx-map small { letter-spacing: 0; font-size: 13px; padding: 0 4px; text-align: center; }
 .yx-chip.locked { opacity: 0.5; cursor: default; }
 .yx-dangers .yx-chip { min-width: 44px; min-height: 46px; }
 .yx-dangers { gap: 4px; }
@@ -117,14 +120,14 @@
 .yx-chip.yx-prep b { display: flex; align-items: center; gap: 4px; font-size: 14px; }
 .yx-chip.yx-prep.hot { border-color: #b8322a; color: #b8322a; }
 .yx-coin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); background: radial-gradient(circle, transparent 2.5px, #f2c94c 3px); flex: none; }
-.yx-livenote { font-size: 12px; line-height: 1.5; color: #5a4a3a; }
+.yx-livenote { font-size: 14px; line-height: 1.5; color: #5a4a3a; }
 .yx-tiers small { letter-spacing: 0; }
 .yx-rnote { text-align: center; font-size: 13px; color: #6b6f7a; margin-top: 6px; }
 .yx-rlive { text-align: center; font-size: 20px; font-weight: 700; color: #8a4a1a; }
 .yx-best { font-size: 13px; color: #5a4a3a; min-height: 1.3em; }
 .yx-tpls .yx-chip { min-height: 46px; }
 .yx-tpls .yx-chip b { font-size: 17px; font-family: 'YxBrush', serif; font-weight: 400; letter-spacing: 2px; }
-.yx-tplnote, .yx-raidnote { font-size: 12px; line-height: 1.5; color: #5a4a3a; }
+.yx-tplnote, .yx-raidnote { font-size: 13px; line-height: 1.5; color: #5a4a3a; }
 .yx-tplnote { min-height: 3em; }
 .yx-raidnote { flex: 1; font-size: 13px; }
 .yx-raidnote b { display: block; font-size: 16px; color: var(--ink); }
@@ -148,7 +151,7 @@
 .yx-cell img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .yx-cell em {
   position: absolute; right: -6px; bottom: -6px; min-width: 20px; height: 20px; padding: 0 3px; box-sizing: border-box;
-  font-style: normal; font-size: 12px; line-height: 16px; text-align: center; color: var(--ink);
+  font-style: normal; font-size: 13px; line-height: 16px; text-align: center; color: var(--ink);
   border: 2px solid var(--ink); border-radius: 8px; background: var(--gold);
 }
 .yx-cell.max { background: #fff3c4; }
@@ -162,7 +165,7 @@
 .yx-bdetail span { font-weight: 600; color: #4a3d30; font-size: 13px; }
 .yx-bdetail i { font-style: normal; font-weight: 600; color: #7a4a20; font-size: 13px; }
 .yx-sets { display: flex; flex-wrap: wrap; gap: 4px; }
-.yx-sets span { font-size: 12px; padding: 2px 8px; border-radius: 8px; background: #4a7a5a; color: #fbf5e4; }
+.yx-sets span { font-size: 13px; padding: 2px 8px; border-radius: 8px; background: #4a7a5a; color: #fbf5e4; }
 .yx-pause-side { display: flex; flex-direction: column; gap: 10px; width: 232px; flex: none; justify-content: flex-end; }
 .yx-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: auto; }
 .yx-pause-side .yx-resume { min-height: 60px; font-size: 22px; }
@@ -201,13 +204,13 @@
 .yx-rstats { display: flex; gap: 8px; }
 .yx-rstats > div { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: rgba(23, 19, 28, 0.07); }
 .yx-rstats b { font-size: 24px; line-height: 1.1; }
-.yx-rstats span { font-size: 12px; color: #5a4a3a; }
+.yx-rstats span { font-size: 13px; color: #5a4a3a; }
 .yx-rbest { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 2.5px solid var(--ink); border-radius: 12px; background: #fff3c4; }
 .yx-rbest img { width: 48px; height: 48px; flex: none; }
 .yx-rbest div { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.yx-rbest small { font-size: 11px; color: #8a5a10; }
+.yx-rbest small { font-size: 13px; color: #8a5a10; }
 .yx-rbest b { font-size: 18px; }
-.yx-rbest span { font-size: 12px; font-weight: 600; color: #5a4a3a; }
+.yx-rbest span { font-size: 13px; font-weight: 600; color: #5a4a3a; }
 .yx-rbuild { display: flex; flex-direction: column; gap: 7px; min-width: 0; justify-content: center; }
 .yx-rbuild label { font-size: 13px; color: #5a4a3a; }
 .yx-rrow { display: grid; grid-template-columns: 34px 76px 1fr 70px; gap: 8px; align-items: center; font-size: 14px; }
@@ -226,7 +229,7 @@
 .yx-gain, .yx-tot { display: inline-flex; align-items: center; gap: 6px; }
 .yx-gain { color: #8a5a10; }
 .yx-tot b { min-width: 3.5em; text-align: right; }
-.yx-tot small { font-size: 12px; color: #5a4a3a; }
+.yx-tot small { font-size: 13px; color: #5a4a3a; }
 .yx-arrow { color: #8a7a68; }
 .yx-rcoins .yx-fly { position: absolute; left: calc(50% - 90px); top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 0; animation: yx-fly 0.7s calc(0.1s + var(--i) * 0.09s) ease-in both; }
 .yx-rsrc { display: grid; grid-template-columns: 1fr; gap: 2px 28px; max-width: 520px; width: 100%; margin: 0 auto; font-size: 14px; color: #4a3a2a; }
@@ -254,7 +257,7 @@
   border: 2.5px solid var(--tc); border-radius: 10px; background: #fbf5e4; box-shadow: 0 2px 0 var(--ink);
 }
 .yx-item img { width: 34px; height: 34px; }
-.yx-item span { font-size: 11px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.yx-item span { font-size: 13px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .yx-item em { font-style: normal; font-size: 10px; color: #8a5a10; }
 .yx-item i { position: absolute; right: -6px; top: -7px; padding: 0 4px; border: 2px solid var(--ink); border-radius: 7px; background: var(--red); color: #fbf5e4; font-style: normal; font-size: 10px; line-height: 13px; }
 .yx-item.t-liang { --tc: #5fa86a; }
@@ -273,7 +276,7 @@
 .yx-tip b { color: var(--red); }
 .yx-tip button {
   min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-left: 2px solid rgba(23, 19, 28, 0.2);
-  background: none; font: inherit; font-size: 12px; color: #5a4a3a; cursor: pointer;
+  background: none; font: inherit; font-size: 13px; color: #5a4a3a; cursor: pointer;
 }
 @keyframes yx-tip-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
@@ -284,8 +287,8 @@
   .yx-title span { display: none; }
   .yx-go { min-height: 56px; font-size: 22px; }
   .yx-chip { min-height: 46px; }
-  .yx-tplnote { min-height: 0; font-size: 12px; line-height: 1.35; }
-  .yx-raidnote { font-size: 12px; line-height: 1.35; }
+  .yx-tplnote { min-height: 0; font-size: 13px; line-height: 1.35; }
+  .yx-raidnote { font-size: 13px; line-height: 1.35; }
   .yx-raidnote b { font-size: 14px; }
   .yx-tpls .yx-chip { min-height: 44px; }
   .yx-raidbtns .yx-big, .yx-vaultbtn { min-height: 44px; }
@@ -294,7 +297,7 @@
   .yx-item { width: 50px; padding: 2px 2px 3px; }
   .yx-item img { width: 26px; height: 26px; }
   .yx-item span { font-size: 9px; }
-  .yx-best { min-height: 0; font-size: 12px; }
+  .yx-best { min-height: 0; font-size: 13px; }
   .yx-panel { padding: 8px 12px 10px; gap: 6px; }
   .yx-panel-head .yx-brush { font-size: 30px; }
   .yx-pause-panel { width: min(70vw, 100%); min-width: 0; min-height: 0; }
@@ -302,7 +305,7 @@
   .yx-build { gap: 8px; }
   .yx-cell { width: 44px; height: 44px; }
   .yx-grid { min-height: 44px; gap: 6px; }
-  .yx-bdetail { min-height: 40px; font-size: 12px; padding: 4px 8px; }
+  .yx-bdetail { min-height: 40px; font-size: 13px; padding: 4px 8px; }
   .yx-pause-side { width: 190px; gap: 6px; }
   .yx-pause-side .yx-resume { min-height: 48px; font-size: 18px; }
   .yx-toggle { min-height: 44px; padding: 0 8px; font-size: 13px; gap: 5px; }
@@ -313,18 +316,18 @@
   .yx-rmain { grid-template-columns: 200px 1fr; gap: 12px; }
   .yx-rleft { gap: 6px; }
   .yx-rtime b { font-size: 30px; }
-  .yx-rtime small { font-size: 11px; }
+  .yx-rtime small { font-size: 13px; }
   .yx-rstats b { font-size: 18px; }
   .yx-rstats > div { padding: 3px 4px; }
   .yx-rbest { padding: 4px 8px; }
   .yx-rbest img { width: 34px; height: 34px; }
   .yx-rbest b { font-size: 15px; }
   .yx-rbuild { gap: 4px; }
-  .yx-rrow { grid-template-columns: 22px 64px 1fr 56px; font-size: 12px; }
+  .yx-rrow { grid-template-columns: 22px 64px 1fr 56px; font-size: 13px; }
   .yx-rrow img { width: 22px; height: 22px; }
   .yx-rbar { height: 10px; }
   .yx-rpass { width: 24px; height: 24px; }
-  .yx-rsrc { font-size: 11px; gap: 0 18px; }
+  .yx-rsrc { font-size: 13px; gap: 0 18px; }
   .yx-rsrc img { width: 12px; height: 12px; }
   .yx-rsrc.two { grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
   .yx-rcoins { font-size: 16px; }
@@ -336,7 +339,8 @@
   .yx-tip span { font-size: 14px; }
 }
 
-.yx-prepchar { position: relative; }
+/* 头像挂在右上角：给它让出位置，免得压住角色名 */
+.yx-prepchar { position: relative; padding-right: 22px; }
 .yx-prepchar img { position: absolute; top: -14px; right: -4px; width: 30px; height: auto; pointer-events: none; }
 
 /* 手机竖屏：模式卡上下排成一列、整页能上下滑；顶上的四个按钮和回大厅、齿轮排成一行（单列让左边的立绘位也不用留） */
@@ -377,7 +381,7 @@
 .yx-stats > div { flex: 1; min-width: 132px; padding: 8px 16px; display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
 .yx-stats > div + div { border-left: 2px solid rgba(23, 19, 28, 0.18); }
 .yx-stats span, .yx-stats small, .yx-stats b { white-space: nowrap; }
-.yx-stats span, .yx-stats small { font-size: 12px; color: #5a4a3a; min-height: 1.2em; }
+.yx-stats span, .yx-stats small { font-size: 13px; color: #5a4a3a; min-height: 1.2em; }
 .yx-stats b { display: flex; align-items: center; gap: 6px; font-size: 22px; }
 
 /* ───────────── 选模式 / 地图 ───────────── */
@@ -411,7 +415,7 @@
 .yx-kind .yx-scene { display: block; width: 100%; height: 44px; object-fit: cover; border-bottom: 3px solid var(--ink); }
 .yx-kindtxt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px 8px; }
 .yx-kindtxt b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 30px; line-height: 1; }
-.yx-kindtxt em { font-style: normal; font-size: 12px; color: #5a4a3a; width: 100%; }
+.yx-kindtxt em { font-style: normal; font-size: 13px; color: #5a4a3a; width: 100%; }
 .yx-kind:not(.on) { filter: brightness(0.86) saturate(0.85); }
 .yx-kind.on { border-color: var(--red); box-shadow: 0 4px 0 var(--ink), 0 0 0 3px var(--gold); }
 .yx-kind.locked { opacity: 0.45; cursor: default; }
@@ -424,13 +428,13 @@
 .yx-mcard .yx-thumb { width: 64px; height: 64px; flex: none; border-radius: 8px; border: 2px solid var(--ink); display: block; }
 .yx-cardtxt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .yx-cardtxt b { font-family: 'YxBrush', serif; font-weight: 400; font-size: 22px; line-height: 1.1; letter-spacing: 2px; }
-.yx-cardtxt small { font-size: 12px; line-height: 1.3; color: #5a4a3a; }
-.yx-unlock { display: block; font-style: normal; font-size: 12px; line-height: 1.3; color: #b8322a; }
+.yx-cardtxt small { font-size: 14px; line-height: 1.3; color: #5a4a3a; }
+.yx-unlock { display: block; font-style: normal; font-size: 13px; line-height: 1.3; color: #b8322a; }
 .yx-mobs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.yx-mobs em { font-style: normal; font-size: 12px; line-height: 1.2; color: #5a4a3a; }
+.yx-mobs em { font-style: normal; font-size: 13px; line-height: 1.2; color: #5a4a3a; }
 /* 浅色底盘：怪的描边是深色，压在选中的深色卡上看不见 */
 .yx-mob { width: 30px; height: 30px; box-sizing: border-box; padding: 2px; object-fit: contain; border-radius: 50%; background: rgba(246, 239, 220, 0.92); border: 1.5px solid rgba(23, 19, 28, 0.35); }
-.yx-mcard .yx-hard { position: absolute; top: 4px; right: 4px; font-style: normal; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
+.yx-mcard .yx-hard { position: absolute; top: 4px; right: 4px; font-style: normal; font-size: 13px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #b8322a; color: #fbf5e4; }
 .yx-mcard.on { background: var(--ink); color: #fbf5e4; box-shadow: 0 3px 0 var(--ink), 0 0 0 3px var(--gold); }
 .yx-mcard.on small, .yx-mcard.on .yx-mobs em { color: #e6dcc0; }
 .yx-mcard.locked { cursor: default; }
@@ -439,7 +443,7 @@
 .yx-towncard { min-height: 96px; }
 .yx-pickarea > .yx-raidnote { padding: 12px; border: 3px solid var(--ink); border-radius: 12px; background: #fbf5e4; box-shadow: 0 3px 0 var(--ink); }
 .yx-pickarea > .yx-tiers .yx-chip { min-height: 56px; }
-.yx-selscreen .yx-livenote { font-size: 12px; line-height: 1.5; }
+.yx-selscreen .yx-livenote { font-size: 14px; line-height: 1.5; }
 
 /* 电脑：返回按钮跟在"大厅"右边（没有齿轮，不用靠右） */
 @media (min-width: 521px) and (min-height: 501px) {
@@ -491,7 +495,7 @@
 @media (max-height: 500px) {
   .yx-quick { flex-direction: row; align-items: stretch; gap: 10px; }
   .yx-quick .yx-go { min-width: 0; min-height: 56px; margin-top: 0; padding: 4px 18px; font-size: 22px; }
-  .yx-quick .yx-go small { font-size: 12px; }
+  .yx-quick .yx-go small { font-size: 13px; }
   .yx-pick { min-width: 0; min-height: 56px; padding: 0 14px; }
   .yx-stats > div { min-width: 0; padding: 4px 14px; }
   .yx-stats b { font-size: 18px; }
