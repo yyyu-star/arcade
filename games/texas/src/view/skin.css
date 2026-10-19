@@ -377,9 +377,9 @@ html, body, body::before { background: var(--night); }
  */
 :root {
   --cg-ink: #2b1d14;
-  --cg-cream: #fff4d6;
-  --cg-cream-2: #ffe7ae;
-  --cg-gold: #ffc933;
+  --cg-cream: #f5e6c0;
+  --cg-cream-2: #ead29a;
+  --cg-gold: #f7c43a;
   --cg-gold-deep: #a85a00;
   --cg-green: #2fbf71;
   --cg-orange: #ff8a2a;
@@ -388,8 +388,8 @@ html, body, body::before { background: var(--night); }
   --ink: var(--cg-ink);
   --muted: #5b4535;
   --faint: #7a6552;
-  --bg: #ffe9b8;
-  --night: #ffe9b8;
+  --bg: #d9bf85;
+  --night: #d9bf85;
   --gold: var(--cg-gold-deep);
   --gold-2: #e09a12;
   --gold-hi: #ffe58a;
@@ -412,7 +412,7 @@ html, body, body::before { background: var(--night); }
   --wood: #a8672d;
   --wood-lo: #7a4519;
   /* kit 面板：奶油底、深棕字、金色强调、深棕描边 */
-  --ak-bg: #fff4d6;
+  --ak-bg: #f5e6c0;
   --ak-fg: #2b1d14;
   --ak-accent: #ffc933;
   --ak-accent-fg: #2b1d14;
@@ -420,19 +420,17 @@ html, body, body::before { background: var(--night); }
   --ak-radius: 16px;
   --ak-radius-btn: 12px;
   --ak-overlay: rgba(43, 29, 20, .55);
-  --ak-soft: #ffe7ae;
+  --ak-soft: #ead29a;
   --ak-title: #a85a00;
 }
-html, body, body::before { background: #ffe9b8; }
-#app { background: #ffe9b8; }
+html, body, body::before { background: #d9bf85; }
+#app { background: #d9bf85; }
 /* 背景层：平涂暖色 + 圆点，去掉暗角和灯光（主题房只换毡面和木边） */
 body .scene {
   background:
     radial-gradient(circle, rgba(255, 255, 255, .55) 0 4px, transparent 5px) 0 0 / 48px 48px,
-    #ffd98a;
+    linear-gradient(#e6cd90, #cdae6c);
 }
-body .scene::after { background: radial-gradient(ellipse 90% 80% at 50% 45%, transparent 60%, rgba(255, 170, 60, .35)); }
-body .scene > * { opacity: .3; }
 .mask { background: rgba(43, 29, 20, .55); }
 
 /* ---------- 牌桌：平涂毡面 + 深棕描边 + 原木边 ---------- */
@@ -618,4 +616,111 @@ body .scene > * { opacity: .3; }
 .stage .read-card .rc-name, .stage .read-card .rc-row { color: var(--cg-ink); }
 .stage .read-card .rc-style { color: var(--muted); }
 .stage .read-card .rc-tag { background: var(--cg-gold); color: var(--cg-ink); border: 2px solid var(--cg-ink); }
-body .scene .sc-lamps { display: none; }
+
+/*
+ * ========== 第二版：有质感的卡通 ==========
+ * 在第一版的描边、圆角、下沿之上补回：上亮下暗的轻渐变 + 顶边 1px 高光、柔和环境投影、呢子/木/纸的细纹理和暗角。
+ * 颜色分主次：大面积是沉稳的奶油和绿呢，亮金、亮绿只给主按钮和重点数字。
+ * 尺寸敏感的元素（名牌、加注面板、池子、下注额、赔率条）仍然只用阴影描边，不碰 border，尺寸一点不变。
+ */
+:root {
+  --cg-sheen: linear-gradient(rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 45%, rgba(70, 40, 5, .1));
+  --cg-sheen-dark: linear-gradient(rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, .14));
+  --cg-hi: inset 0 1px 0 rgba(255, 255, 255, .65);
+  --cg-soft: 0 7px 14px rgba(43, 29, 20, .24);
+  --cg-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .5 0'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='.55'/></svg>");
+}
+body .scene {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .22) 0 3px, transparent 4px) 0 0 / 48px 48px,
+    radial-gradient(ellipse 70% 55% at 50% 40%, #ecd69c, transparent 78%),
+    linear-gradient(#d9bf85, #b8975a);
+}
+body .scene::after { background: radial-gradient(ellipse 85% 75% at 50% 45%, transparent 55%, rgba(60, 30, 5, .38)); }
+
+/* 牌桌：呢子细纹 + 中心亮四周暗 + 内沿暗边；木框细木纹 + 顶沿高光 */
+.stage .felt {
+  background:
+    radial-gradient(ellipse closest-side, transparent 90%, rgba(255, 244, 214, .5) 91% 93%, transparent 94%),
+    radial-gradient(ellipse at 50% 40%, transparent 45%, rgba(0, 0, 0, .34) 100%),
+    var(--cg-noise),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, .06) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 38%, var(--felt-hi), var(--felt) 62%, var(--felt-lo));
+  box-shadow: 0 0 0 3px var(--cg-ink), inset 0 6px 14px rgba(0, 0, 0, .55);
+}
+.stage .felt::before {
+  background:
+    linear-gradient(180deg, rgba(255, 235, 190, .4), transparent 14%, transparent 78%, rgba(0, 0, 0, .35)),
+    repeating-linear-gradient(112deg, rgba(60, 25, 0, .14) 0 1px, transparent 1px 4px, rgba(255, 220, 160, .08) 4px 5px, transparent 5px 9px),
+    linear-gradient(160deg, var(--wood-hi), var(--wood) 50%, var(--wood-lo));
+  box-shadow: 0 0 0 3px var(--cg-ink), 0 6px 0 3px var(--cg-ink), inset 0 2px 1px rgba(255, 235, 190, .5), inset 0 -4px 7px rgba(0, 0, 0, .45), 0 16px 26px rgba(0, 0, 0, .4);
+}
+
+/* 池子、下注额、赔率：纸面渐变 + 高光 + 柔影（仍是阴影描边） */
+.stage :is(.pot-main, .bet-amt, .odds, .pot-sides .side) {
+  background-image: var(--cg-sheen);
+  box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink), var(--cg-hi), 0 8px 12px rgba(0, 0, 0, .25);
+}
+
+/* 牌：纸面微渐变、牌背菱格；筹码带高光和暗边 */
+.stage .card .c-face {
+  background: linear-gradient(160deg, #fffef8, #fbf5e2 55%, #efe4c8);
+  box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink), inset 0 0 0 2px rgba(201, 151, 58, .22), 0 6px 8px rgba(0, 0, 0, .3);
+}
+.stage .card .c-back {
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, .25), transparent 50%),
+    repeating-linear-gradient(45deg, rgba(255, 244, 214, .25) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, rgba(255, 244, 214, .25) 0 1px, transparent 1px 6px),
+    linear-gradient(160deg, #c8363a, #7c1620);
+  box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink), inset 0 0 0 3px rgba(255, 244, 214, .3), 0 6px 8px rgba(0, 0, 0, .3);
+}
+.stage .chip { box-shadow: 0 0 0 2px var(--cg-ink), 0 2px 0 2px var(--cg-ink), inset 0 -2px 2px rgba(0, 0, 0, .25), 0 5px 6px rgba(0, 0, 0, .35); }
+.stage .dealer { background: radial-gradient(circle at 36% 30%, #fffdf2, #efe3bf 65%, #cdb98a); box-shadow: 0 0 0 2px var(--cg-ink), 0 2px 0 2px var(--cg-ink), 0 5px 7px rgba(0, 0, 0, .35); }
+
+/* 座位：头像、名牌、气泡 */
+.stage .seat .avatar { box-shadow: 0 0 0 3px var(--cg-ink), 0 3px 0 3px var(--cg-ink), 0 8px 10px rgba(0, 0, 0, .3); }
+.stage .seat .plate, .stage .seat.allin .plate, .stage .seat.acting .plate, .stage .seat.win .plate {
+  background-image: var(--cg-sheen);
+  box-shadow: 0 0 0 1.5px var(--cg-ink), 0 3px 0 1.5px var(--cg-ink), var(--cg-hi), 0 8px 12px rgba(0, 0, 0, .28);
+}
+.stage .seat.acting .plate, .stage .seat.win .plate { background-color: var(--cg-gold); }
+.stage .seat .badge { background-image: var(--cg-sheen); box-shadow: var(--cg-hi); }
+.stage .seat .bubble, .stage .speech { background-image: var(--cg-sheen); box-shadow: 0 3px 0 var(--cg-ink), var(--cg-hi), 0 7px 12px rgba(0, 0, 0, .25); }
+
+/* 按钮：渐变 + 顶边高光 + 实色下沿 + 柔影 */
+.stage :is(.home, .icon, .pill, .qbet, .preset, .size, .mode, .tile, .step, .pre-btn, .auto-next, .mcard, .p-back),
+.mask .d-btn {
+  background-image: var(--cg-sheen);
+  box-shadow: 0 3px 0 var(--cg-ink), var(--cg-hi), var(--cg-soft);
+}
+.stage .sel:is(.icon, .pill, .preset, .mode, .size, .tile, .pre-btn, .auto-next),
+.stage .mcard.sel { box-shadow: 0 3px 0 var(--cg-ink), var(--cg-hi), var(--cg-soft); }
+.stage :is(.pill.go, .banner .go, .rebuy-cta .rc-go), .mask .d-btn.primary,
+.stage :is(.start, .qstart, .next-hand) {
+  background-image: linear-gradient(rgba(255, 255, 255, .42), rgba(255, 255, 255, 0) 50%, rgba(120, 60, 0, .16));
+}
+.stage :is(.start, .qstart, .next-hand, .act) {
+  box-shadow: 0 4px 0 var(--cg-ink), inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 -3px 0 rgba(0, 0, 0, .12), 0 9px 16px rgba(0, 0, 0, .3);
+}
+.stage .act.allin { box-shadow: 0 4px 0 var(--cg-ink), inset 0 1px 0 rgba(255, 255, 255, .4), inset 0 -3px 0 rgba(0, 0, 0, .14), 0 9px 16px rgba(0, 0, 0, .3); }
+.stage :is(.act) { background-image: var(--cg-sheen-dark); }
+.stage .act.fold { background-color: #b9b2a2; }
+.stage .act.call { background-color: #27a862; }
+.stage .act.raise { background-color: #f08a2e; }
+.stage .act.allin { background-color: #d63f36; }
+.stage .pill.match { background-color: #27a862; background-image: var(--cg-sheen-dark); }
+.stage :is(.home, .icon, .pill, .qbet, .preset, .size, .mode, .tile, .step, .pre-btn, .auto-next, .mcard, .p-back):not(:disabled):active,
+.mask .d-btn:not(:disabled):active { box-shadow: 0 0 0 var(--cg-ink), inset 0 2px 4px rgba(0, 0, 0, .25); }
+.stage :is(.start, .qstart, .next-hand, .act):not(:disabled):active { box-shadow: 0 0 0 var(--cg-ink), inset 0 2px 5px rgba(0, 0, 0, .3); }
+
+/* 加注面板、面板、弹窗、结果、提示：纸面渐变 + 高光 + 大投影 */
+.stage .raise-panel { background-image: var(--cg-sheen); box-shadow: 0 0 0 2px var(--cg-ink), 0 5px 0 2px var(--cg-ink), var(--cg-hi), 0 14px 22px rgba(0, 0, 0, .3); }
+.stage :is(.panel, .front, .room-wait) { background-image: var(--cg-sheen); box-shadow: 0 5px 0 var(--cg-ink), var(--cg-hi), 0 16px 26px rgba(43, 29, 20, .32); }
+.mask .dialog { background-image: var(--cg-sheen); box-shadow: 0 5px 0 var(--cg-ink), var(--cg-hi), 0 20px 36px rgba(43, 29, 20, .45); }
+.stage :is(.read-card, .toast, .result) { background-image: var(--cg-sheen); box-shadow: 0 4px 0 var(--cg-ink), var(--cg-hi), 0 12px 20px rgba(43, 29, 20, .3); }
+.stage .result.mine { background-image: linear-gradient(rgba(255, 255, 255, .4), rgba(255, 255, 255, 0) 50%, rgba(120, 60, 0, .15)); box-shadow: 0 4px 0 var(--cg-ink), var(--cg-hi), 0 12px 20px rgba(43, 29, 20, .3); }
+.stage :is(.banner, .fun-hint, .rw-seat) { background-image: var(--cg-sheen); }
+.stage .hand-no { text-shadow: 0 0 3px var(--cg-cream), 0 0 3px var(--cg-cream), 0 0 6px var(--cg-cream); }
+.stage .lobby .title { color: #f7c43a; -webkit-text-fill-color: #f7c43a; }
