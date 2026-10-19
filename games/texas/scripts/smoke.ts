@@ -1175,6 +1175,26 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
   log('tour place', place, prize);
   await page.locator('.d-btn.primary').click();
   await page.locator('.lobby').waitFor();
+  // 实盘：报名扣一份，开打就离开（剩下的托管跑完），钱包 = 报名前 - 报名费 + 奖金（真走 worker 的 api/solo 和假平台钱包）
+  await enter(page, '实盘');
+  const before = await balance(page);
+  const fee = Number(((await page.locator('.lobby .tour-btn').textContent()) ?? '').replace(/\D/g, ''));
+  if (!(fee > 0)) throw new Error('real tournament button should show the fee');
+  await page.locator('.lobby .tour-btn').click();
+  await skipTips(page);
+  await page.locator('.stage.at-table').waitFor();
+  await page.locator('.pill.leave').click();
+  await page.locator('.d-title', { hasText: '现在离开' }).waitFor();
+  await page.locator('.d-btn.primary').click();
+  await page.locator('.tour-sum').waitFor({ timeout: 60_000 });
+  const realPlace = Number(((await page.locator('.tour-place').textContent()) ?? '').replace(/\D/g, ''));
+  const realPrize = [3, 1.8, 1.2].map((k) => Math.round(fee * k))[realPlace - 1] ?? 0;
+  log('real tour place', realPlace, (await page.locator('.tour-prize').textContent()) ?? '');
+  await page.locator('.d-btn.primary').click();
+  await page.locator('.lobby').waitFor();
+  await page.waitForFunction((want) => Number((document.querySelector('.w-balance')?.textContent ?? '').replace(/,/g, '')) === want, before - fee + realPrize, { timeout: 10_000 }).catch(async () => {
+    throw new Error(`real tour wallet ${before} -> ${await balance(page)}, want ${before - fee + realPrize} (fee ${fee}, place ${realPlace})`);
+  });
   await ctx.close();
 }
 
