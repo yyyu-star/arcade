@@ -1008,8 +1008,20 @@ async function tall(browser: Browser, base: string): Promise<void> {
     await page.locator('[data-key="chat:close"]').tap().catch(() => {});
     await page.waitForTimeout(300);
     await shot(page, `tall-${tag}-bubble`);
-    // 头像上盖着 kit 的热区（atf-hot），点它
+    // 头像上盖着 kit 的热区（atf-hot），点一下是扔道具
     await page.locator('.atf-hot[data-seat="2"]').tap();
+    await page.waitForTimeout(400);
+    await shot(page, `tall-${tag}-throw`);
+    // 加注面板展开（竖屏操作区最高的时候）：不压我的名牌和底牌
+    if (await page.locator('.actions.on .act.raise').isVisible()) {
+      await page.locator('.act.raise').evaluate((e) => (e as HTMLElement).click());
+      await page.waitForTimeout(400);
+      await shot(page, `tall-${tag}-raise`);
+      const [plate, panel] = await Promise.all([page.locator('.seat.me .plate').boundingBox(), page.locator('.raise-panel').boundingBox()]);
+      if (plate && panel && panel.height > 0 && panel.y < plate.y + plate.height) throw new Error(`${tag}: raise panel covers my plate`);
+    }
+    // 互动面板（左上"互动"按钮），最后截：面板开着会挡住别的点击
+    await page.locator('.atf-ui .atf-btn:not([data-key])').evaluate((e) => (e as HTMLElement).click());
     await page.waitForTimeout(400);
     await shot(page, `tall-${tag}-menu`);
     await ctx.close();
