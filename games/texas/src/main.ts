@@ -40,6 +40,7 @@ import { PROPS, propId, TableFun, type FunSeat } from 'arcade-kit/table-fun';
 import { loadFunOff, saveFunOff, suggest } from './view/fun.ts';
 import { readLines, Reads, styleTag } from './view/reads.ts';
 import { RoomPanel } from './view/room.ts';
+import { tourEndBody, tourOutBody, type TourRow } from './view/tourroom.ts';
 import { SHOW_MS, ShowBar } from './view/showbar.ts';
 import { funSound, play, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableView } from './view/table.ts';
@@ -1521,14 +1522,14 @@ function saveRoom(r: SavedRoom | null): void {
   else remove(KEYS.room);
 }
 
-async function openRoom(stakes: StakesId, size: number): Promise<void> {
+async function openRoom(stakes: StakesId, size: number, tour?: { fun: boolean; fill: boolean }): Promise<void> {
   if (busy) return;
   // 一律开新的（0.2.4：同时能开 5 个，没真人的房间马上结束、还名额），不再把人送回旧房间
   busy = true;
   drawLobby();
-  const r = await createRoom({ stakes, size }, nickname());
+  const r = await createRoom(tour ? { stakes, size, tour: true, fill: tour.fill, ...(tour.fun ? { fun: true as const } : {}) } : { stakes, size }, nickname());
   busy = false;
-  if ('code' in r && !('error' in r)) enterRoom({ code: r.code, userId: cloud.userId(), host: true, at: Date.now() });
+  if ('code' in r && !('error' in r)) enterRoom({ code: r.code, userId: cloud.userId(), host: true, at: Date.now(), ...(tour?.fun ? { fun: true as const } : {}) });
   else {
     walletNote = createError('error' in r ? r.error : 'unavailable');
     drawLobby();
@@ -1661,6 +1662,9 @@ function enterRoom(r: SavedRoom): void {
   online?.close();
   lastRefused = null;
   wasBuying = false;
+  outShown.clear();
+  roomTourEnded = '';
+  roomWatch = false;
   laidOut = { size: 0, me: -1 };
   stage.classList.add('in-room');
   closeDialog();
@@ -1670,6 +1674,13 @@ function enterRoom(r: SavedRoom): void {
   openFun(`room:${r.code}`);
   social?.presenceNow(true);
   drawRoom(o.state);
+}
+
+/** 锦标赛里离开的说明：还在打的座位交给电脑托管，打完按名次由服务端结回；淘汰了、打完了、旁观的直接走 */
+function tourLeaveText(t: NonNullable<RoomView['tour']>, me: number | null): string {
+  const playing = t.in && !t.over && me !== null && t.places[me] === null;
+  if (!playing) return '离开房间？名次和奖金不变，奖金会直接结回钱包。';
+  return t.fun ? '你的座位交给电脑接着打，打完出名次。' : '你的座位交给电脑接着打，打完按名次把奖金结回钱包，不用你在线。报名费不退，想拿奖就坚持到底。';
 }
 
 /** 离开房间：坐着的先离座（这一手弃牌，打完结回钱包），再断开。auto：止盈到了自动走（0.22.0），不问 */
@@ -1705,7 +1716,15 @@ async function leaveRoom(goHome: boolean, auto = false): Promise<void> {
     : await dialog(
         stage,
         '离开房间',
-        seated && playing ? (noWallet() ? '这一手弃牌，离开后座位空出来。' : '这一手弃牌，桌上的筹码马上结回钱包。') : seated ? '离开后座位空出来。' : '不看了？',
+        seated && playing && st.view?.tour
+          ? tourLeaveText(st.view.tour, st.you?.seat ?? null)
+          : seated && playing
+            ? noWallet()
+              ? '这一手弃牌，离开后座位空出来。'
+              : '这一手弃牌，桌上的筹码马上结回钱包。'
+            : seated
+              ? '离开后座位空出来。'
+              : '不看了？',
         [
           { label: '留下', value: 'no' },
           { label: '离开', value: 'yes', primary: true },
@@ -1880,6 +1899,11 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     if (!mine() || !o) return;
     // 房间关了、没有这个房间：本机记着的都清掉，标题页不再给"回到房间"
     if (code === CLOSE.noRoom || code === CLOSE.roomClosed) forgetRoom();
+    // 锦标赛打完房间就关：结束页（名次、奖金、真人名次表）还在看的话不能被收掉；还没弹的在这里弹
+    if (o.state.view?.tour?.over && code === CLOSE.roomClosed) {
+      if (roomTourEnded !== o.state.code) void roomTourEnd(o.state);
+      return;
+    }
     // 房间关了是这一场打完了：给每个人的输赢；别的（被顶掉、连不上）只说一句
     const rows = code === CLOSE.roomClosed ? summaryRows(o.state, false) : null;
     // 房间关了：分享链接不带房间码（进不去了）
@@ -1905,10 +1929,21 @@ function layOut(size: number, me: number): boolean {
   return true;
 }
 
+/** 好友房锦标赛：房主的页面在座位坐满 6 个真人时替他点"开赛"（kit 没有自动开打，只有房主能发 start），每个房间只发一次 */
+let autoStarted = '';
+/** 好友房锦标赛：这个房间的结束页已经弹过 / 我淘汰后选了看到结束 */
+let roomTourEnded = '';
+let roomWatch = false;
+
 function drawRoom(s: OnlineState): void {
   roomPanel.draw(s);
+  if (s.opts?.tour && s.host && s.status === 'open' && s.room?.status === 'waiting' && autoStarted !== s.code && s.room.seats.slice(0, s.opts.size).every((x) => x.kind === 'human')) {
+    autoStarted = s.code;
+    online?.start();
+  }
   const v = s.view;
-  const playing = s.room?.status === 'playing' && v !== null;
+  // 锦标赛打完房间就 over，牌桌和结束页还得摆着给人看（点"回大厅"才离开）
+  const playing = (s.room?.status === 'playing' || (s.room?.status === 'over' && !!v?.tour)) && v !== null;
   stage.classList.toggle('at-table', playing);
   drawRoomTop(s);
   if (!playing || !s.room) {
@@ -1927,14 +1962,14 @@ function drawRoom(s: OnlineState): void {
       // 离座的人的座位已经换成电脑（庄家的筹码），按电脑的名字显示
       name: human ? info.name : null,
       // 中途坐下、接管电脑座位的人：钱到账了还要等这一手打完（0.2.5 写清楚，不让人以为卡住了）
-      tag: human && info.auto ? '电脑代打' : human && info.away ? '掉线' : v.next?.[i] ? '下一手上桌' : v.buying[i] ? '带入中' : null,
-      takeable: spectator && !online!.match && info.kind === 'ai' && !info.reserved,
+      tag: human && info.auto ? '电脑代打' : human && info.away ? '掉线' : v.next?.[i] ? '下一手上桌' : v.buying[i] ? (v.tour ? '报名中' : '带入中') : null,
+      takeable: spectator && !online!.match && !v.tour && info.kind === 'ai' && !info.reserved,
     };
   });
   tableView.setPeople(people);
   const turn = s.room.turn;
   // 一手和一手之间也在计时的，是开打时在等这个人的买入（OPENING_MS）
-  tableView.setClock(s.busy ? null : (turn?.seat ?? null), turn?.deadline ?? null, v.phase === 'idle' ? OPENING_MS : TURN_MS);
+  tableView.setClock(s.busy ? null : (turn?.seat ?? null), turn?.deadline ?? null, v.phase === 'idle' || v.tour?.phase === 'opening' ? OPENING_MS : TURN_MS);
   drawRoomPause(s.busy || animating > 0 ? null : (s.room.pause?.until ?? null));
   // 亮牌：房间停顿的前 SHOW_MS（停顿从这一手最后一帧播完算，和倒计时圈同一个起点）
   const until = s.room.pause?.until;
@@ -1958,7 +1993,7 @@ function drawRoom(s: OnlineState): void {
   const refusedOut = v.canRebuy && v.refused !== null && !seated;
   toggle(topUpBtn, 'hidden', !v.canRebuy || refusedOut);
   drawRebuy(refusedOut ? v : null);
-  toggle(sitBtn, 'hidden', !mine || mine.owner !== 'player');
+  toggle(sitBtn, 'hidden', !mine || mine.owner !== 'player' || !!v.tour);
   setText(sitBtn, mine?.away ? '回来' : '歇一手');
   toggle(sitBtn, 'sel', !!mine?.away);
   toggle(backSeatBtn, 'hidden', me !== null || (s.you?.bound ?? null) === null);
@@ -1968,6 +2003,9 @@ function drawRoom(s: OnlineState): void {
   toggle(inviteBtn, 'hidden', online!.match);
   toggle(spectate, 'hidden', !people.some((p) => p.takeable));
   toggle(sitDownBtn, 'hidden', !people.some((p) => p.takeable));
+  // 锦标赛里没有止盈（打到剩一人才结算）
+  toggle(tpBtn, 'hidden', !!v.tour);
+  if (v.tour) roomTourNotes(s, v);
 
   // 我的买入、补码办完了：钱包的数变了
   const buyingNow = me !== null && v.buying[me]!;
@@ -1977,7 +2015,8 @@ function drawRoom(s: OnlineState): void {
   // 买入被钱包拒了：钱包的数可能变了（比如别处已经结回），刷新一下，座位上面那块按新的数说
   if (v.refused && v.refused !== lastRefused) {
     void refreshWallet().then(() => online && drawRoom(online.state));
-    if (seated) toast(`没补上：${walletError(v.refused, undefined, 'room')}`);
+    if (v.tour) toast(`报名没成，这场你先旁观：${walletError(v.refused, undefined, 'room')}`);
+    else if (seated) toast(`没补上：${walletError(v.refused, undefined, 'room')}`);
   }
   lastRefused = v.refused;
 
@@ -1991,6 +2030,68 @@ function drawRoom(s: OnlineState): void {
       tickUntil(turn.deadline ?? null);
     } else notMyTurn();
   }
+}
+
+// ---------- 好友房锦标赛（0.24.0，DESIGN.md 14.3） ----------
+
+/** 谁出局了提示一句；我淘汰了问一次（看到结束 / 现在离开）；整场打完弹结束页 */
+function roomTourNotes(s: OnlineState, v: RoomView): void {
+  const t = v.tour!;
+  if (s.busy || animating > 0) return;
+  const me = s.you?.seat ?? null;
+  t.places.forEach((p, i) => {
+    if (p === null || outShown.has(i)) return;
+    outShown.add(i);
+    if (i !== me && !t.over) toast(`${nameAt(v, i, me)} 出局，第 ${p} 名`);
+  });
+  if (t.over) return void roomTourEnd(s);
+  if (t.in && me !== null && t.places[me] !== null && !roomWatch && !asking) void askRoomEliminated(s, t.places[me]!);
+}
+
+async function askRoomEliminated(s: OnlineState, place: number): Promise<void> {
+  const o = online;
+  if (!o) return;
+  asking = true;
+  const how = await dialog(stage, '你出局了', tourOutBody(place, s.view?.tour?.fun === true), [
+    { label: '现在离开', value: 'leave' },
+    { label: '看到结束', value: 'watch', primary: true },
+  ], true);
+  asking = false;
+  if (online !== o) return;
+  if (how === 'leave') return void (await leaveRoom(false, true));
+  roomWatch = true;
+}
+
+/** 整场打完：我的名次、奖金（实盘"结回钱包 X"，娱乐"筹码不算数"）和真人名次表；点"回大厅"离开房间 */
+async function roomTourEnd(s: OnlineState): Promise<void> {
+  const o = online;
+  const v = s.view;
+  const t = v?.tour;
+  if (!o || !v || !t?.over || !t.order || roomTourEnded === s.code) return;
+  roomTourEnded = s.code;
+  stopCountdown();
+  const me = s.you?.seat ?? s.you?.bound ?? null;
+  const nameOf = (k: number): string => {
+    const info = s.room?.seats[k];
+    return k === me ? myName : info?.name ? info.name : `${k + 1} 号座`;
+  };
+  const placeOf = (k: number): number => t.places[k] ?? t.order!.indexOf(k) + 1;
+  const rows: TourRow[] = t.order.filter((k) => t.humans.includes(k)).map((k) => ({ name: nameOf(k), place: placeOf(k), prize: t.prizes ? (t.prizes[k] ?? 0) : null, me: k === me }));
+  const played = me !== null && t.humans.includes(me);
+  const champ = t.order[0]!;
+  const body = tourEndBody({
+    place: played ? placeOf(me) : null,
+    prize: played && t.prizes ? (t.prizes[me] ?? 0) : null,
+    fun: t.fun,
+    played,
+    rows,
+    champion: t.humans.includes(champ) ? nameOf(champ) : personaName(v.seats[champ]!.persona),
+  });
+  await dialog(stage, '锦标赛结束', body, [{ label: '回大厅', value: 'ok', primary: true }], true);
+  if (online !== o) return;
+  o.close();
+  forgetRoom();
+  exitRoom(null);
 }
 
 /** 这一桌的筹码不碰钱包：单独部署，或者娱乐房间（0.21.0） */
@@ -2065,7 +2166,7 @@ function checkTakeProfit(me: number): void {
   const net = v?.net[me];
   // 只在手间停着（HAND_PAUSE_MS）时走：页面动画播完时服务端可能已经发了下一手（切后台、卡顿），这时离座会变成弃牌白丢盲注，
   // 留到这一手打完再问（tpFired 不置位）
-  if (!v || v.phase !== 'idle' || net === null || net === undefined || online!.state.status !== 'open') return;
+  if (!v || v.tour || v.phase !== 'idle' || net === null || net === undefined || online!.state.status !== 'open') return;
   const buyIn = stakesOf(v.stakes).max;
   if (!reached(takeProfit, buyIn, buyIn + net)) return;
   tpFired = true;
@@ -2147,9 +2248,19 @@ function drawRoomTop(s: OnlineState): void {
   const st = o ? stakesOf(o.stakes) : null;
   // 旁观中（docs/social.md 1.4）：开打了、我没坐下也没绑着座位（离座回来的有"回到我的座位"）
   const watching = s.room?.status === 'playing' && (s.you?.seat ?? null) === null && (s.you?.bound ?? null) === null;
+  if (v?.tour) {
+    const t = v.tour;
+    const left = t.next ? `还有 ${t.handsLeft} 手涨` : '最后一级，不再涨';
+    setText(where, `${watching ? '旁观中 · ' : ''}锦标赛 · 第 ${t.level + 1} 级 · 盲注 ${chips(t.blinds[0])}/${chips(t.blinds[1])} · ${left}`);
+    toggle(where, 'watching', watching);
+    setText(walletChip, wallet && !online?.fun ? `钱包 ${chips(wallet.balance)}` : '');
+    toggle(leaveBtn, 'hidden', false);
+    setText(leaveBtn, '离开');
+    return;
+  }
   const kind = online?.match ? '快速匹配' : `好友房 ${s.code}`;
   // 娱乐房间（0.21.0）不写档位：筹码不算数，盲注照小桌
-  const table = online?.fun ? ' · 娱乐 · 筹码不算数' : st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : '';
+  const table = s.opts?.tour ? ` · 锦标赛 · ${online?.fun ? '娱乐' : (st?.name ?? '')}` : online?.fun ? ' · 娱乐 · 筹码不算数' : st ? ` · ${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)}` : '';
   setText(where, `${watching ? '旁观中 · ' : ''}${kind}${table}`);
   toggle(where, 'watching', watching);
   setText(walletChip, wallet && !online?.fun ? `钱包 ${chips(wallet.balance)}` : '');

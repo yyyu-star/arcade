@@ -21,6 +21,7 @@ import { stream } from 'arcade-kit/rng';
 import { aiAction } from '../bot.ts';
 import { NO_FAME, noteHand, settleStats, type Fame, type SettleStats } from '../core/fame.ts';
 import { FUN_LEVEL, FUN_STAKES, ROOM_LEVEL, STAKES, stakesOf, type StakesId } from '../core/stakes.ts';
+import { TOUR_SEATS } from '../tour/rules.ts';
 import { TAUNTS } from '../fun/taunts.ts';
 import {
   MAX_SEATS,
@@ -69,6 +70,10 @@ export interface RoomOpts {
   size: number;
   /** 娱乐房间（0.21.0，快速匹配的娱乐档）：筹码不算数，带入、结回都不碰钱包（worker/room.ts 的 perform），档位固定 FUN_STAKES */
   fun?: true;
+  /** 好友房锦标赛（0.24.0，src/room/tour.ts）：6 人单桌打到剩一人；size 固定 6，stakes 是报名费那一档（fun 时固定 FUN_STAKES） */
+  tour?: true;
+  /** 锦标赛：开赛时空位由电脑补；不补就按实际人数开赛 */
+  fill?: boolean;
 }
 
 const DEFAULT_OPTS: RoomOpts = { stakes: 'small', size: 6 };
@@ -170,6 +175,35 @@ export interface RoomView extends View {
   last: LastAct | null;
   /** 能打的真人不到两个、牌桌停着（0.4.0）：页面写"实盘好友房至少要两个人" */
   needTwo: boolean;
+  /** 好友房锦标赛（0.24.0）才有；座位号都是房间的座位（空位、没入局的座位是空座） */
+  tour?: TourInfo;
+}
+
+/** 锦标赛房间给页面的：盲注、名次、报名和奖金。座位都是房间的座位号 */
+export interface TourInfo {
+  level: number;
+  blinds: readonly [number, number];
+  next: readonly [number, number] | null;
+  handsLeft: number;
+  /** opening 等钱包扣报名费；play 在打；done 打完（或没开成） */
+  phase: 'opening' | 'play' | 'done';
+  fun: boolean;
+  /** 报名费（娱乐是 0） */
+  buyIn: number;
+  fill: boolean;
+  /** 座位 → 名次（1 = 冠军），没出局、没入局的是 null */
+  places: (number | null)[];
+  over: boolean;
+  /** 我是这场的真人选手（坐着、报了名、没被换成电脑）；不是就是旁观 */
+  in: boolean;
+  /** 这场的真人选手（开赛时坐着、报上名的座位；离开的也算，名次表要列） */
+  humans: number[];
+  /** 没开成（报名后不够两个真人）：报名费退回 */
+  aborted?: true;
+  /** 打完以后：座位按名次排（冠军在前） */
+  order?: number[];
+  /** 打完以后：每个座位的奖金（只有真人选手，实盘才有） */
+  prizes?: (number | null)[];
 }
 
 const SIMPLE = new Set<string>(['fold', 'check', 'call', 'allin', 'away', 'back', 'rebuy']);
@@ -198,6 +232,13 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
     if (!Number.isInteger(o.size) || (o.fun !== undefined && o.fun !== true)) return null;
     const size = o.size as number;
     if (size < 2 || size > SEATS) return null;
+    // 锦标赛（0.24.0）：固定 6 人；fill 只在锦标赛里有
+    if ((o.tour !== undefined && o.tour !== true) || (o.fill !== undefined && (o.tour !== true || typeof o.fill !== 'boolean'))) return null;
+    if (o.tour === true) {
+      if (size !== TOUR_SEATS) return null;
+      if (o.fun !== true && !STAKES.some((x) => x.id === o.stakes)) return null;
+      return { stakes: o.fun === true ? FUN_STAKES : (o.stakes as StakesId), size, ...(o.fun === true ? { fun: true as const } : {}), tour: true, fill: o.fill === true };
+    }
     if (o.fun === true) return { stakes: FUN_STAKES, size, fun: true };
     return STAKES.some((x) => x.id === o.stakes) ? { stakes: o.stakes as StakesId, size } : null;
   },
@@ -356,17 +397,17 @@ export const texasRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wall
 
 // ---------- 内部 ----------
 
-const hex = (n: number): string => n.toString(16).padStart(8, '0');
+export const hex = (n: number): string => n.toString(16).padStart(8, '0');
 
-const isOk = (r: unknown): boolean => (r as { ok?: unknown } | null)?.ok === true;
+export const isOk = (r: unknown): boolean => (r as { ok?: unknown } | null)?.ok === true;
 
 /** 钱包拒绝的原因（固定的短码），认不出来的算 error */
-function errorOf(r: unknown): string {
+export function errorOf(r: unknown): string {
   const e = (r as { error?: unknown } | null)?.error;
   return typeof e === 'string' && /^[a-z_]{1,32}$/.test(e) ? e : 'error';
 }
 
-const set = <T>(a: readonly T[], i: number, v: T): T[] => a.map((x, j) => (j === i ? v : x));
+export const set = <T>(a: readonly T[], i: number, v: T): T[] => a.map((x, j) => (j === i ? v : x));
 
 const debiting = (s: RoomState, seat: number): boolean => s.fx.some((e) => e.seat === seat && e.kind === 'debit');
 

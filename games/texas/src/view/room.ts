@@ -5,6 +5,7 @@
 import { stakesOf } from '../core/stakes.ts';
 import type { OnlineState } from '../online.ts';
 import { SEATS } from '../room/rules.ts';
+import { START_STACK } from '../tour/rules.ts';
 import { site, twoText } from '../site.ts';
 import { el, setText, toggle } from './dom.ts';
 import { ROOM_NAME } from './rooms.ts';
@@ -81,15 +82,22 @@ export class RoomPanel {
     // 档位和人数开房时就定了（房间发来的），进房的人一眼知道要带多少
     const o = s.opts;
     const st = o ? stakesOf(o.stakes) : null;
+    const tour = o?.tour === true;
     setText(
       this.info,
-      o && st
+      o && st && tour
+        ? `锦标赛 · ${o.fun ? '娱乐' : st.name} · 6 人 · 每人 ${chips(START_STACK)} 比赛筹码，打到剩一人。` +
+            (o.fun || site.standalone ? '筹码不算数' : `开赛时每个坐下的人交一份报名费 ${chips(st.max)}，奖池只在真人之间按名次分，结回钱包`) +
+            (o.fill ? '；空位开赛时由电脑补' : '；空位不补，按坐下的人数开赛') +
+            '。坐满 6 人或房主点开始就开赛，开赛后不能再坐下'
+        : o && st
         ? `${st.name} · 盲注 ${chips(st.sb)}/${chips(st.bb)} · ${o.size} 人。` +
             (site.standalone || o.fun ? `开打时每个坐下的人带 ${chips(st.max)} 上桌（筹码不算数）；空位由电脑补` : `开打时每个坐下的人从钱包带 ${chips(st.max)} 上桌，离桌或房间关掉时结回去；空位由电脑补`)
         : '',
     );
     const size = o?.size ?? SEATS;
     setText(this.mark, o ? ROOM_NAME[o.stakes] : '');
+    setText(this.startBtn, tour ? '开赛' : '开打');
     const mine = s.you?.seat ?? null;
     this.seats.forEach((x, i) => {
       // 椅子沿桌边：1 号在正下方，往左手边（顺时针）一圈；按百分比摆，横屏竖屏都跟着容器的椭圆走
@@ -114,9 +122,10 @@ export class RoomPanel {
     const canStart = s.host || mine !== null;
     // 实盘好友房至少两个真人（0.4.0）：房间那边一个人开打也不发牌，按钮先灰掉，免得点了干坐着
     const humans = s.room!.seats.filter((x, i) => i < size && x.kind === 'human').length;
-    setText(this.twoNote, twoText());
+    setText(this.twoNote, tour ? '锦标赛至少要两个人才开赛' : twoText());
     toggle(this.twoNote, 'hidden', humans >= 2);
     toggle(this.startBtn, 'hidden', !canStart);
+    // 锦标赛不管实盘还是娱乐都至少两个真人（电脑补的不算）
     this.startBtn.disabled = mine === null || s.status !== 'open' || humans < 2;
     toggle(this.waitNote, 'hidden', canStart);
   }

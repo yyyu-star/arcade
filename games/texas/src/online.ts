@@ -106,6 +106,11 @@ export class Online {
     return this.s.opts ? this.s.opts.fun === true : this.saved.fun === true;
   }
 
+  /** 是好友房锦标赛（0.24.0）：开房选项里的 tour */
+  get tour(): boolean {
+    return this.s.opts?.tour === true;
+  }
+
   get mySeat(): number {
     return this.s.you?.seat ?? this.s.you?.bound ?? 0;
   }
@@ -254,6 +259,8 @@ export function errorText(code: string): string {
     case 'not_host':
       // 坐着的人都有"开打"按钮（0.3.5：房主换了设备、页面被顶掉后，本机不知道自己是房主，按钮不能藏）
       return '只有开房的人能开打，等他点一下';
+    case 'not_in_tour':
+      return '锦标赛里没有这个操作';
     case 'cannot_rebuy':
       return '已经是满的了，或者补码还在路上';
     case 'room_over':

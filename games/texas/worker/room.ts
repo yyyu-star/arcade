@@ -10,7 +10,8 @@ import { RNG } from '../src/core/table.ts';
 import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunEvent } from 'arcade-kit/fun-logic';
 import { momentOf, temperOf } from '../src/fun/moments.ts';
 import { TAUNTS } from '../src/fun/taunts.ts';
-import { AI_DELAY_MS, roomOp, texasRoom, TURN_MS, type RoomAction, type RoomOpts, type RoomState, type RoomView, type WalletEffect } from '../src/room/rules.ts';
+import { texasGame, type TexasState } from '../src/room/game.ts';
+import { AI_DELAY_MS, roomOp, TURN_MS, type RoomAction, type RoomOpts, type RoomView, type WalletEffect } from '../src/room/rules.ts';
 import type { Env } from './main.ts';
 import { GAME } from './platform.ts';
 
@@ -24,8 +25,8 @@ const HOLD_MS = ROOM_LIMITS.maxLifeMs + ROOM_LIMITS.closingMs + 3_600_000;
 /** 平台暂时办不了：结回要重办（抛错，房间按退避再来，同一个操作 id） */
 const RETRY = new Set(['busy', 'internal']);
 
-export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, RoomOpts, WalletEffect> {
-  protected readonly game = texasRoom;
+export class TexasRoom extends GameRoom<TexasState, RoomAction, RoomView, Env, RoomOpts, WalletEffect> {
+  protected readonly game = texasGame;
   protected override readonly limits = ROOM_LIMITS;
 
   /**
@@ -43,7 +44,9 @@ export class TexasRoom extends GameRoom<RoomState, RoomAction, RoomView, Env, Ro
   /** 报到第几场了（搭子战绩）：只在内存里，被驱逐后醒来把最近切的那几场再报一次，平台按 op 去重、不多记 */
   private matches = -1;
 
-  protected override onStep(s: RoomState): void {
+  protected override onStep(s: TexasState): void {
+    // 锦标赛（0.24.0）：电脑的名场面互动和搭子战绩都不做（没有现金桌的账）
+    if ('tour' in s) return;
     // 搭子战绩（0.17.0，平台 15.19；DESIGN.md 6.10）：规则在有人离桌、散桌时切出的场，按座位报（电脑座位 kit 跳过），不 await、不重试
     // 娱乐房间不报（报给平台走的是钱包的绑定，娱乐房间一概不碰）
     if (!s.fun && s.mates && s.mates.n > this.matches) {

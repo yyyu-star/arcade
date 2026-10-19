@@ -15,6 +15,7 @@
  * 桌面那一段开"快"动画（0.55 倍）省时间；默认速度的节奏用 scripts/capture.ts 连拍看。
  * 单独部署（--only standalone，不带 --only 时也跑）：原样的 wrangler.jsonc 另起一个 wrangler dev，不接假平台：站点根跳到游戏首页，
  * 没有钱包、云存档、实盘，"大厅"回游戏首页；单机娱乐打两手、离桌；两个游客（一个带昵称）开好友房打两手、离开（DESIGN.md 10.1）。
+ * 好友房锦标赛（--only tourroom，0.24.0）：两个人开实盘锦标赛房间（电脑补空位）打完，结束页、钱包守恒（见 tourRoomFlow）。
  * 端口一律由系统分配（不占 5175 / 4175）。截图放在 --shots（默认系统临时目录下的 texas-shots）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -1198,6 +1199,126 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
   await ctx.close();
 }
 
+/**
+ * 好友房锦标赛（--only tourroom，0.24.0）：两个浏览器上下文。房主在好友房里选"锦标赛"（实盘小桌、空位电脑补）开房，
+ * 另一个人用房间码进来坐下，房主点"开赛"；两人前几手跟注、之后能加注就全下（房间里电脑一步 1.6 秒，一直跟注要十几分钟），被淘汰就选"看到结束"，直到两边的结束页出现。
+ * 核对：顶栏"锦标赛 · 第 N 级"、没有止盈旗子 / 补码 / 歇一手 / 下一手；两人钱包变化之和 = 0（奖池只在两个真人之间分，第 1 名拿走全部）、
+ * 每人变化 = 结束页写的奖金 - 报名费。截牌桌和结束页。
+ */
+async function tourRoomFlow(browser: Browser, base: string): Promise<void> {
+  const fastInit = (): void => {
+    if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true }));
+  };
+  const hc = await newContext(browser, base, 'smoke-trh');
+  const gc = await newContext(browser, base, 'smoke-trg');
+  await hc.addInitScript(fastInit);
+  await gc.addInitScript(fastInit);
+  const [hp, gp] = await Promise.all([hc.newPage(), gc.newPage()]);
+  watch(hp, 'tourroom-host');
+  watch(gp, 'tourroom-guest');
+  try {
+    await hp.goto(`${base}/games/texas/?online=1`);
+    await hp.locator('.friends.spot').waitFor();
+    await gp.goto(`${base}/games/texas/`);
+    for (const p of [hp, gp]) await p.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+    const before = [await balance(hp), await balance(gp)];
+    // 开房面板：玩法里选锦标赛，人数那一行收起，多一张娱乐卡和"空位电脑补"开关；现金桌的开房原样
+    const cash = await hp.locator('.friends.open .pill', { hasText: '开房间' }).boundingBox();
+    if (!cash || cash.y + cash.height > DESK_H) throw new Error(`cash 开房间 should stay on the first screen, got ${JSON.stringify(cash)}`);
+    await shot(hp, 'tourroom-lobby-cash');
+    await hp.locator('.friends.open .kind', { hasText: '锦标赛' }).click();
+    if (await hp.locator('.sizes').isVisible()) throw new Error('size row should hide for a tournament');
+    if (!(await hp.locator('.friends.open .fill').textContent())?.includes('开')) throw new Error('电脑补 should default on');
+    await shot(hp, 'tourroom-lobby');
+    const onScreen = await hp.locator('.friends.open .pill').boundingBox();
+    if (!onScreen || onScreen.y + onScreen.height > DESK_H) throw new Error(`开锦标赛房间 off screen ${JSON.stringify(onScreen)}`);
+    await hp.locator('.friends .pill', { hasText: '开锦标赛房间' }).click();
+    await hp.locator('.room-wait').waitFor();
+    const info = (await hp.locator('.rw-info').textContent()) ?? '';
+    if (!info.includes('锦标赛') || !info.includes('2,000') || !info.includes('电脑补')) throw new Error(`tour room info: ${info}`);
+    const code = ((await hp.locator('.rw-code').textContent()) ?? '').replace(/\D/g, '');
+    if (!/^\d{6}$/.test(code)) throw new Error(`bad room code ${code}`);
+    log('tour room', code);
+    await gp.goto(`${base}/games/texas/?room=${code}`);
+    await gp.locator('.room-wait').waitFor();
+    await gp.locator('.rw-seat').nth(1).locator('.rw-sit').click();
+    await gp.locator('.rw-seat.me').waitFor();
+    await hp.locator('.rw-seat.taken').nth(1).waitFor();
+    if (!(await hp.locator('.rw-go .start').textContent())?.includes('开赛')) throw new Error('start button should say 开赛');
+    await shot(hp, 'tourroom-wait');
+    await hp.locator('.rw-go .start').click();
+    for (const p of [hp, gp]) await p.locator('.seat.me .card.up').first().waitFor({ timeout: 30_000 });
+    const where = (await hp.locator('.topbar .where').textContent()) ?? '';
+    if (!/锦标赛 · 第 \d+ 级 · 盲注 [\d,]+\/[\d,]+ · /.test(where)) throw new Error(`tour room top bar: ${where}`);
+    for (const p of [hp, gp]) {
+      if ((await p.locator('.tp-toggle:visible').count()) !== 0) throw new Error('take-profit flag should not show in a tournament room');
+      if (await p.locator('.next-hand:visible').count()) throw new Error('tournament room should not have a next-hand button');
+      for (const t of ['补码', '歇一手']) if (await p.locator('.hud .pill', { hasText: t }).isVisible()) throw new Error(`tournament room should not show ${t}`);
+    }
+    // 打：一直跟注；被淘汰就选"看到结束"；两边的结束页都出来为止
+    let tableShot = false;
+    const deadline = Date.now() + 520_000;
+    const done = async (p: Page): Promise<boolean> => p.locator('.tour-sum').isVisible();
+    while (!((await done(hp)) && (await done(gp)))) {
+      if (Date.now() > deadline) {
+        await shot(hp, 'debug-tourroom-host');
+        await shot(gp, 'debug-tourroom-guest');
+        throw new Error('tour room never ended');
+      }
+      for (const p of [hp, gp]) {
+        if (await done(p)) continue;
+        if (await p.locator('.d-title', { hasText: '你出局了' }).isVisible()) {
+          if (p === hp) await shot(hp, 'tourroom-out');
+          await p.locator('.d-btn', { hasText: '看到结束' }).click();
+          continue;
+        }
+        if (await p.locator('.dialog').isVisible()) continue;
+        if (await p.locator('.actions.on').isVisible()) {
+          if (!tableShot && p === hp) {
+            tableShot = true;
+            await shot(hp, 'tourroom-table');
+          }
+          // 前几手一直跟注；之后能加注就全下：房间里电脑一步 1.6 秒，一直跟注要打二三十手、十几分钟，冒烟等不起
+          if ((await handText(p)) >= 5 && (await p.locator('.act.raise:not(.hidden)').isVisible())) {
+            await p.locator('.act.raise').click({ timeout: 2_000 }).catch(() => {});
+            await p.locator('.preset').nth(4).click({ timeout: 2_000 }).catch(() => {});
+            await p.locator('.act.raise').click({ timeout: 2_000 }).catch(() => {});
+          } else await p.locator('.act.call').click({ timeout: 2_000 }).catch(() => {});
+        }
+      }
+      await hp.waitForTimeout(150);
+    }
+    await shot(hp, 'tourroom-summary');
+    const prizes: number[] = [];
+    for (const [p, tag] of [[hp, 'host'], [gp, 'guest']] as const) {
+      const place = Number(((await p.locator('.tour-place').textContent()) ?? '').replace(/\D/g, ''));
+      if (!(place >= 1 && place <= 6)) throw new Error(`${tag}: tour place out of range: ${place}`);
+      if ((await p.locator('.tour-top li').count()) !== 2) throw new Error(`${tag}: 真人名次表 should list the 2 humans`);
+      const line = (await p.locator('.tour-prize').textContent()) ?? '';
+      if (!/^结回钱包 [\d,]+$/.test(line)) throw new Error(`${tag}: prize line: ${line}`);
+      prizes.push(Number(line.replace(/\D/g, '')));
+      log(tag, 'tour place', place, line);
+    }
+    // 两个真人：第 1 名拿全部奖池（2 份），另一个 0
+    if (prizes.slice().sort((a, b) => a - b).join() !== '0,4000') throw new Error(`prizes should be 0 and 4,000, got ${prizes.join()}`);
+    for (const p of [hp, gp]) {
+      await p.locator('.d-btn.primary').click();
+      await p.locator('.lobby').waitFor();
+    }
+    const after = [await settled(hp, 'tour-host'), await settled(gp, 'tour-guest')];
+    const delta = after.map((a, i) => a - before[i]!);
+    if (delta[0]! + delta[1]! !== 0) throw new Error(`wallet changes should sum to 0, got ${delta.join()} (prizes ${prizes.join()})`);
+    if (delta[0] !== prizes[0]! - 2_000 || delta[1] !== prizes[1]! - 2_000) throw new Error(`wallet deltas ${delta.join()} do not match prizes ${prizes.join()} - fee 2,000`);
+    log('tour room wallets', delta.join(), 'sum 0');
+  } catch (e) {
+    await shot(hp, 'debug-tourroom-host').catch(() => {});
+    await shot(gp, 'debug-tourroom-guest').catch(() => {});
+    throw e;
+  } finally {
+    await Promise.all([hc.close(), gc.close()]);
+  }
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1336,6 +1457,7 @@ async function main(): Promise<void> {
         if (only === 'tall') await tall(browser, base);
         if (only === 'tp') await takeProfitFlow(browser, base);
         if (only === 'tour') await tourFlow(browser, base);
+        if (only === 'tourroom') await tourRoomFlow(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

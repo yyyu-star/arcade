@@ -11,3 +11,11 @@
 .dialog .tour-top b { min-width: 4.5em; }
 .dialog .tour-out { display: grid; gap: var(--s-2); }
 .dialog .tour-out-place { font-size: var(--fs-5, 22px); font-weight: 800; }
+
+/* 好友房锦标赛（0.24.0）：开房那一行的玩法键和电脑补开关、娱乐档的卡、结束页的奖金列 */
+.lobby .friends.open .size.kind { flex: 0 0 auto; height: 52px; padding: 0 var(--s-3); font-size: var(--fs-3); white-space: nowrap; }
+.lobby .friends.open .size.kind.fill { padding: 0 var(--s-2); }
+.lobby .friends.open.rt .pill { letter-spacing: 0; font-size: var(--fs-4); white-space: nowrap; }
+.lobby .stakes .tile.room-fun { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: var(--s-3); padding: var(--s-1) var(--s-2); }
+.lobby .stakes .tile.room-fun small { display: none; }
+.dialog .tour-top li .tour-row-prize { margin-left: auto; opacity: 0.9; }

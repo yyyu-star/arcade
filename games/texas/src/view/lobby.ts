@@ -44,7 +44,7 @@ export interface LobbyHandlers {
   /** 止盈（0.22.0）：点了弹选择框 */
   takeProfit(): void;
   /** 好友房：用现在选的档位和人数开一个；输码进房；回到上次的房间 */
-  openRoom(stakes: StakesId, size: number): void;
+  openRoom(stakes: StakesId, size: number, tour?: { fun: boolean; fill: boolean }): void;
   joinRoom(code: string): void;
   backToRoom(): void;
   /** 选桌上选中的那一间（主题房，0.18.1）：背景先换成它，让人看到"往上走"；主页、娱乐是 null（小桌那一间） */
@@ -68,6 +68,14 @@ export class Lobby {
   private readonly diffTiles = new Map<Difficulty, HTMLButtonElement>();
   private readonly grid: HTMLDivElement;
   private readonly sizes: HTMLButtonElement[] = [];
+  private readonly sizeRow: HTMLDivElement;
+  /** 好友房开房时选玩法（0.24.0，和"开房间"同一行，不多占一行）：现金桌或锦标赛，锦标赛再选档位（含娱乐）和空位电脑补 */
+  private readonly kindBtns: HTMLButtonElement[] = [];
+  private readonly fillBtn: HTMLButtonElement;
+  private readonly funTile: HTMLButtonElement;
+  private roomTour = false;
+  private roomFun = false;
+  private fill = true;
   private readonly slider: HTMLInputElement;
   private readonly buyAmt: HTMLSpanElement;
   private readonly startBtn: HTMLButtonElement;
@@ -208,7 +216,9 @@ export class Lobby {
       t.innerHTML = card(DIFFICULTY_NAME[d], FUN_STARS[d], FOR_WHOM[d], ['不碰钱包', '筹码不算数']);
       this.diffTiles.set(d, t);
     }
-    const sizeRow = el('div', 'sizes', panel);
+    this.funTile = button(grid, 'tile diff room-fun', '', () => this.pickRoomFun());
+    this.funTile.innerHTML = card('娱乐', FUN_STARS.normal, '朋友之间练手', ['不碰钱包', '筹码不算数']);
+    const sizeRow = (this.sizeRow = el('div', 'sizes', panel));
     el('span', 'label', sizeRow, '人数');
     for (let n = 2; n <= MAX_SEATS; n++) {
       const b = button(sizeRow, 'size', String(n), () => this.pickSize(n));
@@ -236,7 +246,10 @@ export class Lobby {
 
     // 好友房（0.17.4）：开房间放在"坐下开打"的位置，用上面选的档位和人数，买入固定是这一档的满买入
     const open = (this.openRow = el('div', 'friends open', panel));
-    this.openBtn = button(open, 'pill go', '开房间', () => this.wait(this.openBtn, () => h.openRoom(this.stakes, this.size)));
+    // 开房的玩法（0.24.0）：现金桌不变；锦标赛 6 人固定，档位里多一张娱乐，再选空位要不要电脑补
+    for (const [i, name] of ['现金桌', '锦标赛'].entries()) this.kindBtns.push(button(open, 'size kind', name, () => this.pickKind(i === 1)));
+    this.fillBtn = button(open, 'size kind fill', '', () => this.pickFill());
+    this.openBtn = button(open, 'pill go', '开房间', () => this.wait(this.openBtn, () => (this.roomTour ? h.openRoom(this.roomFun ? FUN_STAKES : this.stakes, 6, { fun: this.roomFun, fill: this.fill }) : h.openRoom(this.stakes, this.size))));
 
     // 设置坏了就用默认的（readSettings 坏了给空）
     const saved = readSettings() as { stakes?: StakesId; size?: number; mode?: Mode; diff?: Difficulty };
@@ -327,6 +340,7 @@ export class Lobby {
 
   private pick(id: StakesId): void {
     this.stakes = id;
+    this.roomFun = false;
     // 换档就按这一档的满买入（draw 里先改了上下限再设值，不然值会被旧的上限截住）
     this.slider.dataset.init = '';
     this.remember();
@@ -336,6 +350,21 @@ export class Lobby {
   private pickDiff(d: Difficulty): void {
     this.diff = d;
     this.remember();
+    this.draw();
+  }
+
+  private pickKind(tour: boolean): void {
+    this.roomTour = tour;
+    this.draw();
+  }
+
+  private pickFill(): void {
+    this.fill = !this.fill;
+    this.draw();
+  }
+
+  private pickRoomFun(): void {
+    this.roomFun = true;
     this.draw();
   }
 
@@ -418,7 +447,7 @@ export class Lobby {
     this.drawStats();
     setText(
       this.modeNote,
-      room ? '和朋友一桌：开个房间把房间码发给他们，或者输朋友给的码' : this.alone ? '筹码不算数，随便玩' : fun ? '不碰钱包，筹码不算数，随便玩' : '从钱包带筹码上桌，离桌结回；最多输掉带上去的',
+      room ? (this.roomTour ? '锦标赛：6 人、每人 1,500 比赛筹码打到剩一人；实盘每人交一份报名费，奖池只在真人之间按名次分' : '和朋友一桌：开个房间把房间码发给他们，或者输朋友给的码') : this.alone ? '筹码不算数，随便玩' : fun ? '不碰钱包，筹码不算数，随便玩' : '从钱包带筹码上桌，离桌结回；最多输掉带上去的',
     );
     // 好友房：档位、人数照旧选，下面换成开房间、输码进房；单机的带多少、坐下开打收起来
     toggle(this.buyRow, 'hidden', room);
@@ -426,10 +455,20 @@ export class Lobby {
     toggle(this.friends, 'hidden', !room);
     toggle(this.openRow, 'hidden', !room);
     toggle(this.nickRow, 'hidden', !(room && this.alone));
+    // 好友房锦标赛：固定 6 人；档位里多一张娱乐；空位电脑补的开关
+    const rt = room && this.roomTour;
+    toggle(this.openRow, 'rt', rt);
+    this.kindBtns.forEach((b, i) => toggle(b, 'sel', (i === 1) === this.roomTour));
+    toggle(this.fillBtn, 'hidden', !rt);
+    toggle(this.fillBtn, 'sel', this.fill);
+    setText(this.fillBtn, this.fill ? '空位电脑补：开' : '空位电脑补：关');
+    toggle(this.sizeRow, 'hidden', rt);
+    toggle(this.funTile, 'hidden', !rt);
+    toggle(this.funTile, 'sel', rt && this.roomFun);
     // 实盘新开一份只要钱包够这次带入（平台 0.10.2）：够这一档的最少买入就能开，不够一整份就少带一点
     for (const st of STAKES) {
       const t = this.tiles.get(st.id)!;
-      toggle(t, 'sel', st.id === this.stakes);
+      toggle(t, 'sel', st.id === this.stakes && !(rt && this.roomFun));
       toggle(t, 'locked', !fun && !this.alone && bal !== null && bal < st.min);
       toggle(t, 'hidden', fun);
     }
@@ -467,11 +506,15 @@ export class Lobby {
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
     // （0.3.0：好友房不设多余的限制）
     // 单独部署没有钱包：好友房的筹码不记账，不看钱包
-    this.openBtn.disabled = busy || (!this.alone && (!wallet || (bal ?? 0) < st.min));
-    this.openBtn.title = this.alone ? '' : !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < st.min ? `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档` : '';
+    // 锦标赛报名要一整份（娱乐不碰钱包）
+    const need = rt ? st.max : st.min;
+    const free = this.alone || (rt && this.roomFun);
+    setText(this.openBtn, rt ? '开锦标赛房间' : '开房间');
+    this.openBtn.disabled = busy || (!free && (!wallet || (bal ?? 0) < need));
+    this.openBtn.title = free ? '' : !wallet ? '钱包连不上，稍后再试' : (bal ?? 0) < need ? (rt ? `报名要一整份 ${chips(st.max)}：去大厅领补给，或者换小一档` : `这一档最少带 ${chips(st.min)}：去大厅领补给，或者换小一档`) : '';
     this.joinBtn.disabled = busy || this.codeIn.value.length !== 6;
     // 选桌上选实盘、好友房的档位时，背景跟着换成那一间
-    this.h.preview(pick && !fun ? this.stakes : null);
+    this.h.preview(pick && !fun && !(rt && this.roomFun) ? this.stakes : null);
     for (const b of [this.quickBtn, this.startBtn, this.openBtn, this.joinBtn, this.reliefBtn]) toggle(b, 'loading', busy && b === this.pending);
     toggle(this.roomBox, 'hidden', !back);
     if (back) {
