@@ -343,3 +343,230 @@ html:has(.screen.room) body {
     animation: none;
   }
 }
+
+/* ---------- 卡通风格（0.22.0，所有者 10-19 各游戏统一；配色表在 docs/cartoon.md） ----------
+ * 平涂、2–3px 深色描边、圆角 12–16、按钮 4px 实色下沿（按下沉下去）。只改颜色、描边、阴影，不改任何块的尺寸和位置。
+ * 主页、选桌、等人页换奶油底配深色字；牌桌的呢子换成平涂的青绿；名牌、弹窗是平涂深青绿配浅色字（里面的结算、规则配色都按深底调好，不跟着改）。 */
+.stage {
+  --c-ink: #2b1d14;
+  --c-cream: #fff6e0;
+  --c-paper: #ffeec4;
+  --c-teal: #17a37f;
+  --c-teal-dk: #0e6e56;
+  --c-panel: #14584a;
+  --c-sun: #ffc53d;
+  --c-orange: #c4570b;
+  --ak-bg: #14584a;
+  --ak-border: #2b1d14;
+}
+/* 奶油底的几页：平涂纸色 + 一点点圆点，不再是压暗的板壁 */
+.stage:has(> .screen.lobby),
+.stage:has(> .screen.front),
+.stage:has(> .screen.room),
+.stage .screen.lobby,
+.stage .screen.front,
+.stage .screen.room,
+[data-orient='port'] .stage .screen.lobby {
+  background: radial-gradient(#e9c98a 1.2px, transparent 1.6px) 0 0 / 22px 22px, var(--c-paper);
+  color: var(--c-ink);
+}
+html:has(.screen.lobby),
+html:has(.screen.front),
+html:has(.screen.room),
+html:has(.screen.lobby) body,
+html:has(.screen.front) body,
+html:has(.screen.room) body {
+  background: #f3dca6;
+}
+/* 牌桌：两边露出的板壁换暖黄纸色，木框平涂橙棕加深色描边，呢子平涂青绿（去掉暗角和织纹） */
+.stage:has(> .screen.game) {
+  background: radial-gradient(#e9c98a 1.2px, transparent 1.6px) 0 0 / 22px 22px, var(--c-paper);
+}
+html:has(.screen.game),
+html:has(.screen.game) body {
+  background: #f3dca6;
+}
+.stage .table::before {
+  background: #c9763a;
+}
+.stage .table {
+  box-shadow: inset 0 0 0 3px var(--c-ink);
+}
+.stage .table::after,
+[data-orient='port'] .stage .table::after {
+  background: radial-gradient(ellipse at 50% 45%, #22b089 0%, var(--c-teal) 60%, #12936f 100%);
+  box-shadow: inset 0 0 0 3px var(--c-ink), inset 0 6px 0 #0000001f;
+}
+/* 顶栏：奶油色一条，下边一道深色线 */
+.stage .topbar {
+  background: var(--c-cream);
+  box-shadow: 0 3px 0 var(--c-ink);
+  color: var(--c-ink);
+}
+.stage .topbar .title {
+  opacity: 1;
+  font-weight: 700;
+}
+.stage .topbar .wallet-chip {
+  color: var(--c-orange);
+  font-weight: 800;
+}
+.stage :is(.home, .pill, .icon) {
+  background: #fff;
+  color: var(--c-ink);
+  border: 2px solid var(--c-ink);
+  box-shadow: 0 2px 0 var(--c-ink);
+  font-weight: 700;
+}
+.stage .home svg {
+  fill: var(--c-teal);
+}
+.stage .vol {
+  background: var(--c-cream);
+  border: 2px solid var(--c-ink);
+  box-shadow: 0 4px 0 var(--c-ink);
+}
+/* 按钮：白底深字，主按钮太阳黄；描边 + 4px 实色下沿，按下沉 3px */
+.stage .act {
+  border: 2.5px solid var(--c-ink);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--c-ink);
+  text-shadow: none;
+  box-shadow: 0 4px 0 var(--c-ink);
+}
+.stage .act.soft {
+  background: var(--c-cream);
+  font-weight: 700;
+  box-shadow: 0 3px 0 var(--c-ink);
+}
+.stage .act.go,
+.stage .act.quick {
+  background: var(--c-sun);
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+  text-shadow: none;
+}
+.stage .act.ron {
+  background: #ef5340;
+  border-color: var(--c-ink);
+  color: #fff;
+  text-shadow: 0 2px 0 #0004;
+}
+.stage .act:not(:disabled):active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--c-ink);
+}
+/* 档位卡、模式卡、规则设置：奶油卡片，选中的换青绿底 */
+.stage :is(.stake, .mode) {
+  background: var(--c-cream);
+  border: 2.5px solid var(--c-ink);
+  border-radius: 14px;
+  color: var(--c-ink);
+  box-shadow: 0 4px 0 var(--c-ink);
+}
+.stage .stake.on {
+  background: #c9f2e3;
+  border-color: var(--c-ink);
+  box-shadow: 0 4px 0 var(--c-ink), 0 0 0 3px var(--c-teal);
+}
+.stage .stake .stars {
+  color: var(--c-orange);
+}
+.stage .stake small,
+.stage .mode small {
+  opacity: 1;
+  color: #5a4434;
+}
+.stage .rules-opts {
+  background: var(--c-cream);
+  border: 2px solid var(--c-ink);
+}
+.stage .chip {
+  border: 2px solid var(--c-ink);
+  background: #fff;
+  color: var(--c-ink);
+}
+.stage .chip.on {
+  background: var(--c-teal);
+  color: #fff;
+}
+.stage :is(.stakes-label, .wallet-note, .opt .label, .lobby-head .variant, .ver, .record) {
+  opacity: 1;
+  color: #5a4434;
+}
+.stage .link {
+  color: var(--c-teal-dk);
+  font-weight: 700;
+}
+/* 标题：青绿粗体压一道深色实影 */
+.stage .screen.lobby .lobby-head h1,
+.stage .home-head .brand {
+  background: none;
+  color: var(--c-teal);
+  -webkit-text-fill-color: var(--c-teal);
+  filter: none;
+  text-shadow: 0 3px 0 var(--c-ink);
+}
+.stage .pitch,
+.stage .home-head .variant {
+  color: var(--c-ink);
+}
+/* 主页的画、选桌页的画当一张插画卡：圆角加描边 */
+.stage :is(.home-art, .lobby-art) .scene {
+  border: 3px solid var(--c-ink);
+  border-radius: 16px;
+}
+/* 等人页 */
+.stage .room-code {
+  color: var(--c-teal-dk);
+}
+.stage .room-seat {
+  background: var(--c-cream);
+  border: 2.5px solid var(--c-ink);
+  box-shadow: 0 4px 0 var(--c-ink);
+  color: var(--c-ink);
+}
+.stage :is(.room-hint, .room-label, .room-rules, .room-wait) {
+  color: #5a4434;
+  opacity: 1;
+}
+/* 牌桌上的名牌、弹窗：平涂深青绿 + 深色描边 + 实影，字照旧是浅色 */
+.stage .badge {
+  background: var(--c-panel);
+  border: 2.5px solid var(--c-ink);
+  box-shadow: 0 3px 0 var(--c-ink);
+}
+.stage .badge.turn {
+  box-shadow: 0 3px 0 var(--c-ink), 0 0 0 3px var(--c-sun);
+}
+.stage .dialog,
+.stage .mask.match .dialog {
+  background: var(--c-panel);
+  border: 3px solid var(--c-ink);
+  border-radius: 16px;
+  box-shadow: 0 6px 0 var(--c-ink);
+}
+.stage .mask:is(.rules, .guide) .dialog {
+  border: 3px solid var(--c-ink);
+  box-shadow: 0 6px 0 var(--c-ink);
+}
+/* kit 的"互动""聊天"按钮跟牌桌上的按钮一个样子 */
+html .atf-btn {
+  border: 2.5px solid #2b1d14;
+  border-radius: 14px;
+  background: #fff6e0;
+  color: #2b1d14;
+  box-shadow: 0 4px 0 #2b1d14;
+}
+/* 选桌页贴底的开打条：奶油底一道深色上沿（原来是压暗的板壁色）；"‹ 主页"和顶栏的按钮一个样子 */
+.stage .screen.lobby .go-row {
+  background: linear-gradient(#ffeec400, var(--c-paper) 30%);
+}
+.stage .screen.lobby > .back {
+  background: #fff;
+}
+.stage .join input,
+.stage .nick input {
+  border: 2px solid var(--c-ink);
+}
