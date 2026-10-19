@@ -714,10 +714,12 @@ body::before {
 /* kit 画的"互动"按钮的位置（0.13.0）：hud 里占一个和原来按钮一样大的空位，矩形交给 TableFun */
 .fun-slot { width: calc(88px * var(--ui)); height: var(--hit); flex: none; }
 /* 一手打完的顺手短语：在"歇一手、互动"那一行上面，不挨着我的头像和名牌 */
-.fun-hints { position: absolute; left: 0; bottom: calc(100% + var(--s-2)); display: flex; gap: var(--s-2); }
+.fun-hints { position: absolute; left: 0; bottom: calc(100% + var(--s-2)); display: flex; gap: var(--s-2); width: max-content; }
 /* 竖屏 hud 在顶上，下面是顶上的座位；放到我的名牌和赔率那一行之间的空地（舞台做了缩放，fixed 按舞台算） */
-.stage.tall .fun-hints { position: fixed; left: var(--s-3); right: var(--s-3); bottom: 175px; justify-content: center; }
+.stage.tall .fun-hints { position: fixed; left: var(--s-3); right: var(--s-3); width: auto; bottom: 175px; justify-content: center; }
 .fun-hint {
+  /* 不折行（0.25.1 实打：电脑版挤成两个窄条、一个字一行） */
+  white-space: nowrap;
   padding: var(--s-2) var(--s-3);
   border: 1px solid rgba(243, 200, 107, .7);
   border-radius: var(--r-4);

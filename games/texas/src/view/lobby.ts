@@ -501,6 +501,8 @@ export class Lobby {
     setText(this.tourBtn, fun ? '锦标赛 · 免费' : `锦标赛 · ${chips(st.max)}`);
     this.tourBtn.disabled = busy || !!resume || !tourOk;
     this.tourBtn.title = tourOk ? `报名费 ${chips(st.max)}（这一档的一份）：${TOUR_RULE}` : `报名要一整份 ${chips(st.max)}`;
+    // 灰着的按钮要说为什么（0.25.1 实打：钱包不够一整份时只灰、没说要多少）
+    setText(this.tourNote, !fun && !this.alone && wallet && !tourOk ? `钱包要有 ${chips(st.max)} 才能报名这一档的锦标赛` : TOUR_RULE);
     toggle(this.tourNote, 'hidden', room);
     const back = this.s.room;
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
