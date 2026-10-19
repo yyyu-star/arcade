@@ -1,0 +1,13 @@
+/* 单机锦标赛（0.23.0）：大厅入口和结束页。限定在界面根节点下，不碰 style.css */
+.lobby .tour-note { margin-top: var(--s-1, 4px); font-size: 12px; opacity: 0.85; line-height: 1.3; }
+.lobby .go-row .pill.tour-btn { flex: 0 1 auto; height: 52px; padding: 0 var(--s-3); font-size: var(--fs-2); font-weight: 800; white-space: nowrap; }
+.lobby .go-row .start { white-space: nowrap; }
+.dialog .tour-sum { display: grid; gap: var(--s-3); text-align: center; }
+.dialog .tour-place { font-size: 34px; font-weight: 900; }
+.dialog .tour-prize { font-size: var(--fs-4); font-weight: 700; }
+.dialog .tour-top { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); text-align: left; }
+.dialog .tour-top li { display: flex; gap: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: 10px; background: rgba(255, 255, 255, 0.08); }
+.dialog .tour-top li.me { outline: 2px solid currentColor; }
+.dialog .tour-top b { min-width: 4.5em; }
+.dialog .tour-out { display: grid; gap: var(--s-2); }
+.dialog .tour-out-place { font-size: var(--fs-5, 22px); font-weight: 800; }

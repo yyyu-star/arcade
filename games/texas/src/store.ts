@@ -11,6 +11,8 @@ export const KEYS = {
   /** 上一次进的好友房：钱包里还有那一桌的一份时，标题页按它给"回到房间"；点"离开房间"、房间关了就清掉 */
   lastRoom: 'texas.lastRoom',
   session: 'texas.session',
+  /** 单机锦标赛（Sit & Go）本机存档：刷新、断线后接着打或接着结（src/tour/solo.ts） */
+  tour: 'texas.tour',
   /** 互动的总开关（"互动：不看"）。按人屏蔽、首次提示是 kit 的 TableFun 按 storageKey 存的：texas.fun.blocked（sessionStorage）、texas.hint.fun */
   fun: 'texas.fun',
   /** 0.12.0 及以前自己记的按人屏蔽（sessionStorage），0.13.0 起换成 kit 的 texas.fun.blocked，只用来清掉 */

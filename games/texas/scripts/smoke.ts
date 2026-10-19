@@ -1110,6 +1110,74 @@ async function takeProfitFlow(browser: Browser, base: string): Promise<void> {
   await ctx.close();
 }
 
+/**
+ * 单机锦标赛（--only tour，0.23.0）：娱乐锦标赛进去，一直跟注到被淘汰或打完；淘汰了点"现在离开"；
+ * 看到结束页，名次在 1–6，前三名三行；顶上写"锦标赛 · 第 N 级"，桌上没有止盈旗子；选桌里"坐下开打"和锦标赛入口都在第一屏
+ */
+async function tourFlow(browser: Browser, base: string): Promise<void> {
+  const ctx = await newContext(browser, base, 'smoke-tour');
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true }));
+  });
+  const page = await ctx.newPage();
+  watch(page, 'tour');
+  await page.goto(`${base}/games/texas/`);
+  await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+  for (const mode of ['娱乐', '实盘'] as const) {
+    await enter(page, mode);
+    const go = await page.locator('.lobby .start').boundingBox();
+    const tb = await page.locator('.lobby .tour-btn').boundingBox();
+    if (!go || go.height > 70 || go.y + go.height > DESK_H) throw new Error(`lobby(${mode}): 坐下开打 off screen ${JSON.stringify(go)}`);
+    if (!tb || tb.y + tb.height > DESK_H || tb.x + tb.width > DESK_W) throw new Error(`lobby(${mode}): 锦标赛 off screen ${JSON.stringify(tb)}`);
+    const note = await page.locator('.lobby .tour-note').boundingBox();
+    if (!note || note.y + note.height > DESK_H + 0) throw new Error(`lobby(${mode}): 锦标赛说明 off screen ${JSON.stringify(note)}`);
+    await shot(page, `tour-lobby-${mode}`);
+  }
+  await enter(page, '娱乐');
+  await page.locator('.lobby .tour-btn').click();
+  await skipTips(page);
+  await page.locator('.stage.at-table').waitFor();
+  const where = (await page.locator('.topbar .where').textContent()) ?? '';
+  if (!/锦标赛 · 第 \d+ 级 · 盲注 [\d,]+\/[\d,]+ · /.test(where)) throw new Error(`tour top bar: ${where}`);
+  if ((await page.locator('.tp-toggle:visible').count()) !== 0) throw new Error('take-profit flag should not show in a tournament');
+  if (await page.locator('.next-hand:visible').count()) throw new Error('tournament should not have a next-hand button');
+  let shotTable = false;
+  const deadline = Date.now() + 560_000;
+  while (!(await page.locator('.tour-sum').isVisible())) {
+    if (Date.now() > deadline) {
+      await shot(page, 'debug-tour');
+      throw new Error('tournament never ended');
+    }
+    if (await page.locator('.d-title', { hasText: '你出局了' }).isVisible()) {
+      await shot(page, 'tour-out');
+      await page.locator('.d-btn', { hasText: '现在离开' }).click();
+      continue;
+    }
+    if (await page.locator('.dialog').isVisible()) {
+      await page.waitForTimeout(200);
+      continue;
+    }
+    if (await page.locator('.actions.on').isVisible()) {
+      if (!shotTable) {
+        shotTable = true;
+        await shot(page, 'tour-table');
+      }
+      await page.locator('.act.call').click().catch(() => {});
+    }
+    await page.waitForTimeout(120);
+  }
+  await shot(page, 'tour-summary');
+  const place = Number(((await page.locator('.tour-place').textContent()) ?? '').replace(/\D/g, ''));
+  if (!(place >= 1 && place <= 6)) throw new Error(`tour place out of range: ${place}`);
+  if ((await page.locator('.tour-top li').count()) !== 3) throw new Error('tour summary should list the top 3');
+  const prize = (await page.locator('.tour-prize').textContent()) ?? '';
+  if (!prize.includes('筹码不算数')) throw new Error(`fun tournament prize line: ${prize}`);
+  log('tour place', place, prize);
+  await page.locator('.d-btn.primary').click();
+  await page.locator('.lobby').waitFor();
+  await ctx.close();
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1247,6 +1315,7 @@ async function main(): Promise<void> {
         if (!only || only === 'match') await match(browser, base);
         if (only === 'tall') await tall(browser, base);
         if (only === 'tp') await takeProfitFlow(browser, base);
+        if (only === 'tour') await tourFlow(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

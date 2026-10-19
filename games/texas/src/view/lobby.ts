@@ -21,7 +21,7 @@ export interface LobbyState {
   /** 钱包连不上、只读时的说明 */
   note: string | null;
   /** 本机有一桌没打完；waiting：那一笔钱包还没回话（买入在路上，或者离桌的结算还没结回去） */
-  resume: { stakes: StakesId; size: number; practice: boolean; level?: number | undefined; waiting: boolean } | null;
+  resume: { stakes: StakesId; size: number; practice: boolean; level?: number | undefined; waiting: boolean; tour?: boolean } | null;
   /** 钱包里有一桌单机，但本机没有（另一台设备上的） */
   orphan: Stake | null;
   busy: boolean;
@@ -39,6 +39,8 @@ export interface LobbyHandlers {
   /** 快速匹配（0.20.0）：这一档排队找真人，一桌 6 人；只有实盘、有钱包时有 */
   /** 快速匹配：fun 是娱乐档（level 是选的难度，没排到人转单机时用） */
   match(stakes: StakesId, fun: boolean, level: number): void;
+  /** 单机锦标赛（0.23.0）：fun 是娱乐（level 是选的难度）；实盘报名费是这一档的一份 */
+  tour(stakes: StakesId, fun: boolean, level: number): void;
   /** 止盈（0.22.0）：点了弹选择框 */
   takeProfit(): void;
   /** 好友房：用现在选的档位和人数开一个；输码进房；回到上次的房间 */
@@ -70,6 +72,8 @@ export class Lobby {
   private readonly buyAmt: HTMLSpanElement;
   private readonly startBtn: HTMLButtonElement;
   private readonly matchBtn: HTMLButtonElement;
+  private readonly tourBtn: HTMLButtonElement;
+  private readonly tourNote: HTMLDivElement;
   private readonly tpBtn: HTMLButtonElement;
   private readonly openBtn: HTMLButtonElement;
   private readonly codeIn: HTMLInputElement;
@@ -225,6 +229,10 @@ export class Lobby {
 
     // 快速匹配（0.20.0，DESIGN.md 6.11）：实盘才有，挨着"坐下开打"；人数按匹配桌的 6 人，带这一档的满买入（和好友房一样）
     this.matchBtn = button(go, 'pill match', '快速匹配', () => h.match(this.stakes, this.fun(), FUN_LEVEL[this.diff]));
+
+    // 单机锦标赛（0.23.0）：和现金桌共用上面选的档位（娱乐按难度，实盘报名费 = 这一档的一份），人数、带多少不用选
+    this.tourBtn = button(go, 'pill tour-btn', '锦标赛', () => this.wait(this.tourBtn, () => h.tour(this.stakes, this.fun(), FUN_LEVEL[this.diff])));
+    this.tourNote = el('div', 'tour-note', panel, TOUR_RULE);
 
     // 好友房（0.17.4）：开房间放在"坐下开打"的位置，用上面选的档位和人数，买入固定是这一档的满买入
     const open = (this.openRow = el('div', 'friends open', panel));
@@ -383,7 +391,7 @@ export class Lobby {
     // 主页上"继续上局"就是快速开始那个大按钮，横幅只在选桌时说明为什么开不了新的一桌
     toggle(this.resumeBox, 'hidden', !resume || !pick);
     const rd = resume?.practice ? difficultyOf(resume.level) : null;
-    if (resume) setText(this.resumeText, `${resume.practice ? '娱乐' : '实盘'} · ${rd ? DIFFICULTY_NAME[rd] : stakesOf(resume.stakes).name} · ${resume.size} 人，${resume.waiting ? '等钱包回话' : '上次没打完'}`);
+    if (resume) setText(this.resumeText, `${resume.tour ? '锦标赛 · ' : ''}${resume.practice ? '娱乐' : '实盘'} · ${rd ? DIFFICULTY_NAME[rd] : stakesOf(resume.stakes).name} · ${resume.size} 人，${resume.waiting ? '等钱包回话' : '上次没打完'}`);
     toggle(this.orphanBox, 'hidden', !orphan || !!resume);
     if (orphan) setText(this.orphanText, `另一台设备上还有一桌没打完（带上桌 ${chips(orphan.amount)}）：回那台设备离桌就能结回；放着不管，24 小时后原样退回钱包`);
 
@@ -403,7 +411,7 @@ export class Lobby {
     setText(
       this.quickSub,
       resume
-        ? `${resume.practice ? '娱乐' : '实盘'} · ${rd ? DIFFICULTY_NAME[rd] : stakesOf(resume.stakes).name} · ${resume.size} 人`
+        ? `${resume.tour ? '锦标赛 · ' : ''}${resume.practice ? '娱乐' : '实盘'} · ${rd ? DIFFICULTY_NAME[rd] : stakesOf(resume.stakes).name} · ${resume.size} 人`
         : `${qr ? `实盘 · ${stakesOf(this.stakes).name}` : `娱乐 · ${DIFFICULTY_NAME[this.diff]}`} · ${this.size} 人`,
     );
     this.quickBtn.disabled = busy;
@@ -449,6 +457,12 @@ export class Lobby {
     // 娱乐档（0.21.0）不碰钱包，单独部署也有；实盘档没钱包（连不上）不给，钱包够这一档的最少买入才能排（不够一整份的，坐下时少带一点，和好友房一样）
     toggle(this.matchBtn, 'hidden', !fun && (this.alone || !wallet));
     this.matchBtn.disabled = busy || !ok;
+    // 锦标赛：实盘钱包要够一整份报名费（不像现金桌能少带）；单独部署只有娱乐
+    const tourOk = fun || (!this.alone && !!wallet && (bal ?? 0) >= st.max);
+    setText(this.tourBtn, fun ? '锦标赛 · 免费' : `锦标赛 · ${chips(st.max)}`);
+    this.tourBtn.disabled = busy || !!resume || !tourOk;
+    this.tourBtn.title = tourOk ? `报名费 ${chips(st.max)}（这一档的一份）：${TOUR_RULE}` : `报名要一整份 ${chips(st.max)}`;
+    toggle(this.tourNote, 'hidden', room);
     const back = this.s.room;
     // 开房只看钱包够不够这一档的最少买入（坐下就要带；不够一整份的，坐下时少带一点）；单机没打完、别处还有一份都不拦
     // （0.3.0：好友房不设多余的限制）
@@ -471,6 +485,9 @@ export class Lobby {
 export function topBuyIn(st: { min: number; max: number; bb: number }, bal: number): number {
   return Math.max(st.min, Math.min(st.max, Math.floor(bal / st.bb) * st.bb));
 }
+
+/** 锦标赛入口上的规则 */
+const TOUR_RULE = '6 人、每人 1,500 比赛筹码、打到剩一人，前三名拿奖 3 / 1.8 / 1.2 份';
 
 /** 主页三张模式卡：名字和一句话（话里别带别的卡的名字，冒烟按名字找卡） */
 const MODE_CARDS: readonly (readonly [Mode, string, string])[] = [

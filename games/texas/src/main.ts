@@ -8,7 +8,7 @@ import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
 import { chatFont, chatMode as chatLayout } from 'arcade-kit/fun-logic';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
-import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, stakesOf, type StakesId } from './core/stakes.ts';
+import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, SOLO_LEVEL, stakesOf, type StakesId } from './core/stakes.ts';
 import type { Action, Table } from './core/table.ts';
 import { view, type View } from './core/view.ts';
 import { createCloud, type Cloud } from './net/cloud.ts';
@@ -19,6 +19,8 @@ import { getWallet, relief as reliefApi, texasStakes, walletApi, walletError, ty
 import { site, twoText } from './site.ts';
 import { KEYS, patchSettings, readJson, readSettings, remove, writeJson } from './store.ts';
 import { ME, SESSION_KEY, Solo, type SoloDeps, type Step } from './solo.ts';
+import { TOUR_KEY, TourSolo, type TourDeps } from './tour/solo.ts';
+import { HANDS_PER_LEVEL, START_STACK } from './tour/rules.ts';
 import { ActionBar } from './view/actions.ts';
 import { myTurn, notMyTurn, tickUntil } from './view/alert.ts';
 import { momentOf, temperOf } from './fun/moments.ts';
@@ -45,6 +47,8 @@ import { chips, personaName } from './view/text.ts';
 import { handOver, showcase, showcaseText, Tally } from './view/titles.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
+// 单机锦标赛（0.23.0）：结束页和牌桌顶上的几行
+import './view/tour.css';
 // 夜场牌桌的皮（0.10.0）：材质、光影、颜色都在这里，压在 style.css 的布局上
 import './view/skin.css';
 // 分层背景（0.18.0，docs/art-v3.md）：墙、散景、吊灯吧台、光锥，在舞台后面
@@ -213,6 +217,7 @@ const lobby = new Lobby(stage, {
   openRoom,
   match: (stakes, fun, level) => void quickMatch(stakes, fun, level),
   takeProfit: () => void pickTakeProfit(),
+  tour: (stakes, fun, level) => void startTour(stakes, fun, level),
   joinRoom,
   backToRoom,
   preview: (id) => {
@@ -241,6 +246,8 @@ let myName = '我';
 let wallet: WalletView | null = null;
 let walletNote: string | null = null;
 let solo: Solo | null = null;
+/** 单机锦标赛（0.23.0，和现金桌不会同时开着） */
+let tour: TourSolo | null = null;
 /** 好友房（和单机不会同时开着） */
 let online: Online | null = null;
 /** 牌桌按这个人数、这个座位摆的（好友房里换了座位要重摆） */
@@ -270,6 +277,19 @@ const deps: SoloDeps = {
   newId: () => crypto.randomUUID(),
   think,
   wait: (ms) => new Promise((ok) => window.setTimeout(ok, ms)),
+  onStep,
+};
+
+const tourDeps: TourDeps = {
+  wallet: tracked(walletApi),
+  store: localStorage,
+  entropy: deps.entropy,
+  newId: deps.newId,
+  // 我淘汰了在旁观时，电脑想得快一点
+  think: (t, seat) => think(t, seat) * (tour?.eliminated ? 0.5 : 1),
+  // 一手打完停几秒让人看清结果，再自动发下一手；旁观时短一点
+  gap: (watching) => (watching ? 1_200 : 3_200) * pace(),
+  wait: deps.wait,
   onStep,
 };
 
@@ -357,6 +377,16 @@ async function boot(): Promise<void> {
       walletNote = walletError('expired');
     }
   }
+  const ts = TourSolo.load(localStorage, cloud.userId());
+  if (ts && !solo) {
+    tour = new TourSolo(ts, tourDeps);
+    if (ts.pending) await settleTour();
+    if (tour && !ts.practice && !ts.pending && wallet && !texasStakes(wallet).some((x) => x.ref === ts.id)) {
+      remove(TOUR_KEY);
+      tour = null;
+      walletNote = walletError('expired');
+    }
+  }
   // 邀请链接 ?room=123456 直接进；平台大厅的"好友房"按钮 ?online=1（和掼蛋同一个约定）。
   // 刷新前在房间里的不自动拉回去（0.2.3 试玩反馈："每次进去自动进入一个房间…完全打不了"）：标题页给"回到房间"，点了才进
   const q = new URLSearchParams(location.search);
@@ -428,6 +458,7 @@ function showLobby(): void {
 
 function drawLobby(): void {
   const s = solo?.session;
+  const ts = tour?.session;
   // "回到房间"横幅只在两种时候有（0.2.3）：钱包里有好友房那一份（以 /api/wallet 的 stakes 为准）；
   // 或者刷新、关页面前还在房间里（没点"离开房间"，6 小时内）。点了才进，不点照常玩单机。
   // 平台 0.9.5 起德州可以同时有好几份（单机一份、每个房间各一份）：好友房的合起来说
@@ -441,8 +472,12 @@ function drawLobby(): void {
     wallet,
     // 本机不知道是哪个房间（别的设备进的）：没有按钮，只说一句
     note: walletNote ?? (inRoom && !back ? `好友房那一桌还没结回钱包（带上桌 ${chips(inRoom.amount)}）。${settle}` : null),
-    resume: s ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, level: s.table.level, waiting: s.pending !== null } : null,
-    orphan: texasStakes(wallet, 'client').find((x) => x.ref !== s?.id) ?? null,
+    resume: s
+      ? { stakes: s.table.stakes, size: s.table.seats.length, practice: s.practice, level: s.table.level, waiting: s.pending !== null }
+      : ts
+        ? { stakes: ts.stakes, size: ts.state.table.seats.length, practice: ts.practice, level: ts.state.table.level, waiting: ts.pending !== null, tour: true }
+        : null,
+    orphan: texasStakes(wallet, 'client').find((x) => x.ref !== (s?.id ?? ts?.id)) ?? null,
     busy,
     stats: cloud.stats(),
     room: back
@@ -472,8 +507,56 @@ async function start(stakes: StakesId, size: number, amount: number, practice: b
   enterTable();
 }
 
+async function startTour(stakes: StakesId, fun: boolean, level: number): Promise<void> {
+  if (busy || solo || tour) return;
+  busy = true;
+  drawLobby();
+  const r = await TourSolo.open(tourDeps, { userId: cloud.userId(), stakes: fun ? FUN_STAKES : stakes, practice: fun, level: fun ? level : SOLO_LEVEL[stakes] });
+  busy = false;
+  if ('error' in r) {
+    await refreshWallet();
+    if (r.pending) {
+      tour = r.pending;
+      await settleTour();
+    } else walletNote = walletError(r.error);
+    drawLobby();
+    return;
+  }
+  tour = r;
+  void refreshWallet();
+  enterTour();
+}
+
+/** 办锦标赛本机存档里还没回话的那一笔（报名或结奖金），连不上隔一会儿用同一个操作 id 再办 */
+async function settleTour(): Promise<void> {
+  const t = tour;
+  if (!t?.session.pending) return;
+  window.clearTimeout(retryTimer);
+  const err = await t.settle();
+  if (!TourSolo.load(localStorage, cloud.userId())) tour = null;
+  await refreshWallet();
+  if (t.session.pending && err === 'login') walletNote = LOGIN_NOTE;
+  else if (t.session.pending) {
+    walletNote = PENDING_NOTE;
+    retryTimer = window.setTimeout(() => void settleTour().then(drawLobby), RETRY_MS);
+  } else if (err) walletNote = walletError(err);
+}
+
 async function resume(): Promise<void> {
-  if (busy || !solo) return;
+  if (busy) return;
+  if (tour && !solo) {
+    if (tour.session.pending) {
+      busy = true;
+      drawLobby();
+      await settleTour();
+      busy = false;
+      if (tour?.session.pending) return drawLobby();
+    }
+    if (tour) enterTour();
+    else drawLobby();
+    return;
+  }
+  if (!solo) return;
   // 那一笔还没回话：先办完（买入到账才上桌；离桌的结算结完这一桌就没了）
   if (solo.session.pending) {
     busy = true;
@@ -515,6 +598,156 @@ function enterTable(): void {
   refresh();
   // 先看完提示再发第一手（刚坐下的桌一张牌都没发）；接着打的桌从停下的地方接着
   void tips().then(() => drive(s.table.handNo === 0 && s.between ? s.next() : s.flush()));
+}
+
+/** 锦标赛进桌：和现金桌一样先看提示，再从停下的地方接着打 */
+function enterTour(): void {
+  const t = tour!;
+  reads.clear();
+  tally.clear();
+  feedSent.clear();
+  outShown.clear();
+  stage.classList.add('at-table');
+  tableView.setup(t.table.seats.length, ME);
+  tableView.show(view(t.table, ME));
+  openFun('solo');
+  drawTop();
+  refreshTour();
+  void tips().then(() => driveTour(t.flush()));
+}
+
+/** 等这一串（我出手、电脑接着出手、自动发牌）做完，再看轮到谁 */
+async function driveTour(p: Promise<unknown>): Promise<void> {
+  await p;
+  refreshTour();
+}
+
+/** 已经提示过"某某出局"的座位 */
+const outShown = new Set<number>();
+let ending = false;
+
+/** 锦标赛的操作区、顶栏；我淘汰了问一次，整场结束出结算 */
+function refreshTour(): void {
+  const t = tour;
+  if (!t || !stage.classList.contains('at-table')) return;
+  const v = t.view;
+  setText(handNo, v.handNo ? `第 ${v.handNo} 手` : '');
+  stage.dataset.phase = v.phase;
+  // 锦标赛里没有补码、歇一手、下一手（自动发）、亮牌栏
+  for (const b of [topUpBtn, sitBtn]) toggle(b, 'hidden', true);
+  drawBetween(false);
+  showBar.hide();
+  drawTop();
+  tourNotes(t);
+  const auto = bar.update(v, animating === 0 && !t.closing && !t.eliminated);
+  if (auto) {
+    void driveTour(t.act(auto));
+    return;
+  }
+  if (animating > 0 || asking) return;
+  if (t.over) void endTour();
+  else if (t.undecided) void askEliminated();
+}
+
+/** 谁出局了提示一句；盲注涨了顶栏跟着换 */
+function tourNotes(t: TourSolo): void {
+  t.view.places.forEach((p, i) => {
+    if (p !== null && !outShown.has(i)) {
+      outShown.add(i);
+      if (i !== ME) toast(`${personaName(t.table.seats[i]!.persona)} 出局，第 ${p} 名`);
+    }
+  });
+  drawTop();
+}
+
+/** 我淘汰了：看到结束，还是现在离开（直接跑完出结算，名次和奖金不变） */
+async function askEliminated(): Promise<void> {
+  const t = tour;
+  if (!t || asking) return;
+  asking = true;
+  const place = t.state.places[ME]!;
+  const prize = t.result().prize;
+  const body = el('div', 'tour-out');
+  el('p', 'tour-out-place', body, `你拿了第 ${place} 名`);
+  el('p', '', body, t.session.practice ? '娱乐赛，筹码不算数。' : prize > 0 ? `奖金 ${chips(prize)}，打完结回钱包。` : '没进前三，没有奖金。');
+  el('p', 'sum-note', body, '看到结束：电脑接着打，你看谁拿冠军。现在离开：直接跑完，马上出结算。');
+  const v = await dialog(stage, '你出局了', body, [
+    { label: '现在离开', value: 'leave' },
+    { label: '看到结束', value: 'watch', primary: true },
+  ], true);
+  asking = false;
+  if (v === 'leave') return void (await leaveTour(true));
+  t.watch();
+  await driveTour(t.flush());
+}
+
+/** 整场打完：结奖金，出结算页 */
+async function endTour(): Promise<void> {
+  const t = tour;
+  if (!t || ending) return;
+  ending = true;
+  try {
+    stopCountdown();
+    await tourSummary(t, await t.finish());
+  } finally {
+    ending = false;
+  }
+}
+
+/** 离开：打着的时候问一次；淘汰后选了"现在离开"（out）不再问。剩下的电脑托管跑完，按名次结 */
+async function leaveTour(out = false): Promise<boolean> {
+  const t = tour;
+  if (!t || ending) return true;
+  if (!out && !t.over && !t.closing && !t.eliminated) {
+    const ok = await dialog(stage, '现在离开？', t.session.practice ? '你的座位交给电脑接着打，直接跑完出名次。' : '你的座位交给电脑接着打，直接跑完按名次结奖金。报名费不退，想拿奖就坚持到底。', [
+      { label: '接着打', value: 'no' },
+      { label: '离开', value: 'yes', primary: true },
+    ]);
+    if (ok !== 'yes') return false;
+  }
+  ending = true;
+  try {
+    stopCountdown();
+    const err = await t.leave();
+    if (t.session.pending?.t === 'buyin') {
+      await dialog(stage, '先等报名', err === 'login' ? walletError('login') : '报名那一笔还没回话，钱可能已经扣了。等它回话再离开，这一场才不会丢。', [{ label: '好', value: 'ok', primary: true }]);
+      refreshTour();
+      return false;
+    }
+    await tourSummary(t, err);
+  } finally {
+    ending = false;
+  }
+  return true;
+}
+
+/** 结束页：我的名次、奖金、前三名 */
+async function tourSummary(t: TourSolo, err: string | null): Promise<void> {
+  await refreshWallet();
+  const { place, prize, order } = t.result();
+  const practice = t.session.practice;
+  const body = el('div', 'tour-sum');
+  el('div', 'tour-place', body, `第 ${place} 名`);
+  let line: string;
+  if (practice) line = '娱乐赛：筹码不算数';
+  else if (err && t.closing) line = err === 'login' ? `奖金 ${chips(prize)}，登录后自动结回` : `奖金 ${chips(prize)}，钱包暂时连不上，稍后自动结回`;
+  else if (err) line = `没结成：${walletError(err)}`;
+  else if (prize > 0) line = `奖金 ${chips(prize)}，结回钱包${t.capped ? `（今天进账到顶，其中 ${chips(t.capped)} 没进钱包）` : ''}`;
+  else line = '没进前三，这次没有奖金';
+  el('div', 'tour-prize', body, line);
+  const list = el('ol', 'tour-top', body);
+  order.slice(0, 3).forEach((seat, k) => {
+    const li = el('li', seat === ME ? 'me' : '', list);
+    el('b', '', li, `第 ${k + 1} 名`);
+    el('span', '', li, seat === ME ? `${myName}（你）` : personaName(t.table.seats[seat]!.persona));
+  });
+  el('div', 'sum-note', body, `6 人、每人 ${chips(START_STACK)} 比赛筹码，每 ${HANDS_PER_LEVEL} 手涨一次盲注`);
+  await dialog(stage, '锦标赛结束', body, [{ label: '回大厅', value: 'ok', primary: true }], true);
+  if (err && t.closing) {
+    walletNote = err === 'login' ? LOGIN_NOTE : '钱包暂时连不上：奖金先记在本机，稍后会自动结回钱包';
+    if (err !== 'login') retryTimer = window.setTimeout(() => void settleTour().then(drawLobby), RETRY_MS);
+  } else tour = null;
+  showLobby();
 }
 
 /** 亮我刚才的牌：好友房交给房间，单机在本机做 */
@@ -573,6 +806,7 @@ async function act(a: Action): Promise<void> {
     online.act(a);
     return;
   }
+  if (tour) return void driveTour(tour.act(a));
   if (!solo) return;
   await drive(solo.act(a));
 }
@@ -585,6 +819,7 @@ async function drive(p: Promise<unknown>): Promise<void> {
 
 /** 摆操作区和左下角；轮到我且有预选就直接做；输光了问补码 */
 function refresh(): void {
+  if (tour) return refreshTour();
   const s = solo;
   if (!s || !stage.classList.contains('at-table')) return;
   const v = view(s.table, ME);
@@ -637,6 +872,7 @@ async function onStep(st: Step): Promise<void> {
   } finally {
     animating--;
   }
+  if (tour) tourNotes(tour);
   const v = view(st.next, ME);
   bar.update(v, false);
   syncFun();
@@ -667,10 +903,10 @@ function showRead(i: number): void {
 
 /** 现在桌上的视图（好友房、单机）和我坐的座位；不在桌上是 null */
 function curView(): View | null {
-  return online ? online.state.view : solo ? view(solo.table, ME) : null;
+  return online ? online.state.view : tour ? view(tour.table, ME) : solo ? view(solo.table, ME) : null;
 }
 function mySeat(): number | null {
-  return online ? (online.state.you?.seat ?? null) : solo ? ME : null;
+  return online ? (online.state.you?.seat ?? null) : solo || tour ? ME : null;
 }
 
 /** 座位上的人怎么称呼（名场面横幅、称号）：我是"你"，好友房真人用昵称，电脑用性格名 */
@@ -746,7 +982,7 @@ function openFun(scope: string): void {
   toggle(chatBtn, 'hidden', false);
   drawChatBtn();
   tpFired = false;
-  toggle(tpBtn, 'hidden', false);
+  toggle(tpBtn, 'hidden', !!tour);
   drawTakeProfit();
   syncFun();
 }
@@ -878,7 +1114,7 @@ function handDone(prev: View, next: View, me: number | null): void {
   // 称号的数单机、好友房都记（0.3.0 实打后单机结算页也给称号）
   const key = who(prev);
   tally.observe(h.r, h.log, (i) => ({ key: key(i), name: i === me ? myName : nameAt(prev, i, null) }));
-  if (me !== null) reportMoment(feedMoment(h.r, h.log, me, stakesOf(prev.stakes).bb));
+  if (me !== null && !tour) reportMoment(feedMoment(h.r, h.log, me, stakesOf(prev.stakes).bb));
   if (funOff || !tf) return;
   if (me !== null) showHints(suggest(h.r, h.log, me));
   // 好友房的电脑由房间替它反应（worker/room.ts），这里只在单机报
@@ -1104,7 +1340,7 @@ async function tips(): Promise<void> {
  */
 function drawRoomTheme(): void {
   const v = online?.state.view;
-  const id = online ? (v?.stakes ?? online.state.opts?.stakes ?? null) : stage.classList.contains('at-table') && solo ? (solo.session.practice ? null : solo.table.stakes) : lobbyRoom;
+  const id = online ? (v?.stakes ?? online.state.opts?.stakes ?? null) : stage.classList.contains('at-table') && tour ? (tour.session.practice ? null : tour.session.stakes) : stage.classList.contains('at-table') && solo ? (solo.session.practice ? null : solo.table.stakes) : lobbyRoom;
   setRoom([stage, scene], id);
   tableView.setMark(ROOM_NAME[id ?? 'small']);
 }
@@ -1113,11 +1349,27 @@ function drawTop(): void {
   drawFunToggle();
   drawRoomTheme();
   if (online) return drawRoomTop(online.state);
+  if (stage.classList.contains('at-table') && tour) {
+    const v = tour.view;
+    const left = v.next ? `还有 ${v.handsLeft} 手涨` : '最后一级，不再涨';
+    setText(where, `锦标赛 · 第 ${v.level + 1} 级 · 盲注 ${chips(v.blinds[0])}/${chips(v.blinds[1])} · ${left}`);
+    setText(walletChip, wallet && !tour.session.practice ? `钱包 ${chips(wallet.balance)}` : '');
+    toggle(leaveBtn, 'hidden', false);
+  } else {
+    drawSoloTop();
+  }
+  drawSoundSpeed();
+}
+
+function drawSoloTop(): void {
   const at = stage.classList.contains('at-table') && solo;
   const diff = solo?.session.practice ? difficultyOf(solo.table.level) : null;
   setText(where, at ? `${solo!.session.practice ? `娱乐 · ${diff ? DIFFICULTY_NAME[diff] : stakesOf(solo!.table.stakes).name}` : stakesOf(solo!.table.stakes).name} · 盲注 ${chips(solo!.table.sb)}/${chips(solo!.table.bb)}` : '');
   setText(walletChip, wallet && at && !solo!.session.practice ? `钱包 ${chips(wallet.balance)}` : '');
   toggle(leaveBtn, 'hidden', !at);
+}
+
+function drawSoundSpeed(): void {
   const loud = settings.volume > 0.5;
   soundBtn.innerHTML = settings.sound
     ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7${loud ? 'M18.5 6a8.5 8.5 0 0 1 0 12' : ''}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`
@@ -1160,7 +1412,7 @@ cloudBtn.addEventListener('click', () => {
   if (cloud.state() === 'anon') location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
   else void dialog(stage, '战绩', cloudBtn.title, [{ label: '好', value: 'ok', primary: true }]);
 });
-leaveBtn.addEventListener('click', () => void (online ? leaveRoom(false) : leave()));
+leaveBtn.addEventListener('click', () => void (online ? leaveRoom(false) : tour ? leaveTour() : leave()));
 nextBtn.addEventListener('click', nextHand);
 autoBtn.addEventListener('click', () => {
   settings.autoNext = !settings.autoNext;
@@ -1172,6 +1424,16 @@ home.addEventListener('click', (e) => {
   if (online) {
     e.preventDefault();
     void leaveRoom(true);
+    return;
+  }
+  if (tour && stage.classList.contains('at-table')) {
+    e.preventDefault();
+    void leaveTour().then((left) => {
+      if (left && !tour) {
+        cloud.flush();
+        location.href = hall();
+      }
+    });
     return;
   }
   if (!solo || !stage.classList.contains('at-table')) return;
@@ -1204,6 +1466,7 @@ sitBtn.addEventListener('click', () => {
 const hidden = (): void => {
   cloud?.flush();
   if (solo?.closing) void solo.settle(true);
+  if (tour?.closing) void tour.settle(true);
 };
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') hidden();
@@ -1213,7 +1476,7 @@ window.addEventListener('pagehide', hidden);
 window.addEventListener('focus', () => void cloud?.recheck());
 window.addEventListener('storage', (e) => {
   cloud?.onStorage({ key: e.key, newValue: e.newValue });
-  if (e.key === SESSION_KEY) otherTab();
+  if (e.key === SESSION_KEY || e.key === TOUR_KEY) otherTab();
 });
 
 /**
@@ -1222,8 +1485,9 @@ window.addEventListener('storage', (e) => {
  */
 function otherTab(): void {
   if (online || busy) return;
-  const atTable = solo !== null && stage.classList.contains('at-table');
+  const atTable = (solo !== null || tour !== null) && stage.classList.contains('at-table');
   solo?.stop();
+  tour?.stop();
   if (atTable) {
     stopCountdown();
     closeDialog();
@@ -1231,6 +1495,8 @@ function otherTab(): void {
   }
   const s = Solo.load(localStorage, cloud.userId());
   solo = s ? new Solo(s, deps) : null;
+  const ts = solo ? null : TourSolo.load(localStorage, cloud.userId());
+  tour = ts ? new TourSolo(ts, tourDeps) : null;
   // 标题页上开着的弹窗（结算、补给）不关，只重画
   if (atTable) showLobby();
   else drawLobby();
@@ -1782,7 +2048,8 @@ async function pickTakeProfit(): Promise<void> {
 
 /** 一手打完问一次：这一桌净赢够了就走（正在打的一手已经打完了）。单机按坐下加补码算带入，好友房按一份满买入 */
 function checkTakeProfit(me: number): void {
-  if (tpFired || takeProfit.kind === 'off') return;
+  // 锦标赛里没有止盈（打到剩一人才结算）
+  if (tour || tpFired || takeProfit.kind === 'off') return;
   if (solo) {
     const s = solo;
     if (s.busted || s.closing) return;

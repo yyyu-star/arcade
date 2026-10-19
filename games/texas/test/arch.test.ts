@@ -11,7 +11,7 @@ const files = (dir: string): string[] =>
 const read = (f: string): string => readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 describe('架构约束', () => {
-  const pure = [...files('src/core'), ...files('src/ai'), ...files('src/room'), ...files('src/fun'), 'src/bot.ts'];
+  const pure = [...files('src/core'), ...files('src/ai'), ...files('src/room'), ...files('src/fun'), ...files('src/tour'), 'src/bot.ts'];
 
   it('规则核心和电脑里没有 Math.random、时间、平台相关的数学函数、DOM 和网络', () => {
     const banned = /Math\.(random|exp|log|log2|log10|pow|sqrt|sin|cos|tan|atan2|hypot|cbrt)\b|\bDate\b|performance\.|crypto\.|\bwindow\b|\bdocument\b|\bfetch\(|localStorage|setTimeout|setInterval|\*\*|from 'node:/;
