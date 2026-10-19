@@ -1292,11 +1292,13 @@ async function tourRoomFlow(browser: Browser, base: string): Promise<void> {
     const prizes: number[] = [];
     for (const [p, tag] of [[hp, 'host'], [gp, 'guest']] as const) {
       const place = Number(((await p.locator('.tour-place').textContent()) ?? '').replace(/\D/g, ''));
-      if (!(place >= 1 && place <= 6)) throw new Error(`${tag}: tour place out of range: ${place}`);
+      // 大字是真人之间的名次（1 或 2），奖金跟着它走
+      if (!(place === 1 || place === 2)) throw new Error(`${tag}: human place should be 1 or 2: ${place}`);
       if ((await p.locator('.tour-top li').count()) !== 2) throw new Error(`${tag}: 真人名次表 should list the 2 humans`);
       const line = (await p.locator('.tour-prize').textContent()) ?? '';
       if (!/^结回钱包 [\d,]+$/.test(line)) throw new Error(`${tag}: prize line: ${line}`);
       prizes.push(Number(line.replace(/\D/g, '')));
+      if ((place === 1) !== (prizes.at(-1) === 4_000)) throw new Error(`${tag}: human place ${place} but prize ${line}`);
       log(tag, 'tour place', place, line);
     }
     // 两个真人：第 1 名拿全部奖池（2 份），另一个 0
