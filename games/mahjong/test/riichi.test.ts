@@ -522,6 +522,26 @@ describe('一场结束', () => {
     expect(s.phase).toBe('over');
   });
 
+  test('没打完就要结果（好友房离座、提前收场）：按此刻的点数和顺位换筹码，输着走的人拿不回整份', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.points = [10_000, 40_000, 25_000, 25_000];
+    const r = RC.result(s);
+    // 0 号：10,000 − 30,000 − 20 马 = −40,000 → 小档 1,600
+    expect(r.seats[0]!.net).toBe(-1_600);
+    expect(r.seats[1]!.net).toBeGreaterThan(0);
+    expect(s.phase).toBe('turn');
+  });
+
+  test('中途接管：新来的人只为接手以后的涨落负责；前面那段由庄家补给赢家', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.points = [10_000, 40_000, 25_000, 25_000];
+    const before = RC.result(s).seats[1]!.net;
+    const t = RC.restake(s, 0, 2_000);
+    finishMatch(t);
+    expect(t.chips[0]).toBe(2_000);
+    expect(t.chips[1]! - 2_000).toBe(before);
+  });
+
   const last = (dealer: number, first: number, points: number[]): RcState => {
     const s = table(['*', TANYAO + '6s', '*', '*'], 1, '1z', { dealer });
     s.first = first;

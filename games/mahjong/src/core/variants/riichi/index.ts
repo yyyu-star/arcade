@@ -206,7 +206,13 @@ export function titlesOf(s: RcState): string[][] {
   });
 }
 
-export function result(s: RcState): MatchResult {
+/**
+ * 一场的结果。还没打完时（好友房有人离座、单机中途离开）按"现在就收场"算（rules.ts 的 standings：只算点数差，这一局不算）。
+ * 立直的筹码只在终局才动，不这样算的话，眼看要输的人中途走掉就能原样拿回带入
+ */
+export function result(s0: RcState): MatchResult {
+  const s = s0.phase === 'over' ? s0 : structuredClone(s0);
+  if (s !== s0) finishMatch(s, true);
   const titles = titlesOf(s);
   return {
     seats: s.chips.map((c, i) => {
@@ -329,8 +335,7 @@ export const riichi: Variant<RcState, RcAction, RcView, RcOpts> = {
     if (s.phase === 'over') return s;
     const next = structuredClone(s);
     next.events = [];
-    next.claim = null;
-    finishMatch(next);
+    finishMatch(next, true);
     return next;
   },
   seated: (s, seat, kind) => {
