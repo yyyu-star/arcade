@@ -22,7 +22,7 @@
     "smoke:match": "node scripts/smoke-match.ts"
   },
   "dependencies": {
-    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.20.4"
+    "arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.2",
