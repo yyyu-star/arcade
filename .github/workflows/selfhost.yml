@@ -61,7 +61,9 @@ jobs:
       - name: 临时 Secret（只在这次运行里）
         run: |
           r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
-          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v"; done > "$RUNNER_TEMP/secrets.env"
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
       - name: 二进制起站点、冒烟、备份、恢复演练
         run: |
           rel="$RUNNER_TEMP/out/arcade-ci-${{ github.sha }}"
@@ -103,7 +105,9 @@ jobs:
       - name: 起容器、冒烟、容器里跑备份和定时任务
         run: |
           r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
-          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v"; done > "$RUNNER_TEMP/secrets.env"
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
           docker run -d --name arcade --env-file "$RUNNER_TEMP/secrets.env" -p 127.0.0.1:8787:8787 arcade:ci
           for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ] && break; sleep 1; done
           [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ]
