@@ -68,9 +68,6 @@
 /* 手机横屏（矮）：中大号字按屏幕上 13–14 放大以后选桌页"好友房""带上桌"折行、面板出屏（0.25.3 多尺寸实测），这里下限只给到 12 */
 @media (orientation: landscape) and (max-height: 430px) {
   :root { --fs-3: max(14px, calc(12px * var(--ui))); --fs-4: max(16px, calc(12px * var(--ui))); --fs-5: max(18px, calc(12.5px * var(--ui))); --fs-6: max(20px, calc(13px * var(--ui))); }
-  /* 字放大后"好友房""带上桌"折成两行 */
-  .stage.tight .lobby :is(.mode, .buyin .label) { white-space: nowrap; }
-  .stage.tight .lobby .mode { flex: none; width: auto; padding: 0 var(--s-2); }
   /* 赔率条折成两行会顶到右边座位的头像：括号里"赢面过几成可跟"的提示收起，只留底池、跟多少、赔率 */
   .stage.tight .actions .odds .need { display: none; }
   /* 一键下注四个折成两行会把整块顶到右边座位的下注上：收起"⅔池"（加注面板里照样能下任意数），三个一行 */
@@ -853,16 +850,18 @@ body::before {
 .banner span { flex: 1; }
 .banner .go { height: 36px; padding: 0 var(--s-3); border-radius: var(--r-3); white-space: nowrap; }
 .modes { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+/* 模式按钮按字宽给、不折行：字号按缩放放大，定宽 64 在手机竖屏上"好友房"折成两行、"房"被按钮下沿切掉（0.25.5）；挤的是右边的说明，它自己折行 */
 .mode {
-  width: 64px; height: 40px;
+  min-width: 64px; height: 40px; padding: 0 var(--s-2);
   flex: none;
+  white-space: nowrap;
   border-radius: var(--r-3);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, .04);
   font-size: var(--fs-4);
   font-weight: 800;
 }
-.mode-note { flex: 1; font-size: var(--fs-2); color: var(--muted); line-height: 1.3; }
+.mode-note { flex: 1; min-width: 0; font-size: var(--fs-2); color: var(--muted); line-height: 1.3; }
 .stakes { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); margin-top: var(--s-3); }
 .tile {
   display: flex;
@@ -878,14 +877,16 @@ body::before {
 .tile b { font-size: var(--fs-4); }
 .tile span { font-size: var(--fs-1); color: var(--muted); white-space: nowrap; letter-spacing: -.2px; }
 .tile small { font-size: var(--fs-1); color: var(--faint); white-space: nowrap; }
+.tile.diff span:not(.stars) { white-space: normal; text-align: center; }
 .tile.sel span, .tile.sel small { color: #e8d6a8; }
 .tile.sel b { color: var(--gold); }
 .tile.locked { opacity: .4; }
 /* 选档卡（0.12.0）：电脑多强的星；娱乐只有三个难度，排三列 */
 .stakes.fun, .stage.tall .stakes.fun { grid-template-columns: repeat(3, 1fr); }
 .tile .stars { color: var(--gold); letter-spacing: 1px; font-size: var(--fs-2); }
-.tile.diff span:not(.stars) { white-space: normal; text-align: center; }
 .sizes, .buyin { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+/* "带上桌"字放大后折成两行（手机竖横屏都会） */
+.lobby .buyin .label { white-space: nowrap; }
 .label { font-size: var(--fs-3); color: var(--muted); width: 52px; flex: none; }
 /* 2–9 八个人数键平分一行（不设最小宽：最小 40 时 430 宽的一栏放不下，"9" 顶出面板） */
 .size {
@@ -993,6 +994,8 @@ body::before {
 .stage.tight .mcard { min-height: 0; padding: var(--s-2); }
 .stage.tight .mcard svg { width: 26px; height: 26px; }
 .stage.tight :is(.modes, .stakes, .sizes, .buyin, .go-row, .friends) { margin-top: var(--s-2); }
+/* 手机横屏字放大以后四张档位卡一排放不下（"盲注 1,000/2,000"把第四张撑出面板，0.25.5），改成两排；右栏本来就能滚 */
+.stage.tight:not(.tall) .lobby .stakes:not(.fun) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 缩小了或收窄了的横版牌桌（手机横屏、平板竖拿）：左下那一排变宽，"歇一手"压到我的头像（0.25.3 多尺寸）——占位按竖屏的宽度、按钮留白收窄、第几手收起 */
 :is(.stage.tight, .stage.narrow):not(.tall) .hud .fun-slot { width: calc(64px * var(--ui)); }
 :is(.stage.tight, .stage.narrow):not(.tall) .hud > .pill { padding: 0 var(--s-2); }
@@ -1213,7 +1216,11 @@ body::before {
 .stage.tall .between { justify-content: flex-end; }
 .stage.tall .rebuy-cta { bottom: 300px; }
 /* 标题页、好友房等人页：上下排 */
-.stage.tall .lobby { flex-direction: column; justify-content: center; gap: var(--s-4); padding: 72px var(--s-4) var(--s-4); }
+.stage.tall .lobby { flex-direction: column; justify-content: flex-start; gap: var(--s-4); padding: 72px var(--s-4) var(--s-4); overflow-y: auto; }
+/* 放得下时上下居中，放不下时从顶上排、整页能滚到底（0.25.5：Safari 带着工具栏只剩六百多高，实盘选桌最底下锦标赛那行说明出了屏）。
+   用 auto 外边距不用 justify-content: center：居中溢出时顶上那截滚不到 */
+.stage.tall .lobby > :first-child { margin-top: auto; }
+.stage.tall .lobby > :last-child { margin-bottom: auto; }
 .stage.tall .hero { flex: none; max-width: none; }
 .stage.tall .title { font-size: 60px; }
 .stage.tall .fan { height: 120px; margin-top: var(--s-3); transform: scale(.85); }

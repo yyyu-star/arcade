@@ -49,7 +49,7 @@ npm run dev           # 页面（vite，5175）；钱包连不上时娱乐照常
 npm run build:cf      # 页面打包到 dist-cf/games/texas/（Worker 的静态资源）
 npm run smoke         # 冒烟：先 build:cf；本地起 Worker + 无头 Chromium，跑单机（打满 30 手、补码、离桌结算、回大厅）、手机横屏、双指放大、竖屏、好友房、快速匹配，
                       # 再用原样的 wrangler.jsonc 起一个单独部署的 Worker 跑单机和游客好友房；
-                      # --only desktop|mobile|portrait|room|match|standalone 只跑一段，tall|tp|tour|tourroom|devices 只能单独指定（DESIGN.md 第 9 节；devices 是 26 个尺寸的多尺寸检查，8.2）
+                      # --only desktop|mobile|portrait|room|match|standalone 只跑一段，tall|tp|tour|tourroom|devices 只能单独指定（DESIGN.md 第 9 节；devices 是 27 个尺寸的多尺寸检查，加 --lobby 只查主页和选桌页，8.2）
 node scripts/capture.ts [--device desk|phone|both] [--every 250] [--secs 40] [--auto] [--out 目录]
                       # 连拍：本地起页面、娱乐桌自动打，每隔固定毫秒截一张，拼成带时间的 4×4 大图，逐帧看节奏（不进 CI）
 npm test              # 类型检查 + vitest（含全量 1.34 亿手的牌力测试、机器人对打 1 万手）+ workerd 里的 Worker 和好友房测试

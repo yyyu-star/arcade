@@ -24,7 +24,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
-import { opt } from './args.ts';
+import { args, opt } from './args.ts';
 
 const HANDS = Number(opt('hands', '30'));
 const SHOTS = opt('shots', join(tmpdir(), 'texas-shots'));
@@ -1359,11 +1359,12 @@ async function tourRoomFlow(browser: Browser, base: string): Promise<void> {
 
 /**
  * 多尺寸（--only devices，0.25.3，所有者 10-20）：一个浏览器跑完手机竖横、平板、折叠屏、电脑的尺寸矩阵，每个尺寸走
- * 主页 → 选桌（娱乐）→ 对局（轮到我）→ 离桌结算，自动查：横向滚动、伸出屏幕、点击区 ≥ 44（320 宽 ≥ 40）、关键元素互相压、
- * 截字（有意的省略号除外）、字号 ≥ 12、控制台报错。有问题的尺寸才截图；问题全收齐了一起报
+ * 主页 → 选桌（娱乐、实盘、好友房各一遍）→ 对局（轮到我）→ 离桌结算，自动查：横向滚动、伸出屏幕又滚不到、点击区 ≥ 44（320 宽 ≥ 40）、关键元素互相压、
+ * 截字（有意的省略号除外）、按钮里的字折出按钮、字号 ≥ 12、控制台报错。有问题的尺寸才截图；问题全收齐了一起报。
+ * 390×664 是 iPhone Safari 带着上下工具栏剩下的高度。--lobby 只查主页和选桌页
  */
 const DEVICE_SIZES: { name: string; w: number; h: number; touch: boolean }[] = [
-  ...[[320, 568], [360, 640], [360, 780], [375, 667], [390, 844], [393, 852], [412, 915], [414, 896], [430, 932]].map(([w, h]) => ({ name: `phone-${w}x${h}`, w: w!, h: h!, touch: true })),
+  ...[[320, 568], [360, 640], [360, 780], [375, 667], [390, 664], [390, 844], [393, 852], [412, 915], [414, 896], [430, 932]].map(([w, h]) => ({ name: `phone-${w}x${h}`, w: w!, h: h!, touch: true })),
   ...[[568, 320], [640, 360], [667, 375], [780, 360], [844, 390], [896, 414], [932, 430]].map(([w, h]) => ({ name: `land-${w}x${h}`, w: w!, h: h!, touch: true })),
   ...[[768, 1024], [1024, 768], [820, 1180], [1180, 820], [1024, 1366], [1366, 1024], [884, 1104]].map(([w, h]) => ({ name: `tab-${w}x${h}`, w: w!, h: h!, touch: true })),
   ...[[1280, 720], [1366, 768], [1920, 1080]].map(([w, h]) => ({ name: `desk-${w}x${h}`, w: w!, h: h!, touch: false })),
@@ -1387,6 +1388,11 @@ async function audit(page: Page, where: string, touch: boolean): Promise<string[
     };
     const label = (e: Element): string => `${e.tagName.toLowerCase()}.${[...e.classList].slice(0, 3).join('.')}「${(e.textContent ?? '').trim().slice(0, 8)}」`;
     if (document.documentElement.scrollWidth > W + 1) out.push(`横向滚动 ${document.documentElement.scrollWidth}>${W}`);
+    // 外面有能滚的一层（滚得到）就不算出屏
+    const scrolls = (e: Element): boolean => {
+      for (let p = e.parentElement; p; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight + 1) return true;
+      return false;
+    };
     const clickable = [...document.querySelectorAll('button, a[href], input, select, [role="button"]')].filter((e) => !(e as HTMLButtonElement).disabled);
     // 触屏上 button 和"大厅"用 ::before 把能点的范围撑到 44 个屏幕像素（style.css 的 --hit，无头浏览器不认 pointer: coarse，量不到）；
     // 电脑用鼠标，不查点按区
@@ -1395,7 +1401,7 @@ async function audit(page: Page, where: string, touch: boolean): Promise<string[
     for (const e of clickable) {
       const r = shown(e);
       if (!r) continue;
-      if (r.left < -1 || r.top < -1 || r.right > W + 1 || r.bottom > H + 1) out.push(`伸出屏幕 ${label(e)} ${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`);
+      if (r.left < -1 || r.right > W + 1 || ((r.top < -1 || r.bottom > H + 1) && !scrolls(e))) out.push(`伸出屏幕 ${label(e)} ${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`);
       // 点击区：按钮自己或外面一圈能点的（::before 扩出来的不算，量不到）
       if (small(e) && (r.width < min - 0.5 || r.height < min - 0.5)) out.push(`点击区小 ${label(e)} ${Math.round(r.width)}×${Math.round(r.height)}`);
     }
@@ -1422,10 +1428,24 @@ async function audit(page: Page, where: string, touch: boolean): Promise<string[
       if (parseFloat(cs.fontSize) * (r.height / Math.max(1, (e as HTMLElement).offsetHeight || r.height)) < 11.5) out.push(`字小 ${label(e)} ${cs.fontSize}`);
       const he = e as HTMLElement;
       if (cs.textOverflow !== 'ellipsis' && cs.overflow !== 'visible' && he.scrollWidth > he.clientWidth + 1) out.push(`截字 ${label(e)}`);
+      // 出了屏幕下沿、又没有能滚的外层：看不到也滚不到（0.25.5，选桌页锦标赛那行说明）
+      if (r.bottom > H + 1 && !scrolls(e)) out.push(`出屏 ${label(e)} 下沿 ${Math.round(r.bottom)}>${H}`);
+    }
+    // 按钮里的字折行后高出按钮（0.25.5，竖屏选桌页"好友房"折成两行、"房"被切掉一半）
+    for (const e of document.querySelectorAll('button')) {
+      if (!shown(e)) continue;
+      // 量字本身占的框（scrollHeight 会算上 ::before 撑开的点按区）
+      const b = e.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(e);
+      const t = range.getBoundingClientRect();
+      if (t.height && (t.bottom > b.bottom + 2 || t.top < b.top - 2)) out.push(`按钮放不下字 ${label(e)} 字 ${Math.round(t.top)}-${Math.round(t.bottom)} 按钮 ${Math.round(b.top)}-${Math.round(b.bottom)}`);
     }
     return [...new Set(out)].map((x) => `${where}: ${x}`);
   }, [where, touch] as const);
 }
+
+class LobbyOnly extends Error {}
 
 async function devicesFlow(browser: Browser, base: string): Promise<void> {
   const report: string[] = [];
@@ -1462,6 +1482,17 @@ async function devicesFlow(browser: Browser, base: string): Promise<void> {
       await enter(page, '娱乐', d.touch);
       await page.waitForTimeout(400);
       await check('lobby');
+      // 实盘和好友房的选桌页长得不一样（档位卡、锦标赛那行、输码进房），各查一遍再回娱乐
+      for (const [mode, where] of [['实盘', 'lobby-real'], ['好友房', 'lobby-room']] as const) {
+        if (!(await page.locator('.lobby .mode', { hasText: mode }).isVisible())) continue;
+        await enter(page, mode, d.touch);
+        await page.waitForTimeout(300);
+        await check(where);
+      }
+      // --lobby：只查主页和选桌页
+      if (args.includes('--lobby')) throw new LobbyOnly();
+      await enter(page, '娱乐', d.touch);
+      await page.waitForTimeout(300);
       await page.locator('.lobby .start').click();
       await page.locator('.stage.at-table').waitFor();
       await skipTips(page);
@@ -1474,7 +1505,7 @@ async function devicesFlow(browser: Browser, base: string): Promise<void> {
       await page.waitForTimeout(400);
       await check('summary');
     } catch (e) {
-      found.push(`flow: ${(e as Error).message.split('\n')[0]}`);
+      if (!(e instanceof LobbyOnly)) found.push(`flow: ${(e as Error).message.split('\n')[0]}`);
     }
     for (const x of errors.splice(before)) found.push(`报错 ${x}`);
     if (found.length) report.push(...found.map((x) => `[${d.name}] ${x}`));
