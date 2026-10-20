@@ -1,0 +1,131 @@
+# 自托管（tools/selfhost + packages/arcade-host）的整站验证：只测不部署，不碰线上、不用凭证（冒烟用的 pepper 和管理令牌是这次运行临时生成的）。
+#   binary：打平台和德州 → 发布包 → 解开用 bin/arcade 起 → 全站冒烟 → 备份 → 恢复演练；发布包交给 docker 作业；
+#   docker：同一个发布包做成镜像、起容器 → 冒烟（管理入口只在容器里，备份和定时任务用 docker exec 跑）；compose 文件校验。
+# 平台和德州改了也跑：它们一变，自托管能不能原样跑起来要马上知道。
+name: Self-host
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/selfhost/**'
+      - 'tools/deployer/**'
+      - 'tools/workers.json'
+      - 'tools/deploy-allowlist.json'
+      - 'packages/arcade-host/**'
+      - 'platform/**'
+      - 'games/texas/**'
+      - '.github/workflows/selfhost.yml'
+  pull_request:
+    paths:
+      - 'tools/selfhost/**'
+      - 'tools/deployer/**'
+      - 'tools/workers.json'
+      - 'tools/deploy-allowlist.json'
+      - 'packages/arcade-host/**'
+      - 'platform/**'
+      - 'games/texas/**'
+      - '.github/workflows/selfhost.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: selfhost-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  binary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            tools/deployer/package-lock.json
+            packages/arcade-host/package-lock.json
+            platform/package-lock.json
+            games/texas/package-lock.json
+      - name: 装钉死的 wrangler 和运行时
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deployer
+          (cd packages/arcade-host && npm ci --no-audit --no-fund && npm run build)
+      - name: 打包平台和德州
+        run: tools/selfhost/pack-all.sh "$RUNNER_TEMP/art" arcade texas
+      - name: 发布包
+        env:
+          ARCADE_VERSION: ci-${{ github.sha }}
+        run: tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas
+      - name: 临时 Secret（只在这次运行里）
+        run: |
+          r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
+      - name: 二进制起站点、冒烟、备份、恢复演练
+        run: |
+          rel="$RUNNER_TEMP/out/arcade-ci-${{ github.sha }}"
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          ARCADE_DATA="$RUNNER_TEMP/data" "$rel/bin/arcade" > "$RUNNER_TEMP/workerd.log" 2>&1 &
+          for _ in $(seq 50); do curl -fsS http://127.0.0.1:8787/__health >/dev/null 2>&1 && break; sleep 0.2; done
+          node tools/selfhost/smoke.mjs
+          "$rel/ops/backup.sh" "$RUNNER_TEMP/backups" http://127.0.0.1:8788 "$RUNNER_TEMP/data"
+          "$rel/ops/restore-drill.sh" "$rel" "$(ls -d "$RUNNER_TEMP"/backups/*/ | tail -1)"
+          # 管理入口不许听回环以外的地址
+          if ARCADE_ADMIN_LISTEN=0.0.0.0:9999 ARCADE_DATA="$RUNNER_TEMP/x" "$rel/bin/arcade"; then echo "::error::管理入口听了 0.0.0.0"; exit 1; fi
+      - name: 失败时的 workerd 日志
+        if: failure()
+        run: tail -200 "$RUNNER_TEMP/workerd.log" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: selfhost-release
+          path: ${{ runner.temp }}/out/*.tar.gz
+          retention-days: 1
+  docker:
+    needs: binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: selfhost-release
+          path: ${{ runner.temp }}/rel
+      - name: 做镜像
+        run: |
+          cd "$RUNNER_TEMP/rel" && tar -xzf arcade-*.tar.gz
+          docker build -f "$GITHUB_WORKSPACE/tools/selfhost/docker/Dockerfile" -t arcade:ci "$RUNNER_TEMP/rel/arcade-ci-${{ github.sha }}"
+      - name: 起容器、冒烟、容器里跑备份和定时任务
+        run: |
+          r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
+          docker run -d --name arcade --env-file "$RUNNER_TEMP/secrets.env" -p 127.0.0.1:8787:8787 arcade:ci
+          for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ] && break; sleep 1; done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ]
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          node tools/selfhost/smoke.mjs --admin skip
+          # 管理入口宿主连不到，只在容器里
+          if curl -fsS --max-time 2 http://127.0.0.1:8788/d1; then echo "::error::宿主连上了管理入口"; exit 1; fi
+          docker exec arcade curl -fsS -X POST 'http://127.0.0.1:8788/cron/run?worker=arcade&cron=17%2019%20*%20*%20*' | grep -q '"outcome":"ok"'
+          docker exec arcade /app/ops/backup.sh /data/backups
+          # 重启容器后数据还在（卷里）
+          docker restart arcade
+          for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ] && break; sleep 1; done
+          docker exec arcade sh -c 'curl -fsS http://127.0.0.1:8788/d1/d1-arcade-DB/export | grep -c "INSERT INTO \"users\"" | grep -qx 2'
+      - name: compose 文件能解析
+        run: |
+          cd tools/selfhost/docker && touch secrets.env
+          SITE_HOST=game.example.com docker compose config -q
+          SITE_HOST=game.example.com docker compose --profile pg config -q
+      - name: 失败时的容器日志
+        if: failure()
+        run: docker logs arcade 2>&1 | tail -200 || true

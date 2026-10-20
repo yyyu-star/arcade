@@ -1,5 +1,10 @@
 # 更新日志
 
+## 0.2.1（2026-10-20）
+
+- **恢复（`/d1/<库>/import`）修好跨行的建表语句**：0.1.0 起按"一行一条语句"执行导出文件，可建表语句是 `sqlite_schema` 里的原文，平台的迁移跨行、带注释，
+  真站的备份导入直接报 `incomplete input`（tools/selfhost 的恢复演练发现）。现在整个文件交给 SQLite 执行（同一个事务，失败原样不动）；测试的迁移也改成跨行带注释的。
+
 ## 0.2.0（2026-10-20）
 
 - **定时任务不再要 `workerd --experimental`**（主线 10-20）：去掉单独的 cron Worker 和实验开关 `service_binding_extra_handlers`；有 crons 的 Worker 的主模块换成包装入口 `cron-entry`（原样转出模块的全部导出），

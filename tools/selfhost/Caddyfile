@@ -1,0 +1,16 @@
+# 自托管前面的 Caddy（HTTPS 证书自动申请续期；装到 /etc/caddy/Caddyfile，或 compose 里挂进容器）。
+# SITE_HOST 是站点主机名（环境变量，比如 game.example.com）；UPSTREAM 是 workerd 的站点监听（二进制部署 127.0.0.1:8787，compose 里 arcade:8787）。
+{$SITE_HOST} {
+	# Cloudflare 的保留路径：这里没有对应的东西，workerd 也挡一次
+	@cdn path /cdn-cgi /cdn-cgi/*
+	respond @cdn 404
+
+	encode zstd gzip
+
+	reverse_proxy {$UPSTREAM:127.0.0.1:8787} {
+		# 平台和 kit 按 cf-connecting-ip 认真实 IP（限流、防刷）：一律用 Caddy 看到的对端地址覆盖，客户端自己带的不算。
+		# Caddy 前面还有一层反代或 CDN 时，改成那一层给的头，并在全局选项里配 trusted_proxies，不要直接信任客户端。
+		header_up cf-connecting-ip {remote_host}
+		header_up -x-forwarded-for
+	}
+}

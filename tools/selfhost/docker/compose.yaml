@@ -1,0 +1,48 @@
+# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）。postgres 先占位（profile pg，PostgreSQL 模式做好之前不用）。
+# 用法：先 docker build 出 arcade 镜像（见 Dockerfile 开头），再在本目录：
+#   SITE_HOST=game.example.com ARCADE_IMAGE=arcade:<版本> docker compose up -d
+# Secret 放 secrets.env（和本文件同目录，不进 Git；格式见 tools/selfhost/README.md），SITE_ORIGIN 也写在里面。
+# 备份：docker compose exec arcade /app/ops/backup.sh /data/backups（管理入口只在容器里，宿主连不到）。
+services:
+  arcade:
+    image: ${ARCADE_IMAGE:-arcade:latest}
+    restart: unless-stopped
+    env_file: secrets.env
+    volumes:
+      - arcade-data:/data
+    # 不发布端口：只有 caddy 经内部网络连 8787；8788（管理入口）只听容器内的 127.0.0.1
+    expose:
+      - "8787"
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      arcade:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_HOST: ${SITE_HOST:?要设 SITE_HOST（站点主机名）}
+      UPSTREAM: arcade:8787
+    volumes:
+      - ../Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+  postgres:
+    # 占位：PostgreSQL 模式（平台库放 PG、DO 不落盘）做好之前不用，docker compose --profile pg 才会起
+    profiles: [pg]
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: arcade
+      POSTGRES_USER: arcade
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+volumes:
+  arcade-data:
+  caddy-data:
+  caddy-config:
+  pg-data:

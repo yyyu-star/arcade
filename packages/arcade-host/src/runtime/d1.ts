@@ -121,13 +121,12 @@ export class D1Sqlite extends DurableObject<D1Env> {
   }
 
   /**
-   * 恢复：整库换成导出文件里的内容。一个事务里先删掉现有的表、索引、视图、触发器，再逐行执行（导出的格式一行一条语句）；
+   * 恢复：整库换成导出文件里的内容。一个事务里先删掉现有的表、索引、视图、触发器，再把整个文件交给 SQLite 执行
+   * （不按行拆：建表语句是 sqlite_schema 里的原文，会跨行、带注释）；
    * 中途出错整体回滚，库保持原样。导出里带着 d1_migrations，恢复后迁移记录也是备份时的样子，之后的新迁移下次起来时照常补跑。
    */
   private import(dump: string): Response {
-    const lines = dump.split('\n').filter((l) => l.trim());
     try {
-      let n = 0;
       this.ctx.storage.transactionSync(() => {
         // 外键检查推到提交时：删表和导入的先后顺序就不用管父子关系
         this.sql.exec('PRAGMA defer_foreign_keys = ON');
@@ -138,13 +137,12 @@ export class D1Sqlite extends DurableObject<D1Env> {
           .toArray();
         for (const o of objects.filter((o) => o.type !== 'table')) this.sql.exec(`DROP ${o.type.toUpperCase()} IF EXISTS ${quoteId(o.name)}`);
         for (const o of objects.filter((o) => o.type === 'table')) this.sql.exec(`DROP TABLE IF EXISTS ${quoteId(o.name)}`);
-        for (const line of lines) {
-          this.sql.exec(line);
-          n++;
-        }
+        // 多条语句的 exec：读完游标才算全部执行完
+        this.sql.exec(dump).toArray();
       });
-      console.log(JSON.stringify({ msg: 'd1 import', statements: n }));
-      return Response.json({ ok: true, statements: n });
+      const tables = this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").one().n;
+      console.log(JSON.stringify({ msg: 'd1 import', tables }));
+      return Response.json({ ok: true, tables });
     } catch (e) {
       return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 400 });
     }
@@ -209,7 +207,7 @@ function literal(v: SqlStorageValue): string {
   if (v === null) return 'NULL';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : v > 0 ? '9e999' : '-9e999';
   if (typeof v === 'string') {
-    // 换行、回车拼成 char()，导出文件一行一条语句。不学 wrangler 写成 replace('…\n…')：原文里本来就有反斜杠 n 的会被恢复错
+    // 换行、回车拼成 char()，每条 INSERT 占一行（方便 grep 和看差异）。不学 wrangler 写成 replace('…\n…')：原文里本来就有反斜杠 n 的会被恢复错
     return v
       .split(/(\r|\n)/)
       .map((part) => (part === '\r' ? 'char(13)' : part === '\n' ? 'char(10)' : `'${part.replace(/'/g, "''")}'`))

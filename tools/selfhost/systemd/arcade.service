@@ -1,0 +1,41 @@
+# 自托管的 systemd 单元模板：装到 /etc/systemd/system/arcade.service（install.sh 会装）。
+# 目录约定：发布包解在 /opt/arcade/releases/<版本>/，/opt/arcade/current 是指向当前版本的软链接（升级、回滚只换它）；
+# 数据在 /var/lib/arcade/data（StateDirectory 自动建，归 arcade 用户）；Secret 在 /etc/arcade/secrets.env（root:arcade 640）。
+# workerd 只听 127.0.0.1，前面是 Caddy（HTTPS、真实 IP）；日志是一行一个 JSON，进 journald（journalctl -u arcade）。
+[Unit]
+Description=arcade（workerd 跑平台和所有游戏）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arcade
+Group=arcade
+EnvironmentFile=/etc/arcade/secrets.env
+Environment=ARCADE_DATA=/var/lib/arcade/data
+Environment=ARCADE_LISTEN=127.0.0.1:8787
+Environment=ARCADE_ADMIN_LISTEN=127.0.0.1:8788
+ExecStart=/opt/arcade/current/bin/arcade
+Restart=on-failure
+RestartSec=2
+# 停机时给在打的房间一点时间把这一步写完（每步都已落盘，正常几毫秒）
+TimeoutStopSec=15
+StateDirectory=arcade
+StateDirectoryMode=0750
+# 收紧：只能写数据目录，看不到别人的进程和家目录
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/var/lib/arcade
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
