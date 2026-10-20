@@ -188,7 +188,7 @@ platform/
 ├─ public/              静态资源：_headers（CSP 等安全头）、covers/（游戏封面）、favicon.svg、bg.svg（底色小图案）
 ├─ docs/style.md        配色表和形状质感
 ├─ test/                接口测试（每个接口断言写入行数，docs/platform-backend.md 7.2）
-├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面
+├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面（covers/ 里是牌馆、雀馆封面的 SVG 源文件）
 ├─ wrangler.jsonc       Worker 配置（不含域名和正式库 id）
 ├─ .dev.vars.example    Secret 一览和本地假值
 ├─ ASSETS.md            素材来源
