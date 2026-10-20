@@ -1,0 +1,40 @@
+# 自托管运行时 arcade-host（packages/arcade-host/）：只跑测试，不部署（它不是 Cloudflare 上的 Worker，自托管的发布包由 tools/selfhost 打）。
+# 测试起真的 workerd（本包钉死的版本）核实 D1 后端、DO 存储和闹钟跨重启、WebSocket 休眠、定时任务、备份恢复，
+# 再拿 wrangler dev 逐条对照静态资源的行为。不碰线上、不用凭证。整站的冒烟在 selfhost.yml。
+# 拆成独立仓库时：去掉 paths 和 working-directory，把 packages/arcade-host/ 前缀去掉。
+name: Test arcade-host
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/arcade-host/**'
+      - '.github/workflows/pkg-arcade-host.yml'
+  pull_request:
+    paths:
+      - 'packages/arcade-host/**'
+      - '.github/workflows/pkg-arcade-host.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    working-directory: packages/arcade-host
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pkg-arcade-host-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/arcade-host/package-lock.json
+      - run: node ../../tools/check-isolation.mjs
+      - run: npm ci
+      - run: npm test

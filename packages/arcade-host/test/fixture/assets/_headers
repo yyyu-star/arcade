@@ -1,0 +1,5 @@
+/*
+  X-Test: all
+/sub/*
+  X-Sub: :splat
+  ! X-Test
