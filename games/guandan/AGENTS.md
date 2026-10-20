@@ -16,13 +16,13 @@ src/variants/guandan/   掼蛋（玩法之间互不引用，tests/architecture.t
 src/variants/doudizhu/   斗地主（同样的分层；规则取舍见 docs/rules.md、电脑见 docs/ai.md 的"斗地主"一节）：
   core/     规则核心：patterns 牌型（ddzPatterns 是它的 PatternSet）、game 叫分 / 出牌 / 翻倍 / 结算的状态机和玩家视角
   ai/       电脑：hand 拆牌、search 残局搜索、decide 叫分和出牌（新手 / 普通 / 高手）
-  net/      联机：rules 斗地主房间规则（只有娱乐）、match 快速匹配档位 ddz-fun
+  net/      联机：rules 斗地主房间规则（娱乐和实盘）、stake 好友房实盘的桌、match 快速匹配档位 ddz-fun 和 ddz-real-<档位>
   stake/    单机实盘的规则（docs/stake.md 第 10 节）：每分、封顶、一场几副、每档的电脑、ref 的拼法
-src/net/    玩法无关的联机部分：hall 牌馆的房间规则（一个 RoomGame 按 variant 转给掼蛋或斗地主）、version 页面版本与房间、实盘路径，emotes 互动编号表
+src/net/    玩法无关的联机部分：hall 牌馆的房间规则（一个 RoomGame 按 variant 转给掼蛋或斗地主）、stake-table 好友房实盘的桌里玩法无关的部分（带入、结回、换人、再带入，掼蛋和斗地主各绑一份）、version 页面版本与房间、实盘路径，emotes 互动编号表
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
             share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）；
-            斗地主：scenes/DdzScene 三人桌、ddz-session 单机会话、ddz-view 理牌分列和牌型说法、ddz-daily 每日挑战（种子、榜名、交分）
+            斗地主：scenes/DdzScene 三人桌、ddz-session 单机会话、ddz-view 理牌分列和牌型说法、ddz-daily 每日挑战（种子、榜名、交分）、ddz-rules 玩法说明文字（牌桌和主页的"规则"共用，`ui/panels.ts` 的 `openDdzRules`）、ddz-tutorial 新手引导（外壳与掼蛋共用 `tutorial.ts` 的 `runTutorialSteps`）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、match.ts 快速匹配的排队、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
@@ -80,12 +80,14 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   场景 `ddz`（`DdzScene`）复用掼蛋的手牌、出牌区、座位、按钮、弹窗、牌面、音效和 kit 的互动：手牌和出牌区由玩法给"怎么理牌、一手牌怎么写"（`HandOrder`、`DescribePlay`，不给就是掼蛋原样）。
   推进同样只走 `DdzSession.apply` → `dispatchDdz`；电脑只拿 `viewDdz`，随机数按 `ddzSeeds` 派生。URL 带 `?ddz=1&seed=…` 直接开一局（调试，已有存档时不写）。
   每日挑战（`ddz-daily.ts`）：种子只看北京时间的日期、两个普通难度电脑、6 副累计分交到平台 `daily-<日期>-ddz`，不存档、不记战绩。冒烟 `npm run shot -- --only ddz`。
-  单机实盘（`ddz-stake.ts`，数字见 `docs/stake.md` 第 10 节）：`DdzStakeSession` 是 `DdzSession` 加一场的账，带入、结回、放弃走掼蛋同一套接口（请求体多 `variant: 'ddz'`），选档页是同一个（`ui/stake.ts` 的 `openTierPicker` 传 `DDZ_FLOW`），不做快速匹配；
+  单机实盘（`ddz-stake.ts`，数字见 `docs/stake.md` 第 10 节）：`DdzStakeSession` 是 `DdzSession` 加一场的账，带入、结回、放弃走掼蛋同一套接口（请求体多 `variant: 'ddz'`），选档页是同一个（`ui/stake.ts` 的 `openTierPicker` 传 `DDZ_FLOW`），选档页里有"和电脑 / 快速匹配"（匹配排不到转同档单机）；
   ref `solo-ddz-…` 和掼蛋的互不匹配，"别的设备上开的那一份"各认各的（`strayStake` / `strayDdzStake`）。冒烟 `npm run stake-smoke -- --ddz-only`。
-  好友房和快速匹配（只有娱乐）：房间是同一个 `worker/room.ts`，规则走 `src/net/hall.ts`（开房选项 `variant: 'ddz'`，状态里带 `variant` 的转给斗地主，没有的就是掼蛋、形状一点没动）。
+  好友房和快速匹配（娱乐和实盘）：房间是同一个 `worker/room.ts`，规则走 `src/net/hall.ts`（开房选项 `variant: 'ddz'`，状态里带 `variant` 的转给斗地主，没有的就是掼蛋、形状一点没动）。
   页面的联机会话基类是 `net.ts` 的 `RoomLink`（连接、座位、帧队列、出手锁到 ack、聊天、互动），掼蛋 `NetSession`、斗地主 `ddz-net.ts` 的 `DdzNetSession` 各自继承；`DdzScene` 经 `DdzTableSession` 接口同时用单机和联机会话，会话放在 `app.ddzNet`。
   玩法由房间信息 `room.opts.variant` 说了算，不看 `guandan.variant`：开房、匹配、记着的房间（`guandan.room` 的 `variant`）知道玩法就直接按它连，输码和邀请链接先当掼蛋连，发现不对就换会话重连。
-  kit 的 `RoomInfo.seats` 按最大座位数给 4 个，斗地主只用前 3 个（`seatCountOf`）。匹配档位 `ddz-fun`，一桌 3 人。冒烟 `npm run online-smoke -- --ddz`（三个浏览器，约 2 分钟）。
+  kit 的 `RoomInfo.seats` 按最大座位数给 4 个，斗地主只用前 3 个（`seatCountOf`）。匹配档位 `ddz-fun`、`ddz-real-<档位>`，一桌 3 人。冒烟 `npm run online-smoke -- --ddz`（三个浏览器，约 2 分钟）。
+  斗地主好友房实盘：开房请求体 `{ variant: 'ddz', stake: 档位 }`（`hall.ts` 的 `parseHallOpts`），桌在 `src/variants/doudizhu/net/stake.ts`（状态 `DdzNet.stake`、视图 `DdzNetView.stake`），6 副或任何一家到 ±40 分，ref `ddz-<16 位十六进制>`；
+  带入、结回、离开、再带入的规矩和掼蛋好友房是同一份实现（`src/net/stake-table.ts`），房间的 `perform` 也是同一个；电脑暂用最强一档。房间测试 `tests/room/ddz-stake.spec.ts`，规则层 `tests/ddz-net-stake.test.ts`，冒烟 `npm run stake-smoke -- --ddz-room`。
 - 存储只在 `store.ts` 里读写（测试检查）；调试桥 `window.__game` 只在开发模式或 `?debug=1` 时挂。
 - 标题字体是内嵌的宋体子集（`fonts.ts`，README 素材一节）：新加的大字、横幅、弹窗标题如果用了字表里没有的字，`tests/view.test.ts` 会报缺字。
 - 两种部署（arcade-kit 的独立模式，由 env 决定）：`wrangler.jsonc` 是独立配置，不写 `ARCADE`、`WALLET`、`GATE`；本站部署时部署工具（`tools/deployer`）按 `tools/workers.json` 补上平台绑定和 `GATE=login`。
@@ -167,6 +169,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 实盘（设计和数字在 `docs/stake.md`，钱包接口是仓库 `docs/platform-backend.md` 5.9）：
   - 规则都在 `src/variants/guandan/stake/`（纯函数）：档位、每分 = 一份的 1/20、封顶 ±20 分、单机 8 副 / 好友房 5 副、单机每档的电脑、结回额、ref 和 op 的拼法。
     Worker、页面、以后的房间都从这里取，不各算一份。钱包的 ref、op 只能是 8–64 位的 `[A-Za-z0-9_-]`（不能带冒号），测试锁着。
+  - 掼蛋好友房和斗地主好友房的通用部分在 `src/net/stake-table.ts`（见下面斗地主一段）。
   - 单机：`worker/stake.ts` 的 `POST /games/guandan/api/stake/{buyin,settle,refund}` 认人（kit 的 `whoIs`）、只认本站 Origin、查数在规则范围里，
     转给服务绑定 `WALLET`（`entrypoint: WalletService`、`props.game: guandan`，`tests/config.test.ts` 守着），`mode: client`。钱包的回话原样带回；
     业务上的拒绝走返回值（200 + `{ ok: false, error }`），HTTP 状态码只说"没到钱包"（400 / 401 / 403 / 503）。
@@ -263,6 +266,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.variant` | 主页上次选的玩法：`'guandan'` / `'ddz'`（只在 `?ddz=1` 时读） |
 | `guandan.ddz.save` | 斗地主进行中的一局：`{ v, state: DdzState, level, counted, dealsCounted }`；规则版本不对或整局结束就删 |
 | `guandan.ddz.stats` | 斗地主战绩：局数、胜局、副数、赢的副数、当地主几次、当地主赢几次、春天次数（只在本机，不进云同步） |
+| `guandan.ddz.tutorial` | 斗地主单机的新手引导是否看过 `{ v, done }`（第一次进单机娱乐牌桌弹，4 步；好友房、实盘、每日、托管、带 seed 的调试开局不弹；设置里"重看引导"一并清掉；只在本机，不进云同步） |
 | `guandan.ddz.stake` | 斗地主单机实盘这一场：`{ v, userId, ref, tier, share, until, state, settle }`；只在本机、不进云同步；结回或退回后删 |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 

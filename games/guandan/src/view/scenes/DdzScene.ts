@@ -21,8 +21,9 @@ import { DdzStakeSession, settleDdzStake } from '../ddz-stake.ts';
 import { closeText, errorText, type NetEvent } from '../net.ts';
 import { flashTitle, stopFlash, vibrate } from '../attention.ts';
 import { presenceNow } from '../social.ts';
-import { STAKE_ERROR, STAKE_TEXT, TIER_NAME, fmtChips, signed, stakeError } from '../stake-text.ts';
-import { POINTS_PER_SHARE as DDZ_POINTS_PER_SHARE, SOLO_DEALS as DDZ_SOLO_DEALS, pointValue as ddzPointValue } from '../../variants/doudizhu/stake/index.ts';
+import { ROOM_STAKE_TEXT, STAKE_ERROR, STAKE_TEXT, TIER_NAME, fmtChips, roomLeaveText, roomWhy, signed, stakeError } from '../stake-text.ts';
+import { POINTS_PER_SHARE as DDZ_POINTS_PER_SHARE, ROOM_DEALS as DDZ_ROOM_DEALS, SOLO_DEALS as DDZ_SOLO_DEALS, payout as ddzPayout, pointValue as ddzPointValue } from '../../variants/doudizhu/stake/index.ts';
+import type { DdzStakeView } from '../../variants/doudizhu/net/stake.ts';
 import { dailySubmitText, ddzDailySeed, submitDdzDaily } from '../ddz-daily.ts';
 import { randomSeed } from '../session.ts';
 import { DDZ_ORDER, ddzDescribe, ddzPlayDetail, ddzPlayLabel } from '../ddz-view.ts';
@@ -31,7 +32,8 @@ import { DDZ_SEAT_PERSON, seatIdentity, seatName, seatPerson, setTablePersons } 
 import { goLobby, inOnlineGame, leaveText } from '../lobby.ts';
 import { lineFor, thinkTime, type Situation } from '../personas.ts';
 import { lobbyName } from '../platform.ts';
-import { getSettings, updateSettings } from '../store.ts';
+import { ddzTutorialDone, getSettings, updateSettings } from '../store.ts';
+import { runDdzTutorial } from '../ddz-tutorial.ts';
 import { COLOR, TYPE, minHit } from '../theme.ts';
 import { CardView } from '../table/card.ts';
 import { banner, bigWord, burst, flash, rays, shake } from '../table/fx.ts';
@@ -41,9 +43,9 @@ import { SeatView } from '../table/seats.ts';
 import { TrickView } from '../table/trick.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { Button, iconButton, modal, setHit, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
-import { applyAudio, confirm } from '../ui/panels.ts';
+import { applyAudio, confirm, openDdzRules } from '../ui/panels.ts';
 
-type Overlay = 'settle' | 'gameOver' | 'menu' | null;
+type Overlay = 'settle' | 'gameOver' | 'menu' | 'tutorial' | null;
 
 /** 叫分按钮：0 = 不叫 */
 const BIDS = [0, 1, 2, 3] as const;
@@ -90,6 +92,7 @@ export class DdzScene extends Phaser.Scene {
   lastError: string | null = null;
   readonly fxLog: string[] = [];
   /** 冒烟点按用：控件名 → 世界坐标 */
+  private netStakeStatus: Phaser.GameObjects.Text | null = null;
   private ctl = new Map<string, { x: number; y: number; obj: Phaser.GameObjects.Container }>();
 
   constructor() {
@@ -109,6 +112,25 @@ export class DdzScene extends Phaser.Scene {
     return !!this.net?.watching;
   }
 
+  /** 好友房实盘：现在显示的这一帧里每个座位的账（画面座位；娱乐房间为 null） */
+  private get netStake(): DdzStakeView | null {
+    return this.net?.shown?.stake ?? null;
+  }
+
+  /** 离开房间前的确认文字：实盘房间说清楚按现在的分结回多少（打到一半的这一副打完再结） */
+  private leaveMsg(): string {
+    const net = this.net!;
+    const ns = this.netStake;
+    const me = ns?.seats[0];
+    if (ns && !ns.over) {
+      if (me?.paid !== 'yes') return ROOM_STAKE_TEXT.leave;
+      const ph = net.view().phase;
+      return roomLeaveText(me.points, me.points * ddzPointValue(ns.tier), ddzPayout(ns.tier, me.points), ph === 'bid' || ph === 'play');
+    }
+    const others = net.room?.seats.some((x, i) => x.kind === 'human' && i !== net.mySeat);
+    return others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
+  }
+
   /** 画面座位 seat 是不是我自己（旁观时谁都不是） */
   private isMe(seat: number): boolean {
     return seat === DDZ_ME && !this.watching;
@@ -120,6 +142,7 @@ export class DdzScene extends Phaser.Scene {
 
   create(): void {
     this.builds++;
+    this.netStakeStatus = null;
     this.alive = true;
     this.busy = false;
     this.overlay = null;
@@ -272,6 +295,31 @@ export class DdzScene extends Phaser.Scene {
       this.reg(name, b);
       if (name === 'sound') this.soundIcon = b;
     });
+    this.buildNetStake(c, W);
+  }
+
+  /** 好友房实盘：顶栏下面靠右一条，我这个座位的本场分和筹码；带入被拒（或走了又回来）旁边有"重新带入" */
+  private buildNetStake(c: Phaser.GameObjects.Container, W: number): void {
+    const ns = this.netStake;
+    if (!ns) return;
+    const me = ns.seats[DDZ_ME]!;
+    const tail = this.watching
+      ? '旁观'
+      : me.paid === 'yes'
+        ? `本场 ${signed(me.points)} 分（${signed(me.points * ddzPointValue(ns.tier))}）`
+        : me.paid === 'pending'
+          ? ROOM_STAKE_TEXT.pending
+          : roomWhy(ns.why ?? '');
+    const t = text(this, W - 22, TOPBAR_H + 22, `实盘 · ${TIER_NAME[ns.tier]} · 打完 ${ns.deals}/${DDZ_ROOM_DEALS} 副 · ${tail}`, { size: TYPE.small, bold: true, color: COLOR.goldLight, ox: 1 });
+    const pg = this.add.graphics();
+    pg.fillStyle(0x1a0e07, 0.7).fillRoundedRect(W - t.width - 36, TOPBAR_H + 6, t.width + 28, 32, 16);
+    pg.lineStyle(1.5, COLOR.gold, 0.7).strokeRoundedRect(W - t.width - 36, TOPBAR_H + 6, t.width + 28, 32, 16);
+    c.add([pg, t]);
+    if (!this.watching && !ns.over && (me.paid === 'refused' || me.paid === 'left') && ns.why !== 'need_two') {
+      const btn = new Button(this, W - t.width - 120, TOPBAR_H + 22, 150, 34, '重新带入', 'red', () => this.net?.rebuy(), 'restart');
+      c.add(btn);
+      this.reg('rebuy', btn);
+    }
   }
 
   /** 牌桌互动（kit 的 table-fun）：和掼蛋同一套，三个座位；单机在本地播，电脑按性格反应 */
@@ -394,7 +442,7 @@ export class DdzScene extends Phaser.Scene {
   /** 打到一半先确认一次：单机这局存着，回来点"继续"接着打；好友房座位留着（回大厅不算离开房间） */
   private onLobby(): void {
     if (this.net ? !inOnlineGame() : !this.inGame()) return goLobby();
-    this.openOverlay('menu', confirm(this, this.net ? leaveText() : `回${lobbyName()}？这局会存着，回来接着打`, `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
+    this.openOverlay('menu', confirm(this, this.net ? (this.netStake ? this.leaveMsg() : leaveText()) : `回${lobbyName()}？这局会存着，回来接着打`, `回${lobbyName()}`, () => goLobby(), () => this.closeOverlay()));
   }
 
   private onHome(): void {
@@ -402,8 +450,7 @@ export class DdzScene extends Phaser.Scene {
     if (net) {
       // 旁观的人没有座位，直接走；打到一半离开要先问一句
       if (!this.watching && net.room?.status === 'playing') {
-        const others = net.room.seats.some((s, i) => s.kind === 'human' && i !== net.mySeat);
-        const msg = others ? '离开这个房间？你的座位交给电脑接着打' : '离开这个房间？没有别人在了，这一局就结束';
+        const msg = this.leaveMsg();
         // 从结算页点的：确认框叠在结算上，点"算了"要回到结算页，不能让 pump 再弹一份
         const prev = this.overlay === 'settle' ? this.overlayModal : null;
         this.openOverlay('menu', confirm(this, msg, '离开', () => this.leaveRoom(), () => {
@@ -429,23 +476,19 @@ export class DdzScene extends Phaser.Scene {
   }
 
   private openRules(): void {
-    const m = modal(this, 900, 600, '斗地主怎么玩', { onClose: () => this.closeOverlay() });
-    this.openOverlay('menu', m);
-    const lines = [
-      '一副 54 张，三人各 17 张，留 3 张底牌。轮流叫 1 分、2 分、3 分（只能比前面的高），叫得最高的当地主，拿走底牌先出。都不叫就重发；连着三次都不叫，第四次发完直接由先叫的人按 1 分当地主。',
-      '地主一个人对两个农民：谁先出完谁那边赢。',
-      '牌从小到大：3 4 5 … K A 2 小王 大王。同样的牌型、张数一样才能压，点数大的压小的。',
-      '牌型：单张、对子、三张、三带一、三带一对、顺子（5 张起）、连对（3 对起）、飞机（可带同样多的单张或对子）、四带二、四带两对、炸弹、王炸。顺子、连对、飞机里不能有 2 和王。',
-      '炸弹压一切别的牌型，王炸最大。每出一个炸弹或王炸翻一倍；春天（农民一张没出）、反春（地主只出了一手）也翻一倍。',
-      '每副的分 = 叫分 × 倍数：地主赢拿两份，两个农民各输一份；农民赢反过来。三家加起来总是 0。',
-    ];
-    // 一条可能折成两行：按实际高度往下排
-    let y = -224;
-    for (const l of lines) {
-      const t = text(this, -400, y, l, { size: TYPE.body, color: COLOR.ink, ox: 0, oy: 0, wrap: 800, align: 'left' });
-      m.body.add(t);
-      y += t.height + 14;
-    }
+    this.openOverlay('menu', openDdzRules(this, () => this.closeOverlay()));
+  }
+
+  /** 第一次玩单机娱乐出新手引导：好友房、实盘、每日、托管、URL 调试开局都不弹 */
+  private wantsTutorial(): boolean {
+    return !ddzTutorialDone() && !this.net && !this.ses.autoplay && !this.ses.daily && !(this.ses instanceof DdzStakeSession) && app.params?.seed === null;
+  }
+
+  private async startTutorial(): Promise<void> {
+    this.overlay = 'tutorial';
+    this.refreshButtons();
+    await runDdzTutorial(this);
+    this.overlay = null;
   }
 
   private openOverlay(kind: Overlay, m: Modal): void {
@@ -761,6 +804,7 @@ export class DdzScene extends Phaser.Scene {
       return;
     }
     this.noticeNetTurn();
+    this.refreshNetStake();
     if (kind === 'error') {
       this.lastError = detail ?? 'illegal_move';
       audio.sfx('error');
@@ -867,6 +911,7 @@ export class DdzScene extends Phaser.Scene {
         this.hand.setHand(v.hand, 0, { animate: false });
         this.dealToOthers(W / 2, 250);
         await this.hand.dealIn(W / 2, 250);
+        if (this.wantsTutorial()) await this.startTutorial();
         break;
       }
       case 'bid': {
@@ -1029,6 +1074,14 @@ export class DdzScene extends Phaser.Scene {
       const t = v.scores[s]!;
       b.add(text(this, cols[2]!, y, t > 0 ? `+${t}` : `${t}`, { size: TYPE.body, font: 'num', color: COLOR.ink }));
     });
+    // 好友房实盘：这一副的筹码和本场合计（只在我到账了时写）
+    const ns = this.netStake;
+    const mine = ns?.seats[DDZ_ME];
+    if (ns && mine?.paid === 'yes' && !watch) {
+      const pv = ddzPointValue(ns.tier);
+      const d = r.delta[DDZ_ME]!;
+      b.add(text(this, 0, 138, `实盘 · 这一副 ${signed(d * pv)} 筹码 · 本场 ${signed(mine.points)} 分（${signed(mine.points * pv)}）`, { size: TYPE.label, bold: true, color: d >= 0 ? COLOR.redDark : COLOR.teamThem }));
+    }
     const net = this.net;
     const next = new Button(this, 160, 200, 240, 64, last ? '看总分' : net ? '继续' : '下一副', 'red', () => {
       // 联机的"继续"：发出去，弹窗留着等人齐（refreshSettleWait 写在等谁）；房间开了下一副才收起来
@@ -1065,6 +1118,7 @@ export class DdzScene extends Phaser.Scene {
 
   private showGameOver(): void {
     if (this.ses instanceof DdzStakeSession) return this.showStakeResult(this.ses);
+    if (this.netStake) return this.showNetStakeResult(this.netStake);
     const v = this.ses.view();
     const me = v.scores[DDZ_ME]!;
     const watch = this.watching;
@@ -1119,6 +1173,53 @@ export class DdzScene extends Phaser.Scene {
     this.reg('over:home', home);
   }
 
+  /**
+   * 好友房实盘一场打完（6 副或有人到 ±40 分）：我的分和筹码、每个人的输赢；结回由房间去钱包办，办完这一行字跟着房间的帧变成"已经结回钱包"。
+   * 再打要重新开房（和娱乐房间打完一样）。
+   */
+  private showNetStakeResult(ns: DdzStakeView): void {
+    const watch = this.watching;
+    const me = ns.seats[DDZ_ME]!;
+    const pv = ddzPointValue(ns.tier);
+    audio.sfx(me.paid === 'yes' && me.points > 0 ? 'win' : 'pass');
+    const m = modal(this, 780, 520, undefined, { closeBtn: false });
+    this.openOverlay('gameOver', m);
+    const b = m.body;
+    b.add(text(this, 0, -200, `斗地主好友房实盘 · ${TIER_NAME[ns.tier]}`, { size: TYPE.label, bold: true, color: COLOR.muted }));
+    const head = watch ? '这一场打完了' : me.paid !== 'yes' ? '这一场不计输赢' : me.points === 0 ? '这场打平，0 分' : `这场 ${signed(me.points)} 分，${signed(me.points * pv)}`;
+    b.add(text(this, 0, -152, head, { size: TYPE.big, bold: true, color: me.paid === 'yes' && me.points > 0 ? COLOR.red : COLOR.ink }));
+    b.add(text(this, 0, -100, ns.deals >= DDZ_ROOM_DEALS ? `打满 ${DDZ_ROOM_DEALS} 副` : `有人输赢到了一份（${DDZ_POINTS_PER_SHARE} 分），这一场提前结束`, { size: TYPE.label, color: COLOR.ink }));
+    // 每个人：到账的写分，别的写"不计输赢"（电脑是庄家的）
+    [0, 1, 2].forEach((seat, i) => {
+      const s = ns.seats[seat]!;
+      const x = -240 + i * 240;
+      b.add(text(this, x, -50, seatName(seat), { size: TYPE.body, bold: this.isMe(seat), color: COLOR.ink }));
+      const line = s.paid === 'yes' ? `${signed(s.points)} 分` : s.paid === 'left' ? `${signed(s.points)} 分（中途走了）` : s.paid === 'no' ? '电脑' : '不计输赢';
+      b.add(text(this, x, -10, line, { size: TYPE.title, bold: true, color: s.paid === 'yes' && s.points > 0 ? COLOR.redDark : COLOR.ink }));
+    });
+    this.netStakeStatus = text(this, 0, 60, '', { size: TYPE.body, bold: true, color: COLOR.ink, wrap: 700 });
+    b.add(this.netStakeStatus);
+    this.refreshNetStake();
+    const home = new Button(this, 0, 150, 260, 64, '回首页', 'red', () => this.leaveRoom(), 'back');
+    b.add(home);
+    this.reg('over:home', home);
+    b.add(text(this, 0, 220, STAKE_TEXT.noCash, { size: TYPE.small, color: COLOR.muted }));
+  }
+
+  /** 结算页那行字：看最新收到的一帧（结算页开着时帧不往下播，直接看队尾） */
+  private refreshNetStake(): void {
+    const t = this.netStakeStatus;
+    const net = this.net;
+    if (!t?.scene || !net) return;
+    const ns = net.queue[net.queue.length - 1]?.nv.stake ?? net.shown?.stake;
+    const me = ns?.seats[DDZ_ME];
+    // 旁观的人没有自己的账
+    if (!ns || !me || this.watching) return;
+    if (me.paid === 'yes') t.setText(me.out ? '已经结回钱包' : '正在结回钱包…');
+    else if (me.paid === 'pending') t.setText('带入还没到账，到账后原样结回一份');
+    else t.setText(roomWhy(ns.why ?? ''));
+  }
+
   /** 单机实盘一场打完（8 副或有人到 ±40 分）：我的分和筹码，去钱包结回；结回的重试和存档在 ddz-stake.ts */
   private showStakeResult(ses: DdzStakeSession): void {
     const save = ses.stake;
@@ -1170,7 +1271,8 @@ export class DdzScene extends Phaser.Scene {
       if (!c.obj.active) continue;
       const m = c.obj.getWorldTransformMatrix();
       const b = c.obj as unknown as { enabled?: boolean; visible: boolean };
-      out[k] = { x: m.tx / this.cameras.main.zoom, y: m.ty / this.cameras.main.zoom, ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}), visible: c.obj.visible };
+      // 世界坐标（getWorldTransformMatrix 只叠父容器、不含相机），和掼蛋 TableScene 一样交给调试桥换成屏幕坐标
+      out[k] = { x: m.tx, y: m.ty, ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}), visible: c.obj.visible };
     }
     // 互动（kit 的 DOM）：屏幕坐标换回世界坐标，冒烟和别的控件一样点
     const cr = this.game.canvas.getBoundingClientRect();

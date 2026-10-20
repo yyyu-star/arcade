@@ -203,8 +203,8 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
   let res: Response;
   try {
     // 实盘房间（0.5.0）：开房时就定档位（arcade-kit 0.4.0 的开房选项），之后不能改
-    // 斗地主房间（牌馆 ⑤）：请求体带 variant: 'ddz'，只有娱乐
-    const body = variant ? { variant } : stake ? { stake } : null;
+    // 斗地主房间（牌馆 ⑤⑥）：请求体带 variant: 'ddz'，实盘再带 stake
+    const body = variant ? (stake ? { variant, stake } : { variant }) : stake ? { stake } : null;
     const init: RequestInit = body
       ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
       : { method: 'POST', credentials: 'same-origin' };

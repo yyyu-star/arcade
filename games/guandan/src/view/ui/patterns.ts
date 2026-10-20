@@ -44,6 +44,22 @@ export const PATTERNS: PatternDemo[] = [
   { name: '天王炸', note: '4 个王，最大', cards: C('SJ SJ BJ BJ'), bomb: true },
 ];
 
+/** 斗地主的牌型图示（没有逢人配、同花顺）；说明文字在 ddz-rules.ts */
+export const DDZ_PATTERNS: PatternDemo[] = [
+  { name: '单张', note: '一张', cards: C('SA') },
+  { name: '对子', note: '两张同点', cards: C('H8 C8') },
+  { name: '三张', note: '三张同点', cards: C('D9 S9 C9') },
+  { name: '三带一', note: '三张 + 一张', cards: C('S7 H7 D7 C5') },
+  { name: '三带一对', note: '三张 + 一对', cards: C('S7 H7 D7 C5 S5') },
+  { name: '顺子', note: '5 张连着', cards: C('S3 H4 C5 D6 S7') },
+  { name: '连对', note: '3 对连着', cards: C('S3 H3 C4 D4 S5 H5') },
+  { name: '飞机', note: '连着的三张', cards: C('S7 H7 D7 C8 S8 H8') },
+  { name: '四带二', note: '四张 + 两张', cards: C('S9 H9 C9 D9 S3 H5') },
+  { name: '四带两对', note: '四张 + 两对', cards: C('S9 H9 C9 D9 S3 H3 C5 D5') },
+  { name: '炸弹', note: '四张同点', cards: C('S9 H9 C9 D9'), bomb: true },
+  { name: '王炸', note: '大小王，最大', cards: C('SJ BJ'), bomb: true },
+];
+
 /** 一排小牌（叠放），原点在第一张牌中心。 */
 export function miniCards(scene: Phaser.Scene, x: number, y: number, cards: readonly Card[], w = 44, step = 20, level = 0): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y);

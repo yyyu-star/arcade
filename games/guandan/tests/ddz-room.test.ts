@@ -9,7 +9,8 @@ import { hallRoom as H, isDdz, parseHallOpts, type HallState } from '../src/net/
 import { testKey, guandanRoom as G } from '../src/variants/guandan/net/rules.ts';
 import { DDZ_FUN } from '../src/variants/doudizhu/index.ts';
 import { DDZ_IDLE_AFTER, DDZ_IDLE_MS, DDZ_READY_MS, ddzFunBots, ddzMoments, type DdzNet } from '../src/variants/doudizhu/net/rules.ts';
-import { MATCH_DDZ, MATCH_DDZ_TABLE, ddzMatchRoomOptions } from '../src/variants/doudizhu/net/match.ts';
+import { MATCH_DDZ, MATCH_DDZ_TABLE, MATCH_DDZ_TIERS, ddzMatchRoomOptions, ddzMatchTierOf, ddzStakeOfTier } from '../src/variants/doudizhu/net/match.ts';
+import { TIER_IDS } from '../src/variants/doudizhu/stake/index.ts';
 
 const DDZ_OPTS = { variant: 'ddz', stake: null } as const;
 const SEATS: ('human' | 'ai')[] = ['human', 'human', 'human'];
@@ -58,7 +59,8 @@ describe('开房选项', () => {
     expect(parseHallOpts({ variant: 'ddz' })).toEqual(DDZ_OPTS);
     expect(parseHallOpts({ variant: 'ddz', stake: null })).toEqual(DDZ_OPTS);
     expect(H.seatCount!(DDZ_OPTS)).toBe(3);
-    expect(parseHallOpts({ variant: 'ddz', stake: 'small' })).toBeNull();
+    expect(parseHallOpts({ variant: 'ddz', stake: 'small' })).toEqual({ variant: 'ddz', stake: 'small' });
+    expect(parseHallOpts({ variant: 'ddz', stake: 'huge' })).toBeNull();
     expect(parseHallOpts({ variant: 'guandan' })).toBeNull();
     expect(parseHallOpts({ variant: 1 })).toBeNull();
   });
@@ -74,6 +76,17 @@ describe('开房选项', () => {
   it('快速匹配档位 ddz-fun 的人数和选项合房间的规则', () => {
     expect(matchConfigErrors(H, [MATCH_DDZ], () => MATCH_DDZ_TABLE, ddzMatchRoomOptions)).toEqual([]);
     expect(matchConfigErrors(H, [MATCH_DDZ], () => 4, ddzMatchRoomOptions).length).toBeGreaterThan(0);
+  });
+
+  it('快速匹配实盘档位 ddz-real-<档位> 的人数和选项合房间的规则，来回换得回来', () => {
+    expect(matchConfigErrors(H, MATCH_DDZ_TIERS, () => MATCH_DDZ_TABLE, ddzMatchRoomOptions)).toEqual([]);
+    expect(MATCH_DDZ_TIERS).toEqual([MATCH_DDZ, ...TIER_IDS.map((t) => `ddz-real-${t}`)]);
+    expect(ddzStakeOfTier(ddzMatchTierOf(null))).toBeNull();
+    for (const t of TIER_IDS) expect(ddzStakeOfTier(ddzMatchTierOf(t))).toBe(t);
+    expect(ddzStakeOfTier('ddz-real-nope')).toBeUndefined();
+    expect(ddzStakeOfTier('real-small')).toBeUndefined();
+    expect(ddzMatchRoomOptions('real-small')).toBeUndefined();
+    expect(ddzMatchRoomOptions('ddz-real-big')).toEqual({ variant: 'ddz', stake: 'big' });
   });
 });
 
@@ -144,7 +157,7 @@ describe('斗地主房间规则', () => {
     expect(H.apply(s, wrong, { type: 'bid', bid: 1 })).toEqual({ error: 'not_your_turn' });
     expect(H.apply(s, s.g.turn, { type: 'bid', bid: 1 })).not.toHaveProperty('error');
     expect(H.apply(s, s.g.turn, { type: 'tribute', card: 3 })).toEqual({ error: 'bad_action' });
-    expect(H.apply(s, s.g.turn, { type: 'buyin' })).toEqual({ error: 'bad_action' });
+    expect(H.apply(s, s.g.turn, { type: 'buyin' })).toEqual({ error: 'cannot_buyin' });
     expect(H.apply(s, s.g.turn, { type: 'again', code: '123456' })).toEqual({ error: 'bad_action' });
     expect(H.apply(s, 3, { type: 'bid', bid: 1 })).toEqual({ error: 'not_seated' });
     expect(H.parse({ type: 'bid', bid: 4 })).toBeNull();

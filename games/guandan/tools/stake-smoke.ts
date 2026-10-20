@@ -10,7 +10,10 @@
  *    电脑代打（autoplay）打完 5 副，结算页写"已经结回钱包"，两人的分正好相反。约几分钟；--no-room 跳过。
  * 控制台零报错。浏览器的 /api/me、/api/wallet 用 Playwright 拦下来答（本地栈的掼蛋 Worker 不管 /api）。
  *
- * 用法：node tools/stake-smoke.ts [--out <截图目录>] [--no-build] [--no-room]
+ * ⑦ 斗地主好友房实盘（牌馆 ⑥）：--ddz-room 单独跑，从斗地主面板开实盘房间选小档，两个人 + 一个电脑代打打完一场，两人的分相加为 0、都结回；
+ *    不带 --ddz-room 的完整跑也会在最后接上。
+ *
+ * 用法：node tools/stake-smoke.ts [--out <截图目录>] [--no-build] [--no-room] [--ddz-only] [--ddz-room]
  */
 import { mkdirSync } from 'node:fs';
 import { chromium, type Browser, type Page } from 'playwright-core';
@@ -165,6 +168,56 @@ async function friendRoom(browser: Browser, stack: OnlineStack): Promise<void> {
   notes.push(`好友房实盘打完一场：两人 ${pts.join(' / ')} 分，结算页写"已经结回钱包"`);
 }
 
+/** ⑦ 斗地主好友房实盘：两个人 + 一个电脑，电脑代打打完一场 */
+async function ddzFriendRoom(browser: Browser, stack: OnlineStack): Promise<void> {
+  const wallet = { balance: 10_000, stakes: [] };
+  const host = await openPage(browser, stack, 'droom-a', wallet, undefined, '&ddz=1&autoplay=1');
+  await click(host, 'variant:ddz');
+  await until(host, '斗地主面板', "'online' in g.controls()");
+  await click(host, 'online');
+  await host.waitForSelector('#ol-create-stake', { timeout: 30_000 });
+  await host.click('#ol-create-stake');
+  await host.waitForSelector('#ol-tier-small:not([disabled])', { timeout: 10_000 });
+  await host.click('#ol-tier-small');
+  await host.waitForSelector('#ol-room-code', { timeout: 30_000 });
+  const code = (await host.textContent('#ol-room-code'))!.trim();
+  await host.waitForSelector('#ol-stake', { timeout: 10_000 });
+  assert((await host.textContent('#ol-stake'))!.includes('实盘 · 小档'), '大厅写着实盘的档位');
+  assert((await host.textContent('#ol-stake'))!.includes('打 6 副'), '斗地主一场 6 副');
+  await host.waitForSelector('#ol-start', { timeout: 10_000 });
+  assert(await host.$eval('#ol-start', (b) => (b as HTMLButtonElement).disabled), '一个人时实盘房间开局灰掉');
+  await shot(host, '80-ddz-room-alone');
+
+  const guest = await openPage(browser, stack, 'droom-b', wallet, undefined, '&ddz=1&autoplay=1');
+  await guest.waitForSelector('#ol-code', { timeout: 30_000 }).catch(async () => {
+    await click(guest, 'variant:ddz');
+    await until(guest, '斗地主面板', "'online' in g.controls()");
+    await click(guest, 'online');
+    await guest.waitForSelector('#ol-code', { timeout: 30_000 });
+  });
+  await guest.fill('#ol-code', code);
+  await guest.click('#ol-join');
+  await guest.waitForSelector('#ol-stake', { timeout: 30_000 });
+  await guest.click('#ol-sit-1');
+  await host.waitForFunction(() => !(document.getElementById('ol-start') as HTMLButtonElement | null)?.disabled, null, { timeout: 15_000 });
+  await host.click('#ol-start');
+  for (const p of [host, guest]) await until(p, '两边都到账', "g.net()?.stake?.seats[0]?.paid === 'yes'", 60_000);
+  await until(host, '牌桌上', "g.scene === 'ddz'", 30_000);
+  await host.waitForTimeout(1500);
+  await shot(host, '81-ddz-room-table');
+  notes.push(`斗地主好友房实盘：开房选档，一个人时开局灰掉；两个人开局都到账（房间 ${code}）`);
+  for (const p of [host, guest]) await p.evaluate(() => window.__game!.setAutoplay(true));
+  for (const p of [host, guest]) await until(p, '打完一场、结回', "g.overlay === 'gameOver' && g.net()?.stake?.over === true && g.net()?.stake?.seats[0]?.out === true", 900_000);
+  await shot(host, '82-ddz-room-result');
+  const pts = await Promise.all([host, guest].map((p) => p.evaluate(() => window.__game!.net()!.stake!.seats[0]!.points)));
+  const house = await host.evaluate(() => window.__game!.net()!.stake!.seats.map((s) => s.points));
+  assert(Math.abs(pts[0]! + pts[1]!) <= 40, `两个真人的分合计不超过一份（电脑那家是对头）：${pts}`);
+  assert(house.length === 3, '斗地主 3 个座位');
+  notes.push(`斗地主好友房实盘打完一场：两人 ${pts.join(' / ')} 分，结算页写"已经结回钱包"`);
+  await host.context().close();
+  await guest.context().close();
+}
+
 /** 斗地主单机实盘（牌馆）：主页切到斗地主 → 实盘卡 → 小档进场 → 电脑代打到一场结束 → 结回钱包、存档删掉 */
 async function ddzSolo(browser: Browser, stack: OnlineStack): Promise<void> {
   const page = await openPage(browser, stack, 'ddz-a', { balance: 10_000, stakes: [] }, undefined, '&ddz=1&autoplay=1');
@@ -193,7 +246,8 @@ async function main(): Promise<void> {
   console.log(`本地联机栈：${stack.origin}`);
   const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
   try {
-    if (process.argv.includes('--ddz-only')) await ddzSolo(browser, stack);
+    if (process.argv.includes('--ddz-room')) await ddzFriendRoom(browser, stack);
+    else if (process.argv.includes('--ddz-only')) await ddzSolo(browser, stack);
     else await guandanParts(browser, stack);
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
@@ -207,7 +261,8 @@ async function main(): Promise<void> {
     console.log(`失败 ${errors.length} 项：`);
     for (const e of errors) console.log(`  ✗ ${e}`);
     process.exitCode = 1;
-  } else if (process.argv.includes('--ddz-only')) console.log('斗地主实盘冒烟通过，控制台零报错');
+  } else if (process.argv.includes('--ddz-room')) console.log('斗地主好友房实盘冒烟通过，控制台零报错');
+  else if (process.argv.includes('--ddz-only')) console.log('斗地主实盘冒烟通过，控制台零报错');
   else console.log('实盘冒烟通过：选档、退回、接着打、结算、到顶、再来一场、现在结算、被拒，控制台零报错');
 }
 
@@ -327,7 +382,10 @@ async function guandanParts(browser: Browser, stack: OnlineStack): Promise<void>
     notes.push('钱包里有一份不在本机的单机实盘：照样能开新的，也可以原样退回');
 
     await ddzSolo(browser, stack);
-    if (!process.argv.includes('--no-room')) await friendRoom(browser, stack);
+    if (!process.argv.includes('--no-room')) {
+      await friendRoom(browser, stack);
+      await ddzFriendRoom(browser, stack);
+    }
   }
 }
 

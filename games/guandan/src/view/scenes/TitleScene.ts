@@ -13,7 +13,7 @@ import { getDdzStats, getSettings, getStats, getVariant, loadDdzSave, loadSave, 
 import { DdzSession } from '../ddz-session.ts';
 import { DDZ_FLOW, DdzStakeSession, clearDdzStakeSave, ddzStakeExpired, ddzStakeLeft, loadDdzStakeSave } from '../ddz-stake.ts';
 import { DDZ_DAILY_LEVEL, beijingDate, ddzDailySeed } from '../ddz-daily.ts';
-import { COLOR, RADIUS, TYPE, minHit } from '../theme.ts';
+import { COLOR, RADIUS, TYPE, minHit, phoneType } from '../theme.ts';
 import { FIGURE_SIZE, LANTERN_SIZE, homeLayout } from '../home-layout.ts';
 import { LOW_MEMORY } from '../device.ts';
 import { anim } from '../anim.ts';
@@ -22,7 +22,7 @@ import { join, openMatch, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
 import { Button, ModeCard, fitWidth, iconButton, modal, segmented, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
-import { confirm, openRules, openSettings, openStats } from '../ui/panels.ts';
+import { confirm, openDdzRules, openRules, openSettings, openStats } from '../ui/panels.ts';
 import { openLevelPicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
 import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
@@ -31,6 +31,7 @@ import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
 const PITCH = '两两搭档，先出完牌、先打过 A 的一队赢';
 /** 斗地主（牌馆 0.28.0）那一句 */
 const PITCH_DDZ = '一个地主对两个农民，谁先出完谁那边赢';
+const PITCH_DDZ_SHORT = '一个地主对两个农民';
 
 /** screen= 只在打开页面后的第一次主页生效，回到主页不再弹 */
 let screenOpened = false;
@@ -199,7 +200,7 @@ export class TitleScene extends Phaser.Scene {
   private buildCorner(W: number): void {
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间
     const icons: [string, string, () => void][] = [
-      ['rules', 'rules', () => (this.overlay = openRules(this))],
+      ['rules', 'rules', () => (this.overlay = app.params?.ddz && getVariant() === 'ddz' ? openDdzRules(this) : openRules(this))],
       ['settings', 'settings', () => (this.overlay = openSettings(this))],
       ['stats', 'stats', () => (this.overlay = openStats(this))],
     ];
@@ -239,7 +240,9 @@ export class TitleScene extends Phaser.Scene {
    * 斗地主的面板：主按钮（接着打实盘 / 继续上局 / 快速开始）、三张卡（娱乐：选难度、快速匹配；实盘；好友房）、战绩条（右边是每日挑战）。
    */
   private buildDdzPanel(P: { x: number; y: number; w: number; h: number }, cx: number, inner: number): void {
-    text(this, cx, P.y + 228, PITCH_DDZ, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20);
+    // 手机横屏字号托底放大，整句放不下：删字不缩字（AGENTS 画面层约定），再按面板宽度兜底
+    const phone = phoneType();
+    fitWidth(text(this, cx, P.y + 228, phone ? PITCH_DDZ_SHORT : PITCH_DDZ, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20), inner);
     const save = loadDdzSave();
     const saved = save && save.state.phase !== 'gameOver' ? `第 ${save.state.dealNo}/${save.state.opts.deals} 副 · 我 ${signed(save.state.scores[0]!)} 分` : null;
     const level = getSettings().difficulty;
@@ -264,8 +267,8 @@ export class TitleScene extends Phaser.Scene {
     }
     // 模式卡（和掼蛋同一种排法）：娱乐（选难度）、实盘（选档，单独部署没有钱包不摆）、好友房
     const modes: [string, string, string, ButtonStyle, string, () => void][] = [
-      ['fun', '娱乐', '和老周、王姐', 'green', 'robot', () => this.pickDdz(saved)],
-      ...(standalone() ? [] : [['stake', '实盘', '带一份筹码', 'gold', 'crown', () => this.pickDdzStake()] as [string, string, string, ButtonStyle, string, () => void]]),
+      ['fun', '娱乐', phone ? '随便玩' : '和老周、王姐', 'green', 'robot', () => this.pickDdz(saved)],
+      ...(standalone() ? [] : [['stake', '实盘', phone ? '带筹码' : '带一份筹码', 'gold', 'crown', () => this.pickDdzStake()] as [string, string, string, ButtonStyle, string, () => void]]),
       // 好友房：开房时带上玩法（斗地主），3 个座位
       ['online', '好友房', '叫朋友来', 'blue', 'cards', () => openOnline('ddz')],
     ];
@@ -286,9 +289,17 @@ export class TitleScene extends Phaser.Scene {
     if (daily) this.buttons['daily'] = new Button(this, P.x + 24 + inner - 88, sy, 160, 48, '每日挑战', 'gold', () => this.newDdzDaily(), 'crown').setDepth(20);
   }
 
-  /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；不做快速匹配 */
+  /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；快速匹配排不到就转这一档的单机（照常带入一份） */
   pickDdzStake(): void {
-    this.overlay = openTierPicker(this, (ses) => this.startDdzStake(ses), undefined, DDZ_FLOW);
+    this.overlay = openTierPicker(this, (ses) => this.startDdzStake(ses), (tier) => openMatch(tier, () => void this.soloDdzStake(tier), 'ddz'), DDZ_FLOW);
+  }
+
+  private async soloDdzStake(tier: TierId): Promise<void> {
+    if (!this.scene.isActive()) return;
+    const r = await DDZ_FLOW.buyin(tier);
+    if (!this.scene.isActive()) return;
+    if (r.ok) this.startDdzStake(r.ses);
+    else toast(this, stakeError(r.error), worldW(this) / 2, worldH - 60);
   }
 
   startDdzStake(ses: DdzStakeSession): void {

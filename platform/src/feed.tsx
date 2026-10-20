@@ -1,16 +1,19 @@
 /**
- * 好友动态（0.17.0，docs/platform-backend.md 15.17）：好友页顶上一栏（全部，能赞、扔道具），大厅一条小条（最新 3 条 + "看全部"，有新的带红点）。
- * 接口只给编号和数字，文字在这里拼：
+ * 好友动态（docs/platform-backend.md 15.17）：好友页顶上一栏（全部），顶栏的"动态"按钮点开一个浮层（最新 8 条 + "看全部"，有新的带红点）；
+ * 两处都能赞、扔道具。电脑上浮层挂在按钮下面，手机上是从底下弹出的半屏面板（样式见 styles.css 的 .feedpop）。
+ * 接口只给编号和数字，文字在这里拼，拆成"谁、在哪、结果标签"三段排版：
  * - 实盘结回的：平台的模板"老王在掼蛋小档赢了 1.6 份，称号：双下王"，称号名读游戏的 titles.json（读不到写"神秘称号"）；
  * - 游戏报的名场面：模板在游戏的 /games/<id>/moments.json（{"<编号>": {"text": "…"}}），只认 {name} {n} {n2} {n3} 四个占位符，
  *   别的花括号、超过 40 字、缺数字的模板一律当不合格，那条不显示。拼出来的是纯文本，React 按文字渲染，不当 HTML。
- * "看过"记在本机 localStorage 的 arcade.feedSeen（最新看过的那条的时间）：大厅红点只是提醒，换设备不同步没关系。
+ * "看过"记在本机 localStorage 的 arcade.feedSeen（最新看过的那条的时间）：红点只是提醒，换设备不同步没关系。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, type FeedItem } from './api.ts';
 import { gameName, num } from './format.ts';
+import { GAMES } from './games.ts';
 import { loadGameFile } from './gamefile.ts';
-import { Link } from './router.tsx';
+import { FeedIcon } from './icons.tsx';
+import { Link, useLocation } from './router.tsx';
 import { Skeleton } from './ui.tsx';
 import { loadTitles } from './titles.ts';
 
@@ -41,34 +44,48 @@ async function loadMoments(game: string): Promise<Record<string, string>> {
   return out;
 }
 
-/** 一条拼成的字；不合格（模板没有、缺数字）回 null，那条不显示 */
-function textOf(item: FeedItem, moments: Record<string, string>, titles: Record<string, { name: string }>): string | null {
+/** 结果标签：赢了几份（金色）、称号（紫色）、名场面（橙色） */
+interface Tag {
+  kind: 'win' | 'title' | 'moment';
+  text: string;
+}
+/** 一条动态排版要的三段：谁、在哪（游戏和档位）、结果标签 */
+interface Line {
+  who: string;
+  where: string;
+  tags: Tag[];
+}
+type Shown = FeedItem & Line;
+
+/** 拆成三段；不合格（模板没有、缺数字）回 null，那条不显示 */
+function lineOf(item: FeedItem, moments: Record<string, string>, titles: Record<string, { name: string }>): Line | null {
   const who = item.user.displayName;
   const game = gameName(item.game);
   if (item.kind === 'settle') {
     const { tier = '', units = 0, titles: got = [] } = item.data;
     const names = got.map((t) => titles[t]?.name ?? '神秘称号');
-    const where = `${game}${TIERS[tier] ?? ''}`;
-    const win = units >= 5 ? `${who}在${where}赢了 ${(units / 10).toFixed(1).replace(/\.0$/, '')} 份` : `${who}在${where}`;
-    if (!names.length) return win;
-    return units >= 5 ? `${win}，称号：${names.join('、')}` : `${win}拿到称号：${names.join('、')}`;
+    const tags: Tag[] = [];
+    if (units >= 5) tags.push({ kind: 'win', text: `赢了 ${(units / 10).toFixed(1).replace(/\.0$/, '')} 份` });
+    if (names.length) tags.push({ kind: 'title', text: `${units >= 5 ? '称号' : '拿到称号'}：${names.join('、')}` });
+    return { who, where: `${game}${TIERS[tier] ?? ''}`, tags };
   }
   const tpl = item.data.m ? moments[item.data.m] : undefined;
   if (!tpl) return null;
   const n = item.data.n ?? [];
   let missing = false;
-  const text = tpl.replace(/\{(name|n|n2|n3)\}/g, (_, k: string) => {
+  // 模板多半是"{name}一副牌扔了 {n} 个炸弹"：名字已经单独写在前面，标签里就不重复
+  const text = tpl.replace(/^\{name\}/, '').replace(/\{(name|n|n2|n3)\}/g, (_, k: string) => {
     if (k === 'name') return who;
     const v = n[k === 'n' ? 0 : Number(k.slice(1)) - 1];
     if (v === undefined) missing = true;
     return v === undefined ? '' : num(v);
   });
-  return missing ? null : text;
+  return missing || !text.trim() ? null : { who, where: game, tags: [{ kind: 'moment', text: text.trim() }] };
 }
 
 /** 读动态，顺带把要用的模板和称号名读齐；拼不出来的那条去掉 */
-function useFeed(): { items: (FeedItem & { text: string })[] | null; reload: () => void } {
-  const [items, setItems] = useState<(FeedItem & { text: string })[] | null>(null);
+function useFeed(): { items: Shown[] | null; reload: () => void } {
+  const [items, setItems] = useState<Shown[] | null>(null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -81,8 +98,8 @@ function useFeed(): { items: (FeedItem & { text: string })[] | null; reload: () 
       ]);
       const out = raw.flatMap((i) => {
         const k = games.indexOf(i.game);
-        const text = textOf(i, moments[k]!, titles[k]!);
-        return text ? [{ ...i, text }] : [];
+        const line = lineOf(i, moments[k]!, titles[k]!);
+        return line ? [{ ...i, ...line }] : [];
       });
       if (alive) setItems(out);
     })().catch(() => alive && setItems([]));
@@ -105,7 +122,7 @@ function summary(r: Record<string, number>): string {
   return REACTIONS.filter(([k]) => r[k]).map(([k, name]) => `${name} ${r[k]}`).join(' · ');
 }
 
-function Row({ item, me, onReacted }: { item: FeedItem & { text: string }; me: string; onReacted?: () => void }) {
+function Row({ item, me, onReacted }: { item: Shown; me: string; onReacted?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const send = async (kind: string) => {
@@ -123,13 +140,31 @@ function Row({ item, me, onReacted }: { item: FeedItem & { text: string }; me: s
   };
   const mine = item.user.userId === me;
   const counts = summary(item.reactions);
+  const cover = GAMES.find((g) => g.id === item.game)?.cover;
   return (
     <li className="feed__item" data-testid="feed-item">
-      <span className="feed__text">{item.text}</span>
-      <span className="feed__meta">
-        {ago(item.at)}
-        {counts && ` · ${counts}`}
+      <span className="feed__avatar" aria-hidden="true">
+        {Array.from(item.who)[0]}
       </span>
+      {/* 名字太长只省略名字；数字都在标签里，标签折行不截 */}
+      <span className="feed__head">
+        <b className="feed__name">{item.who}</b>
+        <span className="feed__game">
+          {cover && <img className="feed__thumb" src={cover} alt="" width={20} height={20} loading="lazy" decoding="async" />}
+          {item.where}
+        </span>
+        <span className="feed__time">{ago(item.at)}</span>
+      </span>
+      {item.tags.length > 0 && (
+        <span className="feed__tags">
+          {item.tags.map((t) => (
+            <span key={t.kind} className={`feed__tag feed__tag--${t.kind}`}>
+              {t.text}
+            </span>
+          ))}
+        </span>
+      )}
+      {counts && <span className="feed__meta">{counts}</span>}
       {onReacted && !mine && (
         <span className="row feed__actions">
           {item.mine ? (
@@ -173,23 +208,84 @@ export function FeedPanel({ me }: { me: string }) {
   );
 }
 
-/** 大厅的小条：最新 3 条 + "看全部"；有好友的新动态时带红点。没有动态就不占地方 */
-export function FeedStrip({ me }: { me: string }) {
-  const { items } = useFeed();
-  if (!items?.length) return null;
-  const seen = Number(localStorage.getItem(SEEN_KEY) ?? 0);
-  const fresh = items.some((i) => i.at > seen && i.user.userId !== me);
+/**
+ * 顶栏的"动态"：有好友的新动态时带红点，点开就算看过。电脑上是挂在按钮下面的浮层（点外面、按 Esc 收起），
+ * 手机上是底部半屏面板（点遮罩、把顶上的小横条往下拉收起）。换页也收起。
+ */
+export function FeedButton({ me }: { me: string }) {
+  const { items, reload } = useFeed();
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(() => Number(localStorage.getItem(SEEN_KEY) ?? 0));
+  const root = useRef<HTMLSpanElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const drag = useRef<number | null>(null);
+  const path = useLocation().pathname;
+  const fresh = !!items?.some((i) => i.at > seen && i.user.userId !== me);
+  useEffect(() => setOpen(false), [path]);
+  useEffect(() => {
+    if (!open || !items?.[0]) return;
+    localStorage.setItem(SEEN_KEY, String(items[0].at));
+    setSeen(items[0].at);
+  }, [open, items]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const onDown = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open]);
+  // 往下拉：跟着手指走，拉过 80 就收起，不够就弹回去
+  const grab = (e: ReactPointerEvent<HTMLDivElement>) => {
+    drag.current = e.clientY;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const pull = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current === null || !panel.current) return;
+    panel.current.style.transform = `translateY(${Math.max(0, e.clientY - drag.current)}px)`;
+  };
+  const letGo = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current === null) return;
+    const dy = e.clientY - drag.current;
+    drag.current = null;
+    if (panel.current) panel.current.style.transform = '';
+    if (dy > 80) setOpen(false);
+  };
   return (
-    <section className="banner feed-strip" data-testid="feed-strip">
-      <ul className="feed feed--compact">
-        {items.slice(0, 3).map((i) => (
-          <Row key={i.id} item={i} me={me} />
-        ))}
-      </ul>
-      <Link className="inline-link" href="/friends">
-        看全部
-        {fresh && <span className="dot dot--inline" role="img" aria-label="有新动态" data-testid="feed-dot" />}
-      </Link>
-    </section>
+    <span className="feedpop" ref={root}>
+      <button className="account feedpop__btn" type="button" aria-expanded={open} aria-controls="feedpop" data-testid="feed-button" onClick={() => setOpen(!open)}>
+        <FeedIcon />
+        <span className="feedpop__label">动态</span>
+        {fresh && <span className="dot" role="img" aria-label="有新动态" data-testid="feed-dot" />}
+      </button>
+      {open && (
+        <>
+          <div className="feedpop__mask" aria-hidden="true" onClick={() => setOpen(false)} />
+          <div className="feedpop__panel" id="feedpop" role="dialog" aria-label="好友动态" data-testid="feed-pop" ref={panel}>
+            <div className="feedpop__grab" aria-hidden="true" onPointerDown={grab} onPointerMove={pull} onPointerUp={letGo} onPointerCancel={letGo} />
+            <h2 className="feedpop__title">好友动态</h2>
+            <div className="feedpop__list">
+              {!items ? (
+                <Skeleton rows={3} />
+              ) : items.length ? (
+                <ul className="feed">
+                  {items.slice(0, 8).map((i) => (
+                    <Row key={i.id} item={i} me={me} onReacted={reload} />
+                  ))}
+                </ul>
+              ) : (
+                <p className="note">最近 7 天你和好友还没有动态。</p>
+              )}
+            </div>
+            <Link className="feedpop__all" href="/friends">
+              看全部
+            </Link>
+          </div>
+        </>
+      )}
+    </span>
   );
 }

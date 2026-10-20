@@ -176,7 +176,7 @@ describe('斗地主房间（真的 Durable Object）', () => {
     expect(c.msgs.find((m) => m.t === 'error')).toMatchObject({ t: 'error' });
     host.conn.ws.close(1000, 'bye');
     c.ws.close(1000, 'bye');
-    expect((await openDdz('ddz-bad', { variant: 'ddz', stake: 'small' })).status).toBe(400);
+    expect((await openDdz('ddz-bad', { variant: 'ddz', stake: 'huge' })).status).toBe(400);
     expect((await openDdz('ddz-bad', { variant: 'mahjong' })).status).toBe(400);
   });
 

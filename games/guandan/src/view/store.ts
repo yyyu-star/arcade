@@ -33,6 +33,8 @@ export const KEYS = {
   ddzStats: 'guandan.ddz.stats',
   /** 斗地主单机实盘这一场（ddz-stake.ts）：只在本机，不进云同步；和掼蛋的 stake 分开 */
   ddzStake: 'guandan.ddz.stake',
+  /** 斗地主单机的新手引导看过了（只在本机，不进云同步，和斗地主战绩一样） */
+  ddzTutorial: 'guandan.ddz.tutorial',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */
@@ -363,6 +365,14 @@ export function setTutorialDone(done: boolean): void {
   write(KEYS.tutorial, { v: 1, done });
   // "重看引导"清掉的标记不上传：合并规则是"或"，传了也会被云端的"看过"盖回来
   if (done) changed('tutorial');
+}
+
+export function ddzTutorialDone(): boolean {
+  return read<{ v: 1; done: boolean }>(KEYS.ddzTutorial)?.done === true;
+}
+
+export function setDdzTutorialDone(done: boolean): void {
+  write(KEYS.ddzTutorial, { v: 1, done });
 }
 
 // ───────────── 错误记录 ─────────────

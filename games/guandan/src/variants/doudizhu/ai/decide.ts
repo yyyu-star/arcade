@@ -29,6 +29,8 @@ const BOMB_AT: Record<DdzLevel, number> = { novice: 1, normal: 2, pro: 4 };
 const FOLLOW: Record<DdzLevel, { slack: number; contest: number }> = { novice: { slack: 99, contest: 99 }, normal: { slack: 1, contest: 3 }, pro: { slack: 1, contest: 3 } };
 const COST = { vw: 1, cb: 2 };
 const TOP = { penalty: 25 };
+/** 新手的失误：出牌时有这么大的概率不按评分而是随便挑一手（领出挑一个非炸弹，跟牌随机压或不要）。由模拟定（docs/stake.md 10.2） */
+const NOVICE_BLUNDER = 0.28;
 const ENDGAME = { total: 24, samples: 6, nodeCap: 1500 };
 
 /** 叫分的牌力：王、2、炸弹、手数 */
@@ -188,6 +190,13 @@ export function decideDdz(v: DdzView, level: DdzLevel, seed: string | number): D
   const whole = enumerateDdz(c.hand).find((p) => p.cards.length === c.hand.length && (lead || beatsDdz(p, v.target!.play!)));
   if (whole) return { type: 'play', seat: me, cards: whole.cards };
   let play = lead ? chooseLead(c) : chooseFollow(c, rng);
+  if (level === 'novice' && rng.int(1000) < NOVICE_BLUNDER * 1000) {
+    const all = lead ? enumerateDdz(c.hand) : playsBeatingDdz(c.hand, v.target!.play);
+    const plain = all.filter((p) => !isBombish(p));
+    const pool = plain.length ? plain : all;
+    const i = rng.int(pool.length + (lead ? 0 : 1));
+    play = i < pool.length ? pool[i]! : null;
+  }
   if (level === 'pro') play = endgame(c, play, lead, seed);
   return play ? { type: 'play', seat: me, cards: play.cards } : { type: 'pass', seat: me };
 }

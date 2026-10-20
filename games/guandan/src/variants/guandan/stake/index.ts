@@ -3,11 +3,11 @@
  * 和 src/core 一样是纯函数：不碰 DOM、网络、时间、随机数（ref 里的随机数由调用方给）。Worker、页面、房间都从这里取数，
  * 不各算一份。
  */
-import { TIERS, type TierId } from '../../../core/stake.ts';
-import { teamOf, type DealResult, type Phase, type Seat, type Team } from '../core/index.ts';
+import { TIERS, setPaid, type Paid, type RoomBook, type TierId } from '../../../core/stake.ts';
+import { teamOf, type DealResult, type Phase, type Team } from '../core/index.ts';
 
 // 档位、钱包 id 格式、单机有效期、op 的拼法是玩法无关的，放在通用层；这里原样再导出，掼蛋这边的 import 不变
-export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, soloOp, type TierId } from '../../../core/stake.ts';
+export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, seatOp, setPaid, soloOp, type Paid, type RoomBook, type SeatBook, type TierId } from '../../../core/stake.ts';
 
 /** 每分 = 一份的 1/20，一场两头都封顶 20 分（1.2：模拟里没有一场碰到） */
 export const POINTS_PER_SHARE = 20;
@@ -72,10 +72,6 @@ export function roomRef(hex: string): string {
   return ref;
 }
 
-export function seatOp(ref: string, seat: Seat, kind: 'in' | 'out'): string {
-  return `${ref}-s${seat}-${kind}`;
-}
-
 // ───────────── 单机一场（我是 0 号，我方 = 0 队） ─────────────
 
 export interface SoloMatch {
@@ -115,35 +111,8 @@ export function validSoloResult(points: unknown, deals: unknown): boolean {
 
 // ───────────── 好友房：每个座位一本账（3.2） ─────────────
 
-/**
- * no：电脑座位或还没带入；pending：带入在办；yes：到账了，分算他的；refused：带入被拒，这一场不计输赢；
- * left：中途点了"离开"，按当时的分结回了（0.6.0），之后的分归庄家
- */
-export type Paid = 'no' | 'pending' | 'yes' | 'refused' | 'left';
-
-export interface SeatBook {
-  paid: Paid;
-  /** 到账以后的净分（封顶） */
-  points: number;
-}
-
-export interface RoomBook {
-  tier: TierId;
-  seats: SeatBook[];
-  /** 记过的副数 */
-  deals: number;
-  /** 庄家：不归任何到账座位的分，只用来日志和统计 */
-  house: number;
-  /** 离开时已经结回、后来又带入了新的一份的那些份的分（0.6.0）；庄家 + 这个 + 各座位的分恒为 0 */
-  settled?: number;
-}
-
 export function newRoomBook(tier: TierId): RoomBook {
   return { tier, seats: [0, 1, 2, 3].map(() => ({ paid: 'no' as Paid, points: 0 })), deals: 0, house: 0 };
-}
-
-export function setPaid(b: RoomBook, seat: Seat, paid: Paid): RoomBook {
-  return { ...b, seats: b.seats.map((s, i) => (i === seat ? { ...s, paid } : s)) };
 }
 
 /**

@@ -5,11 +5,11 @@
  * 一场的截断（每副 s 封顶 24、任何一家累计到 ±40 就结束、最后那副截 s 仍然零和）由规则核心做（DdzOptions.dealCap / cap），
  * 这里只给实盘用的选项，不再算一遍；单机里我的分就是核心状态里 scores[0]。
  */
-import { TIERS, type TierId } from '../../../core/stake.ts';
+import { TIERS, type Paid, type RoomBook, type TierId } from '../../../core/stake.ts';
 import type { DdzLevel } from '../ai/index.ts';
-import type { DdzOptions } from '../core/index.ts';
+import type { DdzOptions, DdzResult } from '../core/index.ts';
 
-export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, soloOp, type TierId } from '../../../core/stake.ts';
+export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, seatOp, setPaid, soloOp, type Paid, type RoomBook, type TierId } from '../../../core/stake.ts';
 
 /** 每分 = 一份的 1/40（各档都整除：50 / 250 / 1,250 / 5,000） */
 export const POINTS_PER_SHARE = 40;
@@ -87,11 +87,59 @@ export function validSoloResult(points: unknown, deals: unknown): boolean {
 /**
  * 单机实盘每档的电脑（座位 1、2；docs/stake.md 10.3，数字由 tools/ddz-stake-sim.ts 量）：越往上越难。
  * 我不是地主时，坐我这边的电脑农民是我的队友，所以两个座位强弱不一定要一样。
- * 普通玩家每场（份）：小档 +0.18、中档 +0.11（都照顾小白和新手，小档小白持平），大档 −0.03、豪华 −0.12（期望 + 2 倍标准误 ≤ 0）
+ * 普通玩家每场（份）：小档 +0.28（小白 +0.11）、中档 +0.19，大档 −0.08、豪华 −0.12（期望 + 2 倍标准误 ≤ 0）。数字见 10.3，以最近一次模拟为准
  */
 export const DDZ_SOLO_BOTS: Readonly<Record<TierId, readonly [DdzLevel, DdzLevel]>> = {
   small: ['novice', 'novice'],
   mid: ['novice', 'normal'],
-  big: ['novice', 'pro'],
+  big: ['normal', 'pro'],
   lux: ['pro', 'pro'],
 };
+
+// ───────────── 好友房：每个座位一本账（docs/stake.md 3.2、10.4；3 个座位） ─────────────
+
+const ROOM_REF = /^ddz-[0-9a-f]{16}$/;
+
+/** 好友房 ref：`ddz-<16 位十六进制>`（从这一场的密钥流取 64 位）。和掼蛋的 `gd-…`、斗地主单机的 `solo-ddz-…` 互相区分得开 */
+export function roomRef(hex: string): string {
+  const ref = `ddz-${hex}`;
+  if (!ROOM_REF.test(ref)) throw new Error(`斗地主好友房 ref 要 16 位小写十六进制：${hex}`);
+  return ref;
+}
+
+export const DDZ_ROOM_SEATS = 3;
+
+export function newRoomBook(tier: TierId): RoomBook {
+  return { tier, seats: Array.from({ length: DDZ_ROOM_SEATS }, () => ({ paid: 'no' as Paid, points: 0 })), deals: 0, house: 0 };
+}
+
+/** 一家的分封顶：一场任何一家到 ±40 核心就结束；这里再夹一道，是因为走了又回来的新一份从 0 记，不等于核心里的累计 */
+const clampPoints = (p: number): number => Math.max(-POINTS_PER_SHARE, Math.min(POINTS_PER_SHARE, p));
+
+/**
+ * 记一副（用核心给的每家的分 delta，零和）：只记到到账的座位上，各自封顶；其余座位（电脑、还没到账、被拒、离开了）的分归庄家，
+ * 封顶多出来的也归庄家。同一副只记一次。
+ */
+export function roomAddDeal(b: RoomBook, r: DdzResult, dealNo: number): RoomBook {
+  if (dealNo !== b.deals + 1) return b;
+  let house = b.house;
+  const seats = b.seats.map((s, seat) => {
+    const d = r.delta[seat] ?? 0;
+    if (s.paid !== 'yes') {
+      house += d;
+      return s;
+    }
+    const points = clampPoints(s.points + d);
+    house += s.points + d - points;
+    return { ...s, points };
+  });
+  return { ...b, seats, deals: b.deals + 1, house };
+}
+
+/** 一场结束了没有：打满 6 副，或者牌局本身结束（任何一家到 ±40，核心就把牌局收了） */
+export function roomOver(b: RoomBook, phase?: string): boolean {
+  return b.deals >= ROOM_DEALS || phase === 'gameOver';
+}
+
+/** 好友房：房间寿命 8 小时 + 关房收尾 1 小时 + 余量（和掼蛋同一个数） */
+export const ROOM_HOURS = 10;

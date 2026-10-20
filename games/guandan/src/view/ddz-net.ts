@@ -62,6 +62,7 @@ export function rotateDdzNetView(nv: DdzNetView, me: number): DdzNetView {
     events: nv.events.map(event),
     ready: nv.ready ? by(nv.ready) : null,
     ...(nv.afk ? { afk: by(nv.afk) } : {}),
+    ...(nv.stake ? { stake: { ...nv.stake, seats: by(nv.stake.seats) } } : {}),
   };
 }
 
@@ -88,6 +89,11 @@ export class DdzNetSession extends RoomLink<DdzNetAction, DdzNetView, DdzNetView
 
   protected seatToReal(view: number): number {
     return (view + (this.mySeat ?? 0)) % N;
+  }
+
+  /** 实盘房间带入被拒以后再带一份（不轮流的操作，房间不看轮没轮到我） */
+  rebuy(): void {
+    this.client.act({ type: 'buyin' });
   }
 
   protected override onFresh(): void {

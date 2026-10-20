@@ -138,7 +138,10 @@ async function open(browser: Browser, name: string, query: string, o: OpenOpts =
   const context = await browser.newContext(co);
   if (o.init) await context.addInitScript(o.init);
   const storage: Record<string, string> = { ...(o.storage ?? {}) };
-  if (!o.freshTutorial) storage['guandan.tutorial'] = JSON.stringify({ v: 1, done: true });
+  if (!o.freshTutorial) {
+    storage['guandan.tutorial'] = JSON.stringify({ v: 1, done: true });
+    storage['guandan.ddz.tutorial'] = JSON.stringify({ v: 1, done: true });
+  }
   await context.addInitScript((kv) => {
     if (sessionStorage.getItem('__seeded')) return;
     sessionStorage.setItem('__seeded', '1');
@@ -567,12 +570,30 @@ async function smokeBomb(browser: Browser): Promise<void> {
 
 async function smokeDdz(browser: Browser): Promise<void> {
   // 斗地主单机（牌馆 0.28.0，入口先藏在 ?ddz=1）：主页切过去、叫分、真人出一手（不代打的截图），再代打到整局结束、回主页
-  const home = await open(browser, '斗地主主页', 'ddz=1&debug=1');
+  const home = await open(browser, '斗地主主页', 'ddz=1&debug=1', { freshTutorial: true });
   await until(home, '标题页', "g.scene === 'title'");
   await click(home, 'variant:ddz');
   await until(home, '斗地主面板', "'quick' in g.controls() && 'daily' in g.controls()");
   await shot(home, '30-ddz-title');
+  // 主页的"规则"在斗地主下打开斗地主的说明
+  await click(home, 'rules');
+  await home.page.waitForTimeout(600);
+  await shot(home, '30b-ddz-title-rules');
+  await home.page.keyboard.press('Escape');
+  await home.page.waitForTimeout(300);
+  // 第一次进牌桌出新手引导（4 步），看完记在 guandan.ddz.tutorial
   await click(home, 'quick');
+  await until(home, '斗地主引导', "g.scene === 'ddz' && g.tutorialStep === 0");
+  await home.page.waitForTimeout(400);
+  await shot(home, '30c-ddz-tutorial-0');
+  for (let i = 1; i <= 3; i++) {
+    await click(home, 'tutorial:next');
+    await until(home, `斗地主引导第 ${i + 1} 步`, `g.tutorialStep === ${i}`);
+  }
+  await click(home, 'tutorial:next');
+  await until(home, '斗地主引导结束', 'g.tutorialStep === -1');
+  const tut = await home.page.evaluate(() => localStorage.getItem('guandan.ddz.tutorial'));
+  assert(tut !== null && JSON.parse(tut).done === true, '斗地主引导看完要记下来');
   await until(home, '斗地主牌桌', "g.scene === 'ddz' && g.idle");
   await home.page.context().close();
   // URL 带种子直接开局（和掼蛋的调试开局一样）；挑一个我先叫的种子

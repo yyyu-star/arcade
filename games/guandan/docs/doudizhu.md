@@ -49,8 +49,9 @@ src/view/                 画面层两个玩法共用：手牌、出牌区、座
 - 三人桌：0 我（下）、1 老周（右，下家）、2 王姐（左，上家），锚点 `table/layout.ts` 的 `seatAnchors3`（两侧座位上提，让开地主标记和气泡）。
 - 叫分时按钮区换成"不叫 / 1 分 / 2 分 / 3 分"（比当前低的灰掉，让开"理牌"）；顶上写底分、倍数和底牌（叫完才翻开）。
 - 主页：入口先藏着，只有带 `?ddz=1` 时才有"掼蛋 / 斗地主"切换，面板标题换成"牌馆"，上次选的玩法存 `guandan.variant`。
-- 斗地主的玩法说明在牌桌右上的"规则"（`DdzScene.openRules`），主页的"规则"仍是掼蛋的；改规则要一起改这段说明。
-- 冒烟：`npm run shot -- --only ddz`（单机一整场和每日挑战）、`npm run stake-smoke -- --ddz-only`、`npm run online-smoke -- --ddz`。
+- 斗地主的玩法说明只有一份：文字在 `src/view/ddz-rules.ts`（牌型 / 叫分 / 算分三页），牌型图示用 `ui/patterns.ts` 的 `DDZ_PATTERNS`，由 `openDdzRules` 打开；牌桌右上的"规则"和主页右上的"规则"（当前玩法是斗地主时）共用它，掼蛋的主页仍是掼蛋的规则。改规则要一起改这里和 `docs/rules.md`。
+- 新手引导：第一次进单机娱乐牌桌，发完牌弹 4 步（先叫分 → 地主先出 → 出牌 / 提示 / 不要 → 分怎么来），外壳与掼蛋共用；看过记在 `guandan.ddz.tutorial`（只在本机，不进云同步）。好友房、实盘、每日挑战、托管和带 `seed` 的调试开局不弹。
+- 冒烟：`npm run shot -- --only ddz`（引导、单机一整场和每日挑战）、`npm run stake-smoke -- --ddz-only`（单机实盘）、`npm run stake-smoke -- --ddz-room`（好友房实盘）、`npm run online-smoke -- --ddz`。
 
 ## 5. 模式
 
@@ -60,7 +61,8 @@ src/view/                 画面层两个玩法共用：手牌、出牌区、座
 | 每日挑战 | 种子只看北京时间的日期，两个普通电脑，6 副累计分交到平台的 `daily-<日期>-ddz`（`public/daily.json` 写分数怎么显示）；不存档、不记战绩，可以再打一次同一副 |
 | 单机实盘 | 选档位 → 带入一份 → 8 副或我累计到 ±40 分 → 结回；存档 `guandan.ddz.stake`，ref 是 `solo-ddz-<档位>-<32 位十六进制>`，和掼蛋的分得开。数字、每档的电脑和模拟结果见 `docs/stake.md` 第 10 节 |
 | 好友房 | 开房选项多一个 `variant: 'ddz'`（没有就是掼蛋，旧房间照常），3 个座位，缺人电脑补；进房、选座、开局、离开、旁观、聊天、邀请链接的流程和掼蛋一样。玩法由房间信息决定，输码、邀请链接进房不靠本机设置。页面的联机会话和掼蛋共用基类 `RoomLink`（`src/view/net.ts`） |
-| 快速匹配 | 一个档位 `ddz-fun`，一桌 3 人，同一个排队类（`worker/match.ts` 按档位给桌大小） |
-| 好友房实盘、实盘匹配 | 还没做：开房带 `stake` 的斗地主房间直接拒绝 |
+| 快速匹配 | 娱乐档位 `ddz-fun`，一桌 3 人，同一个排队类（`worker/match.ts` 按档位给桌大小） |
+| 好友房实盘 | 开房请求体 `{ variant: 'ddz', stake: 档位 }`；6 副或任何一家到 ±40 分，规矩照掼蛋好友房（至少 2 个真人、离开结回、重新带入），通用部分在 `src/net/stake-table.ts`，斗地主的桌在 `src/variants/doudizhu/net/stake.ts`，ref `ddz-<16 位十六进制>`。见 `docs/stake.md` 10.4 |
+| 实盘匹配 | 档位 `ddz-real-<档位>` 四档，一桌 3 人；选档页的"和电脑 / 快速匹配"，排不到转同档单机 |
 
 - 平台那边：电脑名字老周、王姐登记在 `RESERVED_PERSONAS`；`games.ts` 掼蛋条目的每日子榜 `daily: [{ id: 'ddz', name: '斗地主' }]`。

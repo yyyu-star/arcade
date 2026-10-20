@@ -1043,6 +1043,81 @@ async function fakeFeedFiles(page: Page): Promise<void> {
   await page.route('**/games/guandan/titles.json', (r) => r.fulfill(json({ double_down: { name: '双下王', desc: '打出双下' } })));
 }
 
+/** 一条动态的三段：名字、在哪、结果标签（每个标签一块，数字整个在标签里） */
+async function feedLine(item: Locator, who: string, where: string, tags: string[]): Promise<void> {
+  await item.locator('.feed__name', { hasText: who }).waitFor();
+  check((await item.locator('.feed__game').textContent())?.trim() === where, `动态"在哪"不对：${await item.locator('.feed__game').textContent()}`);
+  const got = (await item.locator('.feed__tag').allTextContents()).map((t) => t.trim());
+  check(got.join('|') === tags.join('|'), `动态的标签不对：${got.join('|')}`);
+}
+
+/**
+ * 顶栏"动态"：有新的带红点，点开就消失；电脑是按钮下面约 360 宽的浮层（Esc、点外面收起），手机是底部半屏面板（点遮罩、往下拉收起）；
+ * 底下"看全部"进好友页；能点的都够 44（电脑上看得见就行）。四种屏幕各截关、开两张。
+ */
+async function feedPop(browser: Browser): Promise<void> {
+  const sizes = [
+    ['电脑1280', 'desktop', { width: 1280, height: 800 }],
+    ['电脑1920', 'desktop', { width: 1920, height: 1080 }],
+    ['竖390', 'portrait', { width: 390, height: 844 }],
+    ['横844', 'landscape', { width: 844, height: 390 }],
+  ] as const;
+  for (const [label, screen, viewport] of sizes) {
+    console.log(`顶栏动态（${label}）`);
+    const { ctx, page } = await newPage(browser, `动态 ${label}`, screen, { viewport });
+    await mockSession(page, { feed: FAKE_FEED });
+    await fakeFeedFiles(page);
+    await page.goto(`${BASE}/`);
+    const btn = page.getByTestId('feed-button');
+    await btn.getByTestId('feed-dot').waitFor();
+    const b = (await btn.boundingBox())!;
+    check(b.height >= 44 && b.width >= 44, `${label}："动态"按钮不到 44（${Math.round(b.width)}×${Math.round(b.height)}）`);
+    check((await page.locator('.topbar').evaluate((el) => {
+      const tops = new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+      return tops.size;
+    })) === 1, `${label}：顶栏折行了`);
+    await shot(page, `feedpop-${label}-closed`, false);
+    await btn.click();
+    const pop = page.getByTestId('feed-pop');
+    await pop.waitFor();
+    await feedLine(pop.getByTestId('feed-item').first(), '小明', '掼蛋小档', ['赢了 1.6 份', '称号：双下王']);
+    check((await pop.getByTestId('feed-item').count()) === 2, `${label}：浮层里该有 2 条`);
+    check((await btn.getByTestId('feed-dot').count()) === 0, `${label}：点开了红点该消失`);
+    check((await pop.getByRole('link', { name: '看全部' }).getAttribute('href')) === '/friends', `${label}："看全部"该进好友页`);
+    const p = (await pop.boundingBox())!;
+    if (screen === 'desktop') {
+      check(Math.abs(p.width - 360) <= 2 && p.y >= b.y + b.height && p.x >= 0 && p.x + p.width <= viewport.width, `${label}：浮层该挂在按钮下面、约 360 宽（${Math.round(p.x)},${Math.round(p.y)} ${Math.round(p.width)} 宽）`);
+    } else {
+      check(Math.abs(p.y + p.height - viewport.height) <= 1 && Math.abs(p.width - viewport.width) <= 1, `${label}：手机上该是贴底的整宽面板（${Math.round(p.y)}+${Math.round(p.height)}）`);
+      for (const el of await pop.locator('a, button').all()) {
+        const r = await el.boundingBox();
+        if (r && (r.height < 44 || r.width < 44)) fail(`${label}：浮层里的「${(await el.textContent())?.trim()}」不到 44（${Math.round(r.width)}×${Math.round(r.height)}）`);
+      }
+    }
+    await shot(page, `feedpop-${label}-open`, false);
+    if (screen === 'desktop') {
+      await page.keyboard.press('Escape');
+      await pop.waitFor({ state: 'detached' });
+      await btn.click();
+      await pop.waitFor();
+      await page.mouse.click(20, viewport.height - 20);
+      await pop.waitFor({ state: 'detached' });
+    } else {
+      // 点遮罩（面板上面那块）收起；再打开，把顶上的小横条往下拉收起
+      await page.mouse.click(viewport.width / 2, 10);
+      await pop.waitFor({ state: 'detached' });
+      await btn.click();
+      const grab = (await pop.locator('.feedpop__grab').boundingBox())!;
+      await page.mouse.move(grab.x + grab.width / 2, grab.y + grab.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(grab.x + grab.width / 2, grab.y + 150, { steps: 5 });
+      await page.mouse.up();
+      await pop.waitFor({ state: 'detached' });
+    }
+    await ctx.close();
+  }
+}
+
 async function fakeFriends(page: Page, invites: object[] = [], feed: object[] = []): Promise<void> {
   await mockSession(page, { invites, feed });
   await fakeFeedFiles(page);
@@ -1092,7 +1167,7 @@ async function mobile(browser: Browser): Promise<void> {
   await shot(page, 'mobile-privacy');
   // 用模拟的登录状态打开"我的账号"，量点击区
   // 0.15.0：好友超过了我这周的开盘每日挑战，大厅顶上提一句
-  // 0.17.0：大厅一条好友动态的小条，最新 3 条 + "看全部"，没看过的带红点
+  // 好友动态不在大厅占地方，在顶栏"动态"按钮里（细查见 feedPop）
   await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }], feed: FAKE_FEED });
   await fakeFeedFiles(page);
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
@@ -1101,11 +1176,8 @@ async function mobile(browser: Browser): Promise<void> {
   const overtake = page.getByTestId('nudge-overtake');
   await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
   check((await overtake.getByRole('link', { name: '去挑战' }).getAttribute('href'))?.startsWith('/games/kaipan/') === true, '"去挑战"该进开盘');
-  const strip = page.getByTestId('feed-strip');
-  await strip.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
-  await strip.getByTestId('feed-dot').waitFor();
-  check((await strip.getByRole('button').count()) === 0, '大厅小条上不放赞的按钮');
-  check((await strip.getByRole('link', { name: /看全部/ }).getAttribute('href')) === '/friends', '"看全部"该进好友页');
+  check((await page.getByTestId('feed-strip').count()) === 0, '大厅不该再有整块的动态');
+  await page.getByTestId('feed-button').getByTestId('feed-dot').waitFor();
   await shot(page, 'mobile-home-overtake');
   const guandan = page.locator('.card', { hasText: '掼蛋' });
   const enterBox = await guandan.getByRole('link', { name: '进入游戏' }).boundingBox();
@@ -1169,8 +1241,8 @@ async function mobile(browser: Browser): Promise<void> {
   check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
   // 0.17.0 好友动态：结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
   const feed = fr.page.getByTestId('feed');
-  await feed.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
-  await feed.getByText('阿花一副牌扔了 4 个炸弹').waitFor();
+  await feedLine(feed.getByTestId('feed-item').first(), '小明', '掼蛋小档', ['赢了 1.6 份', '称号：双下王']);
+  await feedLine(feed.getByTestId('feed-item').nth(1), '阿花', '掼蛋', ['一副牌扔了 4 个炸弹']);
   check((await feed.getByTestId('feed-item').count()) === 2, '模板不合格的动态不该显示');
   check((await feed.getByText('<b>').count()) === 0, '模板不能当 HTML');
   await feed.getByTestId('feed-item').nth(1).getByText('你扔了番茄').waitFor();
@@ -2163,7 +2235,8 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     const box = (await badge.boundingBox())!;
     const vw = page.viewportSize()!.width;
     check(box.x >= 0 && box.x + box.width <= vw, `筹码牌子出了屏幕：${JSON.stringify(box)}，屏宽 ${vw}`);
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `顶栏换行了：${tops}`);
     await shot(page, `wallet-badge-${screen}`);
     await badge.click();
@@ -2203,10 +2276,17 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     });
     await page.goto(`${BASE}/`);
     await page.getByTestId('wallet-badge').waitFor();
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `管理员的顶栏换行了：${tops}`);
     check((await page.getByTestId('admin-chips-open').count()) === 0, '大厅不该再有"管理筹码"按钮');
-    await page.getByRole('link', { name: '管理', exact: true }).click();
+    if (screen === 'desktop') await page.getByRole('link', { name: '管理', exact: true }).click();
+    else {
+      // 手机上顶栏没有"管理"，从"我的"页的"去管理后台"进
+      await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+      await page.locator('.topbar a[href="/me"]').click();
+      await page.getByTestId('me-admin').click();
+    }
     await page.getByTestId('admin-chips-open').click();
     const box = page.getByTestId('admin-chips');
     await box.getByLabel('用户名').fill('xiaoming_2026');
@@ -2346,6 +2426,7 @@ try {
     phone: phoneAudit, // 手机界面专项：四种屏幕逐页量
     devices: deviceMatrix, // 多尺寸矩阵：手机竖横、平板、折叠屏、电脑，只做通用检查
     boards: boardsPage, // 排行榜
+    feedpop: feedPop, // 顶栏的动态按钮和浮层
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则
     invites: adminInvites, // 管理页的邀请码
@@ -2368,6 +2449,7 @@ try {
     await deskPages(browser);
     await phoneAudit(browser);
     await boardsPage(browser);
+    await feedPop(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);
     await adminInvites(browser);
