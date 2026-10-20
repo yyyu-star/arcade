@@ -1,8 +1,8 @@
 /**
  * 调试跳转：用电脑把局面推进到指定阶段（全部走核心的 dispatch，打 A 的跳转除外——见下）。
  */
-import { decide } from '../ai/index.ts';
-import { createGame, dispatch, hashSeed, seatsToAct, viewFor, type GameEvent, type GameState, type Options } from '../core/index.ts';
+import { decide } from '../variants/guandan/ai/index.ts';
+import { createGame, dispatch, hashSeed, seatsToAct, viewFor, type GameEvent, type GameState, type Options } from '../variants/guandan/core/index.ts';
 
 function botStep(s: GameState): GameState {
   const seat = seatsToAct(s)[0]!;

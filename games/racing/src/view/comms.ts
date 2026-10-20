@@ -1,12 +1,14 @@
 /**
  * 交流（DESIGN.md 6.2）：单机和好友房同一个"聊"面板。说一句（可以点名）、表情包、扔道具，设置里有总开关和按人屏蔽。
  * 编号见 game/emotes.ts；表情包和道具直接用 arcade-kit/fun，不自己画。所有人一样、免费，不影响比赛、不停计时。
- * "头像"是名次栏里那一行：短语在那一行冒气泡（点名的带"@名字"，被点的那行晃一下），表情冒在色块旁，道具从发的人那行扔到对象那行。
+ * "头像"是名次栏里那一行：短语在那一行冒气泡（点名的带"@名字"，被点的那行晃一下），表情冒在那一行旁边，道具从发的人那行扔到对象那行。
+ * 气泡和表情不压车手名（0.1.4）：横屏冒在那一行左边（赛道上；原来气泡挂在行里，被名次栏裁掉了）；竖屏名次栏是两列、左右没地方，短语改冒在名次栏上沿（赛道底边，带那辆车的小棋子），
+ * 表情冒在那一行右头（挡位、热量那几格上），和这一行一样高、不出这一行。
  * - 总开关（racing.comms）：关了什么都不显示、不提示，自己也发不了，单机也算；
  * - 屏蔽所有人（racing.mute）：别人的都不显示，自己的照常；
  * - 按人屏蔽：真人、电脑都能屏蔽，只管这一场。
  */
-import { createFunLayer, playFunSound, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type FunLayer } from 'arcade-kit/fun';
+import { createFunLayer, playFunSound, PROPS, propSvg, showSticker, STICKERS, stickerSvg, throwAt, type FunLayer, type StickerId } from 'arcade-kit/fun';
 import { PHRASE_COUNT, PROP_BASE, PROP_COUNT, STICKER_BASE, STICKER_COUNT } from '../game/emotes.ts';
 import { dialogHooks } from './dialog.ts';
 import { button, el } from './dom.ts';
@@ -69,6 +71,52 @@ export class Comms {
     return r ?? new DOMRect(window.innerWidth - 60, 60, 24, 24);
   }
 
+  private portrait(): boolean {
+    return this.host.rowEl(this.host.me() ?? 0)?.closest<HTMLElement>('.stage')?.dataset.orient === 'port';
+  }
+
+  /**
+   * 横屏表情放哪：kit 的 showSticker 把表情冒在给的框的右上方（框 24 像素时表情 44 像素，中心在框心右 10.8、上 13.2），
+   * 所以反过来算一个框，让表情落在那一行左边（赛道上，不压任何一行）
+   */
+  private stickerRect(seat: number): DOMRect {
+    const row = this.host.rowEl(seat)?.getBoundingClientRect();
+    if (!row) return this.rect(seat);
+    const cx = row.left - 22 - 6;
+    const cy = row.top + row.height / 2;
+    return new DOMRect(cx - 10.8 - 12, cy + 13.2 - 12, 24, 24);
+  }
+
+  /**
+   * 竖屏的表情：kit 的表情至少 44 像素，比手机上的一行（不到 20 像素）高得多，会跨出这一行、压到隔壁那一列和热量数字。
+   * 所以自己画一个和这一行一样高的，贴在这一行右头（挡位、热量那几格上），不出这一行；挂在 .race 上（名次栏每一步整个重画）
+   */
+  private rowSticker(seat: number, id: StickerId): void {
+    const row = this.host.rowEl(seat);
+    const race = row?.closest<HTMLElement>('.side')?.parentElement;
+    if (!row || !race) return;
+    race.querySelector(`:scope > .row-sticker[data-seat="${seat}"]`)?.remove();
+    const d = el('div', 'row-sticker', race);
+    d.dataset.seat = String(seat);
+    const size = Math.max(10, row.offsetHeight - 4);
+    // 行的 offsetParent 就是 .race（名次栏本身没定位）
+    Object.assign(d.style, { width: `${size}px`, height: `${size}px`, top: `${row.offsetTop + 2}px`, left: `${row.offsetLeft + row.offsetWidth - size - 4}px` });
+    d.innerHTML = stickerSvg(id);
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (!still && d.animate) {
+      d.animate(
+        [
+          { transform: 'scale(0.4)', opacity: 0 },
+          { transform: 'scale(1)', opacity: 1, offset: 0.08 },
+          { transform: 'scale(1)', opacity: 1, offset: 0.8 },
+          { transform: 'scale(1)', opacity: 0 },
+        ],
+        { duration: 2_000, easing: 'ease-out' },
+      );
+    }
+    window.setTimeout(() => d.remove(), 2_000);
+  }
+
   /** 收到一句（房间转发的，或单机里自己、电脑发的） */
   receive(seat: number, id: number, to?: number): void {
     if (!this.on) return;
@@ -78,7 +126,9 @@ export class Comms {
       return;
     }
     if (id < STICKER_BASE + STICKER_COUNT) {
-      void showSticker(this.layer, this.rect(seat), STICKERS[id - STICKER_BASE]!);
+      const sticker = STICKERS[id - STICKER_BASE]!;
+      if (this.portrait()) this.rowSticker(seat, sticker);
+      else void showSticker(this.layer, this.stickerRect(seat), sticker);
       return;
     }
     if (id < PROP_BASE + PROP_COUNT && to !== undefined) {
@@ -97,12 +147,36 @@ export class Comms {
     this.host.rowEl(seat)?.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 320 });
   }
 
-  /** 名次栏那一行冒一个气泡；点名的带"@名字"，被点的那一行晃一下 */
+  /**
+   * 名次栏那一行冒一个气泡；点名的带"@名字"，被点的那一行晃一下。气泡挂在 .race 上（名次栏 overflow: hidden，挂在行里会被裁掉，
+   * 名次栏每一步还整个重画）：横屏贴在那一行左边，竖屏冒在名次栏上沿、带小棋子（见文件头）
+   */
   private bubble(seat: number, text: string, to?: number): void {
     const row = this.host.rowEl(seat);
-    if (!row) return;
-    row.querySelector('.bubble')?.remove();
-    const b = el('div', 'bubble', row, to === undefined ? text : `@${this.host.name(to)} ${text}`);
+    const side = row?.closest<HTMLElement>('.side');
+    const race = side?.parentElement;
+    if (!row || !side || !race) return;
+    const words = to === undefined ? text : `@${this.host.name(to)} ${text}`;
+    let b: HTMLElement;
+    if (this.portrait()) {
+      let talk = race.querySelector<HTMLElement>(':scope > .talk');
+      if (!talk) talk = el('div', 'talk', race);
+      talk.style.top = `${side.offsetTop}px`;
+      talk.querySelector(`[data-seat="${seat}"]`)?.remove();
+      b = el('div', 'bubble', talk);
+      // 左列的冒在左边，右列的冒在右边，尾巴朝下指着那一列
+      b.classList.toggle('right', row.offsetLeft > side.offsetLeft + side.clientWidth / 2);
+      const dot = row.querySelector('.dot');
+      if (dot) el('span', 'dot car-icon', b).innerHTML = dot.innerHTML;
+      el('span', '', b, words);
+    } else {
+      race.querySelector(`:scope > .bubble[data-seat="${seat}"]`)?.remove();
+      b = el('div', 'bubble', race, words);
+      // 行的 offsetParent 就是 .race（名次栏本身没定位）
+      b.style.right = `${race.clientWidth - row.offsetLeft + 6}px`;
+      b.style.top = `${row.offsetTop + row.offsetHeight / 2}px`;
+    }
+    b.dataset.seat = String(seat);
     window.setTimeout(() => b.remove(), 2_600);
     if (to !== undefined) this.shake(to);
   }

@@ -111,6 +111,8 @@ export class Board {
   private flyId = 0;
   private labelKey = '';
   private nextCorner = -1;
+  /** 新手教程讲到哪儿，镜头就框住哪儿（世界坐标的几个点、至少放大到多少）；null 是照常 */
+  private focusOn: { pts: Pt[]; minK: number } | null = null;
   /** 动画速度倍数（单机"快"是 0.5） */
   speed = 1;
   private readonly fullBtn: HTMLButtonElement;
@@ -265,7 +267,7 @@ export class Board {
       const g = svgEl('g', { class: `ghost-car ${kind}`, transform: `translate(${s.p.x.toFixed(1)} ${s.p.y.toFixed(1)}) rotate(${((s.angle * 180) / Math.PI).toFixed(1)})` }, this.ghost);
       svgEl('rect', { x: -16, y: -9, width: 34, height: 18, rx: 7 }, g);
     }
-    if (same || !this.following()) return;
+    if (same || !this.following() || this.focusOn) return;
     // 要缩小（放不下）马上缩；要放大（落点变近、收回了预览）等一会儿，免得点一张牌画面抖一下
     window.clearTimeout(this.settleTimer);
     const target = this.target();
@@ -361,7 +363,7 @@ export class Board {
         while (da < -Math.PI) da += 2 * Math.PI;
         const ang = a.a + da * u + (spin ? k * Math.PI * 2 : 0);
         this.put(c, a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, ang);
-        if (mine && this.following()) this.home(false);
+        if (mine && this.following() && !this.focusOn) this.home(false);
         else this.paintEdges();
         if (k < 1) requestAnimationFrame(frame);
         else resolve();
@@ -435,7 +437,7 @@ export class Board {
 
   /** 回到该在的地方：跟车（有预览时框住预览）或全图 */
   private home(fly: boolean): void {
-    const target = this.following() ? this.target() : this.pref === 'full' && !this.free ? this.fit(this.box) : null;
+    const target = this.focusOn ? this.framed(this.focusOn.pts, this.focusOn.minK) : this.following() ? this.target() : this.pref === 'full' && !this.free ? this.fit(this.box) : null;
     if (!target) return this.applyCam();
     if (fly) this.flyTo(target);
     else {
@@ -506,6 +508,51 @@ export class Board {
     const w = Math.min(s.w / k, this.box.w * 1.2);
     const h = (w * s.h) / s.w;
     return this.clamp({ x: center.x - w / 2, y: center.y - h / 2, w, h });
+  }
+
+  /** 框住这几个点（转过的坐标里留边）：最多放大到 1.4，至少 minK（放不下就以它们的中心为准） */
+  private framed(pts: Pt[], minK: number): Cam {
+    const s = this.screen();
+    const rp = pts.map((p) => this.rot(p));
+    const pad = 70;
+    const x0 = Math.min(...rp.map((p) => p.x)) - pad;
+    const x1 = Math.max(...rp.map((p) => p.x)) + pad;
+    const y0 = Math.min(...rp.map((p) => p.y)) - pad;
+    const y1 = Math.max(...rp.map((p) => p.y)) + pad;
+    const k = Math.max(minK, Math.min(1.4, s.w / (x1 - x0), s.h / (y1 - y0)));
+    const w = Math.min(s.w / k, this.box.w * 1.2);
+    const h = (w * s.h) / s.w;
+    return this.clamp({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h });
+  }
+
+  /**
+   * 新手教程：镜头框住讲的东西（几个世界坐标的点，minK 是至少放大到多少，制动牌这种小字要 ≥ 0.7 才画），null 回到照常的看法。
+   * 框着的时候不跟车、不跟预览
+   */
+  focus(pts: Pt[] | null, minK = 0): void {
+    this.focusOn = pts && pts.length ? { pts, minK } : null;
+    this.free = false;
+    window.clearTimeout(this.settleTimer);
+    this.paintTools();
+    this.home(true);
+  }
+
+  /** 我的车、虚影车、限速牌、制动牌在世界坐标里的位置（给教程框镜头） */
+  carAt(seat: number): Pt | null {
+    const c = this.cars.get(seat);
+    return c ? { x: c.x, y: c.y } : null;
+  }
+
+  ghostPt(): Pt | null {
+    return this.ghostAt ? this.spot(this.ghostAt.pos, this.ghostAt.lane).p : null;
+  }
+
+  signPt(at: number): Pt {
+    return this.art.sign(at);
+  }
+
+  brakePt(at: number, k: number): Pt {
+    return this.art.brake(at, k);
   }
 
   private applyCam(): void {

@@ -1,11 +1,11 @@
 import { STICKERS, PROPS, funItem } from 'arcade-kit/table-fun';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/core/index.ts';
+import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/variants/guandan/core/index.ts';
 import { EMOTES, EMOTE_COUNT, PROP_BASE, PROP_COUNT, STICKER_BASE, STICKER_COUNT, TAUNTS, emoteOf, taunt } from '../src/net/emotes.ts';
 import { suggestFor } from '../src/view/suggest.ts';
-import { dealTitles, emptyMatchLog, logDeal, matchTitles } from '../src/stake/titles.ts';
-import { MOOD_LINES, PHRASES, URGE_AFTER_MS, URGE_P, dealMoment, momentOf, slowUrge, victimOf } from '../src/net/fun-moments.ts';
-import { funBots, guandanRoom, testKey } from '../src/net/rules.ts';
+import { dealTitles, emptyMatchLog, logDeal, matchTitles } from '../src/variants/guandan/stake/titles.ts';
+import { MOOD_LINES, PHRASES, URGE_AFTER_MS, URGE_P, dealMoment, momentOf, slowUrge, victimOf } from '../src/variants/guandan/net/fun-moments.ts';
+import { funBots, guandanRoom, testKey } from '../src/variants/guandan/net/rules.ts';
 
 const play = (s: string) => interpret(parseCards(s), 2, DEFAULT_OPTIONS)[0]!;
 

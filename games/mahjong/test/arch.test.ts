@@ -25,7 +25,17 @@ const PURE = [...files(join(ROOT, 'core')), ...files(join(ROOT, 'ai'))];
  * 光看"不 import rules.ts"挡不住经 index.ts 拿到 begin、tenpaiKinds、applyMut 这些读全量状态的函数，所以按名字放行：
  * 视图、动作、性格状态的类型，算番（只吃自己的牌）和牌型常量。加名字要想清楚它是不是只吃视图里有的东西（DESIGN.md 5.4）
  */
-const AI_MAY_IMPORT = new Set(['XzView', 'XzAction', 'VariantAi', 'Tune', 'scoreHand', 'NO_CONTEXT', 'HIDDEN', 'SHAPE', 'SUITED_KINDS']);
+const AI_MAY_IMPORT = new Set(['XzView', 'XzAction', 'VariantAi', 'Tune', 'scoreHand', 'NO_CONTEXT', 'HIDDEN', 'SHAPE', 'SUITED_KINDS',
+  // 立直：视图、动作的类型，和只吃自己的牌的算番、听牌、牌型常量
+  'RcView',
+  'RcAction',
+  'WinContext',
+  'ALL_KINDS',
+  'RED',
+  'doraOf',
+  'waitsOf',
+  'scoreWin',
+]);
 
 /** 一段代码从玩法那里拿了哪些名单外的东西（* as、动态 import 也算） */
 function variantLeaks(src: string): string[] {

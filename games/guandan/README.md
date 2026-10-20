@@ -2,7 +2,7 @@
 
 Guandan (掼蛋) — the four-player, two-deck partnership climbing game, from level 2 up to A. One of the games on the Arcade mini-game site, running on Cloudflare Workers.
 
-- **Full rules** in a pure, deterministic rules core (`src/core/`): every pattern including wild cards, tribute / refusal / return, *jiefeng*, level-ups and the A round; same seed + same actions = same game.
+- **Full rules** in a pure, deterministic rules core (`src/variants/guandan/core/`): every pattern including wild cards, tribute / refusal / return, *jiefeng*, level-ups and the A round; same seed + same actions = same game.
 - **Solo play** against three computer players with personalities, entirely in the browser: three fun difficulties (beginner / normal / expert) and four real-chip tables, tuned against two simulated player models (`docs/ai.md`). The computer only reads its own hand and public information.
 - **Friend rooms** via a six-digit code or an invite link (built on the shared `arcade-kit` room): reconnects, auto-play when someone is away, "play again"; the server never sends anyone else's cards.
 - **Table fun** — props, stickers and phrases, with computer players that react — from the shared `arcade-kit/table-fun` component.
@@ -29,9 +29,9 @@ The rest of this README, the design documents (`docs/`) and the code comments ar
 
 ## 功能
 
-- **完整规则**：牌型识别（含逢人配的所有解释）、比大小、进贡 / 抗贡 / 还贡、接风、名次升级、打 A，规则核心是纯函数、同一种子同一串操作结果完全相同（`src/core/`，取舍见 `docs/rules.md`）。
+- **完整规则**：牌型识别（含逢人配的所有解释）、比大小、进贡 / 抗贡 / 还贡、接风、名次升级、打 A，规则核心是纯函数、同一种子同一串操作结果完全相同（`src/variants/guandan/core/`，取舍见 `docs/rules.md`）。
 - **电脑对手**：老张、小美、阿强各有性格（爱炸、捂炸弹、抢牌），每场状态有起伏，随级数差和输赢调整，说话和出手快慢跟着性格走；
-  强弱按场地定，新手场偏弱、档位越高越强。只读自己能看到的信息（`src/ai/`，设计和模拟见 `docs/ai.md`；怎么保证、怎么自己验证见下面"电脑不看牌"）。
+  强弱按场地定，新手场偏弱、档位越高越强。只读自己能看到的信息（`src/variants/guandan/ai/`，设计和模拟见 `docs/ai.md`；怎么保证、怎么自己验证见下面"电脑不看牌"）。
 - **单机**：标题页、新手引导、规则说明、设置、战绩，每副结算有复盘和称号；云存档同步战绩（需要平台账号）。
 - **能单独部署**：不要平台也能部署成一个能玩的游戏（单机 + 游客好友房，见"单独部署这个游戏"）。
 - **好友房**：开房后"叫朋友来"直接叫好友（有平台、登录时；对方页面顶上弹一条）或者发链接，点开就进房、自动坐下；已经开打的先旁观（看得到桌面、出牌、分数，看不到任何人的手牌），有电脑座位时点"坐下"接管；掉线重连、走开了自动托管、打完"再来一场"；
@@ -69,17 +69,17 @@ The rest of this README, the design documents (`docs/`) and the code comments ar
 
 有人怀疑电脑透牌。不透，做法和检查都在仓库里，谁都能自己跑：
 
-- **电脑只拿到自己座位的视图**：`src/core` 的 `viewFor(状态, 座位)` 只有自己的手牌、公开的出牌、每人还剩几张、公开的贡牌和自己参与的还贡牌，没有别人的手牌。
-  电脑（`src/ai`）的输入就是它，代码里连完整牌局状态的类型 `GameState` 都不引用。
-- **电脑拿不到能重算发牌的东西**：发牌和首出用 `'deal'`、`'firstLead'` 两条随机流，只在 `src/core` 里。
-  电脑的随机数和"这一场的状态"按用途另外派生（单机 `src/view/session.ts` 的 `soloSeeds`，好友房 `src/net/rules.ts` 的 `aiSeed`、`formSeed`），拿不到牌局种子、密钥本身。
+- **电脑只拿到自己座位的视图**：`src/variants/guandan/core` 的 `viewFor(状态, 座位)` 只有自己的手牌、公开的出牌、每人还剩几张、公开的贡牌和自己参与的还贡牌，没有别人的手牌。
+  电脑（`src/variants/guandan/ai`）的输入就是它，代码里连完整牌局状态的类型 `GameState` 都不引用。
+- **电脑拿不到能重算发牌的东西**：发牌和首出用 `'deal'`、`'firstLead'` 两条随机流，只在 `src/variants/guandan/core` 里。
+  电脑的随机数和"这一场的状态"按用途另外派生（单机 `src/view/session.ts` 的 `soloSeeds`，好友房 `src/variants/guandan/net/rules.ts` 的 `aiSeed`、`formSeed`），拿不到牌局种子、密钥本身。
 - **好友房里服务端说了算**：每个人（包括浏览器里的你）收到的只有自己座位的视图，别人的牌不下发。
 
 自己验证（在本目录 `npm ci` 以后）：
 
 ```bash
 npx vitest run tests/ai.test.ts -t 反事实   # 反事实测试：几百个决策点上把另外三家没亮出来的牌重新分一遍，电脑的决定必须一次都不变
-npx vitest run tests/architecture.test.ts   # src/ai 不引用 GameState、不出现 'deal' / 'firstLead'
+npx vitest run tests/architecture.test.ts   # src/variants/guandan/ai 不引用 GameState、不出现 'deal' / 'firstLead'
 npx vitest run tests/game.test.ts -t 泄露    # 任何时刻的视图里只有自己的牌和公开信息
 ```
 
@@ -152,15 +152,18 @@ CI 用仓库的部署工具（`tools/deployer/deploy.mjs`，按 `tools/workers.j
 ## 目录结构
 
 ```
-src/core/    规则核心（纯函数、确定性）
-src/ai/      电脑对手
-src/net/     联机规则（房间和页面共用）、视角旋转、实盘的桌
-src/stake/   实盘的计分、档位、称号、战绩小结
+src/core/    牌馆通用层：牌的编码、随机数、座位环、牌型识别框架（不引用任何玩法）
+src/variants/guandan/
+  core/      规则核心（纯函数、确定性）
+  ai/        电脑对手
+  net/       联机规则（房间和页面共用）、视角旋转、实盘的桌
+  stake/     实盘的计分、档位、称号、战绩小结
+src/net/     玩法无关的联机部分：页面版本、互动编号表
 src/view/    画面层（Phaser 4）：场景、牌桌部件、界面、程序生成的美术、合成音效、存储
 src/debug/   URL 参数、调试跳转、调试桥
 worker/      线上 Worker：登录闸门、开房进房、联机房间、单机实盘接口
 public/      封面、图标、称号表
-tests/       vitest；tests/room/ 是在 workerd 里跑真房间的测试
+tests/       vitest；tests/room/ 是在 workerd 里跑真房间的测试；golden.test.ts 是掼蛋金样（重构时证明行为不变）
 tools/       模拟器、冒烟和截图、本地联机栈、部署构建、美术预览
 docs/        设计、规则核实、核心接口、实盘设计
 ```

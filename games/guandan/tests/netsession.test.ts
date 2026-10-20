@@ -5,7 +5,7 @@
 import type { RoomClient } from 'arcade-kit/client';
 import { CLOSE, CLOSE_REASON, type RoomInfo, type StateMsg, type WelcomeMsg } from 'arcade-kit/protocol';
 import { describe, expect, it } from 'vitest';
-import { testKey, guandanRoom as R, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
+import { testKey, guandanRoom as R, type NetAction, type NetState, type NetView } from '../src/variants/guandan/net/rules.ts';
 import { seatIdentity, seatName } from '../src/view/labels.ts';
 import { fullSeatName, isWatching } from '../src/view/labels.ts';
 import { updateSettings } from '../src/view/store.ts';

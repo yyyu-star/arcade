@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/core/index.ts';
-import { DIFFICULTIES, PERSONAS, PERSONA_IDS, SEAT_PERSONA, TUNING, decide, formOf, tuningFor, type Difficulty } from '../src/ai/index.ts';
-import { ROOM_FUN_BOT, ROOM_STAKE_BOT, SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor } from '../src/ai/venue.ts';
-import { TIER_IDS } from '../src/stake/index.ts';
+import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/variants/guandan/core/index.ts';
+import { DIFFICULTIES, PERSONAS, PERSONA_IDS, SEAT_PERSONA, TUNING, decide, formOf, tuningFor, type Difficulty } from '../src/variants/guandan/ai/index.ts';
+import { ROOM_FUN_BOT, ROOM_STAKE_BOT, SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor } from '../src/variants/guandan/ai/venue.ts';
+import { TIER_IDS } from '../src/variants/guandan/stake/index.ts';
 import { lineFor, thinkTime } from '../src/view/personas.ts';
 import { playState } from './helpers.ts';
 

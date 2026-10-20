@@ -8,7 +8,7 @@
 import type { FunBot, FunEvent, FunMood, FunTemper } from 'arcade-kit/fun-logic';
 import { isBomb, type DealResult, type GameEvent } from '../core/index.ts';
 import type { PersonaId } from '../ai/index.ts';
-import { EMOTES, TAUNTS } from './emotes.ts';
+import { EMOTES, TAUNTS } from '../../../net/emotes.ts';
 
 /** kit 的短语表：客气话在前、嘲讽在后，编号和房间转发的 emote 一致（表情从 20 起、道具从 32 起，emotes.ts） */
 export const PHRASES: readonly string[] = [...EMOTES, ...TAUNTS];

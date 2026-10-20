@@ -4,8 +4,8 @@
  */
 import { CLOSE } from 'arcade-kit/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { canPass, viewFor } from '../../src/core/index.ts';
-import { guandanRoom as R } from '../../src/net/rules.ts';
+import { canPass, viewFor } from '../../src/variants/guandan/core/index.ts';
+import { guandanRoom as R } from '../../src/variants/guandan/net/rules.ts';
 import { advance, fireDueAlarms, freezeClock, join, truth } from './helpers.ts';
 import { Table } from './table.ts';
 

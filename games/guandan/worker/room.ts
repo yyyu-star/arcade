@@ -6,12 +6,12 @@
  */
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunBot, type FunEvent } from 'arcade-kit/fun-logic';
-import { PHRASES, dealMoment, momentOf, victimOf } from '../src/net/fun-moments.ts';
-import { funBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
-import type { RoomOpts, StakeEffect } from '../src/net/stake.ts';
+import { PHRASES, dealMoment, momentOf, victimOf } from '../src/variants/guandan/net/fun-moments.ts';
+import { funBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/variants/guandan/net/rules.ts';
+import type { RoomOpts, StakeEffect } from '../src/variants/guandan/net/stake.ts';
 import { CLIENT_VERSION } from '../src/net/version.ts';
-import { matchEnd } from '../src/net/together.ts';
-import { ROOM_HOURS } from '../src/stake/index.ts';
+import { matchEnd } from '../src/variants/guandan/net/together.ts';
+import { ROOM_HOURS } from '../src/variants/guandan/stake/index.ts';
 import type { Env } from './gate.ts';
 
 /** 钱包暂时的毛病：抛出去，kit 按退避重试（15 秒起，最多 10 分钟一次），op 不变 */

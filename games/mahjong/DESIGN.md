@@ -660,9 +660,10 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
   - 画面自查：`node scripts/capture.ts land|port|se-land|se-port` 截图并报互相压住的元素（iPhone SE 尺寸，0.3.5）。
   - 还没进冒烟：双指放大、省内存设备（DOM 牌桌没有画布，后者影响小）——见收尾审计 C。
 
-## 11. 以后加日麻（立直麻将）要做什么
+## 11. 加日麻（立直麻将）要做什么
 
 这一节证明第 3 节的分层撑得住：加日麻只在 `variants/riichi/` 和 `view/variants/riichi/` 里写新东西，通用层只做加法。
+日麻的规则、计分、电脑、界面和分几个 PR 做，见 [docs/riichi.md](docs/riichi.md)（2026-10-20 开工，规则核心先交；做完以前入口藏着）。
 
 | 日麻要的 | 落在哪 | 现在的准备 |
 |---|---|---|

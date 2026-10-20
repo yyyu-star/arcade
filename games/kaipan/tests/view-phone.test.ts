@@ -25,10 +25,15 @@ describe('什么时候用手机布局', () => {
     expect(pick(390, 844, false)).toBe(false);
   });
 
-  it('电脑屏幕、平板不用手机布局', () => {
+  it('电脑屏幕不用手机布局（不是触屏，再小也一样）', () => {
     expect(pick(1280, 720, false)).toBe(false);
-    expect(pick(1024, 768, true)).toBe(false);
-    expect(pick(768, 1024, true)).toBe(false);
+    expect(pick(1024, 768, false)).toBe(false);
+  });
+
+  it('0.19.5 触屏平板：电脑布局的字到不了 12 像素就用手机布局，竖着横着一样', () => {
+    for (const [w, h] of [[1024, 768], [768, 1024], [1180, 820], [820, 1180], [1366, 1024], [1104, 884]] as const) expect(pick(w, h, true)).toBe(true);
+    // 够大的触屏（比如 1920×1080 的触屏一体机）照旧用电脑布局
+    expect(pick(1920, 1080, true)).toBe(false);
   });
 
   it('网址参数可以强制', () => {

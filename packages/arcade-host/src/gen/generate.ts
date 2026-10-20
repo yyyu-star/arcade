@@ -11,9 +11,9 @@
  * 运行：在 <out> 里执行 `workerd serve config.capnp --directory-path data=<数据目录>`（静态资源目录按相对当前目录找，
  * 所以必须在 <out> 里起；tools/selfhost 的 systemd 单元和 Dockerfile 都是这么做的）。
  *
- * 存储两种（v2.1：部署时二选一）：
+ * DO 存储两种（部署时选定，和 db 一起见 README 的表）：
  *   - sqlite：Durable Object 存在数据目录（workerd 的 localDisk，每个类一个子目录，名字是固定的 uniqueKey）；D1 也是一个 DO，同一个目录；
- *   - memory：Durable Object 只在内存（PostgreSQL 模式用，房间状态和平台库由别的绑定写进 PG；第一版只生成配置，PG 后端在后面的阶段）。
+ *   - memory：Durable Object 只在内存（只许配 db: pg：平台库走 D1Pg，房间状态经 KIT_STORE 写进 PG，要 arcade-kit 0.21.0 起）。
  */
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
