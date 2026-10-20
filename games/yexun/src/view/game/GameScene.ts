@@ -37,6 +37,7 @@ import { DamageNumbers, Fx } from './fx.ts';
 import { Items } from './items.ts';
 import { weaponLook } from './look.ts';
 import { Town } from './town.ts';
+import { Bump, drawArenaWall } from './wall.ts';
 import type { Input } from './input.ts';
 
 const TICK_MS = 1000 / 30;
@@ -183,6 +184,7 @@ export class GameScene extends Phaser.Scene {
   private rhud: RaidHud | null = null;
   private guardXY: number[] = [];
   private arenaW = ARENA.w;
+  private bump = new Bump();
   private arenaH = ARENA.h;
   /** 地面层的圈（门圈）：画在影子下面，站在圈里的主角和怪盖在它上面 */
   private rg!: Phaser.GameObjects.Graphics;
@@ -291,6 +293,7 @@ export class GameScene extends Phaser.Scene {
       this.paintTerrainLayer();
     }
     this.rg = this.add.graphics().setDepth(-500);
+    if (!this.raid) drawArenaWall(this, this.arenaW, this.arenaH, mapDef);
     if (this.raid) {
       this.setupRaid(this.raid);
       this.rhud = new RaidHud(this.d.hud.root, this.d.hud.bagBox, makeIcons(this.d.raidAtlas ?? this.d.atlas), this.raid.map);
@@ -687,7 +690,10 @@ export class GameScene extends Phaser.Scene {
 
   private tick(): void {
     const a = this.d.autopilot?.(this.w);
-    this.advance(a ? a.dir : this.d.input.dir(), -1);
+    const dir = a ? a.dir : this.d.input.dir();
+    this.bump.before(this.w, dir);
+    this.advance(dir, -1);
+    if (!a) this.onBump(this.bump.after(this.w, this.time.now, this.w.stats.speed));
     this.readEvents();
     if (this.w.phase === 'choose') {
       // 升级演出：先"叮 + 光柱" 0.3 秒再弹卡片（手感清单第 5 条）
@@ -697,6 +703,17 @@ export class GameScene extends Phaser.Scene {
       music.stop();
       this.time.delayedCall(this.w.won ? 1200 : 900, () => this.d.onEnd(this.w));
     }
+  }
+
+  /** 顶着墙走：接触点冒一小撮火星、亮一圈，轻震一下（震屏开关照旧管） */
+  private onBump(b: { x: number; y: number; cx: number; cy: number } | null): void {
+    if (!b) return;
+    for (let n = 0; n < (LOW_MEMORY ? 3 : 6); n++) {
+      const a = Math.random() * Math.PI * 2;
+      this.fx.spawn({ frame: 'spark', x: b.x, y: b.y - 16, life: 260, vx: -b.cx * 120 + Math.cos(a) * 90, vy: -b.cy * 120 + Math.sin(a) * 90, s0: 0.9, s1: 0.2, tint: 0xffd36a, rot: Math.random(), depth: 60 });
+    }
+    this.fx.spawn({ frame: 'ring', x: b.x, y: b.y - 16, life: 260, s0: 0.15, s1: 0.45, a0: 0.9, a1: 0, tint: 0xfff1c0, depth: 60 });
+    this.shake(70, 0.0025);
   }
 
   /** 推一拍：所有 step 都从这里走，前后钩子才不会漏 */

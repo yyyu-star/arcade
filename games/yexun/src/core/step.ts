@@ -428,16 +428,17 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
 }
 
 /**
- * 刷怪的一圈：刚好在屏幕外（一屏约 1000 × 560 到 1080 × 500 单位，画面层 viewport.ts 的 worldZoom），
- * 椭圆横向宽；出了场地就换到对面。
+ * 刷怪的一圈：刚好在屏幕外（横屏一屏约 1000 × 560 到 1080 × 500 单位，画面层 viewport.ts 的 worldZoom），
+ * 椭圆横向宽；竖屏开的局（setup.tall）转 90°，纵向宽。出了场地就换到对面。
  */
-const RING_X = 600;
-const RING_Y = 360;
+export const RING = { long: 600, short: 360 };
 function ringPoint(w: World, a: number, scale = 1): [number, number] {
-  let x = w.x + dcos(a) * RING_X * scale;
-  let y = w.y + dsin(a) * RING_Y * scale;
-  if (x < 10 || x > w.arenaW - 10) x = w.x - dcos(a) * RING_X * scale;
-  if (y < 10 || y > w.arenaH - 10) y = w.y - dsin(a) * RING_Y * scale;
+  const rx = w.setup.tall ? RING.short : RING.long;
+  const ry = w.setup.tall ? RING.long : RING.short;
+  let x = w.x + dcos(a) * rx * scale;
+  let y = w.y + dsin(a) * ry * scale;
+  if (x < 10 || x > w.arenaW - 10) x = w.x - dcos(a) * rx * scale;
+  if (y < 10 || y > w.arenaH - 10) y = w.y - dsin(a) * ry * scale;
   return [x, y];
 }
 
