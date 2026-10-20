@@ -2,6 +2,18 @@
 
 更早的版本没有单独的更新日志：各版本做了什么，见 `docs/platform-backend.md` 各节里的版本标注。
 
+## 0.26.0 — 2026-10-21
+
+日志、监控、告警（所有者：告警走 GitHub Issue；平台只出状态，告警流程在仓库的 Actions 里）。要先跑迁移 0012 再部署：
+
+- `GET /api/health`：版本和数据库能不能查（`SELECT 1`），不写库。
+- `POST /api/client-error`：游戏浏览器报错上报（kit 的 `reportErrors` 用 `sendBeacon` 发，只查 Origin）。报错截到 200 字、堆栈 1,000 字、路径去掉查询串，一行 JSON 进 Workers Logs；
+  库里每个签名每天一行计数（新表 `monitor_counts`，不存原文）。每 IP 每分钟 10 条，同一签名 5 分钟记一次。
+- 第 2 个 Cron（每 5 分钟）：查各游戏 `/games/<id>/health`（5 秒超时，404 算还没接）、10 分钟报错数和"当前版本才出现的新报错"；每天那次清理后再查钱包自检。结果放 `settings` 一行，只在变了时写（另加每小时心跳）。
+- `GET /api/monitor`：公开只读的检查结果（`health:*`、`errors:*`、`wallet`、`quota`、`cron`），只有模块、检查项和计数。
+- 新的写入预算类别"监控"（1,000 行/天，从登录找回挪出，合计仍是 4 万）；Workers Logs 打开（`observability`）。
+- 文档：`docs/platform-backend.md` 新加第 16 节（检查项、阈值、告警流程），6.6、7.1–7.3、15.6 同步；README。
+
 ## 0.25.5 — 2026-10-20
 
 多尺寸适配：冒烟加了一段 `--only=devices`，一次浏览器会话把 26 个尺寸（竖屏手机 9 个、横屏手机 7 个、平板和折叠屏 7 个、电脑 3 个）× 10 页过一遍，

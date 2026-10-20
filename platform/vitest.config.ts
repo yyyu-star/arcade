@@ -20,6 +20,13 @@ export default defineConfig(async () => {
             REGISTRATION: 'switch',
             ADMIN_TOKEN: 't1:test-admin-token-0123456789abcdef',
           },
+          // 巡检会去查各游戏的 /games/<id>/health（worker/api/monitor.ts）：测试里不出网，按固定的几种回答（test/monitor.test.ts）
+          outboundService: (request: Request) => {
+            const path = new URL(request.url).pathname;
+            if (path === '/games/texas/health') return Response.json({ ok: true, version: '9.9.9' });
+            if (path === '/games/yexun/health') return new Response('boom', { status: 500 });
+            return new Response('not found', { status: 404 });
+          },
         },
       }),
     ],

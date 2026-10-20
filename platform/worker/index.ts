@@ -7,6 +7,7 @@ import { type BlockPair, blockedAmong, blockedAmongStats, parseBlockedAmong } fr
 import { runCleanup } from './api/cron';
 import { d1Trouble, Db, newStats } from './api/db';
 import { effectiveTier, meter } from './api/meter';
+import { runMonitor } from './api/monitor';
 import { handleApi } from './api/router';
 import type { Env } from './env';
 
@@ -39,7 +40,13 @@ export default class Arcade extends WorkerEntrypoint<Env> {
    * 免得有人传一个很远的将来，让会话、邀请这些按时间过期的数据被提前清掉
    */
   scheduled = async (controller: ScheduledController): Promise<void> => {
-    this.ctx.waitUntil(runCleanup(this.env, cleanupTime(controller?.scheduledTime)));
+    const now = cleanupTime(controller?.scheduledTime);
+    // 两个 Cron（wrangler.jsonc）：每天那次清理后再巡检一遍、顺带查钱包；每 5 分钟那次只巡检（第 16 节）
+    if (controller?.cron === DAILY_CRON) {
+      this.ctx.waitUntil(runCleanup(this.env, now).then(() => runMonitor(this.env, now, { wallet: true })));
+    } else {
+      this.ctx.waitUntil(runMonitor(this.env, now, { wallet: false }));
+    }
   };
 
   /**
@@ -65,6 +72,9 @@ export default class Arcade extends WorkerEntrypoint<Env> {
     }
   }
 }
+
+/** 每天清理的那个 Cron，和 wrangler.jsonc 的 triggers 对上 */
+const DAILY_CRON = '17 19 * * *';
 
 /** 清理按哪个时间算：调用方给的时间和现在取早的那个；给的不是数（或日期）就按现在 */
 function cleanupTime(given: unknown): number {

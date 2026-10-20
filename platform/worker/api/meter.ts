@@ -8,7 +8,7 @@
 import type { Env } from '../env';
 import type { Limits } from './config';
 
-export const CATEGORIES = ['reg', 'auth', 'save', 'social', 'acct', 'board', 'wallet', 'live', 'sys'] as const;
+export const CATEGORIES = ['reg', 'auth', 'save', 'social', 'acct', 'board', 'wallet', 'live', 'mon', 'sys'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export type Tier = 'normal' | 'noGrowth' | 'readonly' | 'off';
@@ -20,7 +20,7 @@ interface Counts {
 }
 
 function zero(): Counts {
-  return { requests: 0, rowsRead: 0, rows: { reg: 0, auth: 0, save: 0, social: 0, acct: 0, board: 0, wallet: 0, live: 0, sys: 0 } };
+  return { requests: 0, rowsRead: 0, rows: { reg: 0, auth: 0, save: 0, social: 0, acct: 0, board: 0, wallet: 0, live: 0, mon: 0, sys: 0 } };
 }
 
 function sumRows(c: Counts): number {
@@ -100,6 +100,14 @@ class Meter {
       return 'readonly';
     }
     return this.dbSize >= limits.noGrowthDbBytes ? 'noGrowth' : 'normal';
+  }
+
+  /** 当天用量占停服线的百分比：调用数、写入行、读取行里最高的那项（监控用，第 16 节）。还没读到全站计量时回 null */
+  usagePct(limits: Limits, now: number): number | null {
+    if (!this.day) return null;
+    const t = this.totals(now);
+    const { off } = limits;
+    return Math.round(100 * Math.max(t.requests / off.calls, sumRows(t) / off.rowsWritten, t.rowsRead / off.rowsRead));
   }
 
   /** 这一类当天的写入预算是否用完。 */
@@ -210,14 +218,14 @@ class Meter {
         db
           .prepare(
             `INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys,
-               login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+               login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live, rows_mon)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
              ON CONFLICT (hour) DO UPDATE SET
                requests = requests + excluded.requests, rows_read = rows_read + excluded.rows_read,
                rows_reg = rows_reg + excluded.rows_reg, rows_auth = rows_auth + excluded.rows_auth,
                rows_save = rows_save + excluded.rows_save, rows_social = rows_social + excluded.rows_social,
                rows_acct = rows_acct + excluded.rows_acct, rows_board = rows_board + excluded.rows_board, rows_sys = rows_sys + excluded.rows_sys,
-               rows_wallet = rows_wallet + excluded.rows_wallet, rows_live = rows_live + excluded.rows_live,
+               rows_wallet = rows_wallet + excluded.rows_wallet, rows_live = rows_live + excluded.rows_live, rows_mon = rows_mon + excluded.rows_mon,
                login_attempts = login_attempts + excluded.login_attempts,
                recover_attempts = recover_attempts + excluded.recover_attempts,
                db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE db_size END,
@@ -225,14 +233,14 @@ class Meter {
           )
           .bind(
             hk, sent.requests, sent.rowsRead, sent.rows.reg, sent.rows.auth, sent.rows.save, sent.rows.social,
-            sent.rows.acct, sent.rows.board, sent.rows.sys, sentAnon.login, sentAnon.recover, size, now, sent.rows.wallet, sent.rows.live,
+            sent.rows.acct, sent.rows.board, sent.rows.sys, sentAnon.login, sentAnon.recover, size, now, sent.rows.wallet, sent.rows.live, sent.rows.mon,
           ),
         db
           .prepare(
             `SELECT COALESCE(SUM(requests), 0) AS requests, COALESCE(SUM(rows_read), 0) AS rows_read,
                COALESCE(SUM(rows_reg), 0) AS reg, COALESCE(SUM(rows_auth), 0) AS auth, COALESCE(SUM(rows_save), 0) AS save,
                COALESCE(SUM(rows_social), 0) AS social, COALESCE(SUM(rows_acct), 0) AS acct, COALESCE(SUM(rows_board), 0) AS board,
-               COALESCE(SUM(rows_wallet), 0) AS wallet, COALESCE(SUM(rows_live), 0) AS live, COALESCE(SUM(rows_sys), 0) AS sys
+               COALESCE(SUM(rows_wallet), 0) AS wallet, COALESCE(SUM(rows_live), 0) AS live, COALESCE(SUM(rows_mon), 0) AS mon, COALESCE(SUM(rows_sys), 0) AS sys
              FROM meter_hourly WHERE hour >= ?1 AND hour <= ?2`,
           )
           .bind(`${dk}T00`, `${dk}T23`),

@@ -44,6 +44,7 @@ import {
 } from './friends';
 import { getSaves, putSave, saveParams, SAVE_BODY_LIMIT } from './saves';
 import { getLeaderboard } from './leaderboard';
+import { clientError, health, monitorStatus } from './monitor';
 import { getStats, statsParams } from './stats';
 import { adminAdjust, adminLookup, adminOverview, adminRecentAdjustments, claimRelief, getWallet, listWalletStats } from './wallet-api';
 import { limitsOf } from './config';
@@ -78,10 +79,16 @@ interface Route {
   alwaysOpen?: boolean;
   /** 可丢的写（报位置，0.13.0）：只读档、这一类预算用完时不写、直接 204，不打扰玩家（docs/social.md 0："超了静默丢弃"） */
   quiet?: boolean;
+  /** 浏览器用 sendBeacon 发的（报错上报）：带不了 X-Arcade，只查 Origin */
+  beacon?: boolean;
   handler: (c: Ctx) => Promise<Response>;
 }
 
 const ROUTES: Route[] = [
+  // 监控（第 16 节）：健康检查和巡检状态公开只读，任何档位都答；报错上报写不了就静默 204
+  { method: 'GET', path: '/api/health', cat: 'mon', auth: 'none', alwaysOpen: true, handler: health },
+  { method: 'GET', path: '/api/monitor', cat: 'mon', auth: 'none', alwaysOpen: true, handler: monitorStatus },
+  { method: 'POST', path: '/api/client-error', cat: 'mon', auth: 'none', quiet: true, beacon: true, handler: clientError },
   { method: 'GET', path: '/api/me', cat: 'social', auth: 'optional', handler: getMe },
   { method: 'PATCH', path: '/api/me', cat: 'social', auth: 'user', handler: patchMe },
   { method: 'POST', path: '/api/auth/register', cat: 'reg', auth: 'none', growth: true, handler: register },
@@ -290,7 +297,7 @@ async function dispatch(
   // 管理接口带了 Authorization 就按命令行工具的令牌认证，不看 X-Arcade 和 Origin：浏览器跨站请求带不了这个头（要预检，我们不答应）
   const bearer = route.auth === 'admin' && request.headers.has('authorization');
   // 写请求：X-Arcade 和 Origin（只挡浏览器里的跨站请求，脚本能伪造，5.2）
-  if (write && !bearer && (request.headers.get('x-arcade') !== '1' || request.headers.get('origin') !== site)) {
+  if (write && !bearer && ((!route.beacon && request.headers.get('x-arcade') !== '1') || request.headers.get('origin') !== site)) {
     throw new ApiError(403, 'forbidden');
   }
   const params = route.params ? route.params(hit.segments!) : {};

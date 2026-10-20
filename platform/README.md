@@ -45,6 +45,7 @@ The rest of this README, the code comments and the API contract (`docs/platform-
 - **管理页**（`/admin`，控制台布局，分区记在 `?s=`）：概览（数字卡片、7 天趋势图、今天各游戏、"管理筹码"小窗口）；用户（列表顶上"+ 建号"，左边列表、右边详情：钱包、战绩、
   最近 30 笔流水、重设密码、删号）；钱包统计；设置（大厅公告、开放注册、钱包规则，即时生效、留记录）。页面上动不了管理员账号，管理员只能用命令行工具建。
 - **隐私说明**（`/privacy`）：其中"积分和筹码"一段适用于所有游戏：免费、没有充值，积分筹码没有现金价值，不能买、换、转让，不设奖品。
+- **监控**：`/api/health`（版本和数据库）、`/api/client-error`（游戏浏览器报错上报，只存签名和计数）、每 5 分钟的巡检（游戏健康、报错数、钱包自检）和公开的 `/api/monitor`；告警由仓库的 GitHub Actions 读它开关 issue（`docs/platform-backend.md` 第 16 节）。Workers Logs 开着。
 - **防刷和熔断**：持久限流、每天上限、内存令牌桶；按类别的写入预算和熔断档位（`docs/platform-backend.md` 5.4、6.6）。
 
 ## 本地开发
@@ -110,7 +111,7 @@ ARCADE_ADMIN_TOKEN=dev:local-dev-admin-token-000000 npm run admin -- create me �
 | `PEPPER_*_PREV` | Secret，可选 | 换 pepper 时还要认的旧值（`PEPPER_IP` 没有，`docs/platform-backend.md` 5.1） |
 
 必填的几项也写在 `.dev.vars.example` 和 `package.json` 的 `cloudflare.bindings` 里。Secret 一律自己生成随机值（`openssl rand -hex 24`），
-不要用 `.dev.vars.example` 里的本地假值。另有 Cron（每天 UTC 19:17）跑统计和清理，写在 `wrangler.jsonc` 里。
+不要用 `.dev.vars.example` 里的本地假值。另有两个 Cron 写在 `wrangler.jsonc` 里：每天 UTC 19:17 跑统计和清理，每 5 分钟巡检一次（第 16 节）。
 
 ### 一键部署（Deploy to Cloudflare）
 
@@ -180,7 +181,7 @@ platform/
 │  └─ format.ts、ui.tsx、ledger.tsx、next.ts、play.ts   格式化、表单和恢复码卡片、流水列表、登录后跳回的地址、进游戏的地址
 ├─ worker/              Worker
 │  ├─ index.ts          入口：默认导出 WorkerEntrypoint（fetch、给游戏的 RPC blockedAmong、Cron）；/api/* 交给 api/router.ts；导出钱包 RPC 入口 WalletService（wallet-service.ts）
-│  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、presence、invites、feed、challenges、mates、invite-codes、boards、saves、stats、leaderboard、settings；
+│  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、presence、invites、feed、challenges、mates、invite-codes、boards、monitor、saves、stats、leaderboard、settings；
 │                       钱包 wallet.ts（核心）→ wallet-store.ts（读写）→ wallet-api.ts（接口），只能 api → store → 核心这样 import；
 │                       crypto、validate、ratelimit、meter、db、time、config（所有上限和阈值的默认值）
 ├─ migrations/          D1 迁移，只增不删

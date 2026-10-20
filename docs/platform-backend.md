@@ -593,13 +593,14 @@ Cron 判定需要时把它切到 100%。**没有做，因为**现阶段免费版
   | 类别 | 包含的接口 | 每天预算（行） | 用完了 |
   |---|---|---|---|
   | 注册 `reg` | `POST /api/auth/register`（含带码注册） | 2,700 | 只停注册（= `reg:all` 300 个 × 9 行） |
-  | 登录找回 `auth` | 登录、找回 | 10,000 | 只停这两个；已登录的玩家照常存档、看好友 |
+  | 登录找回 `auth` | 登录、找回 | 9,000 | 只停这两个；已登录的玩家照常存档、看好友 |
   | 存档 `save` | `PUT /api/saves/…` | 4,300 | 只停存档写入，第二天恢复；`/api/me` 的 `saves` 变成 `paused` |
   | 好友与资料 `social` | 好友、屏蔽、查好友码（要计数，所以算写）、改昵称和开关、换好友码、邀请码生成和撤回，以及顺带的 `last_seen_at`、续期 | 5,000 | 只停这一类；查好友码也停（503），好友列表照常 |
   | 账号安全 `acct` | 退出、改密码、换恢复码、退出其他设备、注销、再验证失败计数、管理接口 | 2,000 | 停换恢复码；改密码、退出其他设备只放行每人每天 `acct` 上限以内的，另有 3,000 行的超额封顶；退出、注销照做 |
   | 排行榜 `board` | `POST /api/scores`、异步挑战的发起和交成绩、搭子战绩 `together()` | 2,500 | 只停这些写（503 `busy`），读榜、云存档照常 |
   | 钱包 `wallet` | 游戏经 RPC 的带入、结回、放弃，看钱包时的到期退回，`POST /api/wallet/relief` | 6,000 | 停带入和领补给；结回、放弃、看钱包照常（桌上的筹码总要能回来） |
   | 在线 `live` | `POST /api/presence`、好友邀请、好友动态和赞 | 4,000 | 不报错、不写，照样回 204（好友那边慢慢变成"几分钟前来过"）；只读档同样静默 |
+  | 监控 `mon` | `POST /api/client-error`、每 5 分钟的巡检状态（第 16 节） | 1,000 | 报错不再计数、静默 204；巡检状态不再更新（`/api/monitor` 的 `cron` 变成失败，告警会报出来） |
   | 系统 `sys` | 计量上报、Cron 清理、每天的筹码统计 | 3,500 | Cron 当天停止清理和统计；计量上报不停 |
 
   - 一类用完只停这一类（503 `busy`），不连累别的。尤其是匿名接口被刷时，已登录的玩家照常存档；刷榜也不会把云存档挤停。只拦写请求：读榜、读存档、好友列表这些 GET 不受类别预算影响。
@@ -647,7 +648,7 @@ friendships(user_a, user_b, status, requested_by, created_at, PRIMARY KEY (user_
 blocks(blocker, blocked, created_at, PRIMARY KEY (blocker, blocked))                    WITHOUT ROWID
 saves(user_id, game_id, slot, rev, data, size, updated_at, PRIMARY KEY (user_id, game_id, slot))   WITHOUT ROWID
 rate_counters(key PK, window_start, count, blocked_until)                               WITHOUT ROWID    -- 固定窗口计数；blocked_until 给失败计数的指数延迟用
-meter_hourly(hour PK, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_sys, rows_board, rows_wallet, rows_live,
+meter_hourly(hour PK, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_sys, rows_board, rows_wallet, rows_live, rows_mon,
              login_attempts, recover_attempts, db_size, updated_at)                     WITHOUT ROWID    -- hour：UTC 小时；6.6 的计量
 boards(user_id, game_id, board_id, score, updated_at, PRIMARY KEY (user_id, game_id, board_id))   WITHOUT ROWID，索引 boards_rank (game_id, board_id, score DESC, updated_at)
 settings(key PK, value, updated_at)                                                     WITHOUT ROWID    -- registration、wallet_rules、invite_rules、notice
@@ -660,9 +661,10 @@ challenges(id PK, game, owner_id, payload, created_at, until)                   
 challenge_results(challenge_id, user_id, score, stats, created_at, PRIMARY KEY (challenge_id, user_id))   WITHOUT ROWID
 mates(lo, hi, game, n, lo_wins, hi_wins, team_n, team_wins, last_op, last_at, PRIMARY KEY (lo, hi, game))   WITHOUT ROWID，索引 mates_hi (hi)   -- 搭子战绩（15.19）
 invite_codes(id PK, code, owner_id, created_at, expires_at, used_by, used_at, revoked_at)   WITHOUT ROWID，唯一索引 (code)、索引 (owner_id, created_at)   -- 邀请码（15.20）
+monitor_counts(day, game, kind, sig, n, first_ver, ver, last_at, PRIMARY KEY (day, game, kind, sig))   WITHOUT ROWID   -- 浏览器报错计数（第 16 节）；巡检状态放 settings 的 monitor 一行
 ```
 
-迁移：0001 账号、0002 `users.role`、0003 排行榜、0004 设置、0005 钱包、0006 在线位置、0007 邀请、0008 动态、0009 挑战、0010 搭子、0011 邀请码。设计取舍（都为少写行数）：
+迁移：0001 账号、0002 `users.role`、0003 排行榜、0004 设置、0005 钱包、0006 在线位置、0007 邀请、0008 动态、0009 挑战、0010 搭子、0011 邀请码、0012 监控（`monitor_counts`、`meter_hourly.rows_mon`）。设计取舍（都为少写行数）：
 - **全部用 `WITHOUT ROWID`**：主键是 TEXT 或多列的普通表，SQLite 会另建一个自动唯一索引、每次插入多算 1 行；`WITHOUT ROWID` 表的主键就是表本身。
 - **`credentials` 主键是 `(user_id, type)`，没有 identifier 列和额外索引**：密码和恢复码都是先按用户名找到用户再比对，注册因此从约 13 行降到约 9 行。代价是每种类型只能有一条；以后多个 passkey、第三方登录**另建表**，不改这张表。
 - **注销是直接删除**，没有 `deleted_at`，也没有游客。
@@ -705,6 +707,8 @@ D1 按写入行数计费：插入时表本身一行，每个索引再各算一�
 | 钱包：被拒、重复的 op、写满 1,000 次、档位或预算停了 / `rev` 冲突 | 0 / 输的那次 0，重算后 1 | 先读、算完才写；带 `rev` 条件的更新不成立是 0 行，最多试 4 次 | 钱包 |
 | 看钱包 | 0；有到期退回时 1 | 没有钱包的人不建行；`GET` 顺带数今天各游戏的人数（只读，扫 wallets，每个 isolate 10 分钟一次） | 钱包 |
 | 筹码统计（Cron，每天） | 1 | `wallet_stats`；同一天记过 0；不占 `cleanupMaxRows` | 系统 |
+| 浏览器报错 `POST /api/client-error` | 记下 1；同一签名 5 分钟内、限流、预算用完 0 | monitor_counts 1（每签名每天一行，UPSERT） | 监控 |
+| 每 5 分钟的巡检（Cron） | 结果没变 0；变了或满 1 小时 1 | settings 的 monitor 一行 | 监控 |
 | 报位置 `POST /api/presence` | 位置没变每人每 2 分钟 ≤ 1；位置变了马上 1，但每人每 10 秒 ≤ 1；节流内 0 | users 1（`presence_*`、`last_seen_at` 同一行） | 在线 |
 | 发邀请 / "不了" | 3 / 1 | invites 表 1 + 两个索引 2；只改 `dismissed` | 在线 |
 | 好友动态 `POST /api/feed`、结回生成 / 赞、扔道具 | 2；满 10 条、关了开关、预算用完 0 / 2；再点 0 | feed 1 + 索引 1 / 赞计数 1 + feed_reactions 1 | 在线 |
@@ -718,10 +722,10 @@ D1 按写入行数计费：插入时表本身一行，每个索引再各算一�
 | 管理员改注册开关、公告、钱包规则 | 2；没变化 0 | settings 1 + 每日计数 1；用令牌调时另有认证的 4 行 | 账号安全 |
 | 令牌认证（Bearer） | 成功 4；失败 2；限流或被拒 0 | 两个失败名额各占 1 行，成功再各还 1 行（5.8） | 账号安全 |
 | 管理员列账号、看设置 | 0 | 只读，不计每日次数 | — |
-| **之后的清理**（Cron） | 每个过期计数行 1、每个过期会话 1、每个旧计量行 1、每条 60 天前的每日榜成绩 1 | 每新建一行计数，一生共 2 行写入 | 系统 |
+| **之后的清理**（Cron） | 每个过期计数行 1、每个过期会话 1、每个旧计量行 1、每条 60 天前的每日榜成绩 1、每行 7 天前的报错计数 1 | 每新建一行计数，一生共 2 行写入 | 系统 |
 
 **最坏情况**（匿名刷登录，每次换 IP、随机用户名）：每次尝试新建一个 `login:ip` 行（1），日后清理再 1 行（记系统类）。全站每小时 300 次的上限有上报滞后（6.6），按被刷时 30 个 isolate 估（推断），每小时约 600 次，一天约 1.4 万次。
-真正封顶的是"登录找回"类预算（10,000 行，加上滞后超出约几百行）；之后登录、找回 503，已登录的玩家照常存档。清理的那一半记系统类（3,500 行），用完 Cron 当天停清，剩下的留到第二天。
+真正封顶的是"登录找回"类预算（9,000 行，加上滞后超出约几百行）；之后登录、找回 503，已登录的玩家照常存档。清理的那一半记系统类（3,500 行），用完 Cron 当天停清，剩下的留到第二天。
 各类预算合计 4 万，加上账号安全类最多 3,000 行的超额和各类的滞后，离只读档的 5 万还有约 7,000 行余量；正常情况下一类被刷不会连带全站只读。
 
 ### 7.3 注销与清理
@@ -733,7 +737,7 @@ D1 按写入行数计费：插入时表本身一行，每个索引再各算一�
 - **1 年未登录**：每天的 Cron 找出 `last_seen_at` 早于 365 天前、`role = 'user'` 的用户（没有索引，只花读行数），每次最多 200 个，按注销同样的语句删。**管理员不清**。注意存档接口不更新 `last_seen_at`（5.5）。
 - **每天的 Cron 先记筹码统计**（5.9），先于一年清理；出错只记日志，不影响后面的清理。
 - **每天的 Cron 还清理**：过期的会话、窗口已过的 `rate_counters`、**60 天前的每日榜**（`dailyBoardKeepDays`，北京时间，带不带 `-v<n>` 都算；固定榜不动；沿排名索引按 `board_id` 范围删，这也是榜单 ID 把日期放在版本号前面的原因，9.2）、
-  7 天前的 `meter_hourly`、2 天前的邀请、7 天前的动态和赞、30 天前的挑战和结果、过期或撤回满 30 天的没用邀请码。清理的写入算进"系统"类，每次最多删 3,000 行（`cleanupMaxRows`），删不完的留到第二天。
+  7 天前的 `meter_hourly` 和 `monitor_counts`、2 天前的邀请、7 天前的动态和赞、30 天前的挑战和结果、过期或撤回满 30 天的没用邀请码。清理的写入算进"系统"类，每次最多删 3,000 行（`cleanupMaxRows`），删不完的留到第二天。
   每一段单独兜住：一段出错只记段名和错误类型，接着清下一段。
 - 隐私说明里写明：备份（Time Travel）会在 30 天内自然过期。
 
@@ -1004,6 +1008,7 @@ D1 按写入行数计费：插入时表本身一行，每个索引再各算一�
 | 键 | 窗口 | 上限 | 超了 | 每次写 |
 |---|---|---|---|---|
 | isolate 内存令牌桶 | 1 分钟 | 每个 IP 的匿名接口 10 次；注册先过它再读开关 | 429，不碰 D1 | 0 |
+| 浏览器报错（另一个内存令牌桶） | 1 分钟 / 5 分钟 | 每个 IP 10 条；同一签名每个 isolate 5 分钟记 1 次（第 16 节） | 429 / 静默 204 | 0 |
 | `reg:ip:<ip>` / `reg:all` | 天 | 20 次注册尝试（通过格式检查的才算）/ 300 | 429 | 1 |
 | `login:ip:<ip>` | 1 小时 | 30 次尝试（成败都算） | 429 | 1 |
 | 登录全站（随计量上报） | 1 小时 | 300 次，只算用户名存在的 | 429 | 0 |
@@ -1027,7 +1032,7 @@ D1 按写入行数计费：插入时表本身一行，每个索引再各算一�
 | 钱包写入（记在钱包行里） | 北京时间天 | 每人 1,000 次，各游戏合计；带入、领补给到了上限就停（5.9） | 带入回 `limit`；领补给 429 | 0 |
 | 网关规则 | 10 秒 | 每个 IP + 机房 60 次，`/api/*` 和各游戏的开房、进房、`/api/` 请求（5.4） | Cloudflare 直接拦 10 秒，不进 Worker | 0 |
 | 游戏房间进房（kit，游戏 Worker 里） | — | 每次进房调一次 `/api/me`（算平台的调用）；房间自己的额度见 4.6 | — | 0 |
-| 写入分类预算（6.6） | 天 | 注册 2,700 / 登录找回 10,000 / 存档 4,300 / 好友与资料 5,000 / 账号安全 2,000（超额封顶 3,000）/ 排行榜 2,500 / 钱包 6,000 / 在线 4,000 / 系统 3,500 行（合计 4 万） | 只停这一类，503 `busy`；账号安全类的例外见 6.6 | — |
+| 写入分类预算（6.6） | 天 | 注册 2,700 / 登录找回 9,000 / 存档 4,300 / 好友与资料 5,000 / 账号安全 2,000（超额封顶 3,000）/ 排行榜 2,500 / 钱包 6,000 / 在线 4,000 / 监控 1,000 / 系统 3,500 行（合计 4 万） | 只停这一类，503 `busy`；账号安全类的例外见 6.6 | — |
 | 全站档位（6.6） | 天 | 调用 4 万 / 6 万，D1 写 5 万 / 8 万，读 300 万 / 450 万，库 300 / 400 MB | 停增长、只读、停服，503 `busy` | 约每 50 次调用 1 |
 
 ### 15.7 管理接口
@@ -1278,3 +1283,41 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 - **删干净**：注销、一年清理删本人生成的所有码；本人用过的那个码 `used_by` 清成空（`used_at` 留着，邀请人那边还算已用）。Cron：没用的码过期或撤回满 30 天就删。隐私说明写明谁邀请了谁（邀请人能在"我的"里看到用了自己码的人的昵称）。
 - **界面**：`/me` 的"邀请朋友"栏（还能邀请几个、生成、列表、复制链接、系统分享、撤回）；注册页的"邀请码"输入框（注册关着时必填）；管理后台一页：四个数、给某人改额度、全站的码和撤回。
 - 管理接口见 15.7。存储：`invite_codes` 表（避开好友房邀请的 `invites`）和 `users.invite_quota`。
+
+## 16. 监控和告警
+
+不引入新服务、不给 Cloudflare 加新凭证：平台自己巡检、把结果放在公开的 `/api/monitor`；GitHub Actions 定时读它，用 `GITHUB_TOKEN` 开、关 issue。
+仓库和接口都公开，所以接口返回、issue、日志里只有模块、检查项和计数，没有域名、IP、用户名、userId。
+
+### 16.1 接口
+
+| 接口 | 认证 | 返回 | 写 |
+|---|---|---|---|
+| `GET /api/health` | 无，任何档位都答 | `{"ok", "version", "db"}`：`db` 是 `SELECT 1` 成不成；查不了回 503 | 0 |
+| `POST /api/client-error` | 无；只查 Origin，不要 `X-Arcade`（kit 的 `reportErrors` 用 `sendBeacon` 发，带不了自定义头） | 204；`game` 不在 `games.ts`、没有 `msg` 400；每 IP 每分钟超 10 条 429 | 见 7.2 |
+| `GET /api/monitor` | 无，任何档位都答，`cache-control: no-store` | `{"checks": [{"id", "ok", "n"?, "pct"?, "skip"?}], "at"}`，`at` 是巡检最后一次写状态的时间 | 0 |
+
+`/api/client-error` 的请求体 `{"game", "ver", "msg", "stack"?, "path"?}`：`msg` 截到 200 字、`stack` 截到 1,000 字、`path` 去掉 `?` 和 `#` 以后的部分（里面可能有房间码、邀请码），
+整条 `console.error` 成一行 JSON 进 Workers Logs（`wrangler.jsonc` 的 `observability` 开着）。库里只存签名（游戏 + `msg` 前 80 字的 SHA-256 前 16 位）和计数，不存报错原文。
+同一签名每个 isolate 5 分钟只记一次，刷屏的报错不会把监控类预算用光。
+
+### 16.2 检查项和阈值
+
+巡检是第 2 个 Cron（`*/5 * * * *`），每天 19:17 那次清理之后也跑一遍。阈值在 `config.ts` 的 `monitor*`。
+
+| 检查项 | 失败的条件 | 说明 |
+|---|---|---|
+| `health:<游戏>` | 同域查 `/games/<id>/health`：5 秒超时、网络错、非 2xx、`ok` 不是 `true` | 只查 `status: 'playable'` 的游戏；回 404 算还没接（`skip: true`），不告警。没设 `SITE_ORIGIN`（本地、一键部署）不查 |
+| `errors:<游戏>` | 10 分钟内浏览器报错 ≥ 20 条，或当前版本才出现、以前几天没见过的签名报到 ≥ 5 次 | 10 分钟的数按状态里的快照算：快照只在当天总数变了时记，10 分钟前或更早里最新的那条就是 10 分钟前的数 |
+| `wallet` | 有钱包的余额或桌上的筹码不是非负整数 | 每天那次查，其余几次沿用。各天的筹码统计记不下已结的带入，算不出逐笔对账，所以只查这个 |
+| `quota` | 当天用量（调用数、写入、读取里最高的那项）≥ 停服线（6.6 的 `off`）的 80% | 读 `/api/monitor` 时按计量现算，不存 |
+| `cron` | 状态 30 分钟没更新 | 状态没变时每小时也写一次，所以正常时最多 1 小时旧 |
+
+状态放 `settings` 的 `monitor` 一行 JSON，只在结果变了时写（另加每小时一次心跳），写入记在监控类（7.2）。停服档不巡检。
+
+### 16.3 告警流程
+
+- `.github/workflows/monitor.yml`（维护者的流程）每 10 分钟读一次 `/api/monitor`，主机名在仓库 secret `MONITOR_HOST`。
+- 某项转为失败：开 issue（标签 `alert`，标题"告警：<检查项>"）；同名的已开着，只追评论，每小时最多一次。恢复：评论并关闭。
+- 查问题：Workers Logs 里按 `client-error` 和签名找原文，接口的错误日志只有路径和错误类型。
+
