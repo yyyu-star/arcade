@@ -2,7 +2,7 @@
 .yx-vault-panel { height: min(600px, 100%); }
 .yx-vtab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 0; line-height: 1.15; }
 .yx-vtab b { font-size: 18px; }
-.yx-vtab small { font-size: 11px; opacity: 0.8; }
+.yx-vtab small { font-size: 12px; opacity: 0.8; }
 .yx-vtab.t-liang.on { background: #4f9a5a; }
 .yx-vtab.t-zhen.on { background: #4a7fd0; }
 .yx-vtab.t-jue.on { background: #c8902a; }
@@ -19,7 +19,7 @@
 .yx-vcell img { width: 44px; height: 44px; object-fit: contain; }
 .yx-vcell img.sil { filter: brightness(0); opacity: 0.3; }
 .yx-vcell b { font-size: 13px; line-height: 1.2; text-align: center; }
-.yx-vcell em { position: absolute; right: -5px; top: -7px; padding: 0 5px; border: 2px solid var(--ink); border-radius: 8px; background: var(--gold); font-style: normal; font-size: 11px; line-height: 14px; }
+.yx-vcell em { position: absolute; right: -5px; top: -7px; padding: 0 5px; border: 2px solid var(--ink); border-radius: 8px; background: var(--gold); font-style: normal; font-size: 12px; line-height: 14px; }
 .yx-vcell.got { background: #f7e9b8; box-shadow: 0 2px 0 var(--ink); }
 .yx-vcell.t-jue.got { box-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(224, 160, 48, 0.75); }
 .yx-vcell.seen { background: #ece2c8; }

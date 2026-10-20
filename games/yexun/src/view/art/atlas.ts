@@ -70,10 +70,13 @@ export const RAID_TEX = 'atlas8';
 
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...SPRITES13, ...digitDefs()], res);
+  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...digitDefs()], res);
 }
 
-/** 各地区的特色怪（sprites12）也装不进主图集，单独一张；守夜、夜探都要用 */
+/**
+ * 各地区的特色怪（sprites12）也装不进主图集，单独一张；守夜、夜探都要用。
+ * 纸兵（sprites13）也放这张：0.4.2 放进主图集后 res 3（平板、高分屏）主图集高 2,056 超过 2,048，开局就报错（10-20 多尺寸矩阵 768×1024 查出）
+ */
 export const MOB_TEX = 'atlas9';
 
 let mobCache: { res: number; atlas: Atlas } | null = null;
@@ -81,7 +84,7 @@ let mobCache: { res: number; atlas: Atlas } | null = null;
 /** 特色怪的图集；同一个 res 只画一次 */
 export function buildMobAtlas(res: number): Atlas {
   if (mobCache?.res === res) return mobCache.atlas;
-  mobCache = { res, atlas: pack([...SPRITES12], res, MOB_TEX) };
+  mobCache = { res, atlas: pack([...SPRITES12, ...SPRITES13], res, MOB_TEX) };
   return mobCache.atlas;
 }
 
