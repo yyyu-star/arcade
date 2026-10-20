@@ -490,15 +490,14 @@
     "after": "SELECT * FROM saves ORDER BY user_id, game_id, slot"
   },
   {
-    "why": "监控的钱包自检（第 16 节）：余额、桌上每份筹码都得是非负整数。SQLite 的 typeof 分得出 integer/real，PG 用 json_typeof 加取整比较；不是数的先挡成 NULL 再算，免得转换报错",
+    "why": "监控的钱包自检（第 16 节）：余额、桌上每份筹码都得是非负整数。stakes 是对象（wallet.ts 的 Record<string, Stake>），SQLite 的 json_each 遍历它的值，PG 同样用 json_each 取 value；SQLite 的 typeof 分得出 integer/real，PG 用 json_typeof 加取整比较，不是数的先挡成 NULL 再算，免得转换报错",
     "sqlite": "SELECT COUNT(*) AS bad FROM wallets WHERE typeof(json_extract(state, '$.balance')) != 'integer' OR json_extract(state, '$.balance') < 0 OR EXISTS (SELECT 1 FROM json_each(state, '$.stakes') AS s WHERE typeof(json_extract(s.value, '$.amount')) != 'integer' OR json_extract(s.value, '$.amount') < 0)",
     "pg": [
       "SELECT COUNT(*) AS bad FROM wallets AS w",
       "WHERE (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) IS NULL",
       "   OR (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) < 0 OR (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) <> trunc(CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END)",
-      "   OR EXISTS (SELECT 1 FROM json_array_elements(CASE WHEN json_typeof(w.state::json->'stakes') = 'array' THEN w.state::json->'stakes' END) AS s",
-      "              WHERE json_typeof(s->'amount') IS DISTINCT FROM 'number' OR (CASE WHEN json_typeof(s->'amount') = 'number' THEN (s->>'amount')::numeric END) < 0",
-      "                 OR (CASE WHEN json_typeof(s->'amount') = 'number' THEN (s->>'amount')::numeric END) <> trunc(CASE WHEN json_typeof(s->'amount') = 'number' THEN (s->>'amount')::numeric END))"
+      "   OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_typeof(w.state::json->'stakes') = 'object' THEN w.state::json->'stakes' END) AS s",
+      "              WHERE (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) IS NULL OR (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) < 0 OR (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) <> trunc((CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END)))"
     ],
     "samples": [
       []
