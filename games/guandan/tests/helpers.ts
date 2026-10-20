@@ -1,4 +1,4 @@
-import { createGame, parseCards, sortHand, type Card, type GameState, type Play, type Options, dispatch, type Action, type GameEvent } from '../src/core/index.ts';
+import { createGame, parseCards, sortHand, type Card, type GameState, type Play, type Options, dispatch, type Action, type GameEvent } from '../src/variants/guandan/core/index.ts';
 
 export const C = parseCards;
 

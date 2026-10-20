@@ -6,7 +6,7 @@
 }
 .yx-rs-1, .yx-rs-2 {
   padding: 3px 12px; border: 2.5px solid var(--ink); border-radius: 10px;
-  font-size: calc(14px * var(--s, 1)); box-shadow: 0 2px 0 var(--ink);
+  font-size: max(12px, calc(14px * var(--s, 1))); box-shadow: 0 2px 0 var(--ink);
 }
 .yx-rs-1 { background: rgba(246, 239, 220, 0.94); }
 .yx-rs.go .yx-rs-1 { background: #ffe08a; color: #5a3a00; }
@@ -26,7 +26,7 @@
   width: min(300px, 60vw); max-height: 62%; overflow-y: auto;
   display: flex; flex-direction: column; gap: 4px; padding: 8px;
   border: 3px solid var(--ink); border-radius: 12px; background: rgba(246, 239, 220, 0.97); box-shadow: 0 4px 0 var(--ink);
-  pointer-events: auto; font-size: calc(14px * var(--s, 1));
+  pointer-events: auto; font-size: max(12px, calc(14px * var(--s, 1)));
 }
 .yx-bagpanel .hd { font-size: calc(15px * var(--s, 1)); padding: 0 2px 4px; border-bottom: 2px solid rgba(23, 19, 28, 0.25); }
 .yx-bagpanel .empty { opacity: 0.7; padding: 6px 2px; font-weight: 500; }

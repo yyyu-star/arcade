@@ -3,9 +3,9 @@
  * 不起浏览器：假的 localStorage 和 fetch。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decide } from '../src/ai/index.ts';
-import { seatsToAct, viewFor } from '../src/core/index.ts';
-import { SOLO_DEALS, payout, pointValue } from '../src/stake/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
+import { seatsToAct, viewFor } from '../src/variants/guandan/core/index.ts';
+import { SOLO_DEALS, payout, pointValue } from '../src/variants/guandan/stake/index.ts';
 import { roomLeaveText, settleNowText } from '../src/view/stake-text.ts';
 import { STAKE_KEY, StakeSession, buyinStake, clearStake, loadStake, refundStake, settleStake, strayStake, transient, type StakeSave } from '../src/view/stake.ts';
 import { KEYS } from '../src/view/store.ts';

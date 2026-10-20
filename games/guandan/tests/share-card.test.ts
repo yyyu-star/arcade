@@ -7,7 +7,7 @@ import { INVITE_Z, presenceOf } from '../src/view/social.ts';
 import onlineSrc from '../src/view/online.ts?raw';
 import rotateSrc from '../src/view/orientation.ts?raw';
 import errorsSrc from '../src/view/errors.ts?raw';
-import { emptyMatchLog, type MatchLog, type Title } from '../src/stake/titles.ts';
+import { emptyMatchLog, type MatchLog, type Title } from '../src/variants/guandan/stake/titles.ts';
 import type { NetSession } from '../src/view/net.ts';
 
 const log = (over: Partial<MatchLog> = {}): MatchLog => ({ ...emptyMatchLog(), deals: 6, firsts: [2, 1, 3, 0], bombs: [3, 0, 1, 2], ...over });

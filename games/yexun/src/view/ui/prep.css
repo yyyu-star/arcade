@@ -60,6 +60,21 @@
 .yx-pchar.locked[data-a='buychar'] em { color: #b8322a; font-weight: 700; font-size: 13px; }
 .yx-pchar[aria-disabled='true'] { opacity: 1; }
 .yx-pchar.locked[aria-disabled='true'] { opacity: 0.88; }
+/* 初始数值对比条：基准（小道士）在 50% 处的竖线；绿 = 比基准强，红 = 比基准弱 */
+.yx-pchars .yx-pbars { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-top: 2px; }
+.yx-pchars .yx-pbar { display: grid; grid-template-columns: 4.2em 1fr 3.6em; align-items: center; gap: 4px; font-size: 12px; line-height: 1.3; }
+.yx-pchars .yx-pbn { font-style: normal; text-align: left; white-space: nowrap; color: #5a4a3a; }
+.yx-pchars .yx-pbv { font-style: normal; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: #7a6a58; }
+.yx-pchars .yx-pbar.up .yx-pbv { color: var(--yx-up, #2f7a3a); }
+.yx-pchars .yx-pbar.down .yx-pbv { color: var(--yx-down, #b8322a); }
+.yx-pchars .yx-pbt { position: relative; display: block; height: 7px; border-radius: 3px; background: rgba(0, 0, 0, 0.12); overflow: hidden; }
+.yx-pchars .yx-pbt::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(0, 0, 0, 0.55); }
+.yx-pchars .yx-pbf { position: absolute; left: 0; top: 0; bottom: 0; background: var(--yx-base, #9a8a6a); }
+.yx-pchars .yx-pbd { position: absolute; top: 0; bottom: 0; }
+.yx-pchars .yx-pbar.up .yx-pbd { background: var(--yx-up, #2f7a3a); }
+.yx-pchars .yx-pbar.down .yx-pbd { background: var(--yx-down, #b8322a); }
+.yx-pchars .yx-ppriv { font-size: 13px; line-height: 1.35; font-weight: 700; color: #2f5a8a; }
+.yx-pchar.locked .yx-ppriv { color: #5a4a3a; }
 .yx-lock { width: 11px; height: 11px; vertical-align: -1px; }
 @media (max-width: 640px) {
   .yx-pchars { grid-template-columns: repeat(2, 1fr); }

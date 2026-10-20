@@ -13,8 +13,8 @@
  */
 import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright-core';
-import type { Card } from '../src/core/index.ts';
-import type { NetView } from '../src/net/rules.ts';
+import type { Card } from '../src/variants/guandan/core/index.ts';
+import type { NetView } from '../src/variants/guandan/net/rules.ts';
 import { startOnlineStack, type OnlineStack } from './online-dev.ts';
 
 const OUT = ((): string => {

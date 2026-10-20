@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { handle, type Env, type Fetcher } from '../worker/gate.ts';
 import type { WalletReply, WalletRpc } from '../worker/stake.ts';
-import { SOLO_HOURS, WALLET_ID } from '../src/stake/index.ts';
+import { SOLO_HOURS, WALLET_ID } from '../src/variants/guandan/stake/index.ts';
 
 const SITE = 'https://game.example.com';
 

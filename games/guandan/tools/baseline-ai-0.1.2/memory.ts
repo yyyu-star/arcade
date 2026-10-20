@@ -8,7 +8,7 @@
  *
  * 记性分档：`full` 记全部出牌；`high` 只记大牌（王、级牌、A、K，人类玩家通常只数这些）；`none` 不记牌，只扣掉自己手里的。
  */
-import { ACE, BIG_JOKER, SMALL_JOKER, isWild, orderValue, rankOf, type Card, type Play, type PlayerView } from '../../src/core/index.ts';
+import { ACE, BIG_JOKER, SMALL_JOKER, isWild, orderValue, rankOf, type Card, type Play, type PlayerView } from '../../src/variants/guandan/core/index.ts';
 
 export type Recall = 'none' | 'high' | 'full';
 

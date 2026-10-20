@@ -4,11 +4,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/core/index.ts';
-import { stakeBegin, stakeDeal, stakeSeated, stakeSettled, type StakeTable } from '../src/net/stake.ts';
-import { testKey } from '../src/net/rules.ts';
-import { emptyTally, statsOf, tallyDeal } from '../src/stake/stats.ts';
-import { TITLE_INFO } from '../src/stake/titles.ts';
+import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/variants/guandan/core/index.ts';
+import { stakeBegin, stakeDeal, stakeSeated, stakeSettled, type StakeTable } from '../src/variants/guandan/net/stake.ts';
+import { testKey } from '../src/variants/guandan/net/rules.ts';
+import { emptyTally, statsOf, tallyDeal } from '../src/variants/guandan/stake/stats.ts';
+import { TITLE_INFO } from '../src/variants/guandan/stake/titles.ts';
 
 const play = (s: string) => interpret(parseCards(s), 2, DEFAULT_OPTIONS)[0]!;
 const BOMB = play('♠9 ♥9 ♣9 ♦9');

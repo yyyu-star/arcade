@@ -2,10 +2,10 @@
  * 搭子战绩（0.16.0，src/net/together.ts）：哪一步算"一场刚打完"、哪一队赢；比赛记录里每队的分（score）按 dealPoints 攒、转视角时按队对调
  */
 import { describe, expect, it } from 'vitest';
-import { testKey, guandanRoom as R, type NetState } from '../src/net/rules.ts';
-import { matchEnd } from '../src/net/together.ts';
-import { rotateNetView } from '../src/net/rotate.ts';
-import { dealPoints } from '../src/stake/index.ts';
+import { testKey, guandanRoom as R, type NetState } from '../src/variants/guandan/net/rules.ts';
+import { matchEnd } from '../src/variants/guandan/net/together.ts';
+import { rotateNetView } from '../src/variants/guandan/net/rotate.ts';
+import { dealPoints } from '../src/variants/guandan/stake/index.ts';
 
 /** 电脑把房间打到 over，记下每一步 */
 function play(seed: number, seats?: ('human' | 'ai')[], stake?: 'small'): NetState[] {

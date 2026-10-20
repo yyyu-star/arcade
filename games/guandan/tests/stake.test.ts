@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { decide } from '../src/ai/index.ts';
-import { createGame, dispatch, seatsToAct, viewFor, type DealResult, type GameState, type Seat } from '../src/core/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
+import { createGame, dispatch, seatsToAct, viewFor, type DealResult, type GameState, type Seat } from '../src/variants/guandan/core/index.ts';
 import {
   POINTS_PER_SHARE,
   ROOM_DEALS,
@@ -29,7 +29,7 @@ import {
   validSoloResult,
   type RoomBook,
   type SoloMatch,
-} from '../src/stake/index.ts';
+} from '../src/variants/guandan/stake/index.ts';
 
 /** 一副的结果：只有名次和赢家队要紧 */
 function deal(dealNo: number, order: Seat[]): DealResult {

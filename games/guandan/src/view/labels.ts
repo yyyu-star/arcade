@@ -1,5 +1,5 @@
 /** 给玩家看的短文字：牌型名、名次、座位名。只做"翻译"，不算规则。 */
-import { PLAY_TYPE_NAMES, rankName, type Play } from '../core/index.ts';
+import { PLAY_TYPE_NAMES, rankName, type Play } from '../variants/guandan/core/index.ts';
 import { PERSONAS } from './art/index.ts';
 
 /** 中央显示的牌型名：炸弹带张数，例如"炸弹×6"。 */

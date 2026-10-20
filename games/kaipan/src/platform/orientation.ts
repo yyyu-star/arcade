@@ -1,12 +1,13 @@
 /**
- * 手机竖屏提示：触屏设备（pointer: coarse）竖着拿、且宽度小于 600 CSS 像素时，盖一层 DOM 提示「把手机横过来」；
+ * 竖屏提示：触屏设备（pointer: coarse）竖着拿时，盖一层 DOM 提示「把屏幕横过来」；0.19.5 起平板竖着拿也提示（以前只管 600 宽以下的手机，
+ * 平板竖着时电脑布局缩到 0.6 倍，字只有 6–7 像素）；
  * 转成横屏后自动消失。纯 CSS 媒体查询控制显隐；风格与 0.3 的炒股小屋一致（暖色纸面、深梅子棕粗描边、橙色强调），
  * 插画先用内联 SVG（不依赖外部素材，素材没加载时也能显示）；真的要显示时再去取美术的 ui/rotate_phone.svg，
  * 取到了就换上（横屏设备上不会发这个请求）。
  */
 
 const ID = 'rotate-hint';
-const QUERY = '(orientation: portrait) and (max-width: 599.98px) and (pointer: coarse)';
+const QUERY = '(orientation: portrait) and (pointer: coarse)';
 const ART = 'assets/art/v3/ui/rotate_phone.svg';
 
 /** 一部卡通手机（屏幕上是群聊气泡和一根红 K 线），旁边一道橙色旋转箭头；手机来回转动。 */
@@ -97,7 +98,7 @@ export function mountRotateHint(lobby?: RotateLobby): void {
   const el = document.createElement('div');
   el.id = ID;
   el.setAttribute('role', 'alert');
-  el.innerHTML = `<div class="rh-card">${ICON}<b>把手机横过来</b><span>小屋太宽，竖着放不下看板、持仓和群聊。<br>横过来，画面会自动铺满。</span><i>开盘 · 散户的一年</i></div>`;
+  el.innerHTML = `<div class="rh-card">${ICON}<b>把屏幕横过来</b><span>小屋太宽，竖着放不下看板、持仓和群聊。<br>横过来，画面会自动铺满。</span><i>开盘 · 散户的一年</i></div>`;
   if (lobby) {
     const btn = document.createElement('button');
     btn.type = 'button';

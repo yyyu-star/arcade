@@ -70,10 +70,13 @@ export class Dash {
   private tick = 0;
   private presets: Presets;
   private readonly hooks: DashHooks;
+  /** 新手教程：预设一律"问我"，不显示预设小签（好让冲刺、尾流、拼劲、弃牌的提问都出现） */
+  private readonly lockPresets: boolean;
 
-  constructor(parent: HTMLElement, presets: Presets, hooks: DashHooks) {
+  constructor(parent: HTMLElement, presets: Presets, hooks: DashHooks, lockPresets = false) {
     this.presets = presets;
     this.hooks = hooks;
+    this.lockPresets = lockPresets;
     this.root = el('div', 'dash', parent);
     this.tick = window.setInterval(() => this.paintTimer(), 250);
   }
@@ -329,6 +332,7 @@ ${nums}<text x="60" y="86" font-size="11" font-weight="800" text-anchor="middle"
       if (this.sel.includes(h.id) && (pick || (v.phase === 'plan' && me.plan))) continue;
       const c = el('button', 'card', row);
       c.type = 'button';
+      c.dataset.kind = String(h.kind);
       c.innerHTML = cardSvg(h.kind);
       if (h.kind === HEAT) c.classList.add('heat');
       if (this.marks.includes(h.id)) c.classList.add('mark');
@@ -435,6 +439,7 @@ ${nums}<text x="60" y="86" font-size="11" font-weight="800" text-anchor="middle"
       });
     }
 
+    if (this.lockPresets) chips.remove();
     const go = button('act go', box, stall ? '熄火' : '出牌', () => {
       const plan: Plan = {
         gear: this.gear,

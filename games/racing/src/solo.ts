@@ -54,9 +54,8 @@ export function clearSolo(): void {
   }
 }
 
-/** 开一场：密钥浏览器现生成，0 号座位是自己 */
-export function newSolo(opts: Opts, myName: string): SoloSave {
-  const key = [...crypto.getRandomValues(new Uint32Array(8))];
+/** 开一场：密钥浏览器现生成（新手教程用写死的那把），0 号座位是自己 */
+export function newSolo(opts: Opts, myName: string, key: number[] = [...crypto.getRandomValues(new Uint32Array(8))]): SoloSave {
   const bots = pickPersonas(stream(key, 'persona'), opts.level, opts.cars - 1);
   const kinds: ('human' | 'ai')[] = Array.from({ length: opts.cars }, (_, i) => (i === ME ? 'human' : 'ai'));
   const state = begin(key, opts, kinds, [-1, ...bots]);
@@ -73,10 +72,13 @@ export class Solo {
 
   readonly save: SoloSave;
   private readonly ui: SoloUi;
+  /** 存不存进 racing.solo：新手教程不存，也不能把玩家正在跑的那场续玩冲掉 */
+  private readonly store: boolean;
 
-  constructor(save: SoloSave, ui: SoloUi) {
+  constructor(save: SoloSave, ui: SoloUi, store = true) {
     this.save = save;
     this.ui = ui;
+    this.store = store;
   }
 
   get view(): View {
@@ -109,7 +111,7 @@ export class Solo {
 
   private async commit(s: State): Promise<void> {
     this.save.state = s;
-    persist(this.save);
+    if (this.store) persist(this.save);
     if (this.stopped) return;
     await this.ui.frame(view(s, ME));
   }
@@ -144,7 +146,7 @@ export class Solo {
         if (planning) {
           // 电脑交计划：不放动画，只更新"选好了"
           this.save.state = r;
-          persist(this.save);
+          if (this.store) persist(this.save);
           unshown = true;
           continue;
         }

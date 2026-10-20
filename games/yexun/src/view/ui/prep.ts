@@ -113,6 +113,38 @@ export class Prep {
       `<div class="yx-prep-body">${body}</div></div>`;
   }
 
+  /** 初始数值对比条：以小道士（全 1）为基准画在 50% 处；高于基准绿、低于红，右边写百分比差。冷却取倒数（出手快慢），拾取和运气合成一根 */
+  private statBars(id: CharacterId): string {
+    const b = CHARACTERS[id].base;
+    const rows: [string, number][] = [
+      ['血量', b.hp],
+      ['移速', b.speed],
+      ['伤害', b.might],
+      ['出手', 1 / b.cd],
+      ['范围', b.area],
+      ['拾取运气', b.magnet + b.luck],
+    ];
+    return (
+      '<span class="yx-pbars">' +
+      rows
+        .map(([name, v]) => {
+          const pct = Math.round((v - 1) * 100);
+          const txt = pct === 0 ? '—' : `${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`;
+          // 条满长对应 2 倍；基准在 50%，差的那一段按方向上色
+          const lo = Math.max(0, Math.min(100, Math.min(v, 1) * 50));
+          const hi = Math.max(0, Math.min(100, Math.max(v, 1) * 50));
+          const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+          return (
+            `<span class="yx-pbar ${cls}"><i class="yx-pbn">${name}</i>` +
+            `<span class="yx-pbt"><span class="yx-pbf" style="width:${lo}%"></span><span class="yx-pbd" style="left:${lo}%;width:${hi - lo}%"></span></span>` +
+            `<i class="yx-pbv">${txt}</i></span>`
+          );
+        })
+        .join('') +
+      '</span>'
+    );
+  }
+
   /** 六张角色卡：头像（对局精灵）、名字、起手法器、被动、人设；选中的显示台词；没解锁的灰着显示怎么解锁和进度 */
   private chars(s: PrepState): string {
     return (
@@ -135,6 +167,8 @@ export class Prep {
           `<span class="yx-pface"><img alt="" src="${this.icons(heroKey(id), 128)}"></span>` +
           `<b>${esc(c.name)}</b><span class="yx-pstart"><img alt="" src="${this.icons(w.icon)}">起手 ${esc(w.name)}</span>` +
           `<span class="yx-pperkname">${esc(c.perkName)}</span><p>${esc(c.perk)}</p>` +
+          this.statBars(id) +
+          `<span class="yx-ppriv">小特权：${esc(c.privilege)}</span>` +
           (on && st.open ? `<q class="yx-pline">${esc(c.line)}</q>` : `<span class="yx-plook">${esc(c.look)}</span>`) +
           `${canBuy ? '' : note}<em>${foot}</em></button>`
         );
