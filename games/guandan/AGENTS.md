@@ -95,6 +95,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   没有 `WALLET` 时单机实盘接口和实盘房间回 409 `no_wallet`、房间的 `perform` 兜底拒绝。页面在 `src/view/platform.ts`：启动时 kit 的 `detectPlatform` 问一次 `/api/me`（`main.ts` 和 `BootScene` 等它），
   回 `{ standalone: true }`（单独部署时 kit 的 `standaloneRoot` 接住 `/api/me`，所以 `run_worker_first` 里有它）或 404 是单独部署——不摆实盘和云存档（主页没有"实盘"卡）、"大厅"变"首页"回 `./`、`currentUserId` 回固定的游客（同一个浏览器就是同一个游客）、好友房面板填昵称（`guandan.nick`）并用 `withNickname` 带在开房、进房地址上；
   5xx、超时按有平台处理。本地：`npm run online-dev`（和 online/stake/quota 冒烟）写一份补了平台绑定的派生配置连假平台；`npm run standalone-smoke` 原样用 `wrangler.jsonc`。
+- 健康检查和报错：`gate.ts` 的 `handle` 第一件事是 `GET /games/guandan/health`（`HEALTH_PATH`）→ `{ ok: true, version }`（版本取自 `package.json`，`no-store`；不认人、不读存储、不碰平台，单独部署也一样，`tests/gate.test.ts` 守着），`wrangler.jsonc` 的 `run_worker_first` 里有它、`observability.enabled` 开着（`tests/config.test.ts`）。
+  页面 `main.ts` 开头挂 kit 的 `reportErrors({ game: 'guandan', version })`（`arcade-kit/report`）：没人接住的报错报给平台 `/api/client-error`，和本地的兜底面板（`errors.ts`、`guandan.errors`）互不影响。
 - 登录闸门（`worker/gate.ts`，用 arcade-kit 的 `loginGate`）：线上只有三个首页路径（`wrangler.jsonc` 的 `assets.run_worker_first`）先进 Worker，js、图片照旧直接走静态资源。
   变量 `GATE`：`"off"` 原样放行；其他值（包括没配）都要登录：没带平台会话 cookie 的直接 302，带了的经服务绑定 `ARCADE` 问平台 `/api/me`（地址按请求的 origin 拼）。
   已登录放行、未登录 302 到 `/login?next=<请求的路径 + 查询>`（登录完回到原链接，房间链接直接进房），这两种都把平台下发的 Set-Cookie 原样带回浏览器（会话续期、清失效 cookie）；
@@ -276,3 +278,8 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 
 - 1280×720 下，手牌列数在"每列最多 4 张"和"5 张"之间切换时（`table/hand.ts` 的 `MIN_SPACING_SHORT`），布局会跳一下。
 - 标题字体的缺字测试（`tests/view.test.ts`）按行用正则扫字符串，标题文字跨行写会漏检。
+- 多尺寸适配（手机竖横屏、平板、电脑共 27 个尺寸逐屏量溢出、点按区、重叠、字号）里掼蛋、斗地主共有的三处，要动共用部件，没在斗地主的 PR 里改：
+  - 顶栏图标（左上"大厅"、右上规则 / 声音 / 返回）在手机横屏（568–932 宽）的点按区伸出屏幕上沿，露在屏内的不到 44 CSS 像素；主页和牌桌都有。
+  - `ui/kit.ts` 的 `segmented`（主页"掼蛋 / 斗地主"、选难度）点按区按世界坐标 44 高，手机横屏只有约 27–36 CSS 像素。
+  - kit 的 table-fun：竖屏手机时互动热区（`.atf-hot`）左边伸出屏幕几像素；竖屏平板（1024×1366）上聊天框的短语按钮 32–36 高。改在 kit。
+- 斗地主新手档电脑变弱后（`NOVICE_BLUNDER`，docs/stake.md 10.2），娱乐单机"新手"难度对小白的胜率（仓库 `docs/balance.md`：≥ 60%）还没单独量。

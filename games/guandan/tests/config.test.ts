@@ -33,6 +33,7 @@ interface Wrangler {
   workers_dev: boolean;
   preview_urls: boolean;
   assets: { run_worker_first: string[] };
+  observability?: { enabled?: boolean };
   durable_objects: { bindings: { name: string; class_name: string }[] };
   migrations: { tag: string; new_sqlite_classes?: string[] }[];
   vars: Record<string, unknown>;
@@ -72,6 +73,10 @@ describe('wrangler.jsonc', () => {
     expect(conf.vars.GATE).toBeUndefined();
     expect(conf.workers_dev).toBe(true);
     expect(conf.preview_urls).toBe(false);
-    expect(conf.assets.run_worker_first).toEqual(expect.arrayContaining(['/', '/api/me', '/games/guandan/api/stake/*']));
+    expect(conf.assets.run_worker_first).toEqual(expect.arrayContaining(['/', '/api/me', '/games/guandan/api/stake/*', '/games/guandan/health']));
+  });
+
+  it('开着 Workers 日志（observability），线上排查用', () => {
+    expect(conf.observability?.enabled).toBe(true);
   });
 });

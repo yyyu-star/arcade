@@ -136,7 +136,8 @@ CI 用仓库的部署工具（`tools/deployer/deploy.mjs`，按 `tools/workers.j
 
 | 种类 | 名字 | 说明 |
 |---|---|---|
-| 静态资源 | `ASSETS` | `npm run build:cf` 生成的 `dist-cf/`；只有站点根、首页、房间接口、实盘接口先进 Worker（`run_worker_first`）；模块里写好的 |
+| 静态资源 | `ASSETS` | `npm run build:cf` 生成的 `dist-cf/`；只有站点根、首页、房间接口、实盘接口和健康检查先进 Worker（`run_worker_first`）；模块里写好的 |
+| 日志 | `observability` | 开着 Workers 日志和调用记录，线上排查在 Cloudflare 后台看；模块里写好的 |
 | Durable Object | `ROOM`、`METER`、`MATCH` | 联机房间（`worker/room.ts`）、arcade-kit 的额度计量、快速匹配的排队（`worker/match.ts`）；模块里写好的 |
 | 变量 | `ONLINE`、`KIT_QUOTA` | 好友房开关（`on` / `off`）、每天的联机额度门槛；模块里写好的 |
 | 服务绑定（部署工具补） | `ARCADE` | 平台 Worker（名字 `arcade`）：登录闸门、进房、实盘认人都问它的 `/api/me`；所以要先部署平台 |
@@ -144,6 +145,9 @@ CI 用仓库的部署工具（`tools/deployer/deploy.mjs`，按 `tools/workers.j
 | 变量（部署工具补） | `GATE = login` | 没登录不让进；有它却没绑 `ARCADE` 时 kit 一律拒绝，不会退成游客 |
 | `workers_dev`（部署工具关） | `false` | 本站只经站点域名访问 |
 | 路由和变量（部署时注入） | `<站点>/games/guandan*`、`SITE_ORIGIN` | 只认这个站点发起的开房、实盘请求；不设就按请求自己的 origin |
+
+监控：`GET /games/guandan/health` 回 `{"ok":true,"version":"<版本>"}`（不认人、不读存储，在登录闸门之前，单独部署也能访问），仓库的监控流程定时读它；
+页面里没人接住的报错经 kit 的 `reportErrors` 报给平台 `/api/client-error`（只有报错文字、调用栈、路径和版本，不带账号）。
 | 部署环境的 secret | `SITE_HOST`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 站点主机名（不带协议）只在这里，仓库里不写 |
 
 ## 目录结构

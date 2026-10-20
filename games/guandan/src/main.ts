@@ -2,6 +2,7 @@
  * 入口：错误兜底 → 竖屏提示 → 读设置和 URL 参数 → 准备会话 → 起 Phaser。
  */
 import Phaser from 'phaser';
+import { reportErrors } from 'arcade-kit/report';
 import { mountBridge } from './debug/bridge.ts';
 import { jumpToAce, jumpToTribute } from './debug/jump.ts';
 import { parseParams } from './debug/params.ts';
@@ -31,6 +32,8 @@ import { worldW } from './view/ui/kit.ts';
 import { applyAudio } from './view/ui/panels.ts';
 
 installErrorHandler();
+// 没人接住的报错报给平台（kit 0.22：只发报错文字、调用栈、路径、版本，不带账号；同一条一页只报一次）。兜底面板照旧给玩家看
+reportErrors({ game: 'guandan', version: __APP_VERSION__ });
 // 有没有平台（单独部署时没有）：开场景、进房、云存档都等它（kit 默认最多等 2.5 秒）
 const platform = detectOnce();
 // 竖屏提示层里的"大厅"：牌桌被盖住，有打到一半的存档（或好友房正在打）时用浏览器自带的确认框

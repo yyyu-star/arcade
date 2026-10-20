@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import worker from '../worker/index.ts';
 import * as entry from '../worker/index.ts';
-import { GATED_PATHS, GUEST, handle, type Env, type Fetcher } from '../worker/gate.ts';
+import { GATED_PATHS, GUEST, HEALTH_PATH, handle, type Env, type Fetcher } from '../worker/gate.ts';
+import pkg from '../package.json' with { type: 'json' };
 import { PERSONAS } from '../src/view/art/avatars.ts';
 import wranglerText from '../wrangler.jsonc?raw';
 
@@ -169,6 +170,22 @@ describe('单独部署（没有 ARCADE，GATE 也不是 login）', () => {
   });
 });
 
+describe('健康检查', () => {
+  it('不登录、不问平台、不碰静态资源，回版本号；有平台和单独部署都一样', async () => {
+    const url = `https://game.example.com${HEALTH_PATH}`;
+    const platform = env(arcade(async () => { throw new Error('不该问平台'); }));
+    const alone: Env & { ASSETS: ReturnType<typeof assets> } = { ASSETS: assets() };
+    for (const e of [platform, alone]) {
+      const res = await handle(new Request(url), e);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(await res.json()).toEqual({ ok: true, version: pkg.version });
+      expect(e.ASSETS.calls).toEqual([]);
+    }
+    expect(platform.ARCADE && (platform.ARCADE as unknown as { seen: Request[] }).seen).toEqual([]);
+  });
+});
+
 describe('GATE=off', () => {
   it('原样交给静态资源，不问平台，不改缓存头', async () => {
     const arc = arcade(async () => json({ user: null }));
@@ -195,8 +212,8 @@ describe('wrangler.jsonc', () => {
     services?: unknown;
     assets: { binding: string; run_worker_first: string[] };
   };
-  it('只有站点根和 /api/me（单独部署时由 kit 接）、三个首页路径、房间接口和实盘接口先进 Worker，js、图片等直接走静态资源', () => {
-    expect(cfg.assets.run_worker_first).toEqual(['/', '/api/me', ...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*']);
+  it('只有站点根和 /api/me（单独部署时由 kit 接）、三个首页路径、房间接口、实盘接口和健康检查先进 Worker，js、图片等直接走静态资源', () => {
+    expect(cfg.assets.run_worker_first).toEqual(['/', '/api/me', ...GATED_PATHS, '/games/guandan/room/*', '/games/guandan/api/stake/*', HEALTH_PATH]);
     expect(cfg.assets.binding).toBe('ASSETS');
     // 部署入口是 main.ts（默认导出 + 房间类 Room）；index.ts 只有默认导出，上面的"入口模块"测试查的是它
     expect(cfg.main).toBe('worker/main.ts');

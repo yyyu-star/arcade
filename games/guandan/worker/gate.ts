@@ -23,6 +23,7 @@ import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/variants/guandan/net/
 import { MATCH_DDZ, MATCH_DDZ_TIERS } from '../src/variants/doudizhu/net/match.ts';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
+import pkg from '../package.json' with { type: 'json' };
 
 /** 服务绑定和静态资源绑定只用到 fetch；闸门的测试用假的绑定，这里自己声明最小接口。 */
 export interface Fetcher {
@@ -131,7 +132,13 @@ async function createWithOptions(request: Request, env: Env, kitEnv: KitEnv, opt
   return acceptCreate(request, kitEnv, { ...opts, options: { stake } });
 }
 
+/** 健康检查（监控每 10 分钟读一次）：只说活着和版本号，不读存储、不认人，在登录闸门和单独部署的站点根之前 */
+export const HEALTH_PATH = '/games/guandan/health';
+
 export async function handle(request: Request, env: Env): Promise<Response> {
+  if (request.method === 'GET' && new URL(request.url).pathname === HEALTH_PATH) {
+    return Response.json({ ok: true, version: pkg.version }, { headers: { 'cache-control': 'no-store' } });
+  }
   // 单独部署：站点根 / 转到 /games/guandan/（有平台时回 null，站点根归平台）
   const root = standaloneRoot(request, env, 'guandan');
   if (root) return root;
