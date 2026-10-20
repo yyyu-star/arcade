@@ -26,7 +26,7 @@ jobs:
   # 维护者先登记（tools/workers.json、本流程）、游戏的 PR 后合：登记合并时 games/racing 还不存在，
   # 这时（以及之前 kit 有改动时）测试和部署都跳过，不算失败。游戏合并以后这一段可以删掉。
   present:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
       ok: ${{ steps.chk.outputs.ok }}
@@ -42,7 +42,7 @@ jobs:
   test:
     needs: present
     if: needs.present.outputs.ok == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       # PR 上新推送取消旧的检查
       group: game-racing-test-${{ github.ref }}
@@ -85,7 +85,7 @@ jobs:
   deploy:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test.outputs.deployable == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: production
     concurrency:

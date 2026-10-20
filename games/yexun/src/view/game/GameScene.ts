@@ -755,7 +755,7 @@ export class GameScene extends Phaser.Scene {
       w.level - w.pendingLevels + 1,
       w.choices.map((c) => describe(w, c)),
       this.d.firstRun && !this.cardsSeen,
-      { rerolls: w.rerolls, bans: w.bans },
+      { rerolls: w.rerolls, bans: w.bans, live: !!w.setup.live },
       (i) => {
         this.cardsSeen = true;
         sfx.play('choose');
@@ -959,6 +959,16 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Goblin:
           this.onGoblin(x, y, ev.a[i]!);
+          break;
+        case Ev.Skip: {
+          // 跳过选卡拿到的小奖飘一句（content/picks.ts 的顺序）
+          const n = ev.b[i]!;
+          const say = [`铜钱 +${n}`, `回血 +${n}`, '下次升级多一张卡', '刷新 +1'][ev.a[i]!];
+          if (say) this.d.banners.say(say, 'gold', 1600, '跳过的小奖');
+          break;
+        }
+        case Ev.Reroll:
+          this.d.banners.say('刷新 +1', 'gold', 1400, ev.a[i] === 0 ? '进化补一次' : '打倒精英补一次');
           break;
         case Ev.Market:
           this.onMarket(x, y, ev.a[i]!, ev.b[i]!);
@@ -1728,8 +1738,9 @@ export class GameScene extends Phaser.Scene {
       const key = kind === Shot.Fireball && w.sState[i] !== 0 ? (w.sState[i] === 1 ? 'ice' : 'money') : (SHOT_FRAME[kind] ?? 'fireball');
       if (!s || s.gen !== w.sGen[i]) {
         const f = this.frame(key);
-        const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
-        img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
+        // 纸兵的图在特色怪那张图集（atlas.ts）：按帧所在的贴图换，不能只换帧
+        const img = s?.img ?? this.add.image(0, 0, f.tex ?? 'atlas', f.key);
+        img.setTexture(f.tex ?? 'atlas', f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
         const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : kind === Shot.Paper ? 1.5 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);

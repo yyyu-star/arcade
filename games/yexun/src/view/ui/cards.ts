@@ -107,7 +107,7 @@ export class Cards {
   }
 
   /** onPick 收到的是 step 的 choice：0–2 选第几张，或 Pick.Reroll / Pick.Ban + i / Pick.Skip */
-  show(level: number, cards: CardView[], firstTime: boolean, counts: { rerolls: number; bans: number }, onPick: (i: number) => void): void {
+  show(level: number, cards: CardView[], firstTime: boolean, counts: { rerolls: number; bans: number; live?: boolean }, onPick: (i: number) => void): void {
     this.onPick = onPick;
     this.counts = counts;
     this.banning = false;
@@ -143,9 +143,11 @@ export class Cards {
     const bar = document.createElement('div');
     bar.className = 'yx-picks-bar';
     bar.innerHTML =
-      `<button type="button" data-a="reroll"${counts.rerolls > 0 ? '' : ' disabled'}>刷新 <b>${counts.rerolls}</b></button>` +
-      `<button type="button" data-a="ban"${counts.bans > 0 ? '' : ' disabled'}>封禁 <b>${counts.bans}</b></button>` +
-      '<button type="button" data-a="skip">跳过 <small>换一点魂</small></button>';
+      `<button type="button" data-a="reroll"${counts.rerolls > 0 ? '' : ' disabled'}><span>刷新 <b>${counts.rerolls}</b></span><small>整批换掉</small></button>` +
+      `<button type="button" data-a="ban"${counts.bans > 0 ? '' : ' disabled'}><span>封禁 <b>${counts.bans}</b></span><small>这张整局不再出现</small></button>` +
+      (counts.live
+        ? '<button type="button" data-a="skip"><span>跳过</span><small>换一点魂</small></button>'
+        : '<button type="button" data-a="skip"><span>跳过 · 随机小奖</span><small>随机拿个小奖</small></button>');
     bar.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'reroll') this.action(Pick.Reroll);

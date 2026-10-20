@@ -21,7 +21,7 @@ defaults:
     working-directory: packages/arcade-host
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: pkg-arcade-host-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -40,7 +40,7 @@ jobs:
       - run: npm test
   # PG 模式的测试再拿真的 PostgreSQL 跑一遍（本机默认用 PGlite）
   test-pg:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: pkg-arcade-host-pg-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}

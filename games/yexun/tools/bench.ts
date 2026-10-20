@@ -1,5 +1,5 @@
 /**
- * 核心耗时（DESIGN.md 第 6、8e 节，只测规则核心，浏览器那一侧另测）：
+ * 核心耗时（DESIGN.md 第 6 节，只测规则核心，浏览器那一侧另测）：
  *   node tools/bench.ts [种子] [难度]                整局：会绕圈走、升级选第一个，报每拍耗时和峰值（预算：电脑 ≤ 0.5 ms）
  *   node tools/bench.ts --worst [--reps N] [--ticks T] [--seed S] [--json]
  *                                                    最坏拍：300 只怪始终满额 + 12 件法器全部 8 级进化，主角无敌绕圈走。

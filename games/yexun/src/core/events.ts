@@ -93,6 +93,10 @@ export const Ev = {
   Vault: 54,
   /** 纸兵倒下：a = 0 倒下 / 1 撒豆成兵炸开 / 2 鸣兵震开；b = 半径 */
   Paper: 55,
+  /** 跳过选卡拿到的小奖：a = 0 铜钱 / 1 回血 / 2 下次多一张卡 / 3 刷新 +1，b = 数量；实盘旧规则换魂时 a = -1 */
+  Skip: 56,
+  /** 补了一次刷新：a = 0 进化 / 1 打倒精英或首领 */
+  Reroll: 57,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

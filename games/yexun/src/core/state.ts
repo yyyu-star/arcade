@@ -6,6 +6,7 @@ import { ENEMIES } from '../content/enemies.ts';
 import type { Danger, WaveEvent } from '../content/waves.ts';
 import { CHARACTERS, CURSE_IDS, MAX_CURSES, PERK_FX, PERKS, type CharacterId, type CurseId, type PerkId } from '../content/meta.ts';
 import { MAPS, type Block, type MapId, type Rect } from '../content/maps.ts';
+import { PICKS } from '../content/picks.ts';
 import { MAX_WEAPONS, MERGES, type MergeDef, type PassiveId, type WeaponId, type WeaponStats } from '../content/weapons.ts';
 import { ARENA, PLAYER } from '../content/player.ts';
 import { Events } from './events.ts';
@@ -14,7 +15,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 21;
+export const RULES_VERSION = 22;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -201,6 +202,8 @@ export class World {
   readonly rHit: Rng;
   readonly rWeapon: Rng;
   readonly rProp: Rng;
+  /** 跳过的随机小奖（单独一路，不动别的随机） */
+  readonly rSkip: Rng;
 
   // 主角
   x = ARENA.w / 2;
@@ -233,6 +236,8 @@ export class World {
   /** 刷新、封禁还剩几次；封禁掉的（不再出现在三选一里） */
   rerolls = 2;
   bans = 1;
+  /** 跳过抽中"下次多一张卡"：下一次升级多给一张（不叠加） */
+  bonusCard = 0;
   banned: (WeaponId | PassiveId)[] = [];
   /** 合成了哪几个（MergeDef.id） */
   merges: MergeDef['id'][] = [];
@@ -379,7 +384,8 @@ export class World {
     const setup = normalizeSetup(raw);
     this.setup = setup;
     const perk = (id: PerkId): number => setup.perks?.[id] ?? 0;
-    this.rerolls = setup.curses?.includes('noreroll') ? 0 : 2 + perk('shuaxin') * PERK_FX.shuaxin;
+    this.rerolls = setup.curses?.includes('noreroll') ? 0 : (setup.live ? PICKS.liveRerolls : PICKS.rerolls) + perk('shuaxin') * PERK_FX.shuaxin;
+    this.bans = setup.live ? PICKS.liveBans : PICKS.bans;
     this.revives = perk('fuhuo') * PERK_FX.fuhuo;
     this.cardCount = 3 + perk('kapian') * PERK_FX.kapian;
     this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger, character: setup.character }) : null;
@@ -409,6 +415,7 @@ export class World {
     this.rHit = new Rng(s, 'hit');
     this.rWeapon = new Rng(s, 'weapon');
     this.rProp = new Rng(s, 'prop');
+    this.rSkip = new Rng(s, 'skip');
     this.stats = baseStats();
   }
 }
