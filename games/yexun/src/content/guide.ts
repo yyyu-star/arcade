@@ -51,7 +51,7 @@ export const SCHOOLS: Record<SchoolId, School> = {
     name: '剑修',
     weapons: ['sword', 'flysword', 'coins', 'thunder', 'bell'],
     passives: ['zhusha', 'caoxie', 'lingpai', 'xianglu', 'nianzhu', 'xiantao'],
-    tip: '前期清群快，刀剑砍不动的硬怪多了会吃力：留一格给符、镇或火补刀',
+    tip: '刀剑砍不动石狮、跳尸将军、白狐：后期补雷符劈它们（还和桃木剑凑木 2 件）；尸王、跳尸怕镇魂铃',
   },
   talisman: {
     id: 'talisman',
