@@ -3,7 +3,8 @@
 #   docker：同一个发布包做成镜像、起容器 → 冒烟（管理入口只在容器里，备份和定时任务用 docker exec 跑）；compose 文件校验；
 #   pg：PostgreSQL 模式（postgres:17 服务容器，测试密码固定，只在这次运行里）。平台每条 SQL 在 PG 上 PREPARE、覆盖表和 SQLite 对照（check-sql）→
 #       SQLite 档起站冒烟、备份 → PG 档起站冒烟 → 把 SQLite 的备份迁进 PG、逐行核对（verify-import）→ 迁移后再冒烟一次。
-#       房间先用落盘存储（pg + sqlite）：DO 不落盘的 pg + memory 要 kit 0.21 的 KIT_STORE，kit 发版后再加。
+#       → 房间也进 PG（pg + memory，什么都不落盘）：冒烟、开房记下房间码 → 重启 → 两人回到同一个房间（宿主重启后按 PG 里的闹钟唤醒）。
+#       pg + memory 要 kit 0.21.0 起的 KIT_STORE：德州还没升时，这个作业在工作区里临时把德州的 kit 换成 0.21.0（不提交，德州自己升了这一步就什么都不做）。
 # 平台和德州改了也跑：它们一变，自托管能不能原样跑起来要马上知道。
 name: Self-host
 on:
@@ -164,13 +165,19 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deployer
           (cd packages/arcade-host && npm ci --no-audit --no-fund && npm run build)
+      - name: 德州的 kit 不到 0.21.0 就临时换成 0.21.0（只在这个作业的工作区里）
+        working-directory: games/texas
+        run: |
+          v=$(node -p 'require("./package-lock.json").packages["node_modules/arcade-kit"].version')
+          case "$v" in 0.1?.* | 0.20.* | 0.[0-9].*) npm install --no-audit --no-fund --ignore-scripts "arcade-kit@npm:@yyyu-star/arcade-kit@0.21.0" ;; *) echo "德州已是 kit $v" ;; esac
       - name: 平台的每条 SQL 在 PG 上过一遍（check-sql）
         run: node tools/selfhost/pg/check-sql.mjs --pg "$ARCADE_PG_URL"
-      - name: 打包平台和德州，出 SQLite 档和 PG 档两个发布包
+      - name: 打包平台和德州，出 SQLite 档、PG 档、PG + 不落盘三个发布包
         run: |
           tools/selfhost/pack-all.sh "$RUNNER_TEMP/art" arcade texas
           ARCADE_VERSION=ci-sqlite tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas
           ARCADE_VERSION=ci-pg tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas --db pg
+          ARCADE_VERSION=ci-pgmem tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas --db pg --storage memory
       - name: 临时 Secret（只在这次运行里）
         run: |
           r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
@@ -190,6 +197,7 @@ jobs:
         run: |
           set -a; . "$RUNNER_TEMP/secrets.env"; set +a
           ARCADE_DATA="$RUNNER_TEMP/data-pg" "$RUNNER_TEMP/out/arcade-ci-pg/bin/arcade" > "$RUNNER_TEMP/workerd-pg.log" 2>&1 &
+          pid=$!
           for _ in $(seq 50); do curl -fsS http://127.0.0.1:8787/__health >/dev/null 2>&1 && break; sleep 0.2; done
           node tools/selfhost/smoke.mjs
           dump=$(ls "$RUNNER_TEMP"/backups/*/d1-arcade-DB.sql | tail -1)
@@ -201,6 +209,25 @@ jobs:
           "$RUNNER_TEMP/out/arcade-ci-pg/ops/backup.sh" "$RUNNER_TEMP/backups-pg" http://127.0.0.1:8788 "$RUNNER_TEMP/data-pg"
           # 没给连接串起不来
           if env -u ARCADE_PG_URL ARCADE_DATA="$RUNNER_TEMP/x" "$RUNNER_TEMP/out/arcade-ci-pg/bin/arcade"; then echo "::error::没有 ARCADE_PG_URL 也起来了"; exit 1; fi
+          kill "$pid"; wait "$pid" || true
+      - name: 房间也进 PG（pg + memory）：冒烟、重启、回到同一个房间
+        run: |
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          rel="$RUNNER_TEMP/out/arcade-ci-pgmem"
+          up() {
+            "$rel/bin/arcade" >> "$RUNNER_TEMP/workerd-pgmem.log" 2>&1 &
+            pid=$!
+            for _ in $(seq 50); do curl -fsS http://127.0.0.1:8787/__health >/dev/null 2>&1 && return; sleep 0.2; done
+          }
+          up
+          node tools/selfhost/smoke.mjs --save "$RUNNER_TEMP/room.json"
+          kill "$pid"; wait "$pid" || true
+          up
+          node tools/selfhost/smoke.mjs --rejoin "$RUNNER_TEMP/room.json"
+          # 重启后宿主按 PG 里存的闹钟叫醒了房间（kitWake），没有失败的
+          grep '"msg":"kitstore wake"' "$RUNNER_TEMP/workerd-pgmem.log" | tail -1 | tee "$RUNNER_TEMP/wake.json"
+          grep -q '"failed":\[\]' "$RUNNER_TEMP/wake.json"
+          kill "$pid"; wait "$pid" || true
       - name: 失败时的 workerd 日志
         if: failure()
         run: tail -100 "$RUNNER_TEMP"/workerd-*.log || true

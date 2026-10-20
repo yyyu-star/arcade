@@ -67,6 +67,15 @@ for (const [name, reg] of registry) {
   if (!existsSync(main)) fail(`${main} 不存在：先打包这个模块（tools/selfhost/pack-all.sh）`);
   const extra = readdirSync(workerDir).filter((f) => f !== mainName && !f.endsWith('.map') && f !== 'README.md');
   if (extra.length) fail(`${workerDir} 里除了入口还有 ${extra.join('、')}：只支持打成单个文件的 Worker（和 deploy.mjs 的要求一样）`);
+  if (args.storage === 'memory' && c.durable_objects?.bindings?.length) {
+    // 不落盘时 DO 的状态只能经 KIT_STORE 进 PG，这是 kit 0.21.0 才有的；旧 kit 的房间重启就没了，宁可不生成
+    const lock = JSON.parse(readFileSync(join(modDir, 'package-lock.json'), 'utf8'));
+    const kit = lock.packages?.['node_modules/arcade-kit']?.version;
+    const [maj, min] = (kit ?? '0.0').split('.').map(Number);
+    if (!kit || (maj === 0 && min < 21)) {
+      fail(`${info.mod} 有 Durable Object，可它的 arcade-kit 是 ${kit ?? '（没有）'}：--storage memory 要 kit 0.21.0 起（KIT_STORE），不然房间重启就丢`);
+    }
+  }
   const { SITE_ORIGIN: _ignored, ...vars } = c.vars ?? {};
   workers.push({
     name,

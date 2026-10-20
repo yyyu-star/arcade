@@ -15,7 +15,7 @@ tools/selfhost/pack-all.sh <产物目录>                     # 各模块 npm ci
 tools/selfhost/release.sh <产物目录> <输出目录>           # → <输出目录>/arcade-<版本>.tar.gz
 ```
 
-`release.sh` 后面可以接 `build.mjs` 的参数：`--only arcade,texas`（只要这几个，必须带平台）、`--db pg`（平台库放 PostgreSQL，见下面一节）、`--storage memory`（房间也不落盘，要 kit 0.21，还没发）。
+`release.sh` 后面可以接 `build.mjs` 的参数：`--only arcade,texas`（只要这几个，必须带平台）、`--db pg`（平台库放 PostgreSQL，见下面一节）、`--storage memory`（配 `--db pg`：房间也进 PG，什么都不落盘；有 Durable Object 的模块要 kit 0.21.0 起，不够 build.mjs 直接报错）。
 
 | 文件 | 做什么 |
 |---|---|
@@ -67,8 +67,10 @@ docker compose exec arcade /app/ops/backup.sh /data/backups     # 备份（管�
 ## PostgreSQL 模式
 
 平台库（账号、钱包、榜单……）放进 PostgreSQL，平台代码一条 SQL 都不改：`packages/arcade-host` 的 D1 后端把 SQLite 方言机械翻译成 PG 的，
-翻不了的走 `pg/overrides.json`。SQLite 和 PG 是部署时二选一，PG 模式下平台库不在数据目录里。房间这一版仍然落盘（`--db pg` 配默认的 `--storage sqlite`），
-数据目录照样要；房间也进 PG（`--storage memory`）要等 kit 0.21 的 KIT_STORE。
+翻不了的走 `pg/overrides.json`。SQLite 和 PG 是部署时二选一，PG 模式下平台库不在数据目录里。房间两种放法：
+- `--db pg`（默认的 `--storage sqlite`）：房间仍然落盘，数据目录照样要；
+- `--db pg --storage memory`：房间也进 PG（kit 0.21.0 起的 KIT_STORE：每一步的改动一个事务写进 `arcade_kit_rows`、闹钟进 `arcade_kit_alarms`），
+  不要数据目录；进程重启后第一次请求时宿主按存着的闹钟把房间叫醒，打到一半的牌局接着打。各游戏的 kit 都要 0.21.0 起，不够 build.mjs 直接报错。
 
 ```sh
 tools/selfhost/release.sh <产物目录> <输出目录> --db pg
@@ -87,4 +89,4 @@ ARCADE_PG_URL=postgres://arcade:…@127.0.0.1:5432/arcade ARCADE_DATA=/var/lib/a
 ## 验证
 
 `.github/workflows/selfhost.yml`：打平台和德州 → 发布包 → 二进制起一次（冒烟、备份、恢复演练）→ 同一个包做成镜像起一次（冒烟，容器里跑备份和定时任务）；
-pg 作业连 postgres:17：语句覆盖检查 → SQLite 档冒烟、备份 → PG 档冒烟 → 备份迁进 PG、逐行核对 → 再冒烟。
+pg 作业连 postgres:17：语句覆盖检查 → SQLite 档冒烟、备份 → PG 档冒烟 → 备份迁进 PG、逐行核对 → 再冒烟 → pg + memory 档冒烟、重启、两人回到同一个房间。
