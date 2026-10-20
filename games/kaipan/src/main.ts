@@ -5,6 +5,8 @@ import { mountOverlay } from './debug/overlay.ts';
 import { parseParams } from './debug/params.ts';
 import { detectPlatform, onPlatformMode, platformInfo } from './platform/mode.ts';
 import { inviteUrl, mountSocial } from 'arcade-kit/social';
+import { reportErrors } from 'arcade-kit/report';
+import { APP_VERSION } from './platform/version.ts';
 import { mountRotateHint, setRotateLobbyLabel } from './platform/orientation.ts';
 import { fitViewport } from './platform/viewportFit.ts';
 import { getSettings, onSettingsChange } from './platform/settings.ts';
@@ -25,6 +27,8 @@ import { LOW_MEMORY, applyColorScheme } from './view/theme.ts';
 
 // 最先安装全局错误兜底，之后的任何异常都不会留下白屏
 installErrorHandler();
+// 没人接住的报错发给平台（/api/client-error）；单独部署时没有这个接口，发不出去就算了
+reportErrors({ game: 'kaipan', version: APP_VERSION });
 // 手机竖屏时提示横过来（提示层左上角也有「大厅」，一局进行中先问一次）；触屏设备不显示键盘提示
 mountRotateHint({ inRun: () => session.sceneKey === 'trade', confirm: () => lobbyConfirm(session.state), go: () => goLobby() });
 initInputMode();
