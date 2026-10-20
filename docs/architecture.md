@@ -19,11 +19,12 @@
 |---|---|---|---|
 | `platform/` | 平台主界面和 `/api`：账号、云存档、好友、排行榜、钱包、战绩、动态与邀请、管理页 | `arcade` | `/`、`/api/*` |
 | `games/kaipan/` | 《开盘》股市肉鸽 | `kaipan` | `/games/kaipan/` |
-| `games/guandan/` | 掼蛋（正在重构成多玩法的「牌馆」，斗地主还没上线，方案见该模块 `docs/doudizhu.md`） | `guandan` | `/games/guandan/` |
+| `games/guandan/` | 《牌馆》掼蛋和斗地主（分层见该模块 `docs/doudizhu.md`） | `guandan` | `/games/guandan/` |
 | `games/texas/` | 德州扑克 | `texas` | `/games/texas/` |
-| `games/mahjong/` | 《雀馆》麻将（川麻·血战到底已上线；立直规则核心已写好、还没上线） | `mahjong` | `/games/mahjong/` |
+| `games/mahjong/` | 《雀馆》麻将：川麻·血战到底和立直麻将 | `mahjong` | `/games/mahjong/` |
 | `games/yexun/` | 《夜巡》幸存者类动作游戏 | `yexun` | `/games/yexun/` |
 | `games/racing/` | 《飞驰》回合制卡牌赛车（社区贡献者的游戏，只有娱乐模式） | `racing` | `/games/racing/` |
+| `games/danli/` | 《弹里个弹》回合制抛物线对战（社区贡献者的游戏，单机对电脑，只认人、不接钱包） | `danli` | `/games/danli/` |
 | `packages/arcade-kit/` | 共用包（发布在 npm：`@yyyu-star/arcade-kit`）：联机房间基类、开房进房入口、浏览器连接器、协议、计量、快速匹配、牌桌互动、聊天、分享卡、社交部件；只测不部署（`pkg-arcade-kit.yml`） | 无 | 无 |
 | `packages/arcade-host/` | 自托管运行时（第 6 节）；只测不部署（`pkg-arcade-host.yml`） | 无 | 无 |
 

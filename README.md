@@ -5,7 +5,7 @@
 **A mini-game arcade you host yourself — on Cloudflare Workers or on your own server — with one lobby, one account, many games.**
 
 A lobby with accounts, cloud saves, friends, leaderboards and a play-chip wallet, plus a growing set of
-browser games (a stock-market roguelike, Guandan, Texas Hold'em, Sichuan mahjong, a survivors-like action game, turn-based card racing)
+browser games (a stock-market roguelike, a card hall with Guandan and Dou Dizhu, Texas Hold'em, a mahjong hall with Sichuan and Riichi rules, a survivors-like action game, turn-based card racing, a turn-based artillery game)
 that you can play solo against the computer or in private rooms with friends. It runs on Cloudflare Workers, or on your own machine with the self-hosting kit.
 
 [![Check isolation](https://github.com/yyyu-star/arcade/actions/workflows/check.yml/badge.svg)](https://github.com/yyyu-star/arcade/actions/workflows/check.yml)
@@ -21,10 +21,10 @@ that you can play solo against the computer or in private rooms with friends. It
 
 </div>
 
-| 开盘 · Kaipan | 掼蛋 · Guandan | 德州 · Texas Hold'em | 雀馆 · Mahjong | 夜巡 · Night Patrol | 飞驰 · Racing |
+| 开盘 · Kaipan | 牌馆 · Card Hall | 德州 · Texas Hold'em | 雀馆 · Mahjong | 夜巡 · Night Patrol | 飞驰 · Racing |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| ![Kaipan](platform/public/covers/kaipan.webp) | ![Guandan](platform/public/covers/guandan.webp) | ![Texas Hold'em](platform/public/covers/texas.webp) | ![Mahjong](platform/public/covers/mahjong.webp) | ![Night Patrol](platform/public/covers/yexun.webp) | ![Racing](platform/public/covers/racing.webp) |
-| Stock-market roguelike driven by real historical price data | Full-rules competitive Guandan, 4 players | No-limit Hold'em, 2–9 seats | Sichuan "bloody" mahjong engine | Survivors-like action, Vigil and Night Raid modes | Turn-based card racing, 2–6 cars |
+| ![Kaipan](platform/public/covers/kaipan.webp) | ![Card Hall](platform/public/covers/guandan.webp) | ![Texas Hold'em](platform/public/covers/texas.webp) | ![Mahjong](platform/public/covers/mahjong.webp) | ![Night Patrol](platform/public/covers/yexun.webp) | ![Racing](platform/public/covers/racing.webp) |
+| Stock-market roguelike driven by real historical price data | Guandan (4 players) and Dou Dizhu (3 players) | No-limit Hold'em, 2–9 seats | Sichuan "bloody" and Riichi mahjong | Survivors-like action, Vigil and Night Raid modes | Turn-based card racing, 2–6 cars |
 
 > There is no public demo hosted from this repository: run it locally (see [Quick start](#quick-start)) or deploy your own copy (see [Deploy](#deploy)).
 > The games' user interface is in Simplified Chinese. Chips are play money only: they cannot be bought, sold, exchanged or transferred.
@@ -46,11 +46,12 @@ that you can play solo against the computer or in private rooms with friends. It
 | Module | Game | Highlights |
 |---|---|---|
 | [`games/kaipan`](games/kaipan/) | **开盘 Kaipan** | Roguelike about a retail investor; 135 real price segments (public-domain data) drive the market; daily challenge and posters. |
-| [`games/guandan`](games/guandan/) | **掼蛋 Guandan** | Complete competitive rules, solo vs. three computer players, private rooms, per-hand review. Being refactored into a multi-game card hall (Guandan first, Dou Dizhu next; plan in its `docs/doudizhu.md`). |
+| [`games/guandan`](games/guandan/) | **牌馆 Card Hall** | Two games on one card table: Guandan with complete competitive rules and per-hand review, and classic Dou Dizhu (bid 1–3, bombs and spring double the stake); solo vs. computer players, private rooms, quick match. Layering in its `docs/doudizhu.md`. |
 | [`games/texas`](games/texas/) | **德州扑克 Texas Hold'em** | No-limit, 2–9 players, computer personalities, private rooms, stickers and props. |
-| [`games/mahjong`](games/mahjong/) | **雀馆 Mahjong** | One engine for many variants; Sichuan "bloody" rules are playable, the Riichi rules core is written but not shipped yet (`docs/riichi.md`); ready-hand hints, private rooms. |
+| [`games/mahjong`](games/mahjong/) | **雀馆 Mahjong** | One engine for many variants; Sichuan "bloody" rules and Riichi (Tenhou-style hanchan or tonpuu, `docs/riichi.md`); ready-hand hints, private rooms, quick match. |
 | [`games/yexun`](games/yexun/) | **夜巡 Night Patrol** | Survivors-like action: steer a young Taoist through a snowy old town; Vigil (survive until dawn) and Night Raid (loot and extract) modes; deterministic fixed-tick simulation, daily challenge. |
 | [`games/racing`](games/racing/) | **飞驰 Racing** | Turn-based card racing (shift gears, manage heat, brake for corners, slipstream); three tracks, computer drivers, private rooms. Contributed by a community member; play-for-fun only, no wallet. |
+| [`games/danli`](games/danli/) | **弹里个弹 Danli** | Turn-based artillery with pets and kitchen gear: destructible dough terrain, wind, climbing on a stamina budget, fall off the page and you are out. Solo 1-vs-1 against the computer for now. Contributed by a community member; play-for-fun only, no wallet. |
 
 Current versions and what is in progress: see each module's `package.json` and `CHANGELOG.md`.
 
@@ -60,7 +61,7 @@ Requirements: **Node.js 22** (see `.nvmrc`) and npm. Every module is installed a
 
 ```bash
 git clone https://github.com/yyyu-star/arcade.git
-cd arcade/platform          # or games/kaipan, games/guandan, games/texas, games/mahjong, games/racing, games/yexun
+cd arcade/platform          # or games/kaipan, games/guandan, games/texas, games/mahjong, games/racing, games/yexun, games/danli
 npm ci
 npm run dev                 # local dev server
 npm test                    # unit tests (vitest) and Worker tests
@@ -76,6 +77,7 @@ npm run build               # production build
 | games/mahjong | 5176 | 4176 |
 | games/racing | 5177 | 4177 |
 | games/yexun | 5178 | 4178 |
+| games/danli | 5179 | 4179 |
 
 Packages (`packages/arcade-kit`, `packages/arcade-host`) have no dev server, only tests. Each module's README explains its own scripts, test tools and smoke tests. Before opening a pull request, also run `node tools/check-isolation.mjs` at the repository root (needs no install).
 
@@ -119,7 +121,7 @@ The button at the top deploys the platform alone (it creates the D1 database and
 No platform, no domain needed — the game gets a `https://<id>.<your-subdomain>.workers.dev` address.
 
 - **Deploy to Cloudflare button**: `https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
-  (replace `<id>` with `kaipan`, `guandan`, `texas`, `mahjong`, `racing` or `yexun`). The button copies only that game's directory, so it needs the game to depend on the published `@yyyu-star/arcade-kit` from npm
+  (replace `<id>` with `kaipan`, `guandan`, `texas`, `mahjong`, `racing`, `yexun` or `danli`). The button copies only that game's directory, so it needs the game to depend on the published `@yyyu-star/arcade-kit` from npm
   (aliased, see the `arcade-kit` line in each game's `package.json`) instead of the in-repo copy; each game's README says whether its button is ready.
 - **From a fork**: `cd games/<id> && npm ci && npx wrangler login && npm run deploy`.
 
@@ -271,7 +273,7 @@ Detailed documentation is written in Chinese.
 - [docs/table-fun.md](docs/table-fun.md) — the shared table-interaction spec (emotes, props, computer reactions)
 - [docs/new-game.md](docs/new-game.md) — how to add a new game
 - [docs/review-policy.md](docs/review-policy.md) — how pull requests are reviewed and merged (automated pre-review; only maintainers merge and approve deploys)
-- Module READMEs: [platform](platform/README.md) · [kaipan](games/kaipan/README.md) · [guandan](games/guandan/README.md) · [texas](games/texas/README.md) · [mahjong](games/mahjong/README.md) · [yexun](games/yexun/README.md) · [racing](games/racing/README.md) · [arcade-kit](packages/arcade-kit/README.md) · [arcade-host](packages/arcade-host/README.md) · [selfhost](tools/selfhost/README.md)
+- Module READMEs: [platform](platform/README.md) · [kaipan](games/kaipan/README.md) · [guandan](games/guandan/README.md) · [texas](games/texas/README.md) · [mahjong](games/mahjong/README.md) · [yexun](games/yexun/README.md) · [racing](games/racing/README.md) · [danli](games/danli/README.md) · [arcade-kit](packages/arcade-kit/README.md) · [arcade-host](packages/arcade-host/README.md) · [selfhost](tools/selfhost/README.md)
 
 ## Contributing
 

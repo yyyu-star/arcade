@@ -19,11 +19,12 @@ arcade/
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
 ├─ games/
 │  ├─ kaipan/              模块：《开盘》（Worker 名 kaipan，路径 /games/kaipan/）
-│  ├─ guandan/             模块：掼蛋（Worker 名 guandan，路径 /games/guandan/；正在重构成「牌馆」，掼蛋在 src/variants/guandan，之后加斗地主，方案见 games/guandan/docs/doudizhu.md）
+│  ├─ guandan/             模块：《牌馆》掼蛋 + 斗地主（Worker 名 guandan，路径 /games/guandan/；两种玩法在 src/variants/ 下共用一套牌桌，分层见 games/guandan/docs/doudizhu.md）
 │  ├─ texas/               模块：德州扑克（Worker 名 texas，路径 /games/texas/；设计见 games/texas/DESIGN.md）
-│  ├─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法，川麻·血战到底已上线，立直麻将规则核心已写好、还没上线，设计见 games/mahjong/DESIGN.md、docs/riichi.md）
+│  ├─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法：川麻·血战到底和立直麻将，设计见 games/mahjong/DESIGN.md、docs/riichi.md）
 │  ├─ racing/              模块：《飞驰》回合制卡牌赛车（社区贡献者的游戏，Worker 名 racing，路径 /games/racing/）
-│  └─ yexun/               模块：《夜巡》幸存者类动作游戏，守夜 / 夜探两个模式（Worker 名 yexun，路径 /games/yexun/，设计见 games/yexun/DESIGN.md）
+│  ├─ yexun/               模块：《夜巡》幸存者类动作游戏，守夜 / 夜探两个模式（Worker 名 yexun，路径 /games/yexun/，设计见 games/yexun/DESIGN.md）
+│  └─ danli/               模块：《弹里个弹》回合制抛物线对战（社区贡献者的游戏，Worker 名 danli，路径 /games/danli/，设计见 games/danli/DESIGN.md）
 └─ packages/
    ├─ arcade-kit/          共用包（已发 npm：@yyyu-star/arcade-kit，版本见它的 package.json）：联机房间基类、开房进房入口、浏览器连接器、协议、计量、牌桌互动、聊天、分享卡、社交部件。只测不部署（pkg-arcade-kit.yml）
    └─ arcade-host/         自托管运行时：在一个 workerd 进程里跑平台和所有游戏，补上 D1（SQLite 或 PostgreSQL）、静态资源、路由、定时任务。只测不部署（pkg-arcade-host.yml）
@@ -100,7 +101,8 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 | games/mahjong | 5176 | 4176 |
 | games/racing | 5177 | 4177 |
 | games/yexun | 5178 | 4178 |
-| 下一个游戏 | 5179 | 4179 |
+| games/danli | 5179 | 4179 |
+| 下一个游戏 | 5170 | 4170 |
 
 模块里的截图、音频检查等工具也只用本模块登记的端口，或者由系统分配的临时端口（端口写 0），不占别的模块的。
 允许临时端口是因为登记的两个端口常被开着的 dev 和 preview 占着，工具再去抢只会冲突，或者连到旧服务上。

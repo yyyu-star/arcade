@@ -27,17 +27,16 @@
   | PG | `--db pg` | PostgreSQL | SQLite | 要 |
   | PG 不落盘 | `--db pg --storage memory` | PostgreSQL | PostgreSQL | 不要 |
 
-- **PG 不落盘要有房间的游戏都用 arcade-kit ≥ 0.21.0**（KIT_STORE），不够 `build.mjs` 直接报错，不生成。main 上现在（2026-10-20）都还不够：
+- **PG 不落盘要有房间的游戏都用 arcade-kit ≥ 0.21.0**（KIT_STORE），不够 `build.mjs` 直接报错，不生成。main 上现在（2026-10-20）：
 
   | 游戏 | arcade-kit | 有 Durable Object | PG 不落盘 |
   |---|---|---|---|
-  | 掼蛋 guandan | 0.20.4 | 有 | 不行，要升 kit |
-  | 麻将 mahjong | 0.20.4 | 有 | 不行，要升 kit |
-  | 德州 texas | 0.20.4 | 有 | 不行，要升 kit（CI 里临时换成 0.21.0 测过，能用） |
+  | 牌馆 guandan、雀馆 mahjong、德州 texas | 0.22.0 | 有 | 能用 |
   | 飞驰 racing | 0.10.1 | 有 | 不行，要升 kit |
-  | 开盘 kaipan、夜巡 yexun | 0.15.1 | 没有 | 不受影响 |
+  | 开盘 kaipan、夜巡 yexun | 0.22.0 | 没有 | 不受影响 |
+  | 弹里个弹 danli | 0.22.0 | 没有 | 不受影响 |
 
-  所以现在整站只能打 SQLite 档和 PG 档；PG 不落盘等这几个游戏升了 kit 再用（`--only` 挑出已升级的也行）。这张表照各游戏的 `package-lock.json`，游戏升级后跟着改。
+  所以整站打 PG 不落盘要先去掉飞驰（`--only` 挑出其余游戏），等飞驰升了 kit 再全打。这张表照各游戏的 `package-lock.json`，游戏升级后跟着改。
 - **没在真机上验证过的**：Caddy 给公网域名申请真证书、在别的反代或 CDN 后面时的真实 IP，systemd 单元、`install.sh`/`upgrade.sh`/`rollback.sh`。
   CI 里 Caddy 只用 `localhost`（Caddy 的内部证书）起过整套 compose；安装、升级、回滚只在打包机上用模拟的 `systemctl` 跑过。第一次上真机时要逐项验。
 

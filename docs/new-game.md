@@ -62,7 +62,7 @@ games/<id>/
 ```bash
 cd games/<id>
 npm ci
-npm run dev        # 端口：在 AGENTS.md 第 3 节的端口表里登记一个（下一个空的是 5179 / 4179）
+npm run dev        # 端口：在 AGENTS.md 第 3 节的端口表里登记一个（下一个空的是 5170 / 4170）
 npm test
 npm run build
 ```

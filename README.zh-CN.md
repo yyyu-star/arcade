@@ -4,7 +4,7 @@
 
 **可以自己托管的小游戏平台（Cloudflare Workers 或你自己的服务器）：一个大厅、一个账号，玩所有游戏。**
 
-大厅带账号、云存档、好友、排行榜和娱乐筹码钱包；游戏有股市肉鸽《开盘》、掼蛋、德州扑克、川麻《雀馆》、幸存者类动作游戏《夜巡》、回合制卡牌赛车《飞驰》，
+大厅带账号、云存档、好友、排行榜和娱乐筹码钱包；游戏有股市肉鸽《开盘》、掼蛋和斗地主《牌馆》、德州扑克、川麻和立直麻将《雀馆》、幸存者类动作游戏《夜巡》、回合制卡牌赛车《飞驰》、回合制抛物线对战《弹里个弹》，
 可以单机对电脑，也可以开好友房一起玩。可以部署在 Cloudflare Workers 上，也可以用自托管套件跑在自己的机器上。
 
 [![Check isolation](https://github.com/yyyu-star/arcade/actions/workflows/check.yml/badge.svg)](https://github.com/yyyu-star/arcade/actions/workflows/check.yml)
@@ -20,10 +20,10 @@
 
 </div>
 
-| 开盘 | 掼蛋 | 德州扑克 | 雀馆 | 夜巡 | 飞驰 |
+| 开盘 | 牌馆 | 德州扑克 | 雀馆 | 夜巡 | 飞驰 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| ![开盘](platform/public/covers/kaipan.webp) | ![掼蛋](platform/public/covers/guandan.webp) | ![德州扑克](platform/public/covers/texas.webp) | ![雀馆](platform/public/covers/mahjong.webp) | ![夜巡](platform/public/covers/yexun.webp) | ![飞驰](platform/public/covers/racing.webp) |
-| 真实历史行情驱动的散户肉鸽 | 规则完整的竞赛掼蛋 | 无限注德州，2–9 人 | 川麻·血战到底 | 幸存者类动作，守夜 / 夜探 | 回合制卡牌赛车，2–6 辆 |
+| ![开盘](platform/public/covers/kaipan.webp) | ![牌馆](platform/public/covers/guandan.webp) | ![德州扑克](platform/public/covers/texas.webp) | ![雀馆](platform/public/covers/mahjong.webp) | ![夜巡](platform/public/covers/yexun.webp) | ![飞驰](platform/public/covers/racing.webp) |
+| 真实历史行情驱动的散户肉鸽 | 掼蛋（4 人）和斗地主（3 人） | 无限注德州，2–9 人 | 川麻·血战到底和立直麻将 | 幸存者类动作，守夜 / 夜探 | 回合制卡牌赛车，2–6 辆 |
 
 > 本仓库不托管公开的演示站：在本机跑起来（见[快速开始](#快速开始)），或者按[部署](#部署)一节部署你自己的一份。
 > 筹码只是游戏里的分数：不能买、不能卖、不能兑换、不能转让，没有任何现金价值。
@@ -45,11 +45,12 @@
 | 模块 | 游戏 | 亮点 |
 |---|---|---|
 | [`games/kaipan`](games/kaipan/) | **开盘** | 散户炒股题材的肉鸽；135 段真实历史走势（公有领域数据）驱动大盘；每日挑战、结局海报。 |
-| [`games/guandan`](games/guandan/) | **掼蛋** | 竞赛规则完整；单机对三个电脑；好友房；每副复盘。正在重构成多玩法的「牌馆」（先掼蛋，下一个是斗地主，方案见该模块 `docs/doudizhu.md`）。 |
+| [`games/guandan`](games/guandan/) | **牌馆** | 一张牌桌两种玩法：竞赛规则完整、每副能复盘的掼蛋，和经典叫分斗地主（叫 1–3 分，炸弹、春天翻倍）；单机对电脑、好友房、快速匹配。分层见该模块 `docs/doudizhu.md`。 |
 | [`games/texas`](games/texas/) | **德州扑克** | 无限注，2–9 人；电脑性格各异；好友房；表情和道具。 |
-| [`games/mahjong`](games/mahjong/) | **雀馆** | 一套引擎多种玩法；川麻·血战到底已上线，立直麻将的规则核心已写好、还没上线（`docs/riichi.md`）；听牌提示；好友房。 |
+| [`games/mahjong`](games/mahjong/) | **雀馆** | 一套引擎多种玩法；川麻·血战到底和立直麻将（天凤式半庄 / 东风，`docs/riichi.md`）；听牌提示；好友房；快速匹配。 |
 | [`games/yexun`](games/yexun/) | **夜巡** | 幸存者类动作：道士夜巡雪夜古镇，只管走位；守夜（撑到天亮）和夜探（搜宝撤离）两个模式；固定步长的确定性模拟，每日挑战。 |
 | [`games/racing`](games/racing/) | **飞驰** | 回合制卡牌赛车：换挡出牌、控热量、过弯限速、吃尾流；三条赛道，电脑车手性格各异，好友房。社区贡献者的作品；只有娱乐模式，不碰钱包。 |
+| [`games/danli`](games/danli/) | **弹里个弹** | 回合制抛物线对战，萌宠和厨房道具大乱斗：面团地形能炸、有风、爬动花体力，掉出画本就出局；目前单机 1 对 1 打电脑。社区贡献者的作品；只有娱乐模式，不碰钱包。 |
 
 各模块当前版本和进展见各自的 `package.json` 和 `CHANGELOG.md`。
 
@@ -59,7 +60,7 @@
 
 ```bash
 git clone https://github.com/yyyu-star/arcade.git
-cd arcade/platform          # 或 games/kaipan、games/guandan、games/texas、games/mahjong、games/racing、games/yexun
+cd arcade/platform          # 或 games/kaipan、games/guandan、games/texas、games/mahjong、games/racing、games/yexun、games/danli
 npm ci
 npm run dev                 # 本地开发
 npm test                    # 单元测试（vitest）和 Worker 测试
@@ -75,6 +76,7 @@ npm run build               # 正式构建
 | games/mahjong | 5176 | 4176 |
 | games/racing | 5177 | 4177 |
 | games/yexun | 5178 | 4178 |
+| games/danli | 5179 | 4179 |
 
 共用包（`packages/arcade-kit`、`packages/arcade-host`）没有开发服务器，只有测试。各模块的脚本、测试工具和冒烟测试见模块自己的 README。提 PR 前还要在仓库根跑一次 `node tools/check-isolation.mjs`（不用安装依赖）。
 
@@ -114,7 +116,7 @@ npm run build               # 正式构建
 不要平台，也不要域名：游戏会得到一个 `https://<id>.<你的子域>.workers.dev` 地址。
 
 - **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
-  （`<id>` 换成 `kaipan`、`guandan`、`texas`、`mahjong`、`racing` 或 `yexun`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`）
+  （`<id>` 换成 `kaipan`、`guandan`、`texas`、`mahjong`、`racing`、`yexun` 或 `danli`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.22.0"`）
   （而不是仓库里的那份）才能用；能不能用看各游戏的 README。
 - **fork 后自己部署**：`cd games/<id> && npm ci && npx wrangler login && npm run deploy`。
 
@@ -257,7 +259,7 @@ flowchart LR
 - [docs/table-fun.md](docs/table-fun.md)：牌桌互动规范（表情、道具、电脑反应）
 - [docs/new-game.md](docs/new-game.md)：新游戏开发指南
 - [docs/review-policy.md](docs/review-policy.md)：PR 怎么审、怎么合（自动预审，只由维护者合并和批准部署）
-- 各模块 README：[平台](platform/README.md) · [开盘](games/kaipan/README.md) · [掼蛋](games/guandan/README.md) · [德州](games/texas/README.md) · [麻将](games/mahjong/README.md) · [夜巡](games/yexun/README.md) · [飞驰](games/racing/README.md) · [arcade-kit](packages/arcade-kit/README.md) · [arcade-host](packages/arcade-host/README.md) · [自托管](tools/selfhost/README.md)
+- 各模块 README：[平台](platform/README.md) · [开盘](games/kaipan/README.md) · [牌馆](games/guandan/README.md) · [德州](games/texas/README.md) · [雀馆](games/mahjong/README.md) · [夜巡](games/yexun/README.md) · [飞驰](games/racing/README.md) · [弹里个弹](games/danli/README.md) · [arcade-kit](packages/arcade-kit/README.md) · [arcade-host](packages/arcade-host/README.md) · [自托管](tools/selfhost/README.md)
 
 ## 参与贡献
 
