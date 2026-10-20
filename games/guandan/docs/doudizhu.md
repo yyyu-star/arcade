@@ -74,7 +74,7 @@ interface Variant<S, A, V> {
 
 拆成两个 PR，先合 A 再做 B：
 
-1. **PR ①a：只加金样（golden），不动产品代码。** 场景在 `tests/golden/scenarios.ts`，每个场景把每一项输出按固定顺序 JSON 序列化后喂进 sha256，
+1. **PR ①a：只加金样（golden），不动产品代码。** 场景在 `tests/golden-scenarios.ts`（`tests/golden/` 里只放哈希，重构时这个目录一字节不改），每个场景把每一项输出按固定顺序 JSON 序列化后喂进 sha256，
    哈希和项数存 `tests/golden/guandan.json`，`tests/golden.test.ts` 逐个比对；`node tools/golden.ts --dump <场景> <文件>` 把一个场景逐项导出成文本，改前改后 diff 就能找到第一个不同的地方。
    主线 10-20 定 CI 里一分钟内、覆盖面优先于局数，现在 40 个场景、约 24 万项，vitest 里约 16 秒：
    - 单机（33 局）：三档难度 × 4 个短局（整局打完）+ 4 个完整局（前 6 副）、单机实盘四档 × 2 场（8 副）、地方规则开关全反过来的 1 局。

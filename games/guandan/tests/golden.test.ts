@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import golden from './golden/guandan.json';
-import { runScenario, scenarios, type Outcome } from './golden/scenarios.ts';
+import { runScenario, scenarios, type Outcome } from './golden-scenarios.ts';
 
 const want = golden as Record<string, { hash: string; items: number }>;
 const got = new Map<string, Outcome>();
