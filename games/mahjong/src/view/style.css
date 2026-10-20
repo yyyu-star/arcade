@@ -2235,6 +2235,10 @@ html .atf-btn {
   margin-top: var(--sp-4);
 }
 /* 结算的按钮行贴在弹窗底：内容再长（一场打完的总结算、名场面），"下一局""再来一场"也不用滚到下面去找（0.16.3，1920 宽时被切掉一半） */
+/* 滚到某一行时让出贴底按钮条的高度（按钮 56 + 上下留白），最后一行不被它压住（10-19 试玩） */
+.end .dialog {
+  scroll-padding-bottom: 104px;
+}
 .end .dialog > .end-acts {
   position: sticky;
   bottom: calc(-1 * var(--sp-5));

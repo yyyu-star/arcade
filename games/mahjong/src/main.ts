@@ -795,6 +795,7 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           if (stakesOf(rv.stakes)?.wallet) el('p', 'room-hint', box, '新房间里各人自己坐下，开打时才从钱包带一份');
         }
       }, false);
+      showMine();
       if (g.me) play((g.result?.seats[g.me.seat]?.net ?? 0) >= 0 ? 'win' : 'lose');
       void refreshWallet();
     }
@@ -823,6 +824,15 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
     return;
   }
   if (document.querySelector('.mask.end')) closeDialog();
+}
+
+/**
+ * 一场打完的结算很长，按钮条贴在弹窗底：手机竖屏自己那行（排最后时）被按钮条压一半（10-19 试玩）。
+ * 打开时把一场排名里自己那行滚进看得见的地方；弹窗的 scroll-padding-bottom 让出按钮条的高度（style.css 的 .end .dialog）
+ */
+function showMine(): void {
+  const rows = document.querySelectorAll<HTMLElement>('.mask.end .summary .row.me');
+  rows[rows.length - 1]?.scrollIntoView({ block: 'nearest' });
 }
 
 /** 结算页的"分享"（docs/social.md 1.1）：只有坐着打完的人有（旁观的没有自己的战绩） */
@@ -908,6 +918,7 @@ const soloUi = {
             void startSolo(prefs.stakes, prefs.opts);
           });
         }, false);
+        showMine();
         play((v.result?.seats[v.me!.seat]?.net ?? 0) >= 0 ? 'win' : 'lose');
         return;
       }
