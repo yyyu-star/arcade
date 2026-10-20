@@ -24,8 +24,7 @@ import {
   funItem,
   newBotState,
   fitMenuWidth,
-  placeBubble,
-  placeClear,
+  bubbleSpot,
   placeMenu,
   propId,
   stickerId,
@@ -925,8 +924,8 @@ export class TableFun {
 
   /**
    * 头像旁的一句话：2.4 秒后淡出（聊天 5 秒）。字号跟着屏幕（0.19.0：电脑 18–22px、手机 ≥ 15px），最多两行折行；
-   * 位置挑不压"互动"按钮、聊天框、各家名牌筹码和别人头像的一侧。
-   * strict（0.20.3，首次提示用）：一点都不许压名牌、标签、按钮和聊天框，放不下就不冒、回 undefined
+   * 位置一点都不压名牌、标签、"互动"按钮和聊天框（0.20.4 起所有气泡都这样，placeClear），尽量贴着头像、少压别人的头像。
+   * 实在找不到这样的位置：普通气泡退回 placeBubble 挑压得最少的一侧照样冒（话不能丢）；strict（首次提示）就不冒、回 undefined，由调用方换短句或晚点再试
    */
   bubble(seat: number, text: string, ms = 2400, cls = '', strict = false): HTMLElement | undefined {
     const s = this.seat(seat);
@@ -945,7 +944,7 @@ export class TableFun {
       avoid: [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())],
       over: [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])],
     });
-    const at = strict ? placeClear(s.rect, w, h, view, avoid, hard) : placeBubble(s.rect, w, h, view, avoid, hard);
+    const at = bubbleSpot(s.rect, w, h, view, avoid, hard, strict);
     if (!at) {
       b.remove();
       return undefined;
