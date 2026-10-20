@@ -1,5 +1,5 @@
 // 程序生成的麻将牌面：不用图片和网络字体，每种牌只生成一次。
-// kind：0–8 万，9–17 筒，18–26 条；-1 为牌背。
+// kind：0–8 万，9–17 筒，18–26 条，27–33 东南西北白发中（日麻）；-1 为牌背。赤五（日麻的红宝牌）是 5 万、5 筒、5 条的另一种画法，见 tileUrl 的 red。
 //
 // 光影只用渐变和半透明叠层，不用 filter：feGaussianBlur 一类在手机上每张牌都要单独光栅化，一桌上百张会掉帧。
 // 重复的图形（饼、竹子）放进 <defs> 用 <use> 引用，每张牌只带自己用到的那几个，data URL 控制在 4 KB 内。
@@ -111,12 +111,32 @@ class Face {
   }
 }
 
-function wan(n: number): string {
-  // 字下面先压一层往右下偏的白字，像刻进牌面里的字口反光；描一道同色细边让小尺寸时笔画不发虚
-  const t = (y: number, size: number, fill: string, ch: string) =>
+// 一个居中的大字：字下面先压一层往右下偏的白字，像刻进牌面里的字口反光；描一道同色细边让小尺寸时笔画不发虚
+function glyph(ch: string, y: number, size: number, fill: string): string {
+  return (
     `<text x='30.7' y='${y + 0.8}' font-size='${size}' font-weight='700' text-anchor='middle' font-family="${FONT}" fill='#fff' fill-opacity='.9'>${ch}</text>` +
-    `<text x='30' y='${y}' font-size='${size}' font-weight='700' text-anchor='middle' font-family="${FONT}" fill='${fill}' stroke='${fill}' stroke-width='1' stroke-linejoin='round'>${ch}</text>`;
-  return t(37, 34, '#14213d', NUMS[n] ?? '') + t(70, 33, RED, '萬');
+    `<text x='30' y='${y}' font-size='${size}' font-weight='700' text-anchor='middle' font-family="${FONT}" fill='${fill}' stroke='${fill}' stroke-width='1' stroke-linejoin='round'>${ch}</text>`
+  );
+}
+
+// 赤五右上角的小红点：缩小后字和饼都挤在一起，靠它一眼认出是红宝牌
+const RED_DOT = `<circle cx='8.5' cy='9' r='3.4' fill='${RED}' stroke='#7d1117' stroke-width='.7'/>`;
+
+function wan(n: number, red: boolean): string {
+  return glyph(NUMS[n] ?? '', 37, 34, red ? RED : '#14213d') + glyph('萬', 70, 33, RED) + (red ? RED_DOT : '');
+}
+
+// 字牌（日麻）：风牌深蓝黑字，中红字、發绿字，白板是一圈蓝框。认牌靠颜色和字形，和数牌一样不画花纹
+const HONOR_WIND = ['东', '南', '西', '北'];
+function honor(n: number): string {
+  if (n < 4) return glyph(HONOR_WIND[n]!, 58, 50, '#14213d');
+  if (n === 4) {
+    return (
+      `<rect x='11' y='15' width='38' height='48' rx='3.4' fill='none' stroke='#1d5aa6' stroke-width='3.2'/>` +
+      `<rect x='15.5' y='19.5' width='29' height='39' rx='1.6' fill='none' stroke='#5b9be0' stroke-width='1' stroke-opacity='.8'/>`
+    );
+  }
+  return n === 5 ? glyph('發', 58, 48, '#1a8048') : glyph('中', 58, 52, RED);
 }
 
 // 一筒（大饼）：多层同心圆加一圈花瓣，比普通的饼多两层，缩小后仍是"一个大圆"
@@ -136,13 +156,21 @@ function bigPip(f: Face): string {
   return s;
 }
 
-function tong(n: number, f: Face): void {
+function tong(n: number, f: Face, red: boolean): void {
   switch (n) {
     case 0: f.body = bigPip(f); return;
     case 1: f.pip(30, 21, 13.5, 'g').pip(30, 55, 13.5, 'b'); return;
     case 2: f.pip(16.5, 17.5, 12, 'b').pip(30, 38, 12, 'r').pip(43.5, 58.5, 12, 'g'); return;
     case 3: f.pip(18, 22, 11, 'b').pip(42, 22, 11, 'g').pip(18, 54, 11, 'g').pip(42, 54, 11, 'b'); return;
-    case 4: f.pip(17, 20, 10, 'b').pip(43, 20, 10, 'g').pip(17, 56, 10, 'g').pip(43, 56, 10, 'b').pip(30, 38, 10, 'r'); return;
+    case 4:
+      if (red) {
+        // 赤五筒：五个饼全红
+        for (const [x, y] of [[17, 20], [43, 20], [17, 56], [43, 56], [30, 38]] as const) f.pip(x, y, 10, 'r');
+        f.body += RED_DOT;
+        return;
+      }
+      f.pip(17, 20, 10, 'b').pip(43, 20, 10, 'g').pip(17, 56, 10, 'g').pip(43, 56, 10, 'b').pip(30, 38, 10, 'r');
+      return;
     case 5:
       for (const x of [18, 42]) f.pip(x, 15, 9.5, 'g');
       for (const y of [40, 61]) for (const x of [18, 42]) f.pip(x, y, 9.5, 'r');
@@ -190,13 +218,17 @@ function bird(): string {
   );
 }
 
-function tiao(n: number, f: Face): void {
+function tiao(n: number, f: Face, red: boolean): void {
   switch (n) {
     case 0: f.body = bird(); return;
     case 1: f.stick(30, 21, 28, 'g').stick(30, 55, 28, 'g'); return;
     case 2: f.stick(30, 21, 28, 'g').stick(19, 55, 28, 'g').stick(41, 55, 28, 'g'); return;
     case 3: f.stick(19, 21, 28, 'g').stick(41, 21, 28, 'g').stick(19, 55, 28, 'g').stick(41, 55, 28, 'g'); return;
-    case 4: f.stick(17, 21, 28, 'g').stick(43, 21, 28, 'g').stick(17, 55, 28, 'g').stick(43, 55, 28, 'g').stick(30, 38, 28, 'r'); return;
+    case 4:
+      // 赤五条：五根竹子全红
+      for (const [x, y] of [[17, 21], [43, 21], [17, 55], [43, 55], [30, 38]] as const) f.stick(x, y, 28, red || (x === 30) ? 'r' : 'g');
+      if (red) f.body += RED_DOT;
+      return;
     case 5:
       for (const y of [21, 55]) for (const x of [14, 30, 46]) f.stick(x, y, 28, 'g');
       return;
@@ -242,18 +274,25 @@ const BACK =
   `<rect x='21' y='33' width='18' height='18' transform='rotate(45 30 42)' fill='none' stroke='url(#au)' stroke-width='1.6'/>` +
   `<circle cx='30' cy='42' r='5' fill='url(#au)'/><circle cx='30' cy='42' r='1.8' fill='#0e4a37'/>`;
 
-function face(kind: number): string {
+/** 赤五：5 万、5 筒、5 条的牌种 */
+const RED_KINDS: readonly number[] = [4, 13, 22];
+
+function face(kind: number, red: boolean): string {
   const n = kind % 9;
-  if (kind < 9) return wan(n);
+  if (kind < 9) return wan(n, red);
+  if (kind >= 27) return honor(kind - 27);
   const f = new Face();
-  if (kind < 18) tong(n, f);
-  else tiao(n, f);
+  if (kind < 18) tong(n, f, red);
+  else tiao(n, f, red);
   return (f.defs ? `<defs>${f.defs}</defs>` : '') + f.body;
 }
 
-/** 一张牌的完整 SVG 字符串（含牌身），viewBox="0 0 60 84"；kind = -1 画成牌背 */
-export function tileSvg(kind: number): string {
-  const inner = kind < 0 || kind > 26 || !Number.isInteger(kind) ? BACK : `<defs>${BODY_DEFS}</defs>${BODY}${face(kind)}`;
+/** 这个牌种有没有赤五的画法（5 万、5 筒、5 条） */
+export const hasRed = (kind: number): boolean => RED_KINDS.includes(kind);
+
+/** 一张牌的完整 SVG 字符串（含牌身），viewBox="0 0 60 84"；kind = -1 画成牌背；red 是赤五（不是 5 万 5 筒 5 条时当普通牌） */
+export function tileSvg(kind: number, red = false): string {
+  const inner = kind < 0 || kind > 33 || !Number.isInteger(kind) ? BACK : `<defs>${BODY_DEFS}</defs>${BODY}${face(kind, red && hasRed(kind))}`;
   return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 84'>${inner}</svg>`;
 }
 
@@ -265,12 +304,14 @@ function svgUrl(svg: string): string {
   return 'data:image/svg+xml,' + svg.replace(/["%#<>\u0080-\uffff]/g, encodeURIComponent);
 }
 
-/** 同上但做成 data URI，模块内缓存，每种只生成一次 */
-export function tileUrl(kind: number): string {
-  const key = kind >= 0 && kind <= 26 && Number.isInteger(kind) ? kind : -1;
+/** 同上但做成 data URI，模块内缓存，每种只生成一次；赤五的缓存键是牌种 + 100 */
+export function tileUrl(kind: number, red = false): string {
+  const ok = kind >= 0 && kind <= 33 && Number.isInteger(kind);
+  const isRed = ok && red && hasRed(kind);
+  const key = !ok ? -1 : isRed ? kind + 100 : kind;
   let u = cache.get(key);
   if (!u) {
-    u = svgUrl(tileSvg(key));
+    u = svgUrl(tileSvg(key > 100 ? key - 100 : key, isRed));
     cache.set(key, u);
   }
   return u;
@@ -313,8 +354,11 @@ export function wallUrl(side: 'h' | 'v'): string {
   return (wallCache[side] ??= svgUrl(WALL[side]));
 }
 
-/** 中文名：'一万' '五筒' '七条' */
-export function tileName(kind: number): string {
-  if (!Number.isInteger(kind) || kind < 0 || kind > 26) return '';
-  return (NUMS[kind % 9] ?? '') + (SUITS[Math.floor(kind / 9)] ?? '');
+const HONOR_NAME = ['东', '南', '西', '北', '白', '发', '中'] as const;
+
+/** 中文名：'一万' '五筒' '七条' '东' '白'；赤五前面加"赤" */
+export function tileName(kind: number, red = false): string {
+  if (!Number.isInteger(kind) || kind < 0 || kind > 33) return '';
+  if (kind >= 27) return HONOR_NAME[kind - 27]!;
+  return (red && hasRed(kind) ? '赤' : '') + (NUMS[kind % 9] ?? '') + (SUITS[Math.floor(kind / 9)] ?? '');
 }

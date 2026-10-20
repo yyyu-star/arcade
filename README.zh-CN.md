@@ -123,10 +123,99 @@ npm run build               # 正式构建
 
 ### 自托管（不用 Cloudflare）
 
-[`packages/arcade-host`](packages/arcade-host/README.md) 是一个小运行时：在一个 [workerd](https://github.com/cloudflare/workerd) 进程里原样跑平台和所有游戏，
-补上 Cloudflare 平常替我们做的事（SQLite 或 PostgreSQL 版的 D1、静态资源、路由、定时任务、Durable Object 存储）。
-[`tools/selfhost`](tools/selfhost/README.md) 读各模块的 `wrangler.jsonc`（规则和 Cloudflare 的部署工具一致）打成发布包，并带安装、升级、回滚、备份、恢复脚本、systemd 单元、Caddyfile 和 Docker 镜像加 compose。
-服务器上只要发布包里带的 `workerd` 二进制，加 bash、curl、tar；Node 只在打包的机器上用。数据库在打包时二选一（SQLite 或 PostgreSQL），不能共存。Cloudflare 上的部署不受影响。
+整站（平台 + 全部游戏）也能在自己的机器上跑，**一个进程**：[`packages/arcade-host`](packages/arcade-host/README.md) 在
+[workerd](https://github.com/cloudflare/workerd) 里原样跑各模块，补上 Cloudflare 平时提供的东西（D1 用 SQLite 或 PostgreSQL、静态资源、路由、定时任务）。
+Cloudflare 上的部署不受影响。`main` 上自动发布多架构（amd64、arm64）镜像 **`ghcr.io/yyyu-star/arcade`**
+（标签：`latest`、发布包版本、提交短号）。镜像里没有任何 Secret、主机名、数据库 id，全部从环境变量来。
+
+**设置**（环境变量，写在 `secrets.env` 里）：
+
+| 变量 | 必填 | 是什么 |
+|---|---|---|
+| `PEPPER_PW`、`PEPPER_RC`、`PEPPER_SID`、`PEPPER_IP` | 是 | 哈希用的 pepper，格式 `k1:<随机串>`；用上之后不能改、不能丢 |
+| `ADMIN_TOKEN` | 建第一个管理员时要 | 格式同上 |
+| `SITE_ORIGIN` | 前面有 HTTPS（compose、Caddy）时要 | 站点地址，比如 `https://game.example.com`；不设的话经 HTTPS 反代登录会被拒（"请求来源不对"） |
+| `ARCADE_DB` | 否 | `sqlite`（默认）或 `pg` |
+| `ARCADE_PG_URL` | `ARCADE_DB=pg` 时 | PostgreSQL 连接串 |
+
+先生成一次 Secret（这个文件另存一份，和备份分开放）：
+
+```sh
+mkdir arcade && cd arcade
+for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do echo "$k=k1:$(openssl rand -hex 24)"; done > secrets.env
+chmod 600 secrets.env
+```
+
+**先试试：一个容器、SQLite、数据在卷里：**
+
+```sh
+docker run -d --name arcade --restart unless-stopped -p 127.0.0.1:8787:8787 -v arcade-data:/data --env-file secrets.env ghcr.io/yyyu-star/arcade:latest
+docker exec arcade /app/ops/create-admin.sh zhanzhang 站长   # 打印第一个管理员的密码和恢复码，只打印这一次
+```
+
+打开 <http://localhost:8787> 登录；注册默认关着，在 `/admin` 里建号或打开注册。对外开站要在前面加 HTTPS，用下面的 compose。
+
+**正式站：docker compose，自动 HTTPS（Caddy）。** [`compose.yaml`](tools/selfhost/docker/compose.yaml) 起 `arcade`（不发布到宿主）、
+`caddy`（80/443 端口，给 `SITE_HOST` 自动申请、续期证书，传真实 IP），加 `pg` profile 时再起 `postgres`。先把域名解析到这台服务器，然后在 `secrets.env` 所在的目录：
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/yyyu-star/arcade/main/tools/selfhost/docker/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/yyyu-star/arcade/main/tools/selfhost/docker/Caddyfile
+echo "SITE_ORIGIN=https://game.example.com" >> secrets.env
+echo "SITE_HOST=game.example.com" > .env
+docker compose up -d
+docker compose exec arcade /app/ops/create-admin.sh zhanzhang 站长
+```
+
+用 PostgreSQL 代替 SQLite（平台库放进同一套 compose 里的 `postgres`，游戏房间仍在 `arcade-data` 卷里），第一次启动前做：
+
+```sh
+openssl rand -hex 24 > pg_password.txt
+echo "ARCADE_PG_URL=postgres://arcade:$(cat pg_password.txt)@postgres:5432/arcade" >> secrets.env
+printf 'ARCADE_DB=pg\nCOMPOSE_PROFILES=pg\n' >> .env
+docker compose up -d
+```
+
+**备份和恢复**（SQLite：经内部管理入口逻辑导出，管理入口只在容器里）：
+
+```sh
+docker compose exec arcade /app/ops/backup.sh /data/backups
+docker compose cp arcade:/data/backups ./backups                      # 从这里拷到别的机器
+docker compose exec arcade sh -c '/app/ops/restore.sh d1-arcade-DB "$(ls -d /data/backups/*/ | tail -1)d1-arcade-DB.sql"'   # 恢复最近一份
+```
+
+PostgreSQL：`docker compose exec postgres pg_dump -U arcade --clean --if-exists arcade > arcade.sql` 备份，
+`docker compose exec -T postgres psql -U arcade -d arcade < arcade.sql` 恢复。
+
+**升级和回滚**（迁移只加不删，旧镜像也认新的库）：
+
+```sh
+docker tag ghcr.io/yyyu-star/arcade:latest arcade:previous     # 先留住正在跑的版本
+docker compose pull && docker compose up -d                     # 升级
+echo "ARCADE_IMAGE=arcade:previous" >> .env && docker compose up -d   # 回滚（删掉这一行就回到跟 latest）
+```
+
+**不用 Docker：二进制 + systemd**（Debian/Ubuntu；Node 22 只在打包时用）：从源码打发布包、安装，前面放 Caddy。
+
+```sh
+git clone https://github.com/yyyu-star/arcade.git && cd arcade
+npm ci --ignore-scripts --prefix tools/deployer
+(cd packages/arcade-host && npm ci && npm run build)
+v=$(git rev-parse --short HEAD)
+tools/selfhost/pack-all.sh build/art && ARCADE_VERSION=$v tools/selfhost/release.sh build/art build/out --with-pg
+sudo build/out/arcade-$v/ops/install.sh build/out/arcade-$v.tar.gz game.example.com   # 建用户和目录、生成 /etc/arcade/secrets.env、装 systemd 单元
+sudo /opt/arcade/current/ops/create-admin.sh zhanzhang 站长
+sudo apt install caddy && sudo cp /opt/arcade/current/ops/Caddyfile /etc/caddy/Caddyfile
+echo "SITE_HOST=game.example.com" | sudo tee /etc/default/caddy && sudo systemctl restart caddy
+```
+
+备份：`sudo /opt/arcade/current/ops/backup.sh /var/lib/arcade/backups`（每晚用 cron 或 systemd timer 跑）。升级：拉代码、按上面重新打包，再
+`sudo /opt/arcade/current/ops/upgrade.sh build/out/arcade-$v.tar.gz`（先备份，新版起不来自动切回）；回滚：`sudo /opt/arcade/current/ops/rollback.sh`。
+用 PostgreSQL：在 `/etc/arcade/secrets.env` 里加 `ARCADE_DB=pg` 和 `ARCADE_PG_URL` 两行。
+
+还没在真机上验证过的：Caddy 给公网域名申请真证书，systemd 单元和安装、升级脚本。CI 测的是发布的镜像（SQLite 和 PostgreSQL）、
+经 Caddy 的整套 compose（`localhost`，用 Caddy 的内部证书）和二进制。游戏房间也放进 PostgreSQL（什么都不落盘）要有房间的游戏都用 arcade-kit ≥ 0.21.0，现在还不是。
+细节、全部选项和 CI 覆盖范围见 [tools/selfhost/README.md](tools/selfhost/README.md)。
 
 ## 架构
 

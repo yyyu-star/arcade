@@ -2,8 +2,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { TITLE_ID } from '../src/core/match/index.ts';
-import { TITLE_ORDER } from '../src/core/variants/sichuan-xuezhan/index.ts';
+import { TITLE_ORDER as RC_TITLES } from '../src/core/variants/riichi/index.ts';
+import { TITLE_ORDER as XZ_TITLES } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import { TITLE_NAME } from '../src/view/text.ts';
+
+const TITLE_ORDER: readonly string[] = [...XZ_TITLES, ...RC_TITLES];
 
 test('titles.json 和规则、页面对得上', () => {
   const raw = readFileSync(new URL('../public/titles.json', import.meta.url), 'utf8');

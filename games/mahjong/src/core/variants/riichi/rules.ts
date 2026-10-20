@@ -170,8 +170,10 @@ export interface RcState {
   chips: number[];
   stake: number[];
   points: number[];
-  /** 这一局开始时的点数（算一局的得失） */
+  /** 这一局开始时的点数（算一局的得失；没打完就收场时这一局不算，回到它） */
   start: number[];
+  /** 这一局开始时桌上的供托（同上；部署前的存档没有，按 0） */
+  sticks0?: number;
   /** 起家 */
   first: number;
   /** 场风 0 东 1 南 2 西 */
@@ -213,6 +215,11 @@ export interface RcState {
   history: RoundSummary[];
   stats: SeatStats[];
   final: Final | null;
+  /**
+   * 好友房中途接管座位时，这个座位那一刻的得分（standings）：新来的人只为接手以后的输赢负责。
+   * 没人接管过就没有这个字段（按 0）
+   */
+  entry?: number[];
 }
 
 export type RcAction =
@@ -353,6 +360,7 @@ function startRound(s: RcState): void {
   }
   s.wall = newWall(live, SEATS * 13);
   s.start = s.points.slice();
+  s.sticks0 = s.sticks;
   s.doraOpen = 0;
   s.pendingDora = 0;
   s.kans = 0;
@@ -754,33 +762,61 @@ function endRound(s: RcState, end: RcEnd, renchan: boolean, wins: RcWin[], tenpa
   s.phase = 'end';
 }
 
+const midHand = (s: RcState): boolean => s.phase === 'turn' || s.phase === 'claim';
+
 /**
- * 一场结束：桌上剩的供托给第一名；得分 = (点数 − 返点) ÷ 1000 + 马，第一名加头名奖，四家合计 0。
- * 筹码按得分换（SHARE_POINTS 分换一份），输的最多输掉带来的，付不起时赢家按应得的比例分
+ * 现在的名次和得分（不改状态）。得分按点数记（+52.3 记 52,300），四家合计 0，桌上的供托算给第一名。
+ * - 打完了：点数 − 返点 + 马，第一名加头名奖；
+ * - 没打完就收场（early：好友房有人离座、提前收场，单机中途离开）：只按点数差（点数 − 起始点数），不算马和头名奖，
+ *   一局打到一半的这一局不算（按这一局开始时的点数和供托）。马和头名奖是打完一整场才有的东西，
+ *   开局点数都一样时按起家排第一就能白拿头名奖，一开局就走能刷筹码
  */
-export function finishMatch(s: RcState): void {
-  const rank = ranking(s.points, s.first);
+export function standings(s: RcState, early = false): Final {
+  const half = early && midHand(s);
+  const points = half ? s.start : s.points;
+  const sticks = half ? (s.sticks0 ?? 0) : s.sticks;
+  const rank = ranking(points, s.first);
+  const oka = (RETURN_POINTS - START_POINTS) * SEATS;
+  const score = points.map((x, i) => {
+    const r = rank.indexOf(i);
+    const bonus = r === 0 ? 1000 * sticks : 0;
+    return early ? x + bonus - START_POINTS : x + bonus - RETURN_POINTS + UMA[r]! * 1000 + (r === 0 ? oka : 0);
+  });
+  return { rank, score };
+}
+
+/**
+ * 一场结束（early 见 standings）：桌上的供托给第一名，按 standings 的得分换筹码（SHARE_POINTS 分换一份）。
+ * 每个座位按"现在坐着的人接手以后"的得分算（entry，好友房中途接管时记）：前一个人离座时已经按那一刻的得分结走了。
+ * 输的最多输掉带来的；赢家按应得的比例分输家付得出的，再加上离座的人和庄家之间已经结过的那部分（庄家补上或收回），
+ * 所以没人中途换手时四家的筹码总数守恒
+ */
+export function finishMatch(s: RcState, early = false): void {
+  const f = standings(s, early);
+  if (early && midHand(s)) {
+    s.points = s.start.slice();
+    s.sticks = s.sticks0 ?? 0;
+  }
   if (s.sticks) {
-    s.points[rank[0]!]! += 1000 * s.sticks;
+    s.points[f.rank[0]!]! += 1000 * s.sticks;
     s.sticks = 0;
   }
-  const oka = (RETURN_POINTS - START_POINTS) * SEATS;
-  const score = s.points.map((x, i) => {
-    const r = rank.indexOf(i);
-    return x - RETURN_POINTS + UMA[r]! * 1000 + (r === 0 ? oka : 0);
-  });
-  s.final = { rank, score };
-  const chipsOf = (x: number): number => Math.floor((x * s.share) / SHARE_POINTS[s.opts.length]);
-  const owe = score.map((x, i) => (x < 0 ? Math.min(chipsOf(-x), Math.max(0, s.chips[i]!)) : 0));
-  const want = score.map((x) => (x > 0 ? chipsOf(x) : 0));
-  const paid = owe.reduce((a, b) => a + b, 0);
+  s.final = f;
+  s.claim = null;
+  const per = SHARE_POINTS[s.opts.length];
+  const chipsOf = (x: number): number => (x < 0 ? -1 : 1) * Math.floor((Math.abs(x) * s.share) / per);
+  const entry = s.entry ?? [0, 0, 0, 0];
+  const delta = f.score.map((x, i) => x - entry[i]!);
+  const owe = delta.map((x, i) => (x < 0 ? Math.min(chipsOf(-x), Math.max(0, s.chips[i]!)) : 0));
+  const want = delta.map((x) => (x > 0 ? chipsOf(x) : 0));
+  const pool = Math.max(0, owe.reduce((a, b) => a + b, 0) + chipsOf(-entry.reduce((a, b) => a + b, 0)));
   const total = want.reduce((a, b) => a + b, 0);
-  const got = want.map((w) => (total ? Math.floor((w * paid) / total) : 0));
-  // 整除剩下的零头按名次给（第一名先拿），总数守恒
-  let left = paid - got.reduce((a, b) => a + b, 0);
-  for (const i of rank) {
-    if (left <= 0) break;
-    if (want[i]! > got[i]!) {
+  const got = want.map((w) => (total ? Math.floor((w * pool) / total) : 0));
+  // 整除剩下的零头按名次给（第一名先拿）
+  let left = pool - got.reduce((a, b) => a + b, 0);
+  for (const i of f.rank) {
+    if (left <= 0 || !total) break;
+    if (want[i]! > 0) {
       got[i]!++;
       left--;
     }
@@ -957,10 +993,16 @@ export function actorsOf(s: RcState): { seats: number[]; group: string } | null 
   }
 }
 
-/** 好友房有人接管座位、带入到账：筹码重新记（点数不动，一场结束时按点数换筹码） */
+/**
+ * 好友房有人接管座位、带入到账：筹码重新记；点数不动，记下这个座位此刻按打完算的得分（含马），终局时新来的人只按接手以后的涨落算。
+ * 前一个人离座时按"没打完"结走（不算马，见 standings），两种算法之间的差和电脑代打那一段一样归庄家
+ */
 export function restakeMut(s: RcState, seat: number, chips: number): void {
   s.chips[seat] = chips;
   s.stake[seat] = chips;
+  // 还没开打（开局时真人的带入到账也走这里）：从头算，不记；按名次算马时点数都一样也会差出几万分
+  if (s.kyoku === 0 && s.discards === 0) return;
+  s.entry = (s.entry ?? [0, 0, 0, 0]).map((x, i) => (i === seat ? standings(s).score[seat]! : x));
 }
 
 /** 好友房里座位换了人：只换"是谁"，统计从头算 */

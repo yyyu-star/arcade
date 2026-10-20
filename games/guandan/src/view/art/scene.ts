@@ -217,9 +217,12 @@ export function homeFigureSvg(id: AvatarId, mood: Mood): string {
   return svg(160, 170, `<ellipse cx="80" cy="152" rx="70" ry="18" fill="#000" opacity=".25"/>${avatarSvgBodyScaled(id, mood)}`);
 }
 
-/** 标题字"掼蛋"：金边红字，透明底。seal 为真时右边加一枚竖排小印"单机版"（0.3.0 起好友房一直露出，不再用）；为假时不画小印，字挪到正中 */
-export function logoSvg(seal = true): string {
-  const t = (extra: string) => `<text x="20" y="178" font-family='${SERIF}' font-weight="900" font-size="176" textLength="380" lengthAdjust="spacingAndGlyphs" ${extra}>掼蛋</text>`;
+/**
+ * 标题字（默认"掼蛋"，牌馆主页是"牌馆"；字要在 fonts/svg-chars.txt 里）：金边红字，透明底。
+ * seal 为真时右边加一枚竖排小印"单机版"（封面用）；为假时不画小印，字挪到正中
+ */
+export function logoSvg(seal = true, title = '掼蛋'): string {
+  const t = (extra: string) => `<text x="20" y="178" font-family='${SERIF}' font-weight="900" font-size="176" textLength="380" lengthAdjust="spacingAndGlyphs" ${extra}>${title}</text>`;
   const word =
     t(`fill="#000" opacity=".35" transform="translate(5 7)"`) +
     t(`fill="none" stroke="#2a1206" stroke-width="18" stroke-linejoin="round"`) +

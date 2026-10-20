@@ -9,7 +9,7 @@ import type { Level } from '../ai/venues.ts';
 import type { StakesId, TierId } from '../game/stakes.ts';
 
 export const GAME_NAME = '雀馆';
-export const VARIANT_NAME: Record<string, string> = { 'sichuan-xuezhan': '川麻·血战到底' };
+export const VARIANT_NAME: Record<string, string> = { 'sichuan-xuezhan': '川麻·血战到底', riichi: '立直麻将' };
 
 export const SUIT_NAME = ['万', '筒', '条'] as const;
 
@@ -70,6 +70,9 @@ export const TITLE_NAME: Record<string, string> = {
   xz_heaven: '天胡',
   xz_earth: '地胡',
   xz_last_stand: '血战到底',
+  rc_yakuman: '役满',
+  rc_top: '一位',
+  rc_iron_wall: '铁壁',
 };
 
 /** 名场面（game/banter.ts 的 highlightsOf） */

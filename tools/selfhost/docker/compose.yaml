@@ -1,15 +1,18 @@
-# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）；PostgreSQL 模式再加 postgres（profile pg）。
-# 用法：先 docker build 出 arcade 镜像（见 Dockerfile 开头），再在本目录：
-#   SQLite 档：SITE_HOST=game.example.com ARCADE_IMAGE=arcade:<版本> docker compose up -d
-#   PG 档（发布包用 --db pg [--storage memory] 打）：SITE_HOST=… ARCADE_IMAGE=… docker compose --profile pg up -d
-# Secret 放 secrets.env（和本文件同目录，不进 Git；格式见 tools/selfhost/README.md），SITE_ORIGIN 也写在里面。
-# PG 档另放 pg_password.txt（数据库密码，一行），secrets.env 里加 ARCADE_PG_URL=postgres://arcade:<同一个密码>@postgres:5432/arcade。
+# 自托管的 compose：arcade（发布的镜像 ghcr.io/yyyu-star/arcade）+ caddy（自动 HTTPS、真实 IP）；PostgreSQL 档再加 postgres（profile pg）。
+# 本文件和同目录的 Caddyfile 放进一个空目录，再放 secrets.env（Secret 和 SITE_ORIGIN，生成办法见仓库根 README 的 Self-hosting 一节）：
+#   SQLite 档：SITE_HOST=game.example.com docker compose up -d
+#   PG 档：    SITE_HOST=game.example.com ARCADE_DB=pg docker compose --profile pg up -d
+#             （另放 pg_password.txt，secrets.env 里加 ARCADE_PG_URL，指向下面的 postgres 服务）
+# 自己打的镜像用 ARCADE_IMAGE 换掉默认的。
 # 备份：docker compose exec arcade /app/ops/backup.sh /data/backups（管理入口只在容器里，宿主连不到）。
 services:
   arcade:
-    image: ${ARCADE_IMAGE:-arcade:latest}
+    image: ${ARCADE_IMAGE:-ghcr.io/yyyu-star/arcade:latest}
     restart: unless-stopped
     env_file: secrets.env
+    environment:
+      # sqlite 或 pg：镜像里两份配置都有，按这个选
+      ARCADE_DB: ${ARCADE_DB:-sqlite}
     depends_on:
       # 只有 --profile pg 时才有 postgres；没开 profile 时这条不算（required: false）
       postgres:
@@ -34,7 +37,7 @@ services:
       SITE_HOST: ${SITE_HOST:?要设 SITE_HOST（站点主机名）}
       UPSTREAM: arcade:8787
     volumes:
-      - ../Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
   postgres:

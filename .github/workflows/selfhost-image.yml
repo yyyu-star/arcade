@@ -1,0 +1,195 @@
+# 自托管镜像：把整站（平台 + 全部游戏）打成一个镜像，推到 ghcr.io/yyyu-star/arcade（公开）。
+#   build（只读权限，跑仓库和 npm 的代码）：打包全部模块 → 发布包（SQLite 档 + pg/ 子目录的 PG 档）→ amd64 镜像 →
+#         扫镜像内容（凭证、站点主机名、D1 id，tools/selfhost/docker/scan-image.sh）→ SQLite 档、PG 档各起一次冒烟 → 构建上下文传给 publish；
+#   publish（只有 packages: write，不跑仓库代码，只用上下文里的 Dockerfile）：amd64 + arm64 两个架构推上去，
+#         标签 latest、发布包版本（日期.运行号）、提交短号。只在 main 上推；PR 和别的分支只跑 build。
+# 镜像里没有任何 Secret、站点主机名、D1 id：全部运行时从环境变量取（README 的 Self-hosting 一节）。
+name: Self-host image
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platform/**'
+      - 'games/**'
+      - 'packages/arcade-host/**'
+      - 'tools/selfhost/**'
+      - 'tools/deployer/**'
+      - 'tools/workers.json'
+      - 'tools/deploy-allowlist.json'
+      - '.github/workflows/selfhost-image.yml'
+  pull_request:
+    paths:
+      - 'tools/selfhost/docker/**'
+      - 'tools/selfhost/release.sh'
+      - 'tools/selfhost/arcade.sh'
+      - 'tools/selfhost/create-admin.sh'
+      - '.github/workflows/selfhost-image.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: selfhost-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+      - name: 版本号（日期.运行号）
+        id: version
+        run: echo "version=$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - name: 装钉死的 wrangler 和运行时
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deployer
+          (cd packages/arcade-host && npm ci --no-audit --no-fund && npm run build)
+      - name: 打包全部模块，出发布包（带 PG 档）
+        env:
+          ARCADE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tools/selfhost/pack-all.sh "$RUNNER_TEMP/art"
+          tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --with-pg
+      - name: 构建上下文：两个架构的 workerd（arm64 的从 npm 取，按 lockfile 的 integrity 核对）
+        run: |
+          ctx="$RUNNER_TEMP/ctx"
+          cp -a "$RUNNER_TEMP/out/arcade-${{ steps.version.outputs.version }}" "$ctx"
+          cp tools/selfhost/docker/Dockerfile "$ctx/Dockerfile"
+          mv "$ctx/bin/workerd" "$ctx/bin/workerd-amd64"
+          lock=packages/arcade-host/package-lock.json
+          v=$(node -p "require('./$lock').packages['node_modules/@cloudflare/workerd-linux-arm64'].version")
+          want=$(node -p "require('./$lock').packages['node_modules/@cloudflare/workerd-linux-arm64'].integrity")
+          mkdir -p "$RUNNER_TEMP/arm" && cd "$RUNNER_TEMP/arm"
+          npm pack --json "@cloudflare/workerd-linux-arm64@$v" > pack.json
+          got=$(node -p "require('./pack.json')[0].integrity")
+          [ "$got" = "$want" ] || { echo "::error::workerd-linux-arm64 的 integrity 和 lockfile 不一样"; exit 1; }
+          tar -xzf ./*.tgz package/bin/workerd
+          install -m 755 package/bin/workerd "$ctx/bin/workerd-arm64"
+          ls -l "$ctx/bin"
+      - name: amd64 镜像
+        run: docker build -t arcade:ci "$RUNNER_TEMP/ctx"
+      - name: 扫镜像内容（凭证、站点主机名、D1 id）
+        run: |
+          docker create --name scan arcade:ci >/dev/null
+          mkdir -p "$RUNNER_TEMP/fs" && docker export scan | tar -x -C "$RUNNER_TEMP/fs"
+          docker rm scan >/dev/null
+          tools/selfhost/docker/scan-image.sh "$RUNNER_TEMP/fs" arcade:ci
+      - name: 临时 Secret（只在这次运行里）
+        run: |
+          r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
+      - name: SQLite 档冒烟（README 里那条 docker run）、建管理员
+        run: |
+          docker run -d --name arcade -p 127.0.0.1:8787:8787 -v arcade-data:/data --env-file "$RUNNER_TEMP/secrets.env" arcade:ci
+          for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' arcade)" = healthy ] && break; sleep 1; done
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          node tools/selfhost/smoke.mjs --admin skip
+          docker exec arcade /app/ops/create-admin.sh zhanzhang 站长 | grep -q '"recoveryCode"'
+          docker exec arcade curl -fsS -X POST 'http://127.0.0.1:8788/cron/run?worker=arcade&cron=17%2019%20*%20*%20*' | grep -q '"outcome":"ok"'
+          docker rm -f arcade >/dev/null
+      - name: compose 整套（arcade + caddy，SQLite，没有 pg_password.txt）：经 Caddy 的 HTTPS 冒烟
+        working-directory: tools/selfhost/docker
+        env:
+          # localhost：Caddy 用自己的内部证书（不连 ACME），所以冒烟不验证书
+          SITE_HOST: localhost
+          ARCADE_IMAGE: arcade:ci
+        run: |
+          # 和 README 一样写 SITE_ORIGIN：Caddy 后面 workerd 看到的是 http，不设的话平台按请求自己的地址认来源，https 页面的写请求全被拒
+          { cat "$RUNNER_TEMP/secrets.env"; echo "SITE_ORIGIN=https://localhost"; } > secrets.env
+          docker compose up -d
+          for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q arcade)")" = healthy ] && break; sleep 1; done
+          for _ in $(seq 30); do curl -kfsS https://localhost/__health >/dev/null 2>&1 && break; sleep 1; done
+          set -a; . ./secrets.env; set +a
+          cd "$GITHUB_WORKSPACE"
+          NODE_TLS_REJECT_UNAUTHORIZED=0 node tools/selfhost/smoke.mjs --base https://localhost --admin skip
+          cd tools/selfhost/docker
+          # Caddy 挡 /cdn-cgi
+          [ "$(curl -ks -o /dev/null -w '%{http_code}' https://localhost/cdn-cgi/trace)" = 404 ]
+          docker compose exec -T arcade /app/ops/backup.sh /data/backups | grep -q 'backup：'
+          docker compose down -v
+          rm -f secrets.env
+      - name: PG 档冒烟（ARCADE_DB=pg）
+        run: |
+          docker run -d --name arcade-pg --network host -e ARCADE_DB=pg -e ARCADE_LISTEN=127.0.0.1:8787 \
+            -e ARCADE_PG_URL=postgres://postgres:test@127.0.0.1:5432/postgres --env-file "$RUNNER_TEMP/secrets.env" arcade:ci
+          for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' arcade-pg)" = healthy ] && break; sleep 1; done
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          node tools/selfhost/smoke.mjs --admin skip
+          docker exec arcade-pg curl -fsS -X POST 'http://127.0.0.1:8788/cron/run?worker=arcade&cron=17%2019%20*%20*%20*' | grep -q '"outcome":"ok"'
+          docker logs arcade-pg 2>&1 | grep -q '"msg":"d1pg migration applied"'
+          docker rm -f arcade-pg >/dev/null
+      - name: 失败时的容器日志
+        if: failure()
+        run: |
+          docker logs arcade 2>&1 | tail -100 || true
+          docker logs arcade-pg 2>&1 | tail -100 || true
+          (cd tools/selfhost/docker && docker compose logs 2>&1 | tail -100) || true
+      - name: 构建上下文打包（保留权限）
+        run: tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ctx.tar" ctx
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: selfhost-image-context
+          path: ${{ runner.temp }}/ctx.tar
+          retention-days: 1
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: selfhost-image-context
+          path: ${{ runner.temp }}
+      - name: 解开构建上下文
+        run: tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/ctx.tar"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 标签
+        id: tags
+        run: |
+          img=ghcr.io/yyyu-star/arcade
+          echo "tags=$img:latest,$img:${{ needs.build.outputs.version }},$img:${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ runner.temp }}/ctx
+          file: ${{ runner.temp }}/ctx/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.build.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.description=Arcade: platform and all games in one workerd process (self-hosting)
+      - name: 推上去的清单（两个架构都在）
+        run: |
+          docker buildx imagetools inspect "ghcr.io/yyyu-star/arcade:${{ needs.build.outputs.version }}" | tee "$RUNNER_TEMP/manifest.txt"
+          grep -q 'linux/amd64' "$RUNNER_TEMP/manifest.txt" && grep -q 'linux/arm64' "$RUNNER_TEMP/manifest.txt"

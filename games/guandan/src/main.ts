@@ -10,6 +10,7 @@ import { anim } from './view/anim.ts';
 import { app } from './view/app.ts';
 import { audio } from './view/audio.ts';
 import { CloudSync } from './view/cloud.ts';
+import { DdzSession } from './view/ddz-session.ts';
 import { LOW_MEMORY, appBox, fitAppToViewport, isIOS, markForeground, markRenderLost, webglUsable } from './view/device.ts';
 import { hideErrorPanel, installErrorHandler, showErrorPanel } from './view/errors.ts';
 import { installIdleLimiter } from './view/idle.ts';
@@ -19,10 +20,11 @@ import { mountRotateHint, setRotateLobbyLabel } from './view/orientation.ts';
 import { detectOnce, lobbyName, standalone } from './view/platform.ts';
 import { mountSocialOnce } from './view/social.ts';
 import { BootScene } from './view/scenes/BootScene.ts';
+import { DdzScene } from './view/scenes/DdzScene.ts';
 import { TableScene } from './view/scenes/TableScene.ts';
 import { TitleScene } from './view/scenes/TitleScene.ts';
 import { Session, randomSeed } from './view/session.ts';
-import { EMPTY_STATS, KEYS, backupKey, SYNC_SLOTS, getSettings, getStats, loadSave, onSyncedChange, rawStore, tutorialDone, type SyncSlot } from './view/store.ts';
+import { EMPTY_STATS, KEYS, backupKey, SYNC_SLOTS, getSettings, getStats, loadDdzSave, loadSave, onSyncedChange, rawStore, tutorialDone, type SyncSlot } from './view/store.ts';
 import { GAME_HEIGHT, RENDER_SCALE, worldWidthFor } from './view/theme.ts';
 import { dropBackdrops, ensureBackdrops } from './view/textures.ts';
 import { worldW } from './view/ui/kit.ts';
@@ -43,7 +45,12 @@ if (params.anim === false) anim.instant = true;
 if (params.speed) anim.forcedSpeed = params.speed;
 
 // URL 指定了开局（调试 / 自动化）：直接进牌桌。已有存档时这一局不写存档，免得覆盖玩家进度。
-if (params.seed !== null || params.jump !== null) {
+// 带 ddz=1 时开的是斗地主单机（jump 只有掼蛋有）
+if (params.ddz && params.seed !== null) {
+  const ses = DdzSession.fresh(params.seed, params.difficulty ?? getSettings().difficulty, undefined, !loadDdzSave());
+  ses.autoplay = params.autoplay;
+  app.ddz = ses;
+} else if (params.seed !== null || params.jump !== null) {
   const seed = params.seed ?? randomSeed();
   const rules = getSettings().rules;
   const start = params.jump === 'tribute' ? jumpToTribute(seed, rules) : params.jump === 'ace' ? jumpToAce(seed, rules) : createGame(seed, rules);
@@ -129,7 +136,7 @@ const config: Phaser.Types.Core.GameConfig = {
   // 多重采样的缓冲按画布像素 ×4 份算；iOS 2 倍渲染时边缘锯齿本来就看不出，省下这块内存
   render: { maxTextures: navigator.webdriver ? 1 : -1, antialiasGL: LOW_MEMORY === 0 && !(isIOS() && RENDER_SCALE >= 2) },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, TitleScene, TableScene],
+  scene: [BootScene, TitleScene, TableScene, DdzScene],
 };
 let game: Phaser.Game;
 try {

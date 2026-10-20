@@ -522,6 +522,45 @@ describe('一场结束', () => {
     expect(s.phase).toBe('over');
   });
 
+  test('没打完就要结果（好友房离座、单机中途离开）：只按点数差换筹码，不算马和头名奖，打到一半的这一局不算', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.start = [10_000, 40_000, 25_000, 25_000];
+    s.points = [9_000, 40_000, 25_000, 25_000];
+    s.sticks = 1;
+    const r = RC.result(s);
+    // 0 号：这一局开始时 10,000 − 25,000 = −15,000 → 小档 600；这一局他刚放的立直棒不算
+    expect(r.seats[0]!.net).toBe(-600);
+    expect(r.seats[1]!.net).toBe(600);
+    expect(s.phase).toBe('turn');
+    // 开局点数都一样：谁走都不输不赢（起家不会因为排第一白拿头名奖）
+    const t = table(['*', '*', '*', '*'], 0, '1z');
+    expect(RC.result(t).seats.map((x) => x.net)).toEqual([0, 0, 0, 0]);
+    expect(RC.finish(t).chips).toEqual([2_000, 2_000, 2_000, 2_000]);
+  });
+
+  test('开局时的带入到账（还没人打过牌）不记接手得分', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.discards = 0;
+    const t = RC.restake(RC.restake(s, 0, 2_000), 1, 2_000);
+    expect(t.entry ?? [0, 0, 0, 0]).toEqual([0, 0, 0, 0]);
+  });
+
+  test('中途接管：新来的人只为接手以后的涨落负责；前面那段由庄家补给赢家', () => {
+    const base = (): RcState => {
+      const s = table(['*', '*', '*', '*'], 0, '1z');
+      s.points = [10_000, 40_000, 25_000, 25_000];
+      s.start = s.points.slice();
+      s.kyoku = 3;
+      return s;
+    };
+    const plain = base();
+    finishMatch(plain);
+    const t = RC.restake(base(), 0, 2_000);
+    finishMatch(t);
+    expect(t.chips[0]).toBe(2_000);
+    expect(t.chips[1]).toBe(plain.chips[1]);
+  });
+
   const last = (dealer: number, first: number, points: number[]): RcState => {
     const s = table(['*', TANYAO + '6s', '*', '*'], 1, '1z', { dealer });
     s.first = first;
@@ -545,6 +584,29 @@ describe('一场结束', () => {
     d = RC.resume(d);
     expect(d.phase).toBe('turn');
     expect(act(last(0, 1, [25_000, 28_000, 25_000, 22_000]), 1, { t: 'tsumo' }).phase).toBe('over');
+  });
+
+  test('西入后庄家连庄：别家已到 30,000 但庄家不是第一，接着打；换庄时有人到 30,000 就结束', () => {
+    // 西一局，1 号是庄，荒牌流局时庄家听牌连庄；3 号已经 31,000
+    let s = table(['*8s', TANYAO, '*', '*'], 0, '', { dealer: 1 });
+    s.first = 1;
+    s.wind = 2;
+    s.hand = 0;
+    s.points = [20_000, 24_000, 25_000, 31_000];
+    s.start = s.points.slice();
+    s = discard(s, 0, '8s');
+    expect(s.history.at(-1)!.tenpai).toEqual([false, true, false, false]);
+    expect(s.phase).toBe('end');
+    expect(s.dealer).toBe(1);
+    // 同一局庄家没听（换庄）：3 号到了 30,000，结束
+    let t = table(['*8s', '*', TANYAO, '*'], 0, '', { dealer: 1 });
+    t.first = 1;
+    t.wind = 2;
+    t.hand = 0;
+    t.points = [20_000, 24_000, 25_000, 31_000];
+    t.start = t.points.slice();
+    t = discard(t, 0, '8s');
+    expect(t.phase).toBe('over');
   });
 
   test('东风战打完东四局结束；西入最多打到西四局', () => {

@@ -244,7 +244,7 @@ function runSolo(stakes: StakesId, n: number): void {
     for (let i = 0; i < u.length; i++) u[i] = rng.u32();
     return a;
   });
-  let s = newSolo(stakes, OPTS[n % OPTS.length]!, 'tester', null, 2_000).state;
+  let s = newSolo(stakes, OPTS[n % OPTS.length]!, 'tester', null, 2_000).state as XzState;
   spy.mockRestore();
   const r = stream(SEED, 'perturb', n);
   for (let k = 0; k < 20_000 && !XZ.over(s); k++) {

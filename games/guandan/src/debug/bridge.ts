@@ -11,6 +11,8 @@ import { lobbySession } from '../view/online.ts';
 import { loadStake } from '../view/stake.ts';
 import type { StakeView } from '../variants/guandan/net/stake.ts';
 import type { TableScene } from '../view/scenes/TableScene.ts';
+import type { DdzScene } from '../view/scenes/DdzScene.ts';
+import type { DdzState, DdzView } from '../variants/doudizhu/index.ts';
 import type { TitleScene } from '../view/scenes/TitleScene.ts';
 import { GAME_HEIGHT, RENDER_SCALE } from '../view/theme.ts';
 import { focusedAt } from '../view/ui/focus.ts';
@@ -36,6 +38,9 @@ interface GameBridge {
   readonly sfx: string[];
   state(): GameState | null;
   view(): PlayerView | null;
+  /** 斗地主单机的状态和我的视角（没开就是 null） */
+  ddzState(): DdzState | null;
+  ddzView(): DdzView | null;
   /** 世界坐标 → 页面 CSS 坐标 */
   toScreen(p: Pt): Pt;
   /** 主要控件（页面 CSS 坐标） */
@@ -96,6 +101,11 @@ export function mountBridge(game: Phaser.Game): void {
     const s = active();
     return s && s.scene.key === 'table' ? (s as TableScene) : null;
   };
+  // 斗地主的牌桌（牌馆 0.28.0）：忙不忙、弹层、特效记录、控件和掼蛋的牌桌一样读
+  const ddz = (): DdzScene | null => {
+    const s = active();
+    return s && s.scene.key === 'ddz' ? (s as DdzScene) : null;
+  };
   const toScreen = (p: Pt): Pt => {
     const r = game.canvas.getBoundingClientRect();
     const f = r.width / (game.scale.gameSize.width / RENDER_SCALE);
@@ -109,11 +119,11 @@ export function mountBridge(game: Phaser.Game): void {
       return active()?.scene.key ?? null;
     },
     get idle() {
-      const t = table();
+      const t = table() ?? ddz();
       return t ? !t.isBusy : true;
     },
     get overlay() {
-      return table()?.overlay ?? null;
+      return table()?.overlay ?? ddz()?.overlay ?? null;
     },
     get tutorialStep() {
       return tutorialState.step;
@@ -126,19 +136,21 @@ export function mountBridge(game: Phaser.Game): void {
       return app.fits;
     },
     get builds() {
-      return table()?.builds ?? 0;
+      return table()?.builds ?? ddz()?.builds ?? 0;
     },
     get fxLog() {
-      return [...(table()?.fxLog ?? [])];
+      return [...(table()?.fxLog ?? ddz()?.fxLog ?? [])];
     },
     get lastError() {
-      return table()?.lastError ?? null;
+      return table()?.lastError ?? ddz()?.lastError ?? null;
     },
     get sfx() {
       return audio.log.map((l) => l.name);
     },
     state: () => app.session?.state ?? null,
     view: () => (app.net?.shown ? app.net.view() : (app.session?.view() ?? null)),
+    ddzState: () => app.ddz?.state ?? null,
+    ddzView: () => app.ddz?.view() ?? null,
     toScreen,
     controls: () => {
       const out: Record<string, Pt & { enabled?: boolean; visible?: boolean }> = {};
@@ -148,6 +160,8 @@ export function mountBridge(game: Phaser.Game): void {
         for (const [k, p] of Object.entries((s as TitleScene).controls())) out[k] = toScreen(p);
       } else if (s.scene.key === 'table') {
         for (const [k, p] of Object.entries((s as TableScene).controls())) out[k] = { ...toScreen(p), enabled: p.enabled, visible: p.visible };
+      } else if (s.scene.key === 'ddz') {
+        for (const [k, p] of Object.entries((s as DdzScene).controls())) out[k] = { ...toScreen(p), enabled: p.enabled, visible: p.visible };
       }
       if (tutorialState.step >= 0) for (const [k, p] of Object.entries(tutorialState.buttons)) out[`tutorial:${k}`] = toScreen(p);
       return out;
@@ -238,11 +252,12 @@ export function mountBridge(game: Phaser.Game): void {
       const p = table()?.cardPoint(c);
       return p ? toScreen(p) : null;
     },
-    selected: () => table()?.handSelected() ?? [],
+    selected: () => table()?.handSelected() ?? ddz()?.handSelected() ?? [],
     dispatch: (a) => table()?.debugDispatch(a) ?? '不在牌桌',
     setAutoplay: (on) => {
       if (app.session) app.session.autoplay = on;
       table()?.debugCloseOverlay();
+      ddz()?.debugAutoplay(on);
     },
     setInstant: (on) => {
       anim.instant = on;

@@ -21,6 +21,8 @@ export interface LaunchParams {
   screen: string | null;
   online: boolean;
   room: string | null;
+  /** 牌馆 0.28.0：斗地主全部做完前，主页的掼蛋 / 斗地主切换只在 ddz=1 时露出 */
+  ddz: boolean;
 }
 
 export function parseParams(search: string): LaunchParams {
@@ -39,5 +41,6 @@ export function parseParams(search: string): LaunchParams {
     screen: q.get('screen'),
     online: q.get('online') === '1',
     room: /^\d{6}$/.test(q.get('room') ?? '') ? q.get('room') : null,
+    ddz: q.get('ddz') === '1',
   };
 }

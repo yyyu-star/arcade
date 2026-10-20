@@ -169,6 +169,82 @@ async function soloFun(page: Page, name: string): Promise<void> {
   await page.close();
 }
 
+/**
+ * 立直单机（docs/riichi.md 第 4、5 节）：入口先藏起来（没带 ?rc=1 的选桌页没有"玩法"，带了才有）；?rc=1 选立直开打，
+ * 打到一局结算出来、役种表里有役（有人和了；一直流局就多打几局），再点开规则里的役种表；控制台零报错。
+ * 我这一家：能和就和、能立直就立直（点一张亮着的牌）、吃有几种就挑第一种、碰杠不要；其余打最右边能打的那张。截图在 shots/smoke-rc-*.png
+ */
+for (const [name, viewport] of [
+  ['land', { width: 1280, height: 720 }],
+  ['port', { width: 390, height: 844 }],
+] as const) {
+  const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
+  const errors: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && !/502|Bad Gateway/.test(m.text()) && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(() => {
+    localStorage.setItem('mahjong.guide', '1');
+    localStorage.setItem('mahjong.guide.rc', '1');
+  });
+  // 没带 ?rc=1：选桌页和从前一样，没有玩法选项
+  await page.goto(`http://127.0.0.1:${port}/games/mahjong/?turbo`);
+  await page.click('.mode.fun');
+  await page.waitForSelector('.lobby-head');
+  if (await page.$('.lobby-variants')) errors.push('没带 ?rc=1 时选桌页不该有玩法选项');
+  await page.goto(`http://127.0.0.1:${port}/games/mahjong/?rc=1&turbo`);
+  await page.click('.mode.fun');
+  await page.click('.lobby-variants .chip:has-text("立直")');
+  await page.click('text=单机开打');
+  await page.waitForSelector('.table.rc .my-hand .tile');
+  let win = false;
+  let rounds = 0;
+  for (let i = 0; i < 6_000 && !win && rounds < 12; i++) {
+    if (await page.$('.mask.end .rc-win')) {
+      win = true;
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: `${root}shots/smoke-rc-${name}-summary.png` });
+    } else if (await page.$('text=下一局')) {
+      rounds++;
+      await page.click('text=下一局');
+    } else if (await page.$('.bar .act.ron')) await page.click('.bar .act.ron');
+    else if (await page.$('.bar .act.chi')) {
+      await page.click('.bar .act.chi');
+      if (await page.waitForSelector('.rc-pick .rc-opt', { timeout: 300 }).catch(() => null)) {
+        await page.screenshot({ path: `${root}shots/smoke-rc-${name}-chi.png` });
+        await page.click('.rc-pick .rc-opt');
+      }
+    } else if (await page.$('.bar .act.pass')) await page.click('.bar .act.pass');
+    else if (await page.$('.bar .act.kyuu')) {
+      await page.click('.bar .act.kyuu');
+      await page.click('.bar .act.kyuu');
+    } else if (await page.$('.bar .act.riichi')) {
+      await page.click('.bar .act.riichi');
+      const t = (await page.$$('.my-hand .tile:not(.off)')).at(-1);
+      await t?.click().catch(() => {});
+      await t?.click().catch(() => {});
+    } else {
+      const t = (await page.$$('.my-hand .tile:not(.off)')).at(-1);
+      await t?.click().catch(() => {});
+      await t?.click().catch(() => {});
+    }
+    await page.waitForTimeout(30);
+  }
+  if (!win) errors.push(`打了 ${rounds} 局没出现和牌的役种表`);
+  else if ((await page.$$('.mask.end .rc-yaku-row')).length === 0) errors.push('役种表里没有役');
+  if (await page.$('.mask.end .rc-total .rc-value')) console.log(`rc ${name}: ${await page.textContent('.mask.end .rc-total')}`);
+  // 规则里的役种表
+  await page.click('text=下一局');
+  await page.click('.topbar >> text=规则');
+  await page.click('.rules .tab:has-text("役种")');
+  await page.waitForSelector('.rules table');
+  const yaku = (await page.$$('.rules.rc-guide td.n')).length;
+  if (yaku < 30) errors.push(`役种表只有 ${yaku} 行`);
+  const ok = errors.length === 0;
+  failed ||= !ok;
+  console.log(`rc ${name}: ${ok ? `ok，一局结算有役种表（${rounds + 1} 局内）、规则里役种 ${yaku} 行、控制台零报错` : `报错：\n${errors.join('\n')}`}`);
+  await page.close();
+}
+
 for (const [name, viewport] of [
   ['land', { width: 1280, height: 720 }],
   ['port', { width: 390, height: 844 }],

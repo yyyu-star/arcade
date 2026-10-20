@@ -1,6 +1,7 @@
 /**
  * 玩法登记表（DESIGN.md 3.4）：id → 玩法。房间和单机按开房选项里的 variant 选；加日麻就在这里加一行。
  */
+import { riichi } from './riichi/index.ts';
 import { sichuanXuezhan } from './sichuan-xuezhan/index.ts';
 import type { Variant } from './types.ts';
 
@@ -10,6 +11,7 @@ export type AnyVariant = Variant<any, any, any, any>;
 
 export const VARIANTS: Readonly<Record<string, AnyVariant>> = {
   [sichuanXuezhan.id]: sichuanXuezhan,
+  [riichi.id]: riichi,
 };
 
 export const DEFAULT_VARIANT = sichuanXuezhan.id;

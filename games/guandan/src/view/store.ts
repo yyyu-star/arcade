@@ -4,6 +4,7 @@
  */
 import { soloLevelOf, type SoloLevel } from '../variants/guandan/ai/venue.ts';
 import type { GameState, Options } from '../variants/guandan/core/index.ts';
+import { DDZ_RULES, type DdzState } from '../variants/doudizhu/core/index.ts';
 
 export const KEYS = {
   save: 'guandan.save',
@@ -23,6 +24,12 @@ export const KEYS = {
   stake: 'guandan.stake',
   /** 单独部署（没有平台）时好友房里的昵称（platform.ts、online.ts，0.8.0） */
   nick: 'guandan.nick',
+  /** 牌馆 0.28.0：主页上次选的玩法（掼蛋 / 斗地主） */
+  variant: 'guandan.variant',
+  /** 斗地主单机娱乐的这一局（和掼蛋的 save 分开） */
+  ddzSave: 'guandan.ddz.save',
+  /** 斗地主战绩：第一版只在本机，不进云同步（主线 10-20 定） */
+  ddzStats: 'guandan.ddz.stats',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */
@@ -236,6 +243,82 @@ export function recordGame(won: boolean): Stats {
   }
   write(KEYS.stats, s);
   changed('stats');
+  return s;
+}
+
+// ───────────── 牌馆：玩法、斗地主存档和战绩（0.28.0） ─────────────
+
+export type VariantId = 'guandan' | 'ddz';
+
+export function getVariant(): VariantId {
+  return read<string>(KEYS.variant) === 'ddz' ? 'ddz' : 'guandan';
+}
+
+export function setVariant(v: VariantId): void {
+  write(KEYS.variant, v);
+}
+
+export interface DdzSaveData {
+  v: 1;
+  state: DdzState;
+  level: SoloLevel;
+  /** 这一局的胜负记过战绩没有、记到第几副（刷新后不重复记） */
+  counted: boolean;
+  dealsCounted: number;
+}
+
+export function loadDdzSave(): DdzSaveData | null {
+  const s = read<DdzSaveData>(KEYS.ddzSave);
+  if (!s || s.v !== 1 || !s.state || !Array.isArray(s.state.hands) || s.state.rules !== DDZ_RULES) return null;
+  s.level = soloLevelOf(s.level) ?? DEFAULT_SETTINGS.difficulty;
+  return s;
+}
+
+export function writeDdzSave(data: DdzSaveData): void {
+  write(KEYS.ddzSave, data);
+}
+
+export function clearDdzSave(): void {
+  rawStore.remove(KEYS.ddzSave);
+}
+
+export interface DdzStats {
+  v: 1;
+  games: number;
+  wins: number;
+  deals: number;
+  dealWins: number;
+  /** 当地主的副数、当地主赢的副数 */
+  landlord: number;
+  landlordWins: number;
+  springs: number;
+}
+
+export const EMPTY_DDZ_STATS: DdzStats = { v: 1, games: 0, wins: 0, deals: 0, dealWins: 0, landlord: 0, landlordWins: 0, springs: 0 };
+
+export function getDdzStats(): DdzStats {
+  const s = read<DdzStats>(KEYS.ddzStats);
+  return s && s.v === 1 ? { ...EMPTY_DDZ_STATS, ...s } : { ...EMPTY_DDZ_STATS };
+}
+
+export function recordDdzDeal(won: boolean, landlord: boolean, spring: boolean): DdzStats {
+  const s = getDdzStats();
+  s.deals += 1;
+  if (won) s.dealWins += 1;
+  if (landlord) {
+    s.landlord += 1;
+    if (won) s.landlordWins += 1;
+  }
+  if (won && spring) s.springs += 1;
+  write(KEYS.ddzStats, s);
+  return s;
+}
+
+export function recordDdzGame(won: boolean): DdzStats {
+  const s = getDdzStats();
+  s.games += 1;
+  if (won) s.wins += 1;
+  write(KEYS.ddzStats, s);
   return s;
 }
 

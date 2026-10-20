@@ -84,13 +84,13 @@ describe('内嵌标题字体', () => {
       }
     }
     // 动态拼进来的：牌型名、名次、人名
-    const dynamic = ['炸弹×', '同花顺', '天王炸', '三连对', '钢板', '三带二', '顺子', '单张', '对子', '三张', '头游二游三游末游', '老张小美阿强你'];
+    const dynamic = ['炸弹×', '同花顺', '天王炸', '三连对', '钢板', '三带二', '顺子', '单张', '对子', '三张', '头游二游三游末游', '老张小美阿强你', '老周王姐'];
     for (const s of dynamic) for (const c of cjk(s)) if (!titleChars.has(c)) missing.add(c);
     expect([...missing].join('')).toBe('');
   });
 
   it('SVG 美术里的宋体字在内嵌小字体里都有', () => {
-    const missing = cjk('掼蛋单机版福级配大王小王头游二游三游末游').filter((c) => !svgChars.has(c));
+    const missing = cjk('掼蛋牌馆单机版福级配大王小王头游二游三游末游').filter((c) => !svgChars.has(c));
     expect(missing.join('')).toBe('');
   });
 });
