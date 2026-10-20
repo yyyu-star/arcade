@@ -2,10 +2,10 @@
 
 # Arcade 小游戏街机厅
 
-**部署在 Cloudflare Workers 上的自托管小游戏平台：一个大厅、一个账号，玩所有游戏。**
+**可以自己托管的小游戏平台（Cloudflare Workers 或你自己的服务器）：一个大厅、一个账号，玩所有游戏。**
 
-大厅带账号、云存档、好友、排行榜和娱乐筹码钱包；游戏有股市肉鸽《开盘》、掼蛋、德州扑克、川麻《雀馆》、回合制卡牌赛车《飞驰》，
-可以单机对电脑，也可以开好友房一起玩。
+大厅带账号、云存档、好友、排行榜和娱乐筹码钱包；游戏有股市肉鸽《开盘》、掼蛋、德州扑克、川麻《雀馆》、幸存者类动作游戏《夜巡》、回合制卡牌赛车《飞驰》，
+可以单机对电脑，也可以开好友房一起玩。可以部署在 Cloudflare Workers 上，也可以用自托管套件跑在自己的机器上。
 
 [![Check isolation](https://github.com/yyyu-star/arcade/actions/workflows/check.yml/badge.svg)](https://github.com/yyyu-star/arcade/actions/workflows/check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -20,10 +20,10 @@
 
 </div>
 
-| 开盘 | 掼蛋 | 德州扑克 | 雀馆 | 飞驰 |
-|:---:|:---:|:---:|:---:|:---:|
-| ![开盘](platform/public/covers/kaipan.webp) | ![掼蛋](platform/public/covers/guandan.webp) | ![德州扑克](platform/public/covers/texas.webp) | ![雀馆](platform/public/covers/mahjong.webp) | ![飞驰](platform/public/covers/racing.webp) |
-| 真实历史行情驱动的散户肉鸽 | 规则完整的竞赛掼蛋 | 无限注德州，2–9 人 | 川麻·血战到底 | 回合制卡牌赛车，2–6 辆 |
+| 开盘 | 掼蛋 | 德州扑克 | 雀馆 | 夜巡 | 飞驰 |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| ![开盘](platform/public/covers/kaipan.webp) | ![掼蛋](platform/public/covers/guandan.webp) | ![德州扑克](platform/public/covers/texas.webp) | ![雀馆](platform/public/covers/mahjong.webp) | ![夜巡](platform/public/covers/yexun.webp) | ![飞驰](platform/public/covers/racing.webp) |
+| 真实历史行情驱动的散户肉鸽 | 规则完整的竞赛掼蛋 | 无限注德州，2–9 人 | 川麻·血战到底 | 幸存者类动作，守夜 / 夜探 | 回合制卡牌赛车，2–6 辆 |
 
 > 本仓库不托管公开的演示站：在本机跑起来（见[快速开始](#快速开始)），或者按[部署](#部署)一节部署你自己的一份。
 > 筹码只是游戏里的分数：不能买、不能卖、不能兑换、不能转让，没有任何现金价值。
@@ -38,16 +38,20 @@
 - **手机优先**：在低内存的 iPhone、iPad 上实测过：渲染倍数封顶、按可见区域算高度、让出刘海、WebGL 上下文丢了能恢复。
 - **规则可复现**：每个游戏的规则核心都是纯函数加带种子的随机数，存档、回放、复现 bug 都靠它。
 - **模块随时能拆**：平台、每个游戏、共用包都是独立模块，各有依赖、测试、Worker 和部署流程。
+- **两种跑法**：部署在 Cloudflare Workers 上，或者在自己的机器上用裸 `workerd` 二进制或 Docker 跑（SQLite 或 PostgreSQL），模块代码不变。
 
 ## 游戏
 
 | 模块 | 游戏 | 亮点 |
 |---|---|---|
 | [`games/kaipan`](games/kaipan/) | **开盘** | 散户炒股题材的肉鸽；135 段真实历史走势（公有领域数据）驱动大盘；每日挑战、结局海报。 |
-| [`games/guandan`](games/guandan/) | **掼蛋** | 竞赛规则完整；单机对三个电脑；好友房；每副复盘。 |
+| [`games/guandan`](games/guandan/) | **掼蛋** | 竞赛规则完整；单机对三个电脑；好友房；每副复盘。正在重构成多玩法的「牌馆」（先掼蛋，下一个是斗地主，方案见该模块 `docs/doudizhu.md`）。 |
 | [`games/texas`](games/texas/) | **德州扑克** | 无限注，2–9 人；电脑性格各异；好友房；表情和道具。 |
-| [`games/mahjong`](games/mahjong/) | **雀馆** | 一套引擎多种玩法，先做川麻·血战到底；听牌提示；好友房。 |
+| [`games/mahjong`](games/mahjong/) | **雀馆** | 一套引擎多种玩法；川麻·血战到底已上线，立直麻将的规则核心已写好、还没上线（`docs/riichi.md`）；听牌提示；好友房。 |
+| [`games/yexun`](games/yexun/) | **夜巡** | 幸存者类动作：道士夜巡雪夜古镇，只管走位；守夜（撑到天亮）和夜探（搜宝撤离）两个模式；固定步长的确定性模拟，每日挑战。 |
 | [`games/racing`](games/racing/) | **飞驰** | 回合制卡牌赛车：换挡出牌、控热量、过弯限速、吃尾流；三条赛道，电脑车手性格各异，好友房。社区贡献者的作品；只有娱乐模式，不碰钱包。 |
+
+各模块当前版本和进展见各自的 `package.json` 和 `CHANGELOG.md`。
 
 ## 快速开始
 
@@ -55,7 +59,7 @@
 
 ```bash
 git clone https://github.com/yyyu-star/arcade.git
-cd arcade/platform          # 或 games/kaipan、games/guandan、games/texas、games/mahjong、games/racing
+cd arcade/platform          # 或 games/kaipan、games/guandan、games/texas、games/mahjong、games/racing、games/yexun
 npm ci
 npm run dev                 # 本地开发
 npm test                    # 单元测试（vitest）和 Worker 测试
@@ -70,8 +74,9 @@ npm run build               # 正式构建
 | games/texas | 5175 | 4175 |
 | games/mahjong | 5176 | 4176 |
 | games/racing | 5177 | 4177 |
+| games/yexun | 5178 | 4178 |
 
-各模块的脚本、测试工具和冒烟测试见模块自己的 README。提 PR 前还要在仓库根跑一次 `node tools/check-isolation.mjs`（不用安装依赖）。
+共用包（`packages/arcade-kit`、`packages/arcade-host`）没有开发服务器，只有测试。各模块的脚本、测试工具和冒烟测试见模块自己的 README。提 PR 前还要在仓库根跑一次 `node tools/check-isolation.mjs`（不用安装依赖）。
 
 ## 部署
 
@@ -109,12 +114,19 @@ npm run build               # 正式构建
 不要平台，也不要域名：游戏会得到一个 `https://<id>.<你的子域>.workers.dev` 地址。
 
 - **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`
-  （`<id>` 换成 `kaipan`、`guandan`、`texas`、`mahjong` 或 `racing`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.2"`）
+  （`<id>` 换成 `kaipan`、`guandan`、`texas`、`mahjong`、`racing` 或 `yexun`）。按钮只复制这个游戏的目录，所以要等游戏改成按别名依赖 npm 上发布的 `@yyyu-star/arcade-kit`（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`）
   （而不是仓库里的那份）才能用；能不能用看各游戏的 README。
 - **fork 后自己部署**：`cd games/<id> && npm ci && npx wrangler login && npm run deploy`。
 
 单独部署的游戏有：单机对电脑、好友房（身份是游客 cookie，昵称用地址上的 `?name=`）、浏览器本地存档；没有：登录、云存档、排行榜、钱包实盘。
 细节见 [docs/new-game.md](docs/new-game.md) 第 7 节。
+
+### 自托管（不用 Cloudflare）
+
+[`packages/arcade-host`](packages/arcade-host/README.md) 是一个小运行时：在一个 [workerd](https://github.com/cloudflare/workerd) 进程里原样跑平台和所有游戏，
+补上 Cloudflare 平常替我们做的事（SQLite 或 PostgreSQL 版的 D1、静态资源、路由、定时任务、Durable Object 存储）。
+[`tools/selfhost`](tools/selfhost/README.md) 读各模块的 `wrangler.jsonc`（规则和 Cloudflare 的部署工具一致）打成发布包，并带安装、升级、回滚、备份、恢复脚本、systemd 单元、Caddyfile 和 Docker 镜像加 compose。
+服务器上只要发布包里带的 `workerd` 二进制，加 bash、curl、tar；Node 只在打包的机器上用。数据库在打包时二选一（SQLite 或 PostgreSQL），不能共存。Cloudflare 上的部署不受影响。
 
 ## 架构
 
@@ -132,9 +144,10 @@ flowchart LR
 |---|---|
 | [`platform/`](platform/) | 大厅（React）和 `/api` Worker：账号、云存档、好友、排行榜、钱包、管理页 |
 | [`games/<id>/`](games/) | 一个目录一个游戏，各自有 Worker、测试、`CHANGELOG.md` 和部署流程 |
-| [`packages/arcade-kit/`](packages/arcade-kit/) | 共用包：房间基类、开房进房入口、浏览器连接器、协议、计量、表情道具 |
+| [`packages/arcade-kit/`](packages/arcade-kit/) | 共用包，发布在 npm（`@yyyu-star/arcade-kit`）：房间基类、开房进房入口、浏览器连接器、协议、计量、牌桌互动、聊天、分享卡、社交部件 |
+| [`packages/arcade-host/`](packages/arcade-host/) | 自托管运行时（见上），只测试、不部署到 Cloudflare |
 | [`docs/`](docs/) | 跨模块的设计文档 |
-| [`tools/`](tools/) | 仓库工具：独立性检查、拆分模块、git hooks、部署前核对 |
+| [`tools/`](tools/) | 仓库工具：独立性和部署配置检查、钉死的部署工具、拆分模块、git hooks、部署前核对、[自托管脚本](tools/selfhost/README.md) |
 
 几条硬约束，CI 里由 `node tools/check-isolation.mjs` 检查：
 
@@ -150,11 +163,12 @@ flowchart LR
 - [docs/architecture.md](docs/architecture.md)：整体架构
 - [docs/platform-backend.md](docs/platform-backend.md)：账号、联机房间、额度和熔断
 - [docs/economy.md](docs/economy.md)：筹码体系
+- [docs/social.md](docs/social.md)：社交（分享、在线、邀请、旁观、好友榜）
 - [docs/balance.md](docs/balance.md)：难度和收益的配平目标（所有游戏共用）
 - [docs/table-fun.md](docs/table-fun.md)：牌桌互动规范（表情、道具、电脑反应）
 - [docs/new-game.md](docs/new-game.md)：新游戏开发指南
 - [docs/review-policy.md](docs/review-policy.md)：PR 怎么审、怎么合（自动预审，只由维护者合并和批准部署）
-- 各模块 README：[平台](platform/README.md) · [开盘](games/kaipan/README.md) · [掼蛋](games/guandan/README.md) · [德州](games/texas/README.md) · [麻将](games/mahjong/README.md) · [飞驰](games/racing/README.md) · [arcade-kit](packages/arcade-kit/README.md)
+- 各模块 README：[平台](platform/README.md) · [开盘](games/kaipan/README.md) · [掼蛋](games/guandan/README.md) · [德州](games/texas/README.md) · [麻将](games/mahjong/README.md) · [夜巡](games/yexun/README.md) · [飞驰](games/racing/README.md) · [arcade-kit](packages/arcade-kit/README.md) · [arcade-host](packages/arcade-host/README.md) · [自托管](tools/selfhost/README.md)
 
 ## 参与贡献
 
