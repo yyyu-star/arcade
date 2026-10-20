@@ -158,14 +158,16 @@ describe('聊天坞的芯片点按区（0.21.2）', () => {
       const pad = rules.find((x) => x.sel === `${r.sel}::before`);
       expect(pad, r.sel).toBeTruthy();
       const ext = -Number(/inset:(-?\d+)px/.exec(pad!.body)![1]);
-      expect(h + 2 * ext, r.sel).toBeGreaterThanOrEqual(44);
+      // ::before 从内边框算起：芯片自带 1 像素边框（table-fun.ts 的 .atf-chip），上下各扣 1（0.21.2 实测 42 的教训）
+      expect(h - 2 + 2 * ext, r.sel).toBeGreaterThanOrEqual(44);
       // ::before 按芯片定位
       expect(rules.some((x) => x.sel.split(',').includes(r.sel) && /position:relative/.test(x.body)), r.sel).toBe(true);
     }
   });
   it('电脑版常用语换行时行距 ≥ 两边扩出去的和，滚动框上下留出扩的那截', () => {
     const q = rules.find((r) => r.sel === '.atc-dock .atc-quick')!.body;
-    expect(Number(/row-gap:(\d+)px/.exec(q)![1])).toBeGreaterThanOrEqual(12);
-    expect(q).toMatch(/padding:6px 0/);
+    const ext = -Number(/inset:(-?\d+)px/.exec(rules.find((r) => r.sel === '.atc-dock .atc-quick .atf-chip::before')!.body)![1]);
+    expect(Number(/row-gap:(\d+)px/.exec(q)![1])).toBeGreaterThanOrEqual(2 * ext);
+    expect(q).toContain(`padding:${ext}px 0`);
   });
 });

@@ -72,16 +72,16 @@ export const CHAT_CSS = `
 .atc-head b{flex:1;color:var(--ak-title,#f3d98b);font-size:1.05em}
 .atc-head .atf-chip{min-height:36px;padding:0 10px;font-size:.8em}
 .atc-head .atf-chip,.atc-dock .atc-quick .atf-chip{position:relative;min-width:44px}
-.atc-head .atf-chip::before{content:'';position:absolute;inset:-4px 0}
+.atc-head .atf-chip::before{content:'';position:absolute;inset:-5px 0}
 .atc-log{display:flex;flex-direction:column;gap:2px;line-height:1.45;font-size:.9em;overflow-y:auto;overscroll-behavior:contain}
 .atc-log .atf-empty{opacity:.6}
 .atc-log b,.atf-log b{font-weight:700;margin-right:4px}
 .atc-quick{display:flex;gap:6px;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;flex-shrink:0;padding-right:28px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}
 .atc-quick::-webkit-scrollbar{display:none}
 .atc-quick .atf-chip{flex:none;white-space:nowrap;font-size:.8em}
-.atc-dock .atc-quick{flex-wrap:wrap;row-gap:12px;overflow-x:hidden;overflow-y:auto;max-height:76px;padding:6px 0;margin:-6px 0;-webkit-mask-image:none;mask-image:none}
+.atc-dock .atc-quick{flex-wrap:wrap;row-gap:14px;overflow-x:hidden;overflow-y:auto;max-height:78px;padding:7px 0;margin:-7px 0;-webkit-mask-image:none;mask-image:none}
 .atc-dock .atc-quick .atf-chip{min-height:32px;padding:0 10px}
-.atc-dock .atc-quick .atf-chip::before{content:'';position:absolute;inset:-6px 0}
+.atc-dock .atc-quick .atf-chip::before{content:'';position:absolute;inset:-7px 0}
 .atc-row{display:flex;gap:6px;align-items:center}
 .atc-row .atf-input{font-size:max(16px,.85em)}
 .atc-row .atf-chip{flex:none}
