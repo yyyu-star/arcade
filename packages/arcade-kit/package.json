@@ -1,6 +1,6 @@
 {
   "name": "@yyyu-star/arcade-kit",
-  "version": "0.20.2",
+  "version": "0.20.3",
   "description": "Multiplayer toolkit for small Cloudflare Workers games: Durable Object game rooms, room create/join entry points, browser client, daily write quota, ChaCha20 RNG, platform or standalone (guest) identity. 小游戏共用的联机底座",
   "license": "MIT",
   "type": "module",

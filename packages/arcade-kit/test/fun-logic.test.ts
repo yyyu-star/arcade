@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   placeBubble,
+  placeClear,
   DANMAKU,
   barBottom,
   chatFont,
@@ -651,5 +652,30 @@ describe('聊天的版式（0.19.0）', () => {
     expect(seatColor(0)).toBe(seatColor(8));
     expect(seatColor(1)).not.toBe(seatColor(2));
     expect(seatColor(-1)).toMatch(/^#/);
+  });
+});
+
+describe('placeClear（0.20.3，首次提示不盖任何名牌）', () => {
+  const view = { width: 844, height: 390 };
+  const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
+  const hits = (at: { left: number; top: number }, w: number, h: number, zones: { left: number; top: number; width: number; height: number }[]): boolean =>
+    zones.some((z) => at.left < z.left + z.width && z.left < at.left + w && at.top < z.top + z.height && z.top < at.top + h);
+  it('头像四边有一边空着：和 placeBubble 一样贴着头像', () => {
+    const right = box(740, 150, 70, 70);
+    expect(placeClear(right, 200, 30, view)).toEqual({ left: 734 - 200, top: 144 });
+  });
+  it('四边都会压到名牌：挪到一个一点都不压名牌的位置，尽量靠近头像', () => {
+    const right = box(740, 150, 70, 70);
+    const plates = [box(520, 120, 214, 60), box(734, 222, 100, 40), box(700, 100, 140, 44), box(620, 180, 114, 40)];
+    const at = placeClear(right, 200, 30, view, [], plates)!;
+    expect(at).not.toBeNull();
+    expect(hits(at, 200, 30, plates)).toBe(false);
+    expect(at.left).toBeGreaterThanOrEqual(4);
+    expect(at.top + 30).toBeLessThanOrEqual(386);
+    // 离头像不远（不会跑到屏幕另一头）
+    expect(Math.abs(at.left + 100 - 775) + Math.abs(at.top + 15 - 185)).toBeLessThan(320);
+  });
+  it('哪儿都放不下：回 null（调用方换短句或晚点再试）', () => {
+    expect(placeClear(box(10, 10, 60, 60), 200, 30, view, [], [box(0, 0, 844, 390)])).toBeNull();
   });
 });

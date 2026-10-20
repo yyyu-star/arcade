@@ -357,6 +357,43 @@ export function placeBubble(
   return { left: best!.left, top: best!.top };
 }
 
+/**
+ * 一点都不许压 hard 的位置（0.20.3，首次提示"点头像扔道具"用）：先按 placeBubble 挑头像四边；四边都会压到 hard（名牌、标签、按钮、聊天框）时，
+ * 在可见区里按 8 像素的网格找完全不压 hard 的位置，软的压得越少、离头像越近越好。哪儿都放不下回 null，调用方缩短字或者晚点再试。
+ * 提示是一次性的说明，不像聊天那样非贴着说话人不可，所以宁可挪远一点也不盖住任何人的名字和筹码（所有者 10-20）
+ */
+export function placeClear(
+  anchor: Box,
+  w: number,
+  h: number,
+  view: { width: number; height: number },
+  avoid: readonly Box[] = [],
+  hard: readonly Box[] = [],
+  margin = 4,
+): { left: number; top: number } | null {
+  const hit = (c: Box): number => hard.reduce((s, b) => s + overlap(c, b), 0);
+  const first = placeBubble(anchor, w, h, view, avoid, hard, margin);
+  if (hit({ ...first, width: w, height: h }) === 0) return first;
+  if (w > view.width - 2 * margin || h > view.height - 2 * margin) return null;
+  const ax = anchor.left + anchor.width / 2;
+  const ay = anchor.top + anchor.height / 2;
+  let best: { left: number; top: number } | null = null;
+  let bestCost = Infinity;
+  for (let top = margin; top <= view.height - margin - h; top += 8) {
+    for (let left = margin; left <= view.width - margin - w; left += 8) {
+      const c = { left, top, width: w, height: h };
+      if (hit(c) > 0) continue;
+      // 软的压 1 平方像素约等于远 1 像素：先不压别的东西，再看近不近
+      const cost = [anchor, ...avoid].reduce((s, b) => s + overlap(c, b), 0) + Math.hypot(left + w / 2 - ax, top + h / 2 - ay);
+      if (cost < bestCost) {
+        best = { left, top };
+        bestCost = cost;
+      }
+    }
+  }
+  return best;
+}
+
 /** 气泡压到叠在它上面的按钮、聊天框时的代价倍数（0.19.1，主线定的 ×3） */
 export const HARD_COST = 3;
 

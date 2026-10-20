@@ -25,6 +25,7 @@ import {
   newBotState,
   fitMenuWidth,
   placeBubble,
+  placeClear,
   placeMenu,
   propId,
   stickerId,
@@ -165,6 +166,8 @@ const DEFAULT_LINES: Record<FunMood, readonly string[]> = {
 };
 
 const HINT_TEXT = '点头像扔道具，长按连扔';
+/** 整句放不下（哪儿都会压到名牌）时的短说法（0.20.3） */
+const HINT_SHORT = '点头像扔道具';
 
 /** RoomClient.chat 的结果里组件要看的部分（不 import client.ts，单机的游戏也能用组件） */
 /** 聊天：气泡停多久（0.19.0 起 5 秒）、页面里记最近几条（只在内存里） */
@@ -922,9 +925,10 @@ export class TableFun {
 
   /**
    * 头像旁的一句话：2.4 秒后淡出（聊天 5 秒）。字号跟着屏幕（0.19.0：电脑 18–22px、手机 ≥ 15px），最多两行折行；
-   * 位置挑不压"互动"按钮、聊天框、各家名牌筹码和别人头像的一侧
+   * 位置挑不压"互动"按钮、聊天框、各家名牌筹码和别人头像的一侧。
+   * strict（0.20.3，首次提示用）：一点都不许压名牌、标签、按钮和聊天框，放不下就不冒、回 undefined
    */
-  bubble(seat: number, text: string, ms = 2400, cls = ''): HTMLElement | undefined {
+  bubble(seat: number, text: string, ms = 2400, cls = '', strict = false): HTMLElement | undefined {
     const s = this.seat(seat);
     if (!s) return undefined;
     const b = this.el('div', `atf-bubble ${cls}`.trim(), text);
@@ -941,7 +945,11 @@ export class TableFun {
       avoid: [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())],
       over: [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])],
     });
-    const at = placeBubble(s.rect, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid, hard);
+    const at = strict ? placeClear(s.rect, w, h, view, avoid, hard) : placeBubble(s.rect, w, h, view, avoid, hard);
+    if (!at) {
+      b.remove();
+      return undefined;
+    }
     b.style.transform = `translate(${at.left}px,${at.top}px)`;
     this.live.add(b);
     void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160)
@@ -988,12 +996,13 @@ export class TableFun {
     }
     const at = hintSeatFor(this.o.seats(), this.o.hintSeat);
     if (at === null || !this.canSend() || !this.enabled() || this.open) return this.later(2000, () => this.hint());
+    // 整句、短句都放不下（不压任何名牌就没地方）：先不冒，过一会儿再试（0.20.3）
+    if (!this.bubble(at, HINT_TEXT, FUN_TIMING.hintMs, '', true) && !this.bubble(at, HINT_SHORT, FUN_TIMING.hintMs, '', true)) return this.later(2000, () => this.hint());
     try {
       localStorage.setItem(key, '1');
     } catch {
       // 记不住就下次再提示一次
     }
-    this.bubble(at, HINT_TEXT, FUN_TIMING.hintMs);
     this.o.log?.('提示 头像');
   }
 

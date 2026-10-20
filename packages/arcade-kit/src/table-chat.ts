@@ -89,7 +89,8 @@ export const CHAT_CSS = `
 .atc-bar{position:absolute;left:8px;right:8px;top:0;pointer-events:auto;display:flex;flex-direction:column;gap:6px;background:var(--ak-bg,rgba(43,29,20,.94));border:2px solid var(--ak-border,#d4a64a);border-radius:var(--ak-radius,14px);padding:6px;box-sizing:border-box;color:var(--ak-fg,#fff6e0);box-shadow:0 -4px 16px rgba(0,0,0,.4)}
 .atc-dms{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
 .atc-dm{position:absolute;left:0;top:0;white-space:nowrap;font-weight:700;color:#fff;padding:2px 12px;border-radius:999px;background:rgba(0,0,0,.38);text-shadow:0 1px 2px rgba(0,0,0,.8);pointer-events:none;will-change:transform}
-.atc-dm.atc-me{background:rgba(122,42,30,.78);border:2px solid var(--ak-title,#f3d98b);color:#fff6e0}
+.atc-dm.atc-me{background:linear-gradient(#fffaf0,#f6e6c4);border:2px solid #2b1d14;color:#2b1d14;text-shadow:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 3px 8px rgba(0,0,0,.28)}
+.atc-dm.atc-me b{color:#b8322c}
 `;
 
 const CHAT_ICON = '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"><path d="M10 14h44v28H30l-12 10v-10h-8z"/></svg>';
