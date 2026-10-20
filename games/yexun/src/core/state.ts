@@ -15,7 +15,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 22;
+export const RULES_VERSION = 23;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -384,8 +384,10 @@ export class World {
     const setup = normalizeSetup(raw);
     this.setup = setup;
     const perk = (id: PerkId): number => setup.perks?.[id] ?? 0;
-    this.rerolls = setup.curses?.includes('noreroll') ? 0 : (setup.live ? PICKS.liveRerolls : PICKS.rerolls) + perk('shuaxin') * PERK_FX.shuaxin;
-    this.bans = setup.live ? PICKS.liveBans : PICKS.bans;
+    // 小道士起步多 1 次刷新、符师多 1 次封禁（角色小特权，实盘局暂不开）
+    const own = (id: CharacterId): number => (!setup.live && (setup.character ?? 'xiaodao') === id ? 1 : 0);
+    this.rerolls = setup.curses?.includes('noreroll') ? 0 : (setup.live ? PICKS.liveRerolls : PICKS.rerolls) + perk('shuaxin') * PERK_FX.shuaxin + own('xiaodao');
+    this.bans = (setup.live ? PICKS.liveBans : PICKS.bans) + own('fushi');
     this.revives = perk('fuhuo') * PERK_FX.fuhuo;
     this.cardCount = 3 + perk('kapian') * PERK_FX.kapian;
     this.raid = setup.mode === 'raid' && setup.raid ? new Raid({ ...setup.raid, seed: setup.seed, danger: setup.danger, character: setup.character }) : null;

@@ -50,15 +50,31 @@ export interface CharacterDef {
   look: string;
   /** 台词：选中时显示在卡上，开局时头上冒一次气泡。大白话，有性格 */
   line: string;
+  /** 初始数值（所有者 10-20：以小道士为 1 的倍数；运气是加数）。角色页画成 6 根条 */
+  base: CharBase;
+  /** 小特权，一句话 */
+  privilege: string;
 }
 
+/** 初始数值：血量、移速、伤害、冷却（越小越快）、范围、拾取范围是倍数，运气是加数 */
+export interface CharBase {
+  hp: number;
+  speed: number;
+  might: number;
+  cd: number;
+  area: number;
+  magnet: number;
+  luck: number;
+}
+const EVEN: CharBase = { hp: 1, speed: 1, might: 1, cd: 1, area: 1, magnet: 1, luck: 0 };
+
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
-  xiaodao: { id: 'xiaodao', name: '小道士', start: 'sword', perkName: '越战越勇', perk: '每升 5 级，伤害、范围、持续、移速各 +1.5%', unlock: '一开始就有', look: '蓝袍桃木剑，什么都会一点', line: '师父说，夜路不怕，怕的是不走。' },
-  fushi: { id: 'fushi', name: '符师', start: 'talisman', perkName: '连环符', perk: '符类冷却 −10%，每第 4 次出符多飞一张', unlock: '一开始就有', look: '紫袍高冠，腰上挂满黄符', line: '符纸管够，今晚谁来都是一张。' },
-  jianxia: { id: 'jianxia', name: '剑侠', start: 'flysword', perkName: '剑不停步', perk: '走动时暴击 +12%，暴击更疼 +30%', unlock: '一开始就有', look: '青衣红围巾，背着一把长剑', line: '剑在鞘里闷得慌，边走边打。' },
-  pang: { id: 'pang', name: '胖师叔', start: 'bell', perkName: '皮糙肉厚', perk: '血量 +50，走得慢一点（−8%），挨打时震开身边的怪', unlock: '花 300 铜钱请他', look: '橙袍大圆脸，手里摇着小铃', line: '吃饱了才有力气，挨两下不算啥。' },
-  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perkName: '三更锣', perk: '每 24 秒敲一声锣：全屏的怪被震退并受伤，金钟罩补一层', unlock: '守夜撑过 8 分钟', look: '灰袄毡帽，一手锣一手灯笼', line: '天干物燥——小心火烛——咣！' },
-  caiyao: { id: 'caiyao', name: '采药女', start: 'petals', perkName: '百草香', perk: '每秒回 0.7 血，肉包回血加倍，经验 +20%', unlock: '夜探成功撤出 1 次', look: '青裙双髻，背着药篓采药', line: '药篓里什么都有，也有给你的。' },
+  xiaodao: { id: 'xiaodao', name: '小道士', start: 'sword', perkName: '越战越勇', perk: '每升 5 级，伤害、范围、持续、移速各 +1.5%', unlock: '一开始就有', look: '蓝袍桃木剑，什么都会一点', line: '师父说，夜路不怕，怕的是不走。', base: EVEN, privilege: '起步多 1 次刷新' },
+  fushi: { id: 'fushi', name: '符师', start: 'talisman', perkName: '连环符', perk: '符类冷却 −10%，每第 4 次出符多飞一张', unlock: '一开始就有', look: '紫袍高冠，腰上挂满黄符', line: '符纸管够，今晚谁来都是一张。', base: { ...EVEN, hp: 0.85, cd: 0.92, area: 1.1 }, privilege: '起步多 1 次封禁' },
+  jianxia: { id: 'jianxia', name: '剑侠', start: 'flysword', perkName: '剑不停步', perk: '走动时暴击 +12%，暴击更疼 +30%', unlock: '一开始就有', look: '青衣红围巾，背着一把长剑', line: '剑在鞘里闷得慌，边走边打。', base: { ...EVEN, hp: 0.9, speed: 1.1, might: 1.1, area: 0.9 }, privilege: '打倒精英多补 1 次刷新' },
+  pang: { id: 'pang', name: '胖师叔', start: 'bell', perkName: '皮糙肉厚', perk: '挨打时震开身边的怪', unlock: '花 300 铜钱请他', look: '橙袍大圆脸，手里摇着小铃', line: '吃饱了才有力气，挨两下不算啥。', base: { ...EVEN, hp: 1.5, speed: 0.92, magnet: 1.3 }, privilege: '跳过时抽中回血的机会翻倍' },
+  gengfu: { id: 'gengfu', name: '更夫', start: 'shield', perkName: '三更锣', perk: '每 24 秒敲一声锣：全屏的怪被震退并受伤，金钟罩补一层', unlock: '守夜撑过 8 分钟', look: '灰袄毡帽，一手锣一手灯笼', line: '天干物燥——小心火烛——咣！', base: { ...EVEN, hp: 1.1, area: 1.15, cd: 1.05 }, privilege: '夜市提前 10 秒预告、多开 5 秒' },
+  caiyao: { id: 'caiyao', name: '采药女', start: 'petals', perkName: '百草香', perk: '每秒回 0.7 血，肉包回血加倍，经验 +20%', unlock: '夜探成功撤出 1 次', look: '青裙双髻，背着药篓采药', line: '药篓里什么都有，也有给你的。', base: { ...EVEN, hp: 0.95, luck: 0.15, magnet: 1.2 }, privilege: '夜市打九折' },
 };
 
 /** 角色被动的数值 */
@@ -70,7 +86,7 @@ export const CHAR_FX = {
   fushiEvery: 4,
   jianxiaCrit: 0.12,
   jianxiaCritDmg: 0.3,
-  /** 胖师叔：多的血、移速倍数，挨打时震开的半径和力道 */
+  /** 胖师叔：多的血、移速倍数（实盘局暂用；娱乐局 0.4.5 起并进初始数值 base），挨打时震开的半径和力道 */
   pangHp: 50,
   pangSpeed: 0.92,
   pangArea: 130,
@@ -85,6 +101,15 @@ export const CHAR_FX = {
   caiyaoBun: 2,
   caiyaoXp: 0.2,
   caiyaoRegen: 0.7,
+  /** 小特权（0.4.5）：剑侠打倒精英多补几次刷新；胖师叔跳过抽回血的权重倍数；更夫夜市提前预告、多开的拍数；采药女夜市价格倍数 */
+  jianxiaReroll: 1,
+  pangSkipHeal: 2,
+  gengfuMarketWarn: 10 * 30,
+  gengfuMarketLonger: 5 * 30,
+  caiyaoMarket: 0.9,
+  /** 前几次升级里，和初始法器同一类（剑 / 符 / 镇 / 灵）的法器卡权重乘多少 */
+  earlyEvery: 5,
+  earlyMul: 1.3,
 };
 
 // ───────────────────────── 永久加成 ─────────────────────────

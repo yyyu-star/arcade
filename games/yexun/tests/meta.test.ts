@@ -79,7 +79,8 @@ describe('永久加成', () => {
     const w = make({ perks: { tipo: 2, shuaxin: 1, kapian: 1, fuhuo: 1 } });
     expect(w.stats.hpMax).toBe(make().stats.hpMax + 2 * PERK_FX.tipo);
     expect(w.hp).toBe(w.stats.hpMax);
-    expect(w.rerolls).toBe(PICKS.rerolls + 1);
+    // 起步 + 加成 1 级 + 小道士的小特权 1 次
+    expect(w.rerolls).toBe(PICKS.rerolls + 1 + 1);
     w.pendingLevels = 1;
     step(w, 0);
     expect(w.choices.length).toBe(4);

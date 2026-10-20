@@ -1440,8 +1440,11 @@ function killEnemy(w: World, i: number): void {
     }
   }
   if (w.bossSlot === i) w.bossSlot = otherBoss(w);
-  // 打倒精英、首领（中期 Boss 和尸王）补一次刷新
-  if (def.elite || def.boss || def.kind === 'lord') addReroll(w, 1);
+  // 打倒精英、首领（中期 Boss 和尸王）补一次刷新；剑侠的小特权再多补
+  if (def.elite || def.boss || def.kind === 'lord') {
+    addReroll(w, 1);
+    if (w.setup.character === 'jianxia') for (let k = 0; k < CHAR_FX.jianxiaReroll; k++) addReroll(w, 1);
+  }
   // 夜探：宝妖掉宝物（不掉升级宝箱）、钥匙（explore/raid.ts）
   if (w.raid && w.raid.onKill(i, w.eGen[i]!, !!def.elite || !!def.boss, x, y, w)) {
     for (let k = 0; k < 4; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 50, y + (w.rDrop.next() - 0.5) * 36, def.xp / 4);
@@ -2732,6 +2735,18 @@ function recompute(w: World): void {
   s.durMul = 1 + 0.1 * p('modou') + 0.06 * p('jiandao');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
+  // 角色初始数值（所有者 10-20，content/meta.ts 的 base）：血量只乘底子的 100，仙桃、加成的血照加；实盘局暂不带（配平 PR 一起打开）
+  const ch = w.setup.character ?? 'xiaodao';
+  if (!w.setup.live) {
+    const b = CHARACTERS[ch].base;
+    s.hpMax += PLAYER.hp * (b.hp - 1);
+    s.speed *= b.speed;
+    s.might *= b.might;
+    s.cdMul *= b.cd;
+    s.areaMul *= b.area;
+    s.magnet *= b.magnet;
+    s.luck += b.luck;
+  }
   // 永久加成（实盘为空）
   s.might *= 1 + PERK_FX.liliang * perk(w, 'liliang');
   s.armor += PERK_FX.huti * perk(w, 'huti');
@@ -2742,7 +2757,6 @@ function recompute(w: World): void {
   s.luck += PERK_FX.fuyuan * perk(w, 'fuyuan');
   s.coinBonus += PERK_FX.fuyuan * perk(w, 'fuyuan');
   // 角色被动
-  const ch = w.setup.character;
   if (ch === 'xiaodao') {
     const up = 1 + CHAR_FX.xiaodaoStep * Math.floor(w.level / CHAR_FX.xiaodaoEvery);
     s.might *= up;
@@ -2752,7 +2766,8 @@ function recompute(w: World): void {
   } else if (ch === 'caiyao') {
     s.xpMul += CHAR_FX.caiyaoXp;
     s.regen += CHAR_FX.caiyaoRegen;
-  } else if (ch === 'pang') {
+  } else if (ch === 'pang' && w.setup.live) {
+    // 实盘局还是旧的被动（血 +50、慢 8%）；娱乐局已经并进初始数值
     s.hpMax += CHAR_FX.pangHp;
     s.speed *= CHAR_FX.pangSpeed;
   }
@@ -2949,6 +2964,11 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
       if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 * (1 + w.stats.luck) });
     } else if (w.weapons.length < MAX_WEAPONS + w.merges.length) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
   }
+  // 前几次升级：和角色初始法器同一类的法器卡更容易出，开局更像这个角色（实盘局暂不开）
+  if (!w.setup.live && w.level - w.pendingLevels + 1 <= 1 + CHAR_FX.earlyEvery) {
+    const kind = WEAPONS[CHARACTERS[w.setup.character ?? 'xiaodao'].start].type;
+    for (const p of pool) if (p.c.kind === 'weapon' && WEAPONS[p.c.id as WeaponId].type === kind) p.weight *= CHAR_FX.earlyMul;
+  }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
     if (w.banned.includes(id) || hide.includes(id)) continue;
@@ -3002,14 +3022,16 @@ function applyChoice(w: World, c: Choice): void {
 /** 跳过的小奖：按 SKIP_PRIZES 的概率抽；满血时回血奖作废，在其他三样里按比例重抽 */
 function skipPrize(w: World): void {
   const full = w.hp >= w.stats.hpMax;
+  // 胖师叔的小特权：回血那一样的权重翻倍（其他三样按原比例）
+  const weight = (p: (typeof SKIP_PRIZES)[number]): number => (p.id === 'heal' ? (full ? 0 : w.setup.character === 'pang' ? p.weight * CHAR_FX.pangSkipHeal : p.weight) : p.weight);
   let total = 0;
-  for (const p of SKIP_PRIZES) if (!(full && p.id === 'heal')) total += p.weight;
+  for (const p of SKIP_PRIZES) total += weight(p);
   let r = w.rSkip.next() * total;
   let k = 0;
   for (; k < SKIP_PRIZES.length - 1; k++) {
     const p = SKIP_PRIZES[k]!;
-    if (full && p.id === 'heal') continue;
-    r -= p.weight;
+    if (weight(p) === 0) continue;
+    r -= weight(p);
     if (r < 0) break;
   }
   if (full && SKIP_PRIZES[k]!.id === 'heal') k++;

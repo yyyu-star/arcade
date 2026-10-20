@@ -19,7 +19,7 @@ const evs = (w: World, t: number): { a: number; b: number }[] => {
 
 describe('选卡三件套（10-20）', () => {
   it('起步刷新 3、封禁 2；实盘局暂照旧 2、1', () => {
-    const w = createWorld({ seed: 1, mode: 'vigil', danger: 0 });
+    const w = createWorld({ seed: 1, mode: 'vigil', danger: 0, character: 'jianxia' });
     expect([w.rerolls, w.bans]).toEqual([PICKS.rerolls, PICKS.bans]);
     const l = createWorld({ seed: 1, mode: 'vigil', danger: 0, live: true });
     expect([l.rerolls, l.bans]).toEqual([PICKS.liveRerolls, PICKS.liveBans]);
