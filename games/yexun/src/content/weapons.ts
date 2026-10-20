@@ -367,7 +367,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       stats: { dmg: 56, cd: 36, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
     },
   },
-  // 10-20 新流派（纸人这个名字已经是怪了，所以叫纸兵）：召唤会走的纸兵替你挡怪。实盘局不进卡池（Setup.live），配好系数再开
+  // 10-20 新流派（纸人这个名字已经是怪了，所以叫纸兵）：召唤会走的纸兵替你挡怪
   zhibing: {
     id: 'zhibing',
     name: '纸兵',

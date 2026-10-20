@@ -770,7 +770,7 @@ export class GameScene extends Phaser.Scene {
       w.level - w.pendingLevels + 1,
       w.choices.map((c) => describe(w, c)),
       this.d.firstRun && !this.cardsSeen,
-      { rerolls: w.rerolls, bans: w.bans, live: !!w.setup.live },
+      { rerolls: w.rerolls, bans: w.bans },
       (i) => {
         this.cardsSeen = true;
         sfx.play('choose');
@@ -1394,7 +1394,7 @@ export class GameScene extends Phaser.Scene {
   /** 守夜夜市（核心的 mk* 字段）：预告时摆虚影 + 屏幕边箭头，开市时摆摊、读条，临时增益小标签 */
   private drawNightMarket(): void {
     const w = this.w;
-    if (this.raid || w.setup.live) return;
+    if (this.raid) return;
     const secs = (n: number): number => Math.max(0, Math.ceil(n / 30));
     if (w.mkPhase === 0 || w.mkX.length === 0) {
       this.syncStalls(null);
