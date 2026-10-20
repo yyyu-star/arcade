@@ -14,7 +14,7 @@ import type { Card } from '../core/cards.ts';
 import { categoryOf, evalCards } from '../core/eval.ts';
 import type { Action, HandResult, LogEntry, Owner, Status } from '../core/table.ts';
 import type { View } from '../core/view.ts';
-import { avatarSvg, chipPile, HUMAN_BG, makeCard, ME_LOOK, setCard } from './art.ts';
+import { avatarSvg, chipCols, chipPile, HUMAN_BG, makeCard, ME_LOOK, setCard } from './art.ts';
 import { el, setText, toggle } from './dom.ts';
 import { betPos, boardPos, buttonPos, dealerSpots, deckPos, felt, isTop, potPos, resultPos, seatPos, type Geo, type Pt } from './layout.ts';
 import { Dealer } from './dealer.ts';
@@ -124,6 +124,8 @@ const MS = {
 };
 
 /** 不许盖的操作区：按钮、加注那一行、快捷下注、胜率、预选（看对手的卡、kit 的互动菜单都避开） */
+/** 庄家按钮 D 依次试的位置（相对 buttonPos，placeDealer）：原处、上、下、隔开那摞筹码的右边、更左、右上、右下 */
+const DEALER_TRY: readonly (readonly [number, number])[] = [[0, 0], [0, -32], [0, 32], [128, 0], [-36, 0], [64, -32], [64, 32]];
 const KEEP_OUT = '.actions .buttons, .actions .raise-panel, .actions .quick, .actions .odds, .pre';
 
 export class TableView {
@@ -278,6 +280,7 @@ export class TableView {
     Object.assign(this.feltEl.style, { left: `${f.cx - f.rx}px`, top: `${f.cy - f.ry}px`, width: `${f.rx * 2}px`, height: `${f.ry * 2}px` });
     place(this.potEl, potPos(g));
     place(this.resultEl, resultPos(g));
+    if (this.resultEl.classList.contains('on')) this.fitResult();
     this.placeCroupier();
     this.boardCards.forEach((c, i) => place(c, boardPos(g, i)));
     const size = this.seats.length;
@@ -287,6 +290,10 @@ export class TableView {
       place(s.bet, betPos(p, g, i === this.me));
       // 我的下注按底边摆、往上长：筹码多了也不压到自己的底牌
       s.bet.classList.toggle('mine', i === this.me);
+      // 两侧座位的下注按靠座位那头摆、往桌心长：居中摆时几摞筹码一多，往回伸到那家的底牌上（0.25.6 牌桌互压检查）
+      const sideBet = !g.tall && i !== this.me && !isTop(p, g);
+      s.bet.classList.toggle('from-l', sideBet && p.x < w / 2);
+      s.bet.classList.toggle('from-r', sideBet && p.x > w / 2);
       // 别人的底牌放在头像朝桌子中间的那一侧，不压名牌
       const side = p.x > w / 2 + 1 ? 'right' : p.x < w / 2 - 1 ? 'left' : 'mid';
       s.root.classList.toggle('left', side === 'left');
@@ -585,6 +592,15 @@ export class TableView {
         const n = this.seats[i]!;
         return [[rect(n.plate), 10], [at(this.betPt(i), 44, 18), 10], [rect(n.avatar), i === this.me ? 10 : 4], [at(this.holePt(i, 0), 32, 44), 2], [at(this.holePt(i, 1), 32, 44), 2]];
       }),
+      // 我的牌型（"一对 Q"，style.css 的 .seat.me .hand 以座位左边 150 为中线、上面 60 起）：没亮时量不到，按版式算（0.25.6，1280 上被聊天框盖住）
+      [at({ x: this.seatPt(this.me).x - 150, y: this.seatPt(this.me).y - 46 }, 60, 16), 10],
+      // 别人的动作签（"过牌"）贴在头像旁边，平时藏着：头像四周各让出一截（0.25.6，1920 的 5 人桌）
+      ...live.filter((i) => i !== this.me).map((i): [DOMRect, number] => {
+        const a = rect(this.seats[i]!.avatar);
+        return [new DOMRect(a.left - 70 * k, a.top - 30 * k, a.width + 140 * k, a.height + 30 * k), 3];
+      }),
+      // 摊牌时名牌下面的牌型（.seat .hand，座位下面 66 起）
+      ...live.filter((i) => i !== this.me).map((i): [DOMRect, number] => [at({ x: this.seatPt(i).x, y: this.seatPt(i).y + 80 }, 44, 14), 3]),
       ...[bets, ...extra].map((r): [DOMRect, number] => [r, 10]),
     ];
     const live2 = block.filter(([r]) => r.width > 0 && r.height > 0);
@@ -596,7 +612,9 @@ export class TableView {
         const cost = hit(left, top);
         if (cost < best.cost) best = { left, top, cost };
       }
-    this.dockAt = { key, cost: best.cost, at: { left: best.left, top: best.top, width: w, height: h } };
+    // 进桌那 0.45 秒牌桌在放大入场（skin.css 的 table-in），这时量的位置是缩放中的，不记住：下次来问再量
+    const moving = this.root.parentElement?.getAnimations().some((a) => a.playState === 'running') ?? false;
+    this.dockAt = { key: moving ? '' : key, cost: best.cost, at: { left: best.left, top: best.top, width: w, height: h } };
     return this.dockAt.at;
   }
 
@@ -947,9 +965,10 @@ export class TableView {
     });
     const b = f.button >= 0 && f.button < this.seats.length ? f.button : -1;
     toggle(this.dealer, 'hidden', b < 0);
-    if (b >= 0) place(this.dealer, buttonPos(this.seatPt(b), this.g, b === this.me));
     f.seats.forEach((s, i) => this.drawSeat(this.seats[i]!, s, i, f));
+    // 结果条先摆好，D 再躲开它（两人桌我是庄时，D 在我的底牌上方，正是结果条往上提的地方）
     this.drawResult(f);
+    if (b >= 0) this.placeDealer(b);
   }
 
   private drawPot(pots: number[]): void {
@@ -958,9 +977,69 @@ export class TableView {
     const key = pots.join(',');
     if (this.potEl.dataset.k === key) return;
     this.potEl.dataset.k = key;
-    this.potMain.innerHTML = total ? `<span class="pile">${chipPile(total)}</span><span class="pot-label">底池</span><b>${chips(total)}</b>` : '';
-    // 有边池时分开写：主池、边池（一、二……）
-    this.potSides.innerHTML = pots.length > 1 ? pots.map((x, k) => `<span class="side">${potName(k, pots.length)} <b>${chips(x)}</b></span>`).join('') : '';
+    // 有边池时不写总数，换成一排小标签：主池、边池（一、二……），各带一枚筹码，宽度按字（0.25.6：原来标签的 class 叫 side，
+    // 撞上选桌页右栏的 .side，被撑成 430 宽、竖排的两条，横在桌心压住手牌，主池的数字也挤没了）
+    const multi = pots.length > 1;
+    this.potMain.innerHTML = total && !multi ? `<span class="pile">${chipPile(total)}</span><span class="pot-label">底池</span><b>${chips(total)}</b>` : '';
+    toggle(this.potMain, 'hidden', multi);
+    this.potSides.innerHTML = multi
+      ? pots.map((x, k) => `<span class="pot-tag"><i class="chip c-${chipCols(x)[0]?.[0] ?? 'w'}"></i>${potName(k, pots.length)} <b>${chips(x)}</b></span>`).join('')
+      : '';
+  }
+
+  /**
+   * 庄家按钮 D：先放在那家下注的左边（buttonPos），压到名牌、头像、底牌、别人的下注、公共牌、池子时依次试上、下、右、更左，
+   * 都压就留在原处（0.25.6，所有者截图：左边弃了牌的那家名字和筹码被 D 盖住）
+   */
+  private placeDealer(b: number): void {
+    const p = buttonPos(this.seatPt(b), this.g, b === this.me);
+    // D 的 left/top 有过渡（换庄时滑过去），改了马上量还是旧位置；底牌、下注是发牌、下注时才露出来的，那时不重摆：
+    // 都按版式算（和 chatDock 一样），名牌和头像位置固定，量实际的
+    const box = this.root.getBoundingClientRect();
+    const k = box.width / this.g.w || 1;
+    const at = (c: Pt, hw: number, hh: number): DOMRect => new DOMRect(box.left + (c.x - hw) * k, box.top + (c.y - hh) * k, 2 * hw * k, 2 * hh * k);
+    const b0 = boardPos(this.g, 0);
+    const b4 = boardPos(this.g, 4);
+    const blockers = [
+      at({ x: (b0.x + b4.x) / 2, y: b0.y }, (b4.x - b0.x) / 2 + 32, 44),
+      at(potPos(this.g), 110, 22),
+      ...(this.resultEl.classList.contains('on') ? [this.resultEl.getBoundingClientRect()] : []),
+      // 正亮着的动作签（每次重画都摆一次 D，说了话的下一帧就躲开）
+      ...[...this.root.querySelectorAll('.seat .bubble.on')].map((e) => e.getBoundingClientRect()),
+      ...this.seats.flatMap((n, i) =>
+        n.root.classList.contains('empty')
+          ? []
+          : [n.plate.getBoundingClientRect(), n.avatar.getBoundingClientRect(), at(this.holePt(i, 0), 26, 36), at(this.holePt(i, 1), 26, 36), ...(i === b ? [] : [at(this.betPt(i), 36, 16)])],
+      ),
+    ].filter((r) => r.width > 0 && r.height > 0);
+    const half = (this.dealer.offsetWidth || 26) / 2;
+    const hits = (q: Pt): boolean => {
+      const d = at(q, half, half);
+      return blockers.some((r) => Math.min(d.right, r.right) - Math.max(d.left, r.left) > 1 && Math.min(d.bottom, r.bottom) - Math.max(d.top, r.top) > 1);
+    };
+    place(this.dealer, DEALER_TRY.map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy })).find((q) => !hits(q)) ?? p);
+  }
+
+  /**
+   * 结果条按上边摆在池子下面，几行的往下长会压到我的底牌、竖屏下面两侧那两家（0.25.6）：
+   * 放不下就往上提，最高到公共牌下沿（摊牌时池子已经分走了，那一块空着）
+   */
+  private fitResult(): void {
+    const p = resultPos(this.g);
+    const box = this.root.getBoundingClientRect();
+    const k = box.width / this.g.w || 1;
+    const b0 = this.boardCards[0]!;
+    const ceil = b0.classList.contains('hidden') ? boardPos(this.g, 0).y + 46 : (b0.getBoundingClientRect().bottom - box.top) / k + 4;
+    // 横着和结果条重叠、又在公共牌下面的座位部件，最高的那个上沿就是底线
+    const half = this.resultEl.offsetWidth / 2;
+    const parts = this.seats.flatMap((n) => (n.root.classList.contains('empty') ? [] : [n.plate, n.avatar, ...n.cards.filter((c) => !c.classList.contains('hidden'))]));
+    const floor = parts.reduce((m, e) => {
+      const r = e.getBoundingClientRect();
+      const l = (r.left - box.left) / k;
+      const t = (r.top - box.top) / k;
+      return r.width > 0 && t > ceil && l < p.x + half && l + r.width / k > p.x - half ? Math.min(m, t - 6) : m;
+    }, Infinity);
+    place(this.resultEl, { x: p.x, y: Math.max(ceil, Math.min(p.y, floor - this.resultEl.offsetHeight)) });
   }
 
   /** 结果条：一手打完停着时，谁赢了多少、什么牌；分池时每个池子一行 */
@@ -984,6 +1063,7 @@ export class TableView {
       this.resultEl.classList.remove('on');
       void this.resultEl.offsetWidth;
       this.resultEl.classList.add('on');
+      this.fitResult();
     }
     // 摊牌赢的那五张亮起来，其余变暗
     if (r.byFold) return;

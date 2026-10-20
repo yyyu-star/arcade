@@ -90,7 +90,7 @@ html, body, body::before { background: var(--night); }
   box-shadow: inset 0 0 0 1px rgba(243, 200, 107, .38), 0 3px 8px rgba(0, 0, 0, .45);
 }
 .pot-main b { color: var(--gold-hi); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); }
-.pot-sides .side { background: rgba(0, 0, 0, .42); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); }
+.pot-sides .pot-tag { background: rgba(0, 0, 0, .42); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); }
 .bet-amt { background: rgba(0, 0, 0, .58); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .13), 0 2px 4px rgba(0, 0, 0, .4); color: #fff; }
 .odds { background: rgba(0, 0, 0, .5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); }
 
@@ -446,13 +446,13 @@ body .scene {
 }
 .stage .felt::after { border: 2px dashed rgba(255, 244, 214, .7); }
 .stage .felt-mark { color: rgba(255, 255, 255, .22); text-shadow: none; }
-.stage .pot-main, .stage .bet-amt, .stage .odds, .stage .pot-sides .side {
+.stage .pot-main, .stage .bet-amt, .stage .odds, .stage .pot-sides .pot-tag {
   background: var(--cg-cream);
   color: var(--cg-ink);
   border: 2px solid var(--cg-ink);
   box-shadow: 0 2px 0 var(--cg-ink);
 }
-.stage .pot-main b, .stage .bet-amt { color: var(--cg-ink); text-shadow: none; }
+.stage :is(.pot-main, .pot-sides .pot-tag) b, .stage .bet-amt { color: var(--cg-ink); text-shadow: none; }
 .stage .odds, .stage .odds .need { color: #1b6b43; font-weight: 700; }
 .stage .odds b { color: var(--cg-ink); }
 .stage .where, .stage .hand-no { color: var(--cg-ink); font-weight: 700; }
@@ -605,7 +605,7 @@ body .scene {
 .stage .raise-panel { border: 1px solid var(--cg-ink); box-shadow: 0 0 0 2px var(--cg-ink), 0 5px 0 2px var(--cg-ink); }
 .stage .seat .plate { border: 1px solid var(--cg-ink); box-shadow: 0 0 0 1.5px var(--cg-ink), 0 3px 0 1.5px var(--cg-ink); }
 .stage .seat.allin .plate, .stage .seat.acting .plate, .stage .seat.win .plate { box-shadow: 0 0 0 1.5px var(--cg-ink), 0 3px 0 1.5px var(--cg-ink); }
-.stage .pot-main, .stage .bet-amt, .stage .odds, .stage .pot-sides .side { border: 0; box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink); }
+.stage .pot-main, .stage .bet-amt, .stage .odds, .stage .pot-sides .pot-tag { border: 0; box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink); }
 /* 顶栏按钮和手数：字重只升一点，竖屏顶栏一行放得下（--only tall 核对） */
 .stage :is(.home, .icon, .pill) { font-weight: 600; }
 .stage .hand-no { font-weight: 500; }
@@ -658,7 +658,7 @@ body .scene::after { background: radial-gradient(ellipse 85% 75% at 50% 45%, tra
 }
 
 /* 池子、下注额、赔率：纸面渐变 + 高光 + 柔影（仍是阴影描边） */
-.stage :is(.pot-main, .bet-amt, .odds, .pot-sides .side) {
+.stage :is(.pot-main, .bet-amt, .odds, .pot-sides .pot-tag) {
   background-image: var(--cg-sheen);
   box-shadow: 0 0 0 2px var(--cg-ink), 0 3px 0 2px var(--cg-ink), var(--cg-hi), 0 8px 12px rgba(0, 0, 0, .25);
 }

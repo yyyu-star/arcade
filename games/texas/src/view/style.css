@@ -266,9 +266,12 @@ body::before {
 .pot-main .pile { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
 .pot-label { font-size: var(--fs-2); color: var(--muted); align-self: center; }
 .pot-main b { font-size: var(--fs-6); font-weight: 900; color: #fff; align-self: center; }
-.pot-sides { display: flex; gap: var(--s-2); }
-.pot-sides .side { padding: var(--s-0) var(--s-2); border-radius: var(--r-2); background: rgba(0, 0, 0, .38); font-size: var(--fs-2); font-weight: 600; color: #b9b29c; }
-.pot-sides .side b { color: #fff3cf; font-weight: 800; }
+.pot-sides { display: flex; gap: var(--s-1); }
+.pot-sides:empty { display: none; }
+/* 边池的小标签：一枚筹码 + "主池 175"，宽按字，不折行 */
+.pot-sides .pot-tag { display: flex; align-items: center; gap: var(--s-1); white-space: nowrap; padding: var(--s-0) var(--s-2) var(--s-0) var(--s-1); border-radius: var(--r-2); background: rgba(0, 0, 0, .38); font-size: var(--fs-2); font-weight: 600; color: #b9b29c; }
+.pot-sides .pot-tag .chip { width: 16px; height: 16px; flex: none; }
+.pot-sides .pot-tag b { color: #fff3cf; font-weight: 800; }
 
 /* 一手的结果条：一手打完停着时在公共牌上方（分池时一个池子一行） */
 .result {
@@ -529,6 +532,8 @@ body::before {
 .seat.shifted.right .bubble { left: auto; right: 62px; top: 36px; transform: none; }
 .seat.shifted.left .bubble { left: 62px; top: 36px; transform: none; }
 /* 贴着左边的顶上座位（6、7 人桌左上角）：头像左边放不下，放头像正上方（0.3.1） */
+/* 顶上一排桌心右边的：底牌在头像左边，动作签放到头像右边（外侧），不和左边那家的底牌、自己的底牌挤在一起（0.25.6，竖屏 7 人桌） */
+.seat.top.right .bubble { right: auto; left: 38px; }
 .seat.top.edge .bubble { left: 50%; right: auto; top: -64px; transform: translateX(-50%); }
 
 /* 我：底牌在上、名牌在下、头像在名牌左边，三样不叠（座位的点在名牌上沿往上一点） */
@@ -574,6 +579,8 @@ body::before {
   z-index: 3;
 }
 .bet.mine { transform: translate(-50%, -100%); }
+.bet.from-l { transform: translate(-30px, -50%); }
+.bet.from-r { transform: translate(calc(30px - 100%), -50%); }
 .bet-chips, .fly-chips { display: flex; align-items: flex-end; gap: var(--s-0); }
 .bet-amt {
   font-size: var(--fs-4);
@@ -1000,8 +1007,12 @@ body::before {
 :is(.stage.tight, .stage.narrow):not(.tall) .hud .fun-slot { width: calc(64px * var(--ui)); }
 :is(.stage.tight, .stage.narrow):not(.tall) .hud > .pill { padding: 0 var(--s-2); }
 :is(.stage.tight, .stage.narrow):not(.tall) .hud .hand-no { display: none; }
+/* 两手之间多一个"补码"，那一排再长一截就碰到我的头像（0.25.6 牌桌互压检查，667×375）：按钮之间收紧 */
+.stage.tight:not(.tall) .hud { gap: var(--s-1); left: var(--s-2); }
 /* 我的动作签（"大盲 20"）字放大后变宽，往右伸到第一张底牌、盖住点数：按右边对齐，右沿停在底牌左边 */
 .stage.tight:not(.tall) .seat.me .bubble { left: -76px; transform: translateX(-100%); }
+/* 两侧座位的动作签字放大后变高，上沿顶到上一家的名牌（7–9 人桌两侧挨着的两家，0.25.6）：往下放 6，搭在自己头像上沿 */
+.stage.tight:not(.tall) .seat:not(.top):not(.me):not(.shifted) .bubble { top: -54px; }
 /* 568×320 这种矮横屏：选桌最下面一排"坐下开打"出了屏（0.25.3 多尺寸），锦标赛那行说明收起（按钮上的提示里有） */
 @media (max-height: 340px) {
   .stage.tight .lobby .tour-note { display: none; }
@@ -1215,6 +1226,9 @@ body::before {
 .stage.tall .pre-btn { flex: 1; height: 52px; }
 .stage.tall .between { justify-content: flex-end; }
 .stage.tall .rebuy-cta { bottom: 300px; }
+/* 竖屏摊牌的结果条几个池子就几行，往下长到下面两侧那两家：字小一号、头像小一号、行距收紧（0.25.6 牌桌互压检查） */
+.stage.tall .result { font-size: var(--fs-3); line-height: 1.2; padding: var(--s-0) var(--s-3); }
+.stage.tall .result .r-face { width: 32px; height: 32px; }
 /* 标题页、好友房等人页：上下排 */
 .stage.tall .lobby { flex-direction: column; justify-content: flex-start; gap: var(--s-4); padding: 72px var(--s-4) var(--s-4); overflow-y: auto; }
 /* 放得下时上下居中，放不下时从顶上排、整页能滚到底（0.25.5：Safari 带着工具栏只剩六百多高，实盘选桌最底下锦标赛那行说明出了屏）。

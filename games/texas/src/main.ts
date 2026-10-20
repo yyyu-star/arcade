@@ -932,6 +932,13 @@ function openFun(scope: string): void {
   tf?.destroy();
   // 单机这时牌桌已经摆好，量得出挤不挤；好友房还在等人页，等座位坐满再量（drawRoom）
   crowded = online ? null : !dockFitsNow();
+  // 进桌时牌桌在放大入场（skin.css 的 table-in），上面量的是缩放中的位置：入场完了再量一次、让 kit 重摆
+  // （0.25.6 牌桌互压检查：1920 的 8 人桌、2000×950 的 6 人桌，聊天框按缩放中的位置摆，压住左下那家的名牌）
+  void Promise.all(screen.getAnimations().map((a) => a.finished)).then(() => {
+    if (online || !tf) return;
+    crowded = !dockFitsNow();
+    tf.refresh();
+  }, () => undefined);
   tf = new TableFun({
     storageKey: 'texas',
     phrases: TAUNTS,
