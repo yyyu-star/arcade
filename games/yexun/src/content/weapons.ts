@@ -398,11 +398,18 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 
+/**
+ * 镇 3 件：被减速的怪挨打的倍数。0.4.9 配平：+25% 叠上镇魂铃光环减速和火葫芦烧近身一圈，让镇守走焚天金钟在危险 5 胜率 59.5%（DESIGN 8.1、12），
+ * 改法器会连累烈火，所以动这条套装加成
+ */
+export const WARD_SET_HIT = 1.25;
+const pct = (m: number): string => `${Math.round((m - 1) * 100)}%`;
+
 /** 套装（DESIGN.md 3.4）：同类型 / 同五行的法器凑够 2 件、3 件各有加成。卡片和暂停页的说明也从这里取 */
 export const TYPE_SETS: Record<WeaponType, [string, string]> = {
   剑: ['暴击 +8%', '暴击伤害 +50%'],
   符: ['冷却 −8%', '符类每次多发一张'],
-  镇: ['范围 +12%', '身边的怪减速 20%，被减速的挨打 +25%'],
+  镇: ['范围 +12%', `身边的怪减速 20%，被减速的挨打 +${pct(WARD_SET_HIT)}`],
   灵: ['持续 +15%', '灵类伤害 +25%'],
 };
 /** 五行相生：木生火、火生土、土生金、金生水、水生木 */

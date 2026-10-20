@@ -62,6 +62,7 @@ import {
   weaponStats,
   NEXT_ELEMENT,
   TYPE_SETS,
+  WARD_SET_HIT,
   type Element,
   type PassiveId,
   type WeaponId,
@@ -1360,8 +1361,8 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   const crit = w.rHit.next() < PLAYER.crit * (1 + w.stats.luck) + w.stats.critAdd + (w.moving && w.setup.character === 'jianxia' ? CHAR_FX.jianxiaCrit : 0);
   // 捆仙绳：捆住的挨打加倍
   const bound = w.stats.bindDouble && w.eBind[i]! > w.tick ? 2 : 1;
-  // 镇 3 件：被减速（近身、镇魂铃光环）的怪挨打 +25%
-  const pinned = w.stats.nearSlow && w.eSlow[i] !== 0 ? 1.25 : 1;
+  // 镇 3 件：被减速（近身、镇魂铃光环）的怪挨打加成（WARD_SET_HIT）
+  const pinned = w.stats.nearSlow && w.eSlow[i] !== 0 ? WARD_SET_HIT : 1;
   // 怪对这件法器的克制（类型、五行）
   const owner = credit >= 0 ? w.weapons[credit] : undefined;
   const vs = owner ? VS[w.eKind[i]! * WEAPON_IDS.length + WEAPON_CODE[owner.id]]! : 1;
