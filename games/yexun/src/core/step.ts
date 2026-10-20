@@ -146,7 +146,7 @@ export function step(w: World, dir: number, choice = -1): void {
         openChoices(w);
       }
     } else if (choice === Pick.Skip) {
-      // 跳过：不选，抽一样随机小奖（content/picks.ts）；实盘局暂照旧换一点魂
+      // 跳过：不选，抽一样随机小奖（content/picks.ts）
       w.pendingLevels--;
       w.choices = [];
       w.phase = 'play';
@@ -3045,7 +3045,7 @@ function skipPrize(w: World): void {
 
 /**
  * 守夜夜市（content/market.ts）：预告时就定好摊位和货（画面能先指方向），开市后站在没卖掉的摊前 hold 拍、铜钱够就买下。
- * 更夫提前预告、多开一会儿，采药女打九折（角色小特权）。实盘局暂不开（配平 PR 一起打开）。
+ * 更夫提前预告、多开一会儿，采药女打九折（角色小特权）。
  */
 function nightMarket(w: World): void {
   const M = NIGHT_MARKET;
@@ -3145,7 +3145,7 @@ function marketGive(w: World, g: MarketGood): void {
   }
 }
 
-/** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领。实盘局暂不补 */
+/** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领 */
 function addReroll(w: World, why: number): void {
   if (w.setup.curses?.includes('noreroll') || w.rerolls >= PICKS.rerollMax) return;
   w.rerolls++;
