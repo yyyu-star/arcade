@@ -417,6 +417,9 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* 放不下时（568×320 这类偏方的横屏，一句话折成两行）从顶上排、能滚，不把店名和"规则"挤出去（10-20 多尺寸） */
+  justify-content: safe center;
+  overflow-y: auto;
   gap: var(--sp-4);
   padding: var(--sp-5) var(--sp-5) var(--sp-6);
   min-height: 0;
@@ -1868,6 +1871,13 @@ html .atf-btn {
 }
 @media (max-width: 380px) {
   [data-orient='port'] .topbar > .title .pre { display: none; }
+}
+/* 窄竖屏（≤ 400）字号保底把两边名牌撑宽，对家那排（牌背加碰杠）两头会碰到名牌：整排挪到名牌底下，下面到对家的牌河还空得很（10-20 多尺寸） */
+@media (max-width: 400px) {
+  [data-orient='port'] .side.r2 { top: 150px; }
+}
+@media (max-width: 340px) {
+  [data-orient='port'] .topbar > .title .lv { display: none; }
 }
 /* 头像右边、手牌抬起来（离底 78）也碰不到 */
 [data-orient='port'] .fun-slot { left: 204px; bottom: 84px; }

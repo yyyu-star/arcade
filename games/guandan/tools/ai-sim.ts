@@ -24,10 +24,10 @@
  */
 import { cpus } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { createGame, dispatch, legalPlays, seatsToAct, teamOf, viewFor, type Action, type GameState, type PlayerView } from '../src/core/index.ts';
-import { decide, formOf, type Difficulty, type PersonaId } from '../src/ai/index.ts';
-import { SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor, type SoloBots, type Venue } from '../src/ai/venue.ts';
-import { TIER_IDS } from '../src/stake/index.ts';
+import { createGame, dispatch, legalPlays, seatsToAct, teamOf, viewFor, type Action, type GameState, type PlayerView } from '../src/variants/guandan/core/index.ts';
+import { decide, formOf, type Difficulty, type PersonaId } from '../src/variants/guandan/ai/index.ts';
+import { SOLO_BOTS, SOLO_FUN_BOTS, SOLO_LEVELS, botFor, type SoloBots, type Venue } from '../src/variants/guandan/ai/venue.ts';
+import { TIER_IDS } from '../src/variants/guandan/stake/index.ts';
 import { thinkTime } from '../src/view/personas.ts';
 
 const SHARE = 20;

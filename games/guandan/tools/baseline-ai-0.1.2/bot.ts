@@ -28,7 +28,7 @@ import {
   type Play,
   type PlayerView,
   type Rng,
-} from '../../src/core/index.ts';
+} from '../../src/variants/guandan/core/index.ts';
 import { buildMemory, bombPossible, isTop, type Memory, type Recall } from './memory.ts';
 import { groupToPlay, isBombType, planHand, type Group, type HandPlan } from './plan.ts';
 

@@ -8,13 +8,21 @@
  *   5. 管理入口手动投一次平台的定时清理，结果是 ok；导出平台库，里面有刚建的号（PG 模式不经管理入口导出，回 501，备份用 pg_dump）。
  * 用法：ADMIN_TOKEN=… node tools/selfhost/smoke.mjs --base http://127.0.0.1:8787 --admin http://127.0.0.1:8788
  * Docker 里管理入口只听容器内的 127.0.0.1，宿主连不到：--admin skip 跳过第 5 步，由 selfhost.yml 用 docker exec 在容器里做。
+ * 重启后房间还在（PG 模式的 pg + memory：房间存在 PG 里，进程里什么都不留）：第一次带 --save <文件> 记下房间码和两人的会话，
+ * 重启站点后 --rejoin <文件> 只做一件事：两人再连同一个房间，都要收到 welcome。
  * 只认 tools/workers.json 里本仓库的平台和德州：别的游戏起没起都不影响。
  */
 import { randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 const { values: args } = parseArgs({
-  options: { base: { type: 'string', default: 'http://127.0.0.1:8787' }, admin: { type: 'string', default: 'http://127.0.0.1:8788' } },
+  options: {
+    base: { type: 'string', default: 'http://127.0.0.1:8787' },
+    admin: { type: 'string', default: 'http://127.0.0.1:8788' },
+    save: { type: 'string' },
+    rejoin: { type: 'string' },
+  },
 });
 const base = args.base.replace(/\/$/, '');
 const admin = args.admin.replace(/\/$/, '');
@@ -60,6 +68,37 @@ const body = async (res) => {
   check(cdn.status === 404, '/cdn-cgi 应挡掉', cdn.status);
   ok('健康检查、平台首页和 CSP、单页回退、德州登录闸门、404、/cdn-cgi');
 }
+
+/** 连进德州的房间，收到 welcome 就回这条 WebSocket */
+const welcome = (code, who) =>
+  new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/games/texas/rooms/${code}/ws`, {
+      headers: { cookie: who.cookie, origin: base },
+    });
+    const timer = setTimeout(() => reject(new Error(`${who.username} 10 秒没收到 welcome`)), 10_000);
+    ws.onmessage = (e) => {
+      const m = JSON.parse(String(e.data));
+      if (m.t === 'welcome') {
+        clearTimeout(timer);
+        resolve(ws);
+      } else if (m.t === 'error') reject(new Error(`${who.username} 进房被拒：${JSON.stringify(m)}`));
+    };
+    ws.onerror = () => reject(new Error(`${who.username} 的 WebSocket 连不上`));
+  });
+
+if (args.rejoin) {
+  const { code, a, b } = JSON.parse(readFileSync(args.rejoin, 'utf8'));
+  try {
+    const sockets = await Promise.all([welcome(code, a), welcome(code, b)]);
+    for (const ws of sockets) ws.close();
+  } catch (e) {
+    check(false, `重启后回房间 ${code}`, e.message);
+  }
+  ok(`重启后两人回到德州房间 ${code}，都收到 welcome`);
+  console.log('selfhost smoke：全部通过');
+  process.exit(0);
+}
+
 
 // 2. 建号、登录
 async function account(tag) {
@@ -110,27 +149,13 @@ ok(`管理令牌建号、登录、/api/me（${a.username}、${b.username}）`);
   const r = await get('/games/texas/rooms', { method: 'POST', headers: { ...write, cookie: a.cookie }, body: JSON.stringify({ opts: { stakes: 'small', size: 6, fun: true } }) });
   const created = await body(r);
   check(r.status === 201 && created.code, '德州开房', created);
-  const welcome = (who) =>
-    new Promise((resolve, reject) => {
-      const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/games/texas/rooms/${created.code}/ws`, {
-        headers: { cookie: who.cookie, origin: base },
-      });
-      const timer = setTimeout(() => reject(new Error(`${who.username} 10 秒没收到 welcome`)), 10_000);
-      ws.onmessage = (e) => {
-        const m = JSON.parse(String(e.data));
-        if (m.t === 'welcome') {
-          clearTimeout(timer);
-          resolve(ws);
-        } else if (m.t === 'error') reject(new Error(`${who.username} 进房被拒：${JSON.stringify(m)}`));
-      };
-      ws.onerror = () => reject(new Error(`${who.username} 的 WebSocket 连不上`));
-    });
   try {
-    const sockets = await Promise.all([welcome(a), welcome(b)]);
+    const sockets = await Promise.all([welcome(created.code, a), welcome(created.code, b)]);
     for (const ws of sockets) ws.close();
   } catch (e) {
     check(false, '进房', e.message);
   }
+  if (args.save) writeFileSync(args.save, JSON.stringify({ code: created.code, a, b }));
   ok(`德州开房 ${created.code}，两人 WebSocket 进房收到 welcome`);
 }
 

@@ -5,5 +5,5 @@
     "lib": ["es2023"],
     "types": []
   },
-  "include": ["src/core", "src/ai", "src/stake"]
+  "include": ["src/core", "src/variants/*/core", "src/variants/*/ai", "src/variants/*/stake"]
 }

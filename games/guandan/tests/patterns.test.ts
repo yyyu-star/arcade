@@ -11,7 +11,7 @@ import {
   resolveOptions,
   rngFor,
   type Play,
-} from '../src/core/index.ts';
+} from '../src/variants/guandan/core/index.ts';
 import { C, shape } from './helpers.ts';
 
 const O = DEFAULT_OPTIONS;

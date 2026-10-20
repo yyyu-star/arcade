@@ -8,6 +8,7 @@
  */
 import { ACE, BIG_JOKER, SMALL_JOKER, isWild, natRank, orderValue, rankOf, suitOf, type Card } from './cards.ts';
 import type { Options } from './options.ts';
+import type { PatternSet } from '../../../core/play.ts';
 
 export type PlayType =
   | 'single'
@@ -280,3 +281,14 @@ export function chooseInterpretation(options: readonly Play[], target: Play | nu
 export function samePlayShape(a: Pick<Play, 'type' | 'rank' | 'extra'>, b: Pick<Play, 'type' | 'rank' | 'extra'>): boolean {
   return a.type === b.type && a.rank === b.rank && a.extra === b.extra;
 }
+
+/**
+ * 掼蛋的牌型按通用层的 PatternSet 包一层（牌馆重构 ①b，docs/doudizhu.md 1.1）：识别要级牌和规则开关；函数本身就是上面这些，行为不变
+ */
+export const guandanPatterns: PatternSet<Play, { level: number; opts: Options }> = {
+  interpret: (cards, c) => interpret(cards, c.level, c.opts),
+  beats,
+  isBomb,
+  choose: chooseInterpretation,
+  enumerate: (hand, c) => enumeratePlays(hand, c.level, c.opts),
+};

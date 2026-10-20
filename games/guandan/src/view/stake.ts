@@ -6,11 +6,11 @@
  *   同一个 op 重发钱包只算一次。
  * - 结回、放弃遇到钱包忙（busy、internal、连不上）在这里重试几次；还不行就留着存档，下次再结。
  */
-import type { Venue } from '../ai/venue.ts';
-import { createGame, type Action, type GameEvent, type GameState } from '../core/index.ts';
+import type { Venue } from '../variants/guandan/ai/venue.ts';
+import { createGame, type Action, type GameEvent, type GameState } from '../variants/guandan/core/index.ts';
 import { STAKE_PATH } from '../net/version.ts';
-import { TIERS, isSoloRef, isTier, soloAddDeal, soloOver, soloPoints, type SoloMatch, type TierId } from '../stake/index.ts';
-import { emptyTally, statsOf, tallyDeal, type Tally } from '../stake/stats.ts';
+import { TIERS, isSoloRef, isTier, soloAddDeal, soloOver, soloPoints, type SoloMatch, type TierId } from '../variants/guandan/stake/index.ts';
+import { emptyTally, statsOf, tallyDeal, type Tally } from '../variants/guandan/stake/stats.ts';
 import { currentUserId } from './net.ts';
 import { ME, Session } from './session.ts';
 import { KEYS, rawStore } from './store.ts';

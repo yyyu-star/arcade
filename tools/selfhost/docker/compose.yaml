@@ -1,13 +1,20 @@
-# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）。postgres 在 profile pg 里（PostgreSQL 模式：发布包用 --db pg 打，arcade 加 ARCADE_PG_URL）。
+# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）；PostgreSQL 模式再加 postgres（profile pg）。
 # 用法：先 docker build 出 arcade 镜像（见 Dockerfile 开头），再在本目录：
-#   SITE_HOST=game.example.com ARCADE_IMAGE=arcade:<版本> docker compose up -d
+#   SQLite 档：SITE_HOST=game.example.com ARCADE_IMAGE=arcade:<版本> docker compose up -d
+#   PG 档（发布包用 --db pg [--storage memory] 打）：SITE_HOST=… ARCADE_IMAGE=… docker compose --profile pg up -d
 # Secret 放 secrets.env（和本文件同目录，不进 Git；格式见 tools/selfhost/README.md），SITE_ORIGIN 也写在里面。
+# PG 档另放 pg_password.txt（数据库密码，一行），secrets.env 里加 ARCADE_PG_URL=postgres://arcade:<同一个密码>@postgres:5432/arcade。
 # 备份：docker compose exec arcade /app/ops/backup.sh /data/backups（管理入口只在容器里，宿主连不到）。
 services:
   arcade:
     image: ${ARCADE_IMAGE:-arcade:latest}
     restart: unless-stopped
     env_file: secrets.env
+    depends_on:
+      # 只有 --profile pg 时才有 postgres；没开 profile 时这条不算（required: false）
+      postgres:
+        condition: service_healthy
+        required: false
     volumes:
       - arcade-data:/data
     # 不发布端口：只有 caddy 经内部网络连 8787；8788（管理入口）只听容器内的 127.0.0.1
@@ -31,7 +38,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
   postgres:
-    # PostgreSQL 模式（平台库放 PG）才用：docker compose --profile pg 才会起；arcade 的 secrets.env 里加 ARCADE_PG_URL=postgres://arcade:<密码>@postgres:5432/arcade
+    # PostgreSQL 模式才用：docker compose --profile pg 才会起。不发布端口，只有 arcade 经内部网络连
     profiles: [pg]
     image: postgres:17
     restart: unless-stopped
@@ -39,8 +46,18 @@ services:
       POSTGRES_DB: arcade
       POSTGRES_USER: arcade
       POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    secrets:
+      - pg_password
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "arcade", "-d", "arcade"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
     volumes:
       - pg-data:/var/lib/postgresql/data
+secrets:
+  pg_password:
+    file: pg_password.txt
 volumes:
   arcade-data:
   caddy-data:

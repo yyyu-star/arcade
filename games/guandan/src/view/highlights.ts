@@ -2,7 +2,7 @@
  * 名场面（0.7.1）：一副里值得说一嘴的时刻，打的时候冒一下，结算页的复盘里记一行。
  * 只用公开信息（出牌记录、名次、两队级数），不看任何人的手牌；画面座位和真实座位都行（只比队伍和座位是不是同一个）。
  */
-import { isBomb, type DealResult, type Play, type PlayRecord } from '../core/index.ts';
+import { isBomb, type DealResult, type Play, type PlayRecord } from '../variants/guandan/core/index.ts';
 
 type HighlightKind = 'jokerBomb' | 'bombOnBomb' | 'bombs3' | 'comeback' | 'doubleDown' | 'quick';
 

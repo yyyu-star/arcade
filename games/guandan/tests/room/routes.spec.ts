@@ -7,7 +7,7 @@ import { CLOSE } from 'arcade-kit/protocol';
 import { runDurableObjectAlarm } from 'cloudflare:test';
 import type { WelcomeMsg } from 'arcade-kit/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NetView } from '../../src/net/rules.ts';
+import type { NetView } from '../../src/variants/guandan/net/rules.ts';
 import { env } from 'cloudflare:workers';
 import worker from '../../worker/index.ts';
 import * as main from '../../worker/main.ts';

@@ -804,16 +804,14 @@ button:disabled {
   color: var(--ink);
 }
 
-.bubble {
+.race > .bubble {
   position: absolute;
-  right: calc(100% + 6px);
-  top: 50%;
   transform: translateY(-50%);
   white-space: nowrap;
   background: #fff;
   color: var(--ink);
   border: 1.5px solid var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   padding: 3px 8px;
   border-radius: 10px;
   z-index: 6;
@@ -1762,5 +1760,520 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .card {
     transition: none;
+  }
+}
+
+/* ---------- 弹窗被结算压着时（dialog.ts 的 sticky）藏起来 ---------- */
+
+.mask[hidden] {
+  display: none;
+}
+
+/* ---------- 结算：靠下边放，不挡赛道中间、不压暗、不挡顶栏（DESIGN.md 8"结算"） ---------- */
+
+.mask.end {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-end;
+  padding: 0 12px 10px;
+}
+
+.mask.end .dialog {
+  pointer-events: auto;
+  width: 620px;
+  max-height: 330px;
+  padding: 10px 16px 12px;
+  gap: 8px;
+  box-shadow: 4px 6px 0 rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(247, 240, 220, 0.35);
+}
+
+.mask.end .end-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+}
+
+.mask.end .end-head h2 {
+  font-size: 20px;
+}
+
+.mask.end .end-fold {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1.5px solid var(--ink);
+  background: var(--paper2);
+  color: var(--ink);
+  border-radius: 13px;
+  padding: 3px 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mask.end .result {
+  font-size: 13px;
+  align-self: center;
+}
+
+.mask.end .result td {
+  padding: 3px 8px;
+}
+
+.mask.end .end-acts .act {
+  padding: 6px 16px;
+  font-size: 14px;
+}
+
+/* 收起：只剩名次和"展开"一条，赛道整个露出来 */
+.mask.end.folded .dialog {
+  width: auto;
+  padding: 6px 12px;
+}
+
+.mask.end.folded .dialog > :not(.end-head) {
+  display: none;
+}
+
+.mask.end.folded .end-head {
+  gap: 14px;
+}
+
+.mask.end.folded .end-fold {
+  position: static;
+  transform: none;
+}
+
+/* 比赛结束：驾驶台只看不点（点弃牌区会弹别的弹窗） */
+.race.over .dash {
+  pointer-events: none;
+}
+
+.stage[data-orient='port'] .mask.end .dialog {
+  width: 100%;
+}
+
+.stage[data-orient='port'] .mask.end.folded .dialog {
+  width: auto;
+}
+
+/* ---------- 竖屏：电脑的短语冒在名次栏上沿（comms.ts），不压车手名 ---------- */
+
+.race > .talk {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  transform: translateY(-100%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.race > .talk .bubble {
+  position: relative;
+  white-space: nowrap;
+  background: #fff;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  padding: 3px 8px;
+  border-radius: 10px;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  box-shadow: 1px 2px 0 rgba(43, 38, 34, 0.45);
+}
+
+.race > .talk .bubble.right {
+  align-self: flex-end;
+}
+
+.race > .talk .bubble::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  bottom: -6px;
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border-right: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  transform: rotate(45deg);
+}
+
+.race > .talk .bubble.right::after {
+  left: auto;
+  right: 18px;
+}
+
+.race > .talk .dot.car-icon {
+  width: 24px;
+  height: 14px;
+}
+
+.race > .talk .dot.car-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 竖屏：电脑的表情贴在那一行右头，和这一行一样高（comms.ts 的 rowSticker） */
+.race > .row-sticker {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.race > .row-sticker svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------- 选桌页：新手教程 ----------
+   按钮是金色的印刷按钮（和主按钮同样的墨边、硬投影、按下去沉一下），左头一枚阿驰的小头像；
+   "第一次来？"是一张纸签（和教程气泡同一套：纸面、墨线、硬投影），尖角指着按钮。 */
+
+.lobby-head .tut-entry {
+  position: relative;
+  align-self: center;
+}
+
+.lobby-head .tut-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid var(--ink);
+  background: var(--gold);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 3px 14px 3px 4px;
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 2px 3px 0 var(--ink);
+}
+
+.lobby-head .tut-btn .coach-mini {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.lobby-head .tut-btn .coach-mini svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.lobby-head .tut-btn:active {
+  transform: translate(2px, 3px);
+  box-shadow: none;
+}
+
+/* 第一次来的人：按钮下面冒一张纸签，尖角指着按钮 */
+.lobby-head .tut-hint {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  z-index: 3;
+  white-space: nowrap;
+  background: var(--tex-paper, var(--paper));
+  background-color: var(--paper);
+  background-size: 256px 256px;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.4);
+  animation: tut-bob 1.6s ease-in-out infinite;
+}
+
+.lobby-head .tut-hint::before {
+  content: '';
+  position: absolute;
+  right: 40px;
+  top: -8px;
+  width: 12px;
+  height: 12px;
+  background: var(--paper);
+  border-left: 2px solid var(--ink);
+  border-top: 2px solid var(--ink);
+  transform: rotate(45deg);
+}
+
+@keyframes tut-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+/* ---------- 新手教程：阿驰的气泡和高亮（coach.ts） ----------
+   气泡是一张印刷的人物卡：纸面、墨线、硬边投影（和弹窗一样）；头上一条色带像卡牌的色带，
+   讲解深绿（和顶栏同色）、操作红（主按钮的红，"该你动手了"）、毕业金；阿驰的头像徽章压在色带左头。 */
+
+.coach {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  pointer-events: none;
+}
+
+/* 高亮：目标外面一圈金边（里外两道墨线，和"我的车"、能挂的挡同一个金圈），周围压暗（和弹窗的遮罩同色同深） */
+.coach .coach-spot {
+  position: absolute;
+  border-radius: 10px;
+  border: 3px solid var(--gold);
+  outline: 0 solid rgba(226, 169, 43, 0);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1.5px var(--ink), 0 0 0 2px var(--ink), 0 0 0 4000px rgba(29, 26, 22, 0.55);
+  animation: coach-blink 1.1s ease-in-out infinite;
+}
+
+/* 一呼一吸：金边亮一下，外面再泛一圈金 */
+@keyframes coach-blink {
+  0%,
+  100% {
+    border-color: var(--gold);
+    outline-color: rgba(226, 169, 43, 0);
+    outline-width: 0;
+  }
+  50% {
+    border-color: #ffd86a;
+    outline-color: rgba(255, 216, 106, 0.75);
+    outline-width: 4px;
+  }
+}
+
+.coach .coach-bubble {
+  --band: var(--frame);
+  --band-ink: var(--paper);
+  --face: 50px;
+  --head: 30px;
+  position: absolute;
+  width: 340px;
+  pointer-events: auto;
+  background: var(--tex-paper, var(--paper));
+  background-color: var(--paper);
+  background-size: 256px 256px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 4px 6px 0 rgba(0, 0, 0, 0.4);
+  padding: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 操作步：色带换成红的 */
+.coach .coach-bubble.op {
+  --band: var(--go);
+  --band-ink: #fff;
+}
+
+/* 毕业：金色带 */
+.coach .coach-bubble.grad {
+  --band: var(--gold);
+  --band-ink: var(--ink);
+}
+
+/* 色带：卡牌顶上那条，名字印在头像右边 */
+.coach .coach-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--head);
+  padding: 0 8px 0 calc(var(--face) + 18px);
+  background: var(--band);
+  color: var(--band-ink);
+  border-bottom: 2px solid var(--ink);
+  border-radius: 10px 10px 0 0;
+}
+
+/* 头像徽章：压在色带左头，往下伸进正文一点 */
+.coach .coach-face {
+  position: absolute;
+  left: 8px;
+  top: 5px;
+  z-index: 1;
+  width: var(--face);
+  height: var(--face);
+  border-radius: 50%;
+  box-shadow: 2px 3px 0 rgba(43, 38, 34, 0.45);
+}
+
+.coach .coach-face svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.coach .coach-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+/* "跳过教程"：和顶栏一样的纸签小按钮 */
+.coach .coach-skip {
+  flex: none;
+  border: 1.5px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 1px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.coach .coach-skip:active {
+  background: var(--paper3);
+}
+
+.coach .coach-body {
+  padding: 2px 12px 0;
+}
+
+/* 头像伸下来那一截：正文第一行让开 */
+.coach .coach-body::before {
+  content: '';
+  float: left;
+  width: calc(var(--face) + 4px);
+  height: calc(var(--face) + 2px - var(--head));
+}
+
+.coach .coach-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.coach .coach-text + .coach-text {
+  margin-top: 4px;
+}
+
+.coach .coach-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0 0.1em;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #8c1d22;
+  color: #8c1d22;
+  font-size: 0.85em;
+  font-weight: 900;
+  vertical-align: 0.05em;
+  line-height: 1;
+}
+
+.coach .coach-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.coach .coach-acts .act {
+  padding: 5px 14px;
+  font-size: 14px;
+}
+
+/* 小尖角：一个转 45° 的方块，只露出两条墨边；伸在上沿时是色带的颜色 */
+.coach .coach-tail {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  pointer-events: none;
+}
+
+.coach .coach-tail[hidden] {
+  display: none;
+}
+
+.coach .coach-tail[data-side='top'] {
+  top: -8px;
+  left: calc(var(--at) - 7px);
+  background: var(--band);
+  border-width: 2px 0 0 2px;
+  transform: rotate(45deg);
+}
+
+.coach .coach-tail[data-side='bottom'] {
+  bottom: -8px;
+  left: calc(var(--at) - 7px);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.coach .coach-tail[data-side='left'] {
+  left: -8px;
+  top: calc(var(--at) - 7px);
+  border-width: 0 0 2px 2px;
+  transform: rotate(45deg);
+}
+
+.coach .coach-tail[data-side='right'] {
+  right: -8px;
+  top: calc(var(--at) - 7px);
+  border-width: 2px 2px 0 0;
+  transform: rotate(45deg);
+}
+
+/* 竖屏的舞台宽 560、手机上缩到七成：气泡宽一些、字大一点，头像 60（手机上约 42 像素） */
+.stage[data-orient='port'] .coach .coach-bubble {
+  width: 440px;
+  --face: 60px;
+  --head: 38px;
+}
+
+.stage[data-orient='port'] .coach .coach-body {
+  padding: 2px 14px 0;
+}
+
+.stage[data-orient='port'] .coach .coach-text {
+  font-size: 18px;
+}
+
+.stage[data-orient='port'] .coach .coach-name {
+  font-size: 18px;
+}
+
+.stage[data-orient='port'] .coach .coach-skip {
+  font-size: 15px;
+  padding: 2px 11px;
+}
+
+.stage[data-orient='port'] .coach .coach-acts {
+  padding: 0 14px;
+}
+
+.stage[data-orient='port'] .coach .coach-acts .act {
+  font-size: 17px;
+  padding: 7px 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach .coach-spot,
+  .lobby-head .tut-hint {
+    animation: none;
   }
 }

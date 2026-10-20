@@ -13,7 +13,7 @@
 import { availableParallelism } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { testKey, guandanRoom as R, type NetState } from '../src/net/rules.ts';
+import { testKey, guandanRoom as R, type NetState } from '../src/variants/guandan/net/rules.ts';
 
 interface Job {
   from: number;

@@ -17,7 +17,7 @@ import {
   type Card,
   type Play,
   type PlayType,
-} from '../../src/core/index.ts';
+} from '../../src/variants/guandan/core/index.ts';
 
 export interface Group {
   type: PlayType;

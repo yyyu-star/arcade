@@ -22,8 +22,8 @@ import {
   viewFor,
   type Action,
   type GameState,
-} from '../src/core/index.ts';
-import { decide } from '../src/ai/index.ts';
+} from '../src/variants/guandan/core/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
 import { C, act, playState } from './helpers.ts';
 
 /** 按 pick 选每一步（一副结束时由"牌桌"开下一副），返回经过的全部状态 */

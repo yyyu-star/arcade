@@ -9,6 +9,7 @@
 
 - **规则**：换挡出牌（跳两挡付热量）、速度牌 / 改装牌 / 热量 / 手抖、熄火、散热、冲刺、拼劲、尾流、过弯限速（超速付热量，付不起打滑）、冲线名次（DESIGN.md 第 2 节）。
 - **三条固定赛道**：环湖（均衡）、山城（发夹弯多）、海港（急弯加长直道），1–3 圈。随机赛道是下一阶段（DESIGN.md 3.3）。
+- **新手教程**：老车手阿驰带着在环湖跑一圈（写死的开局，两个新手电脑）：讲解、照着高亮点、自由驾驶时的情景提示、毕业；不碰单机续玩和预设（DESIGN.md 8.1）。
 - **单机**：对 1–5 台电脑，7 种性格分三档，新手场、普通场、老手场只派本档的电脑，也可以混着来；每个电脑每场的状态有浮动；跑到一半关了页面，回来接着跑（`racing.solo`）。
 - **出牌预览**：选好挡和牌，赛道上画一辆虚影车：停在哪、过哪几个弯、要付几张热量、会不会打滑（手抖按点数范围算）。
 - **预设**：冲刺、尾流、拼劲、弃牌可以出牌时定好，轮到时不用再点。
@@ -38,10 +39,11 @@ npm test              # 类型检查 + vitest（规则、赛道、电脑、互�
 npm run deploy        # 单独部署到自己的 Cloudflare 账户（独立模式，见"部署"）；本仓库的正式站不用它
 npm run test:worker   # 只跑 workerd 里的那部分（test/worker/，配置 test/wrangler.test.jsonc，平台的 /api/me 用假的服务绑定）
 npm run build:cf      # 页面打包到 dist-cf/games/racing/（Worker 的静态资源）
-npm run smoke         # 冒烟：起 vite、无头 Chromium 横屏竖屏各跑完一场单机，控制台零报错
+npm run smoke         # 冒烟：起 vite、无头 Chromium 横屏竖屏各跑完一场单机和一遍新手教程，控制台零报错
 npm run sim 200       # 模拟器：电脑对跑，量回合数、打滑、各性格名次（DESIGN.md 5.3）
 node scripts/track.ts --png   # 赛道自查：按形状找弯、和弯道线对一对，截图到 shots/
 node scripts/shots.ts         # PR 用的截图（电脑 1280×720、手机横屏）到 shots/pr-*.png
+node scripts/shots.ts tut     # 新手教程和结算的截图（电脑 1280×720、手机竖屏 390×844）到 shots/tut-*.png
 node scripts/art.ts           # 重新生成 public/art/ 的纹理（ASSETS.md），总览截图在 shots/art.png
 node scripts/tune.ts 40       # 调电脑参数（网格搜索，开发用）
 ```
@@ -86,9 +88,9 @@ node scripts/tune.ts 40       # 调电脑参数（网格搜索，开发用）
 | `src/track/` | 赛道：`fixed.ts` 规则用的数据、`index.ts` 按 id 找、`shape.ts` 画法（只给画面层） |
 | `src/ai/` | 电脑（只拿视图）：`index.ts` 决定、`personas.ts` 7 种性格（分三档） |
 | `src/room/` | 好友房的规则：把规则接到 kit 的 `RoomGame` 上（纯函数，房间和页面共用） |
-| `src/game/` | 交流编号（`emotes.ts`）、电脑的互动（`banter.ts`，单机和好友房共用） |
-| `src/solo.ts`、`src/online.ts`、`src/main.ts` | 单机控制器、好友房连接、页面入口 |
-| `src/view/` | 画面（DOM + SVG）：`board.ts` 镜头和走车动画、`mapart.ts` 地图板和标注、`scenes.ts` 三条赛道的场景、`mapkit.ts` 色板和画法工具、`piece.ts` 棋子、`dash.ts` 驾驶台、`side.ts` 名次栏、`cards.ts` 卡面、`lobby.ts` 选桌页、`room.ts` 等人页、`comms.ts` 交流，其余见目录 |
+| `src/game/` | 交流编号（`emotes.ts`）、电脑的互动（`banter.ts`，单机和好友房共用）、新手教程的文案和密钥（`tutorial.ts`） |
+| `src/solo.ts`、`src/online.ts`、`src/tutor.ts`、`src/main.ts` | 单机控制器、好友房连接、新手教程的流程、页面入口 |
+| `src/view/` | 画面（DOM + SVG）：`board.ts` 镜头和走车动画、`mapart.ts` 地图板和标注、`scenes.ts` 三条赛道的场景、`mapkit.ts` 色板和画法工具、`piece.ts` 棋子、`dash.ts` 驾驶台、`side.ts` 名次栏、`cards.ts` 卡面、`lobby.ts` 选桌页、`room.ts` 等人页、`comms.ts` 交流、`coach.ts` 新手教程的气泡和高亮，其余见目录 |
 | `worker/` | racing Worker：`main.ts` 路由、登录闸门和独立模式、`room.ts` 好友房 DO（电脑的互动在这里发） |
 | `test/` | vitest；`test/worker/` 跑在 workerd 里 |
 | `scripts/` | `sim.ts` 模拟器、`smoke.ts` 冒烟、`drive.ts` 冒烟和截图共用的开车、`track.ts` 赛道自查、`shots.ts` 截图、`art.ts` 生成纹理、`tune.ts` 调电脑、`browser.ts` 无头浏览器 |

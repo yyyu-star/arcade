@@ -8,6 +8,8 @@ import {
   placeBubble,
   placeClear,
   bubbleSpot,
+  HARD_PAD,
+  padBox,
   DANMAKU,
   barBottom,
   chatFont,
@@ -698,5 +700,30 @@ describe('bubbleSpot（0.20.4，所有头像旁气泡都不压名牌）', () => 
     const all = [box(0, 0, 1920, 1080)];
     expect(bubbleSpot(me, 196, 44, view, [], all)).not.toBeNull();
     expect(bubbleSpot(me, 196, 44, view, [], all, true)).toBeNull();
+  });
+});
+
+describe('硬禁区让几像素、开着的菜单也算（0.21.1，德州报）', () => {
+  const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
+  const gap = (a: { left: number; top: number }, w: number, h: number, z: { left: number; top: number; width: number; height: number }) =>
+    Math.max(z.left - (a.left + w), a.left - (z.left + z.width), z.top - (a.top + h), a.top - (z.top + z.height));
+  it('padBox 四周各放大 HARD_PAD', () => {
+    expect(padBox(box(10, 20, 30, 40))).toEqual(box(10 - HARD_PAD, 20 - HARD_PAD, 30 + 2 * HARD_PAD, 40 + 2 * HARD_PAD));
+  });
+  it('1280：自己的气泡和聊天框之间至少留 HARD_PAD，不贴边（以前算出来不相交、画出来压几像素）', () => {
+    const view = { width: 1280, height: 720 };
+    const me = box(30, 470, 80, 80);
+    const dock = box(10, 300, 330, 166);
+    const btn = box(116, 480, 56, 56);
+    const at = bubbleSpot(me, 180, 40, view, [], [dock, btn].map((r) => padBox(r)))!;
+    expect(gap(at, 180, 40, dock)).toBeGreaterThanOrEqual(HARD_PAD);
+    expect(gap(at, 180, 40, btn)).toBeGreaterThanOrEqual(HARD_PAD);
+  });
+  it('1920：开着的聊天菜单当硬禁区，气泡挪到菜单外面', () => {
+    const view = { width: 1920, height: 1080 };
+    const me = box(40, 545, 100, 100);
+    const menu = box(150, 300, 420, 360);
+    const at = bubbleSpot(me, 196, 44, view, [], [padBox(menu)])!;
+    expect(gap(at, 196, 44, menu)).toBeGreaterThanOrEqual(HARD_PAD);
   });
 });

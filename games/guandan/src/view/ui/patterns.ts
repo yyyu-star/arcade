@@ -1,6 +1,6 @@
 /** 牌型图示：规则页和新手引导共用。用真实牌面小图拼出例子。 */
 import Phaser from 'phaser';
-import { makeCard, type Card } from '../../core/index.ts';
+import { makeCard, type Card } from '../../variants/guandan/core/index.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { CardView } from '../table/card.ts';
 import { fitWidth, text } from './kit.ts';

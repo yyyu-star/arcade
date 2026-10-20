@@ -410,6 +410,16 @@ export function bubbleSpot(
   return placeClear(anchor, w, h, view, avoid, hard) ?? (strict ? null : placeBubble(anchor, w, h, view, avoid, hard));
 }
 
+/**
+ * 硬禁区四周再让出几像素（0.21.1，德州 1280 报：气泡下沿和聊天框底边贴着，算出来不相交，画出来描边和阴影压上去几像素）
+ */
+export const HARD_PAD = 4;
+
+/** 矩形四周各放大 n 像素 */
+export function padBox(r: Box, n: number = HARD_PAD): Box {
+  return { left: r.left - n, top: r.top - n, width: r.width + 2 * n, height: r.height + 2 * n };
+}
+
 /** 气泡压到叠在它上面的按钮、聊天框时的代价倍数（0.19.1，主线定的 ×3） */
 export const HARD_COST = 3;
 

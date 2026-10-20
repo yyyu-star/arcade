@@ -3,11 +3,11 @@
  * 真房间里的带入、结回、重试、收场在 tests/room/stake.spec.ts。
  */
 import { describe, expect, it } from 'vitest';
-import type { DealResult, Seat } from '../src/core/index.ts';
-import { rotateNetView } from '../src/net/rotate.ts';
-import { guandanRoom as R, testKey, type NetState } from '../src/net/rules.ts';
-import { canRebuy, parseRoomOpts, shareRef, stakeBegin, stakeDeal, stakeFinish, stakeRef, stakeSeated, stakeSettled, stakeView, type StakeTable } from '../src/net/stake.ts';
-import { ROOM_DEALS, WALLET_ID } from '../src/stake/index.ts';
+import type { DealResult, Seat } from '../src/variants/guandan/core/index.ts';
+import { rotateNetView } from '../src/variants/guandan/net/rotate.ts';
+import { guandanRoom as R, testKey, type NetState } from '../src/variants/guandan/net/rules.ts';
+import { canRebuy, parseRoomOpts, shareRef, stakeBegin, stakeDeal, stakeFinish, stakeRef, stakeSeated, stakeSettled, stakeView, type StakeTable } from '../src/variants/guandan/net/stake.ts';
+import { ROOM_DEALS, WALLET_ID } from '../src/variants/guandan/stake/index.ts';
 
 const KEY = testKey('net-stake');
 const HHAA = ['human', 'human', 'ai', 'ai'] as const;

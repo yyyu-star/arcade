@@ -11,7 +11,7 @@
  *   种子、别人的手牌都不在里面。
  * - 错误码：房间会把 apply 的错误原样发给出手的人，只能是固定短码（小写字母、数字、下划线）。
  */
-import { EMOTE_COUNT } from './emotes.ts';
+import { EMOTE_COUNT } from '../../../net/emotes.ts';
 import type { RoomGame } from 'arcade-kit/game';
 import { canRebuy, parseRoomOpts, stakeBegin, stakeDeal, stakeFinish, stakeRebuy, stakeSeated, stakeSettled, stakeView, type RoomOpts, type StakeEffect, type StakeTable, type StakeView } from './stake.ts';
 import { type Entropy, stream } from 'arcade-kit/rng';

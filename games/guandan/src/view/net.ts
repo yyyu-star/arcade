@@ -9,13 +9,13 @@
  */
 import { RoomClient, type ChatSendResult, type ClientStatus, type RoomClientOptions, type WebSocketLike } from 'arcade-kit/client';
 import { CLOSE, CLOSE_REASON, EMOTE_ERRORS, type CreateError, type DownMsg, type RoomInfo } from 'arcade-kit/protocol';
-import { PERSONAS, SEAT_PERSONA, decide, situationOf, tiltOf } from '../ai/index.ts';
-import type { Action, GameEvent, NextPreview, PlayerView } from '../core/index.ts';
-import { ERROR_TEXT, type NetAction, type NetView } from '../net/rules.ts';
-import { rotateNetView, rotation, toReal } from '../net/rotate.ts';
+import { PERSONAS, SEAT_PERSONA, decide, situationOf, tiltOf } from '../variants/guandan/ai/index.ts';
+import type { Action, GameEvent, NextPreview, PlayerView } from '../variants/guandan/core/index.ts';
+import { ERROR_TEXT, type NetAction, type NetView } from '../variants/guandan/net/rules.ts';
+import { rotateNetView, rotation, toReal } from '../variants/guandan/net/rotate.ts';
 import { CLIENT_VERSION, ROOM_PATH } from '../net/version.ts';
-import { parseRoomOpts } from '../net/stake.ts';
-import type { TierId } from '../stake/index.ts';
+import { parseRoomOpts } from '../variants/guandan/net/stake.ts';
+import type { TierId } from '../variants/guandan/stake/index.ts';
 import { seatIdentity, setSeatIdentities, setWatching, type SeatIdentity } from './labels.ts';
 import type { BotStyle, TableSession } from './session.ts';
 import { QUOTA_TEXT } from './quota-text.ts';

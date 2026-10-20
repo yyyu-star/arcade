@@ -7,8 +7,8 @@
  *   node tools/probe.ts --bot prev --games 200  被测 = 0.1.2 的 normal（tools/baseline-ai-0.1.2）
  *   --difficulty easy|normal|hard
  */
-import { createGame, dispatch, isBomb, legalPlays, seatsToAct, viewFor, type Action, type PlayerView } from '../src/core/index.ts';
-import { decide, planHand } from '../src/ai/index.ts';
+import { createGame, dispatch, isBomb, legalPlays, seatsToAct, viewFor, type Action, type PlayerView } from '../src/variants/guandan/core/index.ts';
+import { decide, planHand } from '../src/variants/guandan/ai/index.ts';
 import { decide as decidePrev } from './baseline-ai-0.1.2/bot.ts';
 
 function arg(name: string, def: string): string {

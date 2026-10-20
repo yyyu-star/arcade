@@ -7,9 +7,9 @@ import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import type { DownMsg, RoomInfo, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
 import { expect, vi } from 'vitest';
-import { decide } from '../../src/ai/index.ts';
-import { timeoutAction, type Card, type SeatAction, type TributeState } from '../../src/core/index.ts';
-import { guandanRoom as R, type NetAction, type NetState, type NetView } from '../../src/net/rules.ts';
+import { decide } from '../../src/variants/guandan/ai/index.ts';
+import { timeoutAction, type Card, type SeatAction, type TributeState } from '../../src/variants/guandan/core/index.ts';
+import { guandanRoom as R, type NetAction, type NetState, type NetView } from '../../src/variants/guandan/net/rules.ts';
 import { ROOM_PATH } from '../../src/net/version.ts';
 import type { Room } from '../../worker/room.ts';
 

@@ -79,7 +79,8 @@ export function createFun(w: FunWiring): TableFun {
 function buttonStyle(): ButtonStyle {
   const s = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-scale')) || 1;
   const fsLg = Math.max(18, 16 * Math.max(1, 1 / s));
-  return { row: true, fontSize: Math.max(13, fsLg * s), icon: Math.max(18, 24 * s) };
+  // 舞台缩得很小（320 宽竖屏，约 0.57 倍）时按钮只有 64 像素宽，横排放不下"图标 + 两个字"会折成竖排：改成图标在上、字在下（10-20 多尺寸）
+  return { row: s >= 0.65, fontSize: Math.max(13, fsLg * s), icon: Math.max(18, 24 * s) };
 }
 
 export function funOff(): boolean {
