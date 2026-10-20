@@ -1000,6 +1000,8 @@ export function actorsOf(s: RcState): { seats: number[]; group: string } | null 
 export function restakeMut(s: RcState, seat: number, chips: number): void {
   s.chips[seat] = chips;
   s.stake[seat] = chips;
+  // 还没开打（开局时真人的带入到账也走这里）：从头算，不记；按名次算马时点数都一样也会差出几万分
+  if (s.kyoku === 0 && s.discards === 0) return;
   s.entry = (s.entry ?? [0, 0, 0, 0]).map((x, i) => (i === seat ? standings(s).score[seat]! : x));
 }
 

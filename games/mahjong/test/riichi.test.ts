@@ -538,11 +538,19 @@ describe('一场结束', () => {
     expect(RC.finish(t).chips).toEqual([2_000, 2_000, 2_000, 2_000]);
   });
 
+  test('开局时的带入到账（还没人打过牌）不记接手得分', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.discards = 0;
+    const t = RC.restake(RC.restake(s, 0, 2_000), 1, 2_000);
+    expect(t.entry ?? [0, 0, 0, 0]).toEqual([0, 0, 0, 0]);
+  });
+
   test('中途接管：新来的人只为接手以后的涨落负责；前面那段由庄家补给赢家', () => {
     const base = (): RcState => {
       const s = table(['*', '*', '*', '*'], 0, '1z');
       s.points = [10_000, 40_000, 25_000, 25_000];
       s.start = s.points.slice();
+      s.kyoku = 3;
       return s;
     };
     const plain = base();

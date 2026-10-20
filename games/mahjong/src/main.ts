@@ -313,7 +313,7 @@ type AnyTable = TableUi<any, any>;
 let table: AnyTable | null = null;
 
 /** 规则小册子讲哪个玩法：好友房一直是川麻，单机里看正在打的，别处看选着的 */
-const rulesVariant = (): string => (online ? DEFAULT_VARIANT : (solo?.save.state.variant ?? activeVariant()));
+const rulesVariant = (): string => (online ? (online.state.opts?.variant ?? DEFAULT_VARIANT) : (solo?.save.state.variant ?? activeVariant()));
 
 /** 离开牌桌、房间回到主页或选桌页：停单机、断房间、拆牌桌 */
 function teardown(): void {
@@ -337,7 +337,7 @@ function teardown(): void {
   paintTop();
 }
 
-/** 游戏主页（0.17.0，docs/art-v3.md 第 4 节）：主视觉、快速开始 / 继续上局、模式卡、战绩 */
+/** 游戏主页（0.17.0，docs/art-v3.md）：主视觉、快速开始 / 继续上局、模式卡、战绩 */
 function homePage(): void {
   teardown();
   screen.className = 'screen front';
@@ -387,8 +387,8 @@ function lobby(friends = false, mode: HomeMode | null = null): void {
     stakes,
     level: prefs.level,
     opts: prefs.opts,
-    // 玩法选项只在立直入口开着、且不是好友房的页面上摆（好友房的开房暂只开川麻，见 room/rules.ts）
-    ...(riichiOpen() && m !== 'room' ? { variants: { current: activeVariant(), rc: prefs.rc, onPick: pickVariant } } : {}),
+    // 玩法选项只在立直入口开着时摆（gate.ts）
+    ...(riichiOpen() ? { variants: { current: activeVariant(), rc: prefs.rc, onPick: pickVariant } } : {}),
     canResume: loadSolo() !== null,
     onSolo: startSolo,
     onResume: () => void resumeSolo(),
@@ -533,9 +533,10 @@ function roomBack(): HomeMode {
   return stakesOf(online?.state.opts?.stakes)?.wallet ? 'real' : 'fun';
 }
 
-async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
+async function openRoom(stakes: StakesId, opts: XzOpts | RcOpts, variant: string): Promise<void> {
   prefs.stakes = stakes;
-  prefs.opts = opts;
+  if (variant === RC_ID) prefs.rc = opts as RcOpts;
+  else prefs.opts = opts as XzOpts;
   savePrefs();
   const st = stakesOf(stakes)!;
   if (st.wallet) {
@@ -543,7 +544,7 @@ async function openRoom(stakes: StakesId, opts: XzOpts): Promise<void> {
     if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
     if (wallet.balance < st.share) return showError(walletError('no_funds').text, 'less');
   }
-  const r = await createRoom(withNick('rooms'), { variant: 'sichuan-xuezhan', stakes, rules: opts });
+  const r = await createRoom(withNick('rooms'), { variant, stakes, rules: opts });
   if ('error' in r) return showError(createError(r.error), r.error === 'login' ? 'refresh' : undefined);
   enterRoom(r.code, true);
 }
@@ -1220,7 +1221,7 @@ function newFun(
     localBots,
     // 首次提示冒在对家头像上（离手牌和操作条最远），对家空着就上家（左上）；右下那家贴着碰杠胡过的按钮，不挑。
     // 换三张、定缺、轮到我打、碰杠胡过的按钮在（v.prompt）时先不冒——以前 kit 挑第一个电脑，常是右下那家，
-    // 气泡压住"缺条""过"和那家的名字（docs/art-v3.md 审计、#249 截图）
+    // 气泡压住"缺条""过"和那家的名字（#249 截图）
     hintSeat: () => {
       const v = t.view();
       const m = me();

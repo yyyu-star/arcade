@@ -1,5 +1,5 @@
 /**
- * 选桌页（docs/economy.md 第 1 节，各游戏一个样子）：从主页的模式卡进来（0.17.2 起只摆这个模式的东西，docs/art-v3.md 第 4 节）——
+ * 选桌页（docs/economy.md 第 1 节，各游戏一个样子）：从主页的模式卡进来（0.17.2 起只摆这个模式的东西，docs/art-v3.md）——
  * 娱乐：三个难度 + 单机开打；实盘：四档 + 单机开打；好友房：娱乐三个难度和实盘四档都能选（房间按这个开）+ 开房间、输房间号进房。
  * 娱乐、实盘的单机开打旁边是快速匹配（0.21.0，和陌生人按这一档排）。规则设置折起来；开打的按钮贴在底部。钱包连不上时实盘不可选。单独部署（没有平台）时只有娱乐，好友房上面多一个昵称框。
  */
@@ -29,7 +29,7 @@ export interface LobbyProps {
   onResume(): void;
   onRules(): void;
   /** 好友房：没有时不显示 */
-  onRoom?(stakes: StakesId, opts: XzOpts): Promise<void>;
+  onRoom?(stakes: StakesId, opts: XzOpts | RcOpts, variant: string): Promise<void>;
   onJoin?(code: string): void;
   /** 快速匹配（0.21.0）：按选中的档位排队，和陌生人打（默认规则）；没有时不显示 */
   onMatch?(stakes: StakesId, opts: XzOpts, level: Level): void;
@@ -163,7 +163,7 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
     if (p.onMatch && !rc) button('act soft big match', go, '快速匹配', () => p.onMatch!(stakes, opts, level));
     return;
   }
-  const room = p.onRoom ? button('act go big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, opts))) : null;
+  const room = p.onRoom ? button('act go big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, rc ? rcOpts : opts, rc ? 'riichi' : DEFAULT_VARIANT))) : null;
   if (p.standalone) {
     const row = el('label', 'nick', go);
     el('span', '', row, '好友房里的昵称');

@@ -3,6 +3,7 @@
  * 开打后牌桌顶上一条：等筹码到账、带入被拒（再带一次）、电脑先替你打；没入座的是"旁观中"（docs/social.md 1.4）。
  */
 import type { RoomInfo, You } from 'arcade-kit/protocol';
+import type { RcOpts } from '../core/variants/riichi/index.ts';
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
 import { stakesOf } from '../game/stakes.ts';
 import { MIN_HUMANS, type RoomOpts, type RoomView } from '../room/rules.ts';
@@ -31,8 +32,9 @@ export interface WaitingProps {
 function rulesLine(o: RoomOpts | null): string {
   if (!o) return '';
   const st = stakesOf(o.stakes);
-  const r = o.rules as XzOpts;
   const stake = st?.wallet ? `实盘${STAKES_NAME[o.stakes]}档（一份 ${num(st.share)}）` : '娱乐';
+  if (o.variant === 'riichi') return [VARIANT_NAME[o.variant], stake, (o.rules as RcOpts).length === 'tonpuu' ? '东风战' : '半庄', '赤宝牌 3 张'].join(' · ');
+  const r = o.rules as XzOpts;
   return [VARIANT_NAME[o.variant] ?? o.variant, stake, `${r.rounds} 局`, `封顶 ${r.cap} 番`, r.swap ? '换三张' : '不换', r.zimo === 'fan' ? '自摸加番' : '自摸加底', r.transfer ? '呼叫转移' : ''].filter(Boolean).join(' · ');
 }
 
