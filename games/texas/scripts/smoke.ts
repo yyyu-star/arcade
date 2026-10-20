@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { args, opt } from './args.ts';
+import { scene, sceneSave, type SceneKind } from './scenes.ts';
 
 const HANDS = Number(opt('hands', '30'));
 const SHOTS = opt('shots', join(tmpdir(), 'texas-shots'));
@@ -1517,6 +1518,110 @@ async function devicesFlow(browser: Browser, base: string): Promise<void> {
   if (report.length) throw new Error(`devices: ${report.length} issues in ${new Set(report.map((x) => x.slice(0, x.indexOf(']') + 1))).size} sizes, see ${join(SHOTS, 'devices.txt')}`);
 }
 
+/**
+ * 牌桌上的东西两两不压（0.25.6，所有者截图：边池变成两条长条压住桌心和手牌、底池被公共牌盖住一半、D 压住名牌）：
+ * 名牌、头像、底牌、动作签、牌型、下注、D、公共牌、底池和边池、结果条、操作区、左下一排、顶栏、聊天框。同一个座位里的（头像挨着名牌这种）不算。
+ * 返回问题清单，空就是没压
+ */
+async function tableHits(page: Page, where: string): Promise<string[]> {
+  return page.evaluate(([where]) => {
+    const PARTS = '.seat .plate, .seat .avatar, .seat .hole .card:not(.hidden), .seat .bubble.on, .seat .hand.on, .bet:not(.hidden), .dealer:not(.hidden), .card.board:not(.hidden), .pot-main:not(.hidden), .pot-sides > *, .result.on, .actions .act, .actions .preset, .actions .qbet, .actions .odds, .hud > :not(.hidden), .topbar > :not(.spacer), .atc-dock';
+    const shown = (e: Element): DOMRect | null => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      for (let p: Element | null = e; p; p = p.parentElement) {
+        const cs = getComputedStyle(p);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return null;
+      }
+      return r;
+    };
+    const label = (e: Element): string => `${e.tagName.toLowerCase()}.${[...e.classList].slice(0, 3).join('.')}「${(e.textContent ?? '').trim().slice(0, 8)}」`;
+    const items = [...document.querySelectorAll(PARTS)].map((e) => ({ e, r: shown(e), seat: e.closest('.seat') })).filter((x) => x.r) as { e: Element; r: DOMRect; seat: Element | null }[];
+    const out: string[] = [];
+    for (let i = 0; i < items.length; i++)
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i]!;
+        const b = items[j]!;
+        if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+        if (a.seat && a.seat === b.seat) continue;
+        const dx = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+        const dy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+        if (dx > 2 && dy > 2) out.push(`${where}: 压住 ${label(a.e)} × ${label(b.e)} ${Math.round(dx)}×${Math.round(dy)}`);
+      }
+    return out;
+  }, [where] as const);
+}
+
+/** 牌桌的几种局面（scripts/scenes.ts）：2–9 人，一个、两个边池，有人全下，摊牌；每个尺寸每个局面截一张、查互压 */
+const SCENE_SIZES: { name: string; w: number; h: number; touch: boolean }[] = [
+  { name: 'desk-1280x720', w: 1280, h: 720, touch: false },
+  { name: 'desk-1920x1080', w: 1920, h: 1080, touch: false },
+  { name: 'wide-2000x950', w: 2000, h: 950, touch: false },
+  { name: 'land-844x390', w: 844, h: 390, touch: true },
+  { name: 'land-667x375', w: 667, h: 375, touch: true },
+  { name: 'phone-390x844', w: 390, h: 844, touch: true },
+];
+
+async function scenesFlow(browser: Browser, base: string): Promise<void> {
+  const report: string[] = [];
+  const pick = opt('sizes', '').split(',').filter(Boolean);
+  const cases: [number, number, SceneKind][] = [[2, 1, 'showdown']];
+  for (let n = 3; n <= 9; n++) {
+    cases.push([n, 1, 'side']);
+    if (n >= 4) cases.push([n, 2, 'side']);
+    cases.push([n, n >= 4 ? 2 : 1, 'showdown']);
+  }
+  const user = 'smoke-scenes';
+  for (const d of SCENE_SIZES.filter((x) => !pick.length || pick.some((p) => x.name.endsWith(p)))) {
+    const ctx = await newContext(browser, base, user, d.touch ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {});
+    await ctx.addInitScript('globalThis.__name = (f) => f;');
+    for (const [n, sides, kind] of cases) {
+      const tag = `${d.name}-${n}p-${kind}${kind === 'side' ? sides : ''}`;
+      const page = await ctx.newPage();
+      const before = errors.length;
+      watch(page, `scenes ${tag}`);
+      const found: string[] = [];
+      try {
+        const save = sceneSave(scene(n, sides, kind, n * 10 + sides), user);
+        await page.addInitScript(([save]) => {
+          localStorage.setItem('texas.settings', JSON.stringify({ fast: true }));
+          localStorage.setItem('texas.session', save);
+        }, [save] as const);
+        await page.setViewportSize({ width: d.w, height: d.h });
+        await page.goto(`${base}/games/texas/`);
+        await page.locator('.qstart', { hasText: '继续上局' }).click();
+        await page.locator('.stage.at-table').waitFor();
+        await skipTips(page);
+        if (kind === 'side') {
+          await page.locator('.actions.on').waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(700);
+          found.push(...(await tableHits(page, 'flop')));
+          await page.screenshot({ path: join(SHOTS, `scene-${tag}.png`) });
+          // 我过牌、电脑跟着说话：动作签都亮着的时候再查一遍
+          await page.locator('.actions .act', { hasText: /过牌|跟注/ }).first().click();
+          await page.waitForTimeout(900);
+          found.push(...(await tableHits(page, 'after')));
+          await page.screenshot({ path: join(SHOTS, `scene-${tag}-after.png`) });
+        } else {
+          await page.locator('.result.on').waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(700);
+          found.push(...(await tableHits(page, 'showdown')));
+          await page.screenshot({ path: join(SHOTS, `scene-${tag}.png`) });
+        }
+      } catch (e) {
+        found.push(`flow: ${(e as Error).message.split('\n')[0]}`);
+      }
+      for (const x of errors.splice(before)) found.push(`报错 ${x}`);
+      report.push(...[...new Set(found)].map((x) => `[${tag}] ${x}`));
+      log('scenes', tag, found.length ? `${found.length} issues` : 'ok');
+      await page.close();
+    }
+    await ctx.close();
+  }
+  writeFileSync(join(SHOTS, 'scenes.txt'), report.join('\n') + '\n');
+  if (report.length) throw new Error(`scenes: ${report.length} issues, see ${join(SHOTS, 'scenes.txt')}`);
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1657,6 +1762,7 @@ async function main(): Promise<void> {
         if (only === 'tour') await tourFlow(browser, base);
         if (only === 'tourroom') await tourRoomFlow(browser, base);
         if (only === 'devices') await devicesFlow(browser, base);
+        if (only === 'scenes') await scenesFlow(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {
