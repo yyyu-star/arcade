@@ -1,3 +1,5 @@
+import { RING } from '../core/step.ts';
+
 /**
  * 手机和平板（尤其 iOS）的几条规矩（仓库根 AGENTS.md 第 4 节，做法照开盘 0.5.9）：
  * 省内存设备渲染倍数封顶 2；高度按看得见的区域算；双指放大时不改尺寸。
@@ -21,13 +23,19 @@ export function renderScale(): number {
   return Math.max(1, Math.min(LOW_MEMORY ? 2 : 3, dpr));
 }
 
+/** 竖屏按屏宽定缩放：一屏宽看到这么多世界单位（10-20 三档对比后定，见 CHANGELOG 0.3.15） */
+export const TALL_BASE = 460;
+
 /**
- * 世界缩放：一屏大约看到多大的世界。按高度定（横屏），手机上看到的世界稍大一点，免得怪贴脸了才看见；
- * 宽屏也不让看到的宽超过 1,400 单位（太宽了刷怪圈露馅）。
+ * 世界缩放：一屏大约看到多大的世界。横屏按高度定，手机上看到的世界稍大一点，免得怪贴脸了才看见；
+ * 竖屏按宽度定（原来也按高度，竖屏只看得见 260 宽，主角和怪大得挤满屏）。
+ * 不管哪种，看得见的半宽、半高都不超过这局的刷怪圈（core 的 RING，tall 是竖屏开的局、圈转 90°），怪不会在屏里凭空冒出来；
+ * 横屏局转成竖屏（或反过来）时靠这一条收紧视野。
  */
-export function worldZoom(cssW: number, cssH: number): number {
-  const byH = cssH / (cssH < 500 ? 500 : 560);
-  return Math.max(byH, cssW / 1400);
+export function worldZoom(cssW: number, cssH: number, tall: boolean): number {
+  const base = cssH > cssW ? cssW / TALL_BASE : cssH / (cssH < 500 ? 500 : 560);
+  const [rx, ry] = tall ? [RING.short, RING.long] : [RING.long, RING.short];
+  return Math.max(base, cssW / (2 * rx), cssH / (2 * ry));
 }
 
 /** 双指放大着（visualViewport.scale 明显不是 1） */

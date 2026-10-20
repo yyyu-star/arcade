@@ -3164,6 +3164,11 @@ async function playtest05(browser: Browser, level: number, tag: string, seedBase
       ctx,
       `(() => { if (!s.slots.some((h) => !h) || s.today.buysLeft <= 0) return -1; const score = (id) => { const f = s.friends.find((x) => x.id === id); return f ? (f.hits + 1) / (f.total + 2) : 0; }; let b = -1; s.today.recs.forEach((r, i) => { if (!r.taken && !r.short && !s.slots.some((h) => h && h.stockId === r.stockId) && (b < 0 || score(r.friendId) > score(s.today.recs[b].friendId))) b = i; }); return b; })()`,
     );
+    // 手机上推荐在「推荐」标签页里，没打开时找不到买入键（10-20 以前手机上这里一只都没买成，格子空着就一直不平淡）
+    if (!acted && buy >= 0 && PHONE && !(`buy:${buy}` in (await controls(ctx))) && 'tab:recs' in (await controls(ctx))) {
+      await click(ctx, 'tab:recs');
+      await ctx.page.waitForTimeout(300);
+    }
     if (!acted && buy >= 0 && `buy:${buy}` in (await controls(ctx))) {
       await buyVia(ctx, `buy:${buy}`);
       await settle('买入');

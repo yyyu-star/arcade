@@ -80,7 +80,7 @@ async function boot(): Promise<void> {
   const r = renderScale();
   const css = (): { w: number; h: number } => ({ w: app.clientWidth || window.innerWidth, h: app.clientHeight || window.innerHeight });
   const size = css();
-  const zoom = worldZoom(size.w, size.h);
+  const zoom = worldZoom(size.w, size.h, size.h > size.w);
   // 图集的清晰度跟着屏幕：每世界单位的像素数 = 世界缩放 × 渲染倍数，取整到 2 或 3
   const res = Math.max(2, Math.min(3, Math.ceil(zoom * r)));
   // 毛笔字体先载好再出横幅（font-display: block 也挡不住第一帧用后备字体量尺寸）
@@ -341,6 +341,8 @@ async function boot(): Promise<void> {
   });
 
   let scene: GameScene | null = null;
+  /** 当前这局的刷怪圈是不是竖屏那圈（转屏重算缩放时用） */
+  let viewTall = false;
   let world: World | null = null;
   let autopilot: ((w: World) => { dir: number; choice: number }) | undefined;
   let ended = false;
@@ -531,7 +533,9 @@ async function boot(): Promise<void> {
     const seed = fixed?.seed ?? (q.has('seed') ? Number(q.get('seed')) >>> 0 : (Math.random() * 0x100000000) >>> 0);
     // 这台设备上的第一局：3 分钟前不会死（DESIGN.md 13.2）；实盘用固定配置
     const ms = menuState();
-    const w = createWorld(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist, ...(wantEndless ? { endless: true } : {}) });
+    // 竖屏开的局刷怪圈转 90°（Setup.tall），录进录像；实盘、每日挑战的固定配置也按这台设备补上
+    const tall = css().h > css().w ? { tall: true } : {};
+    const w = createWorld({ ...(fixed ?? { seed, mode: 'vigil', danger, map, firstRun: save.runs === 0, character: ms.character, curses: ms.curses, perks: save.perks, assist: save.assist, ...(wantEndless ? { endless: true } : {}) }), ...tall });
     world = w;
     autopilot = undefined;
     social.setWhere(w.raid ? 'raid' : 'vigil');
@@ -581,7 +585,7 @@ async function boot(): Promise<void> {
       cards,
       banners,
       input,
-      zoom: worldZoom(css().w, css().h) * r,
+      zoom: worldZoom(css().w, css().h, (viewTall = !!w.setup.tall)) * r,
       icon: (k: string) => icon(k, 128),
       firstRun: firstRun && !tipDone('cards'),
       autopilot,
@@ -678,7 +682,7 @@ async function boot(): Promise<void> {
       cards,
       banners,
       input,
-      zoom: worldZoom(css().w, css().h) * r,
+      zoom: worldZoom(css().w, css().h, (viewTall = !!player.world.setup.tall)) * r,
       icon: (k: string) => icon(k, 128),
       firstRun: false,
       shake: () => settings.shake,
@@ -829,7 +833,7 @@ async function boot(): Promise<void> {
     const s = css();
     game.scale.resize(s.w * r, s.h * r);
     game.scale.setZoom(1 / r);
-    scene?.cameras.main.setZoom(worldZoom(s.w, s.h) * r);
+    scene?.cameras.main.setZoom(worldZoom(s.w, s.h, viewTall) * r);
   });
 }
 

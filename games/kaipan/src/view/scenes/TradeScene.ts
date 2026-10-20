@@ -1138,7 +1138,8 @@ export class TradeScene extends BaseScene {
       stopped ||
       report?.tempo?.quiet === false ||
       !report?.tempo ||
-      events.some((e) => e.type === 'eventStarted' || e.type === 'monthStarted' || e.type === 'bankCalled' || e.type === 'seized' || e.type === 'crashHit' || e.type === 'autoSold' || e.type === 'stockNews');
+      // 0.19.4 摘帽 / 戴帽 / 退市只在是你拿着的那只时停（以前全市场哪只出新闻都停，平淡日几乎从不自动快进）
+      events.some((e) => e.type === 'eventStarted' || e.type === 'monthStarted' || e.type === 'bankCalled' || e.type === 'seized' || e.type === 'crashHit' || e.type === 'autoSold' || (e.type === 'stockNews' && e.held));
 
     // 0.11.0 开了杠杆、收盘后跌到清零线：一张卡说清楚，点了去结束页（月底还完账单后跌到的在账单卡后面说）
     const called = first(events, 'gearWiped');

@@ -25,6 +25,7 @@ interface Part {
   from?: number;
   /** sim.ts --nodual 的对照臂（和正常臂分开拼） */
   noDual?: boolean;
+  tall?: boolean;
   runs: [number, number, number, ...number[]][];
 }
 
@@ -43,7 +44,7 @@ if (!files.length) throw new Error('没有找到 json');
 const groups = new Map<string, Part[]>();
 for (const f of files)
   for (const c of JSON.parse(readFileSync(f, 'utf8')) as Part[]) {
-    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}|${c.char ?? 'xiaodao'}${c.noDual ? '|不合' : ''}`;
+    const k = `${c.map}|${c.diff}|${c.skill}|${c.skill === 'novice' ? '-' : c.build}|${c.char ?? 'xiaodao'}${c.noDual ? '|不合' : ''}${c.tall ? '|竖屏' : ''}`;
     groups.set(k, [...(groups.get(k) ?? []), c]);
   }
 
@@ -65,7 +66,7 @@ for (const k of order) {
   const runs = parts.flatMap((p) => p.runs);
   const [map, diff, skill, build, char] = k.split('|');
   const mode = parts[0]!.mode;
-  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, char, mode, ...(parts[0]!.noDual ? { noDual: true } : {}), from: parts[0]!.from ?? 0, runs });
+  merged.push({ diff: Number(diff), skill: skill!, build: parts[0]!.build, map: map!, char, mode, ...(parts[0]!.noDual ? { noDual: true } : {}), ...(parts[0]!.tall ? { tall: true } : {}), from: parts[0]!.from ?? 0, runs });
   const n = runs.length;
   const win = mean(runs.map((r) => r[0]));
   const tier = mode === 'raid' ? undefined : tierOfDanger(Number(diff));

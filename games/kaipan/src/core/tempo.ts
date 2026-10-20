@@ -373,14 +373,32 @@ export function tempoMonthEnd(s: GameState, ctx: TempoCtx): void {
 }
 
 /**
- * 盘前是不是平淡日：不是月初、没有重磅情报、没有人聊你拿着的风口、格子都满了（没地方买新的）、今天不是传闻月。
+ * 盘前是不是平淡日：不是月初、没有重磅情报、今天不是传闻月、没有能买的空格、没有人唱反你拿着的风口。
  * 画面可以据此自动开盘（玩家随时能打断）。
+ * 0.19.4 放宽（以前收盘平淡的日子第二天几乎从不自动快进）：有空格但今天买不了（次数用完、推荐都买过）不算有事；
+ * 群里聊你拿着的风口，只有说反了的（拿着涨的说跌、押跌的说涨）或者说拐点的才算有事，顺着说的不用停下来看。
  */
 export function premarketQuiet(s: Readonly<GameState>): boolean {
   if (s.dayInMonth === 0) return false;
   if (s.notice) return false;
   if (s.today.messages.some((m) => m.big)) return false;
-  const heldThemes = new Set(s.slots.filter((h) => h).map((h) => stockById((h as NonNullable<typeof h>).stockId).theme));
-  if (s.slots.some((h) => h === null)) return false;
-  return !s.today.messages.some((m) => heldThemes.has(m.theme));
+  const canBuy = s.today.buysLeft > 0 && s.today.recs.some((r) => !r.taken);
+  if (canBuy && s.slots.some((h) => h === null)) return false;
+  // 每个拿着的风口：做多还是押跌（同一风口两边都有时两种说法都算反）
+  const held = new Map<string, Set<boolean>>();
+  for (const h of s.slots) {
+    if (!h) continue;
+    const theme = stockById(h.stockId).theme;
+    const sides = held.get(theme) ?? new Set<boolean>();
+    sides.add(!!h.short);
+    held.set(theme, sides);
+  }
+  return !s.today.messages.some((m) => {
+    const sides = held.get(m.theme);
+    if (!sides) return false;
+    if (m.turn) return true;
+    // 反着信群主：这条按反方向读
+    const claim = m.reverse ? (m.claim === 'up' ? 'down' : m.claim === 'down' ? 'up' : 'flat') : m.claim;
+    return (sides.has(false) && claim === 'down') || (sides.has(true) && claim === 'up');
+  });
 }
