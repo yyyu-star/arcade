@@ -40,7 +40,7 @@ describe('荷官能站的地方', () => {
   for (const w of [STAGE_MIN_W, 960, STAGE_MAX_W]) {
     const g: Geo = { w, h: 540, tall: false };
     for (let size = 2; size <= 9; size++) {
-      it(`宽 ${w}、${size} 人：都在桌子顶边上，离顶上的座位至少 150`, () => {
+      it(`宽 ${w}、${size} 人：都在桌子顶边上，离顶上的座位至少 150（右边 120）`, () => {
         const spots = dealerSpots(g, size);
         if (size <= 6) expect(spots.length, '2–6 人桌至少有一个地方').toBeGreaterThan(0);
         const f = felt(g);
@@ -49,7 +49,8 @@ describe('荷官能站的地方', () => {
           expect(d.y).toBeLessThan(f.cy);
           for (let seat = 0; seat < size; seat++) {
             const p = seatPos(seat, 0, size, g);
-            if (p.y < 200) expect(Math.abs(p.x - d.x)).toBeGreaterThanOrEqual(150);
+            // 座位右边只有底牌，让 120 就够；左边有动作签，要 150（0.25.2）
+            if (p.y < 200) expect(Math.abs(p.x - d.x)).toBeGreaterThanOrEqual(d.x > p.x ? 120 : 150);
           }
         }
       });

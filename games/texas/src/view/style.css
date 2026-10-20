@@ -1159,6 +1159,8 @@ body::before {
 .stage.tall .hud .hand-no { margin-right: auto; }
 /* 竖屏"互动""聊天"两个占位并排（0.21.3）：窄一点，SE 上好友房那一排还要放"歇一手""叫朋友来"，不换行 */
 .stage.tall .hud .fun-slot { width: calc(64px * var(--ui)); }
+/* 好友房里"补码""歇一手""叫朋友来"同时出现时 SE 上排不下、"叫朋友来"掉到第二行（0.25.2 冒烟）：这一排的按钮左右留白收窄 */
+.stage.tall .hud > .pill { padding: 0 var(--s-2); }
 
 /* 竖屏我的动作气泡（"小盲 10"）：放在头像左边，不压右边的底牌 */
 .stage.tall .seat.me .bubble { left: -150px; top: 22px; transform: translateX(-100%); }

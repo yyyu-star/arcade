@@ -1016,6 +1016,9 @@ function tallDanmaku(): { left: number; top: number; width: number; height: numb
   if (!plate || acts.height <= 0) return null;
   const top = plate.bottom + 8;
   const height = acts.top - 8 - top;
+  // 加注面板展开时空地不够两行：给一块零高的区，kit 找不到轨道就不飘（聊天记录里照样有）。
+  // 不能回 null，回 null 是 kit 默认的屏幕上半截，正好横穿上面的座位（0.25.2，所有者 10-20）
+  if (height < 72 && bar.root.classList.contains('open')) return { left: 8, top, width: window.innerWidth - 16, height: 0 };
   return height >= 72 ? { left: 8, top, width: window.innerWidth - 16, height } : null;
 }
 

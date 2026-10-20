@@ -728,3 +728,6 @@ body .scene::after { background: radial-gradient(ellipse 85% 75% at 50% 45%, tra
 /* 卡通第二版补：结束页说明字和锦标赛名次行原来按深色弹窗配（浅字、白色半透明底），奶油弹窗上看不清 */
 .mask .dialog .sum-note { color: #6b5338; }
 .mask .dialog .tour-top li { background: rgba(43, 29, 20, .07); }
+
+/* 0.25.2：卡通描边让标签高了几 px，"没筹码""暂离"往下压到名牌的名字（锦标赛出局的电脑留在桌上最明显）；往上挪进头像下沿 */
+.stage .seat:not(.me) .badge { top: 6px; }
