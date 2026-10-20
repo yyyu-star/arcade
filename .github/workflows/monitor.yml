@@ -1,0 +1,61 @@
+# 线上监控告警（docs/platform-backend.md「监控」一节）：每 10 分钟读一次平台的公开状态接口 /api/monitor，
+# 某项检查转为失败就开一个 issue（标签 alert）指派给所有者，GitHub App 会推送；已开着的同一项每小时最多追一条评论；恢复了评论并关闭。
+# 为什么放在 GitHub 而不是平台自己发：这样 Cloudflare 里不用放任何 GitHub 凭证，告警只靠这里的 GITHUB_TOKEN。
+# 仓库是公开的：issue 里只写检查项和计数，不写主机名、IP、用户信息；主机名从仓库 secret MONITOR_HOST 读，日志里打码。
+# 接口本身连不上也算一项（site），平台整个挂了照样能告警。
+name: Monitor
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: 读状态并开关告警 issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          HOST: ${{ secrets.MONITOR_HOST }}
+        run: |
+          set -u
+          if [ -z "$HOST" ]; then echo "没有配置 MONITOR_HOST，跳过"; exit 0; fi
+          echo "::add-mask::$HOST"
+          gh label create alert -R "$REPO" --color B60205 --description "线上监控告警" 2>/dev/null || true
+
+          # 读状态：连不上或不是 JSON，记成一项 site 失败；否则把 checks 摊成"id<TAB>ok<TAB>说明"
+          body=$(curl -sS --max-time 20 -H 'Accept: application/json' "https://$HOST/api/monitor" 2>/dev/null || true)
+          if ! rows=$(printf '%s' "$body" | jq -r '.checks[] | [.id, (.ok|tostring), (del(.id, .ok) | to_entries | map("\(.key)=\(.value)") | join(" "))] | @tsv' 2>/dev/null) || [ -z "$rows" ]; then
+            rows=$(printf 'site\tfalse\t状态接口连不上或返回不是 JSON')
+          else
+            rows=$(printf '%s\nsite\ttrue\t' "$rows")
+          fi
+
+          now=$(date -u +%s)
+          while IFS=$'\t' read -r id ok detail; do
+            [ -n "$id" ] || continue
+            title="告警：$id"
+            num=$(gh issue list -R "$REPO" --label alert --state open --search "in:title \"$title\"" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+            if [ "$ok" = "false" ]; then
+              msg="检查项 \`$id\` 失败。${detail:+说明：$detail。}时间 $(date -u '+%Y-%m-%d %H:%M') UTC。查法见 docs/platform-backend.md「监控」一节。"
+              if [ -z "$num" ]; then
+                gh issue create -R "$REPO" --title "$title" --label alert --assignee "$OWNER" --body "$msg"
+              else
+                # 同一项一小时内只追一条评论，不刷屏
+                last=$(gh api "repos/$REPO/issues/$num/comments?per_page=100" --jq '[.[].created_at] | last // empty')
+                base=${last:-$(gh issue view "$num" -R "$REPO" --json createdAt --jq .createdAt)}
+                if [ $(( now - $(date -u -d "$base" +%s) )) -ge 3600 ]; then gh issue comment "$num" -R "$REPO" --body "还没恢复。$msg"; fi
+              fi
+            elif [ -n "$num" ]; then
+              gh issue comment "$num" -R "$REPO" --body "已恢复（$(date -u '+%Y-%m-%d %H:%M') UTC）。"
+              gh issue close "$num" -R "$REPO"
+            fi
+          done <<< "$rows"
