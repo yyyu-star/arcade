@@ -7,14 +7,14 @@ Plain TypeScript with DOM + SVG rendering (every tile and picture is generated i
 It is one module of the Arcade monorepo, but deploys on its own too (see "单独部署这个游戏" below): solo play and guest friends' rooms work without the platform.
 Chips are play money only — they cannot be bought, cashed out or transferred. Docs below are in Chinese. MIT licensed.
 
-一套麻将引擎 + 多个玩法的网页麻将。玩法：川麻·血战到底（上线）、立直麻将（开发中，见 [docs/riichi.md](docs/riichi.md)）。单机对三个电脑，也能开好友房一起打。
+一套麻将引擎 + 多个玩法的网页麻将。玩法：川麻·血战到底、立直麻将（天凤式四人，见 [docs/riichi.md](docs/riichi.md)；入口暂时只有地址带 `?rc=1` 才显示）。单机对三个电脑，也能开好友房一起打。
 
 <img src="public/cover.svg" alt="雀馆封面" width="360">
 
 ## 功能
 
 - **川麻·血战到底**：换三张、定缺、刮风下雨、一炮多响、查花猪查大叫；局数、封顶番数、换三张、自摸加底、呼叫转移可以选。
-- **立直麻将**（开发中）：规则核心已有，电脑、界面、单机和好友房还在做，入口没开放。
+- **立直麻将**：东南半庄或东风战，赤宝牌 3 张，单机、好友房、娱乐和实盘都能打；电脑沿用茶馆的人物。入口开关在 `src/view/variants/riichi/gate.ts`，统一验收前只有带 `?rc=1` 才在选桌页看到"玩法"选项。
 - **电脑**：六个性格（快、贪、稳、爱杠、老练、新手），每一场的状态不一样，落后会追、领先会稳、点了炮会上头；出手快慢和互动的脾气跟性格走。
   娱乐分新手、普通、高手三个难度，新手档的电脑像人一样弱；实盘档位越高越强，豪华档接近最强；好友房实盘一律最强。
 - **单机**：娱乐局直接玩；实盘局从平台钱包带筹码上桌，打完结回。筹码无任何现金价值，不能买、不能兑换、不能转让。
@@ -39,8 +39,9 @@ node scripts/balance.ts 2000 solo:small   # 配平：小白、普通两个代理
 npm run sim 1500     # 模拟器：单机各场地代理玩家的期望，各性格的打法指标（DESIGN.md 4.1）
 node scripts/strength.ts 1200 0,2,3 5   # 一个性格对固定三家的强弱（轮换座位）
 node scripts/stake-room.ts 1500 venues   # 好友房实盘桌：两个普通真人对电脑的期望（DESIGN.md 4.1）
-npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场
+npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场（川麻、立直）
 npm run build:cf && npm run smoke:room  # 好友房两个浏览器（本地 wrangler dev + 假平台）
+npm run build:cf && node scripts/smoke-room-riichi.ts  # 好友房开立直：娱乐打一局、实盘开打再离开结回
 npm run build:cf && npm run smoke:match  # 快速匹配：两个浏览器同档同桌、取消、一个人转单机
 npm run build:cf && npm run smoke:standalone  # 单独部署：wrangler.jsonc 原样起，两个游客
 npm run build:cf && npm run dev:worker  # 本地整套（Worker + 页面 + 假平台），端口由系统分配，打开它打印的地址；登录用 __Host-sid cookie（见 test/arcade.dev.ts）
