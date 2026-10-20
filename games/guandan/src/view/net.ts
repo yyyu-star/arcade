@@ -13,6 +13,7 @@ import { PERSONAS, SEAT_PERSONA, decide, situationOf, tiltOf } from '../variants
 import type { Action, GameEvent, NextPreview, PlayerView } from '../variants/guandan/core/index.ts';
 import { ERROR_TEXT, type NetAction, type NetView } from '../variants/guandan/net/rules.ts';
 import { rotateNetView, rotation, toReal } from '../variants/guandan/net/rotate.ts';
+import { DDZ_SEATS } from '../variants/doudizhu/index.ts';
 import { CLIENT_VERSION, ROOM_PATH } from '../net/version.ts';
 import { parseRoomOpts } from '../variants/guandan/net/stake.ts';
 import type { TierId } from '../variants/guandan/stake/index.ts';
@@ -45,6 +46,8 @@ export interface SavedRoom {
   userId: string | null;
   /** 快速匹配排到的桌（0.26.0）：刷新接回去时也按设置"聊天：不和陌生人"决定带不带 chat=1 */
   match?: true;
+  /** 斗地主的房间（牌馆 ⑤）：刷新接回去时直接用斗地主的会话；没有这一项是掼蛋（房间信息到了会再核对） */
+  variant?: 'ddz';
 }
 /** 房间最长活 8 小时（worker/room.ts 的 maxLifeMs），超过就不提"回到房间"了 */
 const ROOM_LIFE_MS = 8 * 3_600_000;
@@ -96,7 +99,7 @@ export function autoSeat(room: RoomInfo, you: { seat: number | null; bound?: num
   // 再来一场跟过来的（0.6.2）：先坐和上一场一样的相对位置（开房的人在 0 号），队友还是那个人
   if (prefer !== null && room.status === 'waiting' && room.seats[prefer]?.kind === 'empty') return prefer;
   // 已经开打的不替人接管电脑座位：先旁观，想打自己点"坐下"（0.13.0，docs/social.md 1.4）
-  const i = room.status === 'waiting' ? room.seats.findIndex((s) => s.kind === 'empty') : -1;
+  const i = room.status === 'waiting' ? room.seats.slice(0, seatCountOf(room)).findIndex((s) => s.kind === 'empty') : -1;
   return i >= 0 ? i : null;
 }
 
@@ -168,8 +171,17 @@ export function closeText(code: number | null, reason: string | null = null): st
   }
 }
 
+/** 斗地主房间自己的短码（其余和掼蛋共用 ERROR_TEXT：not_your_turn、wrong_phase、not_seated……） */
+export const DDZ_ERROR_TEXT: Record<string, string> = {
+  bad_bid: '叫分要比前面的高，或者不叫',
+  not_bidding: '现在不是叫分的时候',
+  too_small: '压不过上家',
+  not_in_hand: '手里没有这些牌',
+  not_deal_end: '这一副还没打完',
+};
+
 export function errorText(code: string): string {
-  return ERROR_TEXT[code] ?? '这手牌出不了';
+  return DDZ_ERROR_TEXT[code] ?? ERROR_TEXT[code] ?? '这手牌出不了';
 }
 
 /** 房间接口的地址（同域） */
@@ -187,12 +199,14 @@ function wsUrl(code: string): string {
  * 同时开着的房间到上限（409 has_room）、今天开房次数用完（429）、今天联机的人太多（503 busy）。
  * 0.6.0 起"开房间"永远开新房：has_room 只说清楚，不再把人送回旧房间（不给玩家设没必要的限制）
  */
-export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | null = null): Promise<{ code: string } | { error: string; login?: boolean; quota?: CreateError }> {
+export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | null = null, variant: 'ddz' | null = null): Promise<{ code: string } | { error: string; login?: boolean; quota?: CreateError }> {
   let res: Response;
   try {
     // 实盘房间（0.5.0）：开房时就定档位（arcade-kit 0.4.0 的开房选项），之后不能改
-    const init: RequestInit = stake
-      ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) }
+    // 斗地主房间（牌馆 ⑤）：请求体带 variant: 'ddz'，只有娱乐
+    const body = variant ? { variant } : stake ? { stake } : null;
+    const init: RequestInit = body
+      ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
       : { method: 'POST', credentials: 'same-origin' };
     res = await fetcher(withNick(roomsUrl()), init);
   } catch {
@@ -217,24 +231,48 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
 
 type SocketImpl = new (url: string) => WebSocketLike;
 
+/** 房间是哪个玩法：开房选项里带 variant: 'ddz' 的是斗地主，没有是掼蛋（src/net/hall.ts 的约定） */
+export type RoomVariant = 'guandan' | 'ddz';
+export function roomVariant(room: RoomInfo | null): RoomVariant {
+  return (room?.opts as { variant?: unknown } | undefined)?.variant === 'ddz' ? 'ddz' : 'guandan';
+}
+/** 这个房间用几个座位：RoomInfo.seats 永远按 kit 的最大座位数（4）给，斗地主只用前 3 个，后面的坐不进去（seat_closed） */
+export function seatCountOf(room: RoomInfo): number {
+  return roomVariant(room) === 'ddz' ? DDZ_SEATS : room.seats.length;
+}
+
 /** 测试用：不连真房间时换掉 RoomClient，或者给真 RoomClient 换 WebSocket、计时器 */
-export interface NetSessionDeps {
-  client?: RoomClient<NetAction, NetView>;
+export interface LinkDeps<A, R> {
+  client?: RoomClient<A, R>;
   url?: string;
   WebSocketImpl?: SocketImpl;
   /** 现在登录的是谁（默认问 /api/me） */
   whoAmI?: () => Promise<string | null>;
-  setTimer?: RoomClientOptions<NetView>['setTimer'];
-  clearTimer?: RoomClientOptions<NetView>['clearTimer'];
+  setTimer?: RoomClientOptions<R>['setTimer'];
+  clearTimer?: RoomClientOptions<R>['clearTimer'];
   /** 快速匹配排到的桌（0.26.0）：不给就看本机记着的这个房间是不是 */
   match?: boolean;
 }
+export type NetSessionDeps = LinkDeps<NetAction, NetView>;
 
-export class NetSession implements TableSession {
+export interface LinkFrame<V> {
+  nv: V;
+  delay: number;
+}
+
+/**
+ * 联机会话里和玩法无关的部分（牌馆 ⑤ 从 NetSession 抽出来，掼蛋、斗地主共用）：连房间、座位和房间信息、关闭码和重连文字、
+ * 记房间码、帧排队、出手锁到 ack、聊天和互动。玩法只管三件事：把房间按真实座位发来的视图转成"我 = 0"（project）、
+ * 座位号怎么在真实和画面之间换（seatToView / seatToReal）、座位上的人怎么写进 labels.ts（identities）。
+ * 大厅（online.ts）在知道房间是哪个玩法之前用掼蛋的会话连；房间信息一到发现不是（variant 不对），
+ * 这条会话不处理任何视图，由大厅换一条对的会话重连。
+ */
+export abstract class RoomLink<A, R, V> {
   readonly online = true;
   autoplay = false;
-  lastEvents: GameEvent[] = [];
   readonly code: string;
+  /** 这条会话按哪个玩法转视图 */
+  readonly variant: RoomVariant;
   /** 进房时就知道是快速匹配排到的桌（房间信息到之前用） */
   private readonly matched: boolean;
   /** 这条连接收不收发打字聊天：陌生人桌按进房那一刻的设置（中途改了下次进房生效，连接上的 chat=1 改不了），别的都收（设置里"聊天"另算） */
@@ -253,55 +291,67 @@ export class NetSession implements TableSession {
   /** 开打后我绑定的真实座位（离座了也还是它，能"回到我的座位"）；没开打、没坐过为 null */
   bound: number | null = null;
   /** 画面正在显示的那一帧（我 = 0） */
-  shown: NetView | null = null;
+  shown: V | null = null;
   /** 收到了、还没播放的帧 */
-  readonly queue: NetFrame[] = [];
+  readonly queue: LinkFrame<V>[] = [];
   /** 这次连接已经把房间记到账号名下了（只问一次 /api/me） */
   private claimed = false;
   private autoSat = false;
   /** 再来一场跟过来的：想坐的真实座位（和上一场一样的相对位置），空着就自动坐它 */
   prefer: number | null = null;
-  /** 再来一场：我开的新房间的码（别人点的跟过去时不是房主） */
-  againCode: string | null = null;
   private readonly whoAmI: () => Promise<string | null>;
   /** 发出去还没回音的操作的 moveId */
   pending: string | null = null;
   /** 最近一次被房间拒绝的原因（冒烟看） */
   lastError: string | null = null;
   private readonly listeners = new Set<NetListener>();
-  private readonly client: RoomClient<NetAction, NetView>;
+  protected readonly client: RoomClient<A, R>;
 
-  constructor(code: string, host: boolean, deps: NetSessionDeps = {}) {
+  protected constructor(variant: RoomVariant, code: string, host: boolean, deps: LinkDeps<A, R> = {}) {
+    this.variant = variant;
     this.code = code;
     this.host = host;
     this.whoAmI = deps.whoAmI ?? (() => currentUserId());
     const prev = savedRoom()?.code === code ? savedRoom() : null;
     this.matched = deps.match ?? prev?.match === true;
-    rawStore.write(KEYS.room, { code, host, at: prev?.at ?? Date.now(), userId: prev?.userId ?? null, ...(this.matched ? { match: true as const } : {}) } satisfies SavedRoom);
+    rawStore.write(KEYS.room, {
+      code,
+      host,
+      at: prev?.at ?? Date.now(),
+      userId: prev?.userId ?? null,
+      ...(this.matched ? { match: true as const } : {}),
+      ...(variant === 'ddz' ? { variant: 'ddz' as const } : {}),
+    } satisfies SavedRoom);
     // 陌生人桌（快速匹配）看设置"聊天"选没选"不和陌生人"（strangerChat 为假）：选了就不给 onChat，kit 进房不带 chat=1，房间不转聊天给这条连接（kit docs/match.md 第 5 节）
     this.chatOn = !this.matched || getSettings().strangerChat;
     this.client =
       deps.client ??
-      new RoomClient<NetAction, NetView>({
+      new RoomClient<A, R>({
         url: deps.url ?? wsUrl(code),
         clientVersion: CLIENT_VERSION,
         onMessage: (m) => this.handle(m),
         onStatus: (s, c, r) => this.onStatus(s, c ?? null, r ?? null),
-        // 快捷短语：房间给的是真实座位，换成画面上的（我 = 0），detail 是"座位:编号"
-        // detail："画面座位:编号" 或 "画面座位:编号:画面对象座位"
-        // "说话人:编号:对象:电脑"（画面座位；没对象是空串，电脑发的末尾是 1）
         // 聊天（kit 0.18.0）：文字里可能有冒号，不走 emit 的字符串，直接交给牌桌挂的 chatSink（座位换成画面上的）
-        ...(this.chatOn ? { onChat: (seat: number, text: string, masked: boolean) => this.chatSink?.(rotation(this.mySeat ?? 0).seat(seat), text, masked) } : {}),
+        ...(this.chatOn ? { onChat: (seat: number, text: string, masked: boolean) => this.chatSink?.(this.seatToView(seat), text, masked) } : {}),
         onChatError: (code) => this.chatErrorSink?.(code),
-        onEmote: (seat, id, to, bot) => {
-          const r = rotation(this.mySeat ?? 0);
-          this.emit('emote', `${r.seat(seat)}:${id}:${to === undefined ? '' : r.seat(to)}:${bot ? 1 : 0}`);
-        },
+        // detail："说话人:编号:对象:电脑"（画面座位；没对象是空串，电脑发的末尾是 1）
+        onEmote: (seat, id, to, bot) => this.emit('emote', `${this.seatToView(seat)}:${id}:${to === undefined ? '' : this.seatToView(to)}:${bot ? 1 : 0}`),
         ...(deps.WebSocketImpl ? { WebSocketImpl: deps.WebSocketImpl } : {}),
         ...(deps.setTimer ? { setTimer: deps.setTimer } : {}),
         ...(deps.clearTimer ? { clearTimer: deps.clearTimer } : {}),
       });
   }
+
+  /** 房间按真实座位发来的视图 → 我 = 0 的视图（mySeat 已经更新） */
+  protected abstract project(raw: R): V;
+  /** 真实座位 → 画面座位（座位 -1 原样） */
+  protected abstract seatToView(real: number): number;
+  /** 画面座位 → 真实座位（选座、互动对象用） */
+  protected abstract seatToReal(view: number): number;
+  /** 把座位上的人写进 labels.ts */
+  protected abstract identities(): void;
+  /** 我走开了、房间在快速替我出（0.6.3）：画面座位 0 是我 */
+  abstract get afk(): boolean;
 
   /** 快速匹配的桌（kit 0.20.0 的 RoomInfo.match）：没有房间码、邀请、房主开局，人到齐自动开打 */
   get match(): boolean {
@@ -311,6 +361,11 @@ export class NetSession implements TableSession {
   /** 平台暂时不可用（1013）：连不上不是玩家的网络问题，别让他去查网络 */
   get platformBusy(): boolean {
     return (this.status === 'reconnecting' || this.status === 'failed') && this.lastCloseCode === CLOSE.tryLater;
+  }
+
+  /** 房间已经知道是别的玩法：这条会话不转它的视图，大厅换一条对的重连 */
+  get wrongVariant(): boolean {
+    return !!this.room && roomVariant(this.room) !== this.variant;
   }
 
   /**
@@ -337,7 +392,7 @@ export class NetSession implements TableSession {
     return () => this.listeners.delete(fn);
   }
 
-  private emit(kind: NetEvent, detail?: string): void {
+  protected emit(kind: NetEvent, detail?: string): void {
     for (const fn of [...this.listeners]) fn(kind, detail);
   }
 
@@ -361,12 +416,8 @@ export class NetSession implements TableSession {
     if (r.userId !== id) rawStore.write(KEYS.room, { ...r, userId: id } satisfies SavedRoom);
   }
 
-  private rot(v: NetView): NetView {
-    return rotateNetView(v, this.mySeat ?? 0);
-  }
-
   /** 收到房间消息（RoomClient 已经按 seq 去过重）。测试里直接调。 */
-  handle(msg: DownMsg<NetView>): void {
+  handle(msg: DownMsg<R>): void {
     if (msg.t === 'welcome') {
       if (!this.claimed) {
         this.claimed = true;
@@ -378,9 +429,14 @@ export class NetSession implements TableSession {
       this.room = msg.room;
       this.queue.length = 0;
       this.pending = null;
-      this.lastEvents = [];
-      this.shown = msg.view ? this.rot(msg.view) : null;
-      this.updateIdentities();
+      this.onFresh();
+      if (this.wrongVariant) {
+        this.shown = null;
+        this.emit('reset');
+        return;
+      }
+      this.shown = msg.view ? this.project(msg.view) : null;
+      this.identities();
       // 连上了（打开页面、断线重连）就说明人回来了：房间还当我走开着的话，替我点一下"我回来了"。
       // 人一直连着、只是走开的收不到 welcome，照旧要自己点
       if (this.mySeat !== null && this.afk) this.back();
@@ -408,52 +464,34 @@ export class NetSession implements TableSession {
     this.mySeat = msg.you.seat;
     this.bound = msg.you.bound ?? null;
     this.room = msg.room;
-    const frames = msg.frames.filter((f) => f.view !== null).map((f) => ({ nv: this.rot(f.view), delay: f.delay }));
+    if (this.wrongVariant) {
+      this.emit('room');
+      return;
+    }
+    const frames = msg.frames.filter((f) => f.view !== null).map((f) => ({ nv: this.project(f.view!), delay: f.delay }));
     if (seatChanged) {
       // 换了座位（刚坐下、接管）：视角整个变了，直接跳到最新一帧整桌重画
       this.queue.length = 0;
       const last = frames[frames.length - 1];
       if (last) this.shown = last.nv;
-      this.updateIdentities();
+      this.identities();
       this.emit('reset');
       return;
     }
     this.queue.push(...frames);
     // 帧收下以后再更新（谁走开了看最新一帧）
-    this.updateIdentities();
+    this.identities();
     this.emit(frames.length ? 'frames' : 'room');
   }
 
+  /** 收到全量快照时，子类清自己的状态用 */
+  protected onFresh(): void {}
+
   /** 牌桌取下一帧来播 */
-  take(): NetFrame | undefined {
+  take(): LinkFrame<V> | undefined {
     const f = this.queue.shift();
     if (f) this.shown = f.nv;
     return f;
-  }
-
-  /** 进牌桌时：还没显示过就拿第一帧，它的事件（发牌）当作进场动画 */
-  begin(): void {
-    if (this.shown) return;
-    const f = this.take();
-    this.lastEvents = f ? f.nv.events : [];
-  }
-
-  private updateIdentities(): void {
-    const room = this.room;
-    if (!room) return;
-    const me = this.mySeat ?? 0;
-    setWatching(this.watching);
-    // 走开了的（0.6.3）：看收到的最新一帧（已经按我的座位转过，下标是画面座位）
-    const afk = (this.queue[this.queue.length - 1]?.nv ?? this.shown)?.afk;
-    const list: (SeatIdentity | null)[] = [];
-    for (let shown = 0; shown < 4; shown++) {
-      const s = room.seats[toReal(me, shown)];
-      if (!s || s.kind === 'empty') list.push(null);
-      // 绑了人、主人离座的座位：显示主人的名字和"电脑代打"（和掉线超过宽限一个样子）；没绑人的电脑座位 name 是 null
-      else if (s.kind === 'ai') list.push(s.name !== null ? { human: true, name: s.name, away: true, auto: true } : { human: false, name: '', away: false, auto: false, persona: SEAT_PERSONA[toReal(me, shown)] });
-      else list.push({ human: true, name: s.name ?? '玩家', away: s.away, auto: s.auto, ...(afk?.[shown] ? { afk: true } : {}) });
-    }
-    setSeatIdentities(list);
   }
 
   // ───────────── 房间里的事 ─────────────
@@ -467,7 +505,7 @@ export class NetSession implements TableSession {
    * 房间给没入座的只下发公开视图（座位 -1，没有任何人的手牌）
    */
   get canEnterTable(): boolean {
-    return this.playing && (this.shown !== null || this.queue.length > 0);
+    return !this.wrongVariant && this.playing && (this.shown !== null || this.queue.length > 0);
   }
 
   /** 旁观：开打了、我没坐下 */
@@ -507,7 +545,7 @@ export class NetSession implements TableSession {
 
   /** 发一句快捷短语、表情或道具（编号见 src/net/emotes.ts）；toView 是画面座位，转成真实座位再发 */
   emote(id: number, toView?: number): void {
-    this.client.emote(id, toView === undefined || this.mySeat === null ? undefined : toReal(this.mySeat, toView));
+    this.client.emote(id, toView === undefined || this.mySeat === null ? undefined : this.seatToReal(toView));
   }
 
   /** 离开房间：开打后由电脑接手我的座位；忘掉房间码（本机和地址栏里的） */
@@ -524,6 +562,11 @@ export class NetSession implements TableSession {
     setWatching(false);
   }
 
+  /** 换成别的玩法的会话时放手：只断开这条连接，座位、房间码、本机记的都不动 */
+  detach(): void {
+    this.client.close();
+  }
+
   retry(): void {
     this.client.retry();
   }
@@ -532,7 +575,63 @@ export class NetSession implements TableSession {
   turnInfo(): { seat: number; deadline: number | null } | null {
     const t = this.room?.turn;
     if (!t) return null;
-    return { seat: rotation(this.mySeat ?? 0).seat(t.seat), deadline: t.deadline };
+    return { seat: this.seatToView(t.seat), deadline: t.deadline };
+  }
+
+  /** 托管中点"我回来了"（不轮流的操作）；自己出一手也一样会恢复 */
+  back(): void {
+    this.client.act({ type: 'back' } as A);
+  }
+}
+
+export class NetSession extends RoomLink<NetAction, NetView, NetView> implements TableSession {
+  lastEvents: GameEvent[] = [];
+  /** 再来一场：我开的新房间的码（别人点的跟过去时不是房主） */
+  againCode: string | null = null;
+
+  constructor(code: string, host: boolean, deps: NetSessionDeps = {}) {
+    super('guandan', code, host, deps);
+  }
+
+  protected project(v: NetView): NetView {
+    return rotateNetView(v, this.mySeat ?? 0);
+  }
+
+  protected seatToView(real: number): number {
+    return rotation(this.mySeat ?? 0).seat(real);
+  }
+
+  protected seatToReal(view: number): number {
+    return toReal(this.mySeat ?? 0, view);
+  }
+
+  protected override onFresh(): void {
+    this.lastEvents = [];
+  }
+
+  protected identities(): void {
+    const room = this.room;
+    if (!room) return;
+    const me = this.mySeat ?? 0;
+    setWatching(this.watching);
+    // 走开了的（0.6.3）：看收到的最新一帧（已经按我的座位转过，下标是画面座位）
+    const afk = (this.queue[this.queue.length - 1]?.nv ?? this.shown)?.afk;
+    const list: (SeatIdentity | null)[] = [];
+    for (let shown = 0; shown < 4; shown++) {
+      const s = room.seats[toReal(me, shown)];
+      if (!s || s.kind === 'empty') list.push(null);
+      // 绑了人、主人离座的座位：显示主人的名字和"电脑代打"（和掉线超过宽限一个样子）；没绑人的电脑座位 name 是 null
+      else if (s.kind === 'ai') list.push(s.name !== null ? { human: true, name: s.name, away: true, auto: true } : { human: false, name: '', away: false, auto: false, persona: SEAT_PERSONA[toReal(me, shown)] });
+      else list.push({ human: true, name: s.name ?? '玩家', away: s.away, auto: s.auto, ...(afk?.[shown] ? { afk: true } : {}) });
+    }
+    setSeatIdentities(list);
+  }
+
+  /** 进牌桌时：还没显示过就拿第一帧，它的事件（发牌）当作进场动画 */
+  begin(): void {
+    if (this.shown) return;
+    const f = this.take();
+    this.lastEvents = f ? f.nv.events : [];
   }
 
   /** 结算页上我还能点"继续"（坐着、这副结束了、还没点过、上一手没在路上）。不看房间的"轮到谁"：结算时所有没准备的人都能点 */
@@ -576,14 +675,8 @@ export class NetSession implements TableSession {
     return { events: [], error: null, sent: true };
   }
 
-  /** 我走开了、房间在快速替我出（0.6.3）：画面座位 0 是我 */
   get afk(): boolean {
     return !!(this.queue[this.queue.length - 1]?.nv ?? this.shown)?.afk?.[0];
-  }
-
-  /** 托管中点"我回来了"（不轮流的操作）；自己出一手也一样会恢复 */
-  back(): void {
-    this.client.act({ type: 'back' });
   }
 
   /** 再来一场（0.6.2）：新房间我已经开好了，叫这一桌的人一起过去（不轮流的操作） */

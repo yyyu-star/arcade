@@ -1,5 +1,5 @@
 /**
- * 掼蛋金样（牌馆重构 ①a，docs/doudizhu.md 1.3）。场景在 tests/golden-scenarios.ts，哈希存 tests/golden/guandan.json，tests/golden.test.ts 比对。
+ * 掼蛋金样（牌馆重构 ①a，docs/doudizhu.md 第 2 节）。场景在 tests/golden-scenarios.ts，哈希存 tests/golden/guandan.json，tests/golden.test.ts 比对。
  *   node tools/golden.ts                 重算并打印每个场景的哈希、条数、耗时（不写文件）
  *   node tools/golden.ts --write         重写 tests/golden/guandan.json（只在有意改了掼蛋行为时用，PR 说明里写为什么）
  *   node tools/golden.ts --dump <名字> <文件>   把一个场景逐项写成文本（重构前后各导一份 diff，找第一个不同的地方）

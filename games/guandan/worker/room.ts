@@ -7,8 +7,10 @@
 import { DEFAULT_LIMITS, GameRoom, type RoomLimits } from 'arcade-kit/room';
 import { botEmoteIds, botReact, hitEvent, newBotState, type BotAction, type FunBot, type FunEvent } from 'arcade-kit/fun-logic';
 import { PHRASES, dealMoment, momentOf, victimOf } from '../src/variants/guandan/net/fun-moments.ts';
-import { funBots, guandanRoom, type NetAction, type NetState, type NetView } from '../src/variants/guandan/net/rules.ts';
-import type { RoomOpts, StakeEffect } from '../src/variants/guandan/net/stake.ts';
+import { funBots } from '../src/variants/guandan/net/rules.ts';
+import type { StakeEffect } from '../src/variants/guandan/net/stake.ts';
+import { ddzFunBots, ddzMoments } from '../src/variants/doudizhu/net/rules.ts';
+import { hallRoom, isDdz, type HallAction, type HallOpts, type HallState, type HallView } from '../src/net/hall.ts';
 import { CLIENT_VERSION } from '../src/net/version.ts';
 import { matchEnd } from '../src/variants/guandan/net/together.ts';
 import { ROOM_HOURS } from '../src/variants/guandan/stake/index.ts';
@@ -17,8 +19,9 @@ import type { Env } from './gate.ts';
 /** 钱包暂时的毛病：抛出去，kit 按退避重试（15 秒起，最多 10 分钟一次），op 不变 */
 const TRANSIENT = new Set(['busy', 'internal']);
 
-export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, StakeEffect> {
-  protected readonly game = guandanRoom;
+export class Room extends GameRoom<HallState, HallAction, HallView, Env, HallOpts, StakeEffect> {
+  // 掼蛋和斗地主共用一个房间类：开房选项 variant: 'ddz' 开斗地主，其余是掼蛋（src/net/hall.ts）
+  protected readonly game = hallRoom;
   /**
    * 电脑的互动（0.12.0 起用 kit 的 botReact，和单机同一份规则）：冷却记录、电脑的性格只放在内存里，不写存储（房间重启了从头记，无所谓）。
    * bots 每一步按公开的牌局刷新一次，onEmote 拿它回嘴（kit 故意不给 onEmote 牌局状态）；这里绝不记任何真人短语。
@@ -36,7 +39,13 @@ export class Room extends GameRoom<NetState, NetAction, NetView, Env, RoomOpts, 
   }
 
   /** 每一步广播完：看这一步的公开事件（谁炸了谁、谁头游、双下），电脑按性格起哄 */
-  protected override onStep(s: NetState): void {
+  protected override onStep(s: HallState): void {
+    // 斗地主：基础反应（炸弹、王炸、春天），没有搭子战绩（没有固定队伍）
+    if (isDdz(s)) {
+      this.bots = ddzFunBots(s);
+      if (this.bots.length) for (const m of ddzMoments(s)) this.react(m, this.bots);
+      return;
+    }
     // 搭子战绩（0.16.0）：一场打完的那一步报一次同桌真人（kit 按座位绑的人认，电脑座位不报；交给 waitUntil，不卡这一步）。
     // 一个房间只打一场（再来一场是换新房间），场次写 1
     const end = matchEnd(s);

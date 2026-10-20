@@ -38,7 +38,7 @@ export class BootScene extends Phaser.Scene {
         app.bootMs = Math.round(performance.now() - t0);
         app.ready = true;
         // 邀请链接、刷新时房间可能在载入过程中就接上了（app.net 已设好），载完直接进牌桌
-        this.scene.start(app.net || app.session ? 'table' : app.ddz ? 'ddz' : 'title');
+        this.scene.start(app.net || app.session ? 'table' : app.ddzNet || app.ddz ? 'ddz' : 'title');
       } catch (err) {
         showErrorPanel(err);
       }

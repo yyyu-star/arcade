@@ -13,12 +13,36 @@ import { clearDdzSave, loadDdzSave, recordDdzDeal, recordDdzGame, writeDdzSave }
 
 export const DDZ_ME = 0;
 
+/**
+ * 斗地主牌桌（DdzScene）只认这个接口：单机的 DdzSession（本地算）和联机的 DdzNetSession（ddz-net.ts，房间算好下发）各实现一份。
+ * 视角一律是"我 = 0"（联机时在 ddz-net.ts 里先转好）。
+ */
+export interface DdzTableSession {
+  /** 联机会话：电脑在房间里出，结算页的"下一副"是"继续"，没有再来一局 */
+  readonly online: boolean;
+  /** 调试：电脑代打我 */
+  autoplay: boolean;
+  /** 进场时要播的事件（新开的一副） */
+  lastEvents: DdzEvent[];
+  /** 每日挑战（只有单机有；联机永远是 null） */
+  daily: string | null;
+  dailySent: boolean;
+  dailyResult: Promise<DailySubmit> | null;
+  view(): DdzView;
+  /** 推进一步：单机马上返回事件；联机只是发出去（sent），结果随房间的下一帧到 */
+  apply(a: DdzAction): { events: DdzEvent[]; error: string | null; sent?: boolean };
+  /** 这个座位要不要由本地的电脑出（联机时电脑在房间里出，只有托管我自己时才在本地算） */
+  isBot(seat: number): boolean;
+  botAction(seat: number): DdzAction | null;
+}
+
 /** 电脑的随机流：只和这一局的种子有关，电脑拿不到发牌的种子 */
 export function ddzSeeds(seed: string): { ai: number } {
   return { ai: hashSeed(seed, 'ddz-solo-ai') };
 }
 
-export class DdzSession {
+export class DdzSession implements DdzTableSession {
+  readonly online = false;
   state: DdzState;
   level: DdzLevel;
   /** 进场时要播的事件（新开的一局） */

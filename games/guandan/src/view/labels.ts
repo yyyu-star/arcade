@@ -71,6 +71,8 @@ export interface SeatIdentity {
   afk?: boolean;
   /** 电脑座位：是哪个人物 */
   persona?: PersonaId;
+  /** 斗地主的电脑座位：老周还是王姐（房间按电脑座位的先后依次给，每个人屏幕上同一个电脑是同一个人） */
+  ddzPerson?: SeatId;
 }
 export const seatIdentity: (SeatIdentity | null)[] = [null, null, null, null];
 
@@ -95,7 +97,7 @@ export function setSeatIdentities(list: (SeatIdentity | null)[]): void {
 /** 头像用哪个人物：联机的真人一律用"你"那张，名字区分 */
 export function seatPerson(seat: number): SeatId {
   const who = seatIdentity[seat];
-  return who?.human ? 'me' : (who?.persona ?? seatPersons[seat]!);
+  return who?.human ? 'me' : (who?.ddzPerson ?? who?.persona ?? seatPersons[seat]!);
 }
 
 export function seatName(seat: number): string {

@@ -570,7 +570,7 @@ async function smokeDdz(browser: Browser): Promise<void> {
   const home = await open(browser, '斗地主主页', 'ddz=1&debug=1');
   await until(home, '标题页', "g.scene === 'title'");
   await click(home, 'variant:ddz');
-  await until(home, '斗地主面板', "'quick' in g.controls() && !('stake' in g.controls())");
+  await until(home, '斗地主面板', "'quick' in g.controls() && 'daily' in g.controls()");
   await shot(home, '30-ddz-title');
   await click(home, 'quick');
   await until(home, '斗地主牌桌', "g.scene === 'ddz' && g.idle");

@@ -1,5 +1,5 @@
 /**
- * 牌的编码（牌馆通用层，docs/doudizhu.md 1.1；掼蛋的级牌、逢人配、理牌在 variants/guandan/core/cards.ts）。
+ * 牌的编码（牌馆通用层，docs/doudizhu.md 第 1 节；掼蛋的级牌、逢人配、理牌在 variants/guandan/core/cards.ts）。
  *
  * 一张牌是 0..107 的整数：两副牌各 54 张，id = 副号 × 54 + i（斗地主只用一副，0..53）。
  * i < 52 时花色 = ⌊i/13⌋（0 黑桃 1 红桃 2 梅花 3 方块），点数 = i % 13 + 2（11 J、12 Q、13 K、14 A）；

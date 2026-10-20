@@ -3,24 +3,17 @@
  * 和 src/core 一样是纯函数：不碰 DOM、网络、时间、随机数（ref 里的随机数由调用方给）。Worker、页面、房间都从这里取数，
  * 不各算一份。
  */
+import { TIERS, type TierId } from '../../../core/stake.ts';
 import { teamOf, type DealResult, type Phase, type Seat, type Team } from '../core/index.ts';
 
-/** 档位表（docs/economy.md 第 2 节，三个游戏共用）：一份多少 */
-export const TIERS = { small: 2_000, mid: 10_000, big: 50_000, lux: 200_000 } as const;
-export type TierId = keyof typeof TIERS;
-export const TIER_IDS: readonly TierId[] = ['small', 'mid', 'big', 'lux'];
-
-export function isTier(x: unknown): x is TierId {
-  return typeof x === 'string' && (TIER_IDS as readonly string[]).includes(x);
-}
+// 档位、钱包 id 格式、单机有效期、op 的拼法是玩法无关的，放在通用层；这里原样再导出，掼蛋这边的 import 不变
+export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, soloOp, type TierId } from '../../../core/stake.ts';
 
 /** 每分 = 一份的 1/20，一场两头都封顶 20 分（1.2：模拟里没有一场碰到） */
 export const POINTS_PER_SHARE = 20;
 /** 一场打几副：单机 8 副，好友房几个真人轮流想、一副更慢，5 副（1.4） */
 export const SOLO_DEALS = 8;
 export const ROOM_DEALS = 5;
-/** 单机放着不打的最长时间：钱包里那一份的到期时间（钱包最长也只给 24 小时） */
-export const SOLO_HOURS = 24;
 /** 好友房：房间寿命 8 小时 + 关房收尾 1 小时 + 余量 */
 export const ROOM_HOURS = 10;
 
@@ -48,7 +41,6 @@ export function payout(tier: TierId, points: number): number {
 
 // ───────────── 钱包的 ref 和 op（平台 5.9：8–64 位的 [A-Za-z0-9_-]） ─────────────
 
-export const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
 /**
  * 单机 ref：`solo-<档位>-<32 位十六进制>`（0.12.2 起把档位编进去）。ref 由 Worker 生成，结回时按 ref 里的档位算结回额，
  * 不信页面带来的档位——否则小档带入、报豪华档结回会按豪华档算（安全审计 2026-10-16，低危：钱包另有"不超过带入 + 20 份"兜着）。
@@ -71,10 +63,6 @@ export function soloRef(tier: TierId, hex: string): string {
 /** 单机 ref 里的档位；旧格式（没编档位）和不是单机 ref 的回 null */
 export function soloRefTier(ref: string): TierId | null {
   return (SOLO_REF.exec(ref)?.[1] as TierId | undefined) ?? null;
-}
-
-export function soloOp(ref: string, kind: 'in' | 'out' | 'refund'): string {
-  return `${ref}-${kind}`;
 }
 
 /** 好友房：hex 是从这一场的密钥流里取的 64 位（16 位十六进制） */

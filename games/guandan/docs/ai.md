@@ -167,7 +167,7 @@ npm run ai-sim -- time  --matches 100    # 单次决策耗时
 性格不加开销（和没性格的基准一样）；慢的那 1% 是牌多、能拆的组合多时的理牌（`plan.ts`），0.7.0 没碰。
 最大值里有 JIT 预热和垃圾回收。单机电脑在浏览器里每手只算一次，房间里也一样，这个量级用户感觉不到。
 
-## 斗地主（牌馆，`src/variants/doudizhu/ai`，设计见 `docs/doudizhu.md` 第 3 节）
+## 斗地主（牌馆，`src/variants/doudizhu/ai`，分层见 `docs/doudizhu.md`）
 
 电脑只读 `viewDdz` 给的视图（自己的手牌、底牌、出过的牌、各家剩几张、谁是地主），碰不到牌局状态；随机只用调用方给的种子，按用途分流（`rngFor(seed, 'ddz-bid' | 'ddz-play' | 'ddz-endgame', ...)`）。架构测试 `tests/ddz-architecture.test.ts` 守着：ai 不引用 `DdzState`、不碰发牌和首叫的随机流。
 

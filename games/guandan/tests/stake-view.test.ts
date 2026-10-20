@@ -185,6 +185,7 @@ describe('进场', () => {
     expect(strayStake(w(REF), null)).toEqual({ ref: REF, solo: true });
     expect(strayStake(w('gd-0123456789abcdef'), null)).toEqual({ ref: 'gd-0123456789abcdef', solo: false });
     expect(strayStake({ balance: 0, stakes: [{ game: 'texas', ref: REF, tier: 'mid' }] }, null)).toBeNull();
+    expect(strayStake(w(`solo-ddz-mid-${'ab'.repeat(16)}`), null)).toBeNull(); // 斗地主单机的归 ddz-stake.ts
     const ses = started();
     expect(strayStake(w(REF), ses.stake)).toBeNull();
   });

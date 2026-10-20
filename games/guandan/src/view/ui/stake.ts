@@ -7,7 +7,7 @@ import type Phaser from 'phaser';
 import { SOLO_LEVELS, type SoloLevel } from '../../variants/guandan/ai/venue.ts';
 import { ROOM_DEALS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../variants/guandan/stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
-import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
+import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeReply, type StakeSession, type WalletView } from '../stake.ts';
 import { COLOR, TYPE, minHit, phoneType } from '../theme.ts';
 import { Button, fitWidth, modal, segmented, text, type Modal } from './kit.ts';
 import type { GameLength } from '../store.ts';
@@ -82,7 +82,33 @@ export function openLevelPicker(
  * 选档位：每档一份多少、电脑多强、一场多久、最多赢 / 最多输；钱包不够的灰掉，钱包连不上整个灰掉。进场成功交给 onStarted。
  * 给了 onMatch 右上角多一个"和电脑 / 快速匹配"（0.26.0）：切到匹配时每档的按钮变"匹配"、时间那行换成好友房实盘的副数，点了交给 onMatch（带入由房间开打时办）
  */
-export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSession) => void, onMatch?: (tier: TierId) => void): Modal {
+/**
+ * 选档位里随玩法变的部分（牌馆：掼蛋、斗地主同一个选档页）：一场几副、每分多少、怎么带入、哪一份算"别处开的单机"
+ */
+export interface TierFlow<S> {
+  soloDeals: number;
+  roomDeals: number;
+  pointValue(tier: TierId): number;
+  buyin(tier: TierId): Promise<{ ok: true; ses: S } | { ok: false; error: string; wallet?: WalletView }>;
+  stray(w: WalletView): { ref: string; solo: boolean } | null;
+  refundStray(ref: string): Promise<StakeReply>;
+}
+
+export const GUANDAN_FLOW: TierFlow<StakeSession> = {
+  soloDeals: SOLO_DEALS,
+  roomDeals: ROOM_DEALS,
+  pointValue,
+  buyin: (tier) => buyinStake(tier),
+  stray: (w) => strayStake(w, loadStake()),
+  refundStray: (ref) => refundStray(ref),
+};
+
+export function openTierPicker<S = StakeSession>(
+  scene: Phaser.Scene,
+  onStarted: (ses: S) => void,
+  onMatch?: (tier: TierId) => void,
+  flow: TierFlow<S> = GUANDAN_FLOW as unknown as TierFlow<S>,
+): Modal {
   const m = modal(scene, 940, 600);
   const b = m.body;
   b.add(text(scene, 0, -250, '选档位', { size: TYPE.title, bold: true, color: COLOR.redDark }));
@@ -91,7 +117,7 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
   b.add(balance);
   let matching = false;
   const times: Phaser.GameObjects.Text[] = [];
-  const timeOf = (): string => (matching ? `${ROOM_DEALS} 副 · ${STAKE_TEXT.matchWho}` : `${SOLO_DEALS} 副 · ${TIER_CARD.time}`);
+  const timeOf = (): string => (matching ? `${flow.roomDeals} 副 · ${STAKE_TEXT.matchWho}` : `${flow.soloDeals} 副 · ${TIER_CARD.time}`);
   if (onMatch) {
     const seg = segmented(
       scene,
@@ -120,7 +146,7 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     const share = fmtChips(TIERS[tier]);
     // 实盘的钱数不截断（主线 10-18：截成"最多输 20…"正好把能输多少藏掉了）。赢输都是一份，第二行合成"最多输赢"，
     // 手机托底到 12 像素时豪华档"一份 200,000 · 每分 10,000"也在 -270 到 60 之间放得下（SE 截图核对过；右边一列从 40 挪到 60 留了余量）
-    b.add(text(scene, -270, y - 14, `一份 ${share} · 每分 ${fmtChips(pointValue(tier))}`, { size: TYPE.label, color: COLOR.ink, ox: 0 }));
+    b.add(text(scene, -270, y - 14, `一份 ${share} · 每分 ${fmtChips(flow.pointValue(tier))}`, { size: TYPE.label, color: COLOR.ink, ox: 0 }));
     b.add(text(scene, -270, y + 16, `最多输赢 ${share}`, { size: TYPE.small, color: COLOR.muted, ox: 0 }));
     b.add(text(scene, 60, y - 14, `电脑 ${stars(TIER_CARD[tier].stars)}`, { size: TYPE.label, bold: true, color: COLOR.goldDark, ox: 0 }));
     // 时间那行可以截（手机上放不下时）
@@ -148,7 +174,7 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     }
     balance.setText(`钱包 ${fmtChips(w.balance)}`);
     // 别的设备上开的单机那一份不挡开新的（平台 0.9.5 起能同时有好几份），给个原样退回的办法；好友房的不归这里管
-    const other = strayStake(w, loadStake());
+    const other = flow.stray(w);
     for (const t of TIER_IDS) buttons[t]!.setEnabled(!busy && w.balance >= TIERS[t]);
     if (other?.solo) {
       note.setText(msg || STAKE_TEXT.elsewhere);
@@ -162,7 +188,7 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     busy = true;
     for (const t of TIER_IDS) buttons[t]!.setEnabled(false);
     note.setText('正在进场…');
-    const r = await buyinStake(tier);
+    const r = await flow.buyin(tier);
     busy = false;
     if (!m.root.scene) return;
     if (r.ok) {
@@ -178,7 +204,7 @@ export function openTierPicker(scene: Phaser.Scene, onStarted: (ses: StakeSessio
     busy = true;
     stray?.setEnabled(false);
     note.setText('正在退回…');
-    const r = await refundStray(ref);
+    const r = await flow.refundStray(ref);
     busy = false;
     if (!m.root.scene) return;
     const msg = r.ok ? '那一份已经原样退回钱包' : r.error === 'no_stake' || r.error === 'expired' ? '那一份已经退回过了' : stakeError(r.error);

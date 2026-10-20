@@ -5,6 +5,7 @@
 import { soloLevelOf, type SoloLevel } from '../variants/guandan/ai/venue.ts';
 import type { GameState, Options } from '../variants/guandan/core/index.ts';
 import { DDZ_RULES, type DdzState } from '../variants/doudizhu/core/index.ts';
+import { isTier, type TierId } from '../core/stake.ts';
 
 export const KEYS = {
   save: 'guandan.save',
@@ -30,6 +31,8 @@ export const KEYS = {
   ddzSave: 'guandan.ddz.save',
   /** 斗地主战绩：第一版只在本机，不进云同步（主线 10-20 定） */
   ddzStats: 'guandan.ddz.stats',
+  /** 斗地主单机实盘这一场（ddz-stake.ts）：只在本机，不进云同步；和掼蛋的 stake 分开 */
+  ddzStake: 'guandan.ddz.stake',
 } as const;
 
 /** 云同步的槽（只同步战绩和教程标记；打到一半的牌局、设置不同步）→ 本地 key */
@@ -320,6 +323,34 @@ export function recordDdzGame(won: boolean): DdzStats {
   if (won) s.wins += 1;
   write(KEYS.ddzStats, s);
   return s;
+}
+
+// ───────────── 斗地主单机实盘（ddz-stake.ts） ─────────────
+
+/** 存档的内容，字段的意思见 ddz-stake.ts */
+export interface DdzStakeSaveData {
+  v: 1;
+  userId: string;
+  ref: string;
+  tier: TierId;
+  share: number;
+  until: number;
+  state: DdzState;
+  settle: { points: number; deals: number } | null;
+}
+
+export function loadDdzStake(): DdzStakeSaveData | null {
+  const s = read<DdzStakeSaveData>(KEYS.ddzStake);
+  if (!s || s.v !== 1 || typeof s.userId !== 'string' || typeof s.ref !== 'string' || !isTier(s.tier) || !s.state || !Array.isArray(s.state.hands) || s.state.rules !== DDZ_RULES) return null;
+  return s;
+}
+
+export function writeDdzStake(data: DdzStakeSaveData): void {
+  write(KEYS.ddzStake, data);
+}
+
+export function clearDdzStake(): void {
+  rawStore.remove(KEYS.ddzStake);
 }
 
 // ───────────── 新手引导 ─────────────

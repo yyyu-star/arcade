@@ -5,16 +5,20 @@
  */
 import type { Presence, SocialHandle } from 'arcade-kit/social';
 import { platformInfo } from './platform.ts';
-import type { NetSession } from './net.ts';
+import { seatCountOf, type RoomLink } from './net.ts';
+
+/** 大厅、牌桌上的联机会话（两种玩法）里社交只看这几项 */
+type LinkInfo = Pick<RoomLink<never, never, never>, 'code' | 'room' | 'status'>;
 
 /** 横条上"老王叫你来掼蛋"、面板里好友"在掼蛋的好友房"：只认自己；别的游戏 kit 说"一起玩""在玩游戏" */
 const GAME_NAME: Record<string, string> = { guandan: '掼蛋' };
 
 /** 现在在哪：连着的好友房（大厅里或牌桌上）报房间，不然报在掼蛋 */
-export function presenceOf(s: Pick<NetSession, 'code' | 'room' | 'status'> | null): Presence {
+export function presenceOf(s: LinkInfo | null): Presence {
   if (s?.room && s.status === 'open' && s.room.status !== 'over') {
-    const humans = s.room.seats.filter((x) => x.kind === 'human').length;
-    return { place: 'room', game: 'guandan', room: s.code, seats: `${humans}/${s.room.seats.length}` };
+    const n = seatCountOf(s.room);
+    const humans = s.room.seats.slice(0, n).filter((x) => x.kind === 'human').length;
+    return { place: 'room', game: 'guandan', room: s.code, seats: `${humans}/${n}` };
   }
   return { place: 'game', game: 'guandan' };
 }
@@ -22,7 +26,7 @@ export function presenceOf(s: Pick<NetSession, 'code' | 'room' | 'status'> | nul
 let handle: SocialHandle | null = null;
 
 /** 启动时挂一次（main.ts 在 detectOnce 之后调）。session：现在连着的好友房会话 */
-export async function mountSocialOnce(session: () => NetSession | null): Promise<void> {
+export async function mountSocialOnce(session: () => LinkInfo | null): Promise<void> {
   if (handle) return;
   const info = platformInfo();
   if (info.platform !== true || !info.user) return;
@@ -40,8 +44,8 @@ export const INVITE_Z = 8800;
  * 房间里的"叫朋友来"（0.13.1）：kit 的面板，列好友、"叫他来"、复制邀请链接。没挂上（单独部署、没登录）时只有复制链接。
  * 链接按现在的页面地址拼（单独部署时站点不一样），点开就进这个房间
  */
-export async function openInvitePanel(code: string): Promise<void> {
-  const inv = { game: 'guandan', room: code, url: `${location.origin}${location.pathname}?room=${code}`, text: `来打掼蛋！房间码 ${code}`, zIndex: INVITE_Z };
+export async function openInvitePanel(code: string, name = '掼蛋'): Promise<void> {
+  const inv = { game: 'guandan', room: code, url: `${location.origin}${location.pathname}?room=${code}`, text: `来打${name}！房间码 ${code}`, zIndex: INVITE_Z };
   if (handle) {
     handle.openInvite(inv);
     return;
