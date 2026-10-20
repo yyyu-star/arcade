@@ -108,8 +108,8 @@ describe('荒庙', () => {
     expect(ENEMY_BY_KIND.templeghost.vs?.火).toBeGreaterThan(1);
   });
 
-  it('实盘暂不开放荒庙（系数配好前）', () => {
-    expect(liveMapOk('temple')).toBe(false);
+  it('实盘开放荒庙（0.4.7 系数配好）', () => {
+    expect(liveMapOk('temple')).toBe(true);
     expect(liveMapOk('snow')).toBe(true);
   });
 });
