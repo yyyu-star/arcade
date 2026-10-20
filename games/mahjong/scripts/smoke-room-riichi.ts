@@ -4,7 +4,7 @@
  *
  *   npm run build:cf && node scripts/smoke-room-riichi.ts [--shots 目录]
  *
- * 1. 娱乐房：A 带 ?rc=1 在好友房选桌页选"立直"开房，等人页写着立直的规则；B 凭 ?room= 进来坐下，A 开打；
+ * 1. 娱乐房：A 在好友房选桌页选"立直"开房，等人页写着立直的规则；B 凭 ?room= 进来坐下，A 开打；
  *    两边都是立直牌桌，自动打到一局结算出来（能和就和、不然过、打最右边那张），再打到下一局开始；
  * 2. 实盘小档房：A、B 开打，假钱包各扣 2,000；打完第一局后两个人都离开：房间按"没打完"结回，两边的那一份都结掉、余额加回结回的数。
  * 两边控制台零报错。端口由系统分配。
@@ -123,7 +123,7 @@ async function playUntil(pages: [Page, string][], done: () => Promise<boolean>, 
 
 /** 好友房选桌页选立直开房，返回房间号 */
 async function openRoom(page: Page, base: string, stake: '娱乐' | '小档'): Promise<string> {
-  await page.goto(`${base}/games/mahjong/?rc=1`);
+  await page.goto(`${base}/games/mahjong/`);
   await page.waitForSelector('.home-main');
   await page.click('.mode.room');
   await page.waitForSelector('.lobby-variants');

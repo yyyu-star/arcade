@@ -1,7 +1,7 @@
 # 雀馆：设计正本
 
 > 模块 `games/mahjong/`，Worker `mahjong`，路径 `/games/mahjong/`，浏览器存储前缀 `mahjong.`，开发 5176 / 预览 4176。
-> 本模块是**一套麻将引擎 + 多个玩法**：川麻·血战到底（`sichuan-xuezhan`，上线）、立直麻将（`riichi`，开发中，见 [docs/riichi.md](docs/riichi.md)）。
+> 本模块是**一套麻将引擎 + 多个玩法**：川麻·血战到底（`sichuan-xuezhan`，上线）、立直麻将（`riichi`，上线，见 [docs/riichi.md](docs/riichi.md)）。
 > 游戏名不叫"四川麻将"，起一个通用的名字，玩法分开（第 3 节）。
 > 跨模块的规范以仓库根 `AGENTS.md`、`docs/economy.md`、`docs/platform-backend.md` 为准；本文只写麻将自己的事。版本历史在 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -137,7 +137,7 @@ src/core/
 │  ├─ types.ts   玩法统一接口 Variant
 │  ├─ index.ts   玩法登记表（id → Variant）
 │  ├─ sichuan-xuezhan/   川麻·血战到底：流程、动作、和牌、番、刮风下雨、查叫、一场、电脑参数、称号
-│  └─ riichi/            立直麻将（开发中，第 11 节）：役、符、点数、牌局流程；还没登记进 index.ts
+│  └─ riichi/            立直麻将（第 11 节）：役、符、点数、牌局流程
 └─ match/        通用：筹码账（付钱、付不起按比例、封顶）、一场的统计、给钱包的小结
 src/ai/          通用的电脑：牌效（向听 + 有效牌）、防守、性格；玩法给参数和专属决定（换三张、定缺）
 src/room/        把任意 Variant 接到 kit 的 RoomGame（房间按开房选项里的 variant 选玩法）

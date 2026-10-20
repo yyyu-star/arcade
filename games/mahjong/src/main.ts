@@ -94,7 +94,7 @@ function loadPrefs(): Prefs {
 }
 /** 立直的玩法 id */
 const RC_ID = 'riichi';
-/** 现在选的玩法：立直入口没开放（地址没带 ?rc=1）时一律川麻，存着的选择留着不动 */
+/** 现在选的玩法：立直入口收起来时（gate.ts 的 RIICHI_GATED）一律川麻，存着的选择留着不动 */
 const activeVariant = (): string => (riichiOpen() && prefs.variant === RC_ID ? RC_ID : DEFAULT_VARIANT);
 const prefs = loadPrefs();
 function savePrefs(): void {
