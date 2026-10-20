@@ -38,7 +38,7 @@ games/<id>/
 
 隐藏文件只许有 `.gitignore`、`.nvmrc`、`.dev.vars.example`（和 `tools/check-deploy-config.mjs` 的名单一致）；不要提交 `.env*`、`.npmrc`、`.wrangler/`、`wrangler.json`、`wrangler.toml`、符号链接（部署配置检查会拦，见第 4 节）。
 
-`package.json` 里写 `"license": "MIT"`；依赖共用包写 npm 上发布的版本，按别名装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，包名是 `@yyyu-star/arcade-kit`，别名让代码里的 `arcade-kit/...` 不用改；命令行是 `npm i arcade-kit@npm:@yyyu-star/arcade-kit`。单独部署和 Deploy to Cloudflare 按钮只复制游戏目录，`file:` 路径带不过去），
+`package.json` 里写 `"license": "MIT"`；依赖共用包写 npm 上发布的版本，按别名装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.22.0"`，包名是 `@yyyu-star/arcade-kit`，别名让代码里的 `arcade-kit/...` 不用改；命令行是 `npm i arcade-kit@npm:@yyyu-star/arcade-kit`。单独部署和 Deploy to Cloudflare 按钮只复制游戏目录，`file:` 路径带不过去），
 或者仓库内的 `"arcade-kit": "file:../../packages/arcade-kit"`（唯一允许指向模块外的路径，跟着仓库里最新的 kit 走，但不能单独部署）。
 脚本里要有 `deploy`：先构建出 `assets.directory` 指的目录再 `wrangler deploy`（比如 `"deploy": "npm run build:cf && wrangler deploy"`），单独部署和按钮都用它。
 
@@ -155,7 +155,7 @@ PR 怎么被审、什么会被打回、什么要等维护者，见 [review-polic
 每个游戏的 `wrangler.jsonc` 都是独立配置，任何人都能只部署一个游戏到自己的 Cloudflare 账户，不需要平台：
 
 - **Deploy to Cloudflare 按钮**：`https://deploy.workers.cloudflare.com/?url=https://github.com/yyyu-star/arcade/tree/main/games/<id>`。
-  按钮只把 `games/<id>/` 复制成你账户下的新仓库，所以游戏要依赖 npm 上的 `@yyyu-star/arcade-kit`（按别名 `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，不是 `file:`），并且有第 1 节说的 `deploy` 脚本
+  按钮只把 `games/<id>/` 复制成你账户下的新仓库，所以游戏要依赖 npm 上的 `@yyyu-star/arcade-kit`（按别名 `"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.22.0"`，不是 `file:`），并且有第 1 节说的 `deploy` 脚本
   （按钮会自动带上 `package.json` 里的 `build`、`deploy` 脚本；Durable Object 按配置自动建）。
 - **fork 或拆出来的仓库**：在游戏目录里 `npm ci && npx wrangler login && npm run deploy`。
 

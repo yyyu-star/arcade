@@ -74,7 +74,7 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
 - **自托管（不用 Cloudflare）**：`packages/arcade-host` 是运行时，`tools/selfhost/` 读各模块的 `wrangler.jsonc`、按部署工具同一套规则叠加平台绑定后打成发布包（裸 `workerd` 二进制加 systemd，或 Docker），
   平台库在打包时二选一用 SQLite 或 PostgreSQL。它不改任何模块、不影响 Cloudflare 上的部署；模块代码因此只能依赖 Workers 运行时的标准能力。步骤见 [tools/selfhost/README.md](tools/selfhost/README.md)。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
-  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
+  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.22.0"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
 - **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
   2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker），
