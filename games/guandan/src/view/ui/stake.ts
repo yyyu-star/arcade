@@ -29,11 +29,15 @@ export function openLevelPicker(
   onPick: (level: SoloLevel, length: GameLength) => void,
   onMatch?: () => void,
 ): Modal {
-  const m = modal(scene, 900, 500);
+  // 三行的行距至少 minHit() + 2（手机横屏上"开始"的点按区要 44 CSS 像素，568×320 要 100），多出来的高度加在弹窗上；电脑上还是 92、500 高
+  const P = Math.max(92, minHit() + 2);
+  const H = 500 + 3 * (P - 92);
+  const T = -H / 2;
+  const m = modal(scene, 900, H);
   const b = m.body;
   const phone = phoneType();
   let len = length;
-  b.add(text(scene, 0, -205, '选难度', { size: TYPE.title, bold: true, color: COLOR.redDark }));
+  b.add(text(scene, 0, T + 45, '选难度', { size: TYPE.title, bold: true, color: COLOR.redDark }));
   const lens: GameLength[] = ['short', 'full'];
   const times: Phaser.GameObjects.Text[] = [];
   // 手机上字托底到 12 像素，整句会压到右边"适合谁"那段：只留"一局约 N 分钟"
@@ -44,7 +48,7 @@ export function openLevelPicker(
   const seg = segmented(
     scene,
     -165,
-    -150,
+    T + 100,
     lens.map((l) => ({ label: `${LENGTH_CARD[l].name} · ${LENGTH_CARD[l].goal}`, value: l })),
     len,
     (v) => {
@@ -52,14 +56,14 @@ export function openLevelPicker(
       SOLO_LEVELS.forEach((lv, i) => times[i]!.setText(timeOf(lv)));
     },
     330,
-    // 手机上 60 只合 27–36 CSS 像素：拉到 minHit()；下沿最低 -106（不压到第一行"开始"的点按区），再高就往上伸进标题字
+    // 手机上 60 只合 27–36 CSS 像素：拉到 minHit()；下沿最低 T + 144（不压到第一行"开始"的点按区），再高就往上伸进标题字
     Math.max(60, minHit()),
     Math.min(0, 44 - Math.max(60, minHit()) / 2),
   );
   b.add(seg);
   m.body.setData('seg:length', seg);
   SOLO_LEVELS.forEach((lv, i) => {
-    const y = -60 + i * 92;
+    const y = T + 190 + (P - 92) / 2 + i * P;
     const c = LEVEL_CARD[lv];
     const g = scene.add.graphics();
     g.fillStyle(i % 2 ? 0xf3e4c4 : 0xf8ecd2, 1).fillRoundedRect(-420, y - 40, 840, 80, 12);
@@ -71,15 +75,16 @@ export function openLevelPicker(
     times.push(t);
     b.add(t);
     b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250, align: 'left' }));
-    // 三行间距 92：点按区高最多 90，上下两行不互相压着
-    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play')).setHit(Math.max(130, minHit()), Math.min(90, minHit()));
+    // 点按区高 P - 2：上下两行、上面的局长切换都不互相压着
+    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play')).setHit(Math.max(130, minHit()), Math.min(P - 2, Math.max(52, minHit())));
   });
-  b.add(text(scene, onMatch ? -120 : 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
+  const by = H / 2 - 40;
+  b.add(text(scene, onMatch ? -120 : 0, by, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
   if (onMatch) {
-    // 点按区 minHit() 高，居中会压到第三行"开始"（下沿 124 + 45）：往下挪
+    // 点按区 minHit() 高，居中会压到第三行"开始"的点按区：往下挪
     const mh = Math.max(52, minHit());
-    const top = Math.max(210 - mh / 2, 124 + 46);
-    reg(m, 'match', new Button(scene, 300, 210, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite')).setHit(Math.max(220, minHit()), mh, top + mh / 2 - 210);
+    const top = Math.max(by - mh / 2, T + 190 + (P - 92) / 2 + 2 * P + P / 2);
+    reg(m, 'match', new Button(scene, 300, by, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite')).setHit(Math.max(220, minHit()), mh, top + mh / 2 - by);
   }
   return m;
 }
@@ -115,11 +120,16 @@ export function openTierPicker<S = StakeSession>(
   onMatch?: (tier: TierId) => void,
   flow: TierFlow<S> = GUANDAN_FLOW as unknown as TierFlow<S>,
 ): Modal {
-  const m = modal(scene, 940, 600);
+  // 四档的行距至少 minHit() + 2（手机横屏上"进场"的点按区要 44 CSS 像素），多出来的高度加在弹窗上；电脑上还是 78、600 高
+  const P = Math.max(78, minHit() + 2);
+  const H = 600 + 3 * (P - 78);
+  const T = -H / 2;
+  const y0 = T + 160 + (P - 78) / 2;
+  const m = modal(scene, 940, H);
   const b = m.body;
-  b.add(text(scene, 0, -250, '选档位', { size: TYPE.title, bold: true, color: COLOR.redDark }));
+  b.add(text(scene, 0, T + 50, '选档位', { size: TYPE.title, bold: true, color: COLOR.redDark }));
   // 有匹配时钱包靠左、右边放切换
-  const balance = text(scene, onMatch ? -400 : 0, -208, '正在看钱包…', { size: TYPE.body, bold: true, color: COLOR.ink, ...(onMatch ? { ox: 0 } : {}) });
+  const balance = text(scene, onMatch ? -400 : 0, T + 92, '正在看钱包…', { size: TYPE.body, bold: true, color: COLOR.ink, ...(onMatch ? { ox: 0 } : {}) });
   b.add(balance);
   let matching = false;
   const times: Phaser.GameObjects.Text[] = [];
@@ -127,8 +137,9 @@ export function openTierPicker<S = StakeSession>(
   if (onMatch) {
     const seg = segmented(
       scene,
-      205,
-      -208,
+      // 右边留出关闭键的点按区（弹窗右上角，手机上约 100 见方）
+      185,
+      T + 92,
       [{ label: '和电脑', value: 'solo' }, { label: '快速匹配', value: 'match' }],
       'solo',
       (v) => {
@@ -139,14 +150,14 @@ export function openTierPicker<S = StakeSession>(
       150,
       Math.max(60, minHit()),
       // 下面紧挨第一档的"进场"（点按区 minHit() 高）：手机上往上伸进标题字，不和它压着
-      Math.min(0, -140 - Math.max(52, minHit()) / 2 - 1 - (-208 + Math.max(60, minHit()) / 2)),
+      Math.min(0, y0 - Math.max(52, minHit()) / 2 - 1 - (T + 92 + Math.max(60, minHit()) / 2)),
     );
     b.add(seg);
     m.body.setData('seg:mode', seg);
   }
   const buttons: Partial<Record<TierId, Button>> = {};
   TIER_IDS.forEach((tier, i) => {
-    const y = -140 + i * 78;
+    const y = y0 + i * P;
     const g = scene.add.graphics();
     g.fillStyle(i % 2 ? 0xf3e4c4 : 0xf8ecd2, 1).fillRoundedRect(-430, y - 35, 860, 70, 12);
     b.add(g);
@@ -166,9 +177,9 @@ export function openTierPicker<S = StakeSession>(
     btn.setEnabled(false);
     buttons[tier] = btn;
   });
-  const note = text(scene, 0, 186, '', { size: TYPE.label, bold: true, color: COLOR.redDark, wrap: 820 });
+  const note = text(scene, 0, H / 2 - 114, '', { size: TYPE.label, bold: true, color: COLOR.redDark, wrap: 820 });
   b.add(note);
-  b.add(text(scene, 0, 262, STAKE_TEXT.noCash, { size: TYPE.small, color: COLOR.muted }));
+  b.add(text(scene, 0, H / 2 - 38, STAKE_TEXT.noCash, { size: TYPE.small, color: COLOR.muted }));
   let stray: Button | null = null;
   let busy = false;
 
@@ -187,7 +198,7 @@ export function openTierPicker<S = StakeSession>(
     for (const t of TIER_IDS) buttons[t]!.setEnabled(!busy && w.balance >= TIERS[t]);
     if (other?.solo) {
       note.setText(msg || STAKE_TEXT.elsewhere);
-      stray = reg(m, 'stray', new Button(scene, 0, 232, 300, 50, '原样退回那一份', 'wood', () => void giveBack(other.ref)));
+      stray = reg(m, 'stray', new Button(scene, 0, H / 2 - 68, 300, 50, '原样退回那一份', 'wood', () => void giveBack(other.ref)));
     } else if (msg) note.setText(msg);
     else note.setText(w.balance < TIERS.mid ? STAKE_TEXT.lowFunds : '');
   };

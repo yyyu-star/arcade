@@ -100,7 +100,8 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
     y += P;
     // 手机上字托底到 12 像素，最长的一条（12 个字）会伸进右边的选项：按宽度折行
     b.add(text(scene, colR, y, label, { size: TYPE.label, ox: 0, wrap: 250, align: 'left' }));
-    b.add(segmented(scene, colR + 300, y, items, cur, pick, 92, P));
+    // 宽度也要 minHit()（568 宽的手机上 92 只合 41 CSS 像素）
+    b.add(segmented(scene, colR + 300, y, items, cur, pick, Math.max(92, minHit()), P));
   };
   y -= P * 0.2;
   rule('三带二能带一对王', [{ label: '能', value: '1' }, { label: '不能', value: '0' }], rules.fullHouseJokerPair ? '1' : '0', (v) => setRule({ fullHouseJokerPair: v === '1' }));

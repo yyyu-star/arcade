@@ -217,7 +217,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   win 的定义改了同步改 design.md 4.3 和 `tests/together.test.ts`；房间测试的假钱包（`tests/room/wallet.ts`）记下每次 `together`，`bots.spec`、`stake.spec` 核对报了几次、报了谁。
 - 界面的刻度和按钮：间距、圆角、投影、按钮配色只从 `theme.ts` 取（`SPACE`、`RADIUS`、`SHADOW`、`BUTTON`），DOM 用 `THEME_CSS` 的 `--gd-` 变量和 `.gd-btn`（`tests/ui-theme.test.ts` 查 DOM 按钮）。
   画布里能点的一律用 `ui/kit.ts` 的 `Button`、`iconButton`、`segmented`（自带悬停、按下、禁用、加载中，登记进 `ui/focus.ts` 的键盘焦点；弹窗用 `modal()`，自带焦点层和 Esc）。
-  点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82–100），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距或用它的 `dy` 挪到空着的一边（`segmented` 的 `hitDy` 同理），不许互相压着；贴着屏幕上沿的顶栏按钮用 `setTopHit`（从上沿往下算，不伸出屏幕），最右一个往里放半个点按区。
+  点按区域至少 44 CSS 像素：`minHit()` 是按当前缩放换算的世界坐标（电脑 44、手机横屏约 82–100），按钮默认就扩到这么大；挨得近的用 `setHit` 收到间距或用它的 `dy` 挪到空着的一边（`segmented` 的 `hitDy` 同理），不许互相压着；贴着屏幕上沿的顶栏按钮用 `setTopHit`（从上沿往下算，不伸出屏幕），最右一个往里放半个点按区。弹窗（`modal()`）右上角的关闭键自己避开屏幕上沿和右沿；行数多的弹窗（选难度、选档位）按行距 `minHit()` + 2 排，多出来的高度加在弹窗上。
   调试桥 `hits()` 列出现在点得到的矩形，冒烟的 `checkHits` 用它查；新加能点的东西后跑一遍 `npm run shot`。画面上的人名用 `seatName`（最多 `NAME_MAX` 个字），认人用 `fullSeatName`。
 - 改了画面后跑 `npm run shot`，并亲自看 `shots/` 里 1280×720、844×390、1920×1080 的截图。
 - 截图里精灵随机缺一块方的（沿精灵中线整块透明，每次位置不同）：是无头 Chrome 的软件渲染（SwiftShader）下 Phaser 多纹理合批取错了纹理单元，
@@ -279,7 +279,6 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 1280×720 下，手牌列数在"每列最多 4 张"和"5 张"之间切换时（`table/hand.ts` 的 `MIN_SPACING_SHORT`），布局会跳一下。
 - 标题字体的缺字测试（`tests/view.test.ts`）按行用正则扫字符串，标题文字跨行写会漏检。
 - 多尺寸适配（手机竖横屏、平板、电脑共 27 个尺寸逐屏量溢出、点按区、重叠、字号）剩下的：
-  - 选档位四档的"进场"行距 78，手机横屏上点按区（`minHit()`，约 82–100）上下压着，要重排成行距 `minHit()`。
-  - 掼蛋选难度三行的"开始"行距 92，点按区封在 90：568×320 上约 40 CSS 像素，差一点。
+  - 选档位在 568×320 上豪华档"每分 10,000"的末尾贴着右边一列的"电脑"（字托底到 12 像素后放不下），要删字或改排法。
   - kit 的 table-fun：竖屏手机时互动热区（`.atf-hot`）左边伸出屏幕几像素；竖屏平板（1024×1366）上聊天框的短语按钮 32–36 高。改在 kit。
 - 斗地主新手档电脑变弱后（`NOVICE_BLUNDER`，docs/stake.md 10.2），娱乐单机"新手"难度对小白的胜率（仓库 `docs/balance.md`：≥ 60%）还没单独量。

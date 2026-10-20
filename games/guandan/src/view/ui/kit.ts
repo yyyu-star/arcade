@@ -481,7 +481,12 @@ export function modal(scene: Phaser.Scene, w: number, h: number, title?: string,
     opts.onClose?.();
   };
   if (opts.closeBtn !== false) {
-    const cb = iconButton(scene, w / 2 - 6, -h / 2 + 6, 'close', close, 46);
+    // 宽的弹窗（设置、规则贴着屏幕两边）右上角的关闭键往里放，点按区不伸出右沿
+    const hit = Math.max(46 + 8, minHit());
+    const cb = iconButton(scene, Math.min(w / 2 - 6, W / 2 - hit / 2), -h / 2 + 6, 'close', close, 46);
+    // 高的弹窗（手机横屏上按 minHit() 排行距的选档位）右上角的关闭键离屏幕上沿近：点按区往下挪，不伸出屏幕
+    const over = hit / 2 - (body.y - h / 2 + 6);
+    if (over > 0) setHit(cb, hit, hit, over);
     body.add(cb);
   }
   // 键盘只在弹窗里走；能关的弹窗 Esc 关掉
