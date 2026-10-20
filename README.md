@@ -141,7 +141,7 @@ A ready-made multi-arch image (amd64, arm64) is published from `main` as **`ghcr
 |---|---|---|
 | `PEPPER_PW`, `PEPPER_RC`, `PEPPER_SID`, `PEPPER_IP` | yes | hashing peppers, format `k1:<random>`; never change or lose them once in use |
 | `ADMIN_TOKEN` | to create the first admin | same format |
-| `SITE_ORIGIN` | in production | the public origin, e.g. `https://game.example.com` (`/api` then only accepts that host) |
+| `SITE_ORIGIN` | behind HTTPS (compose, Caddy) | the public origin, e.g. `https://game.example.com`; without it logins fail behind a TLS proxy |
 | `ARCADE_DB` | no | `sqlite` (default) or `pg` |
 | `ARCADE_PG_URL` | with `ARCADE_DB=pg` | PostgreSQL connection string |
 

@@ -134,7 +134,7 @@ Cloudflare 上的部署不受影响。`main` 上自动发布多架构（amd64、
 |---|---|---|
 | `PEPPER_PW`、`PEPPER_RC`、`PEPPER_SID`、`PEPPER_IP` | 是 | 哈希用的 pepper，格式 `k1:<随机串>`；用上之后不能改、不能丢 |
 | `ADMIN_TOKEN` | 建第一个管理员时要 | 格式同上 |
-| `SITE_ORIGIN` | 正式站要 | 站点地址，比如 `https://game.example.com`（设了 `/api` 只认这个主机名） |
+| `SITE_ORIGIN` | 前面有 HTTPS（compose、Caddy）时要 | 站点地址，比如 `https://game.example.com`；不设的话经 HTTPS 反代登录会被拒（"请求来源不对"） |
 | `ARCADE_DB` | 否 | `sqlite`（默认）或 `pg` |
 | `ARCADE_PG_URL` | `ARCADE_DB=pg` 时 | PostgreSQL 连接串 |
 
