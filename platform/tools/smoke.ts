@@ -507,7 +507,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await shot(friend.page, 'friend-home');
   // 0.25.1：大厅卡片只有一个"进入游戏"，铺满卡片正文宽；好友房在游戏里开、进（所有者 10-18），标签照旧写"好友房"
   console.log('每张能玩的卡片只有一个"进入游戏"，指向游戏首页、铺满卡片；同一行卡片的按钮一样高；没有"好友房"按钮');
-  for (const [name, path] of [['牌馆', '/games/guandan/'], ['德州扑克', '/games/texas/'], ['雀馆', '/games/mahjong/'], ['飞驰', '/games/racing/'], ['夜巡', '/games/yexun/']] as const) {
+  for (const [name, path] of [['牌馆', '/games/guandan/'], ['德州扑克', '/games/texas/'], ['雀馆', '/games/mahjong/'], ['飞驰', '/games/racing/'], ['夜巡', '/games/yexun/'], ['弹里个弹', '/games/danli/']] as const) {
     const card = friend.page.locator('.card', { hasText: name });
     const links = card.getByRole('link');
     check((await links.count()) === 1, `${name}卡片上应该只有一个按钮，实际 ${await links.count()} 个`);

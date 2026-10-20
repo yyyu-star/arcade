@@ -141,6 +141,20 @@ export const GAMES: readonly GameEntry[] = [
       { id: 'raid', name: '夜探' },
     ],
   },
+  {
+    // 社区贡献的游戏（PR #417），0.26.4 随游戏上线登记成能玩
+    id: 'danli',
+    name: '弹里个弹',
+    tagline: '萌宠拿厨房道具开炮，看风、蓄力、轰下画本',
+    desc: '回合制抛物线对战：小动物站在悬空的面团地形上，轮流调角度、按住蓄力、看风开炮，炮弹炸出坑，掉出画本就出局。连发、三岔、加力、纸飞机、锅盖，单机 1 对 1 和电脑橘子比一场。',
+    tags: ['对战', '抛物线', '单人'],
+    cover: '/covers/danli.webp',
+    path: '/games/danli/',
+    devUrl: 'http://localhost:5179/',
+    status: 'playable',
+    // 只有娱乐模式，不碰钱包（游戏 README）
+    wallet: false,
+  },
 ];
 
 /** 登记过的游戏 id：接口的游戏白名单（云存档、分数榜、钱包），只从上面这一份派生 */

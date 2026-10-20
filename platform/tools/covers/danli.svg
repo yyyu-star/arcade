@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+<!-- 弹里个弹的大厅封面（平台 0.26.4）：平台手写，照游戏的画风（绘本纸、厨房瓷砖、面团地形、萌宠、包子蒸笼和锅盖），没有外部素材。
+     改图后在 platform 目录跑 npm run cover，参数 from=tools/covers/danli.svg、id=danli（见 ASSETS.md） -->
+<defs>
+<pattern id="tile" width="120" height="120" patternUnits="userSpaceOnUse"><rect width="120" height="120" fill="#f7efdd"/><path d="M0 0H120M0 0V120" stroke="#e6dac0" stroke-width="3"/></pattern>
+<pattern id="crumb" width="46" height="34" patternUnits="userSpaceOnUse"><circle cx="10" cy="9" r="3" fill="#e9b877"/><circle cx="31" cy="24" r="2.5" fill="#e9b877"/><circle cx="40" cy="6" r="1.8" fill="#e9b877"/></pattern>
+<linearGradient id="dough" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbd9a2"/><stop offset="1" stop-color="#f3c07e"/></linearGradient>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe3f6"/><stop offset="1" stop-color="#e3f3fb"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#5a3a1a" flood-opacity=".22"/></filter>
+</defs>
+<rect width="1280" height="720" fill="url(#tile)"/>
+<!-- 窗户和挂钩，跟游戏的远景一样淡 -->
+<g opacity=".75">
+<rect x="860" y="120" width="330" height="200" rx="10" fill="url(#sky)" stroke="#d9cdb3" stroke-width="6"/>
+<path d="M1025 120V320" stroke="#d9cdb3" stroke-width="6"/>
+<path d="M905 190c10-18 40-18 50 0c16-2 24 14 12 22h-70c-12-6-6-22 8-22z" fill="#fff"/>
+<path d="M1080 250c8-14 32-14 40 0c13-1 19 11 9 17h-56c-10-5-5-17 7-17z" fill="#fff"/>
+<path d="M300 0V60M270 60H330" stroke="#cfc2a6" stroke-width="5" stroke-linecap="round"/>
+<ellipse cx="300" cy="92" rx="14" ry="28" fill="none" stroke="#cfc2a6" stroke-width="5"/>
+</g>
+<!-- 纸边外的书桌 -->
+<path d="M0 0H44l-6 40 8 30-7 50 9 40-8 60 7 50-6 70 8 60-7 70 9 60-8 90 6 60-4 40H0z" fill="#3a3540"/>
+<!-- 面团地形：左岛、右岛、小浮岛 -->
+<g filter="url(#sh)" stroke="#3a3540" stroke-width="7" stroke-linejoin="round">
+<path d="M90 560c40-14 90-6 140-14c60-10 90-2 130-8l14 28c50-6 80-40 120-50c40-10 70 18 110 10l20 40c-20 50-80 70-160 76c-90 6-180 0-260-10c-60-8-110-30-114-48z" fill="url(#dough)"/>
+<path d="M770 610c30-40 70-80 120-84c40-4 60 20 110 14c60-8 100-34 160-28c40 4 70 30 80 58c-10 36-60 58-150 64c-110 8-230 6-320-24z" fill="url(#dough)"/>
+<path d="M640 330c30-10 70-12 100-4c20 6 22 30 6 42c-30 18-80 18-104 2c-14-10-16-34-2-40z" fill="url(#dough)"/>
+</g>
+<g stroke="#ef9442" stroke-width="6" fill="none" stroke-linecap="round" opacity=".9">
+<path d="M104 556c40-12 90-4 136-12c60-10 90-2 126-8"/>
+<path d="M786 600c30-34 66-70 106-72c40-4 60 20 110 14c60-8 100-34 158-26"/>
+</g>
+<g fill="url(#crumb)">
+<path d="M110 580c120 10 300 14 450 0l-10 30c-120 22-300 20-420 4z"/>
+<path d="M800 620c120 20 300 20 420-6l-20 30c-110 24-280 22-380 0z"/>
+</g>
+<!-- 炮弹的虚线弧 -->
+<path d="M300 470C420 200 640 160 800 300" fill="none" stroke="#8a7a66" stroke-width="5" stroke-linecap="round" stroke-dasharray="2 16"/>
+<!-- 包子 -->
+<g transform="translate(808 308) rotate(18)">
+<path d="M-34 14c-4-30 14-46 34-48c20 2 38 18 34 48z" fill="#fffdf6" stroke="#3a3540" stroke-width="5" stroke-linejoin="round"/>
+<path d="M0-30c-6 10-4 20 0 26M-14-24c0 10 4 18 10 22M14-24c0 10-4 18-10 22" fill="none" stroke="#c9b28f" stroke-width="3" stroke-linecap="round"/>
+<circle cx="-12" cy="4" r="2.6" fill="#3a3540"/><circle cx="12" cy="4" r="2.6" fill="#3a3540"/>
+<path d="M-50-6h-26M-48 8h-34" stroke="#ef9442" stroke-width="5" stroke-linecap="round"/>
+</g>
+<!-- 左边：柴犬，蓝队，扛着蒸笼炮 -->
+<g transform="translate(250 470)">
+<ellipse cx="0" cy="76" rx="56" ry="10" fill="none" stroke="#3a7fd0" stroke-width="5"/>
+<g transform="rotate(-48 10 10)"><rect x="0" y="-6" width="118" height="30" rx="8" fill="#e8483a" stroke="#3a3540" stroke-width="5"/><rect x="96" y="-12" width="26" height="42" rx="6" fill="#c9b28f" stroke="#3a3540" stroke-width="5"/></g>
+<path d="M-40 70c-6-40 10-66 40-66s46 26 40 66z" fill="#f57d2a" stroke="#3a3540" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-20 70c-2-20 6-34 20-34s22 14 20 34z" fill="#fff1d6"/>
+<path d="M-36 28c20 10 52 10 72 0v12c-20 10-52 10-72 0z" fill="#3a7fd0" stroke="#3a3540" stroke-width="4"/>
+<path d="M-50-30l-6-50 34 26zM50-30l6-50-34 26z" fill="#f57d2a" stroke="#3a3540" stroke-width="6" stroke-linejoin="round"/>
+<ellipse cx="0" cy="-20" rx="58" ry="50" fill="#f57d2a" stroke="#3a3540" stroke-width="6"/>
+<path d="M-38 -4c8-26 68-26 76 0c-4 30-72 30-76 0z" fill="#fff1d6"/>
+<circle cx="-20" cy="-22" r="7" fill="#3a3540"/><circle cx="20" cy="-22" r="7" fill="#3a3540"/>
+<circle cx="-18" cy="-25" r="2.4" fill="#fff"/><circle cx="22" cy="-25" r="2.4" fill="#fff"/>
+<ellipse cx="0" cy="-6" rx="8" ry="5.5" fill="#3a3540"/>
+<path d="M-10 4c4 6 16 6 20 0" fill="none" stroke="#3a3540" stroke-width="4" stroke-linecap="round"/>
+<ellipse cx="-38" cy="-4" rx="9" ry="5" fill="#ff9d8a" opacity=".7"/><ellipse cx="38" cy="-4" rx="9" ry="5" fill="#ff9d8a" opacity=".7"/>
+</g>
+<!-- 右边：橘猫"橘子"，黄队，举着锅盖 -->
+<g transform="translate(1080 498)">
+<ellipse cx="0" cy="74" rx="56" ry="10" fill="none" stroke="#f5a531" stroke-width="5"/>
+<path d="M-40 70c-6-40 10-66 40-66s46 26 40 66z" fill="#f5a531" stroke="#3a3540" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-26 22c8 4 12 4 14 0M10 24c8 4 12 4 16 0" stroke="#d27a16" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M-48-30l-4-52 36 28zM48-30l4-52-36 28z" fill="#f5a531" stroke="#3a3540" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-42-50l0-20 14 12zM42-50l0-20-14 12z" fill="#ffb7a3"/>
+<ellipse cx="0" cy="-20" rx="58" ry="48" fill="#f5a531" stroke="#3a3540" stroke-width="6"/>
+<path d="M-12-62l4 18M0-66v20M12-62l-4 18" stroke="#d27a16" stroke-width="5" stroke-linecap="round"/>
+<path d="M-30-24c6-8 14-8 20 0M10-24c6-8 14-8 20 0" fill="none" stroke="#3a3540" stroke-width="5" stroke-linecap="round"/>
+<path d="M-6-8l6 5 6-5" fill="#ff8f8f" stroke="#3a3540" stroke-width="3" stroke-linejoin="round"/>
+<path d="M-12 4c6 8 18 8 24 0" fill="none" stroke="#3a3540" stroke-width="4" stroke-linecap="round"/>
+<path d="M-60-12h-28M-60-2h-26M60-12h28M60-2h26" stroke="#3a3540" stroke-width="3" stroke-linecap="round"/>
+<g transform="translate(-92 -4) rotate(-14)">
+<ellipse cx="0" cy="0" rx="22" ry="62" fill="#dfe8ef" stroke="#3a3540" stroke-width="6"/>
+<path d="M-8-44c6 20 6 68 0 88" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" opacity=".9"/>
+<rect x="-34" y="-12" width="14" height="24" rx="5" fill="#8a2f28" stroke="#3a3540" stroke-width="4"/>
+</g>
+<g transform="translate(0 -110)">
+<rect x="-66" y="-22" width="132" height="40" rx="12" fill="#fffdf6" stroke="#3a3540" stroke-width="4"/>
+<path d="M-46-14l5 10 11 1-8 7 3 11-11-6-10 6 3-11-8-7 11-1z" fill="#f5a531" stroke="#3a3540" stroke-width="2.5" stroke-linejoin="round"/>
+<text x="10" y="8" text-anchor="middle" font-size="24" font-weight="900" fill="#3a3540" font-family="'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC','Microsoft YaHei',sans-serif">橘子</text>
+</g>
+</g>
+<!-- 纸飞机 -->
+<g transform="translate(560 420) rotate(-16)">
+<path d="M0 0l70-26-24 50-12-16z" fill="#fffdf6" stroke="#3a3540" stroke-width="4" stroke-linejoin="round"/>
+<path d="M34 8l36-34" stroke="#3a3540" stroke-width="3"/>
+<path d="M-12 14h-26M-6 26h-20" stroke="#8a7a66" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 8"/>
+</g>
+<!-- 风旗 -->
+<g transform="translate(925 26)">
+<rect x="0" y="0" width="200" height="64" rx="18" fill="#fffdf6" stroke="#3a3540" stroke-width="4"/>
+<path d="M30 14v40" stroke="#3a3540" stroke-width="5" stroke-linecap="round"/>
+<path d="M32 16h52l-8 12 8 12h-52z" fill="#e8483a" stroke="#3a3540" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M50 16v24M66 16v24" stroke="#fff" stroke-width="5"/>
+<path d="M104 32h52m-14-12 14 12-14 12" fill="none" stroke="#e8483a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="176" y="45" text-anchor="middle" font-size="36" font-weight="900" fill="#e8483a" font-family="Arial, sans-serif">4</text>
+</g>
+<!-- 大字 -->
+<g font-family="'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC','Microsoft YaHei',sans-serif" font-weight="900" text-anchor="middle">
+<text x="390" y="262" font-size="150" fill="#b8551f" stroke="#3a3540" stroke-width="22" stroke-linejoin="round" transform="rotate(-5 390 220)">弹里个弹</text>
+<text x="384" y="252" font-size="150" fill="#fff1d6" stroke="#3a3540" stroke-width="10" stroke-linejoin="round" paint-order="stroke" transform="rotate(-5 390 220)">弹里个弹</text>
+<g transform="rotate(-5 390 220)"><rect x="216" y="282" width="336" height="54" rx="27" fill="#3a7fd0" stroke="#3a3540" stroke-width="5"/>
+<text x="384" y="320" font-size="32" fill="#fff">萌宠厨房大乱斗</text></g>
+</g>
+</svg>
