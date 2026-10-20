@@ -207,7 +207,7 @@ function literal(v: SqlStorageValue): string {
   if (v === null) return 'NULL';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : v > 0 ? '9e999' : '-9e999';
   if (typeof v === 'string') {
-    // 换行、回车拼成 char()，导出文件一行一条语句。不学 wrangler 写成 replace('…\n…')：原文里本来就有反斜杠 n 的会被恢复错
+    // 换行、回车拼成 char()，每条 INSERT 占一行（方便 grep 和看差异）。不学 wrangler 写成 replace('…\n…')：原文里本来就有反斜杠 n 的会被恢复错
     return v
       .split(/(\r|\n)/)
       .map((part) => (part === '\r' ? 'char(13)' : part === '\n' ? 'char(10)' : `'${part.replace(/'/g, "''")}'`))
