@@ -17,7 +17,7 @@ permissions:
   contents: read
 jobs:
   isolation:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -33,7 +33,7 @@ jobs:
       - run: node tools/check-deploy-config.mjs
   deployer:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       # 拿到 PR 的合并提交和它的第一个父提交（目标分支），用 git diff 判断改了哪些文件，不引入第三方 action

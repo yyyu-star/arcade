@@ -22,7 +22,7 @@ defaults:
     working-directory: packages/arcade-kit
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: pkg-arcade-kit-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -38,7 +38,7 @@ jobs:
       - run: npm ci
       - run: npm test
   games:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: pkg-arcade-kit-games-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
