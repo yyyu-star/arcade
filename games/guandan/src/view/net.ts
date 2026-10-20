@@ -162,7 +162,7 @@ export function closeText(code: number | null, reason: string | null = null): st
     case CLOSE.tooOld:
       return '页面版本太旧了，刷新一下再进';
     case CLOSE.forbidden:
-      return `请从游戏${lobbyName()}打开掼蛋再进房间`;
+      return `请从游戏${lobbyName()}打开牌馆再进房间`;
     case CLOSE.policy:
     case CLOSE.tooBig:
       return '连接出了点问题，刷新页面再试';
@@ -218,7 +218,7 @@ export async function createRoom(fetcher: typeof fetch = fetch, stake: TierId | 
     return { error: '开房没成功，刷新一下再试' };
   }
   if (res.status === 401) return standalone() ? { error: '认不出你是谁，刷新页面再试' } : { error: '还没登录，先登录再来', login: true };
-  if (res.status === 403) return { error: `请从游戏${lobbyName()}打开掼蛋再开房` };
+  if (res.status === 403) return { error: `请从游戏${lobbyName()}打开牌馆再开房` };
   if (res.status === 404) return { error: '好友房暂时关了，单机照常玩' };
   const body = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown } | null;
   if (body?.error === 'has_room') return { error: QUOTA_TEXT.has_room, quota: 'has_room' };

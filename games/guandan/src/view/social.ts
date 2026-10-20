@@ -10,10 +10,13 @@ import { seatCountOf, type RoomLink } from './net.ts';
 /** 大厅、牌桌上的联机会话（两种玩法）里社交只看这几项 */
 type LinkInfo = Pick<RoomLink<never, never, never>, 'code' | 'room' | 'status'>;
 
-/** 横条上"老王叫你来掼蛋"、面板里好友"在掼蛋的好友房"：只认自己；别的游戏 kit 说"一起玩""在玩游戏" */
-const GAME_NAME: Record<string, string> = { guandan: '掼蛋' };
+/**
+ * 横条上"老王叫你来牌馆"、面板里好友"在牌馆的好友房"：只认自己；别的游戏 kit 说"一起玩""在玩游戏"。
+ * 游戏 id 是 guandan，掼蛋和斗地主共用，报位置分不出玩法（显示名由平台按登记给），所以写"牌馆"
+ */
+const GAME_NAME: Record<string, string> = { guandan: '牌馆' };
 
-/** 现在在哪：连着的好友房（大厅里或牌桌上）报房间，不然报在掼蛋 */
+/** 现在在哪：连着的好友房（大厅里或牌桌上）报房间，不然报在牌馆 */
 export function presenceOf(s: LinkInfo | null): Presence {
   if (s?.room && s.status === 'open' && s.room.status !== 'over') {
     const n = seatCountOf(s.room);

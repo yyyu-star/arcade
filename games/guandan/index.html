@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <title>掼蛋</title>
-    <meta name="description" content="《掼蛋》：两副牌四人对打，你和对家一队，从 2 打到 A；可以和电脑打，也可以开好友房和朋友一起打。" />
+    <title>牌馆</title>
+    <meta name="description" content="《牌馆》：掼蛋和斗地主。掼蛋两副牌四人对打，你和对家一队，从 2 打到 A；斗地主三人叫分抢地主。可以和电脑打，也可以开好友房和朋友一起打。" />
     <meta name="theme-color" content="#123a2b" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="掼蛋" />
+    <meta name="apple-mobile-web-app-title" content="牌馆" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <style>
       html, body { margin: 0; height: 100%; background: #0d2a1f; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
@@ -26,13 +26,14 @@
         background: radial-gradient(circle at 50% 45%, #1f5a43 0, #0d2a1f 75%);
       }
       #boot b { color: #ffe3a0; font-size: 44px; letter-spacing: 8px; text-shadow: 0 3px 0 #7d121a; }
+      #boot i { font-style: normal; color: #f3dca8; font-size: 18px; letter-spacing: 4px; margin-top: -6px; }
       noscript { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #ffe3a0; background: #0d2a1f; font: 16px sans-serif; }
     </style>
   </head>
   <body>
     <div id="app"></div>
-    <div id="boot"><b>掼蛋</b><span>正在洗牌…</span></div>
-    <noscript>《掼蛋》需要启用 JavaScript 才能运行。</noscript>
+    <div id="boot"><b>牌馆</b><i>掼蛋 · 斗地主</i><span>正在洗牌…</span></div>
+    <noscript>《牌馆》需要启用 JavaScript 才能运行。</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
