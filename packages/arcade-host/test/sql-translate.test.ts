@@ -27,6 +27,12 @@ describe('SQLite → PG 机械翻译', () => {
     const up = 'INSERT INTO t (k, n) VALUES ($1, 1) ON CONFLICT (k) DO UPDATE SET n = t.n + excluded.n RETURNING n';
     expect(translate('INSERT INTO t (k, n) VALUES (?1, 1) ON CONFLICT (k) DO UPDATE SET n = t.n + excluded.n RETURNING n')).toBe(up);
   });
+  it('带 ON 的 CROSS JOIN → JOIN（内连接）；不带 ON 的不动', () => {
+    expect(translate('SELECT * FROM f CROSS JOIN boards b ON b.user_id = f.id AND b.x > ?1')).toBe('SELECT * FROM f JOIN boards b ON b.user_id = f.id AND b.x > $1');
+    expect(translate('SELECT * FROM f CROSS JOIN "my t" AS b ON b.k = f.k')).toBe('SELECT * FROM f JOIN "my t" AS b ON b.k = f.k');
+    expect(translate('SELECT * FROM f CROSS JOIN g ON g.k = f.k')).toBe('SELECT * FROM f JOIN g ON g.k = f.k');
+    expect(translate('SELECT * FROM f CROSS JOIN g WHERE g.k = f.k')).toBe('SELECT * FROM f CROSS JOIN g WHERE g.k = f.k');
+  });
   it('翻不了的抛 NeedsOverride，覆盖表按规范化后的原文命中', () => {
     const sql = `SELECT json_extract(state, '$.a') AS a\n  FROM wallets WHERE user_id = ?1`;
     expect(() => translate(sql)).toThrow(NeedsOverride);

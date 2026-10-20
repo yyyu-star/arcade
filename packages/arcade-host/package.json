@@ -1,7 +1,7 @@
 {
   "name": "arcade-host",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "自托管运行时：用 workerd 一个二进制在自己的机器上跑平台和所有游戏（D1 的 SQLite 后端、静态资源、路由、定时任务、配置生成器）",
   "license": "MIT",
   "type": "module",

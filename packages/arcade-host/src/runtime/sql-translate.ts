@@ -3,7 +3,8 @@
  *   - 参数：?N → $N，裸 ? 按 SQLite 的规矩编号（已出现的最大号 + 1）；
  *   - 标量 MIN(a, b, …) / MAX(a, b, …)（两个以上参数）→ LEAST / GREATEST（一个参数的是聚合，不动）；
  *   - a IS b / a IS NOT b（b 不是 NULL、TRUE、FALSE）→ IS NOT DISTINCT FROM / IS DISTINCT FROM（SQLite 的 IS 是不认 NULL 的等于）；
- *   - 去掉 WITHOUT ROWID。
+ *   - 去掉 WITHOUT ROWID；
+ *   - `CROSS JOIN t [AS x] ON …` → `JOIN t [AS x] ON …`（SQLite 里带 ON 的 CROSS JOIN 就是内连接，CROSS 只是固定连接顺序的提示；PG 的 CROSS JOIN 不许带 ON）。
  * 碰到翻不了的写法（json_*、日期函数、INSERT OR …、PRAGMA、sqlite_ 系统表……）抛 NeedsOverride：这条语句必须在覆盖表里有 PG 版，
  * 宁可报错也不猜。字符串字面量、双引号标识符、注释里的内容不动。
  */
@@ -97,6 +98,7 @@ export function translate(sql: string, overrides: Record<string, string> = {}): 
     masked
       .replace(/\?(\d+)|\?/g, (_all, n: string | undefined) => (n ? `$${n}` : `$${++max}`))
       .replace(/\s*\bWITHOUT\s+ROWID\b/gi, '')
+      .replace(/\bCROSS\s+JOIN(\s+[\w.\u0000]+(?:\s+(?:AS\s+)?(?!ON\b)[\w\u0000]+)?\s+ON\b)/gi, 'JOIN$1')
       .replace(/\bIS\s+NOT\s+(?!NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS DISTINCT FROM ')
       .replace(/\bIS\s+(?!NOT\b|NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS NOT DISTINCT FROM '),
   );
