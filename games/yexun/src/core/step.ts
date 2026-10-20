@@ -46,6 +46,7 @@ import type { Raid } from '../explore/raid.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
 import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
+import { PICKS, SKIP_FX, SKIP_PRIZES } from '../content/picks.ts';
 import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
@@ -144,11 +145,15 @@ export function step(w: World, dir: number, choice = -1): void {
         openChoices(w);
       }
     } else if (choice === Pick.Skip) {
-      // 跳过：换一点魂（这一级要的经验的 15%），不选
+      // 跳过：不选，抽一样随机小奖（content/picks.ts）；实盘局暂照旧换一点魂
       w.pendingLevels--;
       w.choices = [];
       w.phase = 'play';
-      gainXp(w, xpNeed(w.level, w.raid !== null) * 0.15);
+      w.bonusCard = 0;
+      if (w.setup.live) {
+        gainXp(w, xpNeed(w.level, w.raid !== null) * PICKS.liveSkipXp);
+        w.ev.push(Ev.Skip, w.x, w.y, -1, 0);
+      } else skipPrize(w);
       if (w.pendingLevels > 0) openChoices(w);
     }
     return;
@@ -1435,6 +1440,11 @@ function killEnemy(w: World, i: number): void {
     }
   }
   if (w.bossSlot === i) w.bossSlot = otherBoss(w);
+  // 打倒精英、首领（中期 Boss 和尸王）补一次刷新；剑侠的小特权再多补
+  if (def.elite || def.boss || def.kind === 'lord') {
+    addReroll(w, 1);
+    if (w.setup.character === 'jianxia') for (let k = 0; k < CHAR_FX.jianxiaReroll; k++) addReroll(w, 1);
+  }
   // 夜探：宝妖掉宝物（不掉升级宝箱）、钥匙（explore/raid.ts）
   if (w.raid && w.raid.onKill(i, w.eGen[i]!, !!def.elite || !!def.boss, x, y, w)) {
     for (let k = 0; k < 4; k++) addDrop(w, Drop.Soul, x + (w.rDrop.next() - 0.5) * 50, y + (w.rDrop.next() - 0.5) * 36, def.xp / 4);
@@ -2725,6 +2735,18 @@ function recompute(w: World): void {
   s.durMul = 1 + 0.1 * p('modou') + 0.06 * p('jiandao');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
+  // 角色初始数值（所有者 10-20，content/meta.ts 的 base）：血量只乘底子的 100，仙桃、加成的血照加；实盘局暂不带（配平 PR 一起打开）
+  const ch = w.setup.character ?? 'xiaodao';
+  if (!w.setup.live) {
+    const b = CHARACTERS[ch].base;
+    s.hpMax += PLAYER.hp * (b.hp - 1);
+    s.speed *= b.speed;
+    s.might *= b.might;
+    s.cdMul *= b.cd;
+    s.areaMul *= b.area;
+    s.magnet *= b.magnet;
+    s.luck += b.luck;
+  }
   // 永久加成（实盘为空）
   s.might *= 1 + PERK_FX.liliang * perk(w, 'liliang');
   s.armor += PERK_FX.huti * perk(w, 'huti');
@@ -2735,7 +2757,6 @@ function recompute(w: World): void {
   s.luck += PERK_FX.fuyuan * perk(w, 'fuyuan');
   s.coinBonus += PERK_FX.fuyuan * perk(w, 'fuyuan');
   // 角色被动
-  const ch = w.setup.character;
   if (ch === 'xiaodao') {
     const up = 1 + CHAR_FX.xiaodaoStep * Math.floor(w.level / CHAR_FX.xiaodaoEvery);
     s.might *= up;
@@ -2745,7 +2766,8 @@ function recompute(w: World): void {
   } else if (ch === 'caiyao') {
     s.xpMul += CHAR_FX.caiyaoXp;
     s.regen += CHAR_FX.caiyaoRegen;
-  } else if (ch === 'pang') {
+  } else if (ch === 'pang' && w.setup.live) {
+    // 实盘局还是旧的被动（血 +50、慢 8%）；娱乐局已经并进初始数值
     s.hpMax += CHAR_FX.pangHp;
     s.speed *= CHAR_FX.pangSpeed;
   }
@@ -2942,6 +2964,11 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
       if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 * (1 + w.stats.luck) });
     } else if (w.weapons.length < MAX_WEAPONS + w.merges.length) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
   }
+  // 前几次升级：和角色初始法器同一类的法器卡更容易出，开局更像这个角色（实盘局暂不开）
+  if (!w.setup.live && w.level - w.pendingLevels + 1 <= 1 + CHAR_FX.earlyEvery) {
+    const kind = WEAPONS[CHARACTERS[w.setup.character ?? 'xiaodao'].start].type;
+    for (const p of pool) if (p.c.kind === 'weapon' && WEAPONS[p.c.id as WeaponId].type === kind) p.weight *= CHAR_FX.earlyMul;
+  }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
     if (w.banned.includes(id) || hide.includes(id)) continue;
@@ -2958,7 +2985,7 @@ function openChoices(w: World): void {
   const picks: Choice[] = [];
   // 新手档前几次升级：先从法器里抽两张，保证有能打的（主线 #144）
   const arms = w.level <= dangerDef(w.setup.mode, w.setup.danger).armsFirst + 1 ? 2 : 0;
-  while (picks.length < w.cardCount && pool.length > 0) {
+  while (picks.length < w.cardCount + w.bonusCard && pool.length > 0) {
     const only = picks.length < arms && pool.some((p) => p.c.kind === 'weapon');
     let total = 0;
     for (const p of pool) if (!only || p.c.kind === 'weapon') total += p.weight;
@@ -2988,7 +3015,45 @@ function applyChoice(w: World, c: Choice): void {
   w.pendingLevels--;
   w.choices = [];
   w.phase = 'play';
+  w.bonusCard = 0;
   if (w.pendingLevels > 0) openChoices(w);
+}
+
+/** 跳过的小奖：按 SKIP_PRIZES 的概率抽；满血时回血奖作废，在其他三样里按比例重抽 */
+function skipPrize(w: World): void {
+  const full = w.hp >= w.stats.hpMax;
+  // 胖师叔的小特权：回血那一样的权重翻倍（其他三样按原比例）
+  const weight = (p: (typeof SKIP_PRIZES)[number]): number => (p.id === 'heal' ? (full ? 0 : w.setup.character === 'pang' ? p.weight * CHAR_FX.pangSkipHeal : p.weight) : p.weight);
+  let total = 0;
+  for (const p of SKIP_PRIZES) total += weight(p);
+  let r = w.rSkip.next() * total;
+  let k = 0;
+  for (; k < SKIP_PRIZES.length - 1; k++) {
+    const p = SKIP_PRIZES[k]!;
+    if (weight(p) === 0) continue;
+    r -= weight(p);
+    if (r < 0) break;
+  }
+  if (full && SKIP_PRIZES[k]!.id === 'heal') k++;
+  const id = SKIP_PRIZES[k]!.id;
+  let n = 1;
+  if (id === 'coins') {
+    n = SKIP_FX.coinBase + SKIP_FX.coinPerLevel * w.level;
+    w.coins += n;
+    w.coinBy.drop += n;
+  } else if (id === 'heal') {
+    n = Math.round(w.stats.hpMax * SKIP_FX.heal);
+    heal(w, n);
+  } else if (id === 'card') w.bonusCard = 1;
+  else addReroll(w, -1);
+  w.ev.push(Ev.Skip, w.x, w.y, k, n);
+}
+
+/** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领。实盘局暂不补 */
+function addReroll(w: World, why: number): void {
+  if (w.setup.live || w.setup.curses?.includes('noreroll') || w.rerolls >= PICKS.rerollMax) return;
+  w.rerolls++;
+  if (why >= 0) w.ev.push(Ev.Reroll, w.x, w.y, why);
 }
 
 /** 宝箱：能合成先合成，能进化就进化；不然随机升一件手上的东西（黄历：有概率再升一件）；都满了给铜钱和回血 */
@@ -3015,6 +3080,7 @@ function openChest(w: World): void {
     if (!o.evolved && evo && o.level >= MAX_WEAPON_LEVEL && (w.passives[evo.with] ?? 0) > 0) {
       o.evolved = true;
       recompute(w);
+      addReroll(w, 0);
       w.ev.push(Ev.Evolve, w.x, w.y, WEAPON_CODE[o.id]);
       w.ev.push(Ev.Chest, w.x, w.y, WEAPON_CODE[o.id]);
       return;

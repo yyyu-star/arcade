@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { GLOSSARY } from '../src/view/glossary.ts';
 
 /**
- * 画面层文案检查（docs/design-0.3.1-friendly.md 第 5 节）：src/view 里面向玩家的字符串不出现 A 股行话，不用 emoji。
+ * 画面层文案检查（docs/design.md 第 3 节）：src/view 里面向玩家的字符串不出现 A 股行话，不用 emoji。
  * 词典（glossary.ts）里的原词括注除外；音频目录只有内部 cue 名，不显示给玩家。
  */
 const ROOT = decodeURIComponent(new URL('../src/view/', import.meta.url).pathname);

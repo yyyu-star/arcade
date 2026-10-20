@@ -87,9 +87,10 @@ describe('纸兵', () => {
   it('实盘局的卡池里没有纸兵和剪刀（系数配好前），娱乐局有', () => {
     const pool = (live: boolean): Set<string> => {
       const ids = new Set<string>();
-      for (let seed = 1; seed <= 16; seed++) {
+      // 0.4.5 前几次升级偏向角色初始法器那一类，开局的卡换了一批：多跑几个种子、每局多一分钟
+      for (let seed = 1; seed <= 32; seed++) {
         const w = createWorld(live ? liveSetup('medium', seed) : { seed, mode: 'vigil', danger: 2 });
-        for (let t = 0; t < 30 * 60 && w.phase !== 'over'; t++) {
+        for (let t = 0; t < 30 * 120 && w.phase !== 'over'; t++) {
           step(w, (t >> 5) % 8 === 0 ? 1 : 5, -1);
           if (w.phase === 'choose') {
             for (const c of w.choices) ids.add(c.id);
@@ -103,5 +104,5 @@ describe('纸兵', () => {
     expect(live.has('zhibing') || live.has('jiandao')).toBe(false);
     const fun = pool(false);
     expect(fun.has('zhibing') || fun.has('jiandao')).toBe(true);
-  }, 30_000);
+  }, 60_000);
 });

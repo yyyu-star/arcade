@@ -71,6 +71,7 @@ describe('专属被动', () => {
   it('胖师叔：血多 50、走得慢、挨打震开身边', () => {
     const p = make('pang');
     const x = make('xiaodao');
+    // 0.4.5 起并进初始数值（血 150%），多的还是 50
     expect(p.stats.hpMax - x.stats.hpMax).toBe(CHAR_FX.pangHp);
     expect(p.hp).toBe(p.stats.hpMax);
     expect(p.stats.speed).toBeLessThan(x.stats.speed);
@@ -110,4 +111,88 @@ describe('专属被动', () => {
       expect(fingerprint(a)).toBe(fingerprint(b));
     }
   });
+});
+
+describe('角色初始数值和小特权（所有者 10-20，0.4.5）', () => {
+  const at = (ch: Setup['character'], extra: Partial<Setup> = {}): World => createWorld({ seed: 9, mode: 'vigil', danger: 0, character: ch, ...extra });
+  it('初始数值按 base 乘到小道士身上；实盘局暂不带', () => {
+    const x = at('xiaodao');
+    for (const id of CHARACTER_IDS) {
+      const w = at(id);
+      const b = CHARACTERS[id].base;
+      expect(w.stats.hpMax).toBeCloseTo(x.stats.hpMax + PLAYER.hp * (b.hp - 1), 6);
+      expect(w.stats.might / x.stats.might).toBeCloseTo(b.might, 6);
+      expect(w.stats.areaMul / x.stats.areaMul).toBeCloseTo(b.area, 6);
+      expect(w.stats.magnet / x.stats.magnet).toBeCloseTo(b.magnet, 6);
+      expect(w.stats.luck - x.stats.luck).toBeCloseTo(b.luck, 6);
+      // 符师的连环符本来就乘冷却，这里只比 base 那一层：同角色实盘局（不带 base）对照
+      expect(w.stats.cdMul / at(id, { live: true }).stats.cdMul).toBeCloseTo(b.cd, 6);
+    }
+    // 胖师叔实盘局还是旧被动：血 +50、慢 8%，和娱乐局的初始数值一样多
+    expect(at('pang', { live: true }).stats.hpMax).toBe(at('pang').stats.hpMax);
+    expect(at('fushi', { live: true }).stats.hpMax).toBe(PLAYER.hp);
+  });
+  it('数值大致相抵：没有哪个角色六项全不吃亏', () => {
+    for (const id of CHARACTER_IDS) {
+      if (id === 'xiaodao') continue;
+      const b = CHARACTERS[id].base;
+      const worse = b.hp < 1 || b.speed < 1 || b.might < 1 || b.cd > 1 || b.area < 1 || b.magnet < 1;
+      expect(worse, id).toBe(true);
+    }
+  });
+  it('小道士起步多 1 次刷新、符师多 1 次封禁；实盘局不加', () => {
+    expect(at('xiaodao').rerolls - at('jianxia').rerolls).toBe(1);
+    expect(at('fushi').bans - at('jianxia').bans).toBe(1);
+    expect(at('xiaodao', { live: true }).rerolls).toBe(at('jianxia', { live: true }).rerolls);
+  });
+  it('剑侠打倒精英多补 1 次刷新', () => {
+    const got = (ch: Setup['character']): number => {
+      const w = at(ch);
+      const r0 = w.rerolls;
+      const i = spawnNow(w, 'shishi', w.x + 60, w.y);
+      for (let t = 0; t < 600 && w.eAlive[i]; t++) {
+        w.eHp[i] = Math.min(w.eHp[i]!, 0.001);
+        step(w, 0, w.phase === 'choose' ? 0 : -1);
+      }
+      return w.rerolls - r0;
+    };
+    expect(got('jianxia') - got('fushi')).toBe(CHAR_FX.jianxiaReroll);
+  });
+  it('胖师叔跳过抽到回血的机会翻倍', () => {
+    const heals = (ch: Setup['character']): number => {
+      let n = 0;
+      for (let s = 0; s < 600; s++) {
+        const w = createWorld({ seed: 2000 + s, mode: 'vigil', danger: 0, character: ch });
+        w.hp = 10;
+        w.pendingLevels = 1;
+        step(w, 0);
+        step(w, 0, 300);
+        for (let i = 0; i < w.ev.n; i++) if (w.ev.type[i] === Ev.Skip && w.ev.a[i] === 1) n++;
+      }
+      return n;
+    };
+    const p = heals('pang');
+    const x = heals('xiaodao');
+    // 回血 25%：别人约 150 次，胖师叔 2 / (1 + 1.25) ≈ 40% 约 240 次
+    expect(p).toBeGreaterThan(x * 1.4);
+  });
+  it('前 5 次升级里和初始法器同一类的法器卡出得更多', () => {
+    // 符师（符）开局前几级：符类法器卡的占比高于剑侠开局
+    const share = (ch: Setup['character']): number => {
+      let hit = 0;
+      let all = 0;
+      for (let s = 0; s < 300; s++) {
+        const w = createWorld({ seed: 3000 + s, mode: 'vigil', danger: 0, character: ch });
+        w.pendingLevels = 1;
+        step(w, 0);
+        for (const c of w.choices) {
+          if (c.kind !== 'weapon') continue;
+          all++;
+          if (WEAPONS[c.id as keyof typeof WEAPONS].type === '符') hit++;
+        }
+      }
+      return hit / all;
+    };
+    expect(share('fushi')).toBeGreaterThan(share('jianxia'));
+  }, 30_000);
 });

@@ -1,4 +1,4 @@
-/** core 层对外接口：view、debug、tools、tests 只从这里引用。接口说明见 docs/core-api-0.3.md。 */
+/** core 层对外接口：view、debug、tools、tests 只从这里引用。接口说明见 docs/core-api.md。 */
 export { BALANCE, fx } from './balance.ts';
 export type { Balance, LiveParams, RoleParams, StageParams, ThemeParams } from './balance.ts';
 export { credibility, flipDir, friendForm, handOf, hottestTheme, recCredibility, makeComments, makeMessages, makeRecs, messageCred, topicsOf, turnTalk } from './chat.ts';

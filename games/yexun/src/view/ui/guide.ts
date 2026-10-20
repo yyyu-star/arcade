@@ -3,6 +3,7 @@
  * 名字、配方、数值全从内容表现取（weapons / enemies / maps / meta / waves / explore / live / guide），以后加法器、地图、流派自动跟上；
  * 只有讲道理的句子写在这里。主页和暂停面板都能打开，关掉回到打开它的地方。
  */
+import { PICKS } from '../../content/picks.ts';
 import type { EnemyKind } from '../../content/enemies.ts';
 import { GATE_WINDOWS, RAID_DAWN, RAID_LATE } from '../../content/explore.ts';
 import { GUIDE_EXAMPLES, ROLE_NAME, ROLE_TIP, SCHOOLS, WEAPON_ROLE, type Role, type SchoolId } from '../../content/guide.ts';
@@ -153,7 +154,7 @@ export class Guide {
     const perks = PERK_IDS.map((id) => `<li><b>${esc(PERKS[id].name)}</b>${esc(PERKS[id].text)}<small>最多 ${PERKS[id].cost.length} 级</small></li>`).join('');
     const chars = CHARACTER_IDS.map((id) => {
       const c = CHARACTERS[id];
-      return `<li>${this.img(WEAPONS[c.start].icon)}<b>${esc(c.name)}</b>${esc(c.perkName)}<small>${esc(c.unlock)}</small></li>`;
+      return `<li>${this.img(WEAPONS[c.start].icon)}<b>${esc(c.name)}</b>${esc(c.perkName)}<small>${esc(c.unlock)}；小特权：${esc(c.privilege)}</small></li>`;
     }).join('');
     const maps = MAP_IDS.map((id) => `<li><b>${esc(MAPS[id].name)}</b>${esc(MAPS[id].blurb)}<small>${MAP_UNLOCK[id] ? esc(MAP_UNLOCK[id]!.text) : '一开始就有'}</small></li>`).join('');
     const dangers = DANGER_IDS.map((d) => `<li><b>${DANGERS[d].name}</b>${esc(DANGERS[d].blurb)}</li>`).join('');
@@ -161,11 +162,11 @@ export class Guide {
       this.sec(
         '升级三选一',
         '<div class="yx-gcards"><span>新法器</span><span>法器升一级</span><span>被动</span></div>' +
-          '<ul class="yx-glist"><li><b>刷新</b>三张都不想要，换一批。</li><li><b>封禁</b>先点它再点一张卡，这张以后不再出。</li><li><b>跳过</b>不拿，换一点魂火。</li></ul>' +
+          `<ul class="yx-glist"><li><b>刷新</b>三张都不想要，整批换掉。起步 ${PICKS.rerolls} 次，进化一件、打倒精英或首领各补 1 次，最多攒 ${PICKS.rerollMax} 次。</li><li><b>封禁</b>先点它再点一张卡，这张整局不再出现。起步 ${PICKS.bans} 次。</li><li><b>跳过</b>不拿，随机拿个小奖：铜钱、回血、下次多一张卡、刷新 +1。</li></ul>` +
           '<p class="yx-gnote">卡上写着拿了以后能凑成什么，留意「凑成」「再拿 X」。</p>',
       ) +
-      this.sec('铜钱和加成', `<p>每局结束按撑了多久、打了多少、有没有天亮给铜钱，回主页买永久加成（实盘不生效）：</p><ul class="yx-glist two">${perks}</ul>`) +
-      this.sec('角色（选角页）', `<ul class="yx-glist two">${chars}</ul>`) +
+      this.sec('铜钱和加成', `<p>局里捡的铜钱打完存进账户（实盘也一样），每局结束还按撑了多久、打了多少、有没有天亮另给，回主页买永久加成（实盘不生效）：</p><ul class="yx-glist two">${perks}</ul>`) +
+      this.sec('角色（选角页）', `<p>每个角色的血量、移速、伤害等初始数值不同，选角页有对比条。</p><ul class="yx-glist two">${chars}</ul>`) +
       this.sec('地图', `<ul class="yx-glist two">${maps}</ul>`) +
       this.sec('危险档', `<p>通关一档开下一档，越往上怪越硬、铜钱越多。还能挂最多 ${MAX_CURSES} 条咒印，每条铜钱 +${Math.round(CURSE_COIN_BONUS * 100)}%。</p><ul class="yx-glist two">${dangers}</ul>`)
     );

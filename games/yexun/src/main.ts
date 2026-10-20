@@ -445,8 +445,9 @@ async function boot(): Promise<void> {
     save.vault = rr.vault;
     if (raid.teach) save.raidDone = true;
     if (st.outcome === 'escaped') save.extracts++;
-    // 实盘的夜探不发铜钱（筹码走钱包，按撤出时带出的价值结回），宝物照样记进藏宝阁
-    if (st.coins > 0 && liveSeed === null) grantCoins(save, `raid:${w.setup.seed.toString(36)}-${nonce()}`, st.coins);
+    // 实盘的夜探：筹码按撤出时带出的价值结回；局内铜钱和娱乐一样存进账户（所有者 10-20：账户铜钱只买永久加成和请角色，永久加成不进实盘）。
+    // 实盘流水 id 用这一份的种子，结回重试也只记一次
+    if (st.coins > 0) grantCoins(save, liveSeed === null ? `raid:${w.setup.seed.toString(36)}-${nonce()}` : `live:${liveSeed.toString(36)}`, st.coins);
     writeSave(save);
     showPlay(false);
     const view = (code: number) => {
@@ -461,7 +462,7 @@ async function boot(): Promise<void> {
       seconds,
       kills: w.kills,
       level: w.level,
-      coins: liveSeed === null ? st.coins : 0,
+      coins: st.coins,
       coinsTotal: coins(save),
       label: liveSeed === null ? `夜探 · ${RAID_TEMPLATES[tpl].name}${raid.teach ? '' : ` · ${DANGERS[w.setup.danger].name}`}` : `实盘 · 夜探 · ${RAID_TEMPLATES[tpl].name} · ${LIVE_TIERS[liveTier].name}档`,
       ...(liveSeed === null ? {} : { live: '正在结回…' }),
@@ -498,13 +499,15 @@ async function boot(): Promise<void> {
       return finishRaid(w, quit, seconds, seed);
     }
     if (liveRun) {
-      // 实盘：不发铜钱、不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算
+      // 实盘：不记纪录（固定配置，和娱乐分开），按撑到的时间结回；认输按当时撑到的算。
+      // 局内铜钱和娱乐一样存进账户（所有者 10-20），流水 id 用这一份的种子，结回重试也只记一次
       const seed = liveRun.seed;
       liveRun = null;
+      grantCoins(save, `live:${seed.toString(36)}`, w.coins);
       // 撑过的时间照样解锁地图、更夫，天亮了照样开下一危险档（以前实盘分支不记，撑到天亮竹林还锁着）
       recordLiveVigil(save, { danger: w.setup.danger, won: dawned(w), ticks: Math.min(w.tick, DAWN_TICK) });
       showPlay(false);
-      result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: 0, label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
+      result.show({ won: w.won, quit, bossKilled: w.bossKilled, seconds, kills: w.kills, level: w.level, coins: w.coins, coinsTotal: coins(save), label: `实盘 · ${LIVE_TIERS[liveTier].name}档`, live: '正在结回…', record: false, build: buildRows(w) });
       void live.finish(seed, { ticks: w.won ? DAWN_TICK : w.tick, won: w.won, bossKilled: w.bossKilled }).then(showLiveResult);
       return;
     }

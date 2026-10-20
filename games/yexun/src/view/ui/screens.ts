@@ -868,11 +868,11 @@ export class Result {
       .join('');
     const total = r.coinsTotal;
     const coinImg = this.icons('coin');
-    const coinRow = r.live !== undefined
-      ? `<div class="yx-rlive">${esc(r.live)}</div>`
-      : total !== undefined
+    // 实盘：结回一行，局内铜钱照样存进账户（所有者 10-20），底下照常一行铜钱
+    const coinRow = (r.live !== undefined ? `<div class="yx-rlive">${esc(r.live)}</div>` : '') +
+      (total !== undefined
         ? `<div class="yx-rcoins"><span class="yx-gain"><img alt="" src="${coinImg}">+${fmt(r.coins)}</span><span class="yx-arrow">→</span><span class="yx-tot"><img alt="" src="${coinImg}"><b data-from="${Math.max(0, total - r.coins)}" data-to="${total}">${fmt(Math.max(0, total - r.coins))}</b><small>铜钱</small></span>${Array.from({ length: 6 }, (_, i) => `<img class="yx-fly" alt="" src="${coinImg}" style="--i:${i}">`).join('')}</div>`
-        : '';
+        : '');
     const src = r.live === undefined && !rr && total !== undefined ? (r.sources ?? []).filter((x) => x.coins > 0) : [];
     const srcHtml = src.length
       ? `<div class="yx-rsrc${src.length > 6 ? ' two' : ''}">${src

@@ -156,6 +156,12 @@
 /* 击杀 + 铜钱：一个胶囊，两段并排 */
 .yx-hud .yx-caps { gap: calc(10px * var(--s, 1)); padding: 0 calc(10px * var(--s, 1)) 0 calc(6px * var(--s, 1)); white-space: nowrap; }
 .yx-hud .yx-cap { display: inline-flex; align-items: center; gap: 4px; }
+/* 胶囊底下右对齐一行小字（铜钱去哪）；放胶囊里会把手机竖屏的血条挤没 */
+.yx-hud .yx-caps { position: relative; }
+.yx-hud .yx-cnote {
+  position: absolute; right: 0; top: calc(100% + 4px); font-size: 12px; line-height: 1; white-space: nowrap; pointer-events: none;
+  color: var(--paper, #fbf5e4); text-shadow: 0 1px 0 var(--ink, #17131c), 0 0 3px var(--ink, #17131c);
+}
 .yx-ico { width: calc(20px * var(--s, 1)); height: calc(20px * var(--s, 1)); flex: none; }
 .yx-ico-kill {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1.5c-4.4 0-7.5 3-7.5 7 0 2.4 1.2 4 2.6 4.9V16a1.5 1.5 0 0 0 1.5 1.5h6.8a1.5 1.5 0 0 0 1.5-1.5v-2.6c1.4-.9 2.6-2.5 2.6-4.9 0-4-3.1-7-7.5-7z' fill='%23f4f1ea' stroke='%2317131c' stroke-width='1.8'/%3E%3Cellipse cx='7' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cellipse cx='13' cy='9.2' rx='1.9' ry='2.2' fill='%2317131c'/%3E%3Cpath d='M8.2 14.4v2.4M11.8 14.4v2.4' stroke='%2317131c' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -270,8 +276,9 @@
   .yx-hud .yx-timer { padding: 4px 10px; }
   .yx-hud .yx-home span { display: none; }
   .yx-hud .yx-home { padding: 0; }
-  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
-  .yx-hud .yx-bagpanel { top: 112px; max-height: calc(100% - 120px); }
+  /* 0.4.4 铜钱胶囊底下多了一行小字，背包再往下让一行 */
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 24px); }
+  .yx-hud .yx-bagpanel { top: 128px; max-height: calc(100% - 136px); }
 }
 
 /* ── 手机竖屏：顶栏并成一行（大厅、头像血条、计时、胶囊、暂停），夜探的背包在第二行右边 ──
@@ -300,8 +307,9 @@
   .yx-hud .yx-cap { gap: 2px; }
   .yx-hud .yx-ico { width: 14px; height: 14px; }
   .yx-hud .yx-pause { flex: none; padding: 0; }
-  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
-  .yx-hud .yx-bagpanel { top: 112px; right: 8px; }
+  /* 0.4.4 铜钱胶囊底下多了一行小字，背包再往下让一行 */
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 24px); }
+  .yx-hud .yx-bagpanel { top: 128px; right: 8px; }
   .yx-hud .yx-rs { top: 152px; }
   .yx-hud .yx-rs.lower { top: 190px; }
   .yx-hud .yx-mm { left: max(8px, env(safe-area-inset-left, 0px)); top: 108px; bottom: auto; width: 80px; height: 80px; }
