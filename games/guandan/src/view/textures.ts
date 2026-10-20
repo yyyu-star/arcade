@@ -114,8 +114,7 @@ function jobsCore(): Job[] {
   for (const i of ICONS) jobs.push({ key: `icon:${i}`, svg: () => iconSvg(i, '#ffffff'), w: 48, h: 48 });
   for (const [t, c] of Object.entries(STAMPS)) jobs.push({ key: `stamp:${t}`, svg: () => stampSvg(t, c), w: 150, h: 150 });
   for (const p of PARTICLES) jobs.push({ key: `particle:${p}`, svg: () => particleSvg(p), w: 32, h: 32 });
-  // 0.3.0 起好友房一直露出，logo 上不再盖"单机版"的印章
-  jobs.push({ key: 'logo', svg: () => logoSvg(false), w: 520, h: 220 });
+  // 主页标题"牌馆"（0.3.0 起 logo 上不再盖"单机版"的印章）
   jobs.push({ key: 'logo:hall', svg: () => logoSvg(false, '牌馆'), w: 520, h: 220 });
   // 主页（art-v3）：能动的灯笼和四个人，按显示尺寸烘焙（人物显示约 1.62 倍）
   jobs.push({ key: 'home:lantern', svg: () => lanternArtSvg(), w: LANTERN_SIZE.w, h: LANTERN_SIZE.h });

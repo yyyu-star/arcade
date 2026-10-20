@@ -27,9 +27,7 @@ import { openLevelPicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
 import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
 
-/** 一句玩法：不会掼蛋的人也知道这是什么 */
-const PITCH = '两两搭档，先出完牌、先打过 A 的一队赢';
-/** 斗地主（牌馆 0.28.0）那一句 */
+/** 斗地主面板的一句玩法（掼蛋面板这个位置是主按钮，不放） */
 const PITCH_DDZ = '一个地主对两个农民，谁先出完谁那边赢';
 const PITCH_DDZ_SHORT = '一个地主对两个农民';
 
@@ -44,7 +42,7 @@ export class TitleScene extends Phaser.Scene {
   private backBtn: Button | null = null;
   overlay: Modal | null = null;
 
-  /** 掼蛋 / 斗地主切换的两个点（?ddz=1 时才有，冒烟点它） */
+  /** 掼蛋 / 斗地主切换的两个点（冒烟点它） */
   private variantAt: Record<VariantId, { x: number; y: number }> | null = null;
 
   constructor() {
@@ -107,21 +105,19 @@ export class TitleScene extends Phaser.Scene {
     const cx = P.x + P.w / 2;
     const inner = P.w - 48;
 
-    // 牌馆（掼蛋 + 斗地主）的切换露出时标题写"牌馆"
-    const logo = this.add.image(cx, P.y + 92, app.params?.ddz ? 'logo:hall' : 'logo').setDisplaySize(380, 161).setDepth(20);
+    // 牌馆：掼蛋 + 斗地主两个玩法，标题写"牌馆"
+    const logo = this.add.image(cx, P.y + 92, 'logo:hall').setDisplaySize(380, 161).setDepth(20);
     if (lively) {
       logo.setAlpha(0).setScale(logo.scaleX * 1.2);
       this.tweens.add({ targets: logo, alpha: 1, scale: logo.scaleX / 1.2, duration: 520, ease: 'Back.easeOut' });
     }
-    // 牌馆（0.28.0）：掼蛋 / 斗地主的切换。斗地主全部做完前只在 ?ddz=1 时露出（docs/doudizhu.md 第 4 节），平时主页和以前一样
-    const variant: VariantId = app.params?.ddz ? getVariant() : 'guandan';
-    if (app.params?.ddz) {
-      const seg = segmented(this, cx - 75, P.y + 186, [{ label: '掼蛋', value: 'guandan' }, { label: '斗地主', value: 'ddz' }], variant, (v) => {
-        setVariant(v as VariantId);
-        this.scene.restart();
-      }, 150).setDepth(20);
-      this.variantAt = { guandan: { x: seg.x, y: seg.y }, ddz: { x: seg.x + 150, y: seg.y } };
-    } else text(this, cx, P.y + 186, PITCH, { size: TYPE.label, color: 0xf6e4c0 }).setDepth(20);
+    // 掼蛋 / 斗地主的切换（docs/doudizhu.md 第 4 节），上次选的记在 guandan.variant
+    const variant: VariantId = getVariant();
+    const seg = segmented(this, cx - 75, P.y + 186, [{ label: '掼蛋', value: 'guandan' }, { label: '斗地主', value: 'ddz' }], variant, (v) => {
+      setVariant(v as VariantId);
+      this.scene.restart();
+    }, 150).setDepth(20);
+    this.variantAt = { guandan: { x: seg.x, y: seg.y }, ddz: { x: seg.x + 150, y: seg.y } };
     if (variant === 'ddz') {
       this.buildDdzPanel(P, cx, inner);
       this.buildCorner(W);
@@ -200,7 +196,7 @@ export class TitleScene extends Phaser.Scene {
   private buildCorner(W: number): void {
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间
     const icons: [string, string, () => void][] = [
-      ['rules', 'rules', () => (this.overlay = app.params?.ddz && getVariant() === 'ddz' ? openDdzRules(this) : openRules(this))],
+      ['rules', 'rules', () => (this.overlay = getVariant() === 'ddz' ? openDdzRules(this) : openRules(this))],
       ['settings', 'settings', () => (this.overlay = openSettings(this))],
       ['stats', 'stats', () => (this.overlay = openStats(this))],
     ];
