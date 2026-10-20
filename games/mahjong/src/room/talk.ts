@@ -79,7 +79,8 @@ export class RoomTalk {
     const ended = g.history.length > prev.rounds ? g.history.at(-1) : undefined;
     // 换了一局的话副露清零了，比不出新开的杠，不算
     const kanSeats = ended || g.history.length !== prev.rounds ? [] : kans.flatMap((k, i) => (k > (prev.kans[i] ?? 0) ? [i] : []));
-    return rcFunMoments(ended ? rcSummaryWins(ended.wins) : [], kanSeats, g.history.length);
+    // 和了的那一步小结已经多了一条：hand 按刚打完的这一局记（和单机的 publicMoments 一样），同一局的杠和和算同一手
+    return rcFunMoments(ended ? rcSummaryWins(ended.wins) : [], kanSeats, ended ? g.history.length - 1 : g.history.length);
   }
 
   /** 和上一步比，新出了哪些公开的事（同一步再调一次是空的） */

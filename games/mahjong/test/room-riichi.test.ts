@@ -180,4 +180,23 @@ describe('立直房里电脑起哄', () => {
     expect(seen).toBe(loud.length);
     expect(eye.watchRc(s)).toEqual([]);
   });
+
+  test('同一局先开杠再和：两个名场面算同一手（kit 的"每手电脑主动最多 2 次"按它数）', () => {
+    const talk = new RoomTalk(9);
+    let s = begin(['human', 'ai', 'ai', 'ai'], 'fun');
+    s = drive(s, 1);
+    expect(talk.watchRc(s)).toEqual([]);
+    const rc = structuredClone(s.g as RcState);
+    const hand = rc.history.length;
+    rc.players[1]!.melds.push({ kind: 'kan', tiles: [0, 1, 2, 3], from: null, kan: 'concealed' });
+    s = { ...s, n: s.n + 1, g: rc };
+    const kan = talk.watchRc(s);
+    const won = structuredClone(rc);
+    const score = { yaku: [{ id: 'tsumo' as const, han: 1 }], yakuman: 0, kazoe: false, han: 1, fu: 30, dora: 0, aka: 0, ura: 0, base: 240, limit: 'none' as const };
+    won.history.push({ wind: 0, hand: 0, honba: 0, dealer: 0, end: 'tsumo', delta: [0, 0, 0, 0], wins: [{ seat: 1, from: null, tile: 4, score, hand: [], melds: [], gain: 0, pao: null }], tenpai: null, dora: [], ura: [] });
+    s = { ...s, n: s.n + 1, g: won };
+    const tsumo = talk.watchRc(s);
+    expect(kan.map((m) => m.kind === 'moment' && [m.moment, m.hand])).toEqual([['kong', hand]]);
+    expect(tsumo.map((m) => m.kind === 'moment' && [m.moment, m.hand])).toEqual([['self-draw', hand]]);
+  });
 });
