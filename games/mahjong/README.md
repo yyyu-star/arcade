@@ -28,7 +28,7 @@ Chips are play money only — they cannot be bought, cashed out or transferred. 
 
 ## 本地开发
 
-需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
+需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.22.0"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
 
 ```bash
 npm ci
@@ -78,6 +78,12 @@ node scripts/capture.ts se-port 40      # 截图到 shots/，并报互相压住�
 
 模块自己的：Durable Object `ROOM`（`MahjongRoom`）、`METER`（`RoomMeter`），变量 `KIT_QUOTA`（每天的写入预算和开房名额）。
 没有 `ARCADE` 时首页和开房发游客 cookie（kit 的独立模式）；`GATE` 是 `login` 却没有 `ARCADE` 时一律拒绝，不会悄悄变成人人可进。
+
+线上监控：
+- `GET /games/mahjong/health` 回 `{"ok":true,"version":"<package.json 的版本>"}`：不读存储、不认人，排在登录闸门前面，单独部署也能访问。
+- `wrangler.jsonc` 开着 `observability`（Workers 日志，只用 Cloudflare 默认的，不往别处发）。
+- 页面启动时调 kit 的 `reportErrors({ game: "mahjong", version })`（`arcade-kit/report`），没人接住的报错发给平台的 `/api/client-error`。
+  只发报错文字、调用栈、路径和版本，不带账号和昵称；单独部署没有这个接口，发不出去就算了。
 
 ## 目录结构
 

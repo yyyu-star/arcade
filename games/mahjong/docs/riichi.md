@@ -161,7 +161,7 @@
   为了让电脑按真实先后认现物，河里每张牌记了"这一局全桌第几张打出"（`RcRiverTile.n`）；换筹码按模拟分半庄、东风战两档（`SHARE_POINTS`）。
 - ③ 界面和单机：牌面（字牌、赤五）在 `src/view/tiles.ts`；立直牌桌、操作条、听牌振听提示、役种结算在 `src/view/variants/riichi/`；单机 `src/solo.ts` 按玩法 id 走；选桌页玩法选项在 `src/view/lobby.ts`（记在 `mahjong.prefs`）；新手引导和规则小册子的立直几页、役种表在 `src/view/guide.ts`；称号中文名在 `public/titles.json`。
   单测 `test/riichi-view.test.ts`、`test/solo.test.ts` 的立直几条；冒烟 `scripts/smoke.ts` 加了一场立直单机（横竖屏各一遍）。立直不排快速匹配，选了立直就不显示快速匹配。
-- ④ 好友房和实盘：开房选玩法、页面发动作带玩法 id、没打完收场只算点数差、中途接管（`entry`）；单测 `test/room-riichi.test.ts`，双浏览器冒烟 `scripts/smoke-room-riichi.ts`。共用包 kit ^0.21.3。
+- ④ 好友房和实盘：开房选玩法、页面发动作带玩法 id、没打完收场只算点数差、中途接管（`entry`）；单测 `test/room-riichi.test.ts`，双浏览器冒烟 `scripts/smoke-room-riichi.ts`。
 
 ## 7. 模拟结果（PR ② 填，2026-10-20）
 

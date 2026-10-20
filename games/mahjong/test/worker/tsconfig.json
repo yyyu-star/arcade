@@ -13,7 +13,8 @@
     "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": ["**/*.ts", "../../worker/**/*.ts", "../../src/game/stakes.ts", "../arcade.dev.ts", "../dev-entry.ts"]
 }

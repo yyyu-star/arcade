@@ -21,5 +21,6 @@
 - 快速匹配（DESIGN.md 第 6 节）：档位在 `src/game/match.ts`（Worker 和页面共用），排队类 `worker/match.ts` 的 `Queue`（DO 绑定 `MATCH`）。
   改了档位、房间的 `options` 或座位数，`test/match-tier.test.ts` 的 `matchConfigErrors` 必须还是 `[]`；入口的具名导出只有 `MahjongRoom`、`RoomMeter`、`Queue`（`test/worker/match.test.ts` 守着）。
   `wrangler.jsonc` 已上线的迁移（v1、v2）不能改，加 DO 类另起一条新 tag，`test/wrangler.*.jsonc` 和测试入口同步。改了排队、匹配桌，跑 `npm run build:cf && npm run smoke:match`（浏览器锁下）。
+- 线上监控（README 的部署一节）：`/games/mahjong/health` 排在 Worker 最前面，不许读存储、认人或调平台；页面最先调 `reportErrors`。改了这块，`test/worker/api.test.ts`、`standalone.test.ts` 的健康检查一起改。
 - 浏览器存储的键一律 `mahjong.` 前缀（DESIGN.md 第 8 节）。
 - 提交信息以 `mahjong:` 开头，分支 `mahjong/<说明>`；只暂存明确路径。

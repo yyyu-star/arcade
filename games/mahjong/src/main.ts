@@ -45,6 +45,12 @@ import './view/style.css';
 import './view/art.css';
 import { installArt } from './view/art.ts';
 import { wallUrl } from './view/tiles.ts';
+import { reportErrors } from 'arcade-kit/report';
+
+/** 模块 id（平台登记、邀请链接 /games/<id>/、错误上报用的就是它） */
+const GAME_ID = 'mahjong';
+// 页面里没人接住的报错发给平台（kit 的 arcade-kit/report，只发报错文字、调用栈、路径和版本）：最先挂上，启动时的报错也收得到
+reportErrors({ game: GAME_ID, version: __MAHJONG_VERSION__ });
 
 // ---------- 设置 ----------
 
@@ -1354,8 +1360,6 @@ home.addEventListener('click', (e) => {
 
 // ---------- 好友：报位置、收邀请（docs/social.md 1.2、1.3，kit 的 arcade-kit/social；没平台、没登录时不挂） ----------
 
-/** 模块 id（平台登记、邀请链接 /games/<id>/ 用的就是它） */
-const GAME_ID = 'mahjong';
 let social: SocialHandle | null = null;
 /** 上次报的是哪个房间（null：不在房间） */
 let reported: string | null = null;
