@@ -4,7 +4,7 @@
  * 档位和开桌选项在 src/net/match.ts，tests/match.test.ts 用 kit 的 matchConfigErrors 核对它们对得上房间的规则
  */
 import { MatchQueue, type MatchEnv } from 'arcade-kit/match';
-import { MATCH_TABLE, matchRoomOptions } from '../src/net/match.ts';
+import { MATCH_TABLE, matchRoomOptions } from '../src/variants/guandan/net/match.ts';
 
 export class Queue extends MatchQueue<MatchEnv> {
   protected readonly seats = MATCH_TABLE;

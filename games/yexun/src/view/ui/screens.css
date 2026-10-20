@@ -553,6 +553,18 @@
   .yx-aside .yx-tiers .yx-chip { flex: 1 1 60px; min-height: 46px; }
   .yx-sel > .yx-modesw .yx-chip { min-height: 44px; }
 }
+/* 小手机横屏（≤ 700 宽）选模式：左栏只剩一百多像素，"守夜 / 夜探"并排时字竖着被切；顶上一排压到"大厅"（10-20 矩阵 568×320）。
+   左边让出"大厅"的宽度，两个模式上下排 */
+@media (max-height: 500px) and (max-width: 700px) {
+  .yx-menu.yx-selscreen { padding-left: max(108px, env(safe-area-inset-left, 0px)); }
+  .yx-selscreen .yx-kinds { grid-template-columns: minmax(0, 1fr); }
+}
+/* 小手机横屏（≤ 700 宽）选模式：左栏只剩一百多像素，"守夜 / 夜探"并排时字竖着被切；顶上一排压到"大厅"（10-20 矩阵 568×320）。
+   左边让出"大厅"的宽度，两个模式上下排 */
+@media (max-height: 500px) and (max-width: 700px) {
+  .yx-menu.yx-selscreen { padding-left: max(108px, env(safe-area-inset-left, 0px)); }
+  .yx-selscreen .yx-kinds { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ───────────── 卡通第二版：质感（所有者 10-19：第一版对齐后画面平、像贴纸） ─────────────
    描边、圆角、实色下沿照旧；表面加上亮下暗的轻渐变 + 顶边高光 + 纸纹，下面再垫一层柔和投影让卡片浮起来。

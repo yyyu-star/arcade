@@ -19,12 +19,12 @@ import {
   type Card,
   type GameState,
   type Play,
-} from '../src/core/index.ts';
-import { decide, hintList, planHand, suggest } from '../src/ai/index.ts';
-import type { Venue } from '../src/ai/venue.ts';
-import { guandanRoom, testKey } from '../src/net/rules.ts';
+} from '../src/variants/guandan/core/index.ts';
+import { decide, hintList, planHand, suggest } from '../src/variants/guandan/ai/index.ts';
+import type { Venue } from '../src/variants/guandan/ai/venue.ts';
+import { guandanRoom, testKey } from '../src/variants/guandan/net/rules.ts';
 import { Session } from '../src/view/session.ts';
-import { beatableByOthers, bombPossible, buildMemory, isTop } from '../src/ai/memory.ts';
+import { beatableByOthers, bombPossible, buildMemory, isTop } from '../src/variants/guandan/ai/memory.ts';
 import { C, act, pass, play, playState } from './helpers.ts';
 
 // 三家"牌还多"的对手/队友手牌，彼此不重复（parseCards 里 SJ 是小王，J 用其他花色写）

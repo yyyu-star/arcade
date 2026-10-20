@@ -8,10 +8,11 @@
 import { ACE, BIG_JOKER, HAND_SIZE, SMALL_JOKER, cardValue, fullDeck, isJoker, isWild, rankOf, sortHand, suitOf, type Card } from './cards.ts';
 import { resolveOptions, type Options } from './options.ts';
 import { beats, chooseInterpretation, interpret, playsBeating, samePlayShape, bombTier, type Play, type PlayType } from './patterns.ts';
-import { rngFor } from './rng.ts';
+import { rngFor } from '../../../core/rng.ts';
+import { nextOf, seatRing, type Seat } from '../../../core/seats.ts';
 import { type Entropy, isEntropy, shuffle as keyedShuffle, stream } from 'arcade-kit/rng';
 
-export type Seat = number;
+export type { Seat };
 export type Team = number;
 
 /**
@@ -39,10 +40,10 @@ export function rulesOf(state: Pick<GameState, 'rules'>): number {
 }
 export type Phase = 'tribute' | 'return' | 'play' | 'dealEnd' | 'gameOver';
 
-export const SEATS: readonly Seat[] = [0, 1, 2, 3];
+export const SEATS: readonly Seat[] = seatRing(4);
 export const teamOf = (s: Seat): Team => s % 2;
 export const partnerOf = (s: Seat): Seat => (s + 2) % 4;
-export const nextSeat = (s: Seat): Seat => (s + 1) % 4;
+export const nextSeat = (s: Seat): Seat => nextOf(s, 4);
 
 export interface Trick {
   /** 本轮领出的人 */

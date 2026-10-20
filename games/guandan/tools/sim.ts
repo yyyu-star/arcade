@@ -13,8 +13,8 @@
  * 任何非法动作、死锁（一副超过 3000 步）或单局超过 300 副都计入问题并让退出码为 1。
  */
 import { performance } from 'node:perf_hooks';
-import { createGame, dispatch, hint, seatsToAct, teamOf, viewFor, type Action, type GameState, type PlayerView } from '../src/core/index.ts';
-import { decide, randomAction, type Difficulty } from '../src/ai/index.ts';
+import { createGame, dispatch, hint, seatsToAct, teamOf, viewFor, type Action, type GameState, type PlayerView } from '../src/variants/guandan/core/index.ts';
+import { decide, randomAction, type Difficulty } from '../src/variants/guandan/ai/index.ts';
 import { decide as decideOld } from './baseline-ai/bot.ts';
 import { decide as decidePrev } from './baseline-ai-0.1.2/bot.ts';
 

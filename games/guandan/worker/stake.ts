@@ -9,7 +9,7 @@
  * 409 no_wallet 没绑钱包（单独部署）、503 平台或钱包连不上（这时页面当作"钱包暂时忙"）。
  */
 import { sameOrigin, whoIs } from 'arcade-kit/auth';
-import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, soloRefTier, validSoloResult, type TierId } from '../src/stake/index.ts';
+import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, soloRefTier, validSoloResult, type TierId } from '../src/variants/guandan/stake/index.ts';
 import { STAKE_PATH } from '../src/net/version.ts';
 import type { Fetcher } from './gate.ts';
 

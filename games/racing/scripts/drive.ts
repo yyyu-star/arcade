@@ -34,3 +34,32 @@ export async function drive(page: Page, prefer: number[], boost: boolean): Promi
   if (btn) await btn.click().catch(() => {});
   return true;
 }
+
+/**
+ * 新手教程里替我点一步：阿驰的讲解、提示点"下一步 →""知道了""自己开 →"；操作步照着高亮的东西点（挂 2 挡 → 挂好了 → 挑两张大的 → 出牌）；
+ * 没有气泡时和 drive 一样开（挂 2 挡或 1 挡，问什么都"不了"）。毕业气泡出来了返回 'grad'，做了一步返回 true。
+ */
+export async function driveTutorial(page: Page): Promise<'grad' | boolean> {
+  const bubble = await page.$('.coach:not([hidden]) .coach-bubble');
+  if (bubble) {
+    if (await bubble.$('button:has-text("正式开跑")')) return 'grad';
+    const next = await bubble.$('.coach-acts .act.go');
+    if (next) {
+      await next.click().catch(() => {});
+      return true;
+    }
+    const text = (await bubble.textContent()) ?? '';
+    if (text.includes('挂到 2 挡')) await page.click('.gate-btn[aria-label="2 挡"]').catch(() => {});
+    else if (text.includes('挑两张大的')) {
+      for (const k of ['5', '4', '3', '2', '1', '0', '11']) {
+        const c = await page.$(`.hand.live .card:not(:disabled)[data-kind="${k}"]`);
+        if (c) {
+          await c.click().catch(() => {});
+          break;
+        }
+      }
+    } else await page.click('.dash-action .act.go').catch(() => {});
+    return true;
+  }
+  return drive(page, [2, 1, 3], false);
+}

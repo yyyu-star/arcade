@@ -2,7 +2,7 @@
   "name": "racing",
   "private": true,
   "license": "MIT",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "飞驰：回合制卡牌赛车，换挡出牌、热量、过弯限速、尾流；单机对电脑和好友房",
   "scripts": {

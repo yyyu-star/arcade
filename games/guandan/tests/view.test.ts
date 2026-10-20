@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, isWild, makeCard, parseCards } from '../src/core/index.ts';
+import { createGame, isWild, makeCard, parseCards } from '../src/variants/guandan/core/index.ts';
 import { columnsFor } from '../src/view/table/columns.ts';
 import { KEYS } from '../src/view/store.ts';
 import { playLabel } from '../src/view/labels.ts';
-import { interpret, DEFAULT_OPTIONS } from '../src/core/index.ts';
+import { interpret, DEFAULT_OPTIONS } from '../src/variants/guandan/core/index.ts';
 import { worldWidthFor } from '../src/view/theme.ts';
 
 /** 画面层源码（以文本导入，不执行）。 */

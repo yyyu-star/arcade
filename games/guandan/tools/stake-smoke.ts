@@ -14,9 +14,9 @@
  */
 import { mkdirSync } from 'node:fs';
 import { chromium, type Browser, type Page } from 'playwright-core';
-import { decide } from '../src/ai/index.ts';
-import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/core/index.ts';
-import { soloAddDeal, soloOver, type SoloMatch } from '../src/stake/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
+import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/variants/guandan/core/index.ts';
+import { soloAddDeal, soloOver, type SoloMatch } from '../src/variants/guandan/stake/index.ts';
 import { startOnlineStack, type OnlineStack } from './online-dev.ts';
 
 const OUT = ((): string => {

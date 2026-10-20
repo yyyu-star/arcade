@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 /** core、ai 与实盘规则（stake）的源码（以文本形式导入，不执行）。 */
-const sources = import.meta.glob(['../src/core/**/*.ts', '../src/ai/**/*.ts', '../src/stake/**/*.ts'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+// 牌馆重构（①b，docs/doudizhu.md 1.1）：通用层 src/core 加上每个玩法的 core、ai、stake
+const sources = import.meta.glob(['../src/core/**/*.ts', '../src/variants/*/core/**/*.ts', '../src/variants/*/ai/**/*.ts', '../src/variants/*/stake/**/*.ts'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
 
 /** 去掉注释，避免说明文字里的示例触发规则。 */
 function stripComments(src: string): string {
@@ -59,6 +64,17 @@ describe('架构约束：core、ai、stake 保持纯逻辑与确定性', () => {
       for (const m of stripComments(raw).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
         const spec = m[1]!;
         if (spec.startsWith('../core')) expect(spec, path).toBe('../core/index.ts');
+      }
+    }
+  });
+
+  it('通用层 src/core 不引用任何玩法（variants/*），玩法之间也互不引用', () => {
+    for (const [path, raw] of Object.entries(sources)) {
+      const own = /\/variants\/([^/]+)\//.exec(path)?.[1];
+      for (const m of stripComments(raw).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+        const other = /variants\/([^/]+)\//.exec(m[1]!)?.[1];
+        if (other !== undefined) expect(other, `${path} 引用了 ${m[1]}`).toBe(own);
+        if (own === undefined) expect(m[1]!.includes('variants'), `${path} 引用了 ${m[1]}`).toBe(false);
       }
     }
   });

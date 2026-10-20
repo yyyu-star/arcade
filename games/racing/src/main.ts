@@ -10,11 +10,13 @@ import type { View } from './core/view.ts';
 import { detectPlatform } from 'arcade-kit/client';
 import { clockSkew, createError, createRoom, Online, setNickname, type OnlineState } from './online.ts';
 import { clearSolo, loadSolo, ME, newSolo, Solo } from './solo.ts';
+import { TUTORIAL_KEY, TUTORIAL_OPTS, TUTORIAL_STORE } from './game/tutorial.ts';
+import { Tutor } from './tutor.ts';
 import { getTrack } from './track/index.ts';
 import { Board } from './view/board.ts';
 import { Comms } from './view/comms.ts';
 import { Dash, type Presets } from './view/dash.ts';
-import { closeDialog, confirmBox, dialog } from './view/dialog.ts';
+import { closeAllDialogs, closeDialog, confirmBox, dialog } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
 import { showRules } from './view/guide.ts';
 import { renderLobby } from './view/lobby.ts';
@@ -35,6 +37,8 @@ interface Prefs {
   presets: Presets;
 }
 const DEFAULT_PRESETS: Presets = { boost: 'ask', adren: 'ask', slip: 'ask', markDiscard: true };
+/** 新手教程：一律"问我"，好让冲刺、尾流、拼劲、弃牌的提问都出现（弃牌只问第一次，tutor.ts 的 plan）；不动玩家存的预设 */
+const TUTORIAL_PRESETS: Presets = { boost: 'ask', adren: 'ask', slip: 'ask', markDiscard: false };
 
 function loadPrefs(): Prefs {
   try {
@@ -56,6 +60,11 @@ setSound(prefs.sound);
 
 /** 冒烟用：?turbo 让动画和电脑几乎不停顿 */
 const TURBO = new URLSearchParams(location.search).has('turbo');
+const reduceMotion = (): boolean => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+/** 冲线的动画放完以后停一会儿再弹结算，看得到冲线（DESIGN.md 8"结算"）；减少动态效果时不等 */
+function resultDelay(): number {
+  return TURBO ? 50 : reduceMotion() ? 0 : 1_200;
+}
 
 // ---------- 骨架 ----------
 
@@ -168,12 +177,12 @@ class RaceUi {
   readonly dash: Dash;
   private prompted = false;
 
-  constructor(parent: HTMLElement, opts: Opts, hooks: { plan(p: Plan): void; answer(a: Action): void }) {
+  constructor(parent: HTMLElement, opts: Opts, hooks: { plan(p: Plan): void; answer(a: Action): void }, tutorial = false) {
     const track = getTrack(opts.track)!;
     this.root = el('div', 'race', parent);
     this.board = new Board(this.root, track);
     this.side = el('div', 'side', this.root);
-    this.dash = new Dash(this.root, prefs.presets, {
+    this.dash = new Dash(this.root, tutorial ? TUTORIAL_PRESETS : prefs.presets, {
       plan: (p) => {
         play('go');
         hooks.plan(p);
@@ -184,10 +193,11 @@ class RaceUi {
       },
       preview: (pos, lane, kind) => this.board.preview(pos, lane, kind),
       presets: (p) => {
+        if (tutorial) return;
         prefs.presets = p;
         savePrefs();
       },
-    });
+    }, tutorial);
     this.board.speed = speedOf();
   }
 
@@ -241,9 +251,12 @@ class SoloTalk {
   private urgeTimer = 0;
   private urgedRound = -1;
   private readonly comms: Comms;
+  /** 新手教程里不催：阿驰在讲的时候电脑别插嘴催出牌 */
+  private readonly urges: boolean;
 
-  constructor(comms: Comms) {
+  constructor(comms: Comms, urges = true) {
     this.comms = comms;
+    this.urges = urges;
   }
 
   destroy(): void {
@@ -261,7 +274,7 @@ class SoloTalk {
     this.prev = cur;
     window.clearTimeout(this.urgeTimer);
     const waiting = v.phase === 'plan' && !!v.me && !v.me.plan && v.cars[ME]!.rank === null;
-    if (waiting && this.urgedRound !== v.round) {
+    if (waiting && this.urges && this.urgedRound !== v.round) {
       const round = v.round;
       this.urgeTimer = window.setTimeout(() => {
         const t = urge(cur, ME);
@@ -292,15 +305,24 @@ function applySpeed(): void {
 let race: RaceUi | null = null;
 
 function clearScreen(): void {
+  tutor?.destroy();
+  tutor = null;
+  window.clearTimeout(overTimer);
+  overTimer = 0;
   race?.destroy();
   race = null;
   soloTalk?.destroy();
   soloTalk = null;
   comms?.destroy();
   comms = null;
-  closeDialog();
+  closeAllDialogs();
   screen.replaceChildren();
 }
+
+/** 结算等着弹（冲线后停一会儿）的计时 */
+let overTimer = 0;
+/** 新手教程（src/tutor.ts）；不在教程里是 null */
+let tutor: Tutor | null = null;
 
 // ---------- 选桌页 ----------
 
@@ -323,6 +345,8 @@ function lobby(friends = false): void {
     nickname: standalone ? { value: myName === '我' ? '' : myName, onChange: setGuestName } : null,
     canResume: loadSolo() !== null,
     friends,
+    firstTime: !readFlag(TUTORIAL_STORE),
+    onTutorial: () => startTutorial(),
     onSolo: (o) => startSolo(o),
     onResume: () => {
       const save = loadSolo();
@@ -341,6 +365,28 @@ function startSolo(o: Opts): void {
   playSolo(new Solo(newSolo(o, myName), soloUi));
 }
 
+function readFlag(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 新手教程（DESIGN.md 8.1）：环湖 1 圈、两个新手电脑、写死的密钥。是一场不存续玩的单机：
+ * 不碰 racing.solo（玩家正在跑的那场照样能接着跑）、racing.prefs（选项和预设）。
+ * 一进来就记下 racing.tutorial：跑完、中途退出、关页面都算来过，选桌页不再冒"第一次来？"
+ */
+function startTutorial(): void {
+  try {
+    localStorage.setItem(TUTORIAL_STORE, '1');
+  } catch {
+    // 存不上就下回再冒一次气泡
+  }
+  playSolo(new Solo(newSolo(TUTORIAL_OPTS, myName, [...TUTORIAL_KEY]), soloUi, false), true);
+}
+
 // ---------- 单机 ----------
 
 function soloNames(): SeatName[] {
@@ -352,27 +398,51 @@ const soloUi = {
     if (!race) return;
     await race.show(v, soloNames(), { fresh: false, thinking: [], until: null });
     soloTalk?.step(v);
+    await tutor?.frame(v);
   },
   over(v: View): void {
-    window.setTimeout(() => showResult(v, soloNames(), [
-      ['回选桌', 'soft', () => lobby()],
-      ['再来一场', 'go', () => startSolo(prefs.opts)],
-    ]), TURBO ? 50 : 900);
+    window.clearTimeout(overTimer);
+    overTimer = window.setTimeout(() => {
+      overTimer = 0;
+      if (!solo || solo.save.state.phase !== 'over') return;
+      if (tutor) {
+        // 教程：阿驰的毕业气泡先出（"正式开跑""再练一次"在它上面），结算随后在下边出来，只看成绩（还有"大厅"）
+        const t = tutor;
+        t.graduate(v);
+        overTimer = window.setTimeout(() => {
+          overTimer = 0;
+          if (tutor === t) showResult(v, soloNames(), []);
+        }, TURBO ? 0 : 600);
+        return;
+      }
+      showResult(v, soloNames(), [
+        ['回选桌', 'soft', () => lobby()],
+        ['再来一场', 'go', () => startSolo(prefs.opts)],
+      ]);
+    }, resultDelay());
   },
 };
 
-function playSolo(s: Solo): void {
+function playSolo(s: Solo, tutorial = false): void {
   solo = s;
   applySpeed();
   clearScreen();
   screen.className = 'screen game';
   const o = s.save.state.opts;
-  title.textContent = `${getTrack(o.track)?.name ?? ''} · ${o.laps} 圈`;
+  title.textContent = `${tutorial ? '新手教程 · ' : ''}${getTrack(o.track)?.name ?? ''} · ${o.laps} 圈`;
   paintTop();
-  race = new RaceUi(screen, o, {
-    plan: (p) => void act({ t: 'plan', ...p }),
-    answer: (a) => void act(a),
-  });
+  race = new RaceUi(
+    screen,
+    o,
+    {
+      plan: (p) => {
+        tutor?.planned();
+        void act({ t: 'plan', ...(tutor ? tutor.plan(p) : p) });
+      },
+      answer: (a) => void act(a),
+    },
+    tutorial,
+  );
   const r = race;
   comms = new Comms(
     screen,
@@ -385,7 +455,15 @@ function playSolo(s: Solo): void {
     },
     (id, to) => soloTalk?.heard(id, to),
   );
-  soloTalk = new SoloTalk(comms);
+  soloTalk = new SoloTalk(comms, !tutorial);
+  if (tutorial)
+    tutor = new Tutor({
+      stage,
+      me: ME,
+      board: () => race?.board ?? null,
+      exit: () => lobby(),
+      again: () => startTutorial(),
+    });
   applySpeed();
   void s.resume();
 }
@@ -396,12 +474,23 @@ async function act(a: Action): Promise<void> {
   if (err && err !== 'busy') toast(MOVE_ERROR[err] ?? '这一步不行');
 }
 
-/** 结算：名次、每辆车这一场的数 */
+/**
+ * 结算：名次、每辆车这一场的数（DESIGN.md 8"结算"）。
+ * 不挡赛道中间：靠下边放（盖驾驶台，赛道露着），不压暗、不挡顶栏；"收起"只剩一条，看看赛道和冲线，"展开"回来。
+ * 弹窗里也有"大厅"，和顶栏那个一样走 goHome（独立部署时回游戏首页）
+ */
 function showResult(v: View, names: SeatName[], acts: [string, 'go' | 'soft', () => void][]): void {
+  screen.querySelector('.race')?.classList.add('over');
   dialog(stage, 'end', (box) => {
     const me = v.me?.seat ?? null;
     const mine = me === null ? null : v.cars[me]!.rank;
-    el('h2', '', box, mine === 0 ? '冠军！' : mine !== null ? `第 ${mine + 1} 名` : '比赛结束');
+    const head = el('div', 'end-head', box);
+    el('h2', '', head, mine === 0 ? '冠军！' : mine !== null ? `第 ${mine + 1} 名` : '比赛结束');
+    const fold = button('end-fold', head, '收起，看看赛道', () => {
+      const mask = box.parentElement!;
+      const folded = mask.classList.toggle('folded');
+      fold.textContent = folded ? '展开' : '收起，看看赛道';
+    });
     const tb = el('table', 'result', box);
     const hr = el('tr', '', tb);
     for (const h of ['名次', '车手', '冲刺', '尾流', '打滑', '付热量', '最快']) el('th', '', hr, h);
@@ -416,12 +505,13 @@ function showResult(v: View, names: SeatName[], acts: [string, 'go' | 'soft', ()
       for (const n of [c.stats.boosts, c.stats.slips, c.stats.spins, c.stats.heat, c.stats.top]) el('td', '', tr, String(n));
     }
     const row = el('div', 'row end-acts', box);
+    button('act soft end-home', row, home.querySelector('span')?.textContent ?? '大厅', () => goHome());
     for (const [text, kind, fn] of acts)
       button(`act ${kind}`, row, text, () => {
         closeDialog();
         fn();
       });
-  }, false);
+  }, false, true);
   const mine = v.me ? v.cars[v.me.seat]!.rank : null;
   play(mine !== null && mine <= Math.floor(v.cars.length / 2) - 1 ? 'win' : 'lose');
 }
@@ -566,16 +656,30 @@ async function drawRoomRace(s: OnlineState, fresh: boolean): Promise<void> {
 }
 
 function roomOver(s: OnlineState): void {
+  const v = s.view!.g;
+  if (v.phase !== 'over') return;
+  if (document.querySelector('.mask.end')) return followNext(s);
+  // 冲线动画放完停一会儿再弹（和单机一样）；等着的时候来了"再来一场"，弹出来以后一起补上
+  if (overTimer) return;
+  const room = online;
+  overTimer = window.setTimeout(() => {
+    overTimer = 0;
+    if (!room || online !== room || !room.state.view) return;
+    const st = room.state;
+    const me = st.you?.seat ?? null;
+    const acts: [string, 'go' | 'soft', () => void][] = [['回选桌', 'soft', () => lobby()]];
+    if (me !== null && st.room?.seats[me]?.kind === 'human' && !st.view!.next) acts.push(['再来一场', 'go', () => void rematch()]);
+    showResult(st.view!.g, roomNames(st, st.view!.g), acts);
+    followNext(st);
+  }, resultDelay());
+}
+
+/** 有人开了新房间（再来一场）：结算上写一句，5 秒后跟过去 */
+function followNext(s: OnlineState): void {
   const rv = s.view!;
   const v = rv.g;
-  if (v.phase !== 'over') return;
   const me = s.you?.seat ?? null;
   const names = roomNames(s, v);
-  if (!document.querySelector('.mask.end')) {
-    const acts: [string, 'go' | 'soft', () => void][] = [['回选桌', 'soft', () => lobby()]];
-    if (me !== null && s.room?.seats[me]?.kind === 'human' && !rv.next) acts.push(['再来一场', 'go', () => void rematch()]);
-    showResult(v, names, acts);
-  }
   if (rv.next && rv.next.by !== me && !followTimer) {
     const next = rv.next;
     const from = me === null ? null : { seat: (me - next.by + v.cars.length) % v.cars.length, sit: true };
@@ -618,30 +722,36 @@ async function leaveRoom(): Promise<void> {
   lobby();
 }
 
-async function leave(): Promise<void> {
-  if (online) return leaveRoom();
-  if (!solo) return lobby();
-  if (solo.save.state.phase !== 'over') {
-    const ok = await confirmBox(stage, '这一场还没跑完，存着下次接着跑。现在回选桌吗？', '回选桌', '接着跑');
-    if (!ok) return;
-  }
-  lobby();
+/** 比赛中离开先确认一次（单机存着下次接着跑；教程不存，问一句退不退）；where 是"回选桌"还是"回大厅" */
+async function confirmQuit(where: '回选桌' | '回大厅'): Promise<boolean> {
+  if (!solo || solo.save.state.phase === 'over') return true;
+  if (tutor) return confirmBox(stage, `教程还没跑完，下次从头来。现在${where}吗？`, where, '接着学');
+  return confirmBox(stage, `这一场还没跑完，存着下次接着跑。现在${where}吗？`, where, '接着跑');
 }
 
-// 比赛中点"大厅"先确认一次
-home.addEventListener('click', (e) => {
+async function leave(): Promise<void> {
+  if (online) return leaveRoom();
+  if (await confirmQuit('回选桌')) lobby();
+}
+
+/** 回大厅：顶栏的"大厅"和结算弹窗里的"大厅"都走这里（好友房先离座；独立部署时 homeUrl 是游戏首页） */
+function goHome(): void {
   if (online) {
-    e.preventDefault();
     void leaveRoom().then(() => {
       if (!online) location.href = homeUrl;
     });
     return;
   }
-  if (!solo || solo.save.state.phase === 'over') return;
-  e.preventDefault();
-  void confirmBox(stage, '这一场还没跑完，存着下次接着跑。回大厅吗？', '回大厅', '接着跑').then((ok) => {
+  void confirmQuit('回大厅').then((ok) => {
     if (ok) location.href = homeUrl;
   });
+}
+
+// 比赛中点"大厅"先确认一次；没在比赛就照链接走
+home.addEventListener('click', (e) => {
+  if (!online && (!solo || solo.save.state.phase === 'over')) return;
+  e.preventDefault();
+  goHome();
 });
 
 // ---------- 开始 ----------

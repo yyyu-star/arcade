@@ -3,4 +3,4 @@ export * from './cards.ts';
 export * from './options.ts';
 export * from './patterns.ts';
 export * from './game.ts';
-export { hashSeed, rngFor, type Rng } from './rng.ts';
+export { hashSeed, rngFor, type Rng } from '../../../core/rng.ts';

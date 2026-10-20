@@ -3,7 +3,7 @@
  * 老张：豪爽、爱炸弹、出手爽快；小美：稳、话少、想得细；阿强：莽、嘴快、手快，输了上头。
  * 每场的状态（手热、手冷）和局面（落后、领先、上头）也反映在说什么、多快出手上。
  */
-import { PERSONAS, type PersonaId } from '../ai/index.ts';
+import { PERSONAS, type PersonaId } from '../variants/guandan/ai/index.ts';
 import type { SeatId } from './labels.ts';
 
 export type Situation =

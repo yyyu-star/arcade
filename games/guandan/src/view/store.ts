@@ -2,8 +2,8 @@
  * 浏览器存储：全部 key 带 `guandan.` 前缀（所有游戏同域，前缀是唯一的隔离手段）。
  * 读坏了（JSON 损坏、版本不对）一律退回默认值，不让坏存档卡死游戏。
  */
-import { soloLevelOf, type SoloLevel } from '../ai/venue.ts';
-import type { GameState, Options } from '../core/index.ts';
+import { soloLevelOf, type SoloLevel } from '../variants/guandan/ai/venue.ts';
+import type { GameState, Options } from '../variants/guandan/core/index.ts';
 
 export const KEYS = {
   save: 'guandan.save',

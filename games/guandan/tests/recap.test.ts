@@ -1,6 +1,6 @@
 /** 每副结束的复盘（src/view/recap.ts，0.6.1）：只看公开的出牌记录和名次 */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/core/index.ts';
+import { DEFAULT_OPTIONS, interpret, parseCards, type DealResult, type PlayRecord } from '../src/variants/guandan/core/index.ts';
 import { dealRecap } from '../src/view/recap.ts';
 
 // 同一手可能有好几种解释（同花顺也是顺子）：取最大的那种

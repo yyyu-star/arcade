@@ -4,9 +4,9 @@
  */
 import { matchConfigErrors } from 'arcade-kit/game';
 import { describe, expect, it } from 'vitest';
-import { MATCH_FUN, MATCH_TABLE, MATCH_TIERS, matchRoomOptions, matchTierOf, stakeOfTier } from '../src/net/match.ts';
-import { guandanRoom } from '../src/net/rules.ts';
-import { TIER_IDS } from '../src/stake/index.ts';
+import { MATCH_FUN, MATCH_TABLE, MATCH_TIERS, matchRoomOptions, matchTierOf, stakeOfTier } from '../src/variants/guandan/net/match.ts';
+import { guandanRoom } from '../src/variants/guandan/net/rules.ts';
+import { TIER_IDS } from '../src/variants/guandan/stake/index.ts';
 
 describe('快速匹配的档位', () => {
   it('每个档位开桌的人数和选项都合房间的规则', () => {

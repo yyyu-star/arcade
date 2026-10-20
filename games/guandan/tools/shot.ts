@@ -14,8 +14,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContextOptions, type Page, type Route } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
-import { createGame, dispatch, viewFor } from '../src/core/index.ts';
-import { decide } from '../src/ai/index.ts';
+import { createGame, dispatch, viewFor } from '../src/variants/guandan/core/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
 import { jumpToTribute } from '../src/debug/jump.ts';
 
 // 默认让系统分配端口（模块登记的 5174/4174 常年被 dev、preview 占着）；GD_SHOT_PORT 可以指定

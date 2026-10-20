@@ -5,7 +5,7 @@
  * 4 张时露约 40（约 21 CSS 像素）。所以横向放得下时一列最多 4 张（列间距不小于 72，约 39 CSS 像素），放不下才用 5 张。
  */
 import Phaser from 'phaser';
-import { sortHand, type Card } from '../../core/index.ts';
+import { sortHand, type Card } from '../../variants/guandan/core/index.ts';
 import { audio } from '../audio.ts';
 import { dur, settle } from '../anim.ts';
 import { worldH, worldW } from '../ui/kit.ts';

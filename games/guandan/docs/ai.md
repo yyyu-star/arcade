@@ -1,6 +1,6 @@
 # 掼蛋的电脑：场地、性格、状态（0.7.0 起；0.12.1 按仓库 docs/balance.md 重新配平）
 
-> 代码：`src/ai/persona.ts`（强弱、性格、状态、局面）、`src/ai/venue.ts`（场地 → 电脑）、`src/ai/bot.ts`（出牌）、
+> 代码：`src/variants/guandan/ai/persona.ts`（强弱、性格、状态、局面）、`src/variants/guandan/ai/venue.ts`（场地 → 电脑）、`src/variants/guandan/ai/bot.ts`（出牌）、
 > `src/view/personas.ts`（口吻、节奏）。数字都来自 `tools/ai-sim.ts`（`npm run ai-sim -- solo|room|style|time`），命令和原始输出在第 6 节。
 
 ## 0. 摘要

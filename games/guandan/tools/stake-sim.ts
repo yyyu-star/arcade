@@ -12,8 +12,8 @@
  * 时长按动作数估：我每次出手 --human 秒（默认 4），电脑每次出手 --bot 秒（默认 1，页面的出牌动画），每副另加 --deal-overhead 秒（默认 12：发牌、进贡还贡、结算页）。
  * 只是估计：真人想得久的话按比例放大，表里给出 3 秒和 6 秒两种。
  */
-import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/core/index.ts';
-import { decide, type Difficulty } from '../src/ai/index.ts';
+import { createGame, dispatch, seatsToAct, viewFor, type GameState } from '../src/variants/guandan/core/index.ts';
+import { decide, type Difficulty } from '../src/variants/guandan/ai/index.ts';
 
 function arg(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);

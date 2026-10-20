@@ -9,7 +9,7 @@ import Phaser from 'phaser';
 import { PROPS } from 'arcade-kit/table-fun';
 import type { FunBot } from 'arcade-kit/fun-logic';
 import { PROP_BASE, emoteOf } from '../../net/emotes.ts';
-import { URGE_AFTER_MS, slowUrge } from '../../net/fun-moments.ts';
+import { URGE_AFTER_MS, slowUrge } from '../../variants/guandan/net/fun-moments.ts';
 import { getSettings } from '../store.ts';
 import { COLOR, TYPE } from '../theme.ts';
 import { iconButton, text } from '../ui/kit.ts';

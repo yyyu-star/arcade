@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { interpret, parseCards, DEFAULT_OPTIONS } from '../src/core/index.ts';
+import { interpret, parseCards, DEFAULT_OPTIONS } from '../src/variants/guandan/core/index.ts';
 import { countLeft } from '../src/view/counter.ts';
 
 describe('记牌器', () => {

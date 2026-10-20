@@ -18,8 +18,8 @@ import {
   hint,
   type Action,
   type GameState,
-} from '../src/core/index.ts';
-import { decide } from '../src/ai/index.ts';
+} from '../src/variants/guandan/core/index.ts';
+import { decide } from '../src/variants/guandan/ai/index.ts';
 import { C, act, pass, play, playState } from './helpers.ts';
 
 describe('出牌流程', () => {

@@ -8,7 +8,7 @@
  * - screen=title|rules|settings|stats：启动后直接打开某个画面（截图用）
  * - online=1：启动后直接打开好友房面板（平台大厅的入口用；0.3.0 起标题页一直有"好友房"）；room=xxxxxx：直接进这个房间（邀请链接）
  */
-import { SOLO_LEVELS, type SoloLevel } from '../ai/venue.ts';
+import { SOLO_LEVELS, type SoloLevel } from '../variants/guandan/ai/venue.ts';
 
 export interface LaunchParams {
   seed: string | null;

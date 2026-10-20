@@ -2,10 +2,10 @@
  * 结束颁奖（0.14.0）：房间攒的公开记录（src/net/rules.ts 的 log）、视角旋转、评奖（src/net/awards.ts）、分享卡里的奖（src/view/share-card.ts）
  */
 import { describe, expect, it } from 'vitest';
-import { testKey, guandanRoom as R, type NetState } from '../src/net/rules.ts';
-import { rotateNetView } from '../src/net/rotate.ts';
-import { AWARD_NAME, matchAwards, winnerOf } from '../src/net/awards.ts';
-import { emptyMatchLog, logDeal, type MatchLog } from '../src/stake/titles.ts';
+import { testKey, guandanRoom as R, type NetState } from '../src/variants/guandan/net/rules.ts';
+import { rotateNetView } from '../src/variants/guandan/net/rotate.ts';
+import { AWARD_NAME, matchAwards, winnerOf } from '../src/variants/guandan/net/awards.ts';
+import { emptyMatchLog, logDeal, type MatchLog } from '../src/variants/guandan/stake/titles.ts';
 import { shareCardOf } from '../src/view/share-card.ts';
 
 /** 电脑把一整局打完，顺手按 dealEnd 事件自己再记一份，和房间的记录对照 */

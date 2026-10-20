@@ -6,13 +6,16 @@
  * 横屏那一遍还点一遍"聊"：点名电脑说一句、冲它扔番茄、按人屏蔽、关掉再打开总开关。
  * 手机：竖屏那一遍按手机模拟（触屏、像素比 3、CPU 降速 4 倍当省内存设备）；横屏那一遍模拟一次双指放大（visualViewport.scale = 2 时舞台不能重排）。
  * 我这辆车照驾驶台的顺序开（scripts/drive.ts）：先挂 3 挡或 2 挡，再把手牌放进出牌区；问冲刺、拼劲、尾流一律"不了"，问弃牌"不弃"。
+ * 结算：有"大厅"，"收起，看看赛道"收起再展开。
+ * 新手教程（横竖各一遍）：先留一场没跑完的单机存档，从选桌页点"新手教程"，阿驰的讲解点"下一步"、操作步照着高亮点完，进自由驾驶，
+ * 跑到冲线看到毕业气泡；查教程没动 racing.solo、racing.prefs，记下了 racing.tutorial，回选桌后"第一次来？"不再冒。
  * 用法：npm run smoke。截图在 shots/smoke-*.png。
  */
 import { mkdirSync } from 'node:fs';
 import type { Page } from 'playwright-core';
 import { createServer } from 'vite';
 import { launch } from './browser.ts';
-import { drive } from './drive.ts';
+import { drive, driveTutorial } from './drive.ts';
 
 const root = new URL('..', import.meta.url).pathname;
 mkdirSync(`${root}shots`, { recursive: true });
@@ -57,6 +60,64 @@ async function race(page: Page, name: string): Promise<boolean> {
   }
   if (!peeked) console.error(`${name}: 没点到弃牌区`);
   return false;
+}
+
+/** 新手教程走一遍（DESIGN.md 8.1）；返回发现的问题 */
+async function tutorial(page: Page, name: string): Promise<string[]> {
+  const bad: string[] = [];
+  const store = (): Promise<Record<string, string | null>> =>
+    page.evaluate(() => Object.fromEntries(['racing.solo', 'racing.prefs', 'racing.tutorial'].map((k) => [k, localStorage.getItem(k)])));
+  await page.waitForSelector('.lobby-head .tut-btn');
+  if (!(await page.$('.lobby-head .tut-hint'))) bad.push('没来过教程，选桌页没冒"第一次来？"');
+  // 先留一场没跑完的单机：开跑、出一手牌、离开回选桌（存着下次接着跑）
+  await page.click('text=单机开跑');
+  await page.waitForSelector('.dash-action .act.go');
+  for (let k = 0; k < 3; k++) await drive(page, [2], false);
+  await page.click('.topbar .leave');
+  await page.click('.mask.confirm button:has-text("回选桌")');
+  await page.waitForSelector('.lobby-head .tut-btn');
+  const before = await store();
+  if (!before['racing.solo']) bad.push('没留下单机存档，测不了教程碰没碰它');
+  await page.click('.lobby-head .tut-btn');
+  await page.waitForSelector('.coach:not([hidden]) .coach-bubble');
+  await page.screenshot({ path: `${root}shots/smoke-${name}-tut-intro.png` });
+  let free = false;
+  let opShot = false;
+  let grad = false;
+  // 弃牌只问第一次（之后按"不弃"跳过）：数一数问了几回
+  let discardAsks = 0;
+  let asking = false;
+  for (let i = 0; i < 4_000 && !grad; i++) {
+    const discard = !!(await page.$('.dash-action .ask .act-title:has-text("弃牌")'));
+    if (discard && !asking) discardAsks++;
+    asking = discard;
+    // 没有气泡时不能用 page.textContent（它会一直等到气泡出来）
+    const text = (await (await page.$('.coach:not([hidden]) .coach-bubble'))?.textContent()) ?? '';
+    if (text.includes('剩下的路你自己开')) free = true;
+    if (!opShot && text.includes('挂到 2 挡')) {
+      opShot = true;
+      await page.waitForTimeout(100);
+      await page.screenshot({ path: `${root}shots/smoke-${name}-tut-op.png` });
+    }
+    const r = await driveTutorial(page);
+    if (r === 'grad') grad = true;
+    else if (!r) await page.waitForTimeout(25);
+  }
+  if (!free) bad.push('教程没走到自由驾驶');
+  if (!grad) bad.push('教程没跑到毕业');
+  if (discardAsks !== 1) bad.push(`教程问了 ${discardAsks} 回弃牌（应该只问第一次）`);
+  await page.screenshot({ path: `${root}shots/smoke-${name}-tut-grad.png` });
+  const after = await store();
+  if (after['racing.solo'] !== before['racing.solo']) bad.push('教程动了 racing.solo（玩家的续玩）');
+  if (after['racing.prefs'] !== before['racing.prefs']) bad.push('教程动了 racing.prefs');
+  if (!after['racing.tutorial']) bad.push('教程跑完没记 racing.tutorial');
+  if (grad) {
+    await page.click('.coach-bubble button:has-text("正式开跑")');
+    await page.waitForSelector('.lobby-head .tut-btn');
+    if (await page.$('.lobby-head .tut-hint')) bad.push('跑过教程，选桌页还在冒"第一次来？"');
+    if (!(await page.$('.lobby-acts button:has-text("接着上一场")'))) bad.push('跑完教程，"接着上一场"没了');
+  }
+  return bad;
 }
 
 for (const [name, viewport] of [
@@ -113,7 +174,7 @@ for (const [name, viewport] of [
     await page.click('.comms-btn');
     await page.click('.comms-who .chip:nth-of-type(2)');
     await page.click('.comms-body .phrase >> nth=0');
-    await page.waitForSelector('.standings .row .bubble:has-text("@")');
+    await page.waitForSelector('.race > .bubble:has-text("@")');
     await page.click('.comms-btn');
     await page.click('.comms-tabs .chip:has-text("道具")');
     await page.click('.comms-body .pic >> nth=0');
@@ -138,6 +199,15 @@ for (const [name, viewport] of [
   if (!ok) {
     failed = true;
     console.error(`${name}: 没跑完`);
+  } else {
+    // 结算：有"大厅"（和顶栏的一样，这里不点：点了就离开页面了）；收起看赛道，再展开
+    if (!(await page.$('.mask.end .end-home'))) errors.push('结算弹窗里没有"大厅"');
+    await page.click('.mask.end .end-fold');
+    await page.waitForSelector('.mask.end.folded');
+    await page.screenshot({ path: `${root}shots/smoke-${name}-end-folded.png` });
+    await page.click('.mask.end .end-fold');
+    await page.click('.mask.end .end-acts button:has-text("回选桌")');
+    errors.push(...(await tutorial(page, name)));
   }
   if (errors.length) {
     failed = true;
