@@ -2280,7 +2280,13 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `管理员的顶栏换行了：${tops}`);
     check((await page.getByTestId('admin-chips-open').count()) === 0, '大厅不该再有"管理筹码"按钮');
-    await page.getByRole('link', { name: '管理', exact: true }).click();
+    if (screen === 'desktop') await page.getByRole('link', { name: '管理', exact: true }).click();
+    else {
+      // 手机上顶栏没有"管理"，从"我的"页的"去管理后台"进
+      await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+      await page.locator('.topbar a[href="/me"]').click();
+      await page.getByTestId('me-admin').click();
+    }
     await page.getByTestId('admin-chips-open').click();
     const box = page.getByTestId('admin-chips');
     await box.getByLabel('用户名').fill('xiaoming_2026');
