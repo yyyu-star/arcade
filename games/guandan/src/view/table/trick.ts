@@ -1,5 +1,6 @@
 /** 桌面中央：本轮各家出的牌（或"不要"），带牌型名。新一轮开始时清桌。 */
 import Phaser from 'phaser';
+import type { PlayBase } from '../../core/play.ts';
 import { isBomb, type Play } from '../../variants/guandan/core/index.ts';
 import { dur, tweenP } from '../anim.ts';
 import { playLabel } from '../labels.ts';
@@ -11,7 +12,12 @@ import type { SeatAnchor } from './layout.ts';
 export const PLAYED_W = 60;
 const STEP = 26;
 
-export class TrickView {
+/** 出牌区上一手的字和要不要按炸弹的样子画（牌馆 0.28.0：玩法给；不给就是掼蛋的） */
+export type DescribePlay<P extends PlayBase> = (p: P) => { label: string; bomb: boolean };
+
+const describeGuandan: DescribePlay<Play> = (p) => ({ label: playLabel(p), bomb: isBomb(p) });
+
+export class TrickView<P extends PlayBase = Play> {
   private scene: Phaser.Scene;
   private anchors: SeatAnchor[];
   private slots: (Phaser.GameObjects.Container | null)[] = [null, null, null, null];
@@ -19,13 +25,15 @@ export class TrickView {
   private glows: (Phaser.GameObjects.Graphics | null)[] = [null, null, null, null];
   private level = 2;
   /** 这一墩到现在的出牌顺序（null = 不要）；读档恢复时不知道前面的，不记 */
-  private seq: { seat: number; play: Play | null }[] = [];
+  private seq: { seat: number; play: P | null }[] = [];
   /** 刚收掉的上一墩（给"上一墩"回看用）；新的一副清空 */
-  prev: { seat: number; play: Play | null }[] = [];
+  prev: { seat: number; play: P | null }[] = [];
+  private readonly describe: DescribePlay<P>;
 
-  constructor(scene: Phaser.Scene, anchors: SeatAnchor[]) {
+  constructor(scene: Phaser.Scene, anchors: SeatAnchor[], describe?: DescribePlay<P>) {
     this.scene = scene;
     this.anchors = anchors;
+    this.describe = describe ?? (describeGuandan as unknown as DescribePlay<P>);
   }
 
   setLevel(level: number): void {
@@ -74,7 +82,7 @@ export class TrickView {
   /**
    * 出牌：views 给出时（我出的牌，从手牌拿来）直接飞过去；否则从 from 位置（电脑头像）新建牌飞过去。
    */
-  async showPlay(seat: number, play: Play, views: CardView[] | null, from: { x: number; y: number }): Promise<void> {
+  async showPlay(seat: number, play: P, views: CardView[] | null, from: { x: number; y: number }): Promise<void> {
     this.clearSeat(seat);
     this.dimOthers(seat);
     this.seq.push({ seat, play });
@@ -111,8 +119,7 @@ export class TrickView {
     );
     await Promise.all(tweens);
     // 牌型名：普通牌型金色小牌子，炸弹红色
-    const label = playLabel(play);
-    const bomb = isBomb(play);
+    const { label, bomb } = this.describe(play);
     // 压着的那一手：牌后面垫一圈金框（炸弹红框）；飞行途中被清掉了就不画
     if (this.slots[seat] === c) {
       const half = (PLAYED_W * 1.4) / 2 + 7;
@@ -189,7 +196,7 @@ export class TrickView {
   }
 
   /** 重建（读档或刷新后）：只画出牌，不做动画。 */
-  restore(seat: number, play: Play | null): void {
+  restore(seat: number, play: P | null): void {
     if (play === null) {
       this.showPass(seat);
       this.slots[seat]?.setScale(1).setAlpha(1);

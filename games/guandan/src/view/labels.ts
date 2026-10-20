@@ -1,6 +1,7 @@
 /** 给玩家看的短文字：牌型名、名次、座位名。只做"翻译"，不算规则。 */
 import { PLAY_TYPE_NAMES, rankName, type Play } from '../variants/guandan/core/index.ts';
-import { PERSONAS } from './art/index.ts';
+import { PERSONAS, type AvatarId } from './art/index.ts';
+import type { PersonaId } from '../variants/guandan/ai/index.ts';
 
 /** 中央显示的牌型名：炸弹带张数，例如"炸弹×6"。 */
 export function playLabel(p: Play): string {
@@ -41,9 +42,18 @@ export function goalWord(endLevel: number): string {
   return endLevel >= 14 ? '过 A' : `打到 ${levelName(endLevel)}`;
 }
 
-export type SeatId = 'me' | 'laozhang' | 'xiaomei' | 'aqiang';
+export type SeatId = AvatarId;
 /** 座位 → 人物：0 我（下）、1 下家老张（右）、2 对家小美（上）、3 上家阿强（左）。 */
-const SEAT_PERSON: SeatId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
+const SEAT_PERSON: readonly SeatId[] = ['me', 'laozhang', 'xiaomei', 'aqiang'];
+/** 斗地主（牌馆 0.28.0）：0 我、1 下家老周（右）、2 上家王姐（左） */
+export const DDZ_SEAT_PERSON: readonly SeatId[] = ['me', 'laozhou', 'wangjie'];
+
+/** 这张桌子的座位 → 人物（掼蛋的牌桌用默认的，斗地主的牌桌建起来时换成 DDZ_SEAT_PERSON，离开时换回来） */
+let seatPersons: readonly SeatId[] = SEAT_PERSON;
+
+export function setTablePersons(list: readonly SeatId[] | null): void {
+  seatPersons = list ?? SEAT_PERSON;
+}
 
 /**
  * 联机时座位上坐的是谁（画面座位号，我 = 0）：真人用昵称、头像统一用"你"那张；电脑是老张、小美、阿强，
@@ -60,7 +70,7 @@ export interface SeatIdentity {
   /** 人还连着但走开了，房间每手几秒就替他出（0.6.3） */
   afk?: boolean;
   /** 电脑座位：是哪个人物 */
-  persona?: Exclude<SeatId, 'me'>;
+  persona?: PersonaId;
 }
 export const seatIdentity: (SeatIdentity | null)[] = [null, null, null, null];
 
@@ -85,7 +95,7 @@ export function setSeatIdentities(list: (SeatIdentity | null)[]): void {
 /** 头像用哪个人物：联机的真人一律用"你"那张，名字区分 */
 export function seatPerson(seat: number): SeatId {
   const who = seatIdentity[seat];
-  return who?.human ? 'me' : (who?.persona ?? SEAT_PERSON[seat]!);
+  return who?.human ? 'me' : (who?.persona ?? seatPersons[seat]!);
 }
 
 export function seatName(seat: number): string {

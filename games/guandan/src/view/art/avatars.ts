@@ -4,7 +4,7 @@
  */
 import { C, SANS, svg } from './common.ts';
 
-export type AvatarId = 'me' | 'laozhang' | 'xiaomei' | 'aqiang';
+export type AvatarId = 'me' | 'laozhang' | 'xiaomei' | 'aqiang' | 'laozhou' | 'wangjie';
 export type Mood = 'normal' | 'happy' | 'sad' | 'think' | 'smug';
 
 /** 三位电脑对手的名字与代表色（名牌底色） */
@@ -12,6 +12,8 @@ export const PERSONAS: Record<Exclude<AvatarId, 'me'>, { name: string; color: nu
   laozhang: { name: '老张', color: 0xb5552b },
   xiaomei: { name: '小美', color: 0x6f4a9e },
   aqiang: { name: '阿强', color: 0x2f8a5c },
+  laozhou: { name: '老周', color: 0x2c5f8f },
+  wangjie: { name: '王姐', color: 0xb02a3c },
 };
 
 /** 头像内底色 [中心, 边缘] */
@@ -20,6 +22,8 @@ const BG: Record<AvatarId, [string, string]> = {
   laozhang: ['#e3a15f', '#a4512a'],
   xiaomei: ['#b195d6', '#5f3f8e'],
   aqiang: ['#6cc49a', '#257450'],
+  laozhou: ['#8fb4d6', '#2b4a6e'],
+  wangjie: ['#f0a0a0', '#9c2f45'],
 };
 
 const INK = C.ink;
@@ -41,6 +45,8 @@ const LOOK: Record<AvatarId, Look> = {
   laozhang: { skin: '#f2c99e', skinSh: '#dea173', brow: '#3a3330', browW: 6.5, browY: 71, lash: false, calm: false },
   xiaomei: { skin: '#fde2cc', skinSh: '#f0bfa0', brow: '#2b1f1f', browW: 3.2, browY: 72, lash: true, calm: true },
   aqiang: { skin: '#f6cfa6', skinSh: '#e2a676', brow: '#2b1d14', browW: 5.5, browY: 72, lash: false, calm: false },
+  laozhou: { skin: '#eec59a', skinSh: '#d99f72', brow: '#26262a', browW: 7.5, browY: 70, lash: false, calm: true },
+  wangjie: { skin: '#fbd5b8', skinSh: '#ecae8c', brow: '#4a1620', browW: 3.6, browY: 72, lash: true, calm: false },
 };
 
 const EX = [66, 94] as const; // 两眼 x
@@ -173,6 +179,41 @@ export function bustSvgBody(id: AvatarId, mood: Mood): string {
       const front = `<path d="M43 82C42 58 58 47 80 47C102 47 118 58 117 82C112 74 106 70 100 73C95 66 88 67 82 72C76 66 68 66 62 72C56 68 48 72 43 82Z" fill="${hair}" ${L2}/>` +
         `<path d="M58 54Q66 50 74 51" stroke="#55424f" stroke-width="2.4" fill="none" stroke-linecap="round"/>` +
         `<path d="M104 60l12-6" stroke="${C.gold}" stroke-width="4" stroke-linecap="round"/><circle cx="117" cy="53.5" r="3.4" fill="#e8708a" stroke="${INK}" stroke-width="1.2"/>`;
+      return back + body + face + front;
+    }
+    case 'laozhou': {
+      const grey = '#d9d6d2';
+      const body = headBase(k, '#2c4a73', '#1a2d4a') +
+        // 立领夹克 + 拉链 + 胸口的笔
+        `<path d="M64 122Q80 130 96 122L98 132Q80 140 62 132Z" fill="#3b5f93" ${L2}/>` +
+        `<path d="M80 136V162" stroke="#1a2d4a" stroke-width="2.4"/><path d="M78 140h4M78 148h4M78 156h4" stroke="#b9c4d4" stroke-width="2"/>` +
+        `<g transform="rotate(8 108 146)"><rect x="105" y="136" width="5" height="24" rx="2" fill="#e8d9a8" ${L2}/><rect x="105" y="136" width="5" height="7" rx="2" fill="#b8322c" stroke="${INK}" stroke-width="1.4"/></g>`;
+      // 灰白平头：顶部齐刷刷 + 深色鬓角
+      const back = `<path d="M44 80C40 56 54 46 80 46C106 46 120 56 116 80L110 72L50 72Z" fill="${grey}" ${L3}/>`;
+      const front = `<path d="M46 70C48 52 62 46 80 46C98 46 112 52 114 70C106 62 96 58 80 58C64 58 54 62 46 70Z" fill="${grey}" ${L2}/>` +
+        `<path d="M60 52H100M56 57H104" stroke="#9a958f" stroke-width="2" stroke-linecap="round"/>` +
+        `<path d="M44 74C42 84 44 92 47 96C50 90 51 82 50 72ZM116 74C118 84 116 92 113 96C110 90 109 82 110 72Z" fill="#3a3a40" ${L2}/>` +
+        // 耳朵上夹的牙签
+        `<path d="M36 80L50 90" stroke="#e9d49a" stroke-width="2.6" stroke-linecap="round"/><path d="M36 80L34 78" stroke="#a88a4a" stroke-width="2.6" stroke-linecap="round"/>`;
+      return back + body + face + front;
+    }
+    case 'wangjie': {
+      const hair = '#7a1f3a';
+      const hi = '#a8405a';
+      const curl = (x: number, y: number, r: number) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${hair}" ${L2}/>`;
+      // 蓬松烫卷：一圈圆卷叠成短发
+      const back = `<path d="M38 92C34 60 52 42 80 42C108 42 126 60 122 92C122 104 116 112 110 114L50 114C44 112 38 104 38 92Z" fill="${hair}" ${L3}/>` +
+        curl(40, 70, 12) + curl(36, 92, 11) + curl(120, 70, 12) + curl(124, 92, 11) + curl(56, 48, 13) + curl(80, 42, 13) + curl(104, 48, 13);
+      const body = headBase(k, '#d3302f', '#8e1a1e') +
+        // 外套翻领 + 金扣
+        `<path d="M62 124L80 150L98 124L90 122L80 134L70 122Z" fill="#e8504a" ${L2}/>` +
+        `<path d="M80 150V164" stroke="#8e1a1e" stroke-width="2.4"/><circle cx="80" cy="154" r="3" fill="${C.gold}" ${L2}/><circle cx="80" cy="162" r="3" fill="${C.gold}" ${L2}/>`;
+      const front = curl(52, 62, 11) + curl(68, 56, 11) + curl(84, 55, 11) + curl(100, 56, 11) + curl(110, 64, 10) +
+        `<path d="M60 56q4-4 8-3M92 52q5-1 8 2" stroke="${hi}" stroke-width="2.2" fill="none" stroke-linecap="round"/>` +
+        // 金色圆耳环
+        `<circle cx="44" cy="102" r="5.5" fill="none" stroke="${C.gold}" stroke-width="3"/><circle cx="116" cy="102" r="5.5" fill="none" stroke="${C.gold}" stroke-width="3"/>` +
+        // 嘴角笑纹
+        `<path d="M66 97Q64 101 67 104M94 97Q96 101 93 104" fill="none" stroke="${k.skinSh}" stroke-width="2.2" stroke-linecap="round"/>`;
       return back + body + face + front;
     }
     case 'aqiang': {

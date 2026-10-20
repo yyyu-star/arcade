@@ -16,6 +16,7 @@ import { chromium, type Browser, type BrowserContextOptions, type Page, type Rou
 import { createServer, type ViteDevServer } from 'vite';
 import { createGame, dispatch, viewFor } from '../src/variants/guandan/core/index.ts';
 import { decide } from '../src/variants/guandan/ai/index.ts';
+import { createDdz } from '../src/variants/doudizhu/index.ts';
 import { jumpToTribute } from '../src/debug/jump.ts';
 
 // 默认让系统分配端口（模块登记的 5174/4174 常年被 dev、preview 占着）；GD_SHOT_PORT 可以指定
@@ -65,8 +66,10 @@ interface FakeApi {
   mode: 'ok' | 'offline' | 'hang' | 'putTooSoon';
   saves: Map<string, { rev: number; data: unknown }>;
   log: { method: string; path: string; xArcade: string | null; type: string | null; body: { baseRev: number; data: unknown; userId?: unknown } | null }[];
+  /** 每日挑战交上来的分 */
+  scores: number[];
 }
-const fakeApi = (saves: Record<string, { rev: number; data: unknown }> = {}, mode: FakeApi['mode'] = 'ok'): FakeApi => ({ mode, saves: new Map(Object.entries(saves)), log: [] });
+const fakeApi = (saves: Record<string, { rev: number; data: unknown }> = {}, mode: FakeApi['mode'] = 'ok'): FakeApi => ({ mode, saves: new Map(Object.entries(saves)), log: [], scores: [] });
 
 async function serveApi(name: string, route: Route, api: FakeApi | undefined): Promise<void> {
   const req = route.request();
@@ -89,6 +92,13 @@ async function serveApi(name: string, route: Route, api: FakeApi | undefined): P
   if (path === '/api/feed' && req.method() === 'POST') {
     if (h['x-arcade'] !== '1') errors.push(`[${name}] 报名场面没带 X-Arcade`);
     return route.fulfill({ status: 204 });
+  }
+  // 斗地主每日挑战交分（平台 15.5）：记最好的一次
+  if (path === '/api/scores' && req.method() === 'POST') {
+    const s = JSON.parse(req.postData() ?? 'null') as { gameId: string; boardId: string; score: number; userId: string };
+    if (h['x-arcade'] !== '1' || s.gameId !== 'guandan' || s.userId !== 'u-shot' || !/^daily-\d{4}-\d{2}-\d{2}-ddz$/.test(s.boardId)) errors.push(`[${name}] 交分不对：${JSON.stringify(s)}`);
+    api.scores.push(s.score);
+    return reply({ best: Math.max(...api.scores), improved: s.score === Math.max(...api.scores) });
   }
   const body = req.method() === 'PUT' ? (JSON.parse(req.postData() ?? 'null') as { baseRev: number; data: unknown; userId?: unknown }) : null;
   api.log.push({ method: req.method(), path, xArcade: h['x-arcade'] ?? null, type: h['content-type'] ?? null, body });
@@ -553,6 +563,72 @@ async function smokeBomb(browser: Browser): Promise<void> {
     notes.push('炸弹：这一副没人出炸弹（不算失败）');
   }
   await page.context().close();
+}
+
+async function smokeDdz(browser: Browser): Promise<void> {
+  // 斗地主单机（牌馆 0.28.0，入口先藏在 ?ddz=1）：主页切过去、叫分、真人出一手（不代打的截图），再代打到整局结束、回主页
+  const home = await open(browser, '斗地主主页', 'ddz=1&debug=1');
+  await until(home, '标题页', "g.scene === 'title'");
+  await click(home, 'variant:ddz');
+  await until(home, '斗地主面板', "'quick' in g.controls() && !('stake' in g.controls())");
+  await shot(home, '30-ddz-title');
+  await click(home, 'quick');
+  await until(home, '斗地主牌桌', "g.scene === 'ddz' && g.idle");
+  await home.page.context().close();
+  // URL 带种子直接开局（和掼蛋的调试开局一样）；挑一个我先叫的种子
+  let seed = '';
+  for (let i = 0; !seed; i++) if (createDdz(`ddz-shot${i}`).state.firstBidder === 0) seed = `ddz-shot${i}`;
+  const ctx = await open(browser, '斗地主', `ddz=1&seed=${seed}&debug=1&anim=0`);
+  const { page } = ctx;
+  await until(ctx, '斗地主牌桌', "g.scene === 'ddz' && g.idle && g.ddzView()?.turn === 0");
+  const bidAt = await page.evaluate(() => window.__game!.ddzView()!.phase);
+  assert(bidAt === 'bid', `第一个轮到我是叫分，实际 ${bidAt}`);
+  await shot(ctx, '31-ddz-bid');
+  await click(ctx, 'rules');
+  await until(ctx, '规则弹窗', "g.overlay === 'menu'");
+  await shot(ctx, '31b-ddz-rules');
+  await page.keyboard.press('Escape');
+  await until(ctx, '关掉规则', 'g.overlay === null && g.idle');
+  await click(ctx, 'bid:3');
+  await until(ctx, '叫完地主', "g.ddzView()?.phase === 'play' && g.idle && g.ddzView()?.turn === 0");
+  const v = await page.evaluate(() => window.__game!.ddzView()!);
+  assert(v.landlord === 0 && v.hand.length === 20, `叫 3 分我当地主、拿了底牌（20 张），实际地主 ${v.landlord}、${v.hand.length} 张`);
+  await click(ctx, 'hint');
+  await until(ctx, '提示选了牌', 'g.selected().length > 0');
+  await shot(ctx, '32-ddz-hint');
+  await click(ctx, 'play');
+  await until(ctx, '出了一手', 'g.ddzView().hand.length < 20');
+  await page.evaluate(() => window.__game!.setAutoplay(true));
+  await until(ctx, '一副结束', "g.overlay === 'settle'", 120_000);
+  await shot(ctx, '33-ddz-settle');
+  await until(ctx, '整局结束', "g.overlay === 'gameOver'", 240_000);
+  await shot(ctx, '34-ddz-gameover');
+  const st = await page.evaluate(() => window.__game!.ddzState()!);
+  assert(st.scores.reduce((a, b) => a + b, 0) === 0, `斗地主零和，实际 ${st.scores.join(',')}`);
+  const stats = JSON.parse((await page.evaluate(() => localStorage.getItem('guandan.ddz.stats'))) ?? 'null');
+  assert(stats?.games === 1 && stats?.deals === st.results.length, `战绩记了 1 局 ${st.results.length} 副，实际 ${JSON.stringify(stats)}`);
+  assert((await page.evaluate(() => localStorage.getItem('guandan.ddz.save'))) === null, '整局结束删掉存档');
+  notes.push(`斗地主一局 ${st.results.length} 副，我 ${st.scores[0]} 分`);
+  await click(ctx, 'over:home');
+  await until(ctx, '回到主页', "g.scene === 'title' && 'quick' in g.controls()");
+  await page.context().close();
+  // 每日挑战：登录了才有这张卡；代打打完一场，结束页交分、写今天最好
+  const api = fakeApi();
+  const d = await open(browser, '斗地主每日', 'ddz=1&debug=1&anim=0&autoplay=1', { api, storage: { 'guandan.variant': JSON.stringify('ddz') } });
+  await until(d, '斗地主面板', "g.scene === 'title' && 'daily' in g.controls()");
+  await click(d, 'daily');
+  await until(d, '每日挑战打完', "g.overlay === 'gameOver'", 240_000);
+  await until(d, '交上分', "g.texts().some((t) => t.s.includes('已上榜'))", 10_000);
+  assert(api.scores.length === 1, `每日挑战交了 ${api.scores.length} 次分`);
+  assert((await d.page.evaluate(() => localStorage.getItem('guandan.ddz.stats'))) === null, '每日挑战不记战绩');
+  await shot(d, '34b-ddz-daily-over');
+  await d.page.context().close();
+  // 手机横屏：叫分那一刻的牌桌
+  const m = await open(browser, '斗地主手机', `ddz=1&seed=${seed}&debug=1&anim=0`, { w: 844, h: 390, dpr: 3, touch: true });
+  await until(m, '斗地主牌桌', "g.scene === 'ddz' && g.idle && g.ddzView()?.turn === 0");
+  await checkHits(m, '斗地主叫分', false);
+  await shot(m, '35-ddz-phone');
+  await m.page.context().close();
 }
 
 async function smokeMobile(browser: Browser): Promise<void> {
@@ -1157,6 +1233,7 @@ async function main(): Promise<void> {
         cloud: smokeCloud,
         large: smokeLarge,
         viewport: smokeViewport,
+        ddz: smokeDdz,
       };
       const names = only > 0 ? process.argv[only + 1]!.split(',') : Object.keys(parts);
       for (const n of names) {

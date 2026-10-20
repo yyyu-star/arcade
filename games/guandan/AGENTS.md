@@ -19,17 +19,18 @@ src/variants/doudizhu/   斗地主（同样的分层；规则取舍见 docs/rule
 src/net/    玩法无关的联机部分：version 页面版本与房间、实盘路径，emotes 互动编号表
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
-            share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）
+            share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）；
+            斗地主：scenes/DdzScene 三人桌、ddz-session 单机会话、ddz-view 理牌分列和牌型说法、ddz-daily 每日挑战（种子、榜名、交分）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、match.ts 快速匹配的排队、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
-public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、_headers
+public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、daily.json（斗地主每日挑战的分数怎么显示，平台读）、_headers
 tests/      vitest；architecture.test.ts 检查通用层和各玩法 core/ai/stake 的纯度、互不引用；golden.test.ts 掼蛋金样（tests/golden/ 只放哈希，场景在 golden-scenarios.ts）；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai/ 和 baseline-ai-0.1.2/ 旧版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
             ddz-sim.ts 斗地主机器人对打（稳定性、三档梯度、耗时）；quota-smoke.ts 额度提示冒烟；match-smoke.ts 快速匹配冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
-docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计、ai.md 电脑的场地、性格、强弱数字、art-v3.md 主页和牌桌的美术现状、doudizhu.md 牌馆重构方案
+docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计、ai.md 电脑的场地、性格、强弱数字、art-v3.md 主页和牌桌的美术现状、doudizhu.md 牌馆（掼蛋 + 斗地主）的分层、规则、界面和分期
 ```
 
 ## 2. 规则核心的约束
@@ -72,10 +73,15 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 动画时长一律经 `anim.ts` 的 `dur()`（设置里的速度、URL `anim=0` 瞬间完成）；冒烟靠 `anim=0` 和 `autoplay=1` 快速推进。
 - 手牌分列是纯函数 `table/columns.ts`（有单测）；一列最多 5 张，保证手机横屏每张牌露出的部分都点得中（冒烟里逐张点验证）。
 - 座位：0 我（下）、1 老张（右，下家）、2 小美（上，对家）、3 阿强（左，上家）。性格只影响台词/表情（`personas.ts`）。
+  斗地主三人桌：0 我（下）、1 老周（右，下家）、2 王姐（左，上家），布局 `table/layout.ts` 的 `seatAnchors3`；`labels.ts` 的 `setTablePersons` 换成这两个人。
+- 斗地主（牌馆，`docs/doudizhu.md`）：入口先藏着，只有带 `?ddz=1` 时主页才有"掼蛋 / 斗地主"切换（标题换成"牌馆"），玩法记在 `guandan.variant`。
+  场景 `ddz`（`DdzScene`）复用掼蛋的手牌、出牌区、座位、按钮、弹窗、牌面、音效和 kit 的互动：手牌和出牌区由玩法给"怎么理牌、一手牌怎么写"（`HandOrder`、`DescribePlay`，不给就是掼蛋原样）。
+  推进同样只走 `DdzSession.apply` → `dispatchDdz`；电脑只拿 `viewDdz`，随机数按 `ddzSeeds` 派生。URL 带 `?ddz=1&seed=…` 直接开一局（调试，已有存档时不写）。
+  每日挑战（`ddz-daily.ts`）：种子只看北京时间的日期、两个普通难度电脑、6 副累计分交到平台 `daily-<日期>-ddz`，不存档、不记战绩。冒烟 `npm run shot -- --only ddz`。
 - 存储只在 `store.ts` 里读写（测试检查）；调试桥 `window.__game` 只在开发模式或 `?debug=1` 时挂。
 - 标题字体是内嵌的宋体子集（`fonts.ts`，README 素材一节）：新加的大字、横幅、弹窗标题如果用了字表里没有的字，`tests/view.test.ts` 会报缺字。
 - 两种部署（arcade-kit 的独立模式，由 env 决定）：`wrangler.jsonc` 是独立配置，不写 `ARCADE`、`WALLET`、`GATE`；本站部署时部署工具（`tools/deployer`）按 `tools/workers.json` 补上平台绑定和 `GATE=login`。
-  没有 `ARCADE`、`GATE` 也不是 login 就是单独部署：`gate.ts` 先调 `standaloneRoot`（站点根转到 `/games/guandan/`），`loginGate`、`acceptCreate`、`acceptJoin` 传同一个 `GUEST`（昵称不许含三个电脑的名字，`tests/gate.test.ts` 和画面上的名字核对），
+  没有 `ARCADE`、`GATE` 也不是 login 就是单独部署：`gate.ts` 先调 `standaloneRoot`（站点根转到 `/games/guandan/`），`loginGate`、`acceptCreate`、`acceptJoin` 传同一个 `GUEST`（昵称不许含电脑的名字，掼蛋三个、斗地主两个，`tests/gate.test.ts` 和画面上的名字核对），
   没有 `WALLET` 时单机实盘接口和实盘房间回 409 `no_wallet`、房间的 `perform` 兜底拒绝。页面在 `src/view/platform.ts`：启动时 kit 的 `detectPlatform` 问一次 `/api/me`（`main.ts` 和 `BootScene` 等它），
   回 `{ standalone: true }`（单独部署时 kit 的 `standaloneRoot` 接住 `/api/me`，所以 `run_worker_first` 里有它）或 404 是单独部署——不摆实盘和云存档（主页没有"实盘"卡）、"大厅"变"首页"回 `./`、`currentUserId` 回固定的游客（同一个浏览器就是同一个游客）、好友房面板填昵称（`guandan.nick`）并用 `withNickname` 带在开房、进房地址上；
   5xx、超时按有平台处理。本地：`npm run online-dev`（和 online/stake/quota 冒烟）写一份补了平台绑定的派生配置连假平台；`npm run standalone-smoke` 原样用 `wrangler.jsonc`。
@@ -246,6 +252,9 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.chat` | 聊天的界面设置：弹幕开关、电脑版聊天框收起、记录展开（由 kit 的 table-fun 按 `storageKey: 'guandan'` 读写） |
 | `guandan.hint.fun` | 首次进牌桌冒过"点头像扔道具，长按连扔"了（由 kit 的 table-fun 读写），只出一次 |
 | `guandan.fun.blocked` | sessionStorage：点头像"屏蔽他"屏蔽了谁（由 kit 的 table-fun 读写，按房间码分开、记座位和名字，那个座位换了人就不算） |
+| `guandan.variant` | 主页上次选的玩法：`'guandan'` / `'ddz'`（只在 `?ddz=1` 时读） |
+| `guandan.ddz.save` | 斗地主进行中的一局：`{ v, state: DdzState, level, counted, dealsCounted }`；规则版本不对或整局结束就删 |
+| `guandan.ddz.stats` | 斗地主战绩：局数、胜局、副数、赢的副数、当地主几次、当地主赢几次、春天次数（只在本机，不进云同步） |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 
 新增 key 必须带前缀、只在 `src/view/store.ts` 里读写（kit 的 table-fun 按 `storageKey: 'guandan'` 自己读写的三个除外），并补进这张表。
