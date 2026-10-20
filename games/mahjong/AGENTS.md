@@ -5,7 +5,7 @@
 - 模块 id `mahjong`，Worker 名 `mahjong`，路径 `/games/mahjong/`，开发端口 5176、预览 4176；工具用系统分配的临时端口（端口写 0）。
 - 只改 `games/mahjong/`；不读、不引用其他游戏的源码。共用的东西只走共用包（npm 上的 `@yyyu-star/arcade-kit`，按别名 `arcade-kit` 装）和平台的公开 `/api`。
 - **一套引擎 + 多个玩法**（DESIGN.md 第 3 节）：通用层 `src/core/{tiles,hand,table,match}` 不认识任何玩法；玩法在 `src/core/variants/<id>/`，玩法之间不互相 import；
-  房间、单机、界面、电脑都按玩法 id 驱动（`src/core/variants/index.ts`、`src/ai/index.ts`）。立直麻将（开发中）按 `docs/riichi.md`，没做完以前不登记进玩法表。
+  房间、单机、界面、电脑都按玩法 id 驱动（`src/core/variants/index.ts`、`src/ai/index.ts`）。立直麻将按 `docs/riichi.md`，入口开关在 `src/view/variants/riichi/gate.ts`（已放开）。
 - 规则核心 `src/core/` 和电脑 `src/ai/` 是纯函数：不碰 DOM、网络；不用 `Math.random`、`Date.now`、`new Date`、结果依赖平台的数学函数；
   随机只用 `arcade-kit/rng`（ChaCha20）按"用途 + 序号"分流（`deal` 洗牌、`swap` 换牌方向、`seat` 首庄、`persona` 挑电脑和这一场的状态）。
   电脑只拿视图（`src/ai/` 不出现状态类型）。`test/arch.test.ts` 检查这些。

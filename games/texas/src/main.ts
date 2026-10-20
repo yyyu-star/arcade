@@ -6,6 +6,7 @@
 import { detectPlatform, MATCH_TEXT, MatchClient } from 'arcade-kit/client';
 import { localChat } from 'arcade-kit/chat';
 import { CLOSE } from 'arcade-kit/protocol';
+import { reportErrors } from 'arcade-kit/report';
 import { chatFont, chatMode as chatLayout } from 'arcade-kit/fun-logic';
 import { feedMoment, shouldReport, type FeedMoment } from './core/feed.ts';
 import { DIFFICULTY_NAME, difficultyOf, FUN_STAKES, SOLO_LEVEL, stakesOf, type StakesId } from './core/stakes.ts';
@@ -334,6 +335,8 @@ function think(t: Table, seat: number): number {
 // ---------- 大厅 ----------
 
 async function boot(): Promise<void> {
+  // 没人接住的报错发给平台的 /api/client-error（kit 0.22.0）；单独部署没有平台，发出去回 404，kit 吞掉不重试
+  reportErrors({ game: 'texas', version: __TEXAS_VERSION__ });
   window.addEventListener('pointerdown', unlockAudio, { once: true });
   // 点按声（0.10.0）：界面上的按钮轻轻"嗒"一下；出牌按钮、喇叭自己有声音，不叠
   document.addEventListener('click', (e) => {

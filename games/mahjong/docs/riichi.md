@@ -1,7 +1,7 @@
 # 立直麻将（日麻，玩法 id `riichi`）方案
 
 > 2026-10-20 所有者拍板：雀馆加日麻，天凤式半庄。本文是方案也是实现的说明：方案和代码一起在 PR 里审，规则以 `src/core/variants/riichi/` 和它的单测为准，两边不一致时改文档。
-> 进度见第 6 节：没做完以前，玩法不登记进 `src/core/variants/index.ts`，房间、单机都开不出立直。
+> 已上线（0.25.3 放开入口）：单机、好友房，娱乐和实盘都能打；进度见第 6 节。
 > 范围：模块 id 还是 `mahjong`；川麻（`sichuan-xuezhan`）和好友房的开房、进房、邀请流程不动；三人麻将不做；不加本文以外的功能。
 > 分层沿用 DESIGN.md 第 3 节：日麻只写在 `src/core/variants/riichi/`、`src/ai/riichi.ts`、`src/view/variants/riichi/`，通用层（`tiles`、`hand`、`table`、`match`）只做加法。
 
@@ -151,7 +151,7 @@
 
 - 合计 15–20 小时，约 1.5–2 天。
 - 每个 PR 都要过根 AGENTS.md 第 5 节的五条自查，升一个小版本。
-- 入口的开关在 `src/view/variants/riichi/gate.ts`：`RIICHI_GATED = true` 时只有地址带 `?rc=1` 才显示选桌页的"玩法"选项（单机和好友房），其余和川麻时一样；统一验收后改成 `false` 放开。
+- 入口的开关在 `src/view/variants/riichi/gate.ts`：现在 `RIICHI_GATED = false`，选桌页（单机和好友房）都有"玩法"选项；改回 `true` 就收起来，只有地址带 `?rc=1` 才显示。
 
 进度（2026-10-20）：
 
@@ -162,6 +162,7 @@
 - ③ 界面和单机：牌面（字牌、赤五）在 `src/view/tiles.ts`；立直牌桌、操作条、听牌振听提示、役种结算在 `src/view/variants/riichi/`；单机 `src/solo.ts` 按玩法 id 走；选桌页玩法选项在 `src/view/lobby.ts`（记在 `mahjong.prefs`）；新手引导和规则小册子的立直几页、役种表在 `src/view/guide.ts`；称号中文名在 `public/titles.json`。
   单测 `test/riichi-view.test.ts`、`test/solo.test.ts` 的立直几条；冒烟 `scripts/smoke.ts` 加了一场立直单机（横竖屏各一遍）。立直不排快速匹配，选了立直就不显示快速匹配。
 - ④ 好友房和实盘：开房选玩法、页面发动作带玩法 id、没打完收场只算点数差、中途接管（`entry`）；单测 `test/room-riichi.test.ts`，双浏览器冒烟 `scripts/smoke-room-riichi.ts`。
+- 放开（0.25.3）：线上验收（单机东风战打完一整场、每局结算的风和名牌一致、控制台零报错）过了以后，`RIICHI_GATED` 改成 `false`。
 
 ## 7. 模拟结果（PR ② 填，2026-10-20）
 

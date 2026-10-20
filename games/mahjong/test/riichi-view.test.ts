@@ -148,13 +148,9 @@ describe('役种表', () => {
 });
 
 describe('入口的开关', () => {
-  test('地址带 ?rc=1 才开；放开时把 RIICHI_GATED 改成 false', () => {
-    expect(RIICHI_GATED).toBe(true);
-    expect(riichiOpen('')).toBe(false);
-    expect(riichiOpen('?rc=0')).toBe(false);
-    expect(riichiOpen('?room=123456')).toBe(false);
-    expect(riichiOpen('?rc=1')).toBe(true);
-    expect(riichiOpen('?turbo&rc=1')).toBe(true);
+  test('已放开：不带参数也能选立直（旧链接带着 ?rc=1 照样开）', () => {
+    expect(RIICHI_GATED).toBe(false);
+    for (const q of ['', '?rc=0', '?room=123456', '?rc=1', '?turbo&rc=1']) expect(riichiOpen(q)).toBe(true);
   });
 });
 

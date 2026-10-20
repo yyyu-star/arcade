@@ -170,7 +170,7 @@ async function soloFun(page: Page, name: string): Promise<void> {
 }
 
 /**
- * 立直单机（docs/riichi.md 第 4、5 节）：入口先藏起来（没带 ?rc=1 的选桌页没有"玩法"，带了才有）；?rc=1 选立直开打，
+ * 立直单机（docs/riichi.md 第 4、5 节）：入口已放开（不带参数的选桌页就有"玩法"）；选立直开打，
  * 打到一局结算出来、役种表里有役（有人和了；一直流局就多打几局），再点开规则里的役种表；控制台零报错。
  * 我这一家：能和就和、能立直就立直（点一张亮着的牌）、吃有几种就挑第一种、碰杠不要；其余打最右边能打的那张。截图在 shots/smoke-rc-*.png
  */
@@ -186,13 +186,11 @@ for (const [name, viewport] of [
     localStorage.setItem('mahjong.guide', '1');
     localStorage.setItem('mahjong.guide.rc', '1');
   });
-  // 没带 ?rc=1：选桌页和从前一样，没有玩法选项
+  // 入口已放开：不带参数的选桌页就有玩法选项
   await page.goto(`http://127.0.0.1:${port}/games/mahjong/?turbo`);
   await page.click('.mode.fun');
   await page.waitForSelector('.lobby-head');
-  if (await page.$('.lobby-variants')) errors.push('没带 ?rc=1 时选桌页不该有玩法选项');
-  await page.goto(`http://127.0.0.1:${port}/games/mahjong/?rc=1&turbo`);
-  await page.click('.mode.fun');
+  if (!(await page.$('.lobby-variants'))) errors.push('选桌页应该有玩法选项（立直已放开）');
   await page.click('.lobby-variants .chip:has-text("立直")');
   await page.click('text=单机开打');
   await page.waitForSelector('.table.rc .my-hand .tile');

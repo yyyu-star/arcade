@@ -169,7 +169,7 @@ describe('电脑的难度', () => {
     const lux = style('lux', 6, 6, 500, six);
     console.log(`6 人桌入池 / 翻牌前加注（%）小桌 ${fmt(small)}`);
     console.log(`                           豪华桌 ${fmt(lux)}`);
-    // 0.12.0 小桌改用第 1 档（松、不敢先打）：入池整体高、翻牌前加注少；0.11 及以前的区间见 DESIGN.md 4.6
+    // 0.12.0 小桌改用第 1 档（松、不敢先打）：入池整体高、翻牌前加注少；0.11 及以前的区间见 CHANGELOG
     const [wen, abiao, laohao, manman] = small;
     expect(laohao!.vpip).toBeGreaterThanOrEqual(55);
     expect(laohao!.vpip).toBeLessThanOrEqual(75);
@@ -308,7 +308,7 @@ describe('电脑的难度', () => {
       });
     }
     console.log(`小桌 6 人 ${hands} 手：每手平均 ${(seers / hands).toFixed(2)} 人看翻牌`);
-    // 0.2.5 时约 1.5（长期见 DESIGN.md 4.6）
+    // 0.2.5 时约 1.5（之前的数字见 CHANGELOG）
     expect(seers / hands).toBeGreaterThan(2);
   });
 

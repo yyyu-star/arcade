@@ -71,11 +71,14 @@ export const GAMES: readonly GameEntry[] = [
     daily: true,
   },
   {
+    // 牌馆：一个游戏里两种打法，id 还是 guandan（存档、钱包、榜单都按 id 记，不改）
     id: 'guandan',
-    name: '掼蛋',
-    tagline: '两副牌、四个人，对家一队打到过 A',
-    desc: '正宗掼蛋：逢人配、钢板、同花顺、天王炸，进贡还贡一样不少，打过 A 就赢。可以和三个电脑牌友打，也能开好友房，叫朋友一起来。',
-    tags: ['牌类', '好友房', '约 20 分钟一局'],
+    name: '牌馆',
+    tagline: '掼蛋、斗地主，凑一桌就开打',
+    desc: '两种打法一个馆。掼蛋：两副牌、四个人，对家一队，逢人配、进贡还贡一样不少，打过 A 就赢；斗地主：三个人抢地主，炸弹、春天翻倍。可以和电脑牌友打，也能开好友房，叫朋友一起来。',
+    tags: ['牌类', '掼蛋', '斗地主', '好友房'],
+    // 每日挑战只有斗地主（全国同一套牌）；掼蛋没有每日
+    daily: [{ id: 'ddz', name: '斗地主' }],
     cover: '/covers/guandan.webp',
     path: '/games/guandan/',
     devUrl: 'http://localhost:5174/',
@@ -95,9 +98,9 @@ export const GAMES: readonly GameEntry[] = [
   {
     id: 'mahjong',
     name: '雀馆',
-    tagline: '川麻·血战到底',
-    desc: '四川麻将血战到底：开局换三张、定缺，有人胡了接着打，打到只剩一家。和三个四川味的电脑搓一桌，也能开好友房，叫朋友一起搓。',
-    tags: ['麻将', '好友房', '川麻'],
+    tagline: '川麻·血战到底、立直麻将',
+    desc: '两种玩法一个馆。四川麻将血战到底：开局换三张、定缺，有人胡了接着打，打到只剩一家；立直麻将：立直、宝牌、役满，听牌前门清更值钱。和电脑搓一桌，也能开好友房，叫朋友一起搓。',
+    tags: ['麻将', '川麻', '立直', '好友房'],
     cover: '/covers/mahjong.webp',
     path: '/games/mahjong/',
     devUrl: 'http://localhost:5176/',

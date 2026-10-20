@@ -7,14 +7,14 @@ Plain TypeScript with DOM + SVG rendering (every tile and picture is generated i
 It is one module of the Arcade monorepo, but deploys on its own too (see "单独部署这个游戏" below): solo play and guest friends' rooms work without the platform.
 Chips are play money only — they cannot be bought, cashed out or transferred. Docs below are in Chinese. MIT licensed.
 
-一套麻将引擎 + 多个玩法的网页麻将。玩法：川麻·血战到底、立直麻将（天凤式四人，见 [docs/riichi.md](docs/riichi.md)；入口暂时只有地址带 `?rc=1` 才显示）。单机对三个电脑，也能开好友房一起打。
+一套麻将引擎 + 多个玩法的网页麻将。玩法：川麻·血战到底、立直麻将（天凤式四人，见 [docs/riichi.md](docs/riichi.md)）。单机对三个电脑，也能开好友房一起打。
 
 <img src="public/cover.svg" alt="雀馆封面" width="360">
 
 ## 功能
 
 - **川麻·血战到底**：换三张、定缺、刮风下雨、一炮多响、查花猪查大叫；局数、封顶番数、换三张、自摸加底、呼叫转移可以选。
-- **立直麻将**：东南半庄或东风战，赤宝牌 3 张，单机、好友房、娱乐和实盘都能打；电脑沿用茶馆的人物。入口开关在 `src/view/variants/riichi/gate.ts`，统一验收前只有带 `?rc=1` 才在选桌页看到"玩法"选项。
+- **立直麻将**：东南半庄或东风战，赤宝牌 3 张，单机、好友房、娱乐和实盘都能打；电脑沿用茶馆的人物。选桌页最上面的"玩法"选血战到底或立直（快速匹配只排川麻）；入口开关在 `src/view/variants/riichi/gate.ts`。
 - **电脑**：六个性格（快、贪、稳、爱杠、老练、新手），每一场的状态不一样，落后会追、领先会稳、点了炮会上头；出手快慢和互动的脾气跟性格走。
   娱乐分新手、普通、高手三个难度，新手档的电脑像人一样弱；实盘档位越高越强，豪华档接近最强；好友房实盘一律最强。
 - **单机**：娱乐局直接玩；实盘局从平台钱包带筹码上桌，打完结回。筹码无任何现金价值，不能买、不能兑换、不能转让。

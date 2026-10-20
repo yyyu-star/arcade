@@ -9,13 +9,15 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "preview_urls": false,
+  // Workers 日志（控制台里看报错和请求），不采样
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    // 只有这些先过 Worker：站点根（单独部署时跳到 /games/texas/）、首页（登录闸门）、单机带入结回、开房进房；其余静态资源直接回。
+    // 只有这些先过 Worker：站点根（单独部署时跳到 /games/texas/）、首页（登录闸门）、探活 health、单机带入结回、开房进房；其余静态资源直接回。
     // /api/*（含 /api/wallet）本站由平台的路由接；单独部署时 /api/me 由 Worker（kit 的 standaloneRoot）答"没有平台"（页面据此藏起登录、钱包），别的落到静态资源回 404
-    "run_worker_first": ["/", "/api/me", "/games/texas", "/games/texas/", "/games/texas/index.html", "/games/texas/api/solo/*", "/games/texas/rooms", "/games/texas/rooms/*"]
+    "run_worker_first": ["/", "/api/me", "/games/texas", "/games/texas/", "/games/texas/index.html", "/games/texas/health", "/games/texas/api/solo/*", "/games/texas/rooms", "/games/texas/rooms/*"]
   },
   "durable_objects": {
     "bindings": [

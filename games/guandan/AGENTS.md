@@ -76,7 +76,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 手牌分列是纯函数 `table/columns.ts`（有单测）；一列最多 5 张，保证手机横屏每张牌露出的部分都点得中（冒烟里逐张点验证）。
 - 座位：0 我（下）、1 老张（右，下家）、2 小美（上，对家）、3 阿强（左，上家）。性格只影响台词/表情（`personas.ts`）。
   斗地主三人桌：0 我（下）、1 老周（右，下家）、2 王姐（左，上家），布局 `table/layout.ts` 的 `seatAnchors3`；`labels.ts` 的 `setTablePersons` 换成这两个人。
-- 斗地主（牌馆，`docs/doudizhu.md`）：入口先藏着，只有带 `?ddz=1` 时主页才有"掼蛋 / 斗地主"切换（标题换成"牌馆"），玩法记在 `guandan.variant`。
+- 斗地主（牌馆，`docs/doudizhu.md`）：主页标题"牌馆"，下面是"掼蛋 / 斗地主"切换（控件 `variant:guandan` / `variant:ddz`），上次选的记在 `guandan.variant`，面板、主页"规则"跟着切。
   场景 `ddz`（`DdzScene`）复用掼蛋的手牌、出牌区、座位、按钮、弹窗、牌面、音效和 kit 的互动：手牌和出牌区由玩法给"怎么理牌、一手牌怎么写"（`HandOrder`、`DescribePlay`，不给就是掼蛋原样）。
   推进同样只走 `DdzSession.apply` → `dispatchDdz`；电脑只拿 `viewDdz`，随机数按 `ddzSeeds` 派生。URL 带 `?ddz=1&seed=…` 直接开一局（调试，已有存档时不写）。
   每日挑战（`ddz-daily.ts`）：种子只看北京时间的日期、两个普通难度电脑、6 副累计分交到平台 `daily-<日期>-ddz`，不存档、不记战绩。冒烟 `npm run shot -- --only ddz`。
@@ -122,7 +122,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   多个标签页靠 `storage` 事件同步元数据：rev 取大；别的页传完、本页又没改过的槽，本页的待上传跟着清掉。
   本地联调：`npm run dev` 把 `/api` 代理到平台的 `npm run dev:api`（5181），浏览器先在 5181 登录。冒烟里 `/api` 由 `tools/shot.ts` 的假平台回答。
 - 主页（标题页，现状见 `docs/art-v3.md` 第 4 节）：左边茶馆一角（背景 SVG + 单独烘焙的灯笼 `home:lantern`、四个人 `home:fig:<id>`），右边一块面板；排版是纯函数 `src/view/home-layout.ts`，背景和场景共用，宽屏一起铺开。
-  面板从上到下：标题、一句玩法、主按钮（有实盘存档 `resumeStake`，否则有存档 `continue`，否则 `quick` 快速开始娱乐）、三张卡 `fun` / `stake` / `online`、战绩条（点开战绩）；右上 `stats`、`settings`、`rules`、`cloud`。括号里是冒烟用的控件名。
+  面板从上到下：标题"牌馆"、"掼蛋 / 斗地主"切换、主按钮（有实盘存档 `resumeStake`，否则有存档 `continue`，否则 `quick` 快速开始娱乐）、三张卡 `fun` / `stake` / `online`、战绩条（点开战绩）；右上 `stats`、`settings`、`rules`、`cloud`。括号里是冒烟用的控件名。
   灯笼晃、人物呼吸、火星只在 `LOW_MEMORY === 0` 且没关动画时开。
 - 回大厅（`src/view/lobby.ts`，所有游戏统一）：左上角"大厅"（小房子）指向平台首页 `/`；单独部署叫"首页"、指向 `./`，标题页本身就是首页，不摆。标题页直接走；牌桌上打到一半先弹确认（这局会存着 / 调试开局不保存 / 好友房：头 60 秒轮到你时等 30 秒按"能不出就不出"代出，之后电脑替你打，回来接着打——回大厅不调 `leave()`，座位和 `guandan.room` 都留着）；
   手机竖屏时牌桌被"请横过来"盖住，提示层左上角也有一个（打到一半用浏览器自带的确认框）。离开前调一次 `cloud.flushOnHide()`（pagehide 时也会触发，同槽在途不重发）。
@@ -265,7 +265,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.chat` | 聊天的界面设置：弹幕开关、电脑版聊天框收起、记录展开（由 kit 的 table-fun 按 `storageKey: 'guandan'` 读写） |
 | `guandan.hint.fun` | 首次进牌桌冒过"点头像扔道具，长按连扔"了（由 kit 的 table-fun 读写），只出一次 |
 | `guandan.fun.blocked` | sessionStorage：点头像"屏蔽他"屏蔽了谁（由 kit 的 table-fun 读写，按房间码分开、记座位和名字，那个座位换了人就不算） |
-| `guandan.variant` | 主页上次选的玩法：`'guandan'` / `'ddz'`（只在 `?ddz=1` 时读） |
+| `guandan.variant` | 主页上次选的玩法：`'guandan'` / `'ddz'`（没有就是掼蛋） |
 | `guandan.ddz.save` | 斗地主进行中的一局：`{ v, state: DdzState, level, counted, dealsCounted }`；规则版本不对或整局结束就删 |
 | `guandan.ddz.stats` | 斗地主战绩：局数、胜局、副数、赢的副数、当地主几次、当地主赢几次、春天次数（只在本机，不进云同步） |
 | `guandan.ddz.tutorial` | 斗地主单机的新手引导是否看过 `{ v, done }`（第一次进单机娱乐牌桌弹，4 步；好友房、实盘、每日、托管、带 seed 的调试开局不弹；设置里"重看引导"一并清掉；只在本机，不进云同步） |

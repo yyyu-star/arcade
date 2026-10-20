@@ -983,7 +983,7 @@ games/texas/
 ├─ src/view/        页面（DOM + CSS）：牌桌 table、操作区 actions、标题页 lobby、等人页 room、牌面头像筹码 art、布局 layout、音效 sound 等，其余见目录
 ├─ src/net/         钱包 wallet、云存档 cloud
 ├─ src/             main.ts 页面入口，solo.ts 单机的一桌，online.ts 好友房连接（kit 的 RoomClient），bot.ts 电脑的入口，store.ts 浏览器存储，site.ts 有没有平台
-├─ worker/          texas Worker：登录闸门、单机带入结回（转平台钱包）、好友房 TexasRoom DO、快速匹配的排队 Queue DO（match.ts）
+├─ worker/          texas Worker：探活 /games/texas/health（回 {ok, version}，不读存储、不要登录，排在登录闸门前面）、登录闸门、单机带入结回（转平台钱包）、好友房 TexasRoom DO、快速匹配的排队 Queue DO（match.ts）
 ├─ test/            规则、电脑的 vitest（Node）；test/worker/ 是 Worker、钱包、房间的 vitest（workerd，配置 test/wrangler.test.jsonc）；
 │                   test/standalone/ 是单独部署的（配置 test/wrangler.standalone.jsonc，入口就是 worker/main.ts）
 ├─ scripts/         smoke.ts（冒烟）  sim.ts + vs.ts（模拟，vs 是多线程部分）  balance.ts（配平）  tour-sim.ts（锦标赛时长）  capture.ts（连拍看节奏）  gen-preflop.ts（生成翻牌前胜率表）  args.ts
@@ -991,7 +991,8 @@ games/texas/
                     本地试平台模式用 gitignore 掉的 wrangler.local.jsonc。
                     不写路由和 zone（本站的路由 `<站点>/games/texas`、`<站点>/games/texas/*` 与 SITE_ORIGIN 由部署流程用 GitHub production secret `SITE_HOST` 注入；没设 SITE_ORIGIN 时 Worker 认请求自己的来源）；
                     workers_dev: true（单独部署用 workers.dev，本站部署时关掉）、preview_urls: false；
-                    run_worker_first：/、/api/me（单独部署用）、首页三个路径、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*（排队 rooms/match/<档位> 也在里面）；
+                    observability 开着（Workers 日志）；
+                    run_worker_first：/、/api/me（单独部署用）、首页三个路径、/games/texas/health（探活）、/games/texas/api/solo/*、/games/texas/rooms、/games/texas/rooms/*（排队 rooms/match/<档位> 也在里面）；
                     绑定 ROOM（类 TexasRoom）、METER（DO）、MATCH（类 Queue）；不写 ARCADE、WALLET、GATE（本站部署时按 tools/workers.json 补：ARCADE 服务、WALLET 服务 arcade 的 WalletService、props.game = texas，GATE=login）；
                     vars KIT_QUOTA（每天的写入预算、每人开房数、互动的限流，数见 wrangler.jsonc 和第 7 节）；迁移 v1 TexasRoom + RoomMeter、v2 Queue（已上线以后新加的类要新的一版）
 ```
@@ -1015,6 +1016,7 @@ games/texas/
 - **安全**：本站有 ARCADE 绑定，游客 cookie 一律不认；绑定丢了（GATE=login 却没有 ARCADE）kit 按平台不可用拒绝，房间也不会因为没有 WALLET 就白给筹码（`perform` 只在单独部署时回 ok，否则回 `unavailable`）。
 - **真人至少两个**照旧（规则不分部署），说明换成不提实盘的一句。
 - 单独部署的额度照 `KIT_QUOTA`（同一份配置），计量照常。
+- **探活和报错**：`/games/texas/health` 两种部署都不要登录，回 `{ ok: true, version }`（`package.json` 的版本）；页面开局调 kit 的 `reportErrors`（`arcade-kit/report`），没人接住的报错发给平台的 `/api/client-error`，单独部署时那里回 404，kit 吞掉不重试。
 - 测试：`test/standalone/`（workerd，入口就是 `worker/main.ts`，入口多导出了具名常量时 workerd 起不来，这里先报）；冒烟 `--only standalone` 用原样的 `wrangler.jsonc` 起 `wrangler dev`。
 
 ### 10.2 仓库级的事（不在本模块里改）

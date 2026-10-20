@@ -65,7 +65,7 @@ describe('小格挑亮眼的', () => {
       mahjong: career({ rounds: 8, wins: 1 }),
     };
     const { stats, line } = pickStats(three);
-    expect(stats.map((s) => s.label)).toEqual(['掼蛋胜率', '德州扑克胜率', '雀馆胜率']);
+    expect(stats.map((s) => s.label)).toEqual(['牌馆胜率', '德州扑克胜率', '雀馆胜率']);
     expect(line).toBe('最大一把 18,400');
     expect(Array.from(line!).length).toBeLessThanOrEqual(LINE_MAX);
     expect(pickStats({ ...three, texas: career({ rounds: 40, wins: 20, best: 30 }) }).line).toBe('德州扑克最大一把 30');

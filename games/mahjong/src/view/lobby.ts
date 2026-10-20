@@ -21,7 +21,7 @@ export interface LobbyProps {
   /** 娱乐的难度（第一次玩是新手） */
   level: Level;
   opts: XzOpts;
-  /** "玩法"选项（立直入口开着、且不是好友房那一页才有）：current 是选着的玩法，rc 是立直的规则设置 */
+  /** "玩法"选项（立直入口开着时才有，单机和好友房都有）：current 是选着的玩法，rc 是立直的规则设置 */
   variants?: { current: string; rc: RcOpts; onPick(id: string): void };
   canResume: boolean;
   /** 开单机、开房间要先问钱包和服务器：按钮转圈直到回来；opts 是选着的玩法的规则设置 */

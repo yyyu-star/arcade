@@ -569,7 +569,7 @@ async function smokeBomb(browser: Browser): Promise<void> {
 }
 
 async function smokeDdz(browser: Browser): Promise<void> {
-  // 斗地主单机（牌馆 0.28.0，入口先藏在 ?ddz=1）：主页切过去、叫分、真人出一手（不代打的截图），再代打到整局结束、回主页
+  // 斗地主单机（牌馆）：主页切过去、叫分、真人出一手（不代打的截图），再代打到整局结束、回主页
   const home = await open(browser, '斗地主主页', 'ddz=1&debug=1', { freshTutorial: true });
   await until(home, '标题页', "g.scene === 'title'");
   await click(home, 'variant:ddz');

@@ -21,7 +21,7 @@ export interface LaunchParams {
   screen: string | null;
   online: boolean;
   room: string | null;
-  /** 牌馆 0.28.0：斗地主全部做完前，主页的掼蛋 / 斗地主切换只在 ddz=1 时露出 */
+  /** ddz=1 配 seed=… 直接开一局斗地主单机（调试，和掼蛋的 seed 开局对应）；主页的切换不看它 */
   ddz: boolean;
 }
 
