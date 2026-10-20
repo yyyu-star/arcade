@@ -4,8 +4,8 @@
  * 按钮都用 body.setData('btn:<名字>', 按钮) 登记，标题页的 controls() 据此给冒烟坐标。
  */
 import type Phaser from 'phaser';
-import { SOLO_LEVELS, type SoloLevel } from '../../ai/venue.ts';
-import { ROOM_DEALS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
+import { SOLO_LEVELS, type SoloLevel } from '../../variants/guandan/ai/venue.ts';
+import { ROOM_DEALS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../variants/guandan/stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
 import { COLOR, TYPE, minHit, phoneType } from '../theme.ts';

@@ -1,6 +1,6 @@
 /** 一张牌的显示对象：牌面（或牌背）+ 级牌/逢人配标识 + 选中高光。原点在牌中心。 */
 import Phaser from 'phaser';
-import { isWild, rankOf, type Card } from '../../core/index.ts';
+import { isWild, rankOf, type Card } from '../../variants/guandan/core/index.ts';
 import { getSettings } from '../store.ts';
 import { CARD_H, CARD_W, cardKey } from '../textures.ts';
 

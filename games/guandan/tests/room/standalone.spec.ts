@@ -7,7 +7,7 @@ import { env } from 'cloudflare:workers';
 import type { WelcomeMsg } from 'arcade-kit/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CLIENT_VERSION, STAKE_PATH } from '../../src/net/version.ts';
-import type { NetView } from '../../src/net/rules.ts';
+import type { NetView } from '../../src/variants/guandan/net/rules.ts';
 import worker from '../../worker/index.ts';
 import type { Env } from '../../worker/gate.ts';
 import { Conn, ROOMS, SITE, freezeClock } from './helpers.ts';

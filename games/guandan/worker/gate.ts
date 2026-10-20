@@ -19,7 +19,7 @@
 import type { GuestOptions } from 'arcade-kit/guest';
 import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
-import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/net/match.ts';
+import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/variants/guandan/net/match.ts';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
 

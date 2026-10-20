@@ -4,7 +4,7 @@
  */
 import { env, exports } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { NetState } from '../../src/net/rules.ts';
+import type { NetState } from '../../src/variants/guandan/net/rules.ts';
 import { ROOMS, SITE, advance, cookie, fireDueAlarms, freezeClock, join, truth } from './helpers.ts';
 import { Table } from './table.ts';
 import { bank } from './wallet.ts';

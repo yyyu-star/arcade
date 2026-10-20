@@ -5,12 +5,15 @@
 ## 1. 目录
 
 ```
-src/core/   规则核心（纯函数、确定性）：cards 牌与牌序、patterns 牌型/比大小/枚举、game 状态机与玩家视角、options 规则开关、rng
-src/ai/     电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、memory 记牌（只用公开信息）、hints "提示"按钮的轮换列表、random 随机机器人（模拟基准）
-src/net/    联机（房间和页面共用，纯函数）：rules 把规则核心接成 arcade-kit 的 RoomGame、rotate 视角旋转（我总在下）、version 页面版本与房间、实盘路径、
-            stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）、match 快速匹配的档位和开桌选项（0.26.0）、emotes 互动编号表、fun-moments 短语表、电脑互动性格、名场面映射（接 kit 的 table-fun）
-src/stake/  实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
+src/core/   牌馆通用层（牌馆重构 ①b，docs/doudizhu.md 1.1；纯函数、确定性，不引用任何玩法）：cards 牌的编码、rng、seats n 人座位环、play 牌型识别框架 PatternSet
+src/variants/guandan/   掼蛋（玩法之间互不引用，tests/architecture.test.ts 守着）：
+  core/     规则核心（纯函数、确定性）：cards 两副牌与级牌牌序（再导出通用层的编码）、patterns 牌型/比大小/枚举（guandanPatterns 是它的 PatternSet）、game 状态机与玩家视角、options 规则开关
+  ai/       电脑对手：plan 理牌、bot 决策、persona 强弱五档和性格/状态/局面、venue 场地 → 电脑、memory 记牌（只用公开信息）、hints "提示"按钮的轮换列表、random 随机机器人（模拟基准）
+  net/      联机（房间和页面共用，纯函数）：rules 把规则核心接成 arcade-kit 的 RoomGame、rotate 视角旋转（我总在下）、
+            stake 好友房实盘的桌（开房选项、带入、每个座位的账、结回）、match 快速匹配的档位和开桌选项（0.26.0）、fun-moments 短语表、电脑互动性格、名场面映射（接 kit 的 table-fun）、awards 结束颁奖、together 搭子战绩
+  stake/    实盘的规则（纯函数，和 core 同样的约束）：档位、每副的分、封顶、结回额、钱包 ref / op 的拼法、单机一场和好友房每个座位的账（docs/stake.md 第 1 节）；
             titles 称号（只用公开信息，和 public/titles.json 对齐）、stats 结回时带给平台的战绩小结（平台 0.10.0）
+src/net/    玩法无关的联机部分：version 页面版本与房间、实盘路径，emotes 互动编号表
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
             share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）
@@ -18,7 +21,7 @@ src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、match.ts 快速匹配的排队（0.26.0）、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
 public/     favicon、cover.png（平台封面）、titles.json（称号表，平台按 id 显示）、_headers
-tests/      vitest；architecture.test.ts 检查 core/ai 的纯度；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
+tests/      vitest；architecture.test.ts 检查通用层和各玩法 core/ai/stake 的纯度、互不引用；golden.test.ts 掼蛋金样（tests/golden/ 只放哈希，场景在 golden-scenarios.ts）；tests/room/ 是在 workerd 里跑真房间的测试（`npm run test:room`，单独的配置）
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai/（0.1.0）和 baseline-ai-0.1.2/ 旧版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟；room-sim.ts 房间规则层批量对打；
@@ -28,13 +31,13 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 
 ## 2. 规则核心的约束
 
-- `src/core`、`src/ai` 不依赖 DOM、Phaser、网络；禁止 `Math.random`、`Date`、`Math.exp/log/pow/sin` 等；随机一律 `rngFor(seed, 用途, …)`。
+- `src/core`、`src/variants/*/core`、`src/variants/*/ai`、`src/variants/*/stake` 不依赖 DOM、Phaser、网络；禁止 `Math.random`、`Date`、`Math.exp/log/pow/sin` 等；随机一律 `rngFor(seed, 用途, …)`。
   `tsconfig.core.json` 只给 ES 库，误用浏览器全局会编译失败。
 - 状态是纯 JSON（牌是 0..107 的整数），`dispatch` 不修改传入的状态。同一种子 + 同一串动作必须逐位相同（`tests/game.test.ts` 回放测试）。
 - 电脑只能读 `viewFor(state, seat)`，不能碰 `GameState`；`viewFor` 不得包含别人的手牌（防泄漏测试）。联机时下发的也是它。
   给电脑的随机种子、"这一场"的种子一律按用途派生（单机 `session.ts` 的 `soloSeeds`，房间 `rules.ts` 的 `aiSeed`、`formSeed`），不给牌局种子或密钥本身——
   拿着它就能重算发牌（0.8.1 AI 公平审计）。守着的测试：`tests/ai.test.ts` 的反事实测试（单机和房间两条路径 0 不一致，外加阳性对照）、
-  `tests/architecture.test.ts`（`src/ai` 不引用 `GameState`、不出现 `'deal'`/`'firstLead'`）。README"电脑不看牌"一节是给外人看的版本。
+  `tests/architecture.test.ts`（`src/variants/guandan/ai` 不引用 `GameState`、不出现 `'deal'`/`'firstLead'`）。README"电脑不看牌"一节是给外人看的版本。
 - 联机用的核心接口（`timeoutAction`、`previewNext`、规则版本、`SeatAction`/`TableAction`）见 `docs/core-api.md` 5.1，测试在 `tests/online.test.ts`。
   改了会影响牌局结果的规则要加 `RULES_VERSION`，并让旧版本的牌局能按旧规则打完。
 - 规则有出入的点先查 `docs/rules.md`；改规则要同步改该文档、`docs/core-api.md` 和测试，地方差异做成 `options.ts` 开关。
@@ -42,7 +45,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   改强弱、性格、场地表后跑 `npm run ai-sim -- solo|room|style`，把新数字写进 `docs/ai.md` 和 `docs/stake.md` 1.3、3.1（好友房实盘每档要"两个普通真人搭档期望加两倍标准误 ≤ 0"）。
   配平目标是仓库 `docs/balance.md`（两个玩家模型：普通、小白 `rookie`）：实盘小档、娱乐新手档按小白调，其余按普通调（掼蛋的例外，`docs/ai.md` 2.1）；`ai-sim -- grid` 量搭档 × 对手的每种组合。
   没给性格时 `decide` 就是难度预设本身（聪明提示、代打、`sim` 都靠这个），新加的打法参数默认 0、不改原来的行为。
-  `normal-vs-prev` 的基准只在电脑 AI 有改动的版本复制（主线 2026-10-16 定）：改了 `src/ai` 打法的 PR 里，把这一版的 `src/ai` 复制成
+  `normal-vs-prev` 的基准只在电脑 AI 有改动的版本复制（主线 2026-10-16 定）：改了 `src/variants/guandan/ai` 打法的 PR 里，把这一版的 `src/variants/guandan/ai` 复制成
   `tools/baseline-ai-<版本>/`（改 import 路径）、把 `sim.ts` 的 prev 指过去，PR 说明写一句；普通发版不动。现在的基准是 0.1.2，强弱另用 `ai-sim` 的胜率表对比（docs/ai.md）。
 
 ## 3. 画面层约定
@@ -109,7 +112,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     收场点 `breakPoint` 是结算页（一副打完）。页面上的几句话在 `src/view/quota-text.ts`，`npm run quota-smoke` 逐条核对。
   - 发牌（0.3.0，安全）：联机开局走 kit 的 `begin`（256 位熵），核心 `createKeyedGame` 把它存成 `GameState.key`，每一副从 `stream(key, 'deal', 第几副)` 发，`seed` 是空串；
     `key` 只在服务端，`viewFor` 不带。规则版本 2 = 按密钥发牌，1 = 按种子（单机，和 0.2.x 开的旧联机局）。不要再让联机牌局用种子发牌，也不要给 `rngFor` 喂密钥（它会压成 32 位）。
-  - 服务端说了算：房间（`worker/room.ts`）只继承 arcade-kit 的 `GameRoom`，规则从 `src/net/rules.ts` 来；入座、轮流、30 秒超时代出、掉线 60 秒电脑托管、
+  - 服务端说了算：房间（`worker/room.ts`）只继承 arcade-kit 的 `GameRoom`，规则从 `src/variants/guandan/net/rules.ts` 来；入座、轮流、30 秒超时代出、掉线 60 秒电脑托管、
     每步最多写 2 行都由底座管，这里不另写一套。下发的只有 `viewFor(state, 座位)`（没入座 = -1，空手牌）和这一步的事件，`tests/net.test.ts` 查泄漏。
   - 一副结束（docs 9.1、`docs/core-api.md` 的 nextDeal）：每个真人在结算页点"继续"（`ready`），电脑和托管座位由房间立刻代点，没点的真人 20 秒（`READY_MS`）到点由房间代点；
     最后一个人准备好的那一步里开下一副。玩家发不了开下一副的操作（`next` 解析不认）。这一刻谁能出手用 `actors()`、时限用 `turnMs()`（arcade-kit 0.1.1），
@@ -121,7 +124,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 记着的房间分账号（`guandan.room` 带 `userId`）：进房后问一次 `/api/me` 记下是谁的；标题页"回到房间"、大厅"回到刚才的房间"、邀请链接带房主标记之前都现问 `/api/me` 核对，
     不是这个账号的（或旧记录没记账号）就不给并清掉（`myRoom`/`roomOwnerCheck`）；云同步发现换号、退出时也清（`CloudDeps.forgetRoom`）。回不去的关闭码（`isFinalForRoom`）都清。
   - 页面：`src/view/net.ts` 的 `NetSession` 和单机的 `Session` 实现同一个 `TableSession` 接口，牌桌场景不分单机联机；收到的帧排队，一帧帧播，
-    出手发出去后锁住，等 ack 或报错再解锁。视角旋转在 `src/net/rotate.ts`：真实座位 s 显示在 (s − 我 + 4) % 4，按队记的值在我坐奇数位时对调。
+    出手发出去后锁住，等 ack 或报错再解锁。视角旋转在 `src/variants/guandan/net/rotate.ts`：真实座位 s 显示在 (s − 我 + 4) % 4，按队记的值在我坐奇数位时对调。
     大厅是 DOM（`src/view/online.ts`）：开房、输码、选座、房主开局；刷新、切后台回来、掉线都自动接回原座位（进房后地址栏带 `room=<码>`，离开房间时去掉）；关闭码一律换成大白话（`closeText`），
     重连中、连不上时的话走 `NetSession.linkText`：上次断开是 1013 就说"平台有点忙"，不让玩家去查网络（关闭码由 kit 0.1.1 的 `onStatus` 带来，1006 是断网）；4030 是这个人的消息额度用完，不再重连。
   - 开打后座位绑人（arcade-kit 0.1.1）：坐过的人只能回自己的座位（别的回 `not_your_seat`），没坐过的人只能接管没绑人的电脑座位（`SeatInfo.reserved` 为 false），
@@ -134,7 +137,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
     `autoSeat` 开打后不再替人接管（先旁观）。坐下后会话换座位、牌桌整个重画。结束页旁观的人只有"回首页"、没有分享。
   - 快速匹配（0.26.0，kit 0.20.0，设计在 kit 的 `docs/match.md`，房间规范是仓库根 `docs/platform-backend.md` 4.6 的匹配桌一行）：
     排队是 `worker/match.ts` 的 `Queue`（kit `MatchQueue` 的子类，`wrangler.jsonc` 的 `MATCH`，每个档位一个实例），路由 `GET /games/guandan/room/match/<档位>` 走 kit 的 `acceptMatch`（`gate.ts`，同样受 `ONLINE` 开关；没有 `WALLET` 只开 `fun`）。
-    档位在 `src/net/match.ts`：`fun` 用娱乐好友房的规则，`real-<档位>` 用好友房实盘的规则（开桌选项 `{ stake }`，房间的 `parseRoomOpts` 校验）；改档位或桌大小跑 `tests/match.test.ts`（kit 的 `matchConfigErrors`）。
+    档位在 `src/variants/guandan/net/match.ts`：`fun` 用娱乐好友房的规则，`real-<档位>` 用好友房实盘的规则（开桌选项 `{ stake }`，房间的 `parseRoomOpts` 校验）；改档位或桌大小跑 `tests/match.test.ts`（kit 的 `matchConfigErrors`）。
     页面：选难度页的 `match`、选档页的"和电脑 / 快速匹配"（控件 `mode:0` / `mode:1`）→ `online.ts` 的 `openMatch`（排队卡 `#ol-match-wait`，人数、倒计时、`#ol-match-solo` 不等了、`#ol-match-cancel` 取消）；
     排到了 `join(code, false, null, true)`，房间信息里 `room.match` 为真（`NetSession.match`）：大厅和牌桌不摆房间码、叫朋友、邀请、开局，分享卡不带房间码；`solo` 由标题页转同档单机（娱乐 `newGame`、实盘带入一份）。
     陌生人聊天：设置"聊天"一行的"不和陌生人"（`strangerChat` 为假，默认开；手机横屏左栏放不下第七行，和 `chat` 并成一行三档）时，匹配桌的 `NetSession` 不给 `onChat`（kit 不带 `chat=1`），`chatOn` 为假，牌桌不给聊天页；记着的房间带 `match: true`，刷新接回去也照这个设置。
@@ -145,7 +148,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 改了房间和页面之间的约定（动作、视图形状）就加 `src/net/version.ts` 的 `CLIENT_VERSION`：旧页面进房会被 4005 请去刷新。改规则加 `RULES_VERSION`，打到一半的房间按旧规则打完。
   - 验收：`npm run test:room`（真房间机器人对打、写入行数、断线、让位、座位绑人、结算等人）、`npm run room-sim`（规则层大批量）、`npm run online-smoke`（四个浏览器端到端，约 5 分钟，`--quick` 跳过 70 秒托管那项）。
 - 实盘（0.4.0 起单机；设计和数字在 `docs/stake.md`，钱包接口是仓库 `docs/platform-backend.md` 5.9）：
-  - 规则都在 `src/stake/`（纯函数）：档位、每分 = 一份的 1/20、封顶 ±20 分、单机 8 副 / 好友房 5 副、单机每档的电脑、结回额、ref 和 op 的拼法。
+  - 规则都在 `src/variants/guandan/stake/`（纯函数）：档位、每分 = 一份的 1/20、封顶 ±20 分、单机 8 副 / 好友房 5 副、单机每档的电脑、结回额、ref 和 op 的拼法。
     Worker、页面、以后的房间都从这里取，不各算一份。钱包的 ref、op 只能是 8–64 位的 `[A-Za-z0-9_-]`（不能带冒号），测试锁着。
   - 单机：`worker/stake.ts` 的 `POST /games/guandan/api/stake/{buyin,settle,refund}` 认人（kit 的 `whoIs`）、只认本站 Origin、查数在规则范围里，
     转给服务绑定 `WALLET`（`entrypoint: WalletService`、`props.game: guandan`，`tests/config.test.ts` 守着），`mode: client`。钱包的回话原样带回；
@@ -153,21 +156,21 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
   - 页面：`src/view/stake.ts`（存档 `guandan.stake`、`StakeSession`、结回和放弃）、`src/view/ui/stake.ts`（选模式、选档位）、`src/view/stake-text.ts`（说的话）。
     一场结束先把要结的数记进存档，再去结回；结回、放弃遇到 `busy` / `internal` / 连不上按同一个 op 重试，还不行留着存档下次再结；`no_stake`（结过）、`expired`（过期退回过）都算办完。
     实盘不计战绩、不写 `guandan.save`、规则用默认；主页（0.17.0）直接有"娱乐 / 实盘 / 好友房"三张卡，实盘卡进选档。冒烟 `npm run stake-smoke`（本地栈的假平台带一个内存里的假钱包 RPC）。
-  - 好友房（0.5.0）：开房请求体 `{ stake: 档位 }` → kit 0.4.0 的开房选项（`RoomOpts`，规则的 `options` 校验）。桌在 `src/net/stake.ts`，状态里是 `NetState.stake`（娱乐房间没有这个字段，
+  - 好友房（0.5.0）：开房请求体 `{ stake: 档位 }` → kit 0.4.0 的开房选项（`RoomOpts`，规则的 `options` 校验）。桌在 `src/variants/guandan/net/stake.ts`，状态里是 `NetState.stake`（娱乐房间没有这个字段，
     所有实盘的钩子对它原样返回）：`begin` 给每个真人记带入（真人不到 2 个整场不计输赢）、`seated` 管换人——
     接管开局时就是电脑的座位记一笔带入，点"离开"的人按当时的分马上结回（0.6.0），走了又回来用新的 ref `<ref>s<座位>n<第几份>` 再带入一份，
     带入被拒的人有"重新带入"（不轮流的 `buyin`）；每副 `stakeDeal` 记账，一场结束（5 副 / 过 A / 到账的都封顶）`over` 为真、记结回，`closing` 就地结束。
-    结回带战绩小结 `stats`（`src/stake/stats.ts`）。房间的 `perform`（`worker/room.ts`）去钱包办：带入前先 `view`（钱包只记最近 32 个 op），
+    结回带战绩小结 `stats`（`src/variants/guandan/stake/stats.ts`）。房间的 `perform`（`worker/room.ts`）去钱包办：带入前先 `view`（钱包只记最近 32 个 op），
     `busy` / `internal` / 异常抛出去让 kit 退避重试，业务拒绝回 `{ ok: false, error }` 交给 `settled`。视图 `NetView.stake` 公开每个座位的分和到账，被拒原因只给自己。
     房间测试 `tests/room/stake.spec.ts` 用 `tests/room/wallet.ts` 的假钱包（测试入口 `tests/room/main.ts` 多导出 `FakeWallet` / `WalletBank`，WALLET 绑到自己）。
 - 牌桌互动（0.6.0 起；0.12.0 起整套用 kit 的 `arcade-kit/table-fun`，规范是仓库根 `docs/table-fun.md`，和德州、麻将同一个组件；公平底线：人人一样、免费、不挂筹码，不停计时、不挡牌和按钮）：
   - kit 管头像菜单、互动面板、表情菜单、首次提示、冷却、护盾、连击、回敬、长按连扔、电脑反应（`botReact`）、污渍；掼蛋只接线（`TableScene.buildFun`）：
-    头像的屏幕矩形（世界坐标 × 画布缩放，`worldRect`）、名字、谁是电脑和性格（`net/fun-moments.ts` 的 `TEMPER`：阿强爱闹、老张普通、小美高冷）、
+    头像的屏幕矩形（世界坐标 × 画布缩放，`worldRect`）、名字、谁是电脑和性格（`variants/guandan/net/fun-moments.ts` 的 `TEMPER`：阿强爱闹、老张普通、小美高冷）、
     不能盖的地方（操作按钮和手牌那一条）、"互动"按钮的位置（我的头像和"理牌"之间）、发送通道（好友房 `net.emote`，单机直接交回 `fun.receive`）。
   - kit 的 DOM 层盖在画布上：有弹窗（`overlay` 或 `ui/focus.ts` 的焦点层）时整个藏起来（`syncFunShown`，每 200 毫秒对一次、变了才写），不然会挡住弹窗上的按钮。
   - 编号（`src/net/emotes.ts`，只往后加）：客气话 0–7、嘲讽 8–19 合起来是 kit 的短语表（`PHRASES`），表情 20–31、道具 32–39 正好是 kit 的排法。
-  - 名场面（`net/fun-moments.ts`，纯函数有单测）：炸弹压了对方、头游、双下 → kit 的 `bomb`、`first-out`、`double-down`；单机交给 `fun.moment`，好友房在 `worker/room.ts` 的 `onStep` 里问每个电脑的 `botReact`、经 `botEmote` 发。
-    真人冲电脑扔的在 `onEmote` 里用 kit 的 `hitEvent` 认、电脑回应。冷却只在内存里，不写存储、不记真人短语。电脑出牌（`src/ai`）绝不读这些。
+  - 名场面（`variants/guandan/net/fun-moments.ts`，纯函数有单测）：炸弹压了对方、头游、双下 → kit 的 `bomb`、`first-out`、`double-down`；单机交给 `fun.moment`，好友房在 `worker/room.ts` 的 `onStep` 里问每个电脑的 `botReact`、经 `botEmote` 发。
+    真人冲电脑扔的在 `onEmote` 里用 kit 的 `hitEvent` 认、电脑回应。冷却只在内存里，不写存储、不记真人短语。电脑出牌（`src/variants/guandan/ai`）绝不读这些。
   - 电脑气泡里的话是掼蛋自己的台词（`MOOD_LINES`，按 kit 的六种情绪，经 `moodLines` 传给 kit），好友房的页面也用它配电脑的表情。
   - 掼蛋自己多的在 `table/nudge.ts`：公开事件后的顺手提示（`suggest.ts`）、好友房里轮到的人想了 8 秒以上别人能扔的"催促炸弹"、
     单机里我想了 8 秒以上爱闹的电脑按 `URGE_P` 扔一个催促炸弹（`slowUrge`，每手最多判一次，走 kit 的收，同样受护盾）。收到的短语、表情配掼蛋自己的提示音（`funIn`）。
@@ -184,11 +187,11 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 分享卡（0.13.0，`src/view/share-card.ts`，仓库根 `docs/social.md` 1.1）：整局结束页、单机实盘结算、好友房实盘结算（到账的人）右上角一个"分享"图标，用 kit 的分享卡画 1080×1350 的战绩图。
   结算页一出来就 `prepareResult` 先画好（kit 0.12.3 的 `prepareShare`），按钮的点击里同步调 `share()`、前面不许 await：iOS 只许在点击的那一下里调系统分享（0.13.1）。
   卡上只有公开的：胜负或这一场的筹码、打了几副、我的头游和炸弹次数、我的称号（模板拼的话）；图标是 `favicon.svg`。链接是游戏地址（`location.origin + location.pathname`，好友房带 `?room=`），kit 0.15.0 起按它在卡的右下角画二维码。冒烟的控件名 `share`，`gameover` 一段点一次、把预览卡存成 `16b-share-card.png`。
-- 结束颁奖（0.14.0，`src/net/awards.ts`，设计 `docs/design.md` 4.1）：好友房一场打完评本场 MVP、最惨的人、炸弹王（2–3 个），数据是房间攒的 `NetState.log`（公开的名次、炸弹，随视图下发、`rotate.ts` 转座位），
+- 结束颁奖（0.14.0，`src/variants/guandan/net/awards.ts`，设计 `docs/design.md` 4.1）：好友房一场打完评本场 MVP、最惨的人、炸弹王（2–3 个），数据是房间攒的 `NetState.log`（公开的名次、炸弹，随视图下发、`rotate.ts` 转座位），
   页面 `NetSession.matchLog` 取、`TableScene.roomAwards` 评、`addAwards` 画，分享卡经 `shareCardOf` 的 `awards` 写进去。只用公开信息、话从模板拼；改评法同步改 design.md 4.1 和 `tests/awards.test.ts`。
 - 好友动态的名场面（0.15.0，`src/view/feed.ts`、`public/moments.json`，设计 `docs/design.md` 4.2）：一副打完 `TableScene.feedDeal` 从 `highlights.ts` 的名场面里挑和我有关的一条，经 `social.ts` 的 `postFeed`（kit 的 `postMoment`）报给平台；
   一局最多 `FEED_MAX`（2）条、同一种一次，只报娱乐、不是旁观。加编号同时加模板（只用 `{name}`、`{n}`，≤ 40 字），`tests/feed.test.ts` 核对。冒烟的假平台都回 204。
-- 搭子战绩（0.16.0，`src/net/together.ts`，设计 `docs/design.md` 4.3）：`worker/room.ts` 的 `onStep` 用 `matchEnd` 认"这一步刚打完一场"，调 kit 的 `reportMatch`（交给 waitUntil、不重试、不写状态）。
+- 搭子战绩（0.16.0，`src/variants/guandan/net/together.ts`，设计 `docs/design.md` 4.3）：`worker/room.ts` 的 `onStep` 用 `matchEnd` 认"这一步刚打完一场"，调 kit 的 `reportMatch`（交给 waitUntil、不重试、不写状态）。
   win 的定义改了同步改 design.md 4.3 和 `tests/together.test.ts`；房间测试的假钱包（`tests/room/wallet.ts`）记下每次 `together`，`bots.spec`、`stake.spec` 核对报了几次、报了谁。
 - 界面的刻度和按钮（0.9.0 界面改版①）：间距、圆角、投影、按钮配色只从 `theme.ts` 取（`SPACE`、`RADIUS`、`SHADOW`、`BUTTON`），DOM 用 `THEME_CSS` 的 `--gd-` 变量和 `.gd-btn`（`tests/ui-theme.test.ts` 查 DOM 按钮）。
   画布里能点的一律用 `ui/kit.ts` 的 `Button`、`iconButton`、`segmented`（自带悬停、按下、禁用、加载中，登记进 `ui/focus.ts` 的键盘焦点；弹窗用 `modal()`，自带焦点层和 Esc）。

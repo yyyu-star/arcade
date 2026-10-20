@@ -6,7 +6,7 @@ import { app } from '../app.ts';
 import { audio } from '../audio.ts';
 import { levelName } from '../labels.ts';
 import { Session, randomSeed } from '../session.ts';
-import { SOLO_DEALS, type TierId } from '../../stake/index.ts';
+import { SOLO_DEALS, type TierId } from '../../variants/guandan/stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed, stakeError } from '../stake-text.ts';
 import { StakeSession, buyinStake, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
 import { getSettings, getStats, loadSave, updateSettings } from '../store.ts';

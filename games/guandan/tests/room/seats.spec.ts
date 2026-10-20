@@ -3,7 +3,7 @@
  * 回归：旧仓库 PR 50 的独立审阅发现离座后去接管对手的电脑座位能看到对手的手牌——坐过的人只能回自己的座位，新人接管后也固定下来。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { READY_MS, guandanRoom as R } from '../../src/net/rules.ts';
+import { READY_MS, guandanRoom as R } from '../../src/variants/guandan/net/rules.ts';
 import { advance, fireDueAlarms, freezeClock, join, type Conn } from './helpers.ts';
 import { Table } from './table.ts';
 

@@ -1,6 +1,6 @@
 /** 手牌分列（纯函数，不依赖 Phaser，单元测试直接测）。一列超过 maxCol 张（默认 5）拆成相邻两列，保证手机上每张都点得到。 */
-import { planHand } from '../../ai/index.ts';
-import { cardValue, isWild, sortHand, suitOf, type Card, type PlayType } from '../../core/index.ts';
+import { planHand } from '../../variants/guandan/ai/index.ts';
+import { cardValue, isWild, sortHand, suitOf, type Card, type PlayType } from '../../variants/guandan/core/index.ts';
 
 export type SortMode = 'rank' | 'type';
 

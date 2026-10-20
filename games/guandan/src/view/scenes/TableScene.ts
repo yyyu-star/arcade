@@ -6,7 +6,7 @@
  * 能不能出、怎么解释一手牌、提示，全部来自 src/core 和 src/ai。
  */
 import Phaser from 'phaser';
-import { hintList } from '../../ai/index.ts';
+import { hintList } from '../../variants/guandan/ai/index.ts';
 import {
   beats,
   canPass,
@@ -23,7 +23,7 @@ import {
   type GameEvent,
   type Play,
   type PlayerView,
-} from '../../core/index.ts';
+} from '../../variants/guandan/core/index.ts';
 import type { Mood } from '../art/index.ts';
 import { app } from '../app.ts';
 import { audio } from '../audio.ts';
@@ -32,17 +32,17 @@ import { PLACE_NAMES, goalWord, levelName, playDetail, playLabel, seatIdentity, 
 import { NetSession, closeText, createRoom, errorText, type NetEvent } from '../net.ts';
 import { lineFor, talkChance, thinkTime, type Situation } from '../personas.ts';
 import { ME, Session, randomSeed, type TableSession } from '../session.ts';
-import { ROOM_DEALS, SOLO_DEALS, dealPoints, payout, pointValue } from '../../stake/index.ts';
-import type { StakeView } from '../../net/stake.ts';
-import type { Again } from '../../net/rules.ts';
+import { ROOM_DEALS, SOLO_DEALS, dealPoints, payout, pointValue } from '../../variants/guandan/stake/index.ts';
+import type { StakeView } from '../../variants/guandan/net/stake.ts';
+import type { Again } from '../../variants/guandan/net/rules.ts';
 import { flashTitle, stopFlash, vibrate } from '../attention.ts';
 import { countLeft } from '../counter.ts';
 import { ROOM_STAKE_TEXT, STAKE_ERROR, STAKE_TEXT, TIER_NAME, fmtChips, roomLeaveText, roomWhy, settleNowText, signed, stakeError } from '../stake-text.ts';
 import { StakeSession, buyinStake, refundStake, settleStake, type SettleOutcome } from '../stake.ts';
 import { dealRecap } from '../recap.ts';
 import { suggestFor } from '../suggest.ts';
-import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog, type Title } from '../../stake/titles.ts';
-import { AWARD_NAME, matchAwards, winnerOf, type Award } from '../../net/awards.ts';
+import { TITLE_INFO, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog, type Title } from '../../variants/guandan/stake/titles.ts';
+import { AWARD_NAME, matchAwards, winnerOf, type Award } from '../../variants/guandan/net/awards.ts';
 import { getSettings, getStats, tutorialDone, updateSettings } from '../store.ts';
 import { LOW_MEMORY } from '../device.ts';
 import { COLOR, TYPE, css, minHit, phoneType } from '../theme.ts';
@@ -60,7 +60,7 @@ import { SeatView } from '../table/seats.ts';
 import { Nudges } from '../table/nudge.ts';
 import { TableFun, funItem, type FunSeat } from 'arcade-kit/table-fun';
 import { localChat } from 'arcade-kit/chat';
-import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../net/fun-moments.ts';
+import { MOOD_LINES, PHRASES, TEMPER, dealMoment, momentOf } from '../../variants/guandan/net/fun-moments.ts';
 import { taunt } from '../../net/emotes.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { bombDrama, bombOnBomb, dealHighlights, highlightText } from '../highlights.ts';

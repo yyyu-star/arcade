@@ -4,7 +4,7 @@
  * 一桌最多 4 个真人，空位电脑补；座位由房间随机排（kit 默认）。
  */
 import { TIER_IDS, type TierId } from '../stake/index.ts';
-import { ROOM_PATH } from './version.ts';
+import { ROOM_PATH } from '../../../net/version.ts';
 
 export type MatchTier = 'fun' | `real-${TierId}`;
 

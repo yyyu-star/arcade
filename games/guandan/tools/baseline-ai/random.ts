@@ -1,7 +1,7 @@
 /**
  * 随机出牌机器人：模拟器里当基准对手。只要合法，什么都可能出；跟牌时"不要"和各种压法等概率。
  */
-import { canPass, legalPlays, rngFor, type Action, type PlayerView } from '../../src/core/index.ts';
+import { canPass, legalPlays, rngFor, type Action, type PlayerView } from '../../src/variants/guandan/core/index.ts';
 
 export function randomAction(view: PlayerView, seed: string | number): Action | null {
   const rng = rngFor(seed, 'random-bot', view.seat, view.step);

@@ -6,20 +6,20 @@
  */
 import { createHash } from 'node:crypto';
 import { snapshotBytes } from 'arcade-kit/game';
-import { botFor, type SoloLevel, type Venue } from '../src/ai/venue.ts';
-import { decide, styleOf, suggest } from '../src/ai/index.ts';
+import { botFor, type SoloLevel, type Venue } from '../src/variants/guandan/ai/venue.ts';
+import { decide, styleOf, suggest } from '../src/variants/guandan/ai/index.ts';
 import {
   SHORT_END_LEVEL, canPass, createGame, dispatch, eventsFor, hint, legalPlays, previewNext, replay, seatsToAct, timeoutAction, viewFor,
   type Action, type DealResult, type GameState, type Options, type PlayRecord,
-} from '../src/core/index.ts';
-import { matchAwards, winnerOf } from '../src/net/awards.ts';
-import { dealMoment, momentOf, victimOf } from '../src/net/fun-moments.ts';
-import { rotateNetView } from '../src/net/rotate.ts';
-import { guandanRoom as R, testKey, type NetAction, type NetState } from '../src/net/rules.ts';
-import { matchEnd } from '../src/net/together.ts';
-import { TIER_IDS, payout, soloAddDeal, soloOver, soloPoints, type SoloMatch, type TierId } from '../src/stake/index.ts';
-import { statsOf, tallyDeal, emptyTally } from '../src/stake/stats.ts';
-import { bombsBy, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog } from '../src/stake/titles.ts';
+} from '../src/variants/guandan/core/index.ts';
+import { matchAwards, winnerOf } from '../src/variants/guandan/net/awards.ts';
+import { dealMoment, momentOf, victimOf } from '../src/variants/guandan/net/fun-moments.ts';
+import { rotateNetView } from '../src/variants/guandan/net/rotate.ts';
+import { guandanRoom as R, testKey, type NetAction, type NetState } from '../src/variants/guandan/net/rules.ts';
+import { matchEnd } from '../src/variants/guandan/net/together.ts';
+import { TIER_IDS, payout, soloAddDeal, soloOver, soloPoints, type SoloMatch, type TierId } from '../src/variants/guandan/stake/index.ts';
+import { statsOf, tallyDeal, emptyTally } from '../src/variants/guandan/stake/stats.ts';
+import { bombsBy, dealTitles, emptyMatchLog, logDeal, matchTitles, type MatchLog } from '../src/variants/guandan/stake/titles.ts';
 import { feedPick } from '../src/view/feed.ts';
 import { dealHighlights, highlightText } from '../src/view/highlights.ts';
 import { dealRecap } from '../src/view/recap.ts';

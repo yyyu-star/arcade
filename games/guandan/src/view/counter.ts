@@ -2,8 +2,8 @@
  * 记牌器：这一副每种点数还有几张没露面（全场 108 张，减去我手里的、减去已经出过的）。
  * 只用公开信息（出过的牌）和自己的手牌，房间和单机给的视图里都有；贡牌从一家到另一家不算露面。
  */
-import { BIG_JOKER, SMALL_JOKER, rankOf, type Card } from '../core/cards.ts';
-import type { PlayRecord } from '../core/index.ts';
+import { BIG_JOKER, SMALL_JOKER, rankOf, type Card } from '../variants/guandan/core/cards.ts';
+import type { PlayRecord } from '../variants/guandan/core/index.ts';
 
 export interface CounterCell {
   /** 点数：2..14，小王 16，大王 17 */

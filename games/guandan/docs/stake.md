@@ -280,7 +280,7 @@ Worker 只检查数字是不是在规则允许的范围里，不在就回 400。
 
 ## 8. 实现分步（已经做完，留作记录）
 
-1. 规则核心：`src/stake/`，纯函数，放计分、封顶、档位表、结回额、每个座位的账。用 vitest 测，包括 1.1 的每一条和"四个真人时两队输赢抵掉"。**0.4.0 做了**（`tests/stake.test.ts`）。
+1. 规则核心：`src/variants/guandan/stake/`，纯函数，放计分、封顶、档位表、结回额、每个座位的账。用 vitest 测，包括 1.1 的每一条和"四个真人时两队输赢抵掉"。**0.4.0 做了**（`tests/stake.test.ts`）。
 2. 单机实盘：
    - 页面：选模式、选档、存档 `guandan.stake`、结算页、离开确认；
    - Worker：`/games/guandan/api/stake/{buyin,settle,refund}`，`WALLET` 用假的服务绑定测（被拒、`dup`、`capped`、`no_stake` 都要走一遍）。
@@ -290,7 +290,7 @@ Worker 只检查数字是不是在规则允许的范围里，不在就回 400。
 3. 好友房实盘：`options` / `begin` / `seated` / `effects` / `settled` / `closing`，加上房间的 `perform`。
    - 房间测试（workerd 真 DO）覆盖：开局带入、带入被拒、接管、离开、掉线托管、收场结回、同一笔办两次；
    - 冒烟加一个实盘房间，四个真人打满一场，看到结回。
-   - **0.5.0 做了**（`src/net/stake.ts`、`worker/room.ts` 的 `perform`；`tests/net-stake.test.ts`、`tests/room/stake.spec.ts`、`npm run stake-smoke` 的好友房一段）。和上面写的不一样的几处：
+   - **0.5.0 做了**（`src/variants/guandan/net/stake.ts`、`worker/room.ts` 的 `perform`；`tests/net-stake.test.ts`、`tests/room/stake.spec.ts`、`npm run stake-smoke` 的好友房一段）。和上面写的不一样的几处：
      - "至少 2 个真人"：arcade-kit 没有让游戏拒绝开局的接口，所以页面把实盘房间的"开局"灰掉；万一开局时真人不到 2 个（旧页面、脚本），
        房间不拒绝，而是整场不计输赢、不碰钱包（`need_two`），一样刷不了电脑。要服务端直接拒绝得在 kit 加钩子，先不做；
      - 带入前每次都先 `view`（不只重发时）：房间被驱逐后内存里记不住"是不是重发"，每笔多 1 次 RPC、0 行写入；

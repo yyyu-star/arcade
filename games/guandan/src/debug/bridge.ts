@@ -3,13 +3,13 @@
  * 推进状态只走和玩家相同的路径（TableScene.debugDispatch → Session.apply → 核心 dispatch）。
  */
 import type Phaser from 'phaser';
-import type { Action, Card, GameState, PlayerView } from '../core/index.ts';
+import type { Action, Card, GameState, PlayerView } from '../variants/guandan/core/index.ts';
 import { anim } from '../view/anim.ts';
 import { app } from '../view/app.ts';
 import { audio } from '../view/audio.ts';
 import { lobbySession } from '../view/online.ts';
 import { loadStake } from '../view/stake.ts';
-import type { StakeView } from '../net/stake.ts';
+import type { StakeView } from '../variants/guandan/net/stake.ts';
 import type { TableScene } from '../view/scenes/TableScene.ts';
 import type { TitleScene } from '../view/scenes/TitleScene.ts';
 import { GAME_HEIGHT, RENDER_SCALE } from '../view/theme.ts';

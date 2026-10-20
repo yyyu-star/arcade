@@ -7,8 +7,8 @@
  *   node tools/replay-log.ts <log.jsonl> --deal 2 --at 27   第 2 副第 27 手（1 起，含"不要"）四家手牌和决策，--json 输出局面
  */
 import { readFileSync } from 'node:fs';
-import { cardName, dispatch, isBomb, viewFor, type Card, type GameState, type PlayRecord } from '../src/core/index.ts';
-import { decide, hintList } from '../src/ai/index.ts';
+import { cardName, dispatch, isBomb, viewFor, type Card, type GameState, type PlayRecord } from '../src/variants/guandan/core/index.ts';
+import { decide, hintList } from '../src/variants/guandan/ai/index.ts';
 import { soloSeeds } from '../src/view/session.ts';
 
 function arg(name: string): string | undefined {
