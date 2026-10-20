@@ -2712,7 +2712,7 @@ function recompute(w: World): void {
   s.might = 1 + 0.1 * p('zhusha');
   s.cdMul = 1 - 0.08 * p('xianglu');
   s.speed = PLAYER.speed * (1 + 0.1 * p('caoxie'));
-  // 仙桃每级血上限 +15、每秒回 0.25（原来 +20、0.3：满级血翻倍还每秒回 1.5，是最强的一件被动，DESIGN 第 12 节 4c）
+  // 仙桃每级血上限 +15、每秒回 0.25（原来 +20、0.3：满级血翻倍还每秒回 1.5，是最强的一件被动，见 CHANGELOG）
   s.hpMax = PLAYER.hp + 15 * p('xiantao');
   s.regen = 0.25 * p('xiantao');
   s.magnet = PLAYER.magnet * (1 + 0.3 * p('luopan'));

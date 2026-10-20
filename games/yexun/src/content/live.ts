@@ -93,7 +93,7 @@ export const LIVE_MAP_BP: LiveCoef<MapId> = {
 
 /**
  * 组合系数（0.3.7）：「角色 × 地图 × 档」整套系数（万分比），写了就替换 LIVE_CHAR_BP × LIVE_MAP_BP 的乘积。
- * 只给乘积偏出同档平均 0.15 份以上的格子（新种子模拟，每格 2,000–6,000 局拟合，DESIGN.md 12）；没写的组合仍按乘积。
+ * 只给乘积偏出同档平均 0.15 份以上的格子（新种子模拟，每格 2,000–6,000 局拟合，见 CHANGELOG 0.3.7）；没写的组合仍按乘积。
  */
 export const LIVE_COMBO_BP: Partial<Record<CharacterId, Partial<Record<MapId, Partial<Record<LiveTier, number>>>>>> = {
   pang: { yizhuang: { medium: 10_000, large: 10_100, luxe: 10_000 }, riverbank: { luxe: 7_200 } },
