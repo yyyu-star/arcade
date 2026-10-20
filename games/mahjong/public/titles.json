@@ -62,5 +62,17 @@
   "xz_last_stand": {
     "name": "血战到底",
     "desc": "一局里第三个胡"
+  },
+  "rc_yakuman": {
+    "name": "役满",
+    "desc": "和了一把役满"
+  },
+  "rc_top": {
+    "name": "一位",
+    "desc": "一场打完排第一"
+  },
+  "rc_iron_wall": {
+    "name": "铁壁",
+    "desc": "打满 8 局一次铳都没放"
   }
 }

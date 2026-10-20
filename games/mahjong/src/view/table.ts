@@ -68,10 +68,32 @@ export interface VariantUi<V extends TableView, A> {
   effects(v: V, fx: Fx, names: string[]): void;
   /** 听牌提示：打掉 discard（null 是现在这手）听哪些牌种、各还剩几张没看见；听不了返回 null */
   ting(v: V, discard: Tile | null): { kind: number; left: number }[] | null;
+  // 下面几个可选：玩法想改牌桌默认画法时才给（川麻都不用）
+  /** 名牌上的数，默认是筹码；日麻是点数 */
+  score?(v: V, seat: number): string;
+  /** 和了的人名牌上盖的章，默认自摸写"自摸"、点炮写"胡"；日麻写"荣和" */
+  stamp?(v: V, seat: number): string;
+  /** 名牌画完以后再补东西（日麻：立直棒） */
+  badge?(v: V, seat: number, badge: HTMLElement): void;
+  /** 中控盘里的内容，默认是剩余张数和局数；日麻要多放局名、本场、供托和宝牌指示牌 */
+  center?(v: V, mid: HTMLElement, paint: Paint): void;
+  /** 牌河里第 index 张画完以后补样式（日麻：立直宣告那张横放） */
+  river?(v: V, seat: number, index: number, tile: HTMLElement): void;
+  /** 这张牌是不是赤宝牌（画红五） */
+  red?(t: Tile): boolean;
+  /** 现在手牌里哪些能打；不给就是 prompt.discard（日麻：按了立直只剩打了还听牌的那几张） */
+  discardable?(v: V): readonly Tile[] | undefined;
 }
 
-export interface BarCtx<A> {
+/** 给玩法画牌用的：和牌桌自己画的牌一个样子（赤宝牌、牌面缓存都一致） */
+export interface Paint {
+  tile(t: Tile, size: string, parent: HTMLElement): HTMLElement;
+}
+
+export interface BarCtx<A> extends Paint {
   selected: Tile[];
+  /** 摆一排"听哪些牌、各剩几张"（lead 是前面的小标题），和牌桌默认的听牌提示一个样子 */
+  ting(bar: HTMLElement, waits: { kind: number; left: number }[], lead: string): void;
   act(a: A): void;
   /** 改了选择、要重画 */
   setSelected(tiles: Tile[]): void;
@@ -314,6 +336,8 @@ export class TableUi<V extends TableView, A> {
     this.startTimer();
   }
 
+  private readonly paint: Paint = { tile: (t, size, parent) => this.tile(t, size, parent) };
+
   readonly fx: Fx = {
     deal: () => this.dealIn(),
     banner: (seat, text, cls = '') => {
@@ -363,13 +387,14 @@ export class TableUi<V extends TableView, A> {
     if (v.dealer === seat) el('span', 'dealer', av, '庄');
     const info = el('div', 'info', b);
     el('div', 'name', info, meta.empty ? '空位' : meta.name);
-    el('div', 'chips', info, num(s.chips));
+    el('div', 'chips', info, this.ui.score?.(v, seat) ?? num(s.chips));
     const tags = el('div', 'tags', info);
     const t = this.ui.seatTags(v, seat);
     if (t) tags.appendChild(t);
     if (meta.away) el('span', 'tag away', tags, meta.auto ? '托管' : '掉线');
-    if (s.won) el('div', 'stamp', b, s.won.from === null ? '自摸' : '胡');
+    if (s.won) el('div', 'stamp', b, this.ui.stamp?.(v, seat) ?? (s.won.from === null ? '自摸' : '胡'));
     el('div', 'clock', b);
+    this.ui.badge?.(v, seat, b);
   }
 
   /**
@@ -393,8 +418,9 @@ export class TableUi<V extends TableView, A> {
     const e = el('div', `tile ${size}`, parent);
     if (t < 0) e.style.backgroundImage = `url("${backUrl()}")`;
     else {
-      e.style.backgroundImage = `url("${tileUrl(kindOf(t))}")`;
-      e.title = tileName(kindOf(t));
+      const red = this.ui.red?.(t) ?? false;
+      e.style.backgroundImage = `url("${tileUrl(kindOf(t), red)}")`;
+      e.title = tileName(kindOf(t), red);
     }
     return e;
   }
@@ -422,6 +448,7 @@ export class TableUi<V extends TableView, A> {
     river.forEach((x, i) => {
       const e = this.tile(x.tile, 'sm', box);
       if (x.taken) e.classList.add('taken');
+      this.ui.river?.(v, seat, i, e);
       if (i >= this.riverLen[seat]! && !(one && this.fly(e, r, x.tile))) e.classList.add('fresh');
       if (v.claim && v.claim.from === seat && v.claim.tile === x.tile) e.classList.add('hot');
       else if (seat === this.lastDiscard && i === river.length - 1 && !x.taken) e.classList.add('last');
@@ -518,6 +545,7 @@ export class TableUi<V extends TableView, A> {
       d.classList.toggle('done', !!v.seats[s]!.won);
     }
     const mid = el('div', 'mid', c);
+    if (this.ui.center) return this.ui.center(v, mid, this.paint);
     el('div', 'wall', mid, `${v.wall}`);
     el('div', 'wall-label', mid, '剩余');
     el('div', 'round', mid, `第 ${Math.min(v.round + 1, v.opts.rounds)}/${v.opts.rounds} 局`);
@@ -535,7 +563,7 @@ export class TableUi<V extends TableView, A> {
       return;
     }
     const multi = this.ui.multi(v);
-    const discard = v.prompt?.discard;
+    const discard = this.ui.discardable?.(v) ?? v.prompt?.discard;
     // 轮到我打牌：手牌底下亮一道金边（中控盘的方向灯离手牌远，低头看手牌时看不到）
     box.classList.toggle('turn', !!discard && multi === 0);
     let tiles = me.hand.slice();
@@ -651,6 +679,8 @@ export class TableUi<V extends TableView, A> {
     const bar = this.bar;
     clear(bar);
     const ctx: BarCtx<A> = {
+      ...this.paint,
+      ting: (b, ws, lead) => this.drawTing(b, ws, lead),
       selected: this.selected,
       act: (a) => this.send(a),
       setSelected: (tiles) => {
