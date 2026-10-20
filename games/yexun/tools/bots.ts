@@ -45,6 +45,7 @@ export const ROUTES: Record<Build, string[]> = {
   ward: ['bell', 'mirror', 'shield', 'rope', 'yinyang', 'fenzhong', 'linghua'],
   wood: ['thunder', 'petals', 'linghua', 'leihuo'],
   fire: ['gourd', 'talisman', 'fenzhong', 'leihuo'],
+  paper: ['zhibing', 'huobing', 'mingbing', 'bell'],
 };
 
 /** 路线要的法器（进化路线一件，合成路线两件） */
