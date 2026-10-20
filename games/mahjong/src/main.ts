@@ -727,7 +727,7 @@ function drawWaiting(s: OnlineState): void {
   });
 }
 
-function seatMetas(s: OnlineState, g: XzView): SeatMeta[] {
+function seatMetas(s: OnlineState, g: { seats: { persona: number }[] }): SeatMeta[] {
   // 实盘桌的电脑都是同一个最强性格：重名的按座位编号，免得"火锅婆婆点炮火锅婆婆"分不清
   const named = g.seats.map((x) => PERSONAS[x.persona]?.name ?? '电脑');
   const bots = s.room!.seats.map((x, i) => (x.kind === 'human' || x.name ? null : named[i]!));
@@ -741,7 +741,8 @@ function seatMetas(s: OnlineState, g: XzView): SeatMeta[] {
 }
 
 function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
-  const g = rv.g as XzView;
+  const g = rv.g as XzView | RcView;
+  const rc = g.variant === RC_ID;
   if (!table) {
     screen.className = 'screen game';
     screen.replaceChildren();
@@ -757,7 +758,11 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
       title.append(s.code);
       el('span', 'var', title, ` · ${st.wallet ? `实盘 ${num(st.share)}` : '娱乐'}`);
     }
-    table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => online?.play(a));
+    if (rc) {
+      resetRiichiUi();
+      table = new TableUi(screen, riichiUi, (a: CommonAct | RcAction) => online?.play(toRcAction(a)));
+      table.root.classList.add('rc');
+    } else table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => online?.play(a));
     rotateTip(stage);
     lastPrompt = false;
     fame = [];
@@ -775,11 +780,11 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   // 同一步重画：事件已经放过了
   const replay = fresh || rv.n === shownN;
   shownN = rv.n;
-  const v: XzView = replay ? { ...g, events: [] } : g;
+  const v = replay ? { ...g, events: [] } : g;
   const turn = s.room!.turn;
   const pause = s.room!.pause;
   table.render({
-    v,
+    v: v.variant === RC_ID ? tableView(v) : v,
     seats: seatMetas(s, g),
     timer: turn?.deadline ? { seats: turn.seats ?? [turn.seat], until: turn.deadline } : pause ? { seats: [], until: pause.until } : null,
   });
@@ -792,7 +797,8 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
-  if (!replay) {
+  // 名场面、好友动态是川麻的说法（胡、杠），立直暂不接（和单机一样）
+  if (!replay && v.variant !== RC_ID) {
     publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
     if (seat !== null && !(stakesOf(rv.stakes)?.wallet && !rv.unrated)) feed(s.code, v, seat);
   }
@@ -801,7 +807,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
 }
 
 /** 没入座：回自己坐过的座位，或者能接管的电脑座位（没绑人的；实盘房间旁观只看，不给坐） */
-function watching(s: OnlineState, g: XzView): Watching {
+function watching(s: OnlineState, g: XzView | RcView): Watching {
   const metas = seatMetas(s, g);
   return {
     back: s.you?.bound ?? null,
@@ -812,21 +818,23 @@ function watching(s: OnlineState, g: XzView): Watching {
 }
 
 /** 一局打完：房间停 8 秒自动发下一局，结算摆着不用点；一场打完给总结算 */
-function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean): void {
+function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView | RcView, replay: boolean): void {
   const names = seatMetas(s, g).map((x) => x.name);
   const wallet = !!stakesOf(rv.stakes)?.wallet && !rv.unrated;
   const unit = wallet ? '' : ' 分';
+  const rc = g.variant === RC_ID;
+  const round = (): HTMLElement => (g.variant === RC_ID ? rcRoundSummary(g, names) : roundSummary(g, names, unit));
   if (g.phase === 'over' || rv.done) {
     const me = s.you?.seat ?? null;
     if (!(replay && document.querySelector('.mask.end'))) {
-      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面
-      const prizes = g.result ? awardsOf(g.result.seats.map((x) => x.net), g.seats.map((x) => x.stats)) : [];
+      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面；奖项是川麻的说法，立直不颁
+      const prizes = g.result && g.variant !== RC_ID ? awardsOf(g.result.seats.map((x) => x.net), g.seats.map((x) => x.stats)) : [];
       const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
         if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
-        settle(box, roundSummary(g, names, unit));
-        box.appendChild(matchSummary(g, names, unit));
-        if (fame.length) box.appendChild(fameSummary(fame, names));
+        settle(box, round());
+        box.appendChild(g.variant === RC_ID ? rcMatchSummary(g, names, unit) : matchSummary(g, names, unit));
+        if (!rc && fame.length) box.appendChild(fameSummary(fame, names));
         if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
         if (wallet) el('div', 'settle-note', box, '桌上的筹码已经结回钱包');
         else if (rv.unrated) el('div', 'settle-note', box, '实盘只有一个人，这一场不计输赢、没动钱包');
@@ -838,10 +846,12 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
           lobby(false, back);
         });
         // 分享卡带房间码：房间已经结束的话，朋友打开就是游戏首页。匹配桌不带（外人进不去）
-        const title = `${match ? '快速匹配' : '好友房'} · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${g.opts.rounds} 局`;
+        const length = g.variant === RC_ID ? (g.opts.length === 'hanchan' ? '半庄' : '东风战') : `${g.opts.rounds} 局`;
+        const title = `${match ? '快速匹配' : '好友房'} · ${wallet ? `实盘${STAKES_NAME[rv.stakes]}档` : '娱乐'} · ${length}`;
         const url = match ? `${location.origin}${location.pathname}` : new URL(`?room=${s.code}`, location.href).toString();
         awardsButton(row, prizes, names, prizeUnit, `${title} · 颁奖`, url);
-        shareButton(row, g, title, wallet, url);
+        if (g.variant === RC_ID) cardButton(row, rcCardOf(g, title, wallet ? '筹码' : '分', myName), url);
+        else shareButton(row, g, title, wallet, url);
         // 再来一场：我开个同样规则的新房间，这一桌跟过来。房间等 3 分钟，过了再点就自己先去新房间、再叫朋友
         if (me !== null && s.room?.seats[me]?.kind === 'human' && !rv.next) {
           const b = button('act go rematch', row, '再来一场', () => void rematch(b));
@@ -869,15 +879,27 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView, replay: boolean):
     return;
   }
   if (g.phase === 'end') {
-    if (replay && document.querySelector('.mask.end')) return;
-    dialog(stage, 'end', (box) => {
-      settle(box, roundSummary(g, names, unit));
-      el('p', 'room-hint', box, '几秒后自动开下一局');
-    });
+    if (replay && (document.querySelector('.mask.end') || endTimer)) return;
+    const show = (): void => {
+      dialog(stage, 'end', (box) => {
+        settle(box, round());
+        el('p', 'room-hint', box, '几秒后自动开下一局');
+      });
+    };
+    // 立直有人和了：和牌亮牌（役一条条弹出来）先摆一会儿再盖上结算（和单机一样）；这期间开了下一局或离了房就不弹
+    if (!rc || !g.history.at(-1)?.wins.length) return show();
+    const t = table;
+    endTimer = window.setTimeout(() => {
+      endTimer = 0;
+      if (table === t && (online?.state.view?.g as RcView | undefined)?.phase === 'end') show();
+    }, 2_600 * (prefs.fast ? 0.5 : 1));
     return;
   }
   if (document.querySelector('.mask.end')) closeDialog();
 }
+
+/** 立直一局结算前的等待（见 roomRoundEnd） */
+let endTimer = 0;
 
 /**
  * 一场打完的结算很长，按钮条贴在弹窗底：手机竖屏自己那行（排最后时）被按钮条压一半（10-19 试玩）。
