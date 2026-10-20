@@ -9,10 +9,11 @@ import { CLOSE } from 'arcade-kit/protocol';
 import { app } from './app.ts';
 import { NetSession, createRoom, errorText, forgetRoom, isFinalForRoom, myRoom, roomInUrl, roomVariant, savedRoom, seatCountOf, type RoomVariant } from './net.ts';
 import { DdzNetSession } from './ddz-net.ts';
-import { MATCH_DDZ, MATCH_DDZ_TABLE } from '../variants/doudizhu/net/match.ts';
+import { MATCH_DDZ_TABLE, ddzMatchTierOf } from '../variants/doudizhu/net/match.ts';
 import { MATCH_PATH, matchTierOf } from '../variants/guandan/net/match.ts';
 import { parseRoomOpts } from '../variants/guandan/net/stake.ts';
 import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../variants/guandan/stake/index.ts';
+import { ROOM_DEALS as DDZ_ROOM_DEALS, pointValue as ddzPointValue } from '../variants/doudizhu/stake/index.ts';
 import { ROOM_STAKE_TEXT, STAKE_TEXT, TIER_NAME, fmtChips } from './stake-text.ts';
 import { fetchWallet } from './stake.ts';
 import { standalone, withNick } from './platform.ts';
@@ -145,7 +146,7 @@ export function openOnline(variant: RoomVariant = 'guandan'): void {
   const make = el('div', { class: 'ol-row' });
   make.appendChild(button('开个房间', () => void create(null), '', 'ol-create'));
   // 实盘房间（0.5.0，docs/stake.md 第 3 节）：开房时选档位，之后不能改。单独部署没有钱包，不摆
-  if (!standalone() && variant === 'guandan') make.appendChild(button('开实盘房间', () => pickTier(tiers), 'gd-2', 'ol-create-stake'));
+  if (!standalone()) make.appendChild(button('开实盘房间', () => pickTier(tiers), 'gd-2', 'ol-create-stake'));
   c.appendChild(make);
   const tiers = el('div', { class: 'ol-row', id: 'ol-tiers' });
   c.appendChild(tiers);
@@ -175,7 +176,7 @@ function setNote(t: string): void {
 
 /** 实盘房间：每档一个按钮，钱包不够一份的灰掉（钱包连不上时不拦，开局时带入被拒就是这个人不计输赢） */
 function pickTier(box: HTMLElement): void {
-  box.replaceChildren(el('div', { class: 'ol-tip' }, `选档位：打 ${ROOM_DEALS} 副，输赢最多一份；${ROOM_STAKE_TEXT.bots}。${STAKE_TEXT.noCash}`));
+  box.replaceChildren(el('div', { class: 'ol-tip' }, `选档位：打 ${panelVariant === 'ddz' ? DDZ_ROOM_DEALS : ROOM_DEALS} 副，输赢最多一份；${ROOM_STAKE_TEXT.bots}。${STAKE_TEXT.noCash}`));
   const btns = TIER_IDS.map((t) => {
     const b = button(`${TIER_NAME[t]} ${fmtChips(TIERS[t])}`, () => void create(t), '', `ol-tier-${t}`);
     box.appendChild(b);
@@ -291,7 +292,7 @@ function renderRoom(): void {
   const stake = parseRoomOpts(s.room?.opts)?.stake ?? null;
   if (stake) {
     c.appendChild(
-      el('div', { class: 'ol-stake', id: 'ol-stake' }, `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}，每分 ${fmtChips(pointValue(stake))}）· 打 ${ROOM_DEALS} 副 · ${ROOM_STAKE_TEXT.bots}`),
+      el('div', { class: 'ol-stake', id: 'ol-stake' }, `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}，每分 ${fmtChips(s.variant === 'ddz' ? ddzPointValue(stake) : pointValue(stake))}）· 打 ${s.variant === 'ddz' ? DDZ_ROOM_DEALS : ROOM_DEALS} 副 · ${ROOM_STAKE_TEXT.bots}`),
     );
   }
   if (s.status !== 'open' || !s.room) {
@@ -385,7 +386,7 @@ export function openMatch(stake: TierId | null, solo: () => void, variant: RoomV
   const c = card();
   c.appendChild(el('h2', {}, '快速匹配'));
   c.appendChild(
-    el('div', { class: 'ol-stake', id: 'ol-match-tier' }, ddz ? '斗地主 · 娱乐 · 不计战绩' : stake ? `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${ROOM_DEALS} 副` : '娱乐 · 打过 A · 不计战绩'),
+    el('div', { class: 'ol-stake', id: 'ol-match-tier' }, ddz ? (stake ? `斗地主实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${DDZ_ROOM_DEALS} 副` : '斗地主 · 娱乐 · 不计战绩') : stake ? `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${ROOM_DEALS} 副` : '娱乐 · 打过 A · 不计战绩'),
   );
   const wait = el('div', { class: 'ol-wait', id: 'ol-match-wait' }, '正在找人…');
   c.appendChild(wait);
@@ -413,7 +414,7 @@ export function openMatch(stake: TierId | null, solo: () => void, variant: RoomV
   };
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const m = new MatchClient({
-    url: withNick(`${proto}//${window.location.host}${MATCH_PATH}/${ddz ? MATCH_DDZ : matchTierOf(stake)}`),
+    url: withNick(`${proto}//${window.location.host}${MATCH_PATH}/${ddz ? ddzMatchTierOf(stake) : matchTierOf(stake)}`),
     onWaiting: (count, size, leftMs) => {
       [n, seats, until] = [count, size, Date.now() + leftMs];
       paint();

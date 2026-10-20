@@ -285,8 +285,8 @@ export function mountBridge(game: Phaser.Game): void {
         error: n.lastError,
         queue: n.queue.length,
         pending: n.pending !== null,
-        // 好友房实盘：最新一帧里每个座位的账（按我的座位转过，我是 0 号）
-        stake: (n instanceof NetSession ? (n.queue[n.queue.length - 1]?.nv.stake ?? n.shown?.stake) : null) ?? null,
+        // 好友房实盘（掼蛋、斗地主同一个形状）：最新一帧里每个座位的账（按我的座位转过，我是 0 号）
+        stake: ((n.queue[n.queue.length - 1]?.nv as { stake?: StakeView } | undefined)?.stake ?? (n.shown as { stake?: StakeView } | null)?.stake) ?? null,
         match: n.match,
         chat: n.chatOn,
       };

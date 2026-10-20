@@ -5,17 +5,17 @@
  */
 import { MatchQueue, type MatchEnv } from 'arcade-kit/match';
 import { MATCH_TABLE, matchRoomOptions } from '../src/variants/guandan/net/match.ts';
-import { MATCH_DDZ, MATCH_DDZ_TABLE, ddzMatchRoomOptions } from '../src/variants/doudizhu/net/match.ts';
+import { MATCH_DDZ_TABLE, ddzMatchRoomOptions, isDdzMatchTier } from '../src/variants/doudizhu/net/match.ts';
 
 export class Queue extends MatchQueue<MatchEnv> {
   protected readonly seats = MATCH_TABLE;
 
-  // 档位 ddz-fun（斗地主娱乐）一桌 3 人、开斗地主桌；其余档位原样。同一个排队类，每个档位本来就是一个实例
+  // 档位 ddz-fun、ddz-real-<档位>（斗地主）一桌 3 人、开斗地主桌；其余档位原样。同一个排队类，每个档位本来就是一个实例
   protected override tableSize(tier: string): number {
-    return tier === MATCH_DDZ ? MATCH_DDZ_TABLE : this.seats;
+    return isDdzMatchTier(tier) ? MATCH_DDZ_TABLE : this.seats;
   }
 
   protected override roomOptions(tier: string): unknown {
-    return tier === MATCH_DDZ ? ddzMatchRoomOptions(tier) : matchRoomOptions(tier);
+    return isDdzMatchTier(tier) ? ddzMatchRoomOptions(tier) : matchRoomOptions(tier);
   }
 }

@@ -12,8 +12,11 @@ import {
   ddzAi,
   ddzApply,
   ddzBegin,
+  ddzClosing,
+  ddzEffects,
   ddzOver,
   ddzSeated,
+  ddzSettled,
   ddzTimeout,
   ddzTurnMs,
   ddzView,
@@ -22,13 +25,15 @@ import {
   type DdzNetAction,
   type DdzNetView,
 } from '../variants/doudizhu/net/rules.ts';
+import { parseStake } from '../variants/doudizhu/net/stake.ts';
+import type { TierId } from '../variants/doudizhu/stake/index.ts';
 import { DDZ_SEATS } from '../variants/doudizhu/index.ts';
 import { EMOTE_COUNT } from './emotes.ts';
 
-/** 斗地主房间的开房选项（娱乐；实盘以后再接，现在带 stake 的直接拒绝） */
+/** 斗地主房间的开房选项：stake 为 null 是娱乐，是档位就是实盘 */
 export interface DdzOpts {
   variant: 'ddz';
-  stake: null;
+  stake: TierId | null;
 }
 
 export type HallOpts = RoomOpts | DdzOpts;
@@ -40,12 +45,13 @@ export const isDdz = (s: HallState): s is DdzNet => 'variant' in s && s.variant 
 export const isDdzOpts = (o: HallOpts | undefined): o is DdzOpts => !!o && 'variant' in o && o.variant === 'ddz';
 export const isDdzView = (v: HallView): v is DdzNetView => 'variant' in v && v.variant === 'ddz';
 
-/** 开房 / 排队开桌带的选项：variant 只认 'ddz'（别的值拒绝）；斗地主带实盘档位拒绝；其余交给掼蛋原来的校验 */
+/** 开房 / 排队开桌带的选项：variant 只认 'ddz'（别的值拒绝）；斗地主的 stake 要是认得的档位或没带；其余交给掼蛋原来的校验 */
 export function parseHallOpts(raw: unknown): HallOpts | null {
   if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as { variant?: unknown }).variant !== undefined) {
     const o = raw as { variant: unknown; stake?: unknown };
     if (o.variant !== 'ddz') return null;
-    return o.stake === undefined || o.stake === null ? { variant: 'ddz', stake: null } : null;
+    const stake = parseStake(o.stake);
+    return stake === undefined ? null : { variant: 'ddz', stake };
   }
   return parseRoomOpts(raw);
 }
@@ -73,12 +79,13 @@ export const hallRoom: RoomGame<HallState, HallAction, HallView, HallOpts, Stake
   free: (a) => a.type === 'buyin' || a.type === 'again' || a.type === 'back',
   apply: (s, seat, a) => {
     if (isDdz(s)) {
-      // 掼蛋的进贡、还贡、带入、再来一场在斗地主里都不存在；play 的 as 字段斗地主不用
+      // 掼蛋的进贡、还贡、再来一场在斗地主里都不存在；play 的 as 字段斗地主不用
       switch (a.type) {
         case 'bid':
         case 'pass':
         case 'ready':
         case 'back':
+        case 'buyin':
           return ddzApply(s, seat, a);
         case 'play':
           return ddzApply(s, seat, { type: 'play', cards: a.cards });
@@ -100,7 +107,7 @@ export const hallRoom: RoomGame<HallState, HallAction, HallView, HallOpts, Stake
   pause: (s) => (isDdz(s) ? null : guandanRoom.pause!(s)),
   resume: (s) => (isDdz(s) ? s : guandanRoom.resume!(s)),
   seated: (s, seat, kind) => (isDdz(s) ? ddzSeated(s, seat, kind) : guandanRoom.seated!(s, seat, kind)),
-  effects: (s) => (isDdz(s) ? [] : guandanRoom.effects!(s)),
-  settled: (s, id, result) => (isDdz(s) ? s : guandanRoom.settled!(s, id, result)),
-  closing: (s) => (isDdz(s) ? s : guandanRoom.closing!(s)),
+  effects: (s) => (isDdz(s) ? ddzEffects(s) : guandanRoom.effects!(s)),
+  settled: (s, id, result) => (isDdz(s) ? ddzSettled(s, id, result) : guandanRoom.settled!(s, id, result)),
+  closing: (s) => (isDdz(s) ? ddzClosing(s) : guandanRoom.closing!(s)),
 };

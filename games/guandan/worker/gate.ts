@@ -20,7 +20,7 @@ import type { GuestOptions } from 'arcade-kit/guest';
 import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
 import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/variants/guandan/net/match.ts';
-import { MATCH_DDZ } from '../src/variants/doudizhu/net/match.ts';
+import { MATCH_DDZ, MATCH_DDZ_TIERS } from '../src/variants/doudizhu/net/match.ts';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
 
@@ -94,7 +94,7 @@ export function routeRoom(request: Request, env: Env): Promise<Response> | Respo
   if (match) {
     // 快速匹配（0.26.0）：档位不认得、没开放的，kit 回 4004。没有钱包（单独部署）只开娱乐，实盘的排不了
     if (!env.MATCH) return refuseSocket(request, CLOSE.noRoom, 'no match');
-    const tiers = [...(env.WALLET ? MATCH_TIERS : [MATCH_FUN]), MATCH_DDZ];
+    const tiers = env.WALLET ? [...MATCH_TIERS, ...MATCH_DDZ_TIERS] : [MATCH_FUN, MATCH_DDZ];
     return acceptMatch(request, { ...kitEnv, MATCH: env.MATCH }, match[1]!, { ...opts, tiers });
   }
   return acceptJoin(request, kitEnv, join![1]!, opts);

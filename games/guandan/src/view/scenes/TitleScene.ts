@@ -286,9 +286,17 @@ export class TitleScene extends Phaser.Scene {
     if (daily) this.buttons['daily'] = new Button(this, P.x + 24 + inner - 88, sy, 160, 48, '每日挑战', 'gold', () => this.newDdzDaily(), 'crown').setDepth(20);
   }
 
-  /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；不做快速匹配 */
+  /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；快速匹配排不到就转这一档的单机（照常带入一份） */
   pickDdzStake(): void {
-    this.overlay = openTierPicker(this, (ses) => this.startDdzStake(ses), undefined, DDZ_FLOW);
+    this.overlay = openTierPicker(this, (ses) => this.startDdzStake(ses), (tier) => openMatch(tier, () => void this.soloDdzStake(tier), 'ddz'), DDZ_FLOW);
+  }
+
+  private async soloDdzStake(tier: TierId): Promise<void> {
+    if (!this.scene.isActive()) return;
+    const r = await DDZ_FLOW.buyin(tier);
+    if (!this.scene.isActive()) return;
+    if (r.ok) this.startDdzStake(r.ses);
+    else toast(this, stakeError(r.error), worldW(this) / 2, worldH - 60);
   }
 
   startDdzStake(ses: DdzStakeSession): void {
