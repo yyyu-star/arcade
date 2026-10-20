@@ -303,9 +303,9 @@ export const RAID_LIVE = {
   floor: { small: 1.6, medium: 1.6, large: 1.25 } as Record<RaidLiveTier, number>,
   floorRamp: { small: 5 * 60 * 30, medium: 10 * 60 * 30, large: 8 * 60 * 30 } as Record<RaidLiveTier, number>,
   base: {
-    small: { guzhen: 251, dukou: 185, shansi: 222 },
-    medium: { guzhen: 218, dukou: 233, shansi: 144 },
-    large: { guzhen: 171, dukou: 147, shansi: 99 },
+    small: { guzhen: 250, dukou: 182, shansi: 220 },
+    medium: { guzhen: 211, dukou: 241, shansi: 153 },
+    large: { guzhen: 175, dukou: 153, shansi: 98 },
   } as Record<RaidLiveTier, Record<RaidLiveTemplate, number>>,
   danger: { small: 0, medium: 1, large: 2 } as Record<RaidLiveTier, number>,
   open: ['small', 'medium', 'large'] as readonly RaidLiveTier[],
@@ -314,10 +314,10 @@ export const RAID_LIVE = {
    * 某角色同档的实盘期望比最高、最低的差出 0.15 份以上才单独给，按档写，不改角色本身的数值。
    */
   charBp: {
-    jianxia: { small: { guzhen: 8_400, dukou: 8_300, shansi: 8_300 }, medium: { guzhen: 8_000, dukou: 9_000, shansi: 8_200 }, large: { guzhen: 7_800, dukou: 8_000, shansi: 8_400 } },
-    pang: { small: { guzhen: 9_200, dukou: 9_000, shansi: 9_200 }, medium: { guzhen: 8_300, dukou: 9_100, shansi: 8_000 }, large: { guzhen: 7_200, dukou: 8_400, shansi: 7_400 } },
-    caiyao: { small: { guzhen: 8_800, dukou: 8_700, shansi: 8_500 }, medium: { guzhen: 8_000, dukou: 9_000, shansi: 7_200 }, large: { guzhen: 7_600, dukou: 8_500, shansi: 7_200 } },
-    fushi: { small: { dukou: 8_700 }, medium: { guzhen: 8_600, shansi: 8_500 }, large: { guzhen: 9_100, dukou: 8_600, shansi: 8_500 } },
+    jianxia: { small: { guzhen: 8_300, dukou: 8_200, shansi: 8_300 }, medium: { guzhen: 7_900, dukou: 9_100, shansi: 8_500 }, large: { guzhen: 7_900, dukou: 8_100, shansi: 8_500 } },
+    pang: { small: { guzhen: 9_000, dukou: 8_900, shansi: 9_000 }, medium: { guzhen: 8_200, dukou: 9_200, shansi: 8_100 }, large: { guzhen: 7_200, dukou: 8_800, shansi: 7_500 } },
+    caiyao: { small: { guzhen: 8_800, dukou: 8_700, shansi: 8_400 }, medium: { guzhen: 8_000, dukou: 9_100, shansi: 7_600 }, large: { guzhen: 7_800, dukou: 8_600, shansi: 7_100 } },
+    fushi: { small: { dukou: 8_600 }, medium: { guzhen: 8_400, shansi: 8_600 }, large: { guzhen: 9_200, dukou: 8_800, shansi: 8_500 } },
   } as Partial<Record<CharacterId, Partial<Record<RaidLiveTier, RaidCharCoef>>>>,
 };
 

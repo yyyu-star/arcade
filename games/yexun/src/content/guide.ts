@@ -79,7 +79,7 @@ export const SCHOOLS: Record<SchoolId, School> = {
     name: '烈火',
     weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'],
     passives: ['xianglu', 'luopan', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'],
-    tip: '纸扎和僵尸都怕火；提灯鬼不怕，半夜见它要换着打',
+    tip: '纸扎和僵尸都怕火；符咒配火葫芦，飞来的弹也烧得掉；提灯鬼不怕火，半夜见它要换着打',
   },
   paper: {
     id: 'paper',

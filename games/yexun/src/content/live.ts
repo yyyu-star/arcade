@@ -41,9 +41,9 @@ export interface LiveTierDef {
 
 export const LIVE_TIERS: Record<LiveTier, LiveTierDef> = {
   small: { id: 'small', wallet: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 13_500 },
-  medium: { id: 'medium', wallet: 'mid', name: '中', stake: 10_000, danger: 2, dawnBp: 17_200 },
+  medium: { id: 'medium', wallet: 'mid', name: '中', stake: 10_000, danger: 2, dawnBp: 17_300 },
   large: { id: 'large', wallet: 'big', name: '大', stake: 50_000, danger: 3, dawnBp: 18_400 },
-  luxe: { id: 'luxe', wallet: 'lux', name: '豪华', stake: 200_000, danger: 4, dawnBp: 19_100 },
+  luxe: { id: 'luxe', wallet: 'lux', name: '豪华', stake: 200_000, danger: 4, dawnBp: 20_100 },
 };
 
 export function isLiveTier(v: unknown): v is LiveTier {
@@ -78,18 +78,18 @@ export const VIGIL_BOSS_ADD_BP = 2_000;
  */
 export type LiveCoef<K extends string> = Partial<Record<K, Partial<Record<LiveTier, number>>>>;
 export const LIVE_CHAR_BP: LiveCoef<CharacterId> = {
-  jianxia: { small: 9_900, medium: 8_900, large: 8_700, luxe: 7_500 },
+  jianxia: { small: 9_900, medium: 8_900, large: 8_700, luxe: 7_200 },
   pang: { small: 9_800, medium: 8_200, large: 7_600, luxe: 6_100 },
-  gengfu: { small: 10_100, medium: 11_300, large: 12_300, luxe: 14_500 },
-  caiyao: { small: 9_900, medium: 9_700, large: 9_500, luxe: 8_400 },
-  fushi: { medium: 9_500, large: 9_100, luxe: 8_400 },
+  gengfu: { small: 10_100, medium: 11_400, large: 12_300, luxe: 17_600 },
+  caiyao: { small: 9_900, medium: 9_700, large: 9_600, luxe: 8_300 },
+  fushi: { medium: 9_400, large: 9_100, luxe: 8_200 },
 };
 export const LIVE_MAP_BP: LiveCoef<MapId> = {
-  bamboo: { small: 9_900, medium: 8_900, large: 8_500, luxe: 8_300 },
-  icelake: { small: 9_900, medium: 9_700, large: 10_700, luxe: 12_000 },
-  riverbank: { small: 9_900, medium: 9_900, large: 9_600, luxe: 10_500 },
-  yizhuang: { small: 10_500, medium: 13_100, large: 13_900, luxe: 17_800 },
-  temple: { small: 10_200, medium: 12_700, large: 13_300, luxe: 16_600 },
+  bamboo: { small: 9_900, medium: 8_900, large: 8_500, luxe: 7_900 },
+  icelake: { small: 9_900, medium: 9_700, large: 10_700, luxe: 11_700 },
+  riverbank: { small: 9_900, medium: 9_800, large: 9_600, luxe: 10_400 },
+  yizhuang: { small: 10_500, medium: 13_300, large: 13_900, luxe: 19_800 },
+  temple: { small: 10_300, medium: 12_700, large: 13_200, luxe: 17_300 },
 };
 
 /**
@@ -97,11 +97,12 @@ export const LIVE_MAP_BP: LiveCoef<MapId> = {
  * 只给乘积偏出同档平均 0.10 份以上的格子（0.4.7 全扫 6 角色 × 6 地图 × 4 档，每格 600 局拟合，DESIGN 4.2a）；没写的组合仍按乘积。小道士 × 雪原是基准，不写。
  */
 export const LIVE_COMBO_BP: Partial<Record<CharacterId, Partial<Record<MapId, Partial<Record<LiveTier, number>>>>>> = {
-  xiaodao: { temple: { medium: 13_900, large: 15_100, luxe: 25_000 }, riverbank: { large: 8_700 }, bamboo: { luxe: 7_500 } },
-  fushi: { bamboo: { medium: 7_800 }, yizhuang: { medium: 13_500 }, icelake: { large: 8_700, luxe: 8_800 }, temple: { large: 13_400, luxe: 20_800 } },
-  pang: { yizhuang: { medium: 9_900, large: 9_200, luxe: 9_000 }, icelake: { luxe: 9_300 }, temple: { luxe: 8_800 } },
-  gengfu: { snow: { medium: 10_100, large: 10_700, luxe: 11_300 }, riverbank: { medium: 12_100 }, icelake: { large: 12_000, luxe: 12_200 }, yizhuang: { large: 25_000, luxe: 25_000 }, temple: { luxe: 25_000 } },
-  caiyao: { temple: { medium: 11_100, large: 11_100, luxe: 11_800 }, yizhuang: { large: 12_100, luxe: 13_400 }, bamboo: { luxe: 7_900 }, icelake: { luxe: 11_400 } },
+  xiaodao: { temple: { medium: 13_900, large: 15_000, luxe: 25_000 }, riverbank: { large: 8_800, luxe: 9_400 } },
+  pang: { yizhuang: { medium: 9_900, large: 9_300, luxe: 9_700 }, icelake: { large: 8_900, luxe: 9_300 }, temple: { luxe: 8_600 } },
+  gengfu: { snow: { medium: 10_200, large: 10_500, luxe: 11_900 }, bamboo: { large: 11_500, luxe: 11_800 }, icelake: { large: 12_000, luxe: 11_600 }, yizhuang: { large: 25_000, luxe: 25_000 }, riverbank: { luxe: 25_000 }, temple: { luxe: 25_000 } },
+  caiyao: { temple: { medium: 11_000, large: 11_300, luxe: 11_700 }, bamboo: { luxe: 7_600 } },
+  fushi: { icelake: { large: 8_700, luxe: 8_400 }, temple: { large: 13_400, luxe: 25_000 } },
+  jianxia: { yizhuang: { luxe: 12_400 } },
 };
 
 /** 实盘档 tier 的守夜撑了 ticks 拍（每秒 30 拍）、赢没赢、打没打倒尸王 → 结回倍数（万分比，整数）；角色、地图缺省 = 小道士、雪原 */

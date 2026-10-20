@@ -402,7 +402,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 export const WARD_SET_HIT = 1.25;
 /**
  * 火葫芦烧飞来的弹，要带几件火法器（火葫芦自己算一件）。烧弹是烈火顶远程怪的办法（烈火没有飞剑、铜钱）；
- * 别的流派单带火葫芦也烧弹，镇守混搭火葫芦就补上了没有的防远程，焚天金钟危险 5 胜率 59.5%（这一条约占 6.5 点，DESIGN 12）
+ * 别的流派单带火葫芦也烧弹，镇守混搭火葫芦就补上了没有的防远程，焚天金钟危险 5 胜率改前 59.5%（这一条约占 6.5 点，DESIGN 12）
  */
 export const GOURD_BURN_FIRES = 2;
 /** 带几件镇类法器起，危险 4 起的精英不吃减速（waves.ts eliteNoWard） */

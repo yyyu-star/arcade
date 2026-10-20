@@ -115,7 +115,7 @@ export interface DangerDef {
   twinBoss: boolean;
   /**
    * 精英不吃镇守的减速：主角带两件以上镇类法器（ELITE_NO_WARD_PIECES）时，精英不被镇 3 件和镇魂铃减速（危险 4 起）。
-   * 镇守靠减速把怪留在近身，混搭火葫芦时扇面多烧几轮，焚天金钟危险 5 胜率 59.5% 超标；按 8.1 加克制的怪，不砍法器（DESIGN 8.1、12）
+   * 镇守靠减速把怪留在近身，混搭火葫芦时扇面多烧几轮，焚天金钟危险 5 胜率改前 59.5% 超标；按 8.1 加克制的怪，不砍法器（DESIGN 8.1、12）
    */
   eliteNoWard: boolean;
   /** 一句话 */
@@ -139,7 +139,7 @@ export const DANGERS: Record<Danger, DangerDef> = {
   2: { id: 2, name: '危险 2', stars: 2, hpMul: 1.2, dmgMul: 1.2, countMul: 1.1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, eliteNoWard: false, blurb: '会躲会选就能撑到天亮' },
   3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.38, dmgMul: 1.36, countMul: 1.16, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: -20 * S, eliteExtra: 0, twinBoss: false, eliteNoWard: false, blurb: '怪更硬、下手更重' },
   4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.56, dmgMul: 1.5, countMul: 1.22, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, eliteNoWard: true, blurb: '精英成群，带两件镇类时不吃减速' },
-  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.75, dmgMul: 1.65, countMul: 1.28, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, eliteNoWard: true, blurb: '两只尸王' },
+  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.75, dmgMul: 1.65, countMul: 1.28, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, eliteNoWard: true, blurb: '两只尸王，精英也不吃镇守减速' },
 };
 /**
  * 夜探的危险档（DESIGN.md 4.2）：夜探没有天亮可撑、还有巡夜将，同一档比守夜难得多（第 3 轮：普通玩家危险 0 撤出 80%，危险 1 只剩 45%），
