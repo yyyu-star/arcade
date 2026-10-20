@@ -36,7 +36,7 @@ The rest of this README, the code comments and the API contract (`docs/platform-
 - **账号**：注册、登录、找回密码（恢复码）、改昵称和密码、换恢复码、退出其他设备、注销。
 - **邀请码**：每人在"我的"里生成邀请码（普通用户 3 个、管理员 50 个，7 天有效，管理后台能调），链接 `/i/<码>` 打开就是填好码的注册页；
   注册关着时必须凭码注册，用码注册的人和邀请人自动成为好友（`/api/invite-codes`）。
-- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名；好友在不在线、在哪个游戏哪个房间（`POST /api/presence`），本人可以在"我的"里关掉。好友在房间里时一键"加入"，好友叫你时顶上弹一条、"好友"带红点（`/api/invites`）。好友动态：实盘赢了、新称号、游戏里的名场面，好友能赞、扔道具；顶栏"动态"按钮点开看最新几条，有新的带红点（电脑是浮层，手机是底部半屏面板）（`/api/feed`）。搭子战绩：好友房打完，好友页写着和每个好友一起打了几场、各赢几场、谁是最佳搭档（房间服务端经钱包绑定的 `together()` 报，浏览器碰不到）。
+- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名；好友在不在线、在哪个游戏哪个房间（`POST /api/presence`），本人可以在"我的"里关掉。好友在房间里时一键"加入"，好友叫你时顶上弹一条、"好友"带红点（`/api/invites`）。好友动态：实盘赢了、新称号、游戏里的名场面，好友能赞、扔道具；顶栏"动态"按钮点开看最新几条，有新的带红点（电脑是浮层，手机是底部半屏面板），全部在动态页 `/feed`（分页加载、长说明能展开），好友页只留一行入口（`/api/feed`）。好友多了列表在卡片里滚，手机上加好友、好友码排在列表下面。搭子战绩：好友房打完，好友页写着和每个好友一起打了几场、各赢几场、谁是最佳搭档（房间服务端经钱包绑定的 `together()` 报，浏览器碰不到）。
 - **钱包**（`/wallet`）：筹码余额、每日补给、"最近进出"流水。带入、结回、放弃只能由游戏的服务端经 `WalletService` RPC 调。
 - **战绩和排行榜**：战绩页（`/me/stats`、别人的 `/u/<id>`），排行榜（`/boards`：本周净赢、各游戏的每日挑战、称号收集，可只看好友；每日挑战只看好友时比这周每人最好的一天，好友超过你时大厅提一句）。异步挑战：把一局的开局做成链接发出去，大家的成绩挂在一起（`/api/challenges`，开盘先用）。晒战绩：战绩页"晒一晒"、排行榜"晒名次"把成绩画成图发给朋友，链接是自己的好友链接（用 `arcade-kit/share`，图不上传）。
 - **云存档**：`/api/saves/<游戏>/<槽>`，游戏白名单就是 `src/games.ts`。
@@ -64,7 +64,7 @@ npm run smoke      # 界面冒烟：临时本地 D1 + 无头浏览器走主流�
 npm run smoke -- --only=devices  # 只跑一段，见下
 ```
 
-冒烟的分段（`tools/smoke.ts` 末尾的 `only`）：`wallet` `chunk` `next` `stats` `desk` `phone` `devices` `boards` `feedpop` `friends` `rules` `invites` `overview` `notice` `nudge` `sound`。
+冒烟的分段（`tools/smoke.ts` 末尾的 `only`）：`wallet` `chunk` `next` `stats` `desk` `phone` `devices` `boards` `feedpop` `friendsfeed` `friends` `rules` `invites` `overview` `notice` `nudge` `sound`。
 改布局跑 `devices`：26 个尺寸（竖屏手机 9、横屏手机 7、平板和折叠屏 7、电脑 3）× 10 页，自动查整页横滑、伸出屏幕、点击区（手机平板 44，320 宽 40，电脑 24）、
 字号（数字手机平板 14、电脑 12）、顶栏折行和重叠，每个尺寸截一张首页；`phone` 是四种常见屏幕的细查（第一屏、单手够得着、底部筹码条、转屏）。
 `--out <目录>` 把截图放到别处。
@@ -172,7 +172,7 @@ npm run admin -- registration open|close|status
 platform/
 ├─ src/                 界面（React + Vite）
 │  ├─ App.tsx           大厅和页面切换
-│  ├─ pages/            登录注册、找回密码、我的账号、好友、钱包、战绩、排行榜、隐私说明、管理页（admin/）
+│  ├─ pages/            登录注册、找回密码、我的账号、好友、动态、钱包、战绩、排行榜、隐私说明、管理页（admin/）
 │  ├─ games.ts          游戏目录（界面和接口共用）
 │  ├─ session.tsx       登录状态；wallet.tsx 钱包余额；api.ts 接口封装；router.tsx 极简路由
 │  ├─ gamefile.ts       读各游戏公开的 JSON（titles.ts 读称号名，daily.ts 读每日榜分数写法）

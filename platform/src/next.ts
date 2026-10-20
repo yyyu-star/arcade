@@ -1,7 +1,7 @@
 /** 登录页的 next 参数（0.10.1）。 */
 
 /** next 解析后的路径只能落在这几处：游戏目录，或平台自己的页面（不含登录、找回，免得绕回来） */
-const NEXT_PATH = /^\/(?:games\/.+|friends|f\/[0-9A-Za-z-]{8,9}|u\/[A-Za-z0-9_-]{22}|me(?:\/[a-z]+)?|wallet|boards|privacy|admin)?$/;
+const NEXT_PATH = /^\/(?:games\/.+|friends|feed|f\/[0-9A-Za-z-]{8,9}|u\/[A-Za-z0-9_-]{22}|me(?:\/[a-z]+)?|wallet|boards|privacy|admin)?$/;
 
 /**
  * /login?next=<同源路径> 登录后回哪里（0.10.1）：游戏"叫朋友来"的房间链接 /games/<id>/?room=… 要带着房间码回来，

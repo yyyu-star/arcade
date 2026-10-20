@@ -67,6 +67,7 @@ const FriendCodePage = page(() => import('./pages/Friends.tsx'), 'FriendCodePage
 const WalletPage = page(() => import('./pages/Wallet.tsx'), 'WalletPage');
 const StatsPage = page(() => import('./pages/Stats.tsx'), 'StatsPage');
 const BoardsPage = page(() => import('./pages/Boards.tsx'), 'BoardsPage');
+const FeedPage = page(() => import('./pages/Feed.tsx'), 'FeedPage');
 
 /** 账号相关的页面；不在表里的地址都当首页。 */
 const ACCOUNT_PAGES: Record<string, ComponentType> = {
@@ -79,6 +80,7 @@ const ACCOUNT_PAGES: Record<string, ComponentType> = {
   '/wallet': WalletPage,
   '/me/stats': StatsPage,
   '/boards': BoardsPage,
+  '/feed': FeedPage,
 };
 
 /** 带参数的页面：/f/<好友码>、/i/<邀请码>（0.20.0）、/u/<用户 id>（别人的战绩）。 */
@@ -367,7 +369,7 @@ function SoundToggle() {
 }
 
 /** 做好了电脑版排版的页面（0.23.0）：电脑上主区放开成两栏（styles.css 的 .desk），手机上照旧是中间一窄列 */
-const DESK_PAGES = new Set(['/wallet', '/boards', '/friends', '/me', '/me/stats']);
+const DESK_PAGES = new Set(['/wallet', '/boards', '/friends', '/me', '/me/stats', '/feed']);
 const isDesk = (path: string) => DESK_PAGES.has(path) || path.startsWith('/u/');
 
 export function App() {

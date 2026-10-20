@@ -1,13 +1,13 @@
 /**
- * 好友动态（docs/platform-backend.md 15.17）：好友页顶上一栏（全部），顶栏的"动态"按钮点开一个浮层（最新 8 条 + "看全部"，有新的带红点）；
- * 两处都能赞、扔道具。电脑上浮层挂在按钮下面，手机上是从底下弹出的半屏面板（样式见 styles.css 的 .feedpop）。
+ * 好友动态（docs/platform-backend.md 15.17）：动态页 /feed（全部，分页"加载更多"，说明长的能展开），顶栏的"动态"按钮点开一个浮层（最新 8 条 + "看全部"，有新的带红点），
+ * 好友页好友列表上方一行入口（有几条新的）。浮层和动态页都能赞、扔道具。电脑上浮层挂在按钮下面，手机上是从底下弹出的半屏面板（样式见 styles.css 的 .feedpop）。
  * 接口只给编号和数字，文字在这里拼，拆成"谁、在哪、结果标签"三段排版：
  * - 实盘结回的：平台的模板"老王在掼蛋小档赢了 1.6 份，称号：双下王"，称号名读游戏的 titles.json（读不到写"神秘称号"）；
  * - 游戏报的名场面：模板在游戏的 /games/<id>/moments.json（{"<编号>": {"text": "…"}}），只认 {name} {n} {n2} {n3} 四个占位符，
  *   别的花括号、超过 40 字、缺数字的模板一律当不合格，那条不显示。拼出来的是纯文本，React 按文字渲染，不当 HTML。
  * "看过"记在本机 localStorage 的 arcade.feedSeen（最新看过的那条的时间）：红点只是提醒，换设备不同步没关系。
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, type FeedItem } from './api.ts';
 import { gameName, num } from './format.ts';
 import { GAMES } from './games.ts';
@@ -15,7 +15,7 @@ import { loadGameFile } from './gamefile.ts';
 import { FeedIcon } from './icons.tsx';
 import { Link, useLocation } from './router.tsx';
 import { Skeleton } from './ui.tsx';
-import { loadTitles } from './titles.ts';
+import { loadTitles, type TitleCatalog } from './titles.ts';
 
 const TIERS: Record<string, string> = { small: '小档', mid: '中档', big: '大档', lux: '豪华档' };
 /** 赞和 table-fun 的道具，按钮上的字 */
@@ -54,11 +54,13 @@ interface Line {
   who: string;
   where: string;
   tags: Tag[];
+  /** 动态页里标签下面的一行说明：拿到的称号是怎么来的（titles.json 的 desc）；没有就不写 */
+  note?: string;
 }
 type Shown = FeedItem & Line;
 
 /** 拆成三段；不合格（模板没有、缺数字）回 null，那条不显示 */
-function lineOf(item: FeedItem, moments: Record<string, string>, titles: Record<string, { name: string }>): Line | null {
+function lineOf(item: FeedItem, moments: Record<string, string>, titles: TitleCatalog): Line | null {
   const who = item.user.displayName;
   const game = gameName(item.game);
   if (item.kind === 'settle') {
@@ -67,7 +69,8 @@ function lineOf(item: FeedItem, moments: Record<string, string>, titles: Record<
     const tags: Tag[] = [];
     if (units >= 5) tags.push({ kind: 'win', text: `赢了 ${(units / 10).toFixed(1).replace(/\.0$/, '')} 份` });
     if (names.length) tags.push({ kind: 'title', text: `${units >= 5 ? '称号' : '拿到称号'}：${names.join('、')}` });
-    return { who, where: `${game}${TIERS[tier] ?? ''}`, tags };
+    const note = got.flatMap((t) => (titles[t]?.desc ? [`${titles[t]!.name}：${titles[t]!.desc}`] : [])).join('；');
+    return { who, where: `${game}${TIERS[tier] ?? ''}`, tags, ...(note ? { note } : {}) };
   }
   const tpl = item.data.m ? moments[item.data.m] : undefined;
   if (!tpl) return null;
@@ -84,31 +87,61 @@ function lineOf(item: FeedItem, moments: Record<string, string>, titles: Record<
 }
 
 /** 读动态，顺带把要用的模板和称号名读齐；拼不出来的那条去掉 */
+async function fetchFeed(): Promise<Shown[]> {
+  const { items: raw } = await api.feed();
+  const games = [...new Set(raw.map((i) => i.game))];
+  const [moments, titles] = await Promise.all([Promise.all(games.map((g) => loadMoments(g))), Promise.all(games.map((g) => loadTitles(g)))]);
+  return raw.flatMap((i) => {
+    const k = games.indexOf(i.game);
+    const line = lineOf(i, moments[k]!, titles[k]!);
+    return line ? [{ ...i, ...line }] : [];
+  });
+}
+
+/** 顶栏按钮、好友页的入口、动态页同一屏里各要一份：30 秒内共用一次请求；赞了、扔了道具以后重新读 */
+let shared: { at: number; p: Promise<Shown[]> } | null = null;
+function loadFeed(fresh: boolean): Promise<Shown[]> {
+  if (!fresh && shared && Date.now() - shared.at < 30_000) return shared.p;
+  const p = fetchFeed();
+  shared = { at: Date.now(), p };
+  p.catch(() => {
+    if (shared?.p === p) shared = null;
+  });
+  return p;
+}
+
 function useFeed(): { items: Shown[] | null; reload: () => void } {
   const [items, setItems] = useState<Shown[] | null>(null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const { items: raw } = await api.feed();
-      const games = [...new Set(raw.map((i) => i.game))];
-      const [moments, titles] = await Promise.all([
-        Promise.all(games.map((g) => loadMoments(g))),
-        Promise.all(games.map((g) => loadTitles(g))),
-      ]);
-      const out = raw.flatMap((i) => {
-        const k = games.indexOf(i.game);
-        const line = lineOf(i, moments[k]!, titles[k]!);
-        return line ? [{ ...i, ...line }] : [];
-      });
-      if (alive) setItems(out);
-    })().catch(() => alive && setItems([]));
+    loadFeed(tick > 0).then(
+      (out) => alive && setItems(out),
+      () => alive && setItems([]),
+    );
     return () => {
       alive = false;
     };
   }, [tick]);
   return { items, reload: () => setTick((t) => t + 1) };
 }
+
+/** "看过"到哪条（本机）：顶栏红点、好友页入口、动态页共用，一处看过别处跟着变 */
+const seenSubs = new Set<() => void>();
+const readSeen = () => Number(localStorage.getItem(SEEN_KEY) ?? 0);
+function markSeen(items: readonly Shown[] | null): void {
+  const at = items?.[0]?.at;
+  if (!at || at <= readSeen()) return;
+  localStorage.setItem(SEEN_KEY, String(at));
+  for (const f of seenSubs) f();
+}
+function useSeen(): number {
+  return useSyncExternalStore((cb) => {
+    seenSubs.add(cb);
+    return () => seenSubs.delete(cb);
+  }, readSeen);
+}
+const freshCount = (items: readonly Shown[] | null, seen: number, me: string) => (items ?? []).filter((i) => i.at > seen && i.user.userId !== me).length;
 
 function ago(at: number): string {
   const m = Math.floor((Date.now() - at) / 60_000);
@@ -124,6 +157,14 @@ function summary(r: Record<string, number>): string {
 
 function Row({ item, me, onReacted }: { item: Shown; me: string; onReacted?: () => void }) {
   const [busy, setBusy] = useState(false);
+  // 说明默认最多两行；超出了才给"展开"（量一次实际高度）
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const noteRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = noteRef.current;
+    if (el && !open) setLong(el.scrollHeight > el.clientHeight + 1);
+  }, [item.note, open]);
   const [picking, setPicking] = useState(false);
   const send = async (kind: string) => {
     setBusy(true);
@@ -164,6 +205,18 @@ function Row({ item, me, onReacted }: { item: Shown; me: string; onReacted?: () 
           ))}
         </span>
       )}
+      {item.note && (
+        <span className="feed__notewrap">
+          <span className={`feed__note${open ? '' : ' feed__note--fold'}`} ref={noteRef}>
+            {item.note}
+          </span>
+          {(long || open) && (
+            <button className="btn btn--small feed__more" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+              {open ? '收起' : '展开'}
+            </button>
+          )}
+        </span>
+      )}
       {counts && <span className="feed__meta">{counts}</span>}
       {onReacted && !mine && (
         <span className="row feed__actions">
@@ -191,20 +244,42 @@ function Row({ item, me, onReacted }: { item: Shown; me: string; onReacted?: () 
   );
 }
 
-/** 好友页顶上的一栏：全部，能赞、扔道具；打开就算看过 */
-export function FeedPanel({ me }: { me: string }) {
+/** 动态页的列表：先显示 PAGE 条，"加载更多"每次再加 PAGE 条；打开就算看过。能赞、扔道具 */
+const PAGE = 10;
+export function FeedList({ me }: { me: string }) {
   const { items, reload } = useFeed();
-  useEffect(() => {
-    if (items?.[0]) localStorage.setItem(SEEN_KEY, String(items[0].at));
-  }, [items]);
+  const [shown, setShown] = useState(PAGE);
+  useEffect(() => markSeen(items), [items]);
   if (!items) return <Skeleton rows={3} />;
   if (!items.length) return <p className="note">最近 7 天你和好友还没有动态。实盘赢了、拿到新称号，或者在游戏里打出名场面，好友就能看到。</p>;
   return (
-    <ul className="feed" data-testid="feed">
-      {items.map((i) => (
-        <Row key={i.id} item={i} me={me} onReacted={reload} />
-      ))}
-    </ul>
+    <>
+      <ul className="feed" data-testid="feed">
+        {items.slice(0, shown).map((i) => (
+          <Row key={i.id} item={i} me={me} onReacted={reload} />
+        ))}
+      </ul>
+      {shown < items.length ? (
+        <button className="btn feed__load" type="button" data-testid="feed-more" onClick={() => setShown(shown + PAGE)}>
+          加载更多（还有 {items.length - shown} 条）
+        </button>
+      ) : (
+        items.length > PAGE && <p className="note feed__end">最近 7 天的都在这儿了</p>
+      )}
+    </>
+  );
+}
+
+/** 好友页好友列表上方的一行入口："好友动态 · N 条新 →"，没有新的写"看好友动态 →" */
+export function FeedEntry({ me }: { me: string }) {
+  const { items } = useFeed();
+  const n = freshCount(items, useSeen(), me);
+  return (
+    <Link className="feed-entry" href="/feed" data-testid="feed-entry">
+      <FeedIcon />
+      <span>{n > 0 ? `好友动态 · ${n} 条新` : '看好友动态'}</span>
+      <span aria-hidden="true">→</span>
+    </Link>
   );
 }
 
@@ -215,17 +290,14 @@ export function FeedPanel({ me }: { me: string }) {
 export function FeedButton({ me }: { me: string }) {
   const { items, reload } = useFeed();
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState(() => Number(localStorage.getItem(SEEN_KEY) ?? 0));
   const root = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const drag = useRef<number | null>(null);
   const path = useLocation().pathname;
-  const fresh = !!items?.some((i) => i.at > seen && i.user.userId !== me);
+  const fresh = freshCount(items, useSeen(), me) > 0;
   useEffect(() => setOpen(false), [path]);
   useEffect(() => {
-    if (!open || !items?.[0]) return;
-    localStorage.setItem(SEEN_KEY, String(items[0].at));
-    setSeen(items[0].at);
+    if (open) markSeen(items);
   }, [open, items]);
   useEffect(() => {
     if (!open) return;
@@ -280,7 +352,7 @@ export function FeedButton({ me }: { me: string }) {
                 <p className="note">最近 7 天你和好友还没有动态。</p>
               )}
             </div>
-            <Link className="feedpop__all" href="/friends">
+            <Link className="feedpop__all" href="/feed">
               看全部
             </Link>
           </div>

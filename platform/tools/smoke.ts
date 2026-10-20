@@ -1083,7 +1083,7 @@ async function feedPop(browser: Browser): Promise<void> {
     await feedLine(pop.getByTestId('feed-item').first(), '小明', '掼蛋小档', ['赢了 1.6 份', '称号：双下王']);
     check((await pop.getByTestId('feed-item').count()) === 2, `${label}：浮层里该有 2 条`);
     check((await btn.getByTestId('feed-dot').count()) === 0, `${label}：点开了红点该消失`);
-    check((await pop.getByRole('link', { name: '看全部' }).getAttribute('href')) === '/friends', `${label}："看全部"该进好友页`);
+    check((await pop.getByRole('link', { name: '看全部' }).getAttribute('href')) === '/feed', `${label}："看全部"该进动态页`);
     const p = (await pop.boundingBox())!;
     if (screen === 'desktop') {
       check(Math.abs(p.width - 360) <= 2 && p.y >= b.y + b.height && p.x >= 0 && p.x + p.width <= viewport.width, `${label}：浮层该挂在按钮下面、约 360 宽（${Math.round(p.x)},${Math.round(p.y)} ${Math.round(p.width)} 宽）`);
@@ -1113,6 +1113,80 @@ async function feedPop(browser: Browser): Promise<void> {
       await page.mouse.move(grab.x + grab.width / 2, grab.y + 150, { steps: 5 });
       await page.mouse.up();
       await pop.waitFor({ state: 'detached' });
+    }
+    await ctx.close();
+  }
+}
+
+/**
+ * 好友页和动态页，好友多、动态多的时候（所有者 10-21）：好友列表在卡片里滚、不把整页撑长，电脑上卡片和左栏一样高；
+ * 手机上按"入口、想加你的人、好友列表、加好友、好友码"排；动态页先 10 条、"加载更多"再 10 条，长说明能展开，限宽居中。
+ */
+async function friendsFeed(browser: Browser): Promise<void> {
+  const many = {
+    ...FAKE_FRIENDS,
+    friends: Array.from({ length: 18 }, (_, i) => ({ userId: `m${i}`, displayName: i === 3 ? '名字有十二个字那么长的人' : `牌友${i + 1}号`, avatar: null, lastSeenDaysAgo: i % 5, online: i % 4 === 0 })),
+  };
+  const titleIds = ['double_down', 't2', 't3', 't4', 't5'];
+  const feed = Array.from({ length: 25 }, (_, i) => ({
+    id: `0000000${String.fromCharCode(97 + (i % 26))}${String(i).padStart(2, '0')}AAAAAAAAAAA`.slice(0, 21),
+    user: { userId: `m${i % 18}`, displayName: i === 1 ? '名字有十二个字那么长的人' : `牌友${(i % 18) + 1}号`, avatar: null },
+    game: 'guandan',
+    kind: i % 3 === 2 ? 'moment' : 'settle',
+    at: Date.now() - (i + 1) * 20 * 60_000,
+    data: i % 3 === 2 ? { m: 'four_bombs', n: [i + 2] } : { tier: 'small', units: 12 + i, titles: i === 0 ? titleIds : i % 3 === 1 ? ['double_down'] : [] },
+    reactions: i % 4 === 0 ? { like: 3, rose: 1 } : {},
+  }));
+  const titles = Object.fromEntries(titleIds.map((id, k) => [id, { name: k ? `称号${k}` : '双下王', desc: '一局里打出双下，对家两个人都还没出完牌就被你们走完了，这种称号的说明故意写得很长' }]));
+  for (const [label, screen, viewport] of [
+    ['1280', 'desktop', { width: 1280, height: 800 }],
+    ['1920', 'desktop', { width: 1920, height: 1080 }],
+    ['390', 'portrait', { width: 390, height: 844 }],
+  ] as const) {
+    console.log(`好友页和动态页（${label}）：好友 18 个、动态 25 条`);
+    const { ctx, page } = await newPage(browser, `好友动态 ${label}`, screen, { viewport });
+    await mockSession(page, { feed });
+    await page.route('**/games/guandan/moments.json', (r) => r.fulfill(json({ four_bombs: { text: '{name}一副牌扔了 {n} 个炸弹' } })));
+    await page.route('**/games/guandan/titles.json', (r) => r.fulfill(json(titles)));
+    await page.route('**/api/friends', (r) => r.fulfill(json(many)));
+    await page.route('**/api/blocks', (r) => r.fulfill(json({ blocks: [] })));
+    await page.goto(`${BASE}/friends`);
+    await page.getByRole('heading', { name: '好友（18）' }).waitFor();
+    check((await page.getByTestId('feed').count()) === 0, `${label}：好友页不该铺动态`);
+    const sc = await page.getByTestId('friends-scroll').evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight }));
+    check(sc.sh > sc.ch + 10, `${label}：18 个好友该在卡片里滚（${sc.sh} / ${sc.ch}）`);
+    if (screen === 'desktop') {
+      const cols = await page.locator('.desk--friends > .desk__col').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+      check(Math.abs(cols[0]! - cols[1]!) <= 2, `${label}：好友卡片该和左栏一样高（${cols.join(' / ')}）`);
+    } else {
+      const ys = await Promise.all(['feed-entry', 'friends-scroll'].map(async (t) => (await page.getByTestId(t).boundingBox())!.y));
+      const add = (await page.locator('.friends-add').boundingBox())!.y;
+      const code = (await page.locator('.friends-code').boundingBox())!.y;
+      check(ys[0]! < ys[1]! && ys[1]! < add && add < code, `${label}：手机上的顺序该是入口、好友列表、加好友、好友码（${ys.join(',')},${add},${code}）`);
+      for (const el of await page.locator('.feed-entry, .people .btn, .friends-add .btn').all()) {
+        const b = await el.boundingBox();
+        if (b && b.height < 44) fail(`${label}：好友页「${(await el.textContent())?.trim()}」不到 44 高`);
+      }
+    }
+    await shot(page, `friends-many-${label}`);
+    await page.getByTestId('feed-entry').click();
+    await page.waitForURL(`${BASE}/feed`);
+    const list = page.getByTestId('feed');
+    await list.getByTestId('feed-item').first().waitFor();
+    check((await list.getByTestId('feed-item').count()) === 10, `${label}：动态页一开始该 10 条`);
+    const box = (await page.locator('.feedpage').boundingBox())!;
+    if (screen === 'desktop') check(box.width <= 722 && Math.abs(box.x + box.width / 2 - viewport.width / 2) <= 2, `${label}：动态页该限宽居中（${Math.round(box.x)} ${Math.round(box.width)}）`);
+    const more = list.getByTestId('feed-item').first().getByRole('button', { name: '展开' });
+    await more.click();
+    await list.getByTestId('feed-item').first().getByRole('button', { name: '收起' }).waitFor();
+    await shot(page, `feed-${label}`, false);
+    await page.getByTestId('feed-more').click();
+    check((await list.getByTestId('feed-item').count()) === 20, `${label}："加载更多"后该 20 条`);
+    if (screen !== 'desktop') {
+      for (const el of await page.locator('.feedpage button, .feedpage a').all()) {
+        const b = await el.boundingBox();
+        if (b && b.height < 44) fail(`${label}：动态页「${(await el.textContent())?.trim()}」不到 44 高`);
+      }
     }
     await ctx.close();
   }
@@ -1239,7 +1313,14 @@ async function mobile(browser: Browser): Promise<void> {
   await fr.page.getByTestId('invite-bar').getByRole('button', { name: '不了' }).click();
   await fr.page.getByTestId('invite-bar').waitFor({ state: 'detached' });
   check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
-  // 0.17.0 好友动态：结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
+  for (const t of await fr.page.locator('.people .btn').all()) {
+    const box = await t.boundingBox();
+    check(box && box.height >= 44, `好友页的按钮不到 44 高：${await t.textContent()}（${box?.height ?? 0}）`);
+  }
+  // 好友动态在动态页：好友页只有一行入口。结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
+  check((await fr.page.getByTestId('feed').count()) === 0, '好友页不该再铺动态列表');
+  await fr.page.getByTestId('feed-entry').getByText('好友动态 · 2 条新').click();
+  await fr.page.waitForURL(`${BASE}/feed`);
   const feed = fr.page.getByTestId('feed');
   await feedLine(feed.getByTestId('feed-item').first(), '小明', '掼蛋小档', ['赢了 1.6 份', '称号：双下王']);
   await feedLine(feed.getByTestId('feed-item').nth(1), '阿花', '掼蛋', ['一副牌扔了 4 个炸弹']);
@@ -1250,11 +1331,7 @@ async function mobile(browser: Browser): Promise<void> {
   await first.getByText('赞 2').waitFor();
   await first.getByRole('button', { name: '扔个道具' }).click();
   await first.getByRole('button', { name: '玫瑰' }).waitFor();
-  await shot(fr.page, 'mobile-friends-feed');
-  for (const t of await fr.page.locator('.people .btn').all()) {
-    const box = await t.boundingBox();
-    check(box && box.height >= 44, `好友页的按钮不到 44 高：${await t.textContent()}（${box?.height ?? 0}）`);
-  }
+  await shot(fr.page, 'mobile-feed');
   await fr.page.goto(`${BASE}/f/ABCD2345`);
   await fr.page.getByRole('button', { name: '接受，成为好友' }).waitFor();
   await shot(fr.page, 'mobile-friend-link');
@@ -2428,6 +2505,7 @@ try {
     boards: boardsPage, // 排行榜
     feedpop: feedPop, // 顶栏的动态按钮和浮层
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
+    friendsfeed: friendsFeed, // 好友页和动态页，好友多、动态多的时候
     rules: walletRulesAdmin, // 管理页的钱包规则
     invites: adminInvites, // 管理页的邀请码
     overview: adminOverview, // 管理页的今日概况和账号详情
@@ -2450,6 +2528,7 @@ try {
     await phoneAudit(browser);
     await boardsPage(browser);
     await feedPop(browser);
+    await friendsFeed(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);
     await adminInvites(browser);

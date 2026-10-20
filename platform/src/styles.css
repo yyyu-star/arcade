@@ -97,11 +97,15 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
  * 里面用 .desk 分两栏：左边一列放概况和操作，右边放长的列表。960 以下照旧一窄列（手机、竖着的平板）
  */
 @media (min-width: 1100px) { :root { --content: 1280px; } }
-/* 好友页（0.23.0）：960 以下两列拆开，动态排最上、等对方接受和屏蔽的人排最下（和以前手机上的顺序一样） */
+/* 好友页：960 以下两列拆开，按"动态入口、想加你的人、好友列表、加好友、我的好友码"排，等对方接受和屏蔽的人最下 */
 @media (max-width: 959px) {
   .desk--friends > .desk__col { display: contents; }
-  .desk--friends .friends-feed { order: -1; }
-  .desk--friends .friends-late { order: 1; }
+  .desk--friends .feed-entry { order: 1; }
+  .desk--friends .friends-incoming { order: 2; }
+  .desk--friends .friends-list { order: 3; }
+  .desk--friends .friends-add { order: 4; }
+  .desk--friends .friends-code { order: 5; }
+  .desk--friends .friends-late { order: 6; }
 }
 .desk { display: flex; flex-direction: column; gap: var(--s-5); }
 .desk__col { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
@@ -311,6 +315,28 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .feed__tag--moment { background: linear-gradient(180deg, #ffe0cc 0%, #ffb88f 100%); color: #6a2a07; }
 .feed__meta { color: var(--muted); font-size: var(--fs-sm); }
 .feed__actions { flex-wrap: wrap; gap: var(--s-2); }
+/* 动态页：说明默认最多两行，长的"展开"；电脑上限宽居中，不让一列拉满整屏 */
+.feed__notewrap { display: flex; align-items: flex-start; gap: var(--s-2); }
+.feed__note { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.feed__note--fold { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.feed__more { flex: none; }
+.feed__load { width: 100%; margin-top: var(--s-3); }
+.feed__end { margin: var(--s-3) 0 0; text-align: center; }
+.feedpage { width: 100%; max-width: 720px; margin: 0 auto; }
+/* 好友页：好友列表上方一行去动态页的入口；好友多了在卡片里滚 */
+.feed-entry {
+  display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-4);
+  border: var(--bw) solid var(--line); border-radius: var(--r-pill); background: var(--face-white); color: var(--ink);
+  font-weight: 700; text-decoration: none; box-shadow: var(--sh-sm);
+}
+.feed-entry > span:last-child { margin-left: auto; }
+.friends-scroll { max-height: min(600px, 70vh); overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--s-2)); padding-right: var(--s-2); }
+/* 电脑上右栏和左栏一样高：好友卡片撑满剩下的高度，列表在里面滚（左栏比 8 个好友还矮时就按左栏的高度） */
+@media (min-width: 960px) {
+  .desk--friends { align-items: stretch; }
+  .desk--friends > .desk__col:last-child .friends-list { flex: 1 1 0; min-height: 360px; display: flex; flex-direction: column; }
+  .desk--friends .friends-list .friends-scroll { flex: 1 1 0; min-height: 0; max-height: none; }
+}
 /* 顶栏"动态"：电脑上是挂在按钮下面的浮层 */
 .feedpop { position: relative; display: inline-flex; }
 /* 按钮不继承字体，不写就比旁边的链接小一号 */

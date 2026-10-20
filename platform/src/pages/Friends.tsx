@@ -3,7 +3,7 @@
  * 不按昵称搜人，只能靠好友码或链接加；对别人只显示昵称，不显示用户名。
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { FeedPanel } from '../feed.tsx';
+import { FeedEntry } from '../feed.tsx';
 import { api, ApiFail, errorText, type FriendLists, type Profile, type Relation, type Where } from '../api.ts';
 import { gameName } from '../format.ts';
 import { bestPartner, togetherText } from '../mates.ts';
@@ -106,8 +106,8 @@ function Friends() {
     };
   }, [version]);
 
-  // 电脑上（0.23.0）左边一列是好友码、加好友和各种请求，右边是好友列表和好友动态。
-  // 手机上两列拆开（display: contents），按 CSS 的 order 排回原来的顺序：动态最上面，等对方接受、屏蔽的人最下面
+  // 电脑上左边一列是好友码、加好友和各种请求，右边是动态入口和好友列表（列表在卡片里滚，卡片和左栏一样高）。
+  // 手机上两列拆开（display: contents），按 CSS 的 order 排：动态入口、想加你的人、好友列表、加好友、我的好友码，等对方接受、屏蔽的人最下面
   return (
     <div className="desk desk--friends">
       {service === 'readonly' && <p className="banner">服务器有点忙，现在只能看、不能改，明天再来。</p>}
@@ -116,7 +116,7 @@ function Friends() {
         <AddByCode />
         {loadError && <FormError text={loadError} />}
         {data && data.incoming.length > 0 && (
-          <Panel icon="people" title={`想加你的人（${data.incoming.length}）`}>
+          <Panel icon="people" title={`想加你的人（${data.incoming.length}）`} className="friends-incoming">
             <ul className="people">
               {data.incoming.map((p) => (
                 <Incoming key={p.userId} p={p} onChanged={reload} />
@@ -145,28 +145,28 @@ function Friends() {
         )}
       </div>
       <div className="desk__col">
+        <FeedEntry me={user!.id} />
         {!data && !loadError && (
-          <Panel icon="people" title="好友">
+          <Panel icon="people" title="好友" className="friends-list">
             <Skeleton rows={3} />
           </Panel>
         )}
         {data && (
-          <Panel icon="people" title={`好友（${data.friends.length}）`}>
+          <Panel icon="people" title={`好友（${data.friends.length}）`} className="friends-list">
             {data.friends.length === 0 ? (
               <Empty>还没有好友。把好友链接发给朋友，对方点开就能加你。</Empty>
             ) : (
-              <ul className="people">
-                {data.friends.map((p) => (
-                  <Friend key={p.userId} p={p} best={p.userId === best} onChanged={reload} />
-                ))}
-              </ul>
+              // 好友多了在卡片里滚，加好友、好友码不会被长列表压到下面去
+              <div className="friends-scroll" data-testid="friends-scroll">
+                <ul className="people">
+                  {data.friends.map((p) => (
+                    <Friend key={p.userId} p={p} best={p.userId === best} onChanged={reload} />
+                  ))}
+                </ul>
+              </div>
             )}
           </Panel>
         )}
-        {/* 好友动态（0.17.0）：手机上是好友页最上面一栏 */}
-        <Panel icon="people" title="好友动态" className="friends-feed">
-          <FeedPanel me={user!.id} />
-        </Panel>
       </div>
     </div>
   );
@@ -193,7 +193,7 @@ function MyCode() {
       if (!(e instanceof DOMException && e.name === 'AbortError')) void copyLink();
     });
   return (
-    <Panel icon="people" title="我的好友码">
+    <Panel icon="people" title="我的好友码" className="friends-code">
       <p className="code-big" data-testid="my-friend-code">
         {user!.friendCode}
       </p>
@@ -248,7 +248,7 @@ function MyCode() {
 function AddByCode() {
   const [code, setCode] = useState('');
   return (
-    <Panel icon="people" title="加好友">
+    <Panel icon="people" title="加好友" className="friends-add">
       <form
         className="form"
         onSubmit={(e) => {
