@@ -8,6 +8,7 @@ import { exports } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Arcade from '../worker/index';
 import { runMonitor } from '../worker/api/monitor';
+import { DEFAULT_LIMITS } from '../worker/api/config';
 import { advance, call, count, env, flushMeter, resetAll, rowsBy, rowsWritten } from './helpers';
 
 beforeEach(() => resetAll());
@@ -146,6 +147,20 @@ describe('巡检和 /api/monitor', () => {
     await runMonitor(env, Date.now(), { wallet: false });
     advance(1_800_000);
     expect((await check('cron'))?.ok).toBe(false);
+  });
+
+  it('结果不变时每 15 分钟写一次心跳：第 14 分钟不写、第 16 分钟写；心跳加 Cron 间隔小于判死阈值', async () => {
+    await runMonitor(env, Date.now(), { wallet: false });
+    const at = (await status()).at;
+    advance(840_000);
+    await runMonitor(env, Date.now(), { wallet: false });
+    expect((await status()).at).toBe(at);
+    advance(120_000);
+    await runMonitor(env, Date.now(), { wallet: false });
+    expect((await status()).at).toBe(Date.now());
+    expect((await check('cron'))?.ok).toBe(true);
+    // 状态最旧的时候 = 心跳间隔 + 一次 Cron 间隔（5 分钟），还要不到判死线
+    expect(DEFAULT_LIMITS.monitorHeartbeatMs + 300_000).toBeLessThan(DEFAULT_LIMITS.monitorStaleMs);
   });
 
   it('每 5 分钟的 Cron 只巡检，每天那次清理后巡检并查钱包', async () => {

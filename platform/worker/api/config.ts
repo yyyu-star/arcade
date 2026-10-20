@@ -115,9 +115,10 @@ export const DEFAULT_LIMITS = {
   monitorNewSigMin: 5,
   /** 当天用量（调用数、写入、读取里最高的那项，对停服线）到这个百分比就告警 */
   monitorQuotaPct: 80,
-  /** 巡检状态多久没更新算 Cron 没在跑（毫秒）；状态没变时每小时也写一次 */
+  /** 巡检状态多久没更新算 Cron 没在跑（毫秒），容得下漏掉一次 Cron */
   monitorStaleMs: 1_800_000,
-  monitorHeartbeatMs: 3_600_000,
+  /** 状态没变时多久也写一次。加上 Cron 的 5 分钟间隔必须小于 monitorStaleMs，否则站点一安静 cron 就误报（test/monitor.test.ts 查） */
+  monitorHeartbeatMs: 900_000,
   monitorKeepDays: 7,
 
   // Cron 清理（7.3）
