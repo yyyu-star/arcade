@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { isTouch } from '../input.ts';
 import { sound } from '../sound.ts';
 import type { UiSound } from '../audio/index.ts';
-import { COLOR, LOW_MEMORY, PHONE, RADIUS } from '../theme.ts';
+import { COLOR, LOW_MEMORY, PHONE, PHONE_SCALE, RADIUS } from '../theme.ts';
 import type { Glyph } from '../assets.ts';
 import { addGlyph, addSlice, type Box } from './art.ts';
 import { MIN_TEXT_SIZE, addText, setColor, setWrap } from './text.ts';
@@ -35,7 +35,8 @@ interface ButtonOpts {
  * 触屏上点击区至少这么大（世界单位）：手机 960×444 的世界在 844×390 上约 0.88 倍，50 ≈ 44px；
  * 0.9.0 平板走电脑布局（1280×720 的世界在 1024 宽的 iPad 上 0.8 倍），56 ≈ 45px。有鼠标的电脑上不撑。
  */
-export const HIT_MIN = PHONE ? 50 : LOW_MEMORY ? 56 : 0;
+// 0.19.5 比 SE 矮的手机按缩放再撑（568×320 是 56），换算到屏幕上不小于 44 像素
+export const HIT_MIN = PHONE ? Math.max(50, Math.ceil(44 / PHONE_SCALE)) : LOW_MEMORY ? 56 : 0;
 /** 按下时文字和底板往下沉多少（纸面按钮正好压到底边上） */
 const SINK = 2;
 
