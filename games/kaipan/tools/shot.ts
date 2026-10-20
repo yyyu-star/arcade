@@ -12,6 +12,7 @@
  *                                   0.5.11 调试局只留入口、交分还在问账号时点「大厅」先等交分发出去
  *   node tools/shot.ts --challenge  只跑 0.13.0 好友挑战（假平台接口）：发起拿链接、好友接受同一开局打完交成绩看名次、行情段下载不了不退回模拟行情
  *   node tools/shot.ts --live       只跑 0.6.0 实盘（假钱包）：带入 → 打完 → 结回、还没开盘就收手、刷新接着打、结回重试、过期、带入没回话、另一台设备
+ *   node tools/shot.ts --touch      只跑主流程里的触屏一段（长按不算点击、点按完成一天）
  *   node tools/shot.ts --lowmem     只跑 0.5.9 省内存设备（iPhone 8 Plus、iPad Pro 的触屏配置）：渲染倍数、图集、显存预算、截图
  *   node tools/shot.ts --lobby      只跑 0.5.8 回大厅：开始菜单、结束页直接走，对局里先确认（改过设置也一样），竖屏提示层（只断言跳到 /，不加载平台页面）
  *   node tools/shot.ts --ext        只跑 0.4 C：买多少、加仓 / 减一半、押跌与被轧、银行（借钱、打电话、收走、赎回）、图鉴小知识、带经历的结局
@@ -263,8 +264,11 @@ async function tap(ctx: Ctx, key: string): Promise<void> {
   await ctx.page.touchscreen.tap(p.x, p.y);
 }
 
-/** 触屏长按（Playwright 的 touchscreen 只有点按，长按走 CDP 直接发触摸事件）。 */
-async function longPress(ctx: Ctx, key: string, ms = 700): Promise<void> {
+/**
+ * 触屏长按（Playwright 的 touchscreen 只有点按，长按走 CDP 直接发触摸事件）。
+ * 按 1.5 秒：游戏按 450 毫秒算长按，但计时器跟着游戏帧走，整套冒烟时软件渲染一帧能到几百毫秒，按 0.7 秒时计时器可能在松手之后才到，被当成点击。
+ */
+async function longPress(ctx: Ctx, key: string, ms = 1500): Promise<void> {
   const p = await point(ctx, key);
   const cdp = await ctx.page.context().newCDPSession(ctx.page);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y }] });
@@ -406,6 +410,32 @@ function setupQuery(setup: RunSetup): string {
 }
 
 // ---------------------------------------------------------------- 截图与冒烟
+
+/** 触屏：不显示快捷键提示；长按不算点击；点按完成一天（主流程第 11 段，`--touch` 单独跑）。 */
+async function touchShots(browser: Browser): Promise<void> {
+  const ctx = await openPage(browser, 'touch', `seed=touch-1&anim=0&${setupQuery(BASIC_SETUP)}`, { touch: true });
+  await shot(ctx, '60-touch');
+  // 长按永远不算点击：长按买入按钮不买；长按持仓卡弹出说明、不打开详情。说明留在屏幕上，下一次点击只收起说明（不会点到下面的开盘）
+  const held = 's.slots.filter((x) => x).length';
+  const before = await state<number>(ctx, held);
+  // 0.19.5 起触屏且电脑布局字太小的屏（这里 1280×720 触屏）走手机布局：推荐收在「推荐」页签里，先点开
+  if ('tab:recs' in (await controls(ctx))) {
+    await tap(ctx, 'tab:recs');
+    await ctx.page.waitForTimeout(200);
+  }
+  await longPress(ctx, 'buy:0');
+  expect((await state<number>(ctx, held)) === before && !('size:taste' in (await controls(ctx))), '触屏长按买入按钮不应买入');
+  await longPress(ctx, 'card:0');
+  await shot(ctx, '60b-touch-longpress');
+  await tap(ctx, 'open');
+  await ctx.page.waitForTimeout(300);
+  expect((await state<number>(ctx, 's.dayIndex')) === 0, '长按说明显示时，点一下只收起说明，不应点到下面的按钮');
+  await buyVia(ctx, 'buy:0', true);
+  await waitIdle(ctx, '触屏买入');
+  await tap(ctx, 'open');
+  await waitIdle(ctx, '触屏开盘', 'window.__game.state().dayIndex === 1');
+  await ctx.page.context().close();
+}
 
 async function run(browser: Browser): Promise<void> {
   // 1. 开始菜单、设置、关于
@@ -862,25 +892,7 @@ async function run(browser: Browser): Promise<void> {
     await calm.page.context().close();
   }
   // 11. 触屏：不显示快捷键提示；点按完成一天
-  {
-    const ctx = await openPage(browser, 'touch', `seed=touch-1&anim=0&${setupQuery(BASIC_SETUP)}`, { touch: true });
-    await shot(ctx, '60-touch');
-    // 长按永远不算点击：长按买入按钮不买；长按持仓卡弹出说明、不打开详情。说明留在屏幕上，下一次点击只收起说明（不会点到下面的开盘）
-    const held = 's.slots.filter((x) => x).length';
-    const before = await state<number>(ctx, held);
-    await longPress(ctx, 'buy:0');
-    expect((await state<number>(ctx, held)) === before && !('size:taste' in (await controls(ctx))), '触屏长按买入按钮不应买入');
-    await longPress(ctx, 'card:0');
-    await shot(ctx, '60b-touch-longpress');
-    await tap(ctx, 'open');
-    await ctx.page.waitForTimeout(300);
-    expect((await state<number>(ctx, 's.dayIndex')) === 0, '长按说明显示时，点一下只收起说明，不应点到下面的按钮');
-    await buyVia(ctx, 'buy:0', true);
-    await waitIdle(ctx, '触屏买入');
-    await tap(ctx, 'open');
-    await waitIdle(ctx, '触屏开盘', 'window.__game.state().dayIndex === 1');
-    await ctx.page.context().close();
-  }
+  await touchShots(browser);
   // 12. 竖屏提示
   {
     const ctx = await openPage(browser, 'portrait', 'seed=demo-1&anim=0', { touch: true, screen: { width: 390, height: 844, dpr: 2 } });
@@ -3493,6 +3505,7 @@ async function main(): Promise<void> {
     else if (process.argv.includes('--ext')) await extShots(browser);
     else if (process.argv.includes('--cloud')) await cloudShots(browser);
     else if (process.argv.includes('--lowmem')) await lowMemShots(browser);
+    else if (process.argv.includes('--touch')) await touchShots(browser);
     else if (process.argv.includes('--board')) await boardShots(browser);
     else if (process.argv.includes('--challenge')) await challengeShots(browser);
     else if (process.argv.includes('--lobby')) await lobbyShots(browser);
