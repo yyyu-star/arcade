@@ -240,7 +240,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'gourd',
     name: '火葫芦',
     icon: 'i_gourd',
-    desc: '朝最近的怪喷一道火，扇面里都挨烧，飞来的弹也烧掉',
+    desc: '朝最近的怪喷一道火，扇面里都挨烧；带两件火法器时飞来的弹也烧掉',
     el: '火',
     type: '灵',
     // area：火舌多长；duration：一次喷几拍；amount：扇面宽（每多 1 宽 6°，基础 ±22°）
@@ -398,11 +398,15 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 
-/**
- * 镇 3 件：被减速的怪挨打的倍数。0.4.9 配平：+25% 叠上镇魂铃光环减速和火葫芦烧近身一圈，让镇守走焚天金钟在危险 5 胜率 59.5%（DESIGN 8.1、12），
- * 改法器会连累烈火，所以动这条套装加成
- */
+/** 镇 3 件：被减速的怪挨打的倍数（只算镇 3 件和镇魂铃减速的怪） */
 export const WARD_SET_HIT = 1.25;
+/**
+ * 火葫芦烧飞来的弹，要带几件火法器（火葫芦自己算一件）。烧弹是烈火顶远程怪的办法（烈火没有飞剑、铜钱）；
+ * 别的流派单带火葫芦也烧弹，镇守混搭火葫芦就补上了没有的防远程，焚天金钟危险 5 胜率 59.5%（这一条约占 6.5 点，DESIGN 12）
+ */
+export const GOURD_BURN_FIRES = 2;
+/** 带几件镇类法器起，危险 4 起的精英不吃减速（waves.ts eliteNoWard） */
+export const ELITE_NO_WARD_PIECES = 2;
 const pct = (m: number): string => `${Math.round((m - 1) * 100)}%`;
 
 /** 套装（DESIGN.md 3.4）：同类型 / 同五行的法器凑够 2 件、3 件各有加成。卡片和暂停页的说明也从这里取 */

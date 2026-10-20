@@ -108,6 +108,48 @@ describe('新怪', () => {
     expect(blocked).toBeGreaterThan(0);
   });
 
+  it('火葫芦带够两件火法器才烧飞来的弹', () => {
+    const blocks = (fire2: boolean): number => {
+      const w = quiet();
+      grantWeapon(w, 'gourd', 8);
+      if (fire2) grantWeapon(w, 'talisman', 1);
+      const i = spawnNow(w, 'lantern', w.x + 220, w.y);
+      let n = 0;
+      for (let t = 0; t < 900; t++) {
+        // 灯笼鬼打不死、站着不动，一直往这边吐火球
+        w.eHp[i] = 1e9;
+        w.eX[i] = w.x + 220;
+        w.eY[i] = w.y;
+        step(w, 0, 0);
+        for (let k = 0; k < w.ev.n; k++) if (w.ev.type[k] === Ev.Block) n++;
+      }
+      return n;
+    };
+    expect(blocks(false)).toBe(0);
+    expect(blocks(true)).toBeGreaterThan(0);
+  });
+
+  it('危险 4 起带两件镇类，精英不吃减速，普通怪照样减', () => {
+    const slowed = (danger: 2 | 4): [number, number] => {
+      const w = createWorld({ seed: 5, mode: 'vigil', danger });
+      w.weapons.length = 0;
+      w.wstats.length = 0;
+      w.nextEvent = 1 << 30;
+      for (const id of ['bell', 'mirror'] as const) grantWeapon(w, id, 1);
+      const elite = spawnNow(w, 'whitefox', w.x + 60, w.y);
+      const mob = spawnNow(w, 'jiangshi', w.x - 60, w.y);
+      step(w, 0, 0);
+      return [w.eSlow[elite]!, w.eSlow[mob]!];
+    };
+    expect(DANGERS[4].eliteNoWard && !DANGERS[2].eliteNoWard).toBe(true);
+    const [e2, m2] = slowed(2);
+    const [e4, m4] = slowed(4);
+    expect(e2).not.toBe(0);
+    expect(m2).not.toBe(0);
+    expect(e4).toBe(0);
+    expect(m4).not.toBe(0);
+  });
+
   it('纸轿打碎放出一群纸人，精英倒下进收获期', () => {
     const w = quiet();
     const i = spawnNow(w, 'palanquin', w.x + 300, w.y);

@@ -63,6 +63,8 @@ import {
   NEXT_ELEMENT,
   TYPE_SETS,
   WARD_SET_HIT,
+  GOURD_BURN_FIRES,
+  ELITE_NO_WARD_PIECES,
   type Element,
   type PassiveId,
   type WeaponId,
@@ -617,6 +619,12 @@ function markSlow(w: World, g: Grid): void {
     }
     const n = g.query(w, w.x, w.y, area);
     for (let j = 0; j < n; j++) w.eSlow[g.out[j]!] = mark;
+  }
+  // 危险 4 起带两件镇类法器时精英镇不住（waves.ts eliteNoWard）：烈火顺手带一件镇魂铃照样减精英的速
+  let ward = 0;
+  for (const o of w.weapons) if (WEAPONS[o.id].type === '镇') ward++;
+  if (ward >= ELITE_NO_WARD_PIECES && dangerDef(w.setup.mode, w.setup.danger).eliteNoWard) {
+    for (let i = 0; i < MAX_ENEMIES; i++) if (w.eSlow[i] && ENEMIES[w.eKind[i]!]!.elite) w.eSlow[i] = 0;
   }
 }
 
@@ -1691,7 +1699,10 @@ function gourdTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
       if (dot <= 0 || dot * dot < c2 * (dx * dx + dy * dy)) continue;
       hitEnemy(w, i, e.dmg, k, ux, uy, s.knock, s.rehit);
     }
-    // 火舌把扇面里飞来的冰锥、纸钱、火球都烧掉（火流派没有飞剑和铜钱，靠这个顶远程怪）
+    // 带够火法器时（GOURD_BURN_FIRES），火舌把扇面里飞来的冰锥、纸钱、火球都烧掉（火流派没有飞剑和铜钱，靠这个顶远程怪）
+    let fires = 0;
+    for (const o of w.weapons) if (WEAPONS[o.id].el === '火') fires++;
+    if (fires < GOURD_BURN_FIRES) return;
     const r2 = e.area * e.area;
     for (let q = 0; q < MAX_SHOTS; q++) {
       if (!w.sAlive[q] || w.sKind[q] !== Shot.Fireball) continue;
