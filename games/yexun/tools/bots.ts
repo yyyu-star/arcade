@@ -6,6 +6,7 @@
  */
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
+import { MARKET_GOODS, NIGHT_MARKET, type MarketGood } from '../src/content/market.ts';
 import { MERGES, WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
 import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
@@ -168,6 +169,23 @@ export class Bot {
     }
     // 夜探：隔着墙的魂珠不去捡（按直线距离挑最近的，魂珠在墙那边就一直往墙上顶）
     if (best >= 0 && w.raid && blockedBy(w, w.x, w.y, tx, ty)) best = -1;
+    // 守夜夜市：开着时去买一样买得起的（法器 +1 级最先；血少先回血），站到摊上就不再拉
+    let atStall = false;
+    if (!w.raid && w.mkPhase === 2) {
+      const want: MarketGood[] = w.hp < w.stats.hpMax * 0.6 ? ['heal', 'upgrade', 'might', 'reroll', 'vacuum', 'speed', 'ban'] : ['upgrade', 'might', 'reroll', 'heal', 'vacuum', 'speed', 'ban'];
+      let pick = -1;
+      for (const g of want) {
+        pick = w.mkGood.findIndex((x, k) => MARKET_GOODS[x] === g && !w.mkSold[k] && w.coins >= w.mkPrice[k]!);
+        if (pick >= 0) break;
+      }
+      if (pick >= 0) {
+        best = MAX_DROPS + MAX_PROPS;
+        tx = w.mkX[pick]!;
+        ty = w.mkY[pick]!;
+        bd = 0;
+        atStall = Math.hypot(tx - w.x, ty - w.y) < NIGHT_MARKET.r * 0.5;
+      }
+    }
     let gx = 0;
     let gy = 0;
     // 夜探沿路走：怪的推力封顶。窄街里怪成群，不封顶就被推来推去原地打转（10 分钟开不了一个箱子）；
@@ -193,7 +211,7 @@ export class Bot {
       const pull = threat > 0 ? 0.8 : 1;
       gx = inputCos(this.goal) * pull;
       gy = inputSin(this.goal) * pull;
-    } else if (best >= 0) {
+    } else if (best >= 0 && !atStall) {
       const dx = tx - w.x;
       const dy = ty - w.y;
       const d = Math.hypot(dx, dy) || 1;
