@@ -1273,7 +1273,8 @@ export class DdzScene extends Phaser.Scene {
       if (!c.obj.active) continue;
       const m = c.obj.getWorldTransformMatrix();
       const b = c.obj as unknown as { enabled?: boolean; visible: boolean };
-      out[k] = { x: m.tx / this.cameras.main.zoom, y: m.ty / this.cameras.main.zoom, ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}), visible: c.obj.visible };
+      // 世界坐标（getWorldTransformMatrix 只叠父容器、不含相机），和掼蛋 TableScene 一样交给调试桥换成屏幕坐标
+      out[k] = { x: m.tx, y: m.ty, ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}), visible: c.obj.visible };
     }
     // 互动（kit 的 DOM）：屏幕坐标换回世界坐标，冒烟和别的控件一样点
     const cr = this.game.canvas.getBoundingClientRect();

@@ -13,7 +13,7 @@ import { getDdzStats, getSettings, getStats, getVariant, loadDdzSave, loadSave, 
 import { DdzSession } from '../ddz-session.ts';
 import { DDZ_FLOW, DdzStakeSession, clearDdzStakeSave, ddzStakeExpired, ddzStakeLeft, loadDdzStakeSave } from '../ddz-stake.ts';
 import { DDZ_DAILY_LEVEL, beijingDate, ddzDailySeed } from '../ddz-daily.ts';
-import { COLOR, RADIUS, TYPE, minHit } from '../theme.ts';
+import { COLOR, RADIUS, TYPE, minHit, phoneType } from '../theme.ts';
 import { FIGURE_SIZE, LANTERN_SIZE, homeLayout } from '../home-layout.ts';
 import { LOW_MEMORY } from '../device.ts';
 import { anim } from '../anim.ts';
@@ -31,6 +31,7 @@ import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
 const PITCH = '两两搭档，先出完牌、先打过 A 的一队赢';
 /** 斗地主（牌馆 0.28.0）那一句 */
 const PITCH_DDZ = '一个地主对两个农民，谁先出完谁那边赢';
+const PITCH_DDZ_SHORT = '一个地主对两个农民';
 
 /** screen= 只在打开页面后的第一次主页生效，回到主页不再弹 */
 let screenOpened = false;
@@ -239,7 +240,9 @@ export class TitleScene extends Phaser.Scene {
    * 斗地主的面板：主按钮（接着打实盘 / 继续上局 / 快速开始）、三张卡（娱乐：选难度、快速匹配；实盘；好友房）、战绩条（右边是每日挑战）。
    */
   private buildDdzPanel(P: { x: number; y: number; w: number; h: number }, cx: number, inner: number): void {
-    text(this, cx, P.y + 228, PITCH_DDZ, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20);
+    // 手机横屏字号托底放大，整句放不下：删字不缩字（AGENTS 画面层约定），再按面板宽度兜底
+    const phone = phoneType();
+    fitWidth(text(this, cx, P.y + 228, phone ? PITCH_DDZ_SHORT : PITCH_DDZ, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20), inner);
     const save = loadDdzSave();
     const saved = save && save.state.phase !== 'gameOver' ? `第 ${save.state.dealNo}/${save.state.opts.deals} 副 · 我 ${signed(save.state.scores[0]!)} 分` : null;
     const level = getSettings().difficulty;
@@ -264,8 +267,8 @@ export class TitleScene extends Phaser.Scene {
     }
     // 模式卡（和掼蛋同一种排法）：娱乐（选难度）、实盘（选档，单独部署没有钱包不摆）、好友房
     const modes: [string, string, string, ButtonStyle, string, () => void][] = [
-      ['fun', '娱乐', '和老周、王姐', 'green', 'robot', () => this.pickDdz(saved)],
-      ...(standalone() ? [] : [['stake', '实盘', '带一份筹码', 'gold', 'crown', () => this.pickDdzStake()] as [string, string, string, ButtonStyle, string, () => void]]),
+      ['fun', '娱乐', phone ? '随便玩' : '和老周、王姐', 'green', 'robot', () => this.pickDdz(saved)],
+      ...(standalone() ? [] : [['stake', '实盘', phone ? '带筹码' : '带一份筹码', 'gold', 'crown', () => this.pickDdzStake()] as [string, string, string, ButtonStyle, string, () => void]]),
       // 好友房：开房时带上玩法（斗地主），3 个座位
       ['online', '好友房', '叫朋友来', 'blue', 'cards', () => openOnline('ddz')],
     ];
