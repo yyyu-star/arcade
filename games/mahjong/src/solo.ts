@@ -287,14 +287,7 @@ export class Solo {
       this.save$();
       return;
     }
-    // 立直的筹码只在一场结束时才动：中途离开直接结回就是全额退款，输了也不亏。改成按现在的点数和顺位收场（docs/riichi.md 第 2 节），
-    // 但只退不赢：头名奖按名次发，一开局就走（点数都一样、起家排第一）也能拿到，不封顶就能拿来刷筹码
-    if (this.V.id !== DEFAULT_VARIANT && this.s.state.phase !== 'over' && !this.s.settle) {
-      this.s.state = this.V.finish(this.s.state) as SoloState;
-      const r = this.V.result(this.s.state).seats[ME]!;
-      this.s.settle = { op: randomId(), amount: Math.max(0, r.net > 0 ? r.chips - r.net : r.chips), stats: r.stats };
-      this.save$();
-    }
+    // 立直的筹码只在终局才动：没打完时 result 按"现在就收场"算（只算点数差、这一局不算，见 riichi/rules.ts 的 standings），这里不用另外处理
     await this.finish();
   }
 }

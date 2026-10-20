@@ -522,24 +522,35 @@ describe('一场结束', () => {
     expect(s.phase).toBe('over');
   });
 
-  test('没打完就要结果（好友房离座、提前收场）：按此刻的点数和顺位换筹码，输着走的人拿不回整份', () => {
+  test('没打完就要结果（好友房离座、单机中途离开）：只按点数差换筹码，不算马和头名奖，打到一半的这一局不算', () => {
     const s = table(['*', '*', '*', '*'], 0, '1z');
-    s.points = [10_000, 40_000, 25_000, 25_000];
+    s.start = [10_000, 40_000, 25_000, 25_000];
+    s.points = [9_000, 40_000, 25_000, 25_000];
+    s.sticks = 1;
     const r = RC.result(s);
-    // 0 号：10,000 − 30,000 − 20 马 = −40,000 → 小档 1,600
-    expect(r.seats[0]!.net).toBe(-1_600);
-    expect(r.seats[1]!.net).toBeGreaterThan(0);
+    // 0 号：这一局开始时 10,000 − 25,000 = −15,000 → 小档 600；这一局他刚放的立直棒不算
+    expect(r.seats[0]!.net).toBe(-600);
+    expect(r.seats[1]!.net).toBe(600);
     expect(s.phase).toBe('turn');
+    // 开局点数都一样：谁走都不输不赢（起家不会因为排第一白拿头名奖）
+    const t = table(['*', '*', '*', '*'], 0, '1z');
+    expect(RC.result(t).seats.map((x) => x.net)).toEqual([0, 0, 0, 0]);
+    expect(RC.finish(t).chips).toEqual([2_000, 2_000, 2_000, 2_000]);
   });
 
   test('中途接管：新来的人只为接手以后的涨落负责；前面那段由庄家补给赢家', () => {
-    const s = table(['*', '*', '*', '*'], 0, '1z');
-    s.points = [10_000, 40_000, 25_000, 25_000];
-    const before = RC.result(s).seats[1]!.net;
-    const t = RC.restake(s, 0, 2_000);
+    const base = (): RcState => {
+      const s = table(['*', '*', '*', '*'], 0, '1z');
+      s.points = [10_000, 40_000, 25_000, 25_000];
+      s.start = s.points.slice();
+      return s;
+    };
+    const plain = base();
+    finishMatch(plain);
+    const t = RC.restake(base(), 0, 2_000);
     finishMatch(t);
     expect(t.chips[0]).toBe(2_000);
-    expect(t.chips[1]! - 2_000).toBe(before);
+    expect(t.chips[1]).toBe(plain.chips[1]);
   });
 
   const last = (dealer: number, first: number, points: number[]): RcState => {

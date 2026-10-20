@@ -994,13 +994,13 @@ export function actorsOf(s: RcState): { seats: number[]; group: string } | null 
 }
 
 /**
- * 好友房有人接管座位、带入到账：筹码重新记；点数不动，记下这个座位此刻的得分，终局时新来的人只按接手以后的涨落算
- * （前一个人离座时已经按那一刻的得分结走了，见 index.ts 的 result）
+ * 好友房有人接管座位、带入到账：筹码重新记；点数不动，记下这个座位此刻按打完算的得分（含马），终局时新来的人只按接手以后的涨落算。
+ * 前一个人离座时按"没打完"结走（不算马，见 standings），两种算法之间的差和电脑代打那一段一样归庄家
  */
 export function restakeMut(s: RcState, seat: number, chips: number): void {
   s.chips[seat] = chips;
   s.stake[seat] = chips;
-  s.entry = (s.entry ?? [0, 0, 0, 0]).map((x, i) => (i === seat ? standings(s, true).score[seat]! : x));
+  s.entry = (s.entry ?? [0, 0, 0, 0]).map((x, i) => (i === seat ? standings(s).score[seat]! : x));
 }
 
 /** 好友房里座位换了人：只换"是谁"，统计从头算 */

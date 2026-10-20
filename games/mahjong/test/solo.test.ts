@@ -172,16 +172,14 @@ describe('立直单机', () => {
     expect(solo.save.done).toBe(true);
   });
 
-  test('中途离开：按现在的点数和顺位结回，但只退不赢（一开局就走拿不到头名奖）', async () => {
-    // 找一场起家就是我（0 号）：点数都一样时同分按起家顺序排，我是第一名，一场打完的话头名奖会归我
+  test('中途离开：按点数差结回，不算马和头名奖（起家一开局就走，原样拿回一份，拿不到头名奖）', async () => {
     let s = wallet2();
     for (let i = 0; i < 40 && (s.state as RcState).first !== 0; i++) s = wallet2();
     expect((s.state as RcState).first).toBe(0);
-    expect(RC.result(RC.finish(s.state as RcState)).seats[0]!.net).toBeGreaterThan(0);
     replies = [ok];
     await new Solo(s, ui).leave();
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.body.amount).toBeLessThanOrEqual(2_000);
+    expect(sent[0]!.body.amount).toBe(2_000);
     expect(s.done).toBe(true);
   });
 
