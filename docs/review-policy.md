@@ -85,7 +85,7 @@
 
 下面这些改动能改变"构建和部署时跑什么、部署成什么样"，守门代理只预审，由维护者亲自审：
 
-- 改了 `platform/`、`packages/`、`.github/`、`tools/`、根目录的规范文件（AGENTS.md、CONTRIBUTING.md、README、LICENSE、SECURITY.md、CODE_OF_CONDUCT.md、docs/）；
+- 改了 `platform/`、`packages/`（含自托管的 `arcade-host`）、`.github/`、`tools/`（含 `tools/selfhost/`）、根目录的规范文件（AGENTS.md、CONTRIBUTING.md、README、LICENSE、SECURITY.md、CODE_OF_CONDUCT.md、docs/）；
 - 改了模块的 `package.json`（scripts、依赖、`overrides`、别名）或 `package-lock.json`；
 - 改了构建和测试配置：`vite.config.*`、`vitest.config.*`、`tsconfig*.json`、`playwright` 配置之类；
 - 改了模块里 `tools/`、`scripts/` 下的脚本（构建、打包、冒烟脚本在 CI 里执行）；
