@@ -286,22 +286,78 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 .invite .btn--small { margin-left: 0; }
 /* 顶栏入口上的红点 */
 .account { position: relative; }
-/* 好友动态（0.17.0）：好友页一栏、大厅小条共用 */
+/* 好友动态：好友页一栏和顶栏"动态"浮层共用。一条 = 头像 | 名字、游戏、时间 / 结果标签 / 赞和道具 */
 .feed { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; text-align: left; }
-.feed__item { display: grid; gap: 2px; padding: var(--s-2) 0; border-bottom: 1px dashed var(--dashed); }
+.feed__item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 6px var(--s-2); align-items: start; padding: var(--s-2) 0; border-bottom: 1px dashed var(--dashed); }
 .feed__item:last-child { border-bottom: 0; }
-.feed__text { font-weight: 700; overflow-wrap: anywhere; }
-.feed__meta { color: var(--muted); font-size: var(--fs-sm); }
-.feed__actions { flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-1); }
-.feed--compact .feed__item { padding: 2px 0; border: 0; }
-.feed-strip { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-2); }
-.feed-strip .feed { flex: 1 1 260px; }
-/* 手机上好友动态放到游戏卡下面（0.24.0）：上面压着桌上的筹码、补给两条提醒，再加三条动态，SE 的第一屏就看不到游戏了 */
-@media (max-width: 599px) {
-  .lobby { display: flex; flex-direction: column; }
-  .lobby > .feed-strip { order: 1; margin: var(--s-5) 0 0; }
+.feed__item > :not(.feed__avatar) { grid-column: 2; }
+.feed__avatar {
+  grid-row: 1 / span 4; display: grid; place-items: center; width: 36px; height: 36px;
+  border: var(--bw-thin, 2px) solid var(--line); border-radius: 50%; background: linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
+  color: var(--white); font-weight: 700; box-shadow: var(--hl);
 }
-.dot--inline { position: relative; display: inline-block; top: -6px; width: 10px; height: 10px; margin-left: 2px; border: 2px solid var(--white); border-radius: 50%; background: #e0412f; }
+.feed__head { display: flex; align-items: baseline; gap: 6px; min-width: 0; line-height: 1.3; }
+.feed__name { flex: 0 1 auto; min-width: 0; max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed__game { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
+.feed__thumb { flex: none; width: 20px; height: 20px; border: 1.5px solid var(--line); border-radius: 6px; object-fit: cover; }
+.feed__time { flex: none; margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+.feed__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.feed__tag {
+  padding: 3px 10px; border: var(--bw-thin, 2px) solid var(--line); border-radius: var(--r-pill);
+  font-size: var(--fs-sm); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; box-shadow: var(--hl), 0 2px 0 var(--line);
+}
+.feed__tag--win { background: linear-gradient(180deg, #ffe68f 0%, #ffc83d 100%); color: #5a3a00; }
+.feed__tag--title { background: linear-gradient(180deg, #f1e6ff 0%, #d6c0ff 100%); color: #3f2370; }
+.feed__tag--moment { background: linear-gradient(180deg, #ffe0cc 0%, #ffb88f 100%); color: #6a2a07; }
+.feed__meta { color: var(--muted); font-size: var(--fs-sm); }
+.feed__actions { flex-wrap: wrap; gap: var(--s-2); }
+/* 顶栏"动态"：电脑上是挂在按钮下面的浮层 */
+.feedpop { position: relative; display: inline-flex; }
+/* 按钮不继承字体，不写就比旁边的链接小一号 */
+.feedpop__btn { font: inherit; font-weight: 700; cursor: pointer; }
+.feedpop__panel {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 30;
+  display: flex; flex-direction: column; width: 360px; max-width: calc(100vw - 24px); max-height: min(600px, 75vh);
+  border: var(--bw) solid var(--line); border-radius: var(--r-lg); background: var(--face-paper); box-shadow: var(--sh-lg);
+  white-space: normal; text-align: left;
+}
+.feedpop__title { margin: 0; padding: var(--s-3) var(--s-4) var(--s-1); font-size: var(--fs-md); }
+.feedpop__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--s-4); }
+.feedpop__all {
+  display: flex; align-items: center; justify-content: center; min-height: var(--tap); margin: var(--s-2) var(--s-3) var(--s-3);
+  border: var(--bw-thin, 2px) solid var(--line); border-radius: var(--r-pill); background: var(--face-white); color: var(--ink);
+  font-weight: 700; text-decoration: none; box-shadow: var(--sh-sm);
+}
+.feedpop__mask, .feedpop__grab { display: none; }
+/* 手机平板：从底下弹出的半屏面板，遮罩点一下或者把顶上的小横条往下拉就收起 */
+@media (pointer: coarse), (max-width: 959px) {
+  .feedpop__mask { display: block; position: fixed; inset: 0; z-index: 40; background: rgb(43 29 20 / 45%); }
+  .feedpop__panel {
+    position: fixed; inset: auto 0 0; z-index: 41; width: auto; max-width: none;
+    height: 55vh; height: 55dvh; max-height: none;
+    border-bottom: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .feedpop__grab { display: block; flex: none; height: 24px; touch-action: none; cursor: grab; }
+  .feedpop__grab::before { content: ""; display: block; width: 44px; height: 5px; margin: 10px auto 0; border-radius: var(--r-pill); background: var(--dashed); }
+  .feedpop__title { padding-top: 0; }
+}
+/* 横着拿手机，半屏只有一百多像素：放到快满屏 */
+@media (max-height: 500px) and (pointer: coarse), (max-height: 500px) and (max-width: 959px) {
+  .feedpop__panel { height: 85vh; height: 85dvh; }
+}
+/* 手机窄屏顶栏只留图标（别的入口在这些宽度收的是图标、留字，"动态"反过来） */
+@media (max-width: 560px), (min-width: 561px) and (max-height: 500px) {
+  .topbar .feedpop__btn { min-width: var(--tap); }
+  .topbar .feedpop__btn .icon { display: block; }
+  .feedpop__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width: 340px) {
+  .topbar .feedpop__btn { min-width: 40px; }
+}
+/* 手机平板顶栏放不下管理员的第六个按钮："管理"收进"我的"页（那里有"去管理后台"） */
+@media (max-width: 959px) {
+  .topbar .account--admin { display: none; }
+}
 .account .dot { position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; border: 2px solid var(--white); border-radius: 50%; background: #e0412f; }
 .nudges { margin: 0 0 var(--s-5); display: grid; gap: var(--s-2); }
 .nudges .banner { margin: 0; }

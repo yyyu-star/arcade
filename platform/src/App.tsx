@@ -6,7 +6,7 @@ import { playUrl } from './play.ts';
 import { Link, useLocation } from './router.tsx';
 import { api, type Overtake } from './api.ts';
 import { useSession } from './session.tsx';
-import { FeedStrip } from './feed.tsx';
+import { FeedButton } from './feed.tsx';
 import { InviteBar, useHasInvites, useInvitePolling } from './invites.tsx';
 import { useLobbyPresence } from './presence.ts';
 import { FormError, useSubmit, useWritable } from './ui.tsx';
@@ -173,7 +173,6 @@ function Home({ deleted }: { deleted: boolean }) {
       {notice && <p className="banner">账号已经注销，数据都删掉了。</p>}
       <LobbyNudge />
       {user && <OvertakeNudge />}
-      {user && <FeedStrip me={user.id} />}
       {user && announcement && (
         <p className="banner banner--notice" data-testid="notice">
           <strong className="banner__tag">公告</strong>
@@ -311,7 +310,7 @@ function AccountButton() {
   return (
     <span className="topbar">
       {user.isAdmin && (
-        <Link className="account" href="/admin">
+        <Link className="account account--admin" href="/admin">
           <ShieldIcon />
           管理
         </Link>
@@ -320,6 +319,7 @@ function AccountButton() {
         <TrophyIcon />
         排行
       </Link>
+      <FeedButton me={user.id} />
       <FriendsLink />
       <WalletBadge />
       <Link className="account" href="/me" title="我的账号">

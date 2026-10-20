@@ -1216,7 +1216,7 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 | `POST /api/feed/<id>/react` | 登录；平台页 | `{"kind": "like" \| 道具 id}`（道具 id 用 table-fun 的那几个） | 204；每条每人一次，再点不改、0 行 | 400；404（不是好友的、自己的、过期的、不存在的，一律 404）；429（每人每天 100 次） | 1；被拒 0 |
 
 **存储**：`feed`（`id` 是时间前缀 + 随机，按 id 排序就是按时间；`data` JSON ≤ 200 字节；索引 `(user_id, created_at)`）和 `feed_reactions`；Cron 删 7 天前的（`id` 带时间前缀，赞按 `item_id` 范围删）；注销时删本人发的、本人赞的。
-界面：好友页最上面一栏"好友动态"，大厅一条小条（最新 3 条）；"看过"记在本机 `localStorage` 的 `arcade.feedSeen`，只是提醒，换设备不同步。
+界面：好友页最上面一栏"好友动态"；顶栏一个"动态"按钮，有新的带红点，点开是最新 8 条（电脑上挂在按钮下面，手机上从底下弹出半屏），底下"看全部"进好友页。"看过"记在本机 `localStorage` 的 `arcade.feedSeen`，只是提醒，换设备不同步。
 
 ### 15.18 异步挑战
 
