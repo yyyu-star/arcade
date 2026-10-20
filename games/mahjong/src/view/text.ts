@@ -105,6 +105,14 @@ export const HIGHLIGHT_NAME: Record<HighlightId, string> = {
   qing: '清一色',
   jingou: '金钩钓',
   capped: '封顶',
+  rc_multi2: '一炮双响',
+  rc_yakuman: '役满',
+  rc_sanbaiman: '三倍满',
+  rc_rinshan: '岭上开花',
+  rc_chankan: '抢杠',
+  rc_haitei: '海底摸月',
+  rc_houtei: '河底捞鱼',
+  rc_ippatsu: '立直一发',
 };
 
 export const STAKES_NAME: Record<StakesId, string> = { fun: '娱乐', small: '小', mid: '中', big: '大', lux: '豪华' };

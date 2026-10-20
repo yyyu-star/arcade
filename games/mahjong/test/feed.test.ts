@@ -41,7 +41,7 @@ describe('名场面判定', () => {
 
 test('moments.json：编号、长度、占位符合平台的要求，判定会报的每个编号都有模板', () => {
   const json = JSON.parse(readFileSync(new URL('../public/moments.json', import.meta.url), 'utf8')) as Record<string, { text: string }>;
-  const ids: FeedMomentId[] = ['tiandi', 'longqidui', 'qing', 'gangkai', 'haidi', 'qidui'];
+  const ids: FeedMomentId[] = ['tiandi', 'longqidui', 'qing', 'gangkai', 'haidi', 'qidui', 'rc_yakuman', 'rc_sanbaiman', 'rc_rinshan', 'rc_chankan', 'rc_haitei', 'rc_houtei', 'rc_ippatsu'];
   expect(Object.keys(json).sort()).toEqual([...ids].sort());
   for (const [id, { text }] of Object.entries(json)) {
     expect(id, id).toMatch(/^[a-z][a-z0-9_]{0,23}$/);

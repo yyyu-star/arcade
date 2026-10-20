@@ -7,6 +7,7 @@ import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, test } from 'vitest';
 import { riichi as RC, type RcState, type RcView } from '../src/core/variants/riichi/index.ts';
 import { mahjongRoom as G, type RoomAction, type RoomState, type WalletEffect } from '../src/room/rules.ts';
+import { RoomTalk } from '../src/room/talk.ts';
 import { KEY } from './helpers.ts';
 
 const SHARE = 2_000;
@@ -158,5 +159,25 @@ describe('隐藏信息和公平', () => {
       s = act(s, seats[0]!, G.timeout!(s, seats[0]!));
     }
     expect(found).toBe(true);
+  });
+});
+
+describe('立直房里电脑起哄', () => {
+  test('一批推好几步也不漏：每次自摸、跳满以上的和都认得出；只有电脑座位发；同一步再看一次是空的', () => {
+    const eye = new RoomTalk(9);
+    const talk = new RoomTalk(10);
+    let s = begin(['human', 'ai', 'ai', 'ai'], 'fun');
+    let seen = 0;
+    let now = 0;
+    for (let k = 0; !G.over(s) && k < 100_000; k++) {
+      s = drive(s, 5);
+      now += 10_000;
+      seen += eye.watchRc(s).filter((m) => m.kind === 'moment' && m.moment !== 'kong').length;
+      for (const a of talk.step(s, now)) expect(s.kinds[a.seat]).toBe('ai');
+    }
+    const loud = (s.g as RcState).history.flatMap((h) => h.wins).filter((w) => w.from === null || w.score.yakuman > 0 || ['haneman', 'baiman', 'sanbaiman'].includes(w.score.limit) || w.score.yaku.some((y) => y.id === 'rinshan'));
+    expect(loud.length).toBeGreaterThan(0);
+    expect(seen).toBe(loud.length);
+    expect(eye.watchRc(s)).toEqual([]);
   });
 });

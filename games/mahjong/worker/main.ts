@@ -18,7 +18,7 @@ import type { MeterEnv } from 'arcade-kit/meter';
 import type { GuestOptions } from 'arcade-kit/guest';
 import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
-import { MATCH_FUN, MATCH_TIERS } from '../src/game/match.ts';
+import { MATCH_FUN_TIERS, MATCH_TIERS } from '../src/game/match.ts';
 import { PERSONAS } from '../src/ai/personas.ts';
 import type { SettleStats } from '../src/core/match/index.ts';
 import { soloOp } from '../src/game/ops.ts';
@@ -122,7 +122,7 @@ export default {
     if (match) {
       // 档位不认得、没开放的 kit 回 4004；没有钱包（单独部署）只开娱乐，实盘的排不了
       if (!env.MATCH) return refuseSocket(request, CLOSE.noRoom, 'no match');
-      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: site, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : [MATCH_FUN] });
+      return acceptMatch(request, { ...env, MATCH: env.MATCH }, match[1]!, { siteOrigin: site, guest: GUEST, tiers: env.WALLET ? MATCH_TIERS : MATCH_FUN_TIERS });
     }
     const join = JOIN.exec(path);
     if (join) return acceptJoin(request, env, join[1]!, { siteOrigin: site, guest: GUEST });

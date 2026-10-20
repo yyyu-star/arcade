@@ -13,6 +13,8 @@ import { PERSONAS } from '../ai/personas.ts';
 import { funMoments, type Moment } from '../game/banter.ts';
 import { PHRASE_COUNT } from '../game/emotes.ts';
 import type { XzState } from '../core/variants/sichuan-xuezhan/rules.ts';
+import type { RcState } from '../core/variants/riichi/rules.ts';
+import { rcFunMoments, rcSummaryWins } from '../game/riichi-fun.ts';
 import type { RoomState } from './rules.ts';
 
 interface Seen {
@@ -34,6 +36,7 @@ export class RoomTalk {
   private readonly bots: BotState = newBotState();
   private readonly rand: () => number;
   private seen: Seen | null = null;
+  private rcSeen: { n: number; rounds: number; kans: number[] } | null = null;
   /** 每个座位是不是电脑、什么互动性格（真人是 null） */
   private tempers: (FunTemper | null)[] = [];
 
@@ -44,16 +47,39 @@ export class RoomTalk {
 
   /** 房间走了一步：新的名场面 → 电脑发的 */
   step(s: RoomState, now: number): BotEmote[] {
-    const ms = this.watch(s);
-    if (!ms.length) return [];
-    const g = s.g as XzState;
+    const evs = (s.g as { variant?: string } | null)?.variant === 'riichi' ? this.watchRc(s) : this.xzEvents(s);
     const out: BotEmote[] = [];
-    for (const ev of funMoments(ms, g.players.map((p) => p.won === null), g.round)) {
+    for (const ev of evs) {
       this.tempers.forEach((t, seat) => {
         if (t) out.push(...this.act(ev, seat, t, now));
       });
     }
     return out;
+  }
+
+  private xzEvents(s: RoomState): FunEvent[] {
+    const ms = this.watch(s);
+    if (!ms.length) return [];
+    const g = s.g as XzState;
+    return funMoments(ms, g.players.map((p) => p.won === null), g.round);
+  }
+
+  /**
+   * 立直（game/riichi-fun.ts，照川麻的规矩）：和了就结这一局，所以和看新多出来的一局小结（役和点都在里面）；
+   * 杠看各家副露里的杠比上一步多了没有。同一步再调一次是空的
+   */
+  watchRc(s: RoomState): FunEvent[] {
+    const g = s.g as RcState;
+    if (!g?.players || s.n === this.rcSeen?.n) return [];
+    this.tempers = s.kinds.map((k, i) => (k === 'ai' ? (PERSONAS[g.personas[i]!]?.fun ?? 'normal') : null));
+    const prev = this.rcSeen;
+    const kans = g.players.map((p) => p.melds.filter((m) => m.kind === 'kan').length);
+    this.rcSeen = { n: s.n, rounds: g.history.length, kans };
+    if (!prev) return [];
+    const ended = g.history.length > prev.rounds ? g.history.at(-1) : undefined;
+    // 换了一局的话副露清零了，比不出新开的杠，不算
+    const kanSeats = ended || g.history.length !== prev.rounds ? [] : kans.flatMap((k, i) => (k > (prev.kans[i] ?? 0) ? [i] : []));
+    return rcFunMoments(ended ? rcSummaryWins(ended.wins) : [], kanSeats, g.history.length);
   }
 
   /** 和上一步比，新出了哪些公开的事（同一步再调一次是空的） */

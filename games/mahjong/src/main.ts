@@ -15,6 +15,7 @@ import { PERSONAS } from './ai/personas.ts';
 import { awardsOf, type Award } from './game/awards.ts';
 import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/banter.ts';
 import { feedMomentsOf, toReport, type FeedMomentId } from './game/feed.ts';
+import { rcFeedMomentsOf, rcFunMoments, rcHighlightsOf, rcKansOf, rcTally, rcWinsOf } from './game/riichi-fun.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
 import { loadSolo, newSolo, Solo, unsettled, type SoloAction, type SoloOpts, type SoloSave, type SoloView } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
@@ -401,7 +402,7 @@ function lobby(friends = false, mode: HomeMode | null = null): void {
     onRules: () => showRules(stage, undefined, activeVariant()),
     onRoom: openRoom,
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
-    ...(m !== 'room' ? { onMatch: (st: StakesId, o: XzOpts, l: Level) => void quickMatch(st, o, l) } : {}),
+    ...(m !== 'room' ? { onMatch: (st: StakesId, o: XzOpts | RcOpts, l: Level, v: string) => void quickMatch(st, o, l, v) } : {}),
     friends,
     ...(standalone ? { standalone: { nick: nick(), onNick: setNick } } : {}),
     onBack: homePage,
@@ -573,7 +574,7 @@ const said = ((window as { __said?: string[] }).__said ??= []);
  * 选桌页"快速匹配"：按这一档排队，一张卡写"已有几人、还剩几秒"；排到了照好友房进房（匹配桌）。
  * 只剩自己、今天局数用完、联机忙……先说一句再转这一档的单机（实盘照常带入一份）；别的页面排上了（replaced）只说一句、不开单机
  */
-async function quickMatch(stakes: StakesId, opts: XzOpts, level: Level): Promise<void> {
+async function quickMatch(stakes: StakesId, opts: XzOpts | RcOpts, level: Level, variant: string = DEFAULT_VARIANT): Promise<void> {
   const st = stakesOf(stakes)!;
   if (st.wallet) {
     await refreshWallet();
@@ -596,11 +597,11 @@ async function quickMatch(stakes: StakesId, opts: XzOpts, level: Level): Promise
   };
   const solo = (): void => {
     closeDialog();
-    void startSolo(stakes, opts, level);
+    void startSolo(stakes, opts, level, variant);
   };
   dialog(stage, 'match', (box) => {
     el('h2', '', box, '快速匹配');
-    el('div', 'match-tier', box, st.wallet ? `实盘${STAKES_NAME[stakes]}档 · 一份 ${num(st.share)}` : '娱乐 · 不算筹码');
+    el('div', 'match-tier', box, `${variant === RC_ID ? '立直 · ' : ''}${st.wallet ? `实盘${STAKES_NAME[stakes]}档 · 一份 ${num(st.share)}` : '娱乐 · 不算筹码'}`);
     line = el('p', 'match-wait', box);
     el('p', 'room-hint', box, '凑够几个算几个，空位电脑补；只剩你一个就先和电脑打');
     acts = el('div', 'row', box);
@@ -624,7 +625,7 @@ async function quickMatch(stakes: StakesId, opts: XzOpts, level: Level): Promise
     } else if (acts) button('act go', acts, '好', closeDialog);
   };
   const m = new MatchClient({
-    url: withNick(matchUrl(matchTierOf(stakes))),
+    url: withNick(matchUrl(matchTierOf(stakes, variant))),
     onWaiting: (count, size, leftMs) => {
       [n, seats, until] = [count, size, Date.now() + leftMs];
       paint();
@@ -803,8 +804,7 @@ function drawRoomTable(s: OnlineState, rv: RoomView, fresh: boolean): void {
   const n = roomNotice(rv, seat, () => online?.rebuy(), seat === null ? watching(s, g) : null);
   if (n) table.root.appendChild(n);
   fun?.refresh();
-  // 名场面、好友动态是川麻的说法（胡、杠），立直暂不接（和单机一样）
-  if (!replay && v.variant !== RC_ID) {
+  if (!replay) {
     publicMoments(v, seatMetas(s, g).map((x) => x.name), false);
     if (seat !== null && !(stakesOf(rv.stakes)?.wallet && !rv.unrated)) feed(s.code, v, seat);
   }
@@ -833,14 +833,14 @@ function roomRoundEnd(s: OnlineState, rv: RoomView, g: XzView | RcView, replay: 
   if (g.phase === 'over' || rv.done) {
     const me = s.you?.seat ?? null;
     if (!(replay && document.querySelector('.mask.end'))) {
-      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面；奖项是川麻的说法，立直不颁
-      const prizes = g.result && g.variant !== RC_ID ? awardsOf(g.result.seats.map((x) => x.net), g.seats.map((x) => x.stats)) : [];
+      // 颁奖（docs/social.md 第 2 节）：只按结算里公开的净输赢和胡、杠、自摸数评，放在最上面；立直的小计没有杠数，不评杠王（game/riichi-fun.ts）
+      const prizes = g.result ? awardsOf(g.result.seats.map((x) => x.net), g.variant === RC_ID ? rcTally(g.seats.map((x) => x.stats)) : g.seats.map((x) => x.stats)) : [];
       const prizeUnit = wallet ? ' 筹码' : ' 分';
       dialog(stage, 'end', (box) => {
         if (prizes.length) box.appendChild(awardsSummary(prizes, names, prizeUnit));
         settle(box, round());
         box.appendChild(g.variant === RC_ID ? rcMatchSummary(g, names, unit) : matchSummary(g, names, unit));
-        if (!rc && fame.length) box.appendChild(fameSummary(fame, names));
+        if (fame.length) box.appendChild(fameSummary(fame, names));
         if (rv.cut) el('div', 'settle-note', box, '只剩一个人在下注，实盘这一场提前结束（实盘至少要两个人）');
         if (wallet) el('div', 'settle-note', box, '桌上的筹码已经结回钱包');
         else if (rv.unrated) el('div', 'settle-note', box, '实盘只有一个人，这一场不计输赢、没动钱包');
@@ -970,14 +970,7 @@ let lastPrompt = false;
 const soloUi = {
   frame(v: SoloView, names: string[]): void {
     if (!table) return;
-    if (v.variant === RC_ID) {
-      // 立直：互动照常，名场面、好友动态、电脑起哄这几样是川麻的说法（胡、杠），立直暂不接
-      table.render({ v: tableView(v), seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
-      fun?.refresh();
-      alertTurn(v);
-      return;
-    }
-    table.render({ v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
+    table.render({ v: v.variant === RC_ID ? tableView(v) : v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
     fun?.refresh();
     publicMoments(v, names, true);
     if (solo && !stakesOf(solo.stakes)?.wallet) feed(solo, v, 0);
@@ -997,7 +990,7 @@ const soloUi = {
         dialog(stage, 'end', (box) => {
           settle(box, rc ? rcRoundSummary(v as RcView, names) : roundSummary(v as XzView, names, unit));
           box.appendChild(rc ? rcMatchSummary(v as RcView, names, unit) : matchSummary(v as XzView, names, unit));
-          if (!rc && fame.length) box.appendChild(fameSummary(fame, names));
+          if (fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
           cheer(box, mine, net);
           const row = el('div', 'row end-acts', box);
@@ -1276,9 +1269,12 @@ function dropFun(): void {
 }
 
 /** 两边都有的：有名场面就挂横幅（胡牌的牌面先放完）、记进这一场；单机里再交给 kit 让电脑起哄（好友房的电脑在房间里起哄） */
-function publicMoments(v: XzView, names: string[], local: boolean): void {
-  const hus = v.events.filter((e) => e.e === 'hu').length;
-  for (const h of highlightsOf(v.events, v.round, v.opts.cap)) {
+function publicMoments(v: XzView | RcView, names: string[], local: boolean): void {
+  // 立直（game/riichi-fun.ts）：和了就结这一局，所以 round 是刚打完的这一局
+  const rc = v.variant === RC_ID ? { wins: rcWinsOf(v.events), round: v.history.length - (v.phase === 'end' || v.phase === 'over' ? 1 : 0) } : null;
+  const hus = rc ? rc.wins.length : (v as XzView).events.filter((e) => e.e === 'hu').length;
+  const found = rc ? rcHighlightsOf(rc.wins, rc.round) : highlightsOf((v as XzView).events, (v as XzView).round, (v as XzView).opts.cap);
+  for (const h of found) {
     fame.push(h);
     const t = window.setTimeout(() => {
       funTimers.delete(t);
@@ -1287,7 +1283,8 @@ function publicMoments(v: XzView, names: string[], local: boolean): void {
     funTimers.add(t);
   }
   if (!local || !fun) return;
-  for (const ev of funMoments(momentsOf(v.events), v.seats.map((x) => !x.won), v.round)) fun.moment(ev);
+  const evs = rc ? rcFunMoments(rc.wins, rcKansOf((v as RcView).events), rc.round) : funMoments(momentsOf((v as XzView).events), (v as XzView).seats.map((x) => !x.won), (v as XzView).round);
+  for (const ev of evs) fun.moment(ev);
 }
 
 /** 这一场（单机按局面对象、好友房按房间号认；再来一场是新房间）已经报过的名场面 */
@@ -1298,10 +1295,11 @@ let feedSent: FeedMomentId[] = [];
  * 娱乐局里自己胡出名场面：报一条好友动态（docs/platform-backend.md 15.17 第 2 条）。实盘的由平台结回时自己生成，不报；
  * 没平台、没登录（social 没挂上）不报；失败不提示，丢一条动态不影响打牌
  */
-function feed(match: object | string, v: XzView, me: number): void {
+function feed(match: object | string, v: XzView | RcView, me: number): void {
   if (!social) return;
   if (feedFor !== match) [feedFor, feedSent] = [match, []];
-  for (const m of toReport(feedMomentsOf(v.events, me), feedSent)) {
+  const found = v.variant === RC_ID ? rcFeedMomentsOf(v.events, me) : feedMomentsOf(v.events, me);
+  for (const m of toReport(found, feedSent)) {
     feedSent.push(m.moment);
     void postMoment(GAME_ID, m.moment, m.n);
   }

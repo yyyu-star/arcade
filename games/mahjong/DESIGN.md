@@ -495,6 +495,7 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
     输的是点炮的人，自摸和杠是还在打的其他人。别人点炮的普通小胡不算。单机交给 `TableFun.moment`，好友房由房间（`src/room/talk.ts`，kit 的 `onStep`）
     对比公开统计认出来、每个电脑座位问一次 `botReact`、用 `botEmote` 发；真人冲电脑扔的由 kit 的 `onEmote` 交给房间。电脑的反应只在房间内存里记，不写存储。
   - 横幅：一炮双响 / 三响、杠上开花、抢杠胡、天胡、地胡、海底捞月、龙七对、金钩钓、清一色、封顶，胡牌的牌面放完后挂一条（kit 的 `banner`），记进一场的总结算。
+  - 立直的映射和横幅在 `src/game/riichi-fun.ts`（规矩照上面，名场面的种类见 docs/riichi.md 第 4 节）。
   - 好友房聊天（kit 的 `docs/chat.md`）：房间 `chat: true`，kit 过滤（链接、号码、微信 QQ 整条拒发，脏话打码）、按座位限速后只转发给带 `chat=1` 的连接，不写存储、不进快照，电脑不读；
     页面 `Online` 把 onChat / onChatError 交给 TableFun 的 `chat` / `chatError`（房间座位号就是牌桌座位号，不用换算）；声音面板"聊天：开 / 不看"（`mahjong.chatOff`，只在好友房出现），不看只挡别人说的。
     三档轮着切（开 / 不和陌生人 / 不看，同一个键，见第 8 节）：不和陌生人只管匹配桌，进房时不给 onChat（连接不带 chat=1）、牌桌不给聊天；好友房、单机当"开"。
@@ -504,8 +505,8 @@ npx vitest run test/fairness.test.ts test/match.test.ts test/arch.test.ts
     弹幕开关存在 kit 默认的 `mahjong.chat`，声音面板"弹幕：开 / 关"接同一份。
     单机：TableFun 传 kit 的 `localChat((t, m) => fun.chat(0, t, m))`，过滤、限速和房间一样，只在本地显示；说的话不进 `Solo`、不给电脑（`test/arch.test.ts`：规则、电脑、`solo.ts` 不 import `arcade-kit/chat`、`table-fun`）。
   - 快速匹配（kit 的 `MatchQueue` / `MatchClient`，设计在 kit 的 `docs/match.md`）：
-    - 档位（`src/game/match.ts`，Worker 和页面共用）：`fun` 一个，实盘每档一个 `real-<档位>`；一桌最多 4 个真人；开桌选项和好友房开房一样（默认玩法、默认规则），房间照常用 `options` 校验，`test/match-tier.test.ts` 用 kit 的 `matchConfigErrors` 核对（附阳性对照）。
-    - Worker：`worker/match.ts` 的 `Queue`（DO 绑定 `MATCH`，迁移 v2）；路由 `GET /games/mahjong/rooms/match/<档位>` 接 `acceptMatch`，在 `rooms/*` 下面，`run_worker_first` 不用改；没有钱包（单独部署）只开 `fun`；没绑 `MATCH` 回 4004。
+    - 档位（`src/game/match.ts`，Worker 和页面共用）：`fun` 一个，实盘每档一个 `real-<档位>`，立直只有娱乐 `rc-fun`（docs/riichi.md 第 5 节）；一桌最多 4 个真人；开桌选项和好友房开房一样（默认玩法、默认规则），房间照常用 `options` 校验，`test/match-tier.test.ts` 用 kit 的 `matchConfigErrors` 核对（附阳性对照）。
+    - Worker：`worker/match.ts` 的 `Queue`（DO 绑定 `MATCH`，迁移 v2）；路由 `GET /games/mahjong/rooms/match/<档位>` 接 `acceptMatch`，在 `rooms/*` 下面，`run_worker_first` 不用改；没有钱包（单独部署）只开 `fun`、`rc-fun`；没绑 `MATCH` 回 4004。
     - 页面：选桌页"快速匹配"→ 排队卡（`main.ts` 的 `quickMatch`）；排到了照好友房进房，地址栏多带 `match=1`（刷新前就知道是匹配桌，聊天选择照样生效），房间信息到了以 `room.match` 为准。
       匹配桌不摆房间号、叫朋友、选座、开打，分享卡链接不带房间号，好友位置只报"在玩雀馆"；转单机先说 kit 的 `MATCH_TEXT` 一秒，`replaced` 不开单机。
     - 测试：`test/worker/match.test.ts`（入口导出、四人同桌自动开打、实盘档带档位、外人 4004、不认得的档位 4004、没钱包的实盘档 4004）；冒烟 `smoke:match`。

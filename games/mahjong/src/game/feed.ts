@@ -4,8 +4,10 @@
  * 一炮多响记在点炮的人头上，不报；实盘的由平台在结回时自己生成，这里只管娱乐局。
  */
 import type { FanId, XzEvent } from '../core/variants/sichuan-xuezhan/index.ts';
+import type { RcHighlightId } from './riichi-fun.ts';
 
-export type FeedMomentId = 'tiandi' | 'longqidui' | 'qing' | 'gangkai' | 'haidi' | 'qidui';
+/** 川麻的六个，加上立直的（game/riichi-fun.ts，一炮双响不进动态） */
+export type FeedMomentId = 'tiandi' | 'longqidui' | 'qing' | 'gangkai' | 'haidi' | 'qidui' | Exclude<RcHighlightId, 'rc_multi2'>;
 
 export interface FeedMoment {
   moment: FeedMomentId;

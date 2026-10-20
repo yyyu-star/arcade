@@ -31,8 +31,8 @@ export interface LobbyProps {
   /** 好友房：没有时不显示 */
   onRoom?(stakes: StakesId, opts: XzOpts | RcOpts, variant: string): Promise<void>;
   onJoin?(code: string): void;
-  /** 快速匹配（0.21.0）：按选中的档位排队，和陌生人打（默认规则）；没有时不显示 */
-  onMatch?(stakes: StakesId, opts: XzOpts, level: Level): void;
+  /** 快速匹配（0.21.0）：按选中的档位和玩法排队，和陌生人打（这个玩法的默认规则；立直只有娱乐）；没有时不显示 */
+  onMatch?(stakes: StakesId, opts: XzOpts | RcOpts, level: Level, variant: string): void;
   /** 从平台大厅的"好友房"按钮进来（?online=1，和德州、掼蛋同一个约定）：开房、进房那一块滚到看得见、亮一下 */
   friends?: boolean;
   /** 单独部署：没有钱包和实盘；好友房里别人看到的昵称自己填 */
@@ -159,8 +159,8 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   const go = el('div', 'go-row', box);
   if (p.mode !== 'room') {
     const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, rc ? rcOpts : opts, level, rc ? 'riichi' : DEFAULT_VARIANT)));
-    // 快速匹配排的是这一档，开桌用默认规则（上面的规则设置只管单机）；排不到人就转这一档的单机。快速匹配只排川麻，选了立直就不摆
-    if (p.onMatch && !rc) button('act soft big match', go, '快速匹配', () => p.onMatch!(stakes, opts, level));
+    // 快速匹配排的是这一档，开桌用默认规则（上面的规则设置只管单机）；排不到人就转这一档的单机。立直只排娱乐，实盘页选了立直就不摆
+    if (p.onMatch && (!rc || p.mode === 'fun')) button('act soft big match', go, '快速匹配', () => p.onMatch!(rc ? 'fun' : stakes, rc ? rcOpts : opts, level, rc ? 'riichi' : DEFAULT_VARIANT));
     return;
   }
   const room = p.onRoom ? button('act go big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, rc ? rcOpts : opts, rc ? 'riichi' : DEFAULT_VARIANT))) : null;

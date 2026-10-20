@@ -1,8 +1,41 @@
 {
-  "tiandi": { "text": "{name}开局就胡了，天胡地胡，{n} 番" },
-  "longqidui": { "text": "{name}胡了一把龙七对，{n} 番" },
-  "qing": { "text": "{name}胡了一把清一色，{n} 番" },
-  "gangkai": { "text": "{name}杠上开花，{n} 番" },
-  "haidi": { "text": "{name}摸最后一张牌自摸，海底捞月，{n} 番" },
-  "qidui": { "text": "{name}胡了七对，{n} 番" }
+  "tiandi": {
+    "text": "{name}开局就胡了，天胡地胡，{n} 番"
+  },
+  "longqidui": {
+    "text": "{name}胡了一把龙七对，{n} 番"
+  },
+  "qing": {
+    "text": "{name}胡了一把清一色，{n} 番"
+  },
+  "gangkai": {
+    "text": "{name}杠上开花，{n} 番"
+  },
+  "haidi": {
+    "text": "{name}摸最后一张牌自摸，海底捞月，{n} 番"
+  },
+  "qidui": {
+    "text": "{name}胡了七对，{n} 番"
+  },
+  "rc_yakuman": {
+    "text": "{name}和了一把役满，{n} 倍役满"
+  },
+  "rc_sanbaiman": {
+    "text": "{name}和了一把三倍满以上的大牌，{n} 番"
+  },
+  "rc_rinshan": {
+    "text": "{name}开杠摸牌和了，岭上开花，{n} 番"
+  },
+  "rc_chankan": {
+    "text": "{name}抢杠和了，{n} 番"
+  },
+  "rc_haitei": {
+    "text": "{name}摸最后一张牌自摸，海底摸月，{n} 番"
+  },
+  "rc_houtei": {
+    "text": "{name}和了最后一张打出的牌，河底捞鱼，{n} 番"
+  },
+  "rc_ippatsu": {
+    "text": "{name}立直一发和了，{n} 番"
+  }
 }

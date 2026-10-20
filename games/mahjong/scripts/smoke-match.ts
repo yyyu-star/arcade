@@ -9,7 +9,8 @@
  *    A 选了"聊天：不和陌生人"：A 的房间连接不带 chat=1、牌桌上没有聊天；B 带 chat=1，B 说一句，自己的气泡不压自己的手牌。两人离开回娱乐选桌页；
  * 2. 实盘小档：A、B 排到一桌，开打时各从假钱包带一份（2,000）；
  * 3. 取消：排队卡点"取消"，留在选桌页、地址栏没有房间；
- * 4. 一个人排：15 秒后排队卡说"现在没人在排"，转娱乐单机。
+ * 4. 一个人排：15 秒后排队卡说"现在没人在排"，转娱乐单机；
+ * 5. 立直（0.25.4，只有娱乐一档）：A、B 在娱乐选桌页选"立直"再点"快速匹配"，排到同一张立直匹配桌（.table.rc）；实盘选桌页选着立直时没有"快速匹配"。
  * 排队卡说过的每句话记在 window.__said，失败时打出来。两边控制台零报错。端口由系统分配。截图放在 shots/（--shots 可改）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -103,12 +104,13 @@ const roomOf = (page: Page): { room: string | null; match: string | null } => {
   return { room: u.searchParams.get('room'), match: u.searchParams.get('match') };
 };
 
-/** 从主页点模式卡进选桌页，点"快速匹配" */
-async function queue(page: Page, base: string, mode: 'fun' | 'real'): Promise<void> {
+/** 从主页点模式卡进选桌页（rc：先选立直），点"快速匹配" */
+async function queue(page: Page, base: string, mode: 'fun' | 'real', rc = false): Promise<void> {
   await page.goto(`${base}/games/mahjong/`);
   await page.waitForSelector('.home-main');
   await page.click(`.mode.${mode}`);
   await page.waitForSelector('.lobby-head');
+  if (rc) await page.click('.lobby-variants .chip:has-text("立直")');
   await page.click('.go-row .match');
   await page.waitForSelector('.mask.match .match-wait');
 }
@@ -237,6 +239,25 @@ try {
   const lines = await said(pa);
   check(roomOf(pa).room === null && lines.some((l) => l.includes('现在没人在排')), `一个人排：${Math.round((Date.now() - t) / 1000)} 秒后说"现在没人在排"，转单机`);
   check(lines.some((l) => /已有 1\/4 人 · 还剩 \d+ 秒/.test(l)), '排队卡写着"已有 1/4 人 · 还剩几秒"');
+
+  // ---------- 5. 立直 ----------
+  t = Date.now();
+  await queue(pa, base, 'fun', true);
+  const tier = (await pa.textContent('.mask.match .match-tier')) ?? '';
+  await queue(pb, base, 'fun', true);
+  const [qa, qb] = await Promise.all([matched(pa, 'A'), matched(pb, 'B')]);
+  const rcTables = await Promise.all([pa, pb].map((pg) => pg.$('.table.rc')));
+  check(qa === qb && qa !== '' && rcTables.every(Boolean), `立直：A、B 排到同一张立直匹配桌 ${qa}（${Math.round((Date.now() - t) / 1000)} 秒，排队卡写"${tier}"）`);
+  await pa.screenshot({ path: join(SHOTS, 'match-rc-a.png') });
+  await pb.screenshot({ path: join(SHOTS, 'match-rc-b.png') });
+  await leaveRoom(pa);
+  await leaveRoom(pb);
+  // 选桌页记住了立直：实盘页不给快速匹配
+  await pa.goto(`${base}/games/mahjong/`);
+  await pa.waitForSelector('.home-main');
+  await pa.click('.mode.real');
+  await pa.waitForSelector('.lobby-head');
+  check(!!(await pa.$('.lobby-variants .chip.on:has-text("立直")')) && !(await pa.$('.go-row .match')), '实盘选桌页选着立直时没有"快速匹配"');
 
   if (errors.length) {
     console.log(`控制台报错 ${errors.length} 条：\n${[...new Set(errors)].join('\n')}`);

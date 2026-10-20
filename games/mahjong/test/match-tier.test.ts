@@ -4,7 +4,7 @@
  */
 import { matchConfigErrors } from 'arcade-kit/game';
 import { describe, expect, it } from 'vitest';
-import { MATCH_FUN, MATCH_TABLE, MATCH_TIERS, matchRoomOptions, matchTierOf, stakesOfTier } from '../src/game/match.ts';
+import { MATCH_FUN, MATCH_FUN_TIERS, MATCH_RC_FUN, MATCH_TABLE, MATCH_TIERS, matchRoomOptions, matchTierOf, stakesOfTier } from '../src/game/match.ts';
 import { STAKES } from '../src/game/stakes.ts';
 import { mahjongRoom } from '../src/room/rules.ts';
 
@@ -20,12 +20,20 @@ describe('快速匹配的档位', () => {
 
   it('娱乐一个档、实盘每档一个，来回换得回来；认不得的不开桌', () => {
     const real = STAKES.filter((s) => s.wallet).map((s) => s.id);
-    expect(MATCH_TIERS).toEqual([MATCH_FUN, ...real.map((t) => `real-${t}`)]);
+    expect(MATCH_TIERS).toEqual([MATCH_FUN, MATCH_RC_FUN, ...real.map((t) => `real-${t}`)]);
     for (const s of ['fun', ...real] as const) expect(stakesOfTier(matchTierOf(s))).toBe(s);
     for (const bad of ['real-', 'real-nope', 'real-fun', 'Fun', '']) {
       expect(stakesOfTier(bad)).toBeNull();
       expect(matchRoomOptions(bad)).toBeUndefined();
     }
     expect(matchRoomOptions('real-small')?.stakes).toBe('small');
+  });
+
+  it('立直只排娱乐一档：开桌是立直的默认规则（半庄）、娱乐；单独部署也开', () => {
+    expect(matchTierOf('fun', 'riichi')).toBe(MATCH_RC_FUN);
+    expect(stakesOfTier(MATCH_RC_FUN)).toBe('fun');
+    expect(matchRoomOptions(MATCH_RC_FUN)).toEqual({ variant: 'riichi', stakes: 'fun', rules: { length: 'hanchan' } });
+    expect(matchRoomOptions(MATCH_FUN)?.variant).toBe('sichuan-xuezhan');
+    expect(MATCH_FUN_TIERS).toEqual([MATCH_FUN, MATCH_RC_FUN]);
   });
 });

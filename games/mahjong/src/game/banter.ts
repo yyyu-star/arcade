@@ -7,6 +7,7 @@
 import type { FunEvent } from 'arcade-kit/fun-logic';
 import type { FanId } from '../core/variants/sichuan-xuezhan/fan.ts';
 import type { XzEvent } from '../core/variants/sichuan-xuezhan/rules.ts';
+import type { RcHighlightId } from './riichi-fun.ts';
 
 /** 牌局里刚发生的公开的事 */
 export type Moment =
@@ -43,7 +44,8 @@ export function funMoments(ms: readonly Moment[], playing: readonly boolean[], h
   return out;
 }
 
-export type HighlightId = 'multi2' | 'multi3' | 'gangkai' | 'qianggang' | 'tianhu' | 'dihu' | 'haidi' | 'longqidui' | 'qing' | 'jingou' | 'capped';
+/** 川麻的，加上立直的（game/riichi-fun.ts） */
+export type HighlightId = 'multi2' | 'multi3' | 'gangkai' | 'qianggang' | 'tianhu' | 'dihu' | 'haidi' | 'longqidui' | 'qing' | 'jingou' | 'capped' | RcHighlightId;
 
 export interface Highlight {
   id: HighlightId;
