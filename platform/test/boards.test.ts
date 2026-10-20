@@ -96,7 +96,7 @@ describe('交分', () => {
     expect(await (await submit(u, 10, 'daily-2026-10-13')).json()).toEqual({ best: 10, improved: true });
     expect(await (await submit(u, 11, 'daily-2026-10-15')).json()).toEqual({ best: 11, improved: true });
     expect(await (await submit(u, 12, 'daily-2026-10-14-v2')).json()).toEqual({ best: 12, improved: true });
-    expect(await (await submit(u, 5, TODAY, 'guandan')).json()).toEqual({ best: 5, improved: true });
+    expect(await (await submit(u, 5, `${TODAY}-ddz`, 'guandan')).json()).toEqual({ best: 5, improved: true });
     expect(await count('SELECT COUNT(*) AS n FROM boards WHERE user_id = ?1', u.user.id)).toBe(5);
   });
 

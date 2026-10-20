@@ -507,7 +507,7 @@ async function adminFlow(browser: Browser, adminPw: string): Promise<void> {
   await shot(friend.page, 'friend-home');
   // 0.25.1：大厅卡片只有一个"进入游戏"，铺满卡片正文宽；好友房在游戏里开、进（所有者 10-18），标签照旧写"好友房"
   console.log('每张能玩的卡片只有一个"进入游戏"，指向游戏首页、铺满卡片；同一行卡片的按钮一样高；没有"好友房"按钮');
-  for (const [name, path] of [['掼蛋', '/games/guandan/'], ['德州扑克', '/games/texas/'], ['雀馆', '/games/mahjong/'], ['飞驰', '/games/racing/'], ['夜巡', '/games/yexun/']] as const) {
+  for (const [name, path] of [['牌馆', '/games/guandan/'], ['德州扑克', '/games/texas/'], ['雀馆', '/games/mahjong/'], ['飞驰', '/games/racing/'], ['夜巡', '/games/yexun/']] as const) {
     const card = friend.page.locator('.card', { hasText: name });
     const links = card.getByRole('link');
     check((await links.count()) === 1, `${name}卡片上应该只有一个按钮，实际 ${await links.count()} 个`);
@@ -1096,13 +1096,13 @@ async function mobile(browser: Browser): Promise<void> {
   await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }], feed: FAKE_FEED });
   await fakeFeedFiles(page);
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
-  // 登录后的首页：掼蛋卡片只有"进入游戏"（0.25.1），至少 44 高
+  // 登录后的首页：牌馆卡片只有"进入游戏"，至少 44 高
   await page.goto(`${BASE}/`);
   const overtake = page.getByTestId('nudge-overtake');
   await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
   check((await overtake.getByRole('link', { name: '去挑战' }).getAttribute('href'))?.startsWith('/games/kaipan/') === true, '"去挑战"该进开盘');
   const strip = page.getByTestId('feed-strip');
-  await strip.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
+  await strip.getByText('小明在牌馆小档赢了 1.6 份，称号：双下王').waitFor();
   await strip.getByTestId('feed-dot').waitFor();
   check((await strip.getByRole('button').count()) === 0, '大厅小条上不放赞的按钮');
   check((await strip.getByRole('link', { name: /看全部/ }).getAttribute('href')) === '/friends', '"看全部"该进好友页');
@@ -1155,13 +1155,13 @@ async function mobile(browser: Browser): Promise<void> {
   await fakeFriends(fr.page, [{ id: 'inv-0000000000001', from: { id: 'f3', name: '阿花' }, game: 'guandan', room: '654321', until: Date.now() + 600_000 }], FAKE_FEED);
   await fr.page.getByText('23 天前来过').waitFor();
   await fr.page.getByText('昨天来过').waitFor();
-  await fr.page.getByTestId('person-小明').getByText('在掼蛋房里 · 3/4 人').waitFor();
+  await fr.page.getByTestId('person-小明').getByText('在牌馆房里 · 3/4 人').waitFor();
   check(
     (await fr.page.getByTestId('person-小明').getByTestId('join-room').getAttribute('href')) === '/games/guandan/?room=123456',
     '"加入"该指向好友的房间',
   );
   check((await fr.page.getByTestId('join-room').count()) === 1, '只有在房间里的好友才有"加入"');
-  await fr.page.getByTestId('invite-bar').getByText('叫你来掼蛋').waitFor();
+  await fr.page.getByTestId('invite-bar').getByText('叫你来牌馆').waitFor();
   await fr.page.getByTestId('invite-dot').waitFor();
   await shot(fr.page, 'mobile-friends');
   await fr.page.getByTestId('invite-bar').getByRole('button', { name: '不了' }).click();
@@ -1169,7 +1169,7 @@ async function mobile(browser: Browser): Promise<void> {
   check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
   // 0.17.0 好友动态：结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
   const feed = fr.page.getByTestId('feed');
-  await feed.getByText('小明在掼蛋小档赢了 1.6 份，称号：双下王').waitFor();
+  await feed.getByText('小明在牌馆小档赢了 1.6 份，称号：双下王').waitFor();
   await feed.getByText('阿花一副牌扔了 4 个炸弹').waitFor();
   check((await feed.getByTestId('feed-item').count()) === 2, '模板不合格的动态不该显示');
   check((await feed.getByText('<b>').count()) === 0, '模板不能当 HTML');
@@ -1553,7 +1553,7 @@ async function boardsPage(browser: Browser): Promise<void> {
   const all = {
     week: '2026-10-12',
     // 夜巡（0.22.0）一天两个每日榜（子榜，0.16.0）：今天守夜有人交了分，夜探还没人交
-    daily: { kaipan: 'daily-2026-10-15-v2', 'yexun:vigil': 'daily-2026-10-15-vigil', 'yexun:raid': null },
+    daily: { kaipan: 'daily-2026-10-15-v2', 'yexun:vigil': 'daily-2026-10-15-vigil', 'yexun:raid': null, 'guandan:ddz': null },
     boards: {
       total: board([row(0, '老王的徒弟', 48_000), row(1, '小明', 12_500), row(2, '某人', 12_500, 2, true), row(3, '输光了', -6_000, 4)], { rank: 2, value: 12_500 }),
       // 我在列表里（第 4 名，不在领奖台上）：所有者截图里"晒名次"在这种行里被挤成一字一行（0.22.1）
@@ -1631,7 +1631,7 @@ async function boardsPage(browser: Browser): Promise<void> {
     await shot(page, `boards-yexun-fixed-${screen}`);
     if (screen === 'desktop') await deskLayout(page, 'boards');
     await page.getByRole('link', { name: '本周净赢' }).click();
-    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '掼蛋' }).click();
+    await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '牌馆' }).click();
     await page.getByTestId('board-empty').waitFor();
     // 不用钱包的游戏（飞驰，0.10.25）不开"本周净赢"的标签：只会是空的
     check((await page.getByRole('group', { name: '哪个游戏' }).getByRole('button', { name: '飞驰' }).count()) === 0, '本周净赢不该有飞驰的标签');
@@ -1651,6 +1651,9 @@ async function boardsPage(browser: Browser): Promise<void> {
     await page.locator('.rank--me').getByText('撑了 600 秒').waitFor();
     await page.getByText('撑到天亮的比拼击杀').waitFor();
     check((await page.getByRole('link', { name: '夜巡每日·夜探' }).count()) === 1, '夜巡应该还有"夜探"的每日标签');
+    // 牌馆只有斗地主一个每日子榜（掼蛋没有每日）
+    check((await page.getByRole('link', { name: '牌馆每日·斗地主' }).count()) === 1, '牌馆应该有"斗地主"的每日标签');
+    check((await page.getByRole('link', { name: '牌馆每日', exact: true }).count()) === 0, '牌馆不该有不带子榜的每日标签');
     if (screen === 'desktop') await shot(page, 'boards-yexun-daily');
     await page.getByRole('link', { name: '称号收集' }).click();
     await page.getByTestId('my-rank').getByText('第 73 名').waitFor();
@@ -2116,10 +2119,10 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     check((await page.getByTestId('nudge-relief').count()) === 0, '钱包加桌上的够多，不该提醒领补给');
     // 0.10.12：最近玩过的排前面（流水里最后碰的是德州），卡片上有本周净赢，这周没玩的没有
     const order = await page.locator('.card__title').evaluateAll((els) => els.map((e) => e.firstChild?.textContent));
-    check(order.slice(0, 3).join() === '德州扑克,开盘,掼蛋', `卡片顺序不对：${order.join()}`);
+    check(order.slice(0, 3).join() === '德州扑克,开盘,牌馆', `卡片顺序不对：${order.join()}`);
     await page.getByTestId('week-kaipan').getByText('本周 +9,400').waitFor();
     await page.getByTestId('week-texas').getByText('本周 -1,200').waitFor();
-    check((await page.getByTestId('week-guandan').count()) === 0, '掼蛋这周没玩，不该有本周净赢');
+    check((await page.getByTestId('week-guandan').count()) === 0, '牌馆这周没玩，不该有本周净赢');
     // 0.9.9 封面右上角的人数：有人玩的才显示
     await page.getByTestId('playing-texas').getByText('今天 12 人玩过').waitFor();
     await page.getByTestId('playing-kaipan').getByText('今天 3 人玩过').waitFor();

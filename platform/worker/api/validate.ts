@@ -21,7 +21,7 @@ const RESERVED_USERNAMES = new Set([
  * games.ts 每登记一个游戏这里就要有一组（没有电脑就空数组），测试会检查（test/validate.test.ts）。
  */
 export const RESERVED_PERSONAS: Readonly<Record<string, readonly string[]>> = {
-  guandan: ['老张', '小美', '阿强'],
+  guandan: ['老张', '小美', '阿强', '老周', '王姐'], // 老周、王姐是斗地主的电脑
   kaipan: ['小李', '老王', '张姐', '老赵'], // 群聊里的人物
   // 前 6 个 2026-10-14 德州上线前先加上，后 4 个随德州 0.2.0 加（2026-10-15）
   texas: ['稳哥', '阿飙', '老好', '慢慢', '算盘', '江湖', '虎子', '老鹰', '叨叨', '小白'],
