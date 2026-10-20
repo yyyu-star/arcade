@@ -1,6 +1,6 @@
 /** 设置、战绩、规则、确认框：标题页和牌桌共用的弹窗。 */
 import Phaser from 'phaser';
-import { DEFAULT_OPTIONS, makeCard } from '../../core/index.ts';
+import { DEFAULT_OPTIONS, makeCard } from '../../variants/guandan/core/index.ts';
 import { app } from '../app.ts';
 import { levelName } from '../labels.ts';
 import { audio } from '../audio.ts';

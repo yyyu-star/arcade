@@ -4,9 +4,9 @@
  * 拼数据的部分是纯函数（tests/share-card.test.ts）；结算页出来时才去碰 kit 的画布和 DOM。
  */
 import type { PreparedShare, ShareCard } from 'arcade-kit/share';
-import { TITLE_INFO, type MatchLog, type Title } from '../stake/titles.ts';
+import { TITLE_INFO, type MatchLog, type Title } from '../variants/guandan/stake/titles.ts';
 import { TIER_NAME, signed } from './stake-text.ts';
-import { AWARD_NAME, type Award } from '../net/awards.ts';
+import { AWARD_NAME, type Award } from '../variants/guandan/net/awards.ts';
 
 /** 掼蛋的主题色（和封面、图标的红一样） */
 export const SHARE_ACCENT = '#b3202a';

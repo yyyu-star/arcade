@@ -5,7 +5,7 @@ import Phaser from 'phaser';
 import { mountBridge } from './debug/bridge.ts';
 import { jumpToAce, jumpToTribute } from './debug/jump.ts';
 import { parseParams } from './debug/params.ts';
-import { createGame } from './core/index.ts';
+import { createGame } from './variants/guandan/core/index.ts';
 import { anim } from './view/anim.ts';
 import { app } from './view/app.ts';
 import { audio } from './view/audio.ts';

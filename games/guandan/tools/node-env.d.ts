@@ -24,3 +24,7 @@ declare module 'node:os' {
 declare module 'node:fs' {
   export function mkdirSync(path: string, opts?: { recursive?: boolean }): void;
 }
+// 金样（tests/golden/scenarios.ts）算哈希用
+declare module 'node:crypto' {
+  export function createHash(alg: 'sha256'): { update(s: string): unknown; digest(enc: 'hex'): string };
+}

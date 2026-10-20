@@ -1,6 +1,6 @@
 /** 桌面中央：本轮各家出的牌（或"不要"），带牌型名。新一轮开始时清桌。 */
 import Phaser from 'phaser';
-import { isBomb, type Play } from '../../core/index.ts';
+import { isBomb, type Play } from '../../variants/guandan/core/index.ts';
 import { dur, tweenP } from '../anim.ts';
 import { playLabel } from '../labels.ts';
 import { COLOR, TYPE } from '../theme.ts';

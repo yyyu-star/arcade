@@ -1,9 +1,10 @@
 /**
- * 选桌页：挑赛道（带小地图）、圈数、几辆车、电脑强弱；单机开跑、开好友房、输房间号进房、接着上一场。
+ * 选桌页：挑赛道（带小地图）、圈数、几辆车、电脑强弱；单机开跑、开好友房、输房间号进房、接着上一场；新手教程（第一次来的人旁边冒个气泡）。
  */
 import { LEVELS, type Level, type Opts } from '../core/types.ts';
 import { FIXED } from '../track/fixed.ts';
 import { MAP_DEFS, mapArt } from './mapart.ts';
+import { coachFaceSvg } from './coachart.ts';
 import { button, el } from './dom.ts';
 import { GAME_NAME, LEVEL_NAME } from './text.ts';
 
@@ -14,6 +15,9 @@ export interface LobbyHooks {
   friends: boolean;
   /** 独立部署（没有平台账号）时的昵称输入；平台模式是 null */
   nickname: { value: string; onChange(name: string): void } | null;
+  /** 没来过新手教程（没有 racing.tutorial）：教程按钮旁冒"第一次来？" */
+  firstTime: boolean;
+  onTutorial(): void;
   onSolo(o: Opts): void;
   onResume(): void;
   onRoom(o: Opts): void;
@@ -43,6 +47,14 @@ export function renderLobby(parent: HTMLElement, h: LobbyHooks): void {
   el('h1', '', head, GAME_NAME);
   el('p', 'tag', head, '换挡出牌、热量、过弯、吸尾流的回合制赛车');
   button('pill', head, '规则', h.onRules);
+  // 新手教程：一直在，随时能重玩；第一次来的人旁边冒一个气泡（点气泡也进教程）
+  const tut = el('div', 'tut-entry', head);
+  const tb = button('tut-btn', tut, '新手教程', h.onTutorial);
+  // 阿驰的小头像（得意脸）：先在选桌页混个脸熟
+  const mini = el('span', 'coach-mini');
+  mini.innerHTML = coachFaceSvg('grin');
+  tb.prepend(mini);
+  if (h.firstTime) button('tut-hint', tut, '第一次来？先跟阿驰跑一圈 →', h.onTutorial);
 
   const tracks = el('div', 'tracks', wrap);
   const paint = (): void => {

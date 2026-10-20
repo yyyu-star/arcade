@@ -21,7 +21,7 @@ import {
   type Card,
   type Play,
   type PlayerView,
-} from '../../src/core/index.ts';
+} from '../../src/variants/guandan/core/index.ts';
 import { groupToPlay, isBombType, planCost, planHand, type Group } from './plan.ts';
 import { randomAction } from './random.ts';
 

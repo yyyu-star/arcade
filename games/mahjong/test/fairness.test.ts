@@ -17,6 +17,8 @@ import { wallLeft } from '../src/core/table/index.ts';
 import { countsOf, kindOf, suitOf, type Suit, type Tile } from '../src/core/tiles/index.ts';
 import { hasQue, SHAPE, sichuanXuezhan as XZ, view, type XzAction, type XzPlayer, type XzState, type XzView } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import type { StakesId } from '../src/game/stakes.ts';
+import * as RCm from '../src/core/variants/riichi/index.ts';
+import { seatPlan, VENUES } from '../src/ai/venues.ts';
 import { mahjongRoom, type RoomState } from '../src/room/rules.ts';
 import { newSolo } from '../src/solo.ts';
 
@@ -135,7 +137,7 @@ function peekHands(s: XzState, seat: number): XzAction | null {
   const v = view(s, seat);
   if (!v.prompt) return null;
   v.seats.forEach((x, i) => {
-    if (i !== seat && !s.players[i]!.won) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false }))];
+    if (i !== seat && !s.players[i]!.won) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false, n: 0 }))];
   });
   return decide(v);
 }
@@ -335,5 +337,180 @@ describe('电脑不看牌（反事实）', () => {
     expect(tally.cheat.leaky).toBeGreaterThan(tally.worlds / 10);
     // 多出来的那个字段本身就让视图变了：视图字段白名单（match.test.ts）也会抓到它
     expect(tally.leakyViewDiff).toBeGreaterThan(tally.worlds / 2);
+  });
+});
+
+
+// ============================================================================
+// 立直麻将的电脑（docs/riichi.md 第 3 节）：同样的反事实做法。
+// 立直还没登记进玩法表，所以不走单机和房间，直接用玩法的 begin / auto / timeout 打整场；四个座位都是电脑，每个决策点都比。
+// 视图里别人的副露是公开的（暗杠的牌种也摆在桌上），所以平行世界只重洗：别家手牌、牌墙、王牌区没翻开的部分（含里宝牌、岭上牌）。
+// ============================================================================
+
+const RCAI = AIS[RCm.riichi.id]!;
+
+/** 这个座位（null 是旁观）看不见的牌重洗一遍；看得见的（自己手牌、所有河、所有副露、翻开的宝牌指示牌、声明窗口里那张）不动 */
+function perturbRc(s0: RCm.RcState, me: number | null, r: RandomStream): { s: RCm.RcState; changed: boolean } {
+  const s = structuredClone(s0);
+  const known = new Set<Tile>();
+  if (me !== null) s.players[me]!.hand.forEach((t) => known.add(t));
+  for (const p of s.players) {
+    p.river.forEach((x) => known.add(x.tile));
+    for (const m of p.melds) m.tiles.forEach((t) => known.add(t));
+  }
+  s.dead.slice(0, s.doraOpen).forEach((t) => known.add(t));
+  if (s.claim) known.add(s.claim.tile);
+  const free = Array.from({ length: 136 }, (_, t) => t).filter((t) => !known.has(t));
+  const to = free.slice();
+  for (let i = to.length - 1; i > 0; i--) {
+    const j = r.below(i + 1);
+    [to[i], to[j]] = [to[j]!, to[i]!];
+  }
+  const pi = new Map<Tile, Tile>(free.map((t, i) => [t, to[i]!]));
+  const f = (t: Tile): Tile => pi.get(t) ?? t;
+  const before = s.players.map((p) => p.hand.join(','));
+  s.players.forEach((p, i) => {
+    if (i !== me) p.hand = p.hand.map(f).sort((a, b) => a - b);
+  });
+  s.wall.tiles = s.wall.tiles.map(f);
+  s.dead = s.dead.map((t, i) => (i < s.doraOpen ? t : f(t)));
+  if (s.drawn !== null && s.turn !== me) s.drawn = f(s.drawn);
+  s.events = s.events.map((e) => (e.e === 'draw' && e.seat !== me ? { ...e, tile: f(e.tile) } : e));
+  s.key = Array.from({ length: 8 }, () => r.u32());
+  if (s.tunes) s.tunes = s.tunes.map((t, i) => (i === me ? t : { ...t, mood: r.u32() | 1 }));
+  const changed = s.players.some((p, i) => i !== me && p.hand.join(',') !== before[i]) || wallLeft(s.wall) > 0;
+  return { s, changed };
+}
+
+/** 故意偷看的电脑（阳性对照）：别家手牌当成河里的牌、牌墙下一张让我和了就打成那样、视图里多一个牌墙每种还剩几张 */
+function rcPeekHands(s: RCm.RcState, seat: number): RCm.RcAction | null {
+  const v = RCm.view(s, seat);
+  if (!v.prompt) return null;
+  v.seats.forEach((x, i) => {
+    if (i !== seat) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false, n: 0 }))];
+  });
+  return AIS.riichi!.decide(v);
+}
+function rcPeekWall(s: RCm.RcState, seat: number): RCm.RcAction | null {
+  const v = RCm.view(s, seat);
+  if (!v.prompt) return null;
+  if (v.prompt.discard && wallLeft(s.wall) > 0) {
+    const next = s.wall.tiles[s.wall.head]!;
+    const p = s.players[seat]!;
+    for (const t of v.prompt.discard) if (RCm.isAgari(countsOf([...p.hand.filter((x) => x !== t), next]), p.melds.length)) return { t: 'discard', tile: t };
+  }
+  return AIS.riichi!.decide(v);
+}
+function rcPeekLeaky(s: RCm.RcState, seat: number): RCm.RcAction | null {
+  const c = new Array<number>(34).fill(0);
+  for (let i = s.wall.head; i <= s.wall.tail; i++) c[kindOf(s.wall.tiles[i]!)]!++;
+  const v = { ...RCm.view(s, seat), wallKinds: c };
+  if (!v.prompt) return null;
+  if (!v.prompt.discard?.length) return AIS.riichi!.decide(v);
+  let best = v.prompt.discard[0]!;
+  for (const t of v.prompt.discard) if (c[kindOf(t)]! < c[kindOf(best)]!) best = t;
+  return { t: 'discard', tile: best };
+}
+const RC_CHEATS = { hands: rcPeekHands, wall: rcPeekWall, leaky: rcPeekLeaky } as const;
+
+describe('立直电脑不看牌（反事实）', () => {
+  const rc = {
+    points: 0,
+    worlds: 0,
+    unchanged: 0,
+    viewDiff: 0,
+    autoDiff: 0,
+    timeoutDiff: 0,
+    watch: { worlds: 0, diff: 0, leak: 0 },
+    cheat: { hands: 0, wall: 0, leaky: 0 } as Record<keyof typeof RC_CHEATS, number>,
+    by: new Map<string, number>(),
+  };
+  const bumpRc = (k: string): void => void rc.by.set(k, (rc.by.get(k) ?? 0) + 1);
+
+  function checkRc(s: RCm.RcState, seat: number, r: RandomStream): void {
+    const v0 = J(RCm.view(s, seat));
+    const a0 = J(RCm.riichi.auto(s, seat, RCAI));
+    const t0 = J(RCm.riichi.timeout(s, seat, RCAI));
+    const w0 = J(RCm.view(s, null));
+    // 旁观的对照：把座位 0 的真手牌塞进视图，平行世界里它得跟着变
+    const leak = (st: RCm.RcState): string => J({ ...RCm.view(st, null), hand0: st.players[0]!.hand });
+    const l0 = leak(s);
+    const cheat0 = Object.fromEntries(Object.entries(RC_CHEATS).map(([k, f]) => [k, J(f(s, seat))]));
+    rc.points++;
+    bumpRc(`${s.phase}${s.phase === 'claim' && !s.claim!.opts[seat]!.length ? '(没得选)' : ''}`);
+    bumpRc(`action:${(JSON.parse(a0) as RCm.RcAction).t}${(JSON.parse(a0) as { c?: string }).c ? ':' + (JSON.parse(a0) as { c: string }).c : ''}`);
+    if ((JSON.parse(a0) as { riichi?: true }).riichi) bumpRc('action:riichi');
+    if (s.players.some((p) => p.riichi) && s.phase === 'turn') bumpRc('有人立直时出牌');
+    for (let w = 0; w < WORLDS; w++) {
+      const { s: s1, changed } = perturbRc(s, seat, r);
+      rc.worlds++;
+      if (!changed) rc.unchanged++;
+      if (J(RCm.view(s1, seat)) !== v0) rc.viewDiff++;
+      if (J(RCm.riichi.auto(s1, seat, RCAI)) !== a0) rc.autoDiff++;
+      if (J(RCm.riichi.timeout(s1, seat, RCAI)) !== t0) rc.timeoutDiff++;
+      for (const [k, f] of Object.entries(RC_CHEATS)) if (J(f(s1, seat)) !== cheat0[k]) rc.cheat[k as keyof typeof RC_CHEATS]++;
+      // 旁观：所有人的暗牌都看不见，重洗要用 me = null
+      const { s: s2, changed: c2 } = perturbRc(s, null, r);
+      if (c2) {
+        rc.watch.worlds++;
+        if (J(RCm.view(s2, null)) !== w0) rc.watch.diff++;
+        if (leak(s2) !== l0) rc.watch.leak++;
+      }
+    }
+  }
+
+  beforeAll(() => {
+    // 各种场地的性格和手软手紧，半庄、东风战轮着打
+    const venues = Object.keys(VENUES);
+    for (let n = 0; n < 8; n++) {
+      const plan = seatPlan(stream(SEED, 'rc-persona', n), venues[(n * 3) % venues.length]!, 4);
+      let s = RCm.riichi.begin(
+        [n, 0x72696368, 2026, 10, 20, 1, 2, 3],
+        { length: n % 2 ? 'hanchan' : 'tonpuu' },
+        ['ai', 'ai', 'ai', 'ai'],
+        { share: 2_000, base: 80, personas: plan.personas, tunes: plan.tunes },
+      ) as RCm.RcState;
+      const r = stream(SEED, 'rc-perturb', n);
+      for (let k = 0; k < 50_000 && !RCm.riichi.over(s); k++) {
+        const act = RCm.riichi.actors(s);
+        if (!act || !act.seats.length) {
+          s = RCm.riichi.resume(s);
+          continue;
+        }
+        const seat = act.seats[0]!;
+        // 声明窗口里没得选的座位电脑直接过，不算决策点
+        if (RCm.view(s, seat).prompt) checkRc(s, seat, r);
+        s = RCm.riichi.apply(s, seat, RCm.riichi.auto(s, seat, RCAI)) as RCm.RcState;
+      }
+      expect(RCm.riichi.over(s)).toBe(true);
+    }
+  }, 180_000);
+  afterAll(() => {
+    const { by, ...rest } = rc;
+    console.info('立直电脑不看牌：', JSON.stringify({ ...rest, by: Object.fromEntries([...by].sort()) }));
+  });
+
+  test('覆盖到：摸打、声明窗口、立直、鸣牌、和牌，有人立直时的出牌', () => {
+    const by = Object.fromEntries(rc.by);
+    for (const k of ['turn', 'claim', 'action:discard', 'action:riichi', 'action:claim:pon', 'action:claim:chi', 'action:claim:ron', 'action:tsumo', '有人立直时出牌'])
+      expect(by[k] ?? 0, `${k}：${JSON.stringify(by)}`).toBeGreaterThan(0);
+    expect(rc.unchanged / rc.worlds).toBeLessThan(0.02);
+  });
+
+  test('看不见的牌、密钥、别家的状态怎么换，视图和决定都 0 不一致（出牌和超时代出）', () => {
+    expect(rc.points).toBeGreaterThan(1_000);
+    expect({ view: rc.viewDiff, auto: rc.autoDiff, timeout: rc.timeoutDiff }).toEqual({ view: 0, auto: 0, timeout: 0 });
+  });
+
+  test('旁观（座位 null）的视图里没有任何人的暗牌；漏一家手牌的对照被抓出来', () => {
+    expect(rc.watch.worlds).toBeGreaterThan(500);
+    expect(rc.watch.diff).toBe(0);
+    expect(rc.watch.leak).toBeGreaterThan(rc.watch.worlds / 10);
+  });
+
+  test('阳性对照：故意偷看的电脑在同样的点上都被抓出来', () => {
+    expect(rc.cheat.hands).toBeGreaterThan(rc.worlds / 10);
+    expect(rc.cheat.wall).toBeGreaterThan(0);
+    expect(rc.cheat.leaky).toBeGreaterThan(rc.worlds / 10);
   });
 });

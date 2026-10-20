@@ -121,6 +121,9 @@ export function pickPhoneLayout(o: { w: number; h: number; search: string; coars
   const forced = new URLSearchParams(o.search).get('layout');
   if (forced === 'phone') return true;
   if (forced === 'desktop') return false;
+  // 0.19.5 触屏平板：电脑布局（1280×720）横过来缩小以后，11 号字到不了 12 像素（1024×768 只有 8.8、1180×820 只有 10）时也用手机布局，
+  // 字和按钮按屏幕放大。不看方向：平板常常竖着打开再转过来，布局开局时就定了
+  if (o.coarse && Math.min(Math.max(o.w, o.h) / 1280, Math.min(o.w, o.h) / 720) * 11 < 12) return true;
   if (Math.min(o.w, o.h) > 500) return false;
   return o.w > o.h || o.coarse;
 }
@@ -154,6 +157,17 @@ export function phoneWorld(w: number, h: number): { w: number; h: number } {
 /** 实际的世界尺寸：电脑 1280×720，手机横屏见 phoneWorld。适配过手机的界面按它布局。 */
 export const VIEW =
   PHONE && typeof window !== 'undefined' ? phoneWorld(window.innerWidth || 844, window.innerHeight || 390) : { w: GAME_WIDTH, h: GAME_HEIGHT };
+
+/**
+ * 0.19.5 手机世界横过来铺到屏幕上是几倍（SE 0.93、844×390 0.97、平板 1.4 以上）。
+ * 比 SE 还矮的屏（640×360、780×360 是 0.89，老 SE 横屏 568×320 是 0.79）按它抬最小字号和点击区，换算到屏幕上字 ≥ 12、点击 ≥ 44 像素。
+ */
+export const PHONE_SCALE = ((): number => {
+  if (!PHONE || typeof window === 'undefined') return 1;
+  const w = window.innerWidth || 844;
+  const h = window.innerHeight || 390;
+  return Math.min(Math.max(w, h) / VIEW.w, Math.min(w, h) / VIEW.h);
+})();
 
 /**
  * 0.5.9 省内存的设备：iOS（含报成 Mac 的 iPad）和触屏手机平板。iOS Safari 的网页进程内存超了会直接"网页已崩溃"，

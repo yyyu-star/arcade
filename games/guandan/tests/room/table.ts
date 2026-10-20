@@ -7,7 +7,7 @@
  * 这样闹钟次数和真打时差不多（每一手 30 秒、掉线宽限 60 秒都按房间自己的规矩到期）。
  */
 import { expect } from 'vitest';
-import { guandanRoom as R, type NetAction, type NetState } from '../../src/net/rules.ts';
+import { guandanRoom as R, type NetAction, type NetState } from '../../src/variants/guandan/net/rules.ts';
 import { Conn, type Truth, advance, botAction, checkDown, fireDueAlarms, handTruth, join, openRoom, truth } from './helpers.ts';
 
 /** 字符串 → [0,1) 的确定性随机（决定哪一手故意不出） */

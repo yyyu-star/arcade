@@ -63,6 +63,8 @@ export interface MapArt {
   labels(o: { k: number; rot: boolean; next: number }): string;
   /** 这个弯的限速牌在哪（不缩放时） */
   sign(at: number): Pt;
+  /** 这个弯的制动牌 k（3、2、1）在哪（新手教程讲制动牌时镜头要框住它们） */
+  brake(at: number, k: number): Pt;
 }
 
 
@@ -339,6 +341,14 @@ function build(track: Track): MapArt {
     return `${s}</g>`;
   };
 
+  /** 第 i 个弯的制动牌 k（弯道线前第 k 格，立在弯外那一侧） */
+  const brakeAt = (i: number, k: number): Pt => {
+    const c = track.corners[i]!;
+    const side = bends[i]!.side;
+    const cell = geo.cells[(c.at - k + N) % N]!;
+    return { x: cell.c.x + Math.sin(cell.angle) * side * (W / 2 + 12), y: cell.c.y - Math.cos(cell.angle) * side * (W / 2 + 12) };
+  };
+
   const labels = (o: { k: number; rot: boolean; next: number }): string => {
     const detail = o.k >= LOD;
     const turn = o.rot ? ' rotate(-90)' : '';
@@ -353,12 +363,9 @@ function build(track: Track): MapArt {
       });
       // 制动牌：弯道线前三格，写着停在这格再跑几格就过弯道线
       track.corners.forEach((c, i) => {
-        const side = bends[i]!.side;
         for (let k = 1; k <= 3; k++) {
-          const cell = geo.cells[(c.at - k + N) % N]!;
-          const x = cell.c.x + Math.sin(cell.angle) * side * (W / 2 + 12);
-          const y = cell.c.y - Math.cos(cell.angle) * side * (W / 2 + 12);
-          s += `<g transform="translate(${f1(x)} ${f1(y)})${turn}"><rect x="-6.5" y="-6" width="13" height="12" rx="2" fill="${C.paper}" stroke="${C.ink}" stroke-width="${LW.minor}"/><text y="3.8" font-family="${FONT}" font-size="10" font-weight="900" text-anchor="middle" fill="${C.ink}">${k}</text></g>`;
+          const { x, y } = brakeAt(i, k);
+          s += `<g class="brake" transform="translate(${f1(x)} ${f1(y)})${turn}" data-at="${c.at}" data-k="${k}"><rect x="-6.5" y="-6" width="13" height="12" rx="2" fill="${C.paper}" stroke="${C.ink}" stroke-width="${LW.minor}"/><text y="3.8" font-family="${FONT}" font-size="10" font-weight="900" text-anchor="middle" fill="${C.ink}">${k}</text></g>`;
         }
       });
     }
@@ -374,7 +381,7 @@ function build(track: Track): MapArt {
       const ny = -Math.cos(e.angle) * side;
       const p0 = { x: e.c.x + nx * (W / 2 + 1), y: e.c.y + ny * (W / 2 + 1) };
       s += `<path d="M${f1(p0.x)} ${f1(p0.y)}L${f1(p.x)} ${f1(p.y)}" stroke="${C.ink}" stroke-width="${f1(4 * Math.min(ds, 2))}" stroke-linecap="round"/><path d="M${f1(p0.x)} ${f1(p0.y)}L${f1(p.x)} ${f1(p.y)}" stroke="#9aa0a6" stroke-width="${f1(1.8 * Math.min(ds, 2))}" stroke-linecap="round"/>`;
-      s += `<g class="limit" transform="translate(${f1(p.x)} ${f1(p.y)})${turn} scale(${f1(ds)})">`;
+      s += `<g class="limit" transform="translate(${f1(p.x)} ${f1(p.y)})${turn} scale(${f1(ds)})" data-at="${sh.at}">`;
       if (hot) s += `<circle r="${SIGN_R + 3.5}" fill="${C.gold}" stroke="${C.ink}" stroke-width="${LW.minor}"/>`;
       s += `<circle r="${SIGN_R}" fill="#fff" stroke="${C.ink}" stroke-width="${LW.minor}"/><circle r="${SIGN_R - 2.6}" fill="none" stroke="${C.red}" stroke-width="3.4"/><text y="5" font-family="${FONT}" font-size="14" font-weight="900" text-anchor="middle" fill="${C.ink}">${sh.limit}</text></g>`;
     });
@@ -395,7 +402,15 @@ function build(track: Track): MapArt {
     return s;
   };
 
-  return { geo, board, shields, draw, labels, sign: (at: number) => signs[shields.findIndex((sh) => sh.at === at)]! };
+  return {
+    geo,
+    board,
+    shields,
+    draw,
+    labels,
+    sign: (at: number) => signs[shields.findIndex((sh) => sh.at === at)]!,
+    brake: (at: number, k: number) => brakeAt(shields.findIndex((sh) => sh.at === at), k),
+  };
 }
 
 /**

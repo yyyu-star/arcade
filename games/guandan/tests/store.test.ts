@@ -3,7 +3,7 @@
  * store.ts 的设置是模块级缓存，每个用例重新导入一份。不起浏览器：假的 localStorage。
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createGame } from '../src/core/index.ts';
+import { createGame } from '../src/variants/guandan/core/index.ts';
 
 const mem = new Map<string, string>();
 vi.stubGlobal('localStorage', {

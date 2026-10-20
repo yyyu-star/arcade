@@ -9,6 +9,7 @@
 | 棋子 | `src/view/piece.ts` 画的塑料小车，按座位配色，车顶写座位号 |
 | 卡面（速度牌、改装牌、热量、手抖、牌背）和火焰图标 | `src/view/cards.ts` 运行时画的 SVG：速度表、线描的引擎、火焰、轮胎拖痕都是手写的路径，卡纸用上面的纹理；数字用系统字体 |
 | 玩家板（挡位盘、引擎热量、牌堆） | `src/view/dash.ts` 画的 SVG 和 CSS |
+| 新手教程的教练阿驰的头像（平常、大笑、哎哟三个表情） | `src/view/coachart.ts` 运行时画的 SVG：红色半盔、铜框风镜、八字胡都是手写的路径，色板和线宽取自 `mapkit.ts`；设定图 `shots/coach-sheet.png` |
 | 封面 `public/cover.svg` | 手写的 SVG |
 | 音效 | WebAudio 现合成（`src/view/sound.ts`） |
 | 表情包、扔的道具 | `arcade-kit/fun`（kit 自己程序画的，见 kit 的说明） |

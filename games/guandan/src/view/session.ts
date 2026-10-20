@@ -2,9 +2,9 @@
  * 一局游戏的会话：持有 GameState，所有推进都走核心的 dispatch，并负责存档和战绩。
  * 画面层（TableScene）只通过它推进状态，拿到事件后自己播放动画。
  */
-import { decide, styleOf, type PersonaId } from '../ai/index.ts';
-import { botFor, type SoloLevel, type Venue } from '../ai/venue.ts';
-import { SHORT_END_LEVEL, createGame, dispatch, eventsFor, hashSeed, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../core/index.ts';
+import { decide, styleOf, type PersonaId } from '../variants/guandan/ai/index.ts';
+import { botFor, type SoloLevel, type Venue } from '../variants/guandan/ai/venue.ts';
+import { SHORT_END_LEVEL, createGame, dispatch, eventsFor, hashSeed, previewNext, viewFor, type Action, type GameEvent, type GameState, type NextPreview, type Options, type PlayerView } from '../variants/guandan/core/index.ts';
 import { clearSave, getSettings, loadSave, recordDeal, recordGame, writeSave } from './store.ts';
 
 export const ME = 0;

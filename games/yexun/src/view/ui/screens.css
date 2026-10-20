@@ -231,7 +231,7 @@
 .yx-rpasses { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .yx-rpass { position: relative; width: 32px; height: 32px; }
 .yx-rpass img { width: 100%; height: 100%; }
-.yx-rpass em { position: absolute; right: -5px; bottom: -5px; font-style: normal; font-size: 10px; line-height: 13px; min-width: 13px; text-align: center; border-radius: 5px; background: var(--gold); border: 1.5px solid var(--ink); }
+.yx-rpass em { position: absolute; right: -5px; bottom: -5px; font-style: normal; font-size: 12px; line-height: 13px; min-width: 14px; text-align: center; border-radius: 5px; background: var(--gold); border: 1.5px solid var(--ink); }
 .yx-rcoins { position: relative; display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 22px; }
 .yx-rcoins img { width: 28px; height: 28px; }
 .yx-gain, .yx-tot { display: inline-flex; align-items: center; gap: 6px; }
@@ -277,8 +277,8 @@
 }
 .yx-item img { width: 34px; height: 34px; }
 .yx-item span { font-size: 13px; line-height: 1.15; text-align: center; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.yx-item em { font-style: normal; font-size: 10px; color: #8a5a10; }
-.yx-item i { position: absolute; right: -6px; top: -7px; padding: 0 4px; border: 2px solid var(--ink); border-radius: 7px; background: var(--red); color: #fbf5e4; font-style: normal; font-size: 10px; line-height: 13px; }
+.yx-item em { font-style: normal; font-size: 12px; color: #8a5a10; }
+.yx-item i { position: absolute; right: -6px; top: -7px; padding: 0 4px; border: 2px solid var(--ink); border-radius: 7px; background: var(--red); color: #fbf5e4; font-style: normal; font-size: 12px; line-height: 13px; }
 .yx-item.t-liang { --tc: #5fa86a; }
 .yx-item.t-zhen { --tc: #4a7fd0; }
 .yx-item.t-jue { --tc: #e0a030; background: #fff3c4; box-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(224, 160, 48, 0.7); }
@@ -315,7 +315,7 @@
   .yx-ritems { gap: 4px; }
   .yx-item { width: 50px; padding: 2px 2px 3px; }
   .yx-item img { width: 26px; height: 26px; }
-  .yx-item span { font-size: 9px; }
+  .yx-item span { font-size: 12px; }
   .yx-best { min-height: 0; font-size: 13px; }
   .yx-panel { padding: 8px 12px 10px; gap: 6px; }
   .yx-panel-head .yx-brush { font-size: 30px; }
@@ -369,6 +369,15 @@
     padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-top: calc(max(10px, env(safe-area-inset-top, 0px)) + 58px);
   }
   .yx-menu .yx-more { flex-direction: row; gap: 4px; top: max(10px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 100px); right: auto; }
+}
+/* 手机竖屏（≤ 460 宽）：0.4.1 加了"玩法"以后五个按钮一行放不下，齿轮被挤出屏幕（10-20 多尺寸矩阵 320–375 宽），390–430 宽"玩法"压在齿轮上；
+   五个按钮挪到大厅和齿轮下面单独一行，内容整体再往下让一行 */
+@media (orientation: portrait) and (max-width: 460px) {
+  /* 只管主页：选模式屏顶上只有"返回"一个，放得下 */
+  .yx-menu:not(.yx-selscreen) { padding-top: calc(max(10px, env(safe-area-inset-top, 0px)) + 108px); }
+  .yx-menu:not(.yx-selscreen) .yx-more { left: max(10px, env(safe-area-inset-left, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 52px); }
+}
+@media (orientation: portrait) and (max-width: 700px) {
   .yx-menu .yx-more .yx-btn { padding: 0 6px; font-size: 14px; }
   .yx-title b { font-size: 64px; letter-spacing: 8px; -webkit-text-stroke-width: 6px; }
   .yx-title span { font-size: 13px; letter-spacing: 2px; }
@@ -543,6 +552,18 @@
   /* 四个档位挤在右栏一行（豪华档单独掉到第二行太占高度） */
   .yx-aside .yx-tiers .yx-chip { flex: 1 1 60px; min-height: 46px; }
   .yx-sel > .yx-modesw .yx-chip { min-height: 44px; }
+}
+/* 小手机横屏（≤ 700 宽）选模式：左栏只剩一百多像素，"守夜 / 夜探"并排时字竖着被切；顶上一排压到"大厅"（10-20 矩阵 568×320）。
+   左边让出"大厅"的宽度，两个模式上下排 */
+@media (max-height: 500px) and (max-width: 700px) {
+  .yx-menu.yx-selscreen { padding-left: max(108px, env(safe-area-inset-left, 0px)); }
+  .yx-selscreen .yx-kinds { grid-template-columns: minmax(0, 1fr); }
+}
+/* 小手机横屏（≤ 700 宽）选模式：左栏只剩一百多像素，"守夜 / 夜探"并排时字竖着被切；顶上一排压到"大厅"（10-20 矩阵 568×320）。
+   左边让出"大厅"的宽度，两个模式上下排 */
+@media (max-height: 500px) and (max-width: 700px) {
+  .yx-menu.yx-selscreen { padding-left: max(108px, env(safe-area-inset-left, 0px)); }
+  .yx-selscreen .yx-kinds { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ───────────── 卡通第二版：质感（所有者 10-19：第一版对齐后画面平、像贴纸） ─────────────

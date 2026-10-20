@@ -3,7 +3,7 @@
  * 每步一屏，图多字少。
  */
 import Phaser from 'phaser';
-import { makeCard } from '../core/index.ts';
+import { makeCard } from '../variants/guandan/core/index.ts';
 import { levelName } from './labels.ts';
 import { setTutorialDone } from './store.ts';
 import { COLOR, TYPE } from './theme.ts';

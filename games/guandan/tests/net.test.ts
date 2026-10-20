@@ -6,9 +6,9 @@
 import { snapshotBytes } from 'arcade-kit/game';
 import { describe, expect, it } from 'vitest';
 import { shuffle, stream } from 'arcade-kit/rng';
-import { HAND_SIZE, RULES_VERSION, canPass, fullDeck, legalPlays, sortHand, teamOf, type Card, type PlayerView } from '../src/core/index.ts';
-import { testKey, AGAIN_MS, ERROR_TEXT, IDLE_AFTER, IDLE_MS, READY_MS, TURN_MS, guandanRoom as R, parseNetAction, type NetAction, type NetState, type NetView } from '../src/net/rules.ts';
-import { rotateNetView, rotateView, rotation, toReal } from '../src/net/rotate.ts';
+import { HAND_SIZE, RULES_VERSION, canPass, fullDeck, legalPlays, sortHand, teamOf, type Card, type PlayerView } from '../src/variants/guandan/core/index.ts';
+import { testKey, AGAIN_MS, ERROR_TEXT, IDLE_AFTER, IDLE_MS, READY_MS, TURN_MS, guandanRoom as R, parseNetAction, type NetAction, type NetState, type NetView } from '../src/variants/guandan/net/rules.ts';
+import { rotateNetView, rotateView, rotation, toReal } from '../src/variants/guandan/net/rotate.ts';
 
 const CODE_RE = /^[a-z][a-z0-9_]{0,31}$/;
 
