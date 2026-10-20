@@ -60,6 +60,13 @@ function style(): void {
 #online .ol-tip { color: var(--gd-muted); font-size: 14px; }
 #online .ol-wait { font: bold 20px/1.4 var(--gd-font); text-align: center; }
 #online .ol-stake { padding: var(--gd-s1) var(--gd-s3); border-radius: var(--gd-r-sm); background: #f6dcc8; color: var(--gd-red-dark); font-weight: bold; }
+/* 还没填东西的占位（回到房间、实盘档位）不占一格间距；手机横屏矮，收紧间距，"关掉"不用滚就够得着（0.27.4 多尺寸） */
+#online .ol-card > div:empty:not(.ol-note) { display: none; }
+@media (max-height: 430px) {
+  #online .ol-card { gap: var(--gd-s1); padding: var(--gd-s2) var(--gd-s4); max-height: calc(100% - var(--gd-s2)); }
+  #online h2 { margin: 0; padding: 2px var(--gd-s6); font-size: 18px; }
+  #online .ol-note { min-height: 0; }
+}
 #net-banner { position: fixed; z-index: 8400; left: 50%; top: max(var(--gd-s2), env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: none;
   padding: var(--gd-s2) var(--gd-s4); border-radius: var(--gd-r-pill); background: rgba(43, 22, 10, 0.92); border: 2px solid var(--gd-gold); color: #ffe9c2;
   font: bold 15px/1.3 var(--gd-font); pointer-events: none; }

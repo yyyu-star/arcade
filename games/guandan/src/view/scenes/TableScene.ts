@@ -459,7 +459,7 @@ export class TableScene extends Phaser.Scene {
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
     this.lobbyBtn = new Button(this, 70, 28, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
     // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）
-    const deep = Math.max(54, 2 * (minHit() - 28));
+    const deep = Math.max(54, minHit(), 2 * (minHit() - 28));
     this.lobbyBtn.setHit(112, deep);
     c.add(this.lobbyBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：紧挨"大厅"，中途进来的人接管电脑的座位

@@ -8,7 +8,7 @@ import { SOLO_LEVELS, type SoloLevel } from '../../ai/venue.ts';
 import { ROOM_DEALS, SOLO_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../../stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_TEXT, TIER_CARD, TIER_NAME, fmtChips, stakeError, stars } from '../stake-text.ts';
 import { buyinStake, fetchWallet, loadStake, refundStray, strayStake, type StakeSession, type WalletView } from '../stake.ts';
-import { COLOR, TYPE, phoneType } from '../theme.ts';
+import { COLOR, TYPE, minHit, phoneType } from '../theme.ts';
 import { Button, fitWidth, modal, segmented, text, type Modal } from './kit.ts';
 import type { GameLength } from '../store.ts';
 
@@ -44,7 +44,7 @@ export function openLevelPicker(
   const seg = segmented(
     scene,
     -165,
-    -145,
+    -150,
     lens.map((l) => ({ label: `${LENGTH_CARD[l].name} · ${LENGTH_CARD[l].goal}`, value: l })),
     len,
     (v) => {
@@ -52,6 +52,8 @@ export function openLevelPicker(
       SOLO_LEVELS.forEach((lv, i) => times[i]!.setText(timeOf(lv)));
     },
     330,
+    // 手机上 60 只合 27–36 CSS 像素：拉到 minHit()，最多 88（下沿 -106，不压到第一行"开始"的点按区）
+    Math.max(60, Math.min(88, minHit())),
   );
   b.add(seg);
   m.body.setData('seg:length', seg);
@@ -68,7 +70,8 @@ export function openLevelPicker(
     times.push(t);
     b.add(t);
     b.add(text(scene, -30, y, c.who, { size: TYPE.label, color: COLOR.ink, ox: 0, wrap: 250, align: 'left' }));
-    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play'));
+    // 三行间距 92：点按区高最多 90，上下两行不互相压着
+    reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play')).setHit(Math.max(130, minHit()), Math.min(90, minHit()));
   });
   b.add(text(scene, onMatch ? -120 : 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
   if (onMatch) reg(m, 'match', new Button(scene, 300, 210, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite'));
