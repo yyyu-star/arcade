@@ -312,7 +312,7 @@ let solo: Solo | null = null;
 type AnyTable = TableUi<any, any>;
 let table: AnyTable | null = null;
 
-/** 规则小册子讲哪个玩法：好友房一直是川麻，单机里看正在打的，别处看选着的 */
+/** 规则小册子讲哪个玩法：好友房看这一桌的，单机里看正在打的，别处看选着的 */
 const rulesVariant = (): string => (online ? (online.state.opts?.variant ?? DEFAULT_VARIANT) : (solo?.save.state.variant ?? activeVariant()));
 
 /** 离开牌桌、房间回到主页或选桌页：停单机、断房间、拆牌桌 */
