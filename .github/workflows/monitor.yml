@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+    inputs:
+      selftest:
+        description: '告警演练：open 开一条 selftest 告警，close 把它关掉（验证告警链路，不碰线上）'
+        type: choice
+        options: [none, open, close]
+        default: none
 permissions:
   contents: read
   issues: write
@@ -25,6 +31,7 @@ jobs:
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
           HOST: ${{ secrets.MONITOR_HOST }}
+          SELFTEST: ${{ inputs.selftest || 'none' }}
         run: |
           set -u
           if [ -z "$HOST" ]; then echo "没有配置 MONITOR_HOST，跳过"; exit 0; fi
@@ -38,6 +45,12 @@ jobs:
           else
             rows=$(printf '%s\nsite\ttrue\t' "$rows")
           fi
+
+          # 告警演练：手动运行时多一项 selftest，open 时失败、close 时正常，走和真告警同一段代码
+          case "$SELFTEST" in
+            open) rows=$(printf '%s\nselftest\tfalse\t告警演练，不是真故障' "$rows") ;;
+            close) rows=$(printf '%s\nselftest\ttrue\t' "$rows") ;;
+          esac
 
           now=$(date -u +%s)
           while IFS=$'\t' read -r id ok detail; do

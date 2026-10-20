@@ -1319,5 +1319,6 @@ const res = await env.ARCADE.fetch('https://<站点>/api/me', {   // 主机名�
 
 - `.github/workflows/monitor.yml`（维护者的流程）每 10 分钟读一次 `/api/monitor`，主机名在仓库 secret `MONITOR_HOST`。
 - 某项转为失败：开 issue（标签 `alert`，标题"告警：<检查项>"）；同名的已开着，只追评论，每小时最多一次。恢复：评论并关闭。
+- 演练：在 Actions 里手动运行 Monitor，`selftest` 选 `open` 会开一条「告警：selftest」，再选 `close` 关掉；走的是和真告警同一段代码，用来确认告警链路（issue、指派、手机推送）通着，不碰线上。
 - 查问题：Workers Logs 里按 `client-error` 和签名找原文，接口的错误日志只有路径和错误类型。
 
