@@ -59,7 +59,7 @@ describe('刷新、封禁、跳过', () => {
     const w = toChoice(6);
     const id = w.choices[0]!.id;
     step(w, 0, Pick.Ban + 0);
-    expect(w.bans).toBe(0);
+    expect(w.bans).toBe(1);
     expect(w.banned).toContain(id);
     // 之后一直选第一张打到 5 分钟：被封的从没出现
     const bot = new Bot('normal', 'sword', 6);
@@ -68,12 +68,10 @@ describe('刷新、封禁、跳过', () => {
       step(w, bot.act(w).dir, w.phase === 'choose' ? 0 : -1);
     }
   }, 20_000);
-  it('跳过换一点经验，不拿东西', () => {
+  it('跳过不拿东西（小奖见 picks.test.ts）', () => {
     const w = toChoice(7);
-    const xp = w.xp;
     const n = w.weapons.length + Object.keys(w.passives).length;
     step(w, 0, Pick.Skip);
     expect(w.weapons.length + Object.keys(w.passives).length).toBe(n);
-    expect(w.xp).toBeGreaterThan(xp);
   });
 });

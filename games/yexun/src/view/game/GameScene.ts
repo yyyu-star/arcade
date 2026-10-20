@@ -755,7 +755,7 @@ export class GameScene extends Phaser.Scene {
       w.level - w.pendingLevels + 1,
       w.choices.map((c) => describe(w, c)),
       this.d.firstRun && !this.cardsSeen,
-      { rerolls: w.rerolls, bans: w.bans },
+      { rerolls: w.rerolls, bans: w.bans, live: !!w.setup.live },
       (i) => {
         this.cardsSeen = true;
         sfx.play('choose');
@@ -959,6 +959,16 @@ export class GameScene extends Phaser.Scene {
           break;
         case Ev.Goblin:
           this.onGoblin(x, y, ev.a[i]!);
+          break;
+        case Ev.Skip: {
+          // 跳过选卡拿到的小奖飘一句（content/picks.ts 的顺序）
+          const n = ev.b[i]!;
+          const say = [`铜钱 +${n}`, `回血 +${n}`, '下次升级多一张卡', '刷新 +1'][ev.a[i]!];
+          if (say) this.d.banners.say(say, 'gold', 1600, '跳过的小奖');
+          break;
+        }
+        case Ev.Reroll:
+          this.d.banners.say('刷新 +1', 'gold', 1400, ev.a[i] === 0 ? '进化补一次' : '打倒精英补一次');
           break;
         case Ev.Market:
           this.onMarket(x, y, ev.a[i]!, ev.b[i]!);

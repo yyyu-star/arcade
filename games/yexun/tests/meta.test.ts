@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMY_BY_KIND } from '../src/content/enemies.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CHARACTER_IDS, PERK_FX } from '../src/content/meta.ts';
+import { PICKS } from '../src/content/picks.ts';
 import { DANGERS, EVENTS, TWIN_BOSS_HP } from '../src/content/waves.ts';
 import { createWorld, Ev, normalizeSetup, spawnNow, step, type Setup, type World } from '../src/core/index.ts';
 
@@ -78,7 +79,7 @@ describe('永久加成', () => {
     const w = make({ perks: { tipo: 2, shuaxin: 1, kapian: 1, fuhuo: 1 } });
     expect(w.stats.hpMax).toBe(make().stats.hpMax + 2 * PERK_FX.tipo);
     expect(w.hp).toBe(w.stats.hpMax);
-    expect(w.rerolls).toBe(3);
+    expect(w.rerolls).toBe(PICKS.rerolls + 1);
     w.pendingLevels = 1;
     step(w, 0);
     expect(w.choices.length).toBe(4);

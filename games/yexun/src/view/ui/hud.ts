@@ -142,6 +142,8 @@ export class Hud {
     const c = el('span', 'yx-cap', caps);
     el('span', 'yx-ico yx-ico-coin', c);
     this.coins = el('span', '', c, '0');
+    // 胶囊底下一行小字说这些铜钱去哪（所有者 10-20：娱乐、实盘一样，局内夜市花，剩下的局后存入账户）
+    el('span', 'yx-cnote', caps, '夜市可花，剩下局后存入');
     // 夜探的背包件数（守夜不显示）
     this.bagBox = el('button', 'yx-stat yx-bag', tr);
     this.bagBox.type = 'button';
