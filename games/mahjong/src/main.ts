@@ -1014,7 +1014,12 @@ function playSolo(s: Solo): void {
   // 玩法名单独一段：竖屏顶栏放不下时 CSS 藏掉它，留下档位（不缩字）
   title.replaceChildren();
   el('span', 'var', title, `${VARIANT_NAME['sichuan-xuezhan']} · `);
-  title.append(st.wallet ? `实盘 ${num(st.share)}` : `娱乐·${LEVEL_NAME[s.save.level ?? 'easy']}`);
+  if (st.wallet) title.append(`实盘 ${num(st.share)}`);
+  else {
+    // 难度也单独一段：320 宽竖屏连"娱乐·新手"都放不下，藏掉难度只留"娱乐"（删字不截，10-20 多尺寸）
+    title.append('娱乐');
+    el('span', 'lv', title, `·${LEVEL_NAME[s.save.level ?? 'easy']}`);
+  }
   table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => {
     const err = s.act(a as XzAction);
     if (err && err !== 'busy') play('click');
