@@ -1,0 +1,162 @@
+{
+  "solo-novice-short-0": {
+    "hash": "d363af3e9f2d8fe261e49ff39c8ebfafed827c98ed800d7d8b1d08125e57b536",
+    "items": 8740
+  },
+  "solo-novice-full-0": {
+    "hash": "f7916cc9029686d23aa03bc122c8929235ba5a4f44c45460ee09481c2a2f57e8",
+    "items": 5484
+  },
+  "solo-novice-short-1": {
+    "hash": "346b5e24cb89ea249cb1511bcfa921238b13ddcc58a7109cb930b0aa0350646b",
+    "items": 2824
+  },
+  "solo-novice-full-1": {
+    "hash": "91c34e8ae76d6a03140193ad965a2e1549b7ba458da88ffb2d2d15cd4fd15ea5",
+    "items": 6764
+  },
+  "solo-novice-short-2": {
+    "hash": "341933e560cc6fa55df50587309067fc66180a201a1fab4af09397b5f6d27212",
+    "items": 3875
+  },
+  "solo-novice-full-2": {
+    "hash": "e7410f2ef8da4feb9b043345b868f737db5a84390b137a4819dacf137c81f921",
+    "items": 5333
+  },
+  "solo-novice-short-3": {
+    "hash": "a0a5367437d05c746bc358549c572c1ab79694864500266b4e7393195aad71da",
+    "items": 3118
+  },
+  "solo-novice-full-3": {
+    "hash": "2b32ec17cf5764af18dfe2021382701d2da11797ea8011a3fba58de19c4b41f8",
+    "items": 6358
+  },
+  "solo-normal-short-0": {
+    "hash": "b9fdeaad759388d2e5e5343e5833a17552d3920486893f5ce4ea209f19274a07",
+    "items": 7311
+  },
+  "solo-normal-full-0": {
+    "hash": "e887668ce1bdc8bd29ba64d33ce94b5daafffc8f481e4a366475952cc83d4e18",
+    "items": 6414
+  },
+  "solo-normal-short-1": {
+    "hash": "9af83d019a13eac105dc3bb2c09eb45240c08fd40a2d44a72a900512b4cf114d",
+    "items": 9386
+  },
+  "solo-normal-full-1": {
+    "hash": "34d60179c6541efe371f843c167b7989479a854aa4e93224282d3bc7ca4e1c00",
+    "items": 6664
+  },
+  "solo-normal-short-2": {
+    "hash": "2b9fe8b809ae8c3ea597d548d2c7f562c9670d56d5e4dab338efac955bbe91f5",
+    "items": 3131
+  },
+  "solo-normal-full-2": {
+    "hash": "448952796295e211f39bf47421c258be8a91b25fb92bbc8605de0f376aeb6a19",
+    "items": 6962
+  },
+  "solo-normal-short-3": {
+    "hash": "68ff77ae46e283e62ba89100f8ca2f58bf67224d5221565b3c69cd70cbdbc772",
+    "items": 7440
+  },
+  "solo-normal-full-3": {
+    "hash": "221784d2552138c1d590842c9520e7e230d443426d2063b79ea1e86b0b81b613",
+    "items": 7054
+  },
+  "solo-pro-short-0": {
+    "hash": "93d4b792177b402813c88b6de312c5c0ace33de7c5dd79e940bc922e857f12db",
+    "items": 6427
+  },
+  "solo-pro-full-0": {
+    "hash": "293f631c103e2a1b00563f98bdb6b95c0cd6dba615794821844ae044e112fcdc",
+    "items": 6159
+  },
+  "solo-pro-short-1": {
+    "hash": "6bbbf2c9d11640b75829cdecad913bd169c2d93aaec9b9951c222017ea26292d",
+    "items": 5424
+  },
+  "solo-pro-full-1": {
+    "hash": "1aff625752986ef08292a692010f0857d95bfcf70a81962c8f1ea5fe533957ac",
+    "items": 6220
+  },
+  "solo-pro-short-2": {
+    "hash": "9918e84f5fd3aab1b3300d244c4a78b3cfb3b98d9614c4fe422e8bde27944ab8",
+    "items": 3266
+  },
+  "solo-pro-full-2": {
+    "hash": "b717b4ef2e9bf9d18119d3ae01b2f62df84514da92edb9f7c9f636c34095cea4",
+    "items": 6356
+  },
+  "solo-pro-short-3": {
+    "hash": "d00348470cf777b77c3caff2408d1bc56b399c0ba77377a3c88ad6072eafccc6",
+    "items": 4826
+  },
+  "solo-pro-full-3": {
+    "hash": "458e19906139a90cf81a6058338491c6fa5fbb9789496c48a54e8ac2f176a4f9",
+    "items": 6771
+  },
+  "solo-stake-small-0": {
+    "hash": "febdea544ac50477d5ca90276418a7ecb6c226fe234572370708d839558f73bc",
+    "items": 10070
+  },
+  "solo-stake-small-1": {
+    "hash": "fd149814ee805a175b4f01a593633788fb2fe95de7e91528d91f66f4866dbe18",
+    "items": 6532
+  },
+  "solo-stake-mid-0": {
+    "hash": "4634bbee19adb3444cbda9e8deb32f0eef67477fd6270aaa19e428119e8450af",
+    "items": 9297
+  },
+  "solo-stake-mid-1": {
+    "hash": "e513febd6259844c1d46e92b1df817f1de37aa1bdc9a3aa45aeffc81bb305e6e",
+    "items": 9095
+  },
+  "solo-stake-big-0": {
+    "hash": "d0eaf65d239ab382beec139dda2c4b76714a4ce974b2af2dd55b31bdff323294",
+    "items": 5595
+  },
+  "solo-stake-big-1": {
+    "hash": "0cdcc1b6aba631ee8edbccafcecce24bac9164f3a9bd9e719144e3aed8a5a6a0",
+    "items": 6365
+  },
+  "solo-stake-lux-0": {
+    "hash": "e1a0f6ecd5d646f80b725baed4bceea72f8f96e43c7fe0c4294ab650bc86ac6c",
+    "items": 8791
+  },
+  "solo-stake-lux-1": {
+    "hash": "0fec45386f41277d0dfb807ffac69d02bbdf361fd064adce99b0ed3a6c51c79f",
+    "items": 8284
+  },
+  "solo-options": {
+    "hash": "9284d911352275080f341da93099cc719b86ebe1b7f7c8cabd7b9958d485fec9",
+    "items": 7248
+  },
+  "room-legacy": {
+    "hash": "ae444d35bf6a9771934f6bbe05966e2caebe3b883e984e4286e49c40d356b104",
+    "items": 3215
+  },
+  "room-fun-1h": {
+    "hash": "ab9ab551c41175e59ae7604f12c88ff126cc430972fa7907df6de0603eaa8500",
+    "items": 4727
+  },
+  "room-fun-2h-swap": {
+    "hash": "77474b13ed38042df31f6f8e24653d9f594d6fe742c4716189aace69c9b9e179",
+    "items": 7775
+  },
+  "room-stake-small": {
+    "hash": "8a6390f2e27e5afc29a3c3529193d0552cf4d62648eb0f6a4c0b652e6b65b04a",
+    "items": 3431
+  },
+  "room-stake-mid": {
+    "hash": "6364e911d19020556dec5e83662c343eb7f66529cc63b59bc802e89589fb5d5f",
+    "items": 3904
+  },
+  "room-stake-big": {
+    "hash": "1d76f7c3e59e90037bb099cb6ea6b129c02256ac75edbb0058a1c00712dd2612",
+    "items": 3567
+  },
+  "room-stake-lux": {
+    "hash": "650bd920f2d0d7e7177d11437d92a6e03a3dc29afc497985893e42bda3db3257",
+    "items": 3711
+  }
+}

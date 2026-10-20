@@ -74,15 +74,20 @@ interface Variant<S, A, V> {
 
 拆成两个 PR，先合 A 再做 B：
 
-1. **PR ①a：只加金样（golden），不动产品代码。** 新工具 `tools/golden.ts`，跑下面这些，把每一项的完整输出按固定顺序 JSON 序列化后算 sha256，写进 `tests/golden/guandan.json`；
-   `tests/golden.test.ts` 重新跑一遍逐项比对哈希（不一致时打印第一个不同的步骤，便于定位）：
-   - 单机整局：300 个固定种子 × 三档难度，电脑四家对打到 gameOver：每一步的动作、`dispatch` 的状态和事件、四个座位的 `viewFor` 和 `eventsFor`、`hint` 列表、`previewNext`、`timeoutAction`；
-   - 回放：每局用 `replay(seed, opts, actions)` 重算，终局状态和直接打的一致（现有测试是 1 局，扩到 300 局）；
-   - 电脑：同一批局面下五档性格 × 状态的 `decide` 结果（`soloSeeds` / `aiSeed` / `formSeed` 派生出的种子也进哈希）；
-   - 房间规则层：50 个固定熵，`guandanRoom` 的 `begin`→`act`/`timeout`/`ready`/`again` 到结束，每一帧每个座位（含旁观 -1）的 `view`、事件、`actors`、`turnMs`、`snapshotBytes`，娱乐和实盘各一半；
-   - 实盘：单机 `soloAddDeal`/`soloPoints`/`soloOver`、好友房的账（`roomAddDeal`、带入、离开、结回），ref / op 的拼法；
-   - 称号、颁奖、名场面、搭子战绩、复盘（`recap`）、分享卡的数据（`shareCardOf`，不画图）。
-   ①a 单独跑 CI 要绿（金样就是现在的代码自己生成的）。现有的回放测试（`game.test.ts`）、`tools/replay-log.ts` 的试玩日志复盘也一起跑一遍记下结果。
+1. **PR ①a：只加金样（golden），不动产品代码。** 场景在 `tests/golden/scenarios.ts`，每个场景把每一项输出按固定顺序 JSON 序列化后喂进 sha256，
+   哈希和项数存 `tests/golden/guandan.json`，`tests/golden.test.ts` 逐个比对；`node tools/golden.ts --dump <场景> <文件>` 把一个场景逐项导出成文本，改前改后 diff 就能找到第一个不同的地方。
+   主线 10-20 定 CI 里一分钟内、覆盖面优先于局数，现在 40 个场景、约 24 万项，vitest 里约 16 秒：
+   - 单机（33 局）：三档难度 × 4 个短局（整局打完）+ 4 个完整局（前 6 副）、单机实盘四档 × 2 场（8 副）、地方规则开关全反过来的 1 局。
+     用真实的 `Session`（座位 0 代打、电脑按场地取强弱和性格），每一步记：动作、`dispatch` 的状态和事件、`Session.apply` 的回话、四个座位的 `viewFor` 和 `eventsFor`、
+     轮到的人的 `legalPlays`/`canPass`、`hint`、`suggest`、`timeoutAction`、电脑的 `botStyle`/`styleOf`、名场面 `momentOf`、结算页的 `previewNext`；
+   - 每一副：`bombsBy`、`dealTitles`、`dealRecap`、`dealHighlights`（含 `highlightText`）、`feedPick`、`dealMoment`、`victimOf`、`logDeal`、`tallyDeal`/`statsOf`，实盘的 `soloAddDeal`/`soloPoints`/`soloOver`；
+     一局打完：`matchTitles`、`winnerOf`/`matchAwards`、三种 `shareCardOf`；
+   - 回放：每局用 `replay(seed, opts, actions)` 重算，终局和直接打的不一样就直接报错；
+   - 房间规则层（7 场）：没有 setup 的老局、娱乐一个真人（打完整场，走到"再来一场"的等待）、娱乐两个真人中途有人走和接管、实盘四档（两真人 / 四真人、带入被拒后重新带入、中途离开再回来、关房结回）。
+     照 kit 的样子驱动（`actors` → `ai`，每 7 步有一步用 `timeout` → `apply`，钱包的 `effects` 立刻 `settled`），每一帧记：状态、五个视角（含旁观 -1）的 `view` 和 `rotateNetView`、
+     `actors`、`turnMs`、`breakPoint`、`over`、`pause`、`effects`、`snapshotBytes`、`matchEnd`；
+   - 覆盖面也锁着：进贡、抗贡、还贡、一局打完、再来一场、换人、重新带入、钱包结算、关房、分享卡、颁奖、单机实盘账都至少走到一次（`golden.test.ts` 最后一条）。
+   ①a 单独跑 CI 要绿（金样就是现在的代码自己生成的）。
 2. **PR ①b：重构。** `tests/golden/` 一个字节不改，`golden.test.ts` 照样过；`npm run test:room`（workerd 里真房间、写入行数、断线、座位绑人、实盘）照样过；
    `git diff origin/main -- tests/golden` 为空写进 PR 说明（这是 ①b 合并的门槛）；现有单测断言一行不改。另外核对：`RULES_VERSION`、`CLIENT_VERSION` 不变（打到一半的房间、开着的旧页面不受影响），
    `guandan.*` 存储 key 和存档形状不变，`wrangler.jsonc` 不变，房间状态 JSON 里掼蛋房不多字段（没有 `variant` 字段就是掼蛋，部署时正在打的房间照常续）。

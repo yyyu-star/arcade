@@ -211,6 +211,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `npm run shot -- --gallery --out <目录>` | 美术图集：1280 / 1920 / 手机三种尺寸 × 全部画面（主页、选难度、牌桌、结算、整局结束、分享、设置、规则、战绩、好友房）+ 竖屏，改前改后对比用（`docs/art-v3.md`）；加 `--audit --sizes 667x375,844x390` 逐屏量字号和点按区（写 `audit.md`，手机审计用）；浏览器任务一律 `flock -w 3600 <仓库>/.local/locks/browser.lock` 排队 |
 | `node tools/mem.ts [--scales auto,1,2,3]` | 内存估算：模拟老 iPhone 横屏，列纹理/画布像素（MB）和 Chromium PSS，再模拟地址栏收放看会不会攒背景图 |
 | `node tools/replay-log.ts <log.jsonl>` | 试玩日志复盘：还原每一手，看现在的电脑和提示会怎么出 |
+| `node tools/golden.ts [--write \| --dump <场景> <文件>]` | 掼蛋金样（牌馆重构，`docs/doudizhu.md` 1.3）：重算各场景的哈希 / 有意改了掼蛋行为时重写 `tests/golden/guandan.json` / 导出一个场景的明细做 diff |
 | `npm run build:cf` / `npm run deploy` | 部署产物 / 拆成独立仓库后才用；在总仓库里正式部署只经 PR 合并进 main 后由 CI 完成 |
 | `npm run test:room` / `npm run room-sim` | 联机房间：workerd 里的真房间测试 / 规则层批量对打 |
 | `npm run online-dev` / `npm run online-smoke` | 本地联机栈（系统分配端口，打印地址）/ 四客户端联机冒烟 |
