@@ -185,6 +185,9 @@ export class GameScene extends Phaser.Scene {
   private guardXY: number[] = [];
   private arenaW = ARENA.w;
   private bump = new Bump();
+  /** 香火区：这局提示过没有、上次冒金点的时间 */
+  private incenseTold = false;
+  private incenseFx = 0;
   private arenaH = ARENA.h;
   /** 地面层的圈（门圈）：画在影子下面，站在圈里的主角和怪盖在它上面 */
   private rg!: Phaser.GameObjects.Graphics;
@@ -417,7 +420,10 @@ export class GameScene extends Phaser.Scene {
         for (let k = 0; k < n; k++) this.img('terrace_h', b.x + step * (k + 0.5), b.y + b.h).setScale(step / 80 / f.res, 1 / f.res).setDepth(b.y + b.h);
       } else if (b.look === 'river') continue;
       else if (b.look === 'bamboo') continue;
-      else if (b.look === 'rock') {
+      else if (b.look === 'censer') {
+        const f = this.frame('censer');
+        this.img('censer', b.x + b.w / 2, b.y + b.h + 6).setScale(1 / f.res).setDepth(b.y + b.h);
+      } else if (b.look === 'rock') {
         const f = this.frame('rock');
         this.img('rock', b.x + b.w / 2, b.y + b.h + 6).setScale(Math.max(b.w, 56) / 60 / f.res, 1 / f.res).setDepth(b.y + b.h);
       } else this.img('hall', b.x + b.w / 2, b.y + b.h).setDepth(b.y + b.h);
@@ -694,6 +700,7 @@ export class GameScene extends Phaser.Scene {
     this.bump.before(this.w, dir);
     this.advance(dir, -1);
     if (!a) this.onBump(this.bump.after(this.w, this.time.now, this.w.stats.speed));
+    this.onIncense();
     this.readEvents();
     if (this.w.phase === 'choose') {
       // 升级演出：先"叮 + 光柱" 0.3 秒再弹卡片（手感清单第 5 条）
@@ -714,6 +721,19 @@ export class GameScene extends Phaser.Scene {
     }
     this.fx.spawn({ frame: 'ring', x: b.x, y: b.y - 16, life: 260, s0: 0.15, s1: 0.45, a0: 0.9, a1: 0, tint: 0xfff1c0, depth: 60 });
     this.shake(70, 0.0025);
+  }
+
+  /** 站在香火区里：第一次进来说一句规矩，之后每隔一会儿从脚下冒几点金光（回血看得见） */
+  private onIncense(): void {
+    if (!this.w.inIncense) return;
+    if (!this.incenseTold) {
+      this.incenseTold = true;
+      this.d.banners.say('香火', 'gold', 2200, '站着慢慢回血，可香火会引来更多怪');
+    }
+    const now = this.time.now;
+    if (now < this.incenseFx) return;
+    this.incenseFx = now + 450;
+    for (let n = 0; n < (LOW_MEMORY ? 1 : 3); n++) this.fx.spawn({ frame: 'mote', x: this.w.x + (Math.random() - 0.5) * 40, y: this.w.y - 10, vx: (Math.random() - 0.5) * 30, vy: -60 - Math.random() * 40, life: 700, s0: 0.9, s1: 0.3, tint: 0xffc84a, depth: 55 });
   }
 
   /** 推一拍：所有 step 都从这里走，前后钩子才不会漏 */
@@ -1399,6 +1419,14 @@ export class GameScene extends Phaser.Scene {
         this.burst(x, y - 8, 0xc8ccd4, 1.4);
         sfx.play('bossStomp', { volume: 0.45 });
         this.shake(150, 0.006);
+        break;
+      case 14: // 庙祝鬼撒香灰：灰圈预警
+        warn(0x8a8478);
+        break;
+      case 15: // 香灰落地
+        ring(0x9a948a, 2);
+        this.burst(x, y - 8, 0xcfc8bc, 1.4);
+        sfx.play('propWood', { volume: 0.3, pitch: 0.7 });
         break;
       case 13: // 竹王破土
         sfx.play('boss', { volume: 0.5 });

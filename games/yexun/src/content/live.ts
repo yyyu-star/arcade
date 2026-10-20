@@ -13,6 +13,13 @@ import type { Danger } from './waves.ts';
  */
 export const LIVE_OPEN = true;
 
+/**
+ * 实盘暂不开放的守夜图：新图要先按 LIVE_MAP_BP 同一套方法拟合系数、偏离同档平均 ±0.15 份以内才开（DESIGN 8.1，主线 10-20）。
+ * 菜单上这几张图在实盘里灰着；直接调带入也会退回雪原（main.ts startLive）。
+ */
+export const LIVE_MAP_CLOSED: readonly MapId[] = ['temple'];
+export const liveMapOk = (m: MapId): boolean => !LIVE_MAP_CLOSED.includes(m);
+
 export type LiveTier = 'small' | 'medium' | 'large' | 'luxe';
 export const LIVE_TIER_IDS: readonly LiveTier[] = ['small', 'medium', 'large', 'luxe'];
 

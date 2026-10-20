@@ -14,7 +14,8 @@ const LOOK: Record<string, { post: number; rail: number; postW: number; gap: num
   ice: { post: 0x4a3a32, rail: 0x7a6250, postW: 12, gap: 70 },
   bamboo: { post: 0x2f6a2c, rail: 0x5a9a3c, postW: 10, gap: 36 },
   river: { post: 0x4a4a52, rail: 0x7a7a84, postW: 40, gap: 46, solid: true },
-  yizhuang: { post: 0x3a3238, rail: 0x8a8088, postW: 30, gap: 60, solid: true },
+  yard: { post: 0x3a3238, rail: 0x8a8088, postW: 30, gap: 60, solid: true },
+  temple: { post: 0x6a3a2a, rail: 0xa0503a, postW: 24, gap: 64, solid: true },
 };
 const INK = 0x17131c;
 /** 栅栏外那圈雾的颜色（夜蓝） */

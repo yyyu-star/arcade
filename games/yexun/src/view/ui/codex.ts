@@ -44,6 +44,7 @@ export const MONSTER_INFO: Record<EnemyKind, { name: string; tag: string; blurb:
   frostsoul: { name: '冰魄', tag: '精英', blurb: '蓄力后震出一圈寒霜，冻住脚步，还会放出冰傀；怕火' },
   nightwatch: { name: '更夫鬼', tag: '古镇', blurb: '夜探古镇里敲梆子，每敲一下招来小鬼火；怕火怕铃' },
   stonemonk: { name: '石僧', tag: '山寺', blurb: '夜探山寺里又慢又硬，走近了合掌拍地；刀剑砍不动，怕水怕铃' },
+  templeghost: { name: '庙祝鬼', tag: '荒庙', blurb: '远远站着往你脚下撒香灰，先画灰圈，落地迷眼走慢；怕火' },
   lampghost: { name: '提灯鬼', tag: '常规', blurb: '提着灯笼不怕火，危险 3 以后半夜出来；怕符、怕铃' },
   boss: { name: '尸王', tag: 'Boss', blurb: '跳砸、召唤、尸气，血越少越凶；14 分钟现身' },
 };

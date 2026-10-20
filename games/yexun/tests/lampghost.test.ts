@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ENEMIES, ENEMY_BY_KIND } from '../src/content/enemies.ts';
+import { ENEMY_BY_KIND } from '../src/content/enemies.ts';
 import { lampShare, type Danger } from '../src/content/waves.ts';
 import { WEAPONS } from '../src/content/weapons.ts';
 import { createWorld, step, type World } from '../src/core/index.ts';
@@ -35,7 +35,7 @@ function census(mode: 'vigil' | 'raid', danger: Danger, minute: number, ticks: n
 
 describe('提灯鬼', () => {
   it('登记：编号接着往后，图鉴有名字，火 ×0.5', () => {
-    expect(LAMP).toBe(ENEMIES.length - 1);
+    expect(LAMP).toBe(ENEMY_BY_KIND.lampghost.code);
     expect(MONSTER_INFO.lampghost.name).toBe('提灯鬼');
     expect(ENEMY_BY_KIND.lampghost.vs?.火).toBe(0.5);
     expect(ENEMY_BY_KIND.lampghost.elite).toBeUndefined();

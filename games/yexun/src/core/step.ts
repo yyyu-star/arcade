@@ -21,6 +21,7 @@ import {
   HOP_SPEED_MUL,
   ICEGOLEM,
   ICICLE,
+  TEMPLEGHOST,
   LANTERN,
   LORD,
   MONK,
@@ -303,8 +304,10 @@ function slidePlayer(w: World, dir: number): void {
 }
 
 function regen(w: World): void {
-  if (w.stats.regen <= 0 || w.hp >= w.stats.hpMax) return;
-  w.regenAcc += (w.stats.regen * (has(w, 'noheal') ? CURSE_FX.noheal : 1)) / 30;
+  w.inIncense = w.incense.length > 0 && inRects(w.incense, w.x, w.y);
+  const rate = w.stats.regen + (w.inIncense ? TERRAIN.incenseRegen : 0);
+  if (rate <= 0 || w.hp >= w.stats.hpMax) return;
+  w.regenAcc += (rate * (has(w, 'noheal') ? CURSE_FX.noheal : 1)) / 30;
   if (w.regenAcc >= 1) {
     w.hp = Math.min(w.stats.hpMax, w.hp + 1);
     w.regenAcc -= 1;
@@ -418,6 +421,7 @@ function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number): number {
   else if (kind === 'hebo') w.eT[i] = HEBO.every;
   else if (kind === 'frostsoul') w.eT[i] = FROSTSOUL.every;
   else if (kind === 'icicle') w.eT[i] = ICICLE.every;
+  else if (kind === 'templeghost') w.eT[i] = TEMPLEGHOST.every;
   else if (kind === 'nightwatch') w.eT[i] = NIGHTWATCH.every;
   else if (kind === 'stonemonk') w.eT[i] = MONK.every;
   w.eHitAt.fill(0, i * WEAPON_SLOTS, (i + 1) * WEAPON_SLOTS);
@@ -561,9 +565,11 @@ function spawnWaves(w: World): void {
   // 引魂灯：每级怪多 10%；咒印"众"：多 25%
   const curse = (1 + 0.1 * w.stats.curse) * (has(w, 'more') ? CURSE_FX.moreCount : 1);
   const calm = w.tick < w.calmUntil ? CALM.keepMul : 1;
-  const keep = m.keep * diff.countMul * curse * calm;
+  // 香火引怪（荒庙）：站在香炉边，怪的上限和来的速度都往上加
+  const lure = w.inIncense ? TERRAIN.incenseKeep : 1;
+  const keep = m.keep * diff.countMul * curse * calm * lure;
   if (w.eCount >= keep) return;
-  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * calm) / 30;
+  w.spawnAcc += ((w.eCount < keep / 2 ? 2 : 1) * m.rate * diff.countMul * curse * calm * (w.inIncense ? TERRAIN.incenseRate : 1)) / 30;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
     const kind = regionPick(w, VIGIL_REGIONS[w.setup.map ?? 'snow'], Math.max(0, mi + diff.mixShift)) ?? pickKind(w, mix);
@@ -816,6 +822,7 @@ function moveEnemies(w: World): void {
       case 'hebo':
       case 'icegolem':
       case 'icicle':
+      case 'templeghost':
       case 'frostsoul':
       case 'nightwatch':
       case 'stonemonk':
@@ -1036,6 +1043,22 @@ function mobAct(w: World, i: number, kind: EnemyKind, d: number, dx: number, dy:
         w.eAX[i] = w.x;
         w.eAY[i] = w.y;
         w.ev.push(Ev.Mob, w.x, w.y, 4, ICICLE.r, ICICLE.warn);
+      }
+      break;
+    case 'templeghost':
+      // 庙祝鬼：远远站住，往主角脚下撒香灰（先画灰圈，落地迷眼走慢）；和冰凌一个路数，但会让人走慢，逼你离开香炉
+      if (d < TEMPLEGHOST.range) mv.sp = 0;
+      if (w.eS[i]! > 0) {
+        if (--w.eS[i]! === 0) {
+          w.ev.push(Ev.Mob, w.eAX[i]!, w.eAY[i]!, 15, TEMPLEGHOST.r);
+          if (areaHurt(w, w.eAX[i]!, w.eAY[i]!, TEMPLEGHOST.r, TEMPLEGHOST.dmg, w.eKind[i]!)) w.slowUntil = Math.max(w.slowUntil, w.tick + TEMPLEGHOST.slowTicks);
+        }
+      } else if (--w.eT[i]! <= 0 && d < TEMPLEGHOST.range + 80) {
+        w.eT[i] = TEMPLEGHOST.every;
+        w.eS[i] = TEMPLEGHOST.warn;
+        w.eAX[i] = w.x;
+        w.eAY[i] = w.y;
+        w.ev.push(Ev.Mob, w.x, w.y, 14, TEMPLEGHOST.r, TEMPLEGHOST.warn);
       }
       break;
     case 'frostsoul':

@@ -7,7 +7,7 @@ import { MAP_IDS, MAP_UNLOCK, MAPS, type MapId } from '../../content/maps.ts';
 import { drawMapThumb } from '../art/terrain.ts';
 import { DANGER_IDS, DANGERS, type Danger } from '../../content/waves.ts';
 import { CHARACTERS, CURSES, type CharacterId, type CurseId } from '../../content/meta.ts';
-import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, vigilBp, type LiveTier } from '../../content/live.ts';
+import { LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS, liveMapOk, vigilBp, type LiveTier } from '../../content/live.ts';
 import { RAID_LIVE, RAID_TEMPLATES, raidCharCoef, type RaidLiveTemplate, type RaidLiveTier, type RaidTemplateId } from '../../content/explore.ts';
 import type { TreasureTier } from '../../content/treasures.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, type Region } from '../../content/regions.ts';
@@ -420,14 +420,18 @@ export class Select {
       '</div>';
 
     // 地图 / 镇子大卡
+    // 实盘里还没配系数的新图灰着（选中的是它就退回雪原）
+    if (live && !liveMapOk(this.map)) this.map = 'snow';
     const mapCards = MAP_IDS.map((id) => {
-      const locked = !s.maps[id];
+      const liveOff = live && !liveMapOk(id);
+      const locked = !s.maps[id] || liveOff;
       const u = MAP_UNLOCK[id];
+      const why = liveOff ? '实盘暂不开放' : u ? `${u.text}解锁` : '';
       return (
-        `<button type="button" class="yx-mcard yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${u ? `${u.text}解锁` : ''}"` : ''}>` +
+        `<button type="button" class="yx-mcard yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${why}"` : ''}>` +
         `<canvas class="yx-thumb" data-thumb="${id}" width="144" height="144" aria-hidden="true"></canvas>` +
         `<span class="yx-cardtxt"><b>${MAPS[id].name}</b>${id === 'yizhuang' ? '<i class="yx-hard">难</i>' : ''}` +
-        (locked && u ? `<em class="yx-unlock">${LOCK_SVG}${u.text}解锁</em>` : `<small>${MAPS[id].blurb}</small>${heads(VIGIL_REGIONS[id], true)}`) +
+        (locked && why ? `<em class="yx-unlock">${LOCK_SVG}${why}</em>` : `<small>${MAPS[id].blurb}</small>${heads(VIGIL_REGIONS[id], true)}`) +
         '</span></button>'
       );
     }).join('');

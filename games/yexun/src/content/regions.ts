@@ -64,6 +64,17 @@ export const VIGIL_REGIONS: Partial<Record<MapId, Region>> = {
       { at: 660 * S, enemy: 'frostsoul', count: 1 },
     ],
   },
+  // 荒庙：庙祝鬼远远撒香灰、石僧拍地；石狮 6:30 和 11:00 各一次（守庙的）
+  temple: {
+    mobs: [
+      { kind: 'templeghost', share: [[2, 0.04], [6, 0.06]] },
+      { kind: 'stonemonk', share: [[7, 0.03], [10, 0.05]] },
+    ],
+    elites: [
+      { at: 390 * S, enemy: 'shishi', count: 1 },
+      { at: 660 * S, enemy: 'shishi', count: 1 },
+    ],
+  },
 };
 
 /** 夜探：每个镇一种特色怪（教学镇没有） */

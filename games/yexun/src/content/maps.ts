@@ -5,7 +5,7 @@
 import type { EnemyKind } from './enemies.ts';
 import { ARENA } from './player.ts';
 
-export type MapId = 'snow' | 'yizhuang' | 'bamboo' | 'riverbank' | 'icelake';
+export type MapId = 'snow' | 'yizhuang' | 'bamboo' | 'riverbank' | 'icelake' | 'temple';
 
 /** 一块挡路的东西：x, y 是左上角；look 告诉画面层画什么 */
 export interface Block {
@@ -13,7 +13,7 @@ export interface Block {
   y: number;
   w: number;
   h: number;
-  look: 'wall_h' | 'wall_v' | 'coffin' | 'hall' | 'bamboo' | 'rock';
+  look: 'wall_h' | 'wall_v' | 'coffin' | 'hall' | 'bamboo' | 'rock' | 'censer';
   /** 竹丛的血：被法器打到 0 就倒，倒了的块不再挡路也不再长回来（只有 bamboo 有） */
   hp?: number;
 }
@@ -37,8 +37,10 @@ export interface MapDef {
   ice?: readonly Rect[];
   /** 桥：只给画面层画木板（桥面本来就不是水区）；长边是过河的方向，两头各伸出河岸一点 */
   bridges?: readonly Rect[];
+  /** 香火区（荒庙）：主角站在里面慢慢回血，但怪来得更多（TERRAIN.incense*） */
+  incense?: readonly Rect[];
   /** 画面层的色调提示（地面染色） */
-  tone?: 'snow' | 'yard' | 'bamboo' | 'river' | 'ice';
+  tone?: 'snow' | 'yard' | 'bamboo' | 'river' | 'ice' | 'temple';
   /** 刷怪比例的倍数（义庄：跳尸、枯骨多） */
   mix?: Partial<Record<EnemyKind, number>>;
 }
@@ -68,7 +70,7 @@ function yard(): Block[] {
 }
 
 /** 地图卡的顺序 */
-export const MAP_IDS: readonly MapId[] = ['snow', 'bamboo', 'icelake', 'riverbank', 'yizhuang'];
+export const MAP_IDS: readonly MapId[] = ['snow', 'bamboo', 'icelake', 'riverbank', 'yizhuang', 'temple'];
 
 /** 解锁条件：守夜最长撑过多少秒（null = 一开始就开）；text 是卡上写的一句话 */
 export const MAP_UNLOCK: Record<MapId, { seconds: number; text: string } | null> = {
@@ -78,6 +80,7 @@ export const MAP_UNLOCK: Record<MapId, { seconds: number; text: string } | null>
   icelake: { seconds: 480, text: '守夜撑过 8 分钟' },
   // 河滩按难度该排在冰湖后面（12 分钟），但解锁是按"最长撑过多久"现算的、不存档：改成 12 分钟会把已经开了河滩的老玩家锁回去，所以两张都 8 分钟
   riverbank: { seconds: 480, text: '守夜撑过 8 分钟' },
+  temple: { seconds: 600, text: '守夜撑过 10 分钟' },
 };
 
 /** 地形手感（核心用，改数值只改这里） */
@@ -92,6 +95,10 @@ export const TERRAIN = {
   iceKnock: 0.9,
   /** 同一丛竹子两次受伤的最短间隔（拍）：持续伤害的法器不会一拍砍倒 */
   chopGap: 8,
+  /** 香火区里每秒多回几点血（咒印"不回血"照样减半）；怪的上限和刷怪速度乘多少（香火引怪） */
+  incenseRegen: 1.6,
+  incenseKeep: 1.3,
+  incenseRate: 1.7,
 } as const;
 
 /** 整数 LCG：地图布局用，不依赖核心的 Rng，固定种子，布局永远一样 */
@@ -184,6 +191,41 @@ function icelake(): { ice: Rect[]; blocks: Block[] } {
   return { ice, blocks };
 }
 
+/**
+ * 荒庙：正中一座破庙，院墙塌了好几处（缺口能走），北边大殿；院里一尊大香炉，庙外还有三尊。
+ * 香炉四周一块是香火区：站进去慢慢回血，可香火也把怪引过来，待久了被围（DESIGN.md 3.6 荒庙）。
+ */
+function temple(): { blocks: Block[]; incense: Rect[] } {
+  const a = C - 560;
+  const b = C + 560;
+  const T2 = 26;
+  const blocks: Block[] = [
+    // 北墙：三段，中间和东边塌了
+    { x: a, y: a, w: 300, h: T2, look: 'wall_h' },
+    { x: C - 120, y: a, w: 200, h: T2, look: 'wall_h' },
+    { x: b - 180, y: a, w: 180 + T2, h: T2, look: 'wall_h' },
+    // 南墙：两段，正中山门和西南角塌了
+    { x: a + 160, y: b, w: 300, h: T2, look: 'wall_h' },
+    { x: C + 130, y: b, w: 430 + T2, h: T2, look: 'wall_h' },
+    // 西墙、东墙：各断两处
+    { x: a, y: a + T2, w: T2, h: 280, look: 'wall_v' },
+    { x: a, y: C + 40, w: T2, h: 300, look: 'wall_v' },
+    { x: b, y: a + 180, w: T2, h: 300, look: 'wall_v' },
+    { x: b, y: C + 200, w: T2, h: 360, look: 'wall_v' },
+    // 大殿和院里的香炉
+    { x: C - 140, y: a + 70, w: 280, h: 70, look: 'hall' },
+    { x: C - 24, y: C - 230, w: 48, h: 30, look: 'censer' },
+  ];
+  const outside: [number, number][] = [[620, 760], [2560, 900], [1500, 2660]];
+  for (const [x, y] of outside) blocks.push({ x: x - 24, y: y - 15, w: 48, h: 30, look: 'censer' });
+  const rock = (cx: number, cy: number): Block => ({ x: cx - 28, y: cy - 14, w: 56, h: 28, look: 'rock' });
+  blocks.push(rock(400, 1500), rock(2800, 1700), rock(1000, 2300), rock(2300, 2500), rock(1800, 500), rock(2900, 2900), rock(300, 2900));
+  const zone = (x: number, y: number): Rect => ({ x: x - 130, y: y - 120, w: 260, h: 240 });
+  const incense = [zone(C, C - 215), ...outside.map(([x, y]) => zone(x, y))];
+  return { blocks, incense };
+}
+
+const TP = temple();
 const RB = riverbank();
 const IL = icelake();
 
@@ -195,6 +237,7 @@ export const MAPS: Record<MapId, MapDef> = {
   bamboo: { id: 'bamboo', name: '竹林', blurb: '竹子挡路，打几下就倒', blocks: grove(), tone: 'bamboo' },
   riverbank: { id: 'riverbank', name: '河滩', blurb: '两条河把地分开，桥是要道，水里走不快', blocks: RB.blocks, water: RB.water, bridges: RB.bridges, tone: 'river' },
   icelake: { id: 'icelake', name: '冰湖', blurb: '冰面打滑，停不住脚', blocks: IL.blocks, ice: IL.ice, tone: 'ice' },
+  temple: { id: 'temple', name: '荒庙', blurb: '香炉边能回血，可香火会引来更多怪', blocks: TP.blocks, incense: TP.incense, tone: 'temple' },
   yizhuang: {
     id: 'yizhuang',
     name: '义庄',

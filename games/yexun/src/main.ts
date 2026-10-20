@@ -11,7 +11,7 @@ import { createWorld, grantWeapon, openChestNow, step, type OwnedWeapon, type Se
 import { buyChar, buyPerk, CHAR_PRICE, charOpen, charProgress, coins, dangerOpen, finishRun, grantCoins, loadSave, mapOpen, recordLiveVigil, refundPerks, saveHooks, settings, writeSave } from './platform/save.ts';
 import { hasLoginHint, startCloud } from './platform/cloud.ts';
 import { createLive, liveSetup, type LiveRecord, type Outcome } from './platform/live.ts';
-import { LIVE_OPEN, LIVE_TIERS, type LiveTier } from './content/live.ts';
+import { LIVE_OPEN, LIVE_TIERS, liveMapOk, type LiveTier } from './content/live.ts';
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
@@ -704,7 +704,7 @@ async function boot(): Promise<void> {
     if (raid && tier === 'luxe') return;
     // 实盘带已解锁的角色和地图（0.3.6），没解锁的退回小道士、雪原；加成、咒印照旧不带
     const character = menuState().character;
-    const map = !raid && pickMap && mapOpen(save, pickMap) ? pickMap : 'snow';
+    const map = !raid && pickMap && mapOpen(save, pickMap) && liveMapOk(pickMap) ? pickMap : 'snow';
     const seed = (Math.random() * 0x100000000) >>> 0;
     const r = await live.buyin(tier, seed, raid, character, map);
     if (r.ok) {

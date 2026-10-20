@@ -407,6 +407,27 @@ function rock(c: Ctx): void {
   blob(c, (k) => { k.moveTo(10.5, 15); k.quadraticCurveTo(26, 3, 44, 10.5); k.quadraticCurveTo(48, 15, 40, 16); k.quadraticCurveTo(26, 12, 14, 19); }, '#f6f8fb', null, 1.6);
 }
 
+/** 香炉（荒庙）：三足铜鼎，插着三炷香，冒一缕青烟 */
+function censer(c: Ctx): void {
+  dab(c, ellipse(32, 52, 26, 5), INK, 0.22);
+  // 三条腿
+  for (const x of [16, 32, 48]) blob(c, rrect(x - 3, 40, 6, 12, 2), '#6a4a22', '#4a3216', 1.8, 1);
+  // 鼎身
+  blob(c, (k) => { k.moveTo(8, 22); k.lineTo(56, 22); k.quadraticCurveTo(56, 44, 32, 46); k.quadraticCurveTo(8, 44, 8, 22); }, '#b8862e', '#7a5418', 2.4, 3);
+  blob(c, rrect(5, 18, 54, 7, 3), '#d8a842', '#8a6420', 2.2, 1.4);
+  // 两个耳朵
+  blob(c, rrect(2, 10, 7, 12, 3), '#b8862e', '#7a5418', 1.8, 1);
+  blob(c, rrect(55, 10, 7, 12, 3), '#b8862e', '#7a5418', 1.8, 1);
+  // 鼎身上的纹
+  stroke(c, (k) => { k.moveTo(16, 30); k.quadraticCurveTo(32, 36, 48, 30); }, 1.6, '#7a5418');
+  dab(c, circle(32, 34, 3.2), '#7a5418');
+  // 三炷香和火头
+  for (const [x, h] of [[26, 16], [32, 20], [38, 15]] as const) {
+    stroke(c, (k) => { k.moveTo(x, 19); k.lineTo(x, 19 - h); }, 1.8, '#a0342a');
+    dab(c, circle(x, 19 - h, 1.8), '#ffb03a');
+  }
+}
+
 function stele(c: Ctx): void {
   blob(c, poly(8, 70, 10, 14, 16, 6, 34, 6, 40, 14, 42, 70), '#8b8f9e', '#676b7a', 2.4, 3);
   blob(c, rrect(16, 22, 18, 30, 1), '#b8463a', null, 1.4);
@@ -505,6 +526,7 @@ export const SPRITES: SpriteDef[] = [
   { key: 'soul', w: 14, h: 18, ox: 0.5, oy: 0.6, draw: soul },
   { key: 'tree', w: 140, h: 158, ox: 0.5, oy: 0.95, draw: deadTree },
   { key: 'rock', w: 60, h: 40, ox: 0.5, oy: 0.85, draw: rock },
+  { key: 'censer', w: 64, h: 56, ox: 0.5, oy: 0.92, draw: censer },
   { key: 'stele', w: 50, h: 76, ox: 0.5, oy: 0.93, draw: stele },
   { key: 'grass', w: 24, h: 22, ox: 0.5, oy: 0.9, draw: grass },
   { key: 'slabs', w: 130, h: 50, ox: 0.5, oy: 0.5, draw: slabs },

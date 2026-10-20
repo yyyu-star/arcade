@@ -377,6 +377,30 @@ function stonemonk(c: Ctx): void {
   stroke(c, (k) => { k.moveTo(23, 24); k.quadraticCurveTo(26, 25.6, 29, 24); }, 1.5);
 }
 
+/** 庙祝鬼：灰白长袍的老庙祝，弓着背，一手捧香灰钵，一手扬起要撒；头上一顶破僧帽 */
+function templeghost(c: Ctx): void {
+  const ROBE = '#c9c2b4';
+  const ROBE_SH = '#8f877a';
+  dab(c, ellipse(24, 56, 13, 3), INK, 0.2);
+  // 长袍：下摆飘着，没有脚
+  blob(c, (k) => { k.moveTo(14, 24); k.quadraticCurveTo(6, 42, 8, 54); k.lineTo(14, 49); k.lineTo(20, 55); k.lineTo(27, 49); k.lineTo(33, 55); k.lineTo(38, 50); k.quadraticCurveTo(40, 38, 34, 24); k.closePath(); }, ROBE, ROBE_SH, 2.4, 3);
+  stroke(c, (k) => { k.moveTo(24, 26); k.lineTo(22, 50); }, 1.4, ROBE_SH);
+  // 捧着的香灰钵
+  blob(c, ellipse(16, 38, 8, 5), '#6a4a2a', '#3e2a16', 2, 1.2);
+  dab(c, ellipse(16, 36, 6, 2.4), '#b0aaa0');
+  // 扬起的手，指缝漏着灰
+  stroke(c, (k) => { k.moveTo(34, 30); k.lineTo(42, 20); }, 4.4, INK);
+  stroke(c, (k) => { k.moveTo(34, 30); k.lineTo(42, 20); }, 2.6, ROBE);
+  for (const [x, y, r] of [[44, 16, 2.4], [47, 12, 1.8], [41, 11, 1.6], [46, 20, 1.4]] as const) dab(c, circle(x, y, r), '#9a948a', 0.85);
+  // 头：灰白的脸，眯眼，长眉垂下
+  blob(c, circle(24, 16, 9.5), '#ddd6c8', ROBE_SH, 2.2, 2);
+  stroke(c, (k) => { k.moveTo(18, 16); k.quadraticCurveTo(20, 17.6, 22, 16); k.moveTo(26, 16); k.quadraticCurveTo(28, 17.6, 30, 16); }, 1.6);
+  stroke(c, (k) => { k.moveTo(17, 13); k.quadraticCurveTo(14, 16, 15, 20); k.moveTo(31, 13); k.quadraticCurveTo(34, 16, 33, 20); }, 1.2, '#f4f0e6');
+  stroke(c, (k) => { k.moveTo(21, 21); k.quadraticCurveTo(24, 22.6, 27, 21); }, 1.2);
+  // 破僧帽
+  blob(c, (k) => { k.moveTo(14, 11); k.quadraticCurveTo(24, 1, 34, 11); k.quadraticCurveTo(24, 8, 14, 11); }, '#6a5a48', '#3e3226', 1.8, 1);
+}
+
 /** 提灯鬼：半透明的青白小鬼，尖尖的身子飘着，没有脚；一手提着暖黄的纸灯笼，灯笼光把周围染暖 */
 function lampghost(c: Ctx): void {
   const BODY = '#cfe4e0';
@@ -429,4 +453,5 @@ export const SPRITES12: SpriteDef[] = [
   { key: 'nightwatch', w: 54, h: 62, ox: 0.5, oy: 0.92, draw: nightwatch },
   { key: 'stonemonk', w: 52, h: 68, ox: 0.5, oy: 0.95, draw: stonemonk },
   { key: 'lampghost', w: 56, h: 66, ox: 0.5, oy: 0.92, draw: lampghost },
+  { key: 'templeghost', w: 52, h: 60, ox: 0.5, oy: 0.93, draw: templeghost },
 ];

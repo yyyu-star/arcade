@@ -243,6 +243,10 @@ export class World {
   index: BlockIndex | null = null;
   readonly water: readonly Rect[];
   readonly ice: readonly Rect[];
+  /** 香火区（荒庙） */
+  readonly incense: readonly Rect[];
+  /** 主角这一拍在不在香火区里（每拍开头按位置算，画面层拿来亮光圈） */
+  inIncense = false;
   /** 主角在冰上的速度（冰上才用；离开冰面就按输入直接走） */
   pvx = 0;
   pvy = 0;
@@ -384,6 +388,7 @@ export class World {
     if (!this.raid && def.blocks.length > 40) this.index = new BlockIndex(def.blocks as readonly RaidBlock[], ARENA.w);
     this.water = this.raid ? [] : def.water ?? [];
     this.ice = this.raid ? [] : def.ice ?? [];
+    this.incense = this.raid ? [] : def.incense ?? [];
     if (this.raid) {
       this.x = this.px = this.raid.map.spawn.x;
       this.y = this.py = this.raid.map.spawn.y;

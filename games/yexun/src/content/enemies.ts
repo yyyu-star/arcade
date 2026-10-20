@@ -16,6 +16,8 @@ export type EnemyKind =
   | 'drown' | 'crab' | 'hebo'
   | 'icegolem' | 'icicle' | 'frostsoul'
   | 'nightwatch' | 'stonemonk'
+  // 荒庙：庙祝鬼（远远撒香灰）
+  | 'templeghost'
   // 守夜危险 3 起的常规怪：提灯鬼（不怕火）
   | 'lampghost';
 
@@ -86,6 +88,7 @@ export const ENEMIES: readonly EnemyDef[] = [
   { kind: 'stonemonk', code: 31, hp: 60, speed: 0.9, dmg: 11, r: 19, xp: 4, steady: 0.8, vs: { 剑: 0.5, 火: 0.85, 水: 1.3, 镇: 0.6, 符: 1.25 } },
   // 守夜危险 3 起的常规怪（waves.ts LAMP 决定谁在几分钟出）：提灯鬼，近战直走，不怕火，给火流派一个对手；怕符怕铃。数值按同期的河蟹、冰傀
   { kind: 'lampghost', code: 32, hp: 32, speed: 1.35, dmg: 8, r: 15, xp: 3, steady: 0.2, vs: { 火: 0.5, 木: 1.2, 镇: 1.15 } },
+  { kind: 'templeghost', code: 33, hp: 18, speed: 1.3, dmg: 5, r: 14, xp: 3, steady: 0.1, vs: { 火: 1.35, 水: 1.2, 剑: 0.85 } },
 ];
 
 export const ENEMY_BY_KIND: Record<EnemyKind, EnemyDef> = Object.fromEntries(ENEMIES.map((e) => [e.kind, e])) as Record<EnemyKind, EnemyDef>;
@@ -180,4 +183,6 @@ export const FROSTSOUL = { every: 180, warn: 30, r: 170, dmg: 16, slowTicks: 70,
 /** 更夫鬼：每 every 拍敲一次梆子，唤来 calls 只小鬼火（场上怪超过 cap 只就不唤） */
 export const NIGHTWATCH = { every: 170, calls: 2, cap: 260 };
 /** 石僧：走 every 拍就停下蓄力 warn 拍，然后一掌拍地（半径 r，伤 dmg） */
+/** 庙祝鬼：离主角 range 以内站住，每 every 拍往主角脚下撒一把香灰，warn 拍后落地，r 内挨 dmg 并迷眼走慢 slowTicks 拍 */
+export const TEMPLEGHOST = { range: 250, every: 210, warn: 40, r: 56, dmg: 4, slowTicks: 24 };
 export const MONK = { every: 150, warn: 24, r: 95, dmg: 14 };

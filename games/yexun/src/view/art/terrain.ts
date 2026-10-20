@@ -14,11 +14,12 @@ export const GROUND_TINT: Record<NonNullable<MapDef['tone']>, number> = {
   bamboo: 0xc8dcc6,
   river: 0xd8e4ea,
   ice: 0xd2e4f6,
+  temple: 0xd8d4dc,
 };
 
 /** 这张图要不要画地形叠层 */
 export function hasTerrainLayer(def: MapDef): boolean {
-  return def.tone === 'bamboo' || def.tone === 'river' || def.tone === 'ice';
+  return def.tone === 'bamboo' || def.tone === 'river' || def.tone === 'ice' || def.tone === 'temple';
 }
 
 function canvas(w: number, h: number): [HTMLCanvasElement, Ctx] {
@@ -42,8 +43,54 @@ export function paintTerrain(def: MapDef, seed: number, scale: number): HTMLCanv
   const r = artRng(seed ^ 0x7e44a1);
   if (def.tone === 'river') paintRiver(c, def, r);
   else if (def.tone === 'ice') paintIce(c, def, r);
+  else if (def.tone === 'temple') paintTemple(c, def, r);
   else paintBambooFloor(c, r);
   return cv;
+}
+
+/** 荒庙：院里铺一片残破的青石板，香火区画一圈暖黄的香灰地和飘着的青烟，一眼看出"这里不一样" */
+function paintTemple(c: Ctx, def: MapDef, r: () => number): void {
+  const C = ARENA.w / 2;
+  // 院里的石板地
+  c.fillStyle = '#b9b4bd';
+  c.fillRect(C - 540, C - 540, 1080, 1080);
+  c.strokeStyle = '#8e8894';
+  c.lineWidth = 3;
+  for (let y = C - 540; y < C + 540; y += 72) {
+    for (let x = C - 540 + ((y / 72) % 2) * 36; x < C + 540; x += 72) {
+      if (r() < 0.18) continue; // 缺几块，露出雪
+      c.globalAlpha = 0.5 + r() * 0.3;
+      c.strokeRect(x + 2, y + 2, 68, 68);
+    }
+  }
+  c.globalAlpha = 1;
+  // 正中一条通往大殿的石阶路
+  c.fillStyle = '#a49eaa';
+  c.fillRect(C - 70, C - 470, 140, 1010);
+  // 香火区：暖黄的香灰地 + 一圈深边 + 几缕青烟
+  for (const z of def.incense ?? []) {
+    const cx = z.x + z.w / 2;
+    const cy = z.y + z.h / 2;
+    const g = c.createRadialGradient(cx, cy, 10, cx, cy, Math.max(z.w, z.h) * 0.62);
+    g.addColorStop(0, 'rgba(255,214,120,0.75)');
+    g.addColorStop(1, 'rgba(240,180,80,0.18)');
+    c.fillStyle = g;
+    c.fillRect(z.x, z.y, z.w, z.h);
+    c.strokeStyle = 'rgba(150,100,30,0.75)';
+    c.lineWidth = 5;
+    c.setLineDash([18, 12]);
+    c.strokeRect(z.x, z.y, z.w, z.h);
+    c.setLineDash([]);
+    c.strokeStyle = 'rgba(120,130,150,0.45)';
+    c.lineWidth = 4;
+    for (let k = 0; k < 4; k++) {
+      const x = cx - 60 + r() * 120;
+      c.beginPath();
+      c.moveTo(x, cy + 20);
+      c.bezierCurveTo(x - 20, cy - 10, x + 20, cy - 40, x - 6, cy - 80);
+      c.stroke();
+    }
+  }
 }
 
 function paintRiver(c: Ctx, def: MapDef, r: () => number): void {
@@ -419,10 +466,11 @@ const BLOCK_FILL: Record<Block['look'], string> = {
   hall: '#b0402a',
   bamboo: '#1f7a3a',
   rock: '#5d6678',
+  censer: '#c08a28',
 };
 
 /** 每张图自己的底色（缩略图专用，要一眼看出是哪张图） */
-const THUMB_BASE: Record<NonNullable<MapDef['tone']>, string> = { snow: '#c6d6f0', yard: '#b9b3c4', bamboo: '#9fd08a', river: '#e2d2a0', ice: '#cfe4f4' };
+const THUMB_BASE: Record<NonNullable<MapDef['tone']>, string> = { snow: '#c6d6f0', yard: '#b9b3c4', bamboo: '#9fd08a', river: '#e2d2a0', ice: '#cfe4f4', temple: '#c4bccb' };
 
 /** 把地图的示意画在 cv 上（cv 的宽高自己定，画成正方形铺满）：底色、水、冰、桥、块，一眼看出这张图什么样 */
 export function drawMapThumb(cv: HTMLCanvasElement, def: MapDef): void {
@@ -456,6 +504,9 @@ export function drawMapThumb(cv: HTMLCanvasElement, def: MapDef): void {
       c.fill();
     }
   }
+  // 荒庙：香火区画成暖黄的方块
+  c.fillStyle = '#f2c460';
+  for (const z of def.incense ?? []) c.fillRect(z.x, z.y, z.w, z.h);
   for (const w of def.water ?? []) {
     // 河滩：水带外面一圈沙岸
     c.fillStyle = '#c9b57a';
