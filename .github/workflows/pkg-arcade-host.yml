@@ -38,3 +38,34 @@ jobs:
       - run: node ../../tools/check-isolation.mjs
       - run: npm ci
       - run: npm test
+  # PG 模式的测试再拿真的 PostgreSQL 跑一遍（本机默认用 PGlite）
+  test-pg:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pkg-arcade-host-pg-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/arcade-host/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # 测试库只在这个作业里，密码是固定的测试值
+      - run: npx vitest run test/pg.test.ts
+        env:
+          ARCADE_TEST_PG_URL: postgres://postgres:test@127.0.0.1:5432/postgres

@@ -12,6 +12,8 @@
 - 管理入口（`admin.ts`）没有认证，只许听回环地址（生成器的 `LOOPBACK` 断言、启动脚本的检查都要留着；Docker 里也只听容器内的 127.0.0.1）；不要把它挂到站点路由上，也不要加能读写任意 DO 的接口。
 - 不用 workerd 的实验特性（`--experimental`、实验兼容开关）：定时任务就是为这个改成在 Worker 里面直接调的（`docs/verify.md`）。真要用，先在 verify.md 写清开了哪些、风险和替代计划，报维护者。
 - 运行时里不用 `setTimeout`/`setInterval`（定时任务只用一个闹钟），日志一行一个 JSON，不记请求体、cookie、Secret。
+- PG 模式：机械翻译只做两边语义确定一致的改写，拿不准的一律要覆盖表、没有就报错（`NeedsOverride`），不要为了"能跑"加猜测性的改写；覆盖表和 PG 版迁移是站点的数据，不放进本包。
+  报错原文的还原（`sqliteMessage`）要守住平台认的那几种（`UNIQUE`、`Network connection lost`）。连 PG 的 Worker 才走 `pg-network`，别的 Worker 不放开内网出站。
 - capnp 字符串只放 ASCII：中文变量值、迁移 SQL、静态资源清单都写进 embed 的文件（`src/gen/capnp.ts` 会拦）。
 - 测试：`npm test`（起真的 workerd，临时文件在 `os.tmpdir()`）。新加的运行时行为要有测试。
 - 版本号和 `CHANGELOG.md` 各自独立；提交信息以 `arcade-host:` 开头，分支名 `host/<说明>`。

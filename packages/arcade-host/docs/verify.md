@@ -60,3 +60,19 @@ kit 的房间、计量、排队现在都用 `ctx.storage.sql`，所以 PG 模式
 - 迁移文件可以一次执行多条语句（`ctx.storage.sql.exec(整个文件)`），和 wrangler 用的是同一张 `d1_migrations` 表、同样的列，从 Cloudflare 导出的库（`wrangler d1 export`）可以直接导入。
 - `request.cf` 在 workerd 里是 `undefined`；本站代码没有用到。真实 IP 只认 `cf-connecting-ip` 头，由前面的 Caddy 用真实地址覆盖（workerd 只听回环地址）。
 - 页面和静态资源的 ETag 值和 Cloudflare 不同（Cloudflare 用 blake3，这里用 sha256），语义一样：内容加扩展名的哈希，带回来回 304。
+
+## 阶段 5（PostgreSQL 模式）实测（0.3.0，2026-10-20）
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| D1 协议换 PG 后端 | 通过：迁移、写入、raw、BLOB、exec 多行、batch 出错整体回滚、`no such table`/`UNIQUE constraint failed` 原文还原、定时任务写进 PG、重启后数据在且迁移不重跑 | `test/pg.test.ts`（本机 PGlite，CI 另跑真的 postgres:17） |
+| SQLite 备份导进 PG | 通过：跨行 DDL 不管，INSERT 逐行解析按参数写（`''`、`char(10)`、`X'…'`、NULL），行数和数字列总和核对，序列推到最大值之后，坏备份整体回滚 | 同上"SQLite 格式的备份导进 PG" |
+| KIT_STORE | 通过：load/commit/wipe 一个事务、闹钟整行覆盖、ns 只许 room/meter/match；内存存储下重启后按存的闹钟唤醒对象（`kitWake(name)`，过期的也唤醒） | 同上"KIT_STORE" 两条 |
+| 内存存储下的 storage.sql | 仍然不可用（同阶段 0），所以房间状态靠 kit 0.21 的 KitStore 走 KIT_STORE | — |
+
+实测到的细节：
+- workerd 默认的出站网络只许公网地址（防 SSRF），连本机或内网的 PG 报 "cannot connect to the specified address"：生成器给连 PG 的两个 Worker 配了单独的 `pg-network`（public、private、local），模块自己的 Worker 不变。
+- postgres.js 的 workerd 版要 `node:buffer` 等：`nodejs_compat` 从 compat date 2026-08-04 起默认开着，再显式写 workerd 会报错，所以不写。
+- workerd 不许一个请求里开的连接给别的请求用：连接池放在 DO 里（D1Pg、KitStorePg 各一个对象），和方案一致。
+- 结果类型对齐 SQLite：int8（count、BIGINT 列）、numeric（SUM）解析成数字，布尔解析成 0/1。
+- 本机守卫不让装 PostgreSQL（apt 被拒），本机测试用 PGlite + pglite-socket（多连接是它的复用器做的，和真 PG 不完全一样），所以 CI 另有真的 PostgreSQL 作业。

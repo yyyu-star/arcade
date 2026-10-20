@@ -22,7 +22,13 @@ export interface SiteWorker {
   secrets?: string[];
   services?: { binding: string; service: string; entrypoint?: string; props?: Record<string, unknown> }[];
   durable_objects?: { name: string; class_name: string }[];
-  d1_databases?: { binding: string; database_name: string; migrations_dir: string }[];
+  d1_databases?: {
+    binding: string;
+    database_name: string;
+    migrations_dir: string;
+    /** PG 模式用：PG 版的迁移目录（文件名和 SQLite 版一一对应）、覆盖表（JSON：规范化后的 SQLite 语句 → PG 版） */
+    pg?: { migrations_dir: string; overrides?: string };
+  }[];
   assets?: {
     directory: string;
     binding?: string;

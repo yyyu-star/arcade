@@ -16,16 +16,23 @@ export interface RouterEnv {
   FALLBACK: string;
   /** 有定时任务的 Worker；每个一个 DO 绑定 cron:<名>（cron-entry.ts 的 ArcadeHostCron） */
   CRON_WORKERS: string[];
+  /** PG 模式才有：起来后第一次请求时唤醒存了闹钟的房间（kitstore.ts） */
+  KITSTORE?: Fetcher;
   [binding: string]: unknown;
 }
 
 let cronReady = false;
+let kitWoken = false;
 
 export default {
   async fetch(request: Request, env: RouterEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     if (!cronReady) ctx.waitUntil(ensureCron(env));
+    if (!kitWoken && env.KITSTORE) {
+      kitWoken = true;
+      ctx.waitUntil(wakeRooms(env.KITSTORE));
+    }
     if (path === '/__health') {
       await ensureCron(env);
       return new Response('ok\n', { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
@@ -40,6 +47,16 @@ export function pick(routes: [string, string][], path: string): string | null {
     if (rule.endsWith('/*') ? path.startsWith(rule.slice(0, -1)) : path === rule) return service;
   }
   return null;
+}
+
+/** 重启后唤醒一次；失败了下一个请求再试 */
+async function wakeRooms(kit: Fetcher): Promise<void> {
+  try {
+    const res = await kit.fetch('http://kitstore/wake', { method: 'POST' });
+    if (!res.ok) kitWoken = false;
+  } catch {
+    kitWoken = false;
+  }
 }
 
 /** 每个定时任务对象确认闹钟挂上了（第一次起来时没有闹钟）；一个 isolate 成功一次就不再问 */

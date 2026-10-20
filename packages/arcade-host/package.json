@@ -1,7 +1,7 @@
 {
   "name": "arcade-host",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "自托管运行时：用 workerd 一个二进制在自己的机器上跑平台和所有游戏（D1 的 SQLite 后端、静态资源、路由、定时任务、配置生成器）",
   "license": "MIT",
   "type": "module",
@@ -15,11 +15,16 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261019.1",
+    "@electric-sql/pglite": "0.5.10",
+    "@electric-sql/pglite-socket": "0.2.13",
     "@types/node": "22.20.5",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "workerd": "1.20261006.1",
     "wrangler": "4.151.0"
+  },
+  "dependencies": {
+    "postgres": "3.4.9"
   }
 }
