@@ -68,11 +68,11 @@ describe('专属被动', () => {
     const b = make('xiaodao');
     expect(a.stats.critDmg - b.stats.critDmg).toBeCloseTo(CHAR_FX.jianxiaCritDmg, 6);
   });
-  it('胖师叔：血多 50、走得慢、挨打震开身边', () => {
+  it('胖师叔：血多、走得慢、挨打震开身边', () => {
     const p = make('pang');
     const x = make('xiaodao');
-    // 0.4.5 起并进初始数值（血 150%），多的还是 50
-    expect(p.stats.hpMax - x.stats.hpMax).toBe(CHAR_FX.pangHp);
+    expect(p.stats.hpMax).toBe(Math.round(x.stats.hpMax * CHARACTERS.pang.base.hp));
+    expect(p.stats.hpMax).toBeGreaterThan(x.stats.hpMax);
     expect(p.hp).toBe(p.stats.hpMax);
     expect(p.stats.speed).toBeLessThan(x.stats.speed);
   });
