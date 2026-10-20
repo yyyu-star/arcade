@@ -15,8 +15,10 @@ describe('点按区域至少 44 CSS 像素', () => {
     expect(hitFor(844, 390)).toBe(82);
     // 667×375（16:9 小屏）：世界 1280×720，按宽缩 0.52
     expect(hitFor(667, 375)).toBe(85);
+    // 568×320（iPhone SE 一代横屏）：缩 0.44，要 100，正好在封顶以内
+    expect(hitFor(568, 320)).toBe(100);
     // 再小也封顶，免得按钮的点按区域盖满半屏
-    expect(hitFor(320, 160)).toBe(96);
+    expect(hitFor(320, 160)).toBe(100);
   });
 });
 

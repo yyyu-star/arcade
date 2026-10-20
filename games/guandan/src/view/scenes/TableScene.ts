@@ -49,7 +49,7 @@ import { COLOR, TYPE, css, minHit, phoneType } from '../theme.ts';
 import { goLobby, inGame, inOnlineGame, leaveText } from '../lobby.ts';
 import { join } from '../online.ts';
 import { cloudButton } from '../ui/cloud.ts';
-import { Button, fitWidth, iconButton, setHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
+import { Button, fitWidth, iconButton, setHit, setTopHit, modal, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { applyAudio, confirm, openRules, openSettings } from '../ui/panels.ts';
 import { runTutorial } from '../tutorial.ts';
 import { CardView } from '../table/card.ts';
@@ -458,9 +458,9 @@ export class TableScene extends Phaser.Scene {
     };
     // 最左：回大厅（平台首页），所有游戏统一放左上角；单独部署叫"首页"、回游戏首页（platform.ts）
     this.lobbyBtn = new Button(this, 70, 28, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
-    // 顶栏贴着屏幕上沿，点按区域往下伸到离上沿 minHit()（手机上 44 CSS 像素）
-    const deep = Math.max(54, minHit(), 2 * (minHit() - 28));
-    this.lobbyBtn.setHit(112, deep);
+    // 顶栏贴着屏幕上沿，点按区域从上沿往下 minHit()（手机上 44 CSS 像素），不伸出屏幕
+    const deep = Math.max(54, minHit());
+    setTopHit(this.lobbyBtn, 112, deep);
     c.add(this.lobbyBtn);
     // 好友房开打以后也能叫朋友（0.6.1）：紧挨"大厅"，中途进来的人接管电脑的座位
     const net = this.net;
@@ -468,7 +468,7 @@ export class TableScene extends Phaser.Scene {
     // 快速匹配的桌（0.26.0）只给排到的人进，不摆邀请
     this.inviteBtn = net && !net.match ? iconButton(this, 126 + lp / 2 + 8, 28, 'invite', () => void openInvitePanel(net.code), 46) : null;
     if (this.inviteBtn) {
-      setHit(this.inviteBtn, lp, deep);
+      setTopHit(this.inviteBtn, lp, deep);
       c.add(this.inviteBtn);
     }
 
@@ -497,21 +497,23 @@ export class TableScene extends Phaser.Scene {
     const cloudOn = !standalone();
     // 间距：有地方就拉到 44 CSS 像素（minHit），最少 56；最左一个的点按区域不越过中间那组（右边 mx + 238）
     const n = icons.length + (cloudOn ? 1 : 0);
-    const room = (W - 34 - (mx + 238 + 8)) / (n - 0.5);
+    const room = (W - (mx + 238 + 8)) / n;
     const pitch = Math.max(56, Math.min(minHit(), room));
+    // 最右一个的点按区不伸出屏幕右沿
+    const right = W - Math.max(34, pitch / 2);
     icons.forEach(([icon, fn], i) => {
-      const b = iconButton(this, W - 34 - i * pitch, 28, icon, fn, 46);
-      setHit(b, pitch, deep);
+      const b = iconButton(this, right - i * pitch, 28, icon, fn, 46);
+      setTopHit(b, pitch, deep);
       c.add(b);
       this.topIcons[i] = b;
       if (icon === 'mute' || icon === 'sound') this.soundIcon = b;
     });
-    this.cloudBtn = cloudButton(this, W - 34 - icons.length * pitch, 28, 46);
-    setHit(this.cloudBtn, pitch, deep);
+    this.cloudBtn = cloudButton(this, right - icons.length * pitch, 28, 46);
+    setTopHit(this.cloudBtn, pitch, deep);
     // 单独部署没有账号，不摆云存档
     this.cloudBtn.setVisible(cloudOn);
     c.add(this.cloudBtn);
-    this.iconsLeft = W - 34 - (n - 0.5) * pitch;
+    this.iconsLeft = right - (n - 0.5) * pitch;
 
     // 实盘：顶栏下面靠右一条（左边是搭档的头像），本场到目前的分和筹码一直显示着
     const st = this.stake;

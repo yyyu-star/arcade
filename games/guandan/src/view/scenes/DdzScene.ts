@@ -42,7 +42,7 @@ import { BUTTON_Y, TOPBAR_H, seatAnchors3 } from '../table/layout.ts';
 import { SeatView } from '../table/seats.ts';
 import { TrickView } from '../table/trick.ts';
 import { hasLayer } from '../ui/focus.ts';
-import { Button, iconButton, modal, setHit, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
+import { Button, iconButton, modal, setHit, setTopHit, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
 import { applyAudio, confirm, openDdzRules } from '../ui/panels.ts';
 
 type Overlay = 'settle' | 'gameOver' | 'menu' | 'tutorial' | null;
@@ -262,9 +262,9 @@ export class DdzScene extends Phaser.Scene {
     g.lineStyle(2, COLOR.gold, 0.9).lineBetween(0, TOPBAR_H, W, TOPBAR_H);
     g.lineStyle(1, COLOR.goldLight, 0.35).lineBetween(0, TOPBAR_H - 4, W, TOPBAR_H - 4);
     c.add(g);
-    const deep = Math.max(54, minHit(), 2 * (minHit() - 28));
+    const deep = Math.max(54, minHit());
     const lobby = new Button(this, 70, 28, 112, 46, lobbyName(), 'wood', () => this.onLobby(), 'home');
-    lobby.setHit(112, deep);
+    setTopHit(lobby, 112, deep);
     c.add(lobby);
     this.reg('lobby', lobby);
     // 中间：底分 × 倍数，和底牌（叫完才翻开）
@@ -288,9 +288,11 @@ export class DdzScene extends Phaser.Scene {
       ['rules', 'rules', () => this.openRules()],
     ];
     const pitch = Math.max(56, minHit());
+    // 最右一个的点按区不伸出屏幕右沿
+    const right = W - Math.max(34, pitch / 2);
     icons.forEach(([icon, name, fn], i) => {
-      const b = iconButton(this, W - 34 - i * pitch, 28, icon, fn, 46);
-      setHit(b, pitch, deep);
+      const b = iconButton(this, right - i * pitch, 28, icon, fn, 46);
+      setTopHit(b, pitch, deep);
       c.add(b);
       this.reg(name, b);
       if (name === 'sound') this.soundIcon = b;
@@ -1062,7 +1064,7 @@ export class DdzScene extends Phaser.Scene {
     const side = r.landlordWon ? '地主赢' : '农民赢';
     const extras = [`${r.bid} 分`, r.bombs ? `炸弹 ${r.bombs} 个` : '', r.spring === 'spring' ? '春天' : r.spring === 'anti' ? '反春' : '', `× ${r.mult} 倍`].filter(Boolean).join(' · ');
     b.add(text(this, 0, -190, `${side} · ${extras}`, { size: TYPE.title, bold: true, color: r.landlordWon ? COLOR.redDark : COLOR.ink }));
-    b.add(text(this, 0, -146, `这副 ${r.s} 分：地主${r.landlordWon ? '赢' : '输'}两份，农民各${r.landlordWon ? '输' : '赢'}一份`, { size: TYPE.small, color: COLOR.muted }));
+    b.add(text(this, 0, -146, `这副 ${r.s} 分：地主${r.landlordWon ? '赢' : '输'} ${2 * r.s} 分，农民各${r.landlordWon ? '输' : '赢'} ${r.s} 分`, { size: TYPE.small, color: COLOR.muted }));
     const cols = [-300, -40, 120, 280];
     ['', '这副', '累计', ''].forEach((h, i) => h && b.add(text(this, cols[i]!, -96, h, { size: TYPE.small, bold: true, color: COLOR.muted })));
     [0, 1, 2].forEach((s, i) => {

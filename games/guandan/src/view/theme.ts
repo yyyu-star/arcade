@@ -113,7 +113,7 @@ export function minHit(): number {
 /** 可见区域 w×h CSS 像素时，44 CSS 像素合多少世界坐标（画布按 FIT 缩放，取宽、高两个方向小的那个比例） */
 export function hitFor(w: number, h: number): number {
   const k = Math.min(w / worldWidthFor(w, h), h / GAME_HEIGHT);
-  return Math.max(44, Math.min(96, Math.ceil(44 / k)));
+  return Math.max(44, Math.min(100, Math.ceil(44 / k)));
 }
 
 /** 按钮的几种配色：主按钮红、要紧的金、确认绿、次要木色、联机蓝。按下、悬停、禁用由 kit.ts 按同一套规则算 */

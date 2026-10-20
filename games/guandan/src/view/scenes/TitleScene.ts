@@ -21,7 +21,7 @@ import { goLobby } from '../lobby.ts';
 import { join, openMatch, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
-import { Button, ModeCard, fitWidth, iconButton, modal, segmented, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
+import { Button, ModeCard, fitWidth, iconButton, modal, segmented, setHit, setTopHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
 import { confirm, openDdzRules, openRules, openSettings, openStats } from '../ui/panels.ts';
 import { openLevelPicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
@@ -44,6 +44,8 @@ export class TitleScene extends Phaser.Scene {
 
   /** 掼蛋 / 斗地主切换的两个点（冒烟点它） */
   private variantAt: Record<VariantId, { x: number; y: number }> | null = null;
+  /** 主页切换的点按区下沿：主按钮的点按区从这里往下 */
+  private hitTop = 0;
 
   constructor() {
     super('title');
@@ -113,10 +115,15 @@ export class TitleScene extends Phaser.Scene {
     }
     // 掼蛋 / 斗地主的切换（docs/doudizhu.md 第 4 节），上次选的记在 guandan.variant
     const variant: VariantId = getVariant();
-    const seg = segmented(this, cx - 75, P.y + 186, [{ label: '掼蛋', value: 'guandan' }, { label: '斗地主', value: 'ddz' }], variant, (v) => {
+    // 点按区要 minHit() 高（手机横屏约 82–100），下面紧挨着主按钮：下沿对齐画出来的底边（高 44），往上伸进标题字（字点不了）
+    const hitM = minHit();
+    const segY = P.y + 186;
+    const seg = segmented(this, cx - 75, segY, [{ label: '掼蛋', value: 'guandan' }, { label: '斗地主', value: 'ddz' }], variant, (v) => {
       setVariant(v as VariantId);
       this.scene.restart();
-    }, 150).setDepth(20);
+    }, 150, hitM, 22 - hitM / 2).setDepth(20);
+    // 主按钮的点按区从切换的下沿往下数，不和它压着
+    this.hitTop = segY + 23;
     this.variantAt = { guandan: { x: seg.x, y: seg.y }, ddz: { x: seg.x + 150, y: seg.y } };
     if (variant === 'ddz') {
       this.buildDdzPanel(P, cx, inner);
@@ -137,6 +144,7 @@ export class TitleScene extends Phaser.Scene {
     const by = P.y + 256;
     const primary = (key: string, label: string, sub: string, fn: () => void): { btn: Button; line: Phaser.GameObjects.Text } => {
       const btn = new Button(this, cx, by, inner, 72, label, 'red', fn, 'play').setDepth(20);
+      this.belowSeg(btn, by, inner);
       this.buttons[key] = btn;
       const line = text(this, cx, by + 52, sub, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20);
       return { btn, line };
@@ -192,6 +200,13 @@ export class TitleScene extends Phaser.Scene {
     this.buildCorner(W);
   }
 
+  /** 主按钮的点按区：minHit() 高，居中会压到上面的切换时整体往下挪（下面的模式卡离得够远） */
+  private belowSeg(btn: Button, by: number, w: number): void {
+    const h = Math.max(72, minHit());
+    const top = Math.max(by - h / 2, this.hitTop);
+    btn.setHit(w, h, top + h / 2 - by);
+  }
+
   /** 右上角的图标、左上角的回大厅和回到房间、版本号、音乐（掼蛋和斗地主的主页共用） */
   private buildCorner(W: number): void {
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间
@@ -201,12 +216,17 @@ export class TitleScene extends Phaser.Scene {
       ['stats', 'stats', () => (this.overlay = openStats(this))],
     ];
     const step = Math.max(64, minHit() + 4);
-    let ix = W - 44;
+    // 点按区从屏幕上沿往下算（setTopHit），居中的话手机横屏上伸出屏幕的一截点不到
+    const topH = Math.max(60, minHit());
+    let ix = W - Math.max(44, topH / 2);
     this.cloudBtn = cloudButton(this, ix, 44, 52).setDepth(20);
+    setTopHit(this.cloudBtn, topH, topH);
     if (standalone()) this.cloudBtn.setVisible(false);
     else ix -= step;
     for (const [key, icon, fn] of icons) {
-      this.buttons[key] = iconButton(this, ix, 44, icon, fn, 52).setDepth(20);
+      const b = iconButton(this, ix, 44, icon, fn, 52).setDepth(20);
+      setTopHit(b, topH, topH);
+      this.buttons[key] = b;
       ix -= step;
     }
     // URL 的 screen=rules|settings|stats（截图用，params.ts）：主页起来后直接打开那个弹窗，整个页面只开一次
@@ -217,6 +237,7 @@ export class TitleScene extends Phaser.Scene {
     }
     // 回大厅（平台首页）：主页不在对局中，直接走。单独部署没有账号和大厅：主页就是游戏首页
     this.lobbyBtn = new Button(this, 74, 40, 120, 52, '大厅', 'wood', () => goLobby(), 'home').setDepth(20);
+    setTopHit(this.lobbyBtn, 120, topH);
     if (standalone()) this.lobbyBtn.setVisible(false).disableInteractive();
     // 本机记着这个账号刚才的房间（回大厅、关了页面）时左上角给"回到房间"，先问平台现在是谁，换了账号的人看不到上一个人的房间
     const bx = standalone() ? 108 : 244;
@@ -224,6 +245,7 @@ export class TitleScene extends Phaser.Scene {
     void myRoom().then((back) => {
       if (!back || !this.sys.isActive() || this.backBtn) return;
       this.backBtn = new Button(this, bx, 40, 180, 52, '回到房间', 'red', () => join(back.code, back.host, null, false, back.variant ?? 'guandan'), 'cards').setDepth(20);
+      setTopHit(this.backBtn, 180, topH);
     });
 
     text(this, W - 16, worldH - 10, `v${__APP_VERSION__}`, { size: TYPE.small, color: 0xb8a690, ox: 1, oy: 1 }).setDepth(20).setAlpha(0.7);
@@ -282,7 +304,12 @@ export class TitleScene extends Phaser.Scene {
     const daily = !standalone();
     const lx = daily ? P.x + 24 + (inner - 176) / 2 : cx;
     fitWidth(text(this, lx, sy, line, { size: TYPE.label, color: st.games > 0 ? COLOR.goldLight : 0xd8c6a6 }).setDepth(20), daily ? inner - 200 : inner - 24);
-    if (daily) this.buttons['daily'] = new Button(this, P.x + 24 + inner - 88, sy, 160, 48, '每日挑战', 'gold', () => this.newDdzDaily(), 'crown').setDepth(20);
+    if (daily) {
+      // 点按区往下挪到模式卡底边以下（手机横屏要 minHit() 高，居中会伸进卡里）
+      const dh = Math.max(48, minHit());
+      const top = Math.max(sy - dh / 2, P.y + 428 + 75 + 1);
+      this.buttons['daily'] = new Button(this, P.x + 24 + inner - 88, sy, 160, 48, '每日挑战', 'gold', () => this.newDdzDaily(), 'crown').setHit(160, dh, top + dh / 2 - sy).setDepth(20);
+    }
   }
 
   /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；快速匹配排不到就转这一档的单机（照常带入一份） */
@@ -335,8 +362,10 @@ export class TitleScene extends Phaser.Scene {
       if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newDdz(lv));
       else this.newDdz(lv);
     };
+    // 行距至少 minHit()：手机横屏上按钮的点按区要 44 CSS 像素高，行距 90 时上下压着
+    const pitch = Math.max(90, minHit());
     levels.forEach((lv, i) => {
-      const b = new Button(this, 0, -100 + i * 90, 420, 72, LEVEL_CARD[lv].name, lv === getSettings().difficulty ? 'red' : 'wood', () => {
+      const b = new Button(this, 0, 80 - (2 - i) * pitch, 420, 72, LEVEL_CARD[lv].name, lv === getSettings().difficulty ? 'red' : 'wood', () => {
         m.close();
         updateSettings({ difficulty: lv });
         fresh(lv);
@@ -345,7 +374,7 @@ export class TitleScene extends Phaser.Scene {
       m.body.setData(`btn:level:${lv}`, b);
     });
     // 快速匹配（牌馆 ⑤）：排 ddz-fun 档；排不到就按现在的难度开一局单机
-    const match = new Button(this, 0, 170, 420, 72, '快速匹配', 'blue', () => {
+    const match = new Button(this, 0, 80 + pitch, 420, 72, '快速匹配', 'blue', () => {
       m.close();
       this.overlay = null;
       openMatch(null, () => this.scene.isActive() && fresh(getSettings().difficulty), 'ddz');

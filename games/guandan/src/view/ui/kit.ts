@@ -8,10 +8,10 @@ import { audio } from '../audio.ts';
 import { focusable, pushLayer } from './focus.ts';
 
 /**
- * 改点按区域（世界坐标，以对象中心为中心）：按钮、图标按钮、区域都能用。
- * 区域（Zone）的原点不一定在中心，按它自己的原点算。
+ * 改点按区域（世界坐标，以对象中心为中心，dy 是往下挪多少）：按钮、图标按钮、区域都能用。
+ * 区域（Zone）的原点不一定在中心，按它自己的原点算。上下挨得近的（主页的切换和主按钮）用 dy 把点按区挪到空着的那一边，不互相压着。
  */
-export function setHit(obj: Phaser.GameObjects.Container | Phaser.GameObjects.Zone, w: number, h: number): void {
+export function setHit(obj: Phaser.GameObjects.Container | Phaser.GameObjects.Zone, w: number, h: number, dy = 0): void {
   const cx = obj.x;
   const cy = obj.y;
   if (obj instanceof Phaser.GameObjects.Zone && (obj.originX !== 0.5 || obj.originY !== 0.5)) {
@@ -20,8 +20,16 @@ export function setHit(obj: Phaser.GameObjects.Container | Phaser.GameObjects.Zo
     obj.setOrigin(0, 0).setPosition(left, top);
   }
   obj.setSize(w, h);
-  if (obj.input) obj.input.hitArea.setTo(0, 0, w, h);
-  else obj.setInteractive({ useHandCursor: true });
+  if (!obj.input) obj.setInteractive({ useHandCursor: true });
+  obj.input!.hitArea.setTo(0, dy, w, h);
+}
+
+/**
+ * 贴着屏幕上沿的顶栏按钮（对象直接放在场景里或放在原点的容器里）：点按区域从上沿往下 h 高，不伸出屏幕。
+ * 伸出去的那截点不到，手机横屏上露在屏内的就不够 44 CSS 像素。
+ */
+export function setTopHit(obj: Phaser.GameObjects.Container, w: number, h: number): void {
+  setHit(obj, w, h, Math.max(0, h / 2 - obj.y));
 }
 
 export function worldW(scene: Phaser.Scene): number {
@@ -204,8 +212,8 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   /** 点按区域（世界坐标，以按钮中心为中心）；默认至少 minHit() 见方，挨得近的调用方按间距收窄 */
-  setHit(w: number, h: number): this {
-    setHit(this, w, h);
+  setHit(w: number, h: number, dy = 0): this {
+    setHit(this, w, h, dy);
     return this;
   }
 
@@ -547,6 +555,7 @@ export function segmented(
   onPick: (v: string) => void,
   itemW = 104,
   hitH = 60,
+  hitDy = 0,
 ): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y);
   const btns: { g: Phaser.GameObjects.Graphics; t: Phaser.GameObjects.Text; v: string; hover: boolean; down: boolean }[] = [];
@@ -570,7 +579,9 @@ export function segmented(
     const g = scene.add.graphics().setPosition(bx, 0);
     const t = text(scene, bx, 0, it.label, { size: TYPE.label, bold: true });
     // 点按区域：宽到和邻居相接，高到行距（设置面板一行 60），比画出来的 44 高
+    // hitDy：上下有别的按钮时把点按区挪到空着的一边（主页的切换往上伸进标题字）
     const hit = scene.add.zone(bx, 0, itemW, Math.max(h, hitH)).setInteractive({ useHandCursor: true });
+    if (hitDy) setHit(hit, itemW, Math.max(h, hitH), hitDy);
     const b = { g, t, v: it.value, hover: false, down: false };
     const pick = (): void => {
       audio.sfx('click');

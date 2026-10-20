@@ -52,8 +52,9 @@ export function openLevelPicker(
       SOLO_LEVELS.forEach((lv, i) => times[i]!.setText(timeOf(lv)));
     },
     330,
-    // 手机上 60 只合 27–36 CSS 像素：拉到 minHit()，最多 88（下沿 -106，不压到第一行"开始"的点按区）
-    Math.max(60, Math.min(88, minHit())),
+    // 手机上 60 只合 27–36 CSS 像素：拉到 minHit()；下沿最低 -106（不压到第一行"开始"的点按区），再高就往上伸进标题字
+    Math.max(60, minHit()),
+    Math.min(0, 44 - Math.max(60, minHit()) / 2),
   );
   b.add(seg);
   m.body.setData('seg:length', seg);
@@ -74,7 +75,12 @@ export function openLevelPicker(
     reg(m, `level:${lv}`, new Button(scene, 330, y, 130, 52, '开始', 'red', () => (m.close(), onPick(lv, len)), 'play')).setHit(Math.max(130, minHit()), Math.min(90, minHit()));
   });
   b.add(text(scene, onMatch ? -120 : 0, 210, '随时能在设置里换难度；局长下次开局还是这个', { size: TYPE.small, color: COLOR.muted }));
-  if (onMatch) reg(m, 'match', new Button(scene, 300, 210, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite'));
+  if (onMatch) {
+    // 点按区 minHit() 高，居中会压到第三行"开始"（下沿 124 + 45）：往下挪
+    const mh = Math.max(52, minHit());
+    const top = Math.max(210 - mh / 2, 124 + 46);
+    reg(m, 'match', new Button(scene, 300, 210, 220, 52, '快速匹配', 'blue', () => (m.close(), onMatch()), 'invite')).setHit(Math.max(220, minHit()), mh, top + mh / 2 - 210);
+  }
   return m;
 }
 
@@ -131,6 +137,9 @@ export function openTierPicker<S = StakeSession>(
         times.forEach((t) => fitWidth(t.setText(timeOf()), 195));
       },
       150,
+      Math.max(60, minHit()),
+      // 下面紧挨第一档的"进场"（点按区 minHit() 高）：手机上往上伸进标题字，不和它压着
+      Math.min(0, -140 - Math.max(52, minHit()) / 2 - 1 - (-208 + Math.max(60, minHit()) / 2)),
     );
     b.add(seg);
     m.body.setData('seg:mode', seg);
