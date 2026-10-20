@@ -430,7 +430,7 @@ export class Select {
       return (
         `<button type="button" class="yx-mcard yx-mapcard${id === this.map ? ' on' : ''}${locked ? ' locked' : ''}" data-a="map" data-m="${id}"${locked ? ` aria-disabled="true" title="${why}"` : ''}>` +
         `<canvas class="yx-thumb" data-thumb="${id}" width="144" height="144" aria-hidden="true"></canvas>` +
-        `<span class="yx-cardtxt"><b>${MAPS[id].name}</b>${id === 'yizhuang' ? '<i class="yx-hard">难</i>' : ''}` +
+        `<span class="yx-cardtxt"><b>${MAPS[id].name}</b>${id === 'yizhuang' || id === 'temple' ? '<i class="yx-hard">难</i>' : ''}` +
         (locked && why ? `<em class="yx-unlock">${LOCK_SVG}${why}</em>` : `<small>${MAPS[id].blurb}</small>${heads(VIGIL_REGIONS[id], true)}`) +
         '</span></button>'
       );
