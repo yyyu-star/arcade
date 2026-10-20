@@ -5,6 +5,8 @@
 import { createRoom, detectPlatform, MATCH_TEXT, MatchClient, withNickname, type MatchSoloWhy, type PlatformInfo } from 'arcade-kit/client';
 import { inviteUrl, mountSocial, openInvite, postMoment, type Invite, type Presence, type SocialHandle } from 'arcade-kit/social';
 import { DEFAULT_OPTS, type XzAction, type XzOpts, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
+import { DEFAULT_OPTS as RC_DEFAULT_OPTS, type RcAction, type RcOpts, type RcView } from './core/variants/riichi/index.ts';
+import { DEFAULT_VARIANT } from './core/variants/index.ts';
 import { matchTierOf } from './game/match.ts';
 import { stakesOf, type StakesId } from './game/stakes.ts';
 import { getWallet, maybeApplied, randomId, type WalletReply, type WalletView } from './net/wallet.ts';
@@ -14,10 +16,10 @@ import { awardsOf, type Award } from './game/awards.ts';
 import { funMoments, highlightsOf, momentsOf, type Highlight } from './game/banter.ts';
 import { feedMomentsOf, toReport, type FeedMomentId } from './game/feed.ts';
 import { SEATS, type RoomView } from './room/rules.ts';
-import { loadSolo, newSolo, Solo, unsettled } from './solo.ts';
+import { loadSolo, newSolo, Solo, unsettled, type SoloAction, type SoloOpts, type SoloSave, type SoloView } from './solo.ts';
 import { closeDialog, confirmBox, dialog, dialogHooks } from './view/dialog.ts';
 import { button, el } from './view/dom.ts';
-import { GUIDE_KEY, rotateTip, showGuide, showRules } from './view/guide.ts';
+import { guideKey, rotateTip, showGuide, showRules } from './view/guide.ts';
 import { chatMode, createFun, funOff, setChatMode, setFunOff, type ChatMode } from './view/fun.ts';
 import { localChat } from 'arcade-kit/chat';
 import type { ChatResultLike, FunSeat, FunTemper, TableFun } from 'arcade-kit/table-fun';
@@ -28,10 +30,16 @@ import { renderWaiting, roomNotice, type Watching } from './view/room.ts';
 import { play, setAmbience, setSound, setVolume, unlockAudio } from './view/sound.ts';
 import { TableUi, type CommonAct, type SeatMeta } from './view/table.ts';
 import { awardsCard, cardOf, prepareCard } from './view/share.ts';
+import type { ShareCard } from 'arcade-kit/share';
 import { cheerLine, easierLevel, GAME_NAME, HIGHLIGHT_NAME, LEVEL_NAME, nextStreak, num, STAKES_NAME, VARIANT_NAME, walletError, type Streak } from './view/text.ts';
 import { LEVELS, type Level } from './ai/venues.ts';
 import { awardsSummary, fameSummary, matchSummary, roundSummary } from './view/variants/sichuan-xuezhan/summary.ts';
 import { xuezhanUi } from './view/variants/sichuan-xuezhan/ui.ts';
+import { riichiOpen } from './view/variants/riichi/gate.ts';
+import { cardOf as rcCardOf, matchSummary as rcMatchSummary, roundSummary as rcRoundSummary } from './view/variants/riichi/summary.ts';
+import { roundName } from './view/variants/riichi/text.ts';
+import { resetRiichiUi, riichiUi, toRcAction } from './view/variants/riichi/ui.ts';
+import { tableView } from './view/variants/riichi/view.ts';
 import { watchViewport } from './view/viewport.ts';
 import './view/style.css';
 import './view/art.css';
@@ -52,6 +60,9 @@ interface Prefs {
   /** 单机娱乐的难度：第一次玩默认新手 */
   level: Level;
   opts: XzOpts;
+  /** 玩法（立直入口开着时才能选到 riichi，见 activeVariant）和立直的规则设置 */
+  variant: string;
+  rc: RcOpts;
 }
 
 function loadPrefs(): Prefs {
@@ -59,11 +70,26 @@ function loadPrefs(): Prefs {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
     const vol = typeof p.volume === 'number' && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8;
     const level = LEVELS.includes(p.level as Level) ? (p.level as Level) : 'easy';
-    return { sound: p.sound !== false, volume: vol, fast: p.fast === true, ambience: p.ambience !== false, stakes: stakesOf(p.stakes)?.id ?? 'fun', level, opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) } };
+    const length = p.rc?.length === 'tonpuu' ? 'tonpuu' : 'hanchan';
+    return {
+      sound: p.sound !== false,
+      volume: vol,
+      fast: p.fast === true,
+      ambience: p.ambience !== false,
+      stakes: stakesOf(p.stakes)?.id ?? 'fun',
+      level,
+      opts: { ...DEFAULT_OPTS, ...(p.opts ?? {}) },
+      variant: p.variant === RC_ID ? RC_ID : DEFAULT_VARIANT,
+      rc: { ...RC_DEFAULT_OPTS, length },
+    };
   } catch {
-    return { sound: true, volume: 0.8, fast: false, ambience: true, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS } };
+    return { sound: true, volume: 0.8, fast: false, ambience: true, stakes: 'fun', level: 'easy', opts: { ...DEFAULT_OPTS }, variant: DEFAULT_VARIANT, rc: { ...RC_DEFAULT_OPTS } };
   }
 }
+/** 立直的玩法 id */
+const RC_ID = 'riichi';
+/** 现在选的玩法：立直入口没开放（地址没带 ?rc=1）时一律川麻，存着的选择留着不动 */
+const activeVariant = (): string => (riichiOpen() && prefs.variant === RC_ID ? RC_ID : DEFAULT_VARIANT);
 const prefs = loadPrefs();
 function savePrefs(): void {
   try {
@@ -89,7 +115,7 @@ const top = el('div', 'topbar', stage);
 const home = el('a', 'home', top);
 home.href = '/';
 home.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8v10h-6v-6H9v6H3z"/></svg><span>大厅</span>';
-const title = el('span', 'title', top, `${GAME_NAME} · ${VARIANT_NAME['sichuan-xuezhan']}`);
+const title = el('span', 'title', top, `${GAME_NAME} · ${VARIANT_NAME[activeVariant()]}`);
 el('span', 'spacer', top);
 const walletChip = el('span', 'wallet-chip', top);
 const speedBtn = button('icon', top, '', () => {
@@ -159,7 +185,7 @@ const danBtn = button('act soft', volBox, '', () => {
 document.addEventListener('pointerdown', (e) => {
   if (!volBox.hidden && !volBox.contains(e.target as Node) && e.target !== soundBtn) volBox.hidden = true;
 });
-button('icon', top, '规则', () => showRules(stage));
+button('icon', top, '规则', () => showRules(stage, undefined, rulesVariant()));
 const shareBtn = button('pill share', top, '叫朋友', () => share());
 const leaveBtn = button('pill leave', top, '离开', () => void leave());
 const screen = el('div', 'screen', stage);
@@ -281,7 +307,13 @@ function showError(text: string, fix?: string): void {
 // ---------- 选桌页 ----------
 
 let solo: Solo | null = null;
-let table: TableUi<XzView, XzAction> | null = null;
+// 各玩法的牌桌视图、动作类型不同（川麻 XzView、立直 RcTable），这里只当"牌桌"用，具体玩法在创建它的地方定
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyTable = TableUi<any, any>;
+let table: AnyTable | null = null;
+
+/** 规则小册子讲哪个玩法：好友房一直是川麻，单机里看正在打的，别处看选着的 */
+const rulesVariant = (): string => (online ? DEFAULT_VARIANT : (solo?.save.state.variant ?? activeVariant()));
 
 /** 离开牌桌、房间回到主页或选桌页：停单机、断房间、拆牌桌 */
 function teardown(): void {
@@ -301,7 +333,7 @@ function teardown(): void {
   setRoomInUrl(null);
   table?.destroy();
   table = null;
-  title.textContent = `${GAME_NAME} · ${VARIANT_NAME['sichuan-xuezhan']}`;
+  title.textContent = `${GAME_NAME} · ${VARIANT_NAME[activeVariant()]}`;
   paintTop();
 }
 
@@ -315,15 +347,23 @@ function homePage(): void {
     stakesOf(stakes)?.wallet ? `实盘 · ${STAKES_NAME[stakes]}档` : `娱乐 · ${LEVEL_NAME[level ?? 'easy']}`;
   renderHome(screen, {
     quick: kind(st ? prefs.stakes : 'fun', prefs.level),
-    resume: save ? `${kind(save.stakes, save.level)} · 第 ${Math.min(save.state.round + 1, save.state.opts.rounds)}/${save.state.opts.rounds} 局` : null,
+    resume: save ? `${kind(save.stakes, save.level)} · ${progressOf(save)}` : null,
     realOff: wallet ? (wallet.balance <= 0 ? '钱包没有筹码了' : null) : (walletNote ?? '钱包连不上'),
     standalone,
     record: readRecord(),
-    onQuick: () => startSolo(st ? prefs.stakes : 'fun', prefs.opts),
+    variant: activeVariant(),
+    onQuick: () => startSolo(st ? prefs.stakes : 'fun', activeVariant() === RC_ID ? prefs.rc : prefs.opts, prefs.level, activeVariant()),
     onResume: () => void resumeSolo(),
     onMode: (m) => lobby(false, m),
-    onRules: () => showRules(stage),
+    onRules: () => showRules(stage, undefined, activeVariant()),
   });
+}
+
+/** 存档打到哪了（主页"继续上局"底下那行） */
+function progressOf(save: SoloSave): string {
+  const s = save.state;
+  if (s.variant === RC_ID) return `${s.opts.length === 'hanchan' ? '半庄' : '东风战'} · ${roundName(s.wind, s.hand)}`;
+  return `第 ${Math.min(s.round + 1, s.opts.rounds)}/${s.opts.rounds} 局`;
 }
 
 /**
@@ -347,10 +387,12 @@ function lobby(friends = false, mode: HomeMode | null = null): void {
     stakes,
     level: prefs.level,
     opts: prefs.opts,
+    // 玩法选项只在立直入口开着、且不是好友房的页面上摆（好友房的开房暂只开川麻，见 room/rules.ts）
+    ...(riichiOpen() && m !== 'room' ? { variants: { current: activeVariant(), rc: prefs.rc, onPick: pickVariant } } : {}),
     canResume: loadSolo() !== null,
     onSolo: startSolo,
     onResume: () => void resumeSolo(),
-    onRules: () => showRules(stage),
+    onRules: () => showRules(stage, undefined, activeVariant()),
     onRoom: openRoom,
     onJoin: (code) => (/^\d{6}$/.test(code) ? enterRoom(code, false) : toast('房间号是 6 位数字')),
     ...(m !== 'room' ? { onMatch: (st: StakesId, o: XzOpts, l: Level) => void quickMatch(st, o, l) } : {}),
@@ -361,10 +403,20 @@ function lobby(friends = false, mode: HomeMode | null = null): void {
   });
 }
 
-async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.level): Promise<void> {
+/** 选桌页点了"玩法"：记住，重画这一页（档位卡的字、规则设置都跟着换） */
+function pickVariant(id: string): void {
+  prefs.variant = id === RC_ID ? RC_ID : DEFAULT_VARIANT;
+  savePrefs();
+  lobby(false, lobbyMode);
+}
+
+async function startSolo(stakes: StakesId, opts: SoloOpts, level: Level = prefs.level, variant: string = DEFAULT_VARIANT): Promise<void> {
   prefs.stakes = stakes;
   prefs.level = level;
-  prefs.opts = opts;
+  if (variant === RC_ID) {
+    prefs.variant = RC_ID;
+    prefs.rc = opts as RcOpts;
+  } else prefs.opts = opts as XzOpts;
   savePrefs();
   // 上一场实盘还没结回钱包：先结了再开，不然新的一场会盖掉它的存档（自审 C1）
   const old = loadSolo();
@@ -375,13 +427,13 @@ async function startSolo(stakes: StakesId, opts: XzOpts, level: Level = prefs.le
   }
   const st = stakesOf(stakes)!;
   const chips = st.share;
-  if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level), soloUi));
+  if (!st.wallet) return playSolo(new Solo(newSolo(stakes, opts, myName, null, chips, level, variant), soloUi));
   await refreshWallet();
   if (!wallet) return showError(walletNote ?? walletError('unavailable').text);
   // 实盘只带整份（0.15.1）：底分和"最多赢 3 份"按整份算，少带等于输得少、赢得一样多
   if (wallet.balance < chips) return showError(walletError('no_funds').text, 'less');
   // 带入前先存"带入中"（ref、操作号），回包丢了下次用同一个号重发（自审 C3）
-  const save = newSolo(stakes, opts, myName, randomId(), chips);
+  const save = newSolo(stakes, opts, myName, randomId(), chips, 'easy', variant);
   save.buying = { op: randomId(), amount: chips };
   const s = new Solo(save, soloUi);
   const r = await s.buyin();
@@ -837,7 +889,10 @@ function showMine(): void {
 
 /** 结算页的"分享"（docs/social.md 1.1）：只有坐着打完的人有（旁观的没有自己的战绩） */
 function shareButton(row: HTMLElement, v: XzView, title: string, wallet: boolean, url: string): void {
-  const card = cardOf(v, { title, unit: wallet ? '筹码' : '分', name: myName, fame });
+  cardButton(row, cardOf(v, { title, unit: wallet ? '筹码' : '分', name: myName, fame }), url);
+}
+
+function cardButton(row: HTMLElement, card: ShareCard | null, url: string): void {
   if (!card) return;
   // 结算页出来就画好，点的那一下直接调系统分享（iOS 要求，见 view/share.ts）
   const p = prepareCard(card, url);
@@ -884,27 +939,38 @@ function share(): void {
 let lastPrompt = false;
 
 const soloUi = {
-  frame(v: XzView, names: string[]): void {
+  frame(v: SoloView, names: string[]): void {
     if (!table) return;
+    if (v.variant === RC_ID) {
+      // 立直：互动照常，名场面、好友动态、电脑起哄这几样是川麻的说法（胡、杠），立直暂不接
+      table.render({ v: tableView(v), seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
+      fun?.refresh();
+      alertTurn(v);
+      return;
+    }
     table.render({ v, seats: names.map((name, i): SeatMeta => ({ name, bot: i !== 0 })) });
     fun?.refresh();
     publicMoments(v, names, true);
     if (solo && !stakesOf(solo.stakes)?.wallet) feed(solo, v, 0);
     alertTurn(v);
   },
-  roundEnd(v: XzView, names: string[]): void {
+  roundEnd(v: SoloView, names: string[]): void {
     const unit = stakesOf(solo?.stakes)?.wallet ? '' : ' 分';
     // 停一下再弹结算：这期间回了选桌、又开了新的一场，就不弹到新牌桌上（自审 C8）
     const mine = solo;
+    // 立直有人和了时，和牌亮牌（役一条条弹出来）要多摆一会儿再弹结算
+    const wait = v.variant === RC_ID && v.history.at(-1)?.wins.length ? 2_600 : 1_400;
     window.setTimeout(() => {
       if (!solo || solo !== mine) return;
+      const rc = v.variant === RC_ID;
+      const net = v.result?.seats[v.me!.seat]?.net ?? 0;
       if (v.phase === 'over') {
         dialog(stage, 'end', (box) => {
-          settle(box, roundSummary(v, names, unit));
-          box.appendChild(matchSummary(v, names, unit));
-          if (fame.length) box.appendChild(fameSummary(fame, names));
+          settle(box, rc ? rcRoundSummary(v as RcView, names) : roundSummary(v as XzView, names, unit));
+          box.appendChild(rc ? rcMatchSummary(v as RcView, names, unit) : matchSummary(v as XzView, names, unit));
+          if (!rc && fame.length) box.appendChild(fameSummary(fame, names));
           el('div', 'settle-note', box);
-          cheer(box, mine, v.result?.seats[v.me!.seat]?.net ?? 0);
+          cheer(box, mine, net);
           const row = el('div', 'row end-acts', box);
           button('act soft', row, '回选桌', () => {
             closeDialog();
@@ -912,24 +978,26 @@ const soloUi = {
           });
           const st = stakesOf(mine.stakes)!;
           const kind = st.wallet ? `实盘${STAKES_NAME[st.id]}档` : `娱乐·${LEVEL_NAME[mine.save.level ?? 'easy']}`;
-          shareButton(row, v, `${kind} · ${v.opts.rounds} 局`, !!st.wallet, `${location.origin}${location.pathname}`);
+          const url = `${location.origin}${location.pathname}`;
+          if (rc) cardButton(row, rcCardOf(v as RcView, `${kind} · ${(v as RcView).opts.length === 'hanchan' ? '半庄' : '东风战'}`, st.wallet ? '筹码' : '分', myName), url);
+          else shareButton(row, v as XzView, `${kind} · ${(v as XzView).opts.rounds} 局`, !!st.wallet, url);
           button('act go', row, '再来一场', () => {
             closeDialog();
-            void startSolo(prefs.stakes, prefs.opts);
+            void startAgain(prefs.stakes, mine.save.state.variant);
           });
         }, false);
         showMine();
-        play((v.result?.seats[v.me!.seat]?.net ?? 0) >= 0 ? 'win' : 'lose');
+        play(net >= 0 ? 'win' : 'lose');
         return;
       }
       dialog(stage, 'end', (box) => {
-        settle(box, roundSummary(v, names, unit));
+        settle(box, rc ? rcRoundSummary(v as RcView, names) : roundSummary(v as XzView, names, unit));
         button('act go', el('div', 'row end-acts', box), '下一局', () => {
           closeDialog();
           solo?.next();
         });
       }, false);
-    }, TURBO ? 50 : 1_400 * (prefs.fast ? 0.5 : 1));
+    }, TURBO ? 50 : wait * (prefs.fast ? 0.5 : 1));
   },
   settled(r: WalletReply): void {
     if (r.ok) play('chips');
@@ -941,6 +1009,11 @@ const soloUi = {
     void refreshWallet();
   },
 };
+
+/** "再来一场"：同一个玩法、上次的规则设置 */
+function startAgain(stakes: StakesId, variant: string, level: Level = prefs.level): Promise<void> {
+  return startSolo(stakes, variant === RC_ID ? prefs.rc : prefs.opts, level, variant);
+}
 
 /** 结算弹窗里放一局的结算，分从 0 数上去、铜钱飞，飞了就响一声筹码 */
 function settle(box: HTMLElement, summary: HTMLElement): void {
@@ -996,7 +1069,7 @@ function cheer(box: HTMLElement, s: Solo, net: number): void {
   if (lower)
     button('act soft', c, `换到${LEVEL_NAME[lower]}档再来一场`, () => {
       closeDialog();
-      void startSolo('fun', prefs.opts, lower);
+      void startAgain('fun', s.save.state.variant, lower);
     });
 }
 
@@ -1013,17 +1086,24 @@ function playSolo(s: Solo): void {
   const st = stakesOf(s.stakes)!;
   // 玩法名单独一段：竖屏顶栏放不下时 CSS 藏掉它，留下档位（不缩字）
   title.replaceChildren();
-  el('span', 'var', title, `${VARIANT_NAME['sichuan-xuezhan']} · `);
+  const variant = s.save.state.variant;
+  el('span', 'var', title, `${VARIANT_NAME[variant]} · `);
   if (st.wallet) title.append(`实盘 ${num(st.share)}`);
   else {
     // 难度也单独一段：320 宽竖屏连"娱乐·新手"都放不下，藏掉难度只留"娱乐"（删字不截，10-20 多尺寸）
     title.append('娱乐');
     el('span', 'lv', title, `·${LEVEL_NAME[s.save.level ?? 'easy']}`);
   }
-  table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => {
-    const err = s.act(a as XzAction);
+  const act = (a: SoloAction): void => {
+    const err = s.act(a);
     if (err && err !== 'busy') play('click');
-  });
+  };
+  if (variant === RC_ID) {
+    resetRiichiUi();
+    // 根节点打上 rc：立直的样式（view/variants/riichi/riichi.css）都限定在 .table.rc 下
+    table = new TableUi(screen, riichiUi, (a: CommonAct | RcAction) => act(toRcAction(a)));
+    table.root.classList.add('rc');
+  } else table = new TableUi<XzView, XzAction>(screen, xuezhanUi, (a: CommonAct | XzAction) => act(a as XzAction));
   rotateTip(stage);
   lastPrompt = false;
   fame = [];
@@ -1043,11 +1123,11 @@ function playSolo(s: Solo): void {
     localChat((text, masked) => fun?.chat(0, text, masked)),
   );
   s.resume();
-  if (!localStorage.getItem(GUIDE_KEY)) showGuide(stage);
+  if (!localStorage.getItem(guideKey(variant))) showGuide(stage, 0, undefined, variant);
 }
 
 /** 轮到我（出现了要我做的事）：提示音、振动，页面在后台时标题闪 */
-function alertTurn(v: XzView): void {
+function alertTurn(v: { prompt: unknown; phase: string }): void {
   const now = !!v.prompt && v.phase !== 'swap' && v.phase !== 'que';
   if (now && !lastPrompt) {
     play('turn');
@@ -1088,7 +1168,7 @@ const funTimers = new Set<number>();
  * 自己的弹窗打开时把互动藏起来（菜单、热区盖在弹窗上面会挡点击）
  */
 function newFun(
-  t: TableUi<XzView, XzAction>,
+  t: AnyTable,
   me: () => number | null,
   temper: (seat: number) => FunTemper | null,
   send: (id: number, to?: number) => void,
@@ -1313,6 +1393,6 @@ void (async () => {
   // 上一场单机实盘离开时没结上：打开就自动再结一次（自审 C2）
   const left = loadSolo();
   if (left?.settle && !left.done) void settleLeftover(new Solo(left, quietUi));
-  if (!localStorage.getItem(GUIDE_KEY) && !loadSolo()) showGuide(stage);
+  if (!localStorage.getItem(guideKey(DEFAULT_VARIANT)) && !loadSolo()) showGuide(stage);
 })();
 

@@ -165,6 +165,8 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
     if (typeof raw !== 'object' || Array.isArray(raw)) return null;
     const o = raw as Record<string, unknown>;
     const v = variantOf(o.variant ?? DEFAULT_VARIANT);
+    // 好友房暂只开川麻：立直的房间规则、声明窗口要等第 ④ 步（docs/riichi.md 第 6 节）接好再放开，删掉这一行
+    if (v && v.id !== DEFAULT_VARIANT) return null;
     if (!v || v.seats !== SEATS || !STAKES.some((x) => x.id === o.stakes)) return null;
     const rules = v.options(o.rules);
     return rules ? { variant: v.id, stakes: o.stakes as StakesId, rules } : null;

@@ -5,6 +5,7 @@
 import { snapshotBytes } from 'arcade-kit/game';
 import type { SeatKind } from 'arcade-kit/protocol';
 import { describe, expect, test } from 'vitest';
+import { VARIANTS } from '../src/core/variants/index.ts';
 import type { XzState, XzView } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import { STRONGEST } from '../src/ai/personas.ts';
 import { VENUES } from '../src/ai/venues.ts';
@@ -67,9 +68,16 @@ describe('选项', () => {
     expect(G.options!(undefined)).toMatchObject({ variant: 'sichuan-xuezhan', stakes: 'fun' });
     expect(G.options!({ variant: 'sichuan-xuezhan', stakes: 'mid', rules: { rounds: 8 } })).toMatchObject({ stakes: 'mid', rules: { rounds: 8, cap: 4 } });
     expect(G.options!({ stakes: 'x' })).toBeNull();
-    expect(G.options!({ variant: 'riichi', stakes: 'fun' })).toBeNull();
     expect(G.options!({ stakes: 'fun', rules: { rounds: 5 } })).toBeNull();
     expect(G.options!([])).toBeNull();
+  });
+
+  test('好友房暂只开川麻：立直已登记（单机能打），开立直房被拒（第 ④ 步放开）', () => {
+    expect(VARIANTS.riichi!.options({ length: 'tonpuu' })).toEqual({ length: 'tonpuu' });
+    for (const rules of [undefined, { length: 'hanchan' }, { length: 'tonpuu' }]) {
+      expect(G.options!({ variant: 'riichi', stakes: 'fun', rules }), JSON.stringify(rules)).toBeNull();
+      expect(G.options!({ variant: 'riichi', stakes: 'mid', rules }), JSON.stringify(rules)).toBeNull();
+    }
   });
 
   test('互动的编号：14 句短语 + 12 张表情包 + 8 个道具', () => {

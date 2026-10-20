@@ -5,13 +5,17 @@
  * - 实盘（client 模式）：开场经 Worker 从钱包带入，一场打完（或中途离开）带着小结结回；带入、结回的操作号都先存下来，
  *   断网、刷新后用同一个号重发，平台按号去重，不会多扣多给。
  * - 存档只有一份（mahjong.solo），每一场有自己的号（id）：已经停下的旧一场（晚到的结回）只改、只删自己那份，不碰新开的一场（自审 C1）。
+ * - 玩法按状态里的 variant 走（core/variants 的登记表、ai 的 AIS）：川麻、立直共用这一套流程；
+ *   存档里的玩法 id 和规则版本就是 state.variant、state.v，规则版本对不上的旧存档不接着打（loadSolo）。
  */
 import { stream } from 'arcade-kit/rng';
 import { AIS } from './ai/index.ts';
 import { PERSONAS } from './ai/personas.ts';
 import { seatPlan, venueOf, type Level } from './ai/venues.ts';
 import type { SettleStats } from './core/match/index.ts';
-import { sichuanXuezhan as XZ, view, type XzAction, type XzOpts, type XzState, type XzView } from './core/variants/sichuan-xuezhan/index.ts';
+import type { RcAction, RcOpts, RcState, RcView } from './core/variants/riichi/index.ts';
+import { DEFAULT_VARIANT, variantOf, type AnyVariant } from './core/variants/index.ts';
+import type { XzAction, XzOpts, XzState, XzView } from './core/variants/sichuan-xuezhan/index.ts';
 import type { SeatKind } from './core/variants/types.ts';
 import { baseOf, stakesOf, type StakesId, type TierId } from './game/stakes.ts';
 import { maybeApplied, randomId, soloBuyin, soloSettle, type WalletReply } from './net/wallet.ts';
@@ -20,11 +24,20 @@ export const SOLO_KEY = 'mahjong.solo';
 const KINDS: SeatKind[] = ['human', 'ai', 'ai', 'ai'];
 export const ME = 0;
 
+/** 单机打的玩法：状态、视图、动作、规则选项都是两种玩法之一（按 variant 字段分） */
+export type SoloState = XzState | RcState;
+export type SoloView = XzView | RcView;
+export type SoloAction = XzAction | RcAction;
+export type SoloOpts = XzOpts | RcOpts;
+
+/** 存档里的玩法；认不得的（以后删了的玩法）当没有存档 */
+const variantIn = (s: { variant: string }): AnyVariant | null => variantOf(s.variant);
+
 export interface SoloSave {
   v: 1;
   /** 这一场的号（0.3.8 起；之前的存档没有，当作就是存着的那一场） */
   id?: string;
-  state: XzState;
+  state: SoloState;
   stakes: StakesId;
   /** 娱乐的难度（0.10.0 起；之前的存档没有，按新手） */
   level?: Level;
@@ -40,9 +53,9 @@ export interface SoloSave {
 
 export interface SoloUi {
   /** 画一帧（每一步之后） */
-  frame(v: XzView, names: string[]): void;
+  frame(v: SoloView, names: string[]): void;
   /** 一局打完（停在结算）或一场打完 */
-  roundEnd(v: XzView, names: string[]): void;
+  roundEnd(v: SoloView, names: string[]): void;
   /** 结回的结果（实盘） */
   settled(r: WalletReply): void;
 }
@@ -52,7 +65,8 @@ export function loadSolo(): SoloSave | null {
     const raw = localStorage.getItem(SOLO_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as SoloSave;
-    return s && s.v === 1 && s.state?.variant === XZ.id && s.state.v === XZ.rulesVersion ? s : null;
+    const v = s?.state ? variantIn(s.state) : null;
+    return s && s.v === 1 && v && s.state.v === v.rulesVersion ? s : null;
   } catch {
     return null;
   }
@@ -80,15 +94,16 @@ function persist(s: SoloSave, own: boolean): void {
   }
 }
 
-/** 开一场：密钥浏览器现生成；chips 是实盘带进来的（一整份，0.15.1 起不少带） */
-export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: string | null, chips: number, level: Level = 'easy'): SoloSave {
+/** 开一场：密钥浏览器现生成；chips 是实盘带进来的（一整份，0.15.1 起不少带）；variant 是玩法 id，不给就是川麻 */
+export function newSolo(stakes: StakesId, opts: SoloOpts, myName: string, ref: string | null, chips: number, level: Level = 'easy', variant: string = DEFAULT_VARIANT): SoloSave {
   const st = stakesOf(stakes)!;
+  const V = variantOf(variant)!;
   const key = [...crypto.getRandomValues(new Uint32Array(8))];
   // 三个电脑按场地挑性格、各配这一场的状态；0 号座位是自己（性格、状态用不上）
   const plan = seatPlan(stream(key, 'persona'), venueOf('solo', stakes, true, level), 3);
   const personas = [0, ...plan.personas];
   const tunes = [{ mood: 0, soft: 0 }, ...plan.tunes];
-  const state = XZ.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, tunes, chips: [chips, st.share, st.share, st.share] }) as XzState;
+  const state = V.begin(key, opts, KINDS, { share: st.share, base: baseOf(st.share), personas, tunes, chips: [chips, st.share, st.share, st.share] }) as SoloState;
   return { v: 1, id: randomId(), state, stakes, ...(st.wallet ? {} : { level }), names: [myName, ...personas.slice(1).map((p) => PERSONAS[p]!.name)], ref, settle: null, done: false };
 }
 
@@ -96,17 +111,19 @@ export function newSolo(stakes: StakesId, opts: XzOpts, myName: string, ref: str
  * 电脑出手的快慢跟性格走（tempo：幺妹儿快、盖碗儿慢），每一手再有一点起伏，不拖、也不秒出。
  * 起伏由局面算（不用随机数，但这里只是画面节奏，不影响结果）
  */
-function paceOf(s: XzState, seat: number): number {
+function paceOf(s: SoloState, seat: number): number {
   const tempo = PERSONAS[s.personas[seat]!]?.tempo ?? 1_000;
-  const wobble = 850 + ((s.wall.head * 7 + seat * 13 + s.round * 31) % 300);
+  const round = 'round' in s ? s.round : s.kyoku;
+  const wobble = 850 + ((s.wall.head * 7 + seat * 13 + round * 31) % 300);
   return (tempo * wobble) / 1_000_000;
 }
 
 /** 电脑每一步之后停多久（毫秒，再乘性格的快慢和速度） */
-function delayOf(prev: XzState, next: XzState): number {
-  if (next.events.some((e) => e.e === 'hu')) return 1_300;
-  if (next.events.some((e) => e.e === 'pon' || e.e === 'kan')) return 1_000;
-  if (next.events.some((e) => e.e === 'discard')) return 700;
+function delayOf(prev: SoloState, next: SoloState): number {
+  const seen = new Set((next.events as { e: string }[]).map((e) => e.e));
+  if (seen.has('hu') || seen.has('win')) return 1_300;
+  if (seen.has('pon') || seen.has('chi') || seen.has('kan') || seen.has('riichi')) return 1_000;
+  if (seen.has('discard')) return 700;
   if (prev.phase === 'claim' && next.phase === 'claim') return 0;
   return 250;
 }
@@ -127,8 +144,13 @@ export class Solo {
     return this.s;
   }
 
-  get view(): XzView {
-    return view(this.s.state, ME);
+  /** 这一场的玩法（状态里的 variant） */
+  private get V(): AnyVariant {
+    return variantIn(this.s.state)!;
+  }
+
+  get view(): SoloView {
+    return this.V.view(this.s.state, ME);
   }
 
   get stakes(): StakesId {
@@ -174,9 +196,9 @@ export class Solo {
     else void this.runAi();
   }
 
-  act(a: XzAction): string | null {
+  act(a: SoloAction): string | null {
     if (this.busy || this.stopped) return 'busy';
-    const next = XZ.apply(this.s.state, ME, a);
+    const next = this.V.apply(this.s.state, ME, a);
     if ('error' in next) return next.error;
     this.step(next);
     void this.runAi();
@@ -186,7 +208,7 @@ export class Solo {
   /** 一局结算看完了：开下一局 */
   next(): void {
     if (this.s.state.phase !== 'end') return;
-    this.step(XZ.resume(this.s.state));
+    this.step(this.V.resume(this.s.state) as SoloState);
     void this.runAi();
   }
 
@@ -194,7 +216,7 @@ export class Solo {
     this.stopped = true;
   }
 
-  private step(next: XzState): void {
+  private step(next: SoloState): void {
     this.s.state = next;
     this.save$();
     this.ui.frame(this.view, this.s.names);
@@ -206,15 +228,17 @@ export class Solo {
     if (this.busy) return;
     this.busy = true;
     try {
-      const ai = AIS[XZ.id]!;
+      const V = this.V;
+      const ai = AIS[V.id];
+      if (!ai) throw new Error(`no ai for variant ${V.id}`);
       for (;;) {
         if (this.stopped) return;
         const s = this.s.state;
-        const act = XZ.actors(s);
+        const act = V.actors(s);
         if (!act) return;
         const seat = act.seats.find((i) => KINDS[i] === 'ai');
         if (seat === undefined) return;
-        const next = XZ.apply(s, seat, XZ.auto(s, seat, ai));
+        const next = V.apply(s, seat, V.auto(s, seat, ai)) as SoloState | { error: string };
         if ('error' in next) throw new Error(`ai move rejected: ${next.error}`);
         const wait = delayOf(s, next) * paceOf(s, seat) * this.speed;
         if (wait > 0) await sleep(wait);
@@ -240,7 +264,7 @@ export class Solo {
       return null;
     }
     if (!this.s.settle) {
-      const r = XZ.result(this.s.state).seats[ME]!;
+      const r = this.V.result(this.s.state).seats[ME]!;
       this.s.settle = { op: randomId(), amount: Math.max(0, r.chips), stats: r.stats };
       this.save$();
     }
@@ -262,6 +286,14 @@ export class Solo {
       this.s.done = true;
       this.save$();
       return;
+    }
+    // 立直的筹码只在一场结束时才动：中途离开直接结回就是全额退款，输了也不亏。改成按现在的点数和顺位收场（docs/riichi.md 第 2 节），
+    // 但只退不赢：头名奖按名次发，一开局就走（点数都一样、起家排第一）也能拿到，不封顶就能拿来刷筹码
+    if (this.V.id !== DEFAULT_VARIANT && this.s.state.phase !== 'over' && !this.s.settle) {
+      this.s.state = this.V.finish(this.s.state) as SoloState;
+      const r = this.V.result(this.s.state).seats[ME]!;
+      this.s.settle = { op: randomId(), amount: Math.max(0, r.net > 0 ? r.chips - r.net : r.chips), stats: r.stats };
+      this.save$();
     }
     await this.finish();
   }

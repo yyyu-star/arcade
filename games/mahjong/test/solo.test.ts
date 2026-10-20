@@ -3,6 +3,7 @@
  * 晚到的旧一场不碰新一场的存档。浏览器的 localStorage、fetch 用桩代替。
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { riichi as RC, type RcState } from '../src/core/variants/riichi/index.ts';
 import { DEFAULT_OPTS } from '../src/core/variants/sichuan-xuezhan/index.ts';
 import { loadSolo, newSolo, Solo, SOLO_KEY, unsettled, type SoloSave } from '../src/solo.ts';
 
@@ -140,4 +141,53 @@ describe('存档只改自己那份（C1）', () => {
     await a.finish();
     expect(loadSolo()).toBeNull();
   });
+});
+
+describe('立直单机', () => {
+  const RC_OPTS = { length: 'tonpuu' } as const;
+
+  test('开一场、存档带玩法 id 和规则版本，刷新后能读回来；规则版本对不上的旧档不接', () => {
+    const s = newSolo('fun', RC_OPTS, '我', null, 2_000, 'easy', 'riichi');
+    expect(s.state).toMatchObject({ variant: 'riichi', v: RC.rulesVersion, opts: RC_OPTS });
+    expect(new Solo(s, ui).view).toMatchObject({ variant: 'riichi', me: { seat: 0 } });
+    store.set(SOLO_KEY, JSON.stringify(s));
+    expect(loadSolo()!.state.variant).toBe('riichi');
+    store.set(SOLO_KEY, JSON.stringify({ ...s, state: { ...s.state, v: RC.rulesVersion + 1 } }));
+    expect(loadSolo()).toBeNull();
+    // 川麻不受影响
+    expect(newSolo('fun', DEFAULT_OPTS, '我', null, 2_000).state.variant).toBe('sichuan-xuezhan');
+  });
+
+  test('实盘：打完按一场的结果结回钱包，小结带 rc_ 前缀的统计', async () => {
+    const s = wallet2();
+    const solo = new Solo(s, ui);
+    // 直接收场（好友房实盘只剩一个真人时也是这样），不用电脑出牌
+    s.state = RC.finish(s.state as RcState);
+    replies = [ok];
+    await solo.finish();
+    expect(sent).toHaveLength(1);
+    const want = RC.result(s.state).seats[0]!;
+    expect(sent[0]!.body).toMatchObject({ session: s.ref, amount: Math.max(0, want.chips) });
+    expect(Object.keys((sent[0]!.body as unknown as { stats: { max: object; sum: object } }).stats.max)).toEqual(['rc_han']);
+    expect(solo.save.done).toBe(true);
+  });
+
+  test('中途离开：按现在的点数和顺位结回，但只退不赢（一开局就走拿不到头名奖）', async () => {
+    // 找一场起家就是我（0 号）：点数都一样时同分按起家顺序排，我是第一名，一场打完的话头名奖会归我
+    let s = wallet2();
+    for (let i = 0; i < 40 && (s.state as RcState).first !== 0; i++) s = wallet2();
+    expect((s.state as RcState).first).toBe(0);
+    expect(RC.result(RC.finish(s.state as RcState)).seats[0]!.net).toBeGreaterThan(0);
+    replies = [ok];
+    await new Solo(s, ui).leave();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body.amount).toBeLessThanOrEqual(2_000);
+    expect(s.done).toBe(true);
+  });
+
+  function wallet2(): SoloSave {
+    const s = newSolo('small', RC_OPTS, '我', `ref${Math.random().toString(36).slice(2, 10)}`, 2_000, 'easy', 'riichi');
+    s.buying = null;
+    return s;
+  }
 });

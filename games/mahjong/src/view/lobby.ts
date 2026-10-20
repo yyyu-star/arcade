@@ -3,7 +3,9 @@
  * 娱乐：三个难度 + 单机开打；实盘：四档 + 单机开打；好友房：娱乐三个难度和实盘四档都能选（房间按这个开）+ 开房间、输房间号进房。
  * 娱乐、实盘的单机开打旁边是快速匹配（0.21.0，和陌生人按这一档排）。规则设置折起来；开打的按钮贴在底部。钱包连不上时实盘不可选。单独部署（没有平台）时只有娱乐，好友房上面多一个昵称框。
  */
+import type { RcOpts } from '../core/variants/riichi/index.ts';
 import type { XzOpts } from '../core/variants/sichuan-xuezhan/index.ts';
+import { DEFAULT_VARIANT } from '../core/variants/index.ts';
 import { LEVELS, type Level } from '../ai/venues.ts';
 import { STAKES, type StakesId, type TierId } from '../game/stakes.ts';
 import type { WalletView } from '../net/wallet.ts';
@@ -19,9 +21,11 @@ export interface LobbyProps {
   /** 娱乐的难度（第一次玩是新手） */
   level: Level;
   opts: XzOpts;
+  /** "玩法"选项（立直入口开着、且不是好友房那一页才有）：current 是选着的玩法，rc 是立直的规则设置 */
+  variants?: { current: string; rc: RcOpts; onPick(id: string): void };
   canResume: boolean;
-  /** 开单机、开房间要先问钱包和服务器：按钮转圈直到回来 */
-  onSolo(stakes: StakesId, opts: XzOpts, level: Level): Promise<void>;
+  /** 开单机、开房间要先问钱包和服务器：按钮转圈直到回来；opts 是选着的玩法的规则设置 */
+  onSolo(stakes: StakesId, opts: XzOpts | RcOpts, level: Level, variant: string): Promise<void>;
   onResume(): void;
   onRules(): void;
   /** 好友房：没有时不显示 */
@@ -46,13 +50,25 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   let stakes = p.stakes;
   let level = p.level;
   const opts: XzOpts = { ...p.opts };
+  const rcOpts: RcOpts = { length: p.variants?.rc.length ?? 'hanchan' };
+  const rc = p.variants?.current === 'riichi';
   if (p.onBack) button('pill back', box, '‹ 主页', p.onBack);
   // 竖屏选档页上面那块空白放主页同一张茶馆的画（只占剩下的高度，规则设置展开后自己缩没）；横屏没空，CSS 藏掉
   el('div', 'lobby-art', box).innerHTML = homeScene();
   const head = el('div', 'lobby-head', box);
   el('h1', '', head, MODE_TITLE[p.mode]);
-  el('div', 'variant', head, `${GAME_NAME} · ${VARIANT_NAME['sichuan-xuezhan']}`);
+  el('div', 'variant', head, `${GAME_NAME} · ${VARIANT_NAME[rc ? 'riichi' : DEFAULT_VARIANT]}`);
   el('div', 'ver', box, `v${__MAHJONG_VERSION__}`);
+  // 玩法：血战到底 / 立直（记住上次选的）。放在最上面，选了以后整页重画，档位卡和规则设置跟着换
+  if (p.variants) {
+    const row = el('div', 'lobby-variants', box);
+    el('span', 'label', row, '玩法');
+    for (const id of [DEFAULT_VARIANT, 'riichi']) {
+      const on = id === p.variants.current;
+      const b = button(`chip${on ? ' on' : ''}`, row, id === 'riichi' ? '立直' : '血战到底', () => !on && p.variants!.onPick(id));
+      b.setAttribute('aria-pressed', String(on));
+    }
+  }
   if (p.canResume && p.mode !== 'room') button('act go big resume', box, '接着打上一场', p.onResume);
 
   // 每档一张卡（docs/balance.md 第 5 节，四个游戏一样）：电脑多强（星）、一场约多久、一场最多赢 / 最多输。娱乐三个难度一排，实盘四档一排
@@ -72,7 +88,8 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
   const paint = (): void => {
     pick.replaceChildren();
     // 一场多久每张卡都一样，写在每排的小标题上，卡上不重复（0.17.2）
-    const mins = `一场约 ${Math.round((MINUTES_PER_ROUND * opts.rounds) / 5) * 5} 分钟`;
+    // 立直一场按半庄 30 分钟、东风战一半估（docs/riichi.md 第 2 节）
+    const mins = `一场约 ${rc ? (rcOpts.length === 'hanchan' ? 30 : 15) : Math.round((MINUTES_PER_ROUND * opts.rounds) / 5) * 5} 分钟`;
     if (p.mode !== 'real') {
       el('div', 'stakes-label', pick, `娱乐 · 不算筹码 · ${mins}`);
       const fun = el('div', 'stakes', pick);
@@ -112,29 +129,38 @@ export function renderLobby(box: HTMLElement, p: LobbyProps): void {
       });
     }
   };
-  // 局数改了，卡片上的"约多久"跟着变
-  row('局数', [4, 8, 16].map((n) => [`${n} 局`, () => opts.rounds === n, () => ((opts.rounds = n as 4 | 8 | 16), paint())]));
-  row('封顶', [3, 4, 5].map((n) => [`${n} 番`, () => opts.cap === n, () => (opts.cap = n as 3 | 4 | 5)]));
-  row('换三张', [
-    ['换', () => opts.swap, () => (opts.swap = true)],
-    ['不换', () => !opts.swap, () => (opts.swap = false)],
-  ]);
-  row('自摸', [
-    ['加底', () => opts.zimo === 'di', () => (opts.zimo = 'di')],
-    ['加番', () => opts.zimo === 'fan', () => (opts.zimo = 'fan')],
-  ]);
-  row('呼叫转移', [
-    ['开', () => opts.transfer, () => (opts.transfer = true)],
-    ['关', () => !opts.transfer, () => (opts.transfer = false)],
-  ]);
+  if (rc) {
+    // 立直：半庄 / 东风战；赤宝牌固定 3 张（5 万、5 筒、5 条各一张），不给选
+    row('长度', [
+      ['半庄', () => rcOpts.length === 'hanchan', () => ((rcOpts.length = 'hanchan'), paint())],
+      ['东风战', () => rcOpts.length === 'tonpuu', () => ((rcOpts.length = 'tonpuu'), paint())],
+    ]);
+    el('p', 'rc-note', more, '赤宝牌固定 3 张：5 万、5 筒、5 条各一张。');
+  } else {
+    // 局数改了，卡片上的"约多久"跟着变
+    row('局数', [4, 8, 16].map((n) => [`${n} 局`, () => opts.rounds === n, () => ((opts.rounds = n as 4 | 8 | 16), paint())]));
+    row('封顶', [3, 4, 5].map((n) => [`${n} 番`, () => opts.cap === n, () => (opts.cap = n as 3 | 4 | 5)]));
+    row('换三张', [
+      ['换', () => opts.swap, () => (opts.swap = true)],
+      ['不换', () => !opts.swap, () => (opts.swap = false)],
+    ]);
+    row('自摸', [
+      ['加底', () => opts.zimo === 'di', () => (opts.zimo = 'di')],
+      ['加番', () => opts.zimo === 'fan', () => (opts.zimo = 'fan')],
+    ]);
+    row('呼叫转移', [
+      ['开', () => opts.transfer, () => (opts.transfer = true)],
+      ['关', () => !opts.transfer, () => (opts.transfer = false)],
+    ]);
+  }
 
   // 开打的按钮贴在底部（style.css 的 .go-row），档位、规则设置在上面怎么展开都看得见
-  button('link', box, '规则和番型表', p.onRules);
+  button('link', box, rc ? '规则和役种表' : '规则和番型表', p.onRules);
   const go = el('div', 'go-row', box);
   if (p.mode !== 'room') {
-    const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, opts, level)));
-    // 快速匹配排的是这一档，开桌用默认规则（上面的规则设置只管单机）；排不到人就转这一档的单机
-    if (p.onMatch) button('act soft big match', go, '快速匹配', () => p.onMatch!(stakes, opts, level));
+    const solo = button('act go big', go, '单机开打', () => void busy(solo, () => p.onSolo(stakes, rc ? rcOpts : opts, level, rc ? 'riichi' : DEFAULT_VARIANT)));
+    // 快速匹配排的是这一档，开桌用默认规则（上面的规则设置只管单机）；排不到人就转这一档的单机。快速匹配只排川麻，选了立直就不摆
+    if (p.onMatch && !rc) button('act soft big match', go, '快速匹配', () => p.onMatch!(stakes, opts, level));
     return;
   }
   const room = p.onRoom ? button('act go big', go, '开房间叫朋友', () => void busy(room!, () => p.onRoom!(stakes, opts))) : null;

@@ -8,7 +8,15 @@ import { GAME_NAME, VARIANT_NAME } from './text.ts';
 
 export type HomeMode = 'fun' | 'real' | 'room';
 
+/** 主页那一句玩法介绍 */
+const PITCH: Record<string, string> = {
+  'sichuan-xuezhan': '胡了不下桌，一直打到只剩一家',
+  riichi: '立直、鸣牌、必须有役，东南半庄一场打完',
+};
+
 export interface HomeProps {
+  /** 玩法 id（立直入口开着时可能是 riichi） */
+  variant: string;
   /** 快速开始按什么开（"娱乐·新手"之类，按上次选的） */
   quick: string;
   /** 有没打完的单机：按钮换成"继续上局"，底下一行写是哪一场、打到第几局 */
@@ -31,8 +39,8 @@ export function renderHome(box: HTMLElement, p: HomeProps): void {
   const main = el('div', 'home-main', box);
   const head = el('div', 'home-head', main);
   el('h1', 'brand', head, GAME_NAME);
-  el('div', 'variant', head, VARIANT_NAME['sichuan-xuezhan']);
-  el('p', 'pitch', main, '胡了不下桌，一直打到只剩一家');
+  el('div', 'variant', head, VARIANT_NAME[p.variant]);
+  el('p', 'pitch', main, PITCH[p.variant] ?? PITCH['sichuan-xuezhan']!);
 
   const go = p.resume
     ? button('act go big quick', main, '继续上局', p.onResume)
@@ -57,6 +65,6 @@ export function renderHome(box: HTMLElement, p: HomeProps): void {
     el('span', '', rec, `赢 ${r.won} 场`);
     if (r.lost >= 2) el('span', 'down', rec, `连输 ${r.lost}`);
   } else el('span', '', rec, '还没打过：先来一场新手练练手');
-  button('link', main, '规则和番型表', p.onRules);
+  button('link', main, p.variant === 'riichi' ? '规则和役种表' : '规则和番型表', p.onRules);
   el('div', 'ver', box, `v${__MAHJONG_VERSION__}`);
 }
