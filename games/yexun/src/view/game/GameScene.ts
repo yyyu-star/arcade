@@ -849,10 +849,7 @@ export class GameScene extends Phaser.Scene {
           if (!LOW_MEMORY) for (let k = 0; k < 3; k++) this.fx.spawn({ frame: 'petal', x, y: y - 6, vx: (Math.random() - 0.5) * 160, vy: -60 - Math.random() * 60, g: 300, life: 420, s0: 1.2, s1: 0.6, rot: Math.random() * 6, spin: 8 });
           break;
         case Ev.Shield:
-          if (ev.a[i] === 2) {
-            // 破罩（危险 4、5 精英一下打碎全部层）：碎罩的特效下一拍照常放，这里只说一声
-            this.items.floatText(x, y - 74, '破罩', '#ff6a3d');
-          } else if (ev.a[i] === 0) {
+          if (ev.a[i] === 0) {
             sfx.play('shieldBreak');
             this.shake(160, 0.006);
             this.fx.spawn({ frame: 'ring', x, y: y - 20, life: 450, s0: 0.4, s1: (ev.b[i]! * 2.2) / 128, a0: 1, a1: 0, tint: 0xf2c94c, depth: 60 });
