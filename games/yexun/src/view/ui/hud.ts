@@ -196,7 +196,9 @@ export class Hud {
 
   update(s: HudState): void {
     this.hpFill.style.width = `${(100 * s.hp) / s.hpMax}%`;
-    this.hpText.textContent = `${Math.ceil(s.hp)}/${s.hpMax}`;
+    // 血上限按百分比放大会带浮点尾巴（100 × 1.15 = 114.99999999999999），显示时取整；当前血不超过显示的上限
+    const max = Math.round(s.hpMax);
+    this.hpText.textContent = `${Math.min(Math.ceil(s.hp), max)}/${max}`;
     // 没有护盾的时候整条不显示（空着的深色条像是坏了）
     this.shBar.style.visibility = s.shieldMax > 0 ? '' : 'hidden';
     if (s.shieldMax > 0) this.shFill.style.width = `${(100 * s.shield) / s.shieldMax}%`;
