@@ -29,8 +29,9 @@ const BOMB_AT: Record<DdzLevel, number> = { novice: 1, normal: 2, pro: 4 };
 const FOLLOW: Record<DdzLevel, { slack: number; contest: number }> = { novice: { slack: 99, contest: 99 }, normal: { slack: 1, contest: 3 }, pro: { slack: 1, contest: 3 } };
 const COST = { vw: 1, cb: 2 };
 const TOP = { penalty: 25 };
-/** 新手的失误：出牌时有这么大的概率不按评分而是随便挑一手（领出挑一个非炸弹，跟牌随机压或不要）。由模拟定（docs/stake.md 10.2） */
-const NOVICE_BLUNDER = 0.28;
+/** 新手的失误：出牌时有这么大的概率不按评分而是随便挑一手（领出挑一个非炸弹，跟牌随机压或不要）。由模拟定（docs/stake.md 10.2）：
+ * 娱乐新手档小白胜率 ≥ 60% 要它不低于约 0.30，实盘小档小白 ≤ +0.15、中档普通 ≤ +0.20 要它不高于约 0.32 */
+const NOVICE_BLUNDER = 0.32;
 const ENDGAME = { total: 24, samples: 6, nodeCap: 1500 };
 
 /** 叫分的牌力：王、2、炸弹、手数 */

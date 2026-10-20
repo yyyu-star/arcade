@@ -87,7 +87,7 @@ export function validSoloResult(points: unknown, deals: unknown): boolean {
 /**
  * 单机实盘每档的电脑（座位 1、2；docs/stake.md 10.3，数字由 tools/ddz-stake-sim.ts 量）：越往上越难。
  * 我不是地主时，坐我这边的电脑农民是我的队友，所以两个座位强弱不一定要一样。
- * 普通玩家每场（份）：小档 +0.28（小白 +0.11）、中档 +0.19，大档 −0.08、豪华 −0.12（期望 + 2 倍标准误 ≤ 0）。数字见 10.3，以最近一次模拟为准
+ * 普通玩家每场（份）：小档 +0.29（小白 +0.14）、中档 +0.20，大档 −0.08、豪华 −0.12（期望 + 2 倍标准误 ≤ 0）。数字见 10.3，以最近一次模拟为准
  */
 export const DDZ_SOLO_BOTS: Readonly<Record<TierId, readonly [DdzLevel, DdzLevel]>> = {
   small: ['novice', 'novice'],

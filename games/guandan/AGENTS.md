@@ -31,7 +31,7 @@ tests/      vitest；architecture.test.ts 检查通用层和各玩法 core/ai/st
 tools/      sim.ts 机器人对打；probe.ts 跟牌积极度；replay-log.ts 试玩日志复盘；shot.ts 无头冒烟与截图；mem.ts 内存估算；build-cf.ts 部署构建；
             art-preview.ts / cover.ts 美术预览与封面；baseline-ai/ 和 baseline-ai-0.1.2/ 旧版电脑的副本（sim 的 prev 基准，不进产品包）；
             online-dev.ts 本地联机栈（wrangler dev + fake-platform/ 假平台，含假钱包 RPC；standalone 时原样用 wrangler.jsonc）；standalone-smoke.ts 单独部署冒烟；online-smoke.ts 四客户端联机冒烟（`--ddz` 是斗地主三客户端）；room-sim.ts 房间规则层批量对打；
-            ddz-sim.ts 斗地主机器人对打（稳定性、三档梯度、耗时）；ddz-stake-sim.ts 斗地主实盘模拟（docs/stake.md 第 10 节）；quota-smoke.ts 额度提示冒烟；match-smoke.ts 快速匹配冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
+            ddz-sim.ts 斗地主机器人对打（稳定性、三档梯度、耗时）；ddz-stake-sim.ts 斗地主实盘模拟（docs/stake.md 第 10 节；`--fun` 量娱乐单机的一局）；quota-smoke.ts 额度提示冒烟；match-smoke.ts 快速匹配冒烟；stake-sim.ts 实盘计分模拟（docs/stake.md 的数字）；ai-sim.ts 场地、性格、耗时模拟（docs/ai.md 的数字）；stake-smoke.ts 单机和好友房实盘冒烟
 docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stake.md 实盘设计、ai.md 电脑的场地、性格、强弱数字、art-v3.md 主页和牌桌的美术现状、doudizhu.md 牌馆（掼蛋 + 斗地主）的分层、掼蛋金样、斗地主的画面和各模式
 ```
 
@@ -281,4 +281,3 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 - 多尺寸适配（手机竖横屏、平板、电脑共 27 个尺寸逐屏量溢出、点按区、重叠、字号）剩下的：
   - 选档位在 568×320 上豪华档"每分 10,000"的末尾贴着右边一列的"电脑"（字托底到 12 像素后放不下），要删字或改排法。
   - kit 的 table-fun：竖屏手机时互动热区（`.atf-hot`）左边伸出屏幕几像素；竖屏平板（1024×1366）上聊天框的短语按钮 32–36 高。改在 kit。
-- 斗地主新手档电脑变弱后（`NOVICE_BLUNDER`，docs/stake.md 10.2），娱乐单机"新手"难度对小白的胜率（仓库 `docs/balance.md`：≥ 60%）还没单独量。

@@ -4,6 +4,7 @@
  *   node tools/ddz-stake-sim.ts                          默认：每格 2000 场，6 种电脑搭配 × 2 种玩家，并行跑
  *   node tools/ddz-stake-sim.ts --matches 500 --me normal --bots normal,pro
  *   node tools/ddz-stake-sim.ts --table                  只量 DDZ_SOLO_BOTS 里每档用的搭配（四档 × 两种玩家）
+ *   node tools/ddz-stake-sim.ts --fun --bots novice,novice   娱乐单机的一局（DDZ_FUN：6 副、不封顶），看"赢"那一栏（净分 > 0 = 这局赢了，和战绩一样算）
  *
  * 玩家模型：我坐 0 号，"普通玩家" = 电脑的 normal 档代打（--me normal），"小白" = 本文件里单独写的 newbieDecide（--me newbie，
  * 不用电脑的任何一档，调电脑时不会跟着变，定义见 docs/stake.md 10.2）。电脑坐 1、2 号，按给定的两档。
@@ -13,7 +14,7 @@
  */
 import { spawn } from 'node:child_process';
 import { rngFor } from '../src/core/rng.ts';
-import { createDdz, decideDdz, dispatchDdz, enumerateDdz, isBombish, playsBeatingDdz, viewDdz, type DdzAction, type DdzLevel, type DdzView } from '../src/variants/doudizhu/index.ts';
+import { DDZ_FUN, createDdz, decideDdz, dispatchDdz, enumerateDdz, isBombish, playsBeatingDdz, viewDdz, type DdzAction, type DdzLevel, type DdzView } from '../src/variants/doudizhu/index.ts';
 import { DDZ_SOLO_BOTS, DDZ_SOLO_OPTS, POINTS_PER_SHARE, TIER_IDS, type TierId } from '../src/variants/doudizhu/stake/index.ts';
 
 function arg(name: string, def: string): string {
@@ -21,6 +22,9 @@ function arg(name: string, def: string): string {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : def;
 }
 const flag = (name: string): boolean => process.argv.includes(`--${name}`);
+/** --fun：按娱乐单机的规则打一局（docs/stake.md 10.2 娱乐新手档那一行） */
+const FUN = flag('fun');
+const OPTS = FUN ? DDZ_FUN : DDZ_SOLO_OPTS;
 
 const LEVELS: readonly DdzLevel[] = ['novice', 'normal', 'pro'];
 const NAME: Record<DdzLevel, string> = { novice: '新手', normal: '普通', pro: '高手' };
@@ -69,7 +73,7 @@ interface One {
 /** 打一场；seed 区分每场 */
 function playMatch(seed: string, me: Me, bots: readonly [DdzLevel, DdzLevel]): One {
   const levels: Me[] = [me, bots[0], bots[1]];
-  let { state } = createDdz(seed, DDZ_SOLO_OPTS);
+  let { state } = createDdz(seed, OPTS);
   for (let guard = 0; guard < 20_000; guard++) {
     if (state.phase === 'gameOver') break;
     if (state.phase === 'dealEnd') {
@@ -110,7 +114,7 @@ const JOBS = Number(arg('jobs', '8'));
 
 function runChunk(me: Me, bots: readonly [DdzLevel, DdzLevel], from: number, to: number): Promise<One[]> {
   return new Promise((ok, fail) => {
-    const c = spawn('node', [process.argv[1]!, '--worker', '--me', me, '--bots', bots.join(','), '--from', String(from), '--to', String(to)], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const c = spawn('node', [process.argv[1]!, '--worker', ...(FUN ? ['--fun'] : []), '--me', me, '--bots', bots.join(','), '--from', String(from), '--to', String(to)], { stdio: ['ignore', 'pipe', 'inherit'] });
     let text = '';
     c.stdout?.on('data', (d) => void (text += d.toString()));
     c.once('error', fail);
@@ -151,5 +155,5 @@ if (flag('table')) {
 } else {
   for (let i = 0; i < LEVELS.length; i++) for (let j = i; j < LEVELS.length; j++) for (const me of meList) cells.push({ tier: '-', me, bots: [LEVELS[i]!, LEVELS[j]!] });
 }
-console.log(`每格 ${MATCHES} 场，规则 ${JSON.stringify(DDZ_SOLO_OPTS)}；± 是 2 倍标准误`);
+console.log(`每格 ${MATCHES} 场，规则 ${JSON.stringify(OPTS)}；± 是 2 倍标准误`);
 for (const c of cells) console.log(await measure(c));
