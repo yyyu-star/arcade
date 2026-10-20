@@ -3,12 +3,12 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['router', 'assets', 'd1', 'cron', 'admin'].map((n) => `src/runtime/${n}.ts`),
+  entryPoints: ['router', 'assets', 'd1', 'cron-entry', 'admin'].map((n) => `src/runtime/${n}.ts`),
   outdir: 'dist/runtime',
   bundle: true,
   format: 'esm',
   platform: 'neutral',
   target: 'es2022',
-  external: ['cloudflare:*'],
+  external: ['cloudflare:*', './main.js', './arcade-host-crons.js'],
   logLevel: 'warning',
 });

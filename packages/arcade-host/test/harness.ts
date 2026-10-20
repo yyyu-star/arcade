@@ -48,7 +48,7 @@ export async function startSite(site: Site, opts: Omit<GenerateOptions, 'out' | 
   let child: ChildProcess | null = null;
   let logs = '';
   const start = async () => {
-    const args = ['serve', 'config.capnp', '--experimental'];
+    const args = ['serve', 'config.capnp'];
     if ((opts.storage ?? 'sqlite') === 'sqlite') args.push('--directory-path', `data=${data}`);
     child = spawn(workerdBin(), args, { cwd: out, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout!.on('data', (d) => (logs += d));
@@ -104,7 +104,10 @@ export function fixtureSite(): Site {
         compatibility_date: '2026-10-01',
         vars: { TEXT: 'plain', OBJ: { a: 1, nested: { b: [1, 2] } }, CN: '中文变量' },
         secrets: ['PROBE_SECRET'],
-        services: [{ binding: 'SELF_RPC', service: 'probe', entrypoint: 'Hello', props: { game: 'probe' } }],
+        services: [
+          { binding: 'SELF_RPC', service: 'probe', entrypoint: 'Hello', props: { game: 'probe' } },
+          { binding: 'SELF_DEFAULT', service: 'probe' },
+        ],
         durable_objects: [{ name: 'PROBE', class_name: 'Probe' }],
         d1_databases: [{ binding: 'DB', database_name: 'probe', migrations_dir: join(FIXTURE, 'migrations') }],
         crons: ['17 19 * * *'],
@@ -115,6 +118,7 @@ export function fixtureSite(): Site {
         main: join(FIXTURE, 'home.js'),
         compatibility_date: '2026-10-01',
         assets: { directory: join(FIXTURE, 'assets'), binding: 'ASSETS', not_found_handling: 'none' },
+        crons: ['* * * * *'],
       },
     ],
   };

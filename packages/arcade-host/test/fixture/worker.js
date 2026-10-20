@@ -40,8 +40,10 @@ export class Probe extends DurableObject {
   }
 }
 
-export default {
-  async fetch(request, env) {
+// 默认入口和平台一样是 WorkerEntrypoint 类，scheduled 写成实例字段（RPC 调不到，只能由运行时投）
+export default class Probe2 extends WorkerEntrypoint {
+  async fetch(request) {
+    const env = this.env;
     const url = new URL(request.url);
     const sub = url.pathname.replace(/^\/games\/probe/, '');
     if (sub.startsWith('/do/')) {
@@ -55,12 +57,22 @@ export default {
     }
     if (sub === '/env') return Response.json({ secret: env.PROBE_SECRET, text: env.TEXT, obj: env.OBJ, cn: env.CN });
     if (sub === '/rpc') return Response.json(await env.SELF_RPC.hello('x'));
+    if (sub === '/rpc-scheduled') {
+      try {
+        await env.SELF_DEFAULT.scheduled({});
+        return Response.json({ reachable: true });
+      } catch (e) {
+        return Response.json({ reachable: false, error: e.message });
+      }
+    }
     return new Response('probe', { status: 404 });
-  },
-  async scheduled(controller, env) {
-    await env.DB.prepare('INSERT INTO ticks (cron, at) VALUES (?, ?)').bind(controller.cron, controller.scheduledTime).run();
-  },
-};
+  }
+
+  scheduled = async (controller) => {
+    // 和平台一样经 ctx.waitUntil 干活：运行时要等它做完
+    this.ctx.waitUntil(this.env.DB.prepare('INSERT INTO ticks (cron, at) VALUES (?, ?)').bind(controller.cron, controller.scheduledTime).run());
+  };
+}
 
 export class Hello extends WorkerEntrypoint {
   hello(x) {
