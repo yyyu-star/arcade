@@ -7,7 +7,7 @@
  * - 热度 0..100。
  *
  * 标了「隐藏」的字段是画面不能显示的信息（题材真实阶段、今天预先掷好的行情等），
- * 详见 docs/core-api-0.3.md。
+ * 详见 docs/core-api.md。
  */
 import type { LiveTier } from './liveTiers.ts';
 import type { RealMarket } from './segment.ts';

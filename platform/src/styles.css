@@ -156,6 +156,19 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
 /* 横着拿的手机（0.24.0）：只有 390 高，标题折成两行要占掉五分之一屏；缩一号、不折行，和顶栏按钮并排放得下 */
 @media (min-width: 561px) and (max-height: 500px) {
   .top__logo { font-size: var(--fs-2xl); white-space: nowrap; }
+  /* 顶栏照竖屏的收法：小图标收起、头像只露头像，568–780 宽的横屏和标题并排放得下。
+   * 这段写在顶栏的基础样式前面，间距要多一层选择器才压得住后面的 gap: 8px */
+  .top .topbar { gap: var(--s-1); }
+  .topbar .account { padding: 0 10px; font-size: 15px; }
+  .topbar .account:has(.account__avatar) { padding: 0 6px; }
+  .account__avatar + .account__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .topbar .icon { display: none; }
+}
+@media (min-width: 561px) and (max-width: 700px) and (max-height: 500px) {
+  .top__logo { font-size: var(--fs-xl); }
+  .logo-mark { width: 36px; height: 36px; }
+  /* 568 宽实测：按钮共 311、这一行 316，再加四个间距就折行 */
+  .topbar .account { padding: 0 7px; }
 }
 /* 平板竖屏、窄窗口（0.25.4）：顶栏按钮都带字，标题那一列只剩约 230px（iPad 820 宽、管理员实测），40px 的大标题折成两行；
  * 28px 也差几个像素（折成"小游戏街机 / 厅"），用 22px 放得下一行。不写 nowrap：更窄的窗口宁可折行，也不顶出屏幕 */
@@ -190,6 +203,13 @@ a, button, summary { -webkit-tap-highlight-color: transparent; touch-action: man
   .logo-mark { width: 36px; height: 36px; }
   /* 顶栏的小图标在手机上收起，字留着：五个按钮一行放得下 */
   .topbar .icon { display: none; }
+}
+/* 320 宽的老手机（要写在上面 560 那段后面，不然内边距被它盖回去）：管理员五个按钮挤不下，按钮再收窄、筹码牌子的金币收起（数字留着） */
+@media (max-width: 340px) {
+  .topbar { gap: 2px; }
+  /* 320 宽实测：按钮共 287、这一行 288，留不出间距 */
+  .topbar .account { padding: 0 5px; font-size: 14px; }
+  .topbar .account--chips .coin { display: none; }
 }
 
 /* ---------- 按钮 ---------- */

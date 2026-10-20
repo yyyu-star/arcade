@@ -31,7 +31,7 @@ import {
 } from '../src/core/index.ts';
 
 /**
- * 0.3.1 文案检查：面向玩家的文案只用 docs/design-0.3.1-friendly.md 第 2 节词表左边的说法。
+ * 0.3.1 文案检查：面向玩家的文案只用 docs/design.md 第 2 节词表左边的说法。
  * 下面这些 A 股术语一律不得出现（股票名里的"ST"除外，比如"ST摆烂"）。
  */
 const BANNED = [
@@ -67,7 +67,7 @@ const BANNED = [
   '仓位',
   '满仓',
   '空仓',
-  // 0.4 C："加仓"是玩法按钮的名字（设计稿 design-0.4-c 第 1 节），不再禁用
+  // 0.4 C："加仓"是玩法按钮的名字（docs/design.md 第 6.2 节），不再禁用
   '基本面',
   '利好',
   '利空',
@@ -112,7 +112,7 @@ const BANNED_C = ['保证金', '维持', 'Reg T', 'margin call', 'Margin', '融�
 
 function offending(text: string): string[] {
   const c = BANNED_C.filter((w) => text.includes(w));
-  // 小知识卡片的"真实世界里叫……"一行可以出现真实说法（设计稿 design-0.4-c 第 0、4 节）
+  // 小知识卡片的"真实世界里叫……"一行可以出现真实说法（docs/design.md 第 6.1、6.5 节）
   if (text.startsWith('真实世界里')) return c;
   const out = [...c, ...BANNED.filter((w) => text.includes(w))];
   if (ST_OUTSIDE_NAMES.test(text)) out.push('ST');

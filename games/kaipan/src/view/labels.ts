@@ -160,7 +160,7 @@ export function endSubtitle(s: RunSummary): string {
 /** 关于面板里的玩法简介（数字来自 core）。 */
 export function aboutRules(): string[] {
   return [
-    `你是刚开始炒股的普通人。开局账户 ${formatMoney(BALANCE.startAccount)}，能同时拿 ${BALANCE.slots} 只股票。一局 12 个月，一个月只有大约 ${Math.round(totalDays() / 12)} 个交易日。`,
+    `你是刚开始炒股的普通人。开局账户 ${formatMoney(BALANCE.startAccount)}，能同时拿 ${BALANCE.slots} 只股票。一局 12 个月（短局 5 个月），一个月只有大约 ${Math.round(totalDays() / 12)} 个交易日。`,
     `风口会轮流火：${FEEL_CYCLE}。热度涨，这个风口的股票就涨；热度跌，就跌。`,
     '每天开盘前看看群聊和推荐，买一只放进空格，或者卖掉手里的（今天买的明天才能卖）。然后点「开盘」，看今天涨还是跌。',
     `每个月底要从账户里还一笔钱（1 月 ${formatMoney(baseBill(1))}，越往后越多），还不上，游戏就结束。还上了可以挑一样奖励：道具、新群友或稀有股票。`,
@@ -171,6 +171,7 @@ export const ABOUT_CONTROLS: [string, string][] = [
   ['1–3（有道具时到 4）', '买对应的推荐（格子满了会让你选换掉哪只）'],
   ['Shift + 1 – 5', '卖掉第 1–5 格'],
   ['空格 / 回车', '开盘；动画播放时跳过；月底继续'],
+  ['F', '没什么事的日子快进'],
   ['Esc', '关掉对话框、取消换股'],
 ];
 
