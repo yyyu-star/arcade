@@ -333,7 +333,7 @@ function hurt(w: World, dmg: number, by = -1): void {
     w.shieldBurst = true;
     w.invuln = PLAYER.invuln;
     // 破罩：危险 4、5 的精英一下打碎全部层，按 pierce 穿透一部分
-    if (diff.eliteBreak && by >= 0 && by < MAX_ENEMIES && ENEMIES[w.eKind[by]!]!.elite) {
+    if (diff.eliteBreak && by >= 0 && by < SHOT_BY && ENEMIES[by]?.elite) {
       w.shield = 0;
       w.ev.push(Ev.Shield, w.x, w.y, 2, 0);
       if (ELITE_BREAK.pierce <= 0) return;
