@@ -110,8 +110,8 @@ function tingRow(v: RcTable, bar: HTMLElement, ctx: BarCtx<RcAction>, waits: { k
   ctx.ting(bar, waits, lead);
   const me = v.me!;
   if (!furiten || !me.furiten) return;
-  // 振听：这手牌能自摸，不能荣和；原因是哪一种
-  el('span', 'rc-fu', bar.querySelector('.ting'), `振听：只能自摸（${FURITEN_WHY[me.furiten]}）`);
+  // 振听：这手牌能自摸，不能荣和；原因是哪一种。放在听牌那排上面的提示条里（和"再点一下打出"同一个位置），听牌那排不折行
+  el('div', 'hint rc-fu', bar, `振听：只能自摸（${FURITEN_WHY[me.furiten]}）`);
 }
 
 function claimBar(v: RcTable, bar: HTMLElement, ctx: BarCtx<RcAction>): void {
