@@ -697,6 +697,25 @@ export class CardRoom extends GameRoom<State, Action, View, Env> {
 - `{ platform: false }`：404 或不是平台的 JSON，独立部署。藏起登录、云存档、排行榜、钱包（实盘），"回大厅"改成回游戏首页（`./`）；
 - `{ platform: 'unknown' }`：5xx、429、断网、超时。平台可能只是抖了一下，按游戏自己的取舍（比如先按有平台、稍后再问一次）。
 
+## 自托管 PG 模式的存储（KitStore，0.21.0）
+
+kit 的三个 Durable Object（房间 `GameRoom`、计量 `RoomMeter`、排队 `MatchQueue`）的存储可以换：**有没有 `KIT_STORE` 绑定决定**，游戏代码、`wrangler.jsonc` 都不用改。
+
+| | 默认（Cloudflare、自托管 SQLite 模式） | 自托管 PG 模式（arcade-host 的生成器注入 `KIT_STORE`） |
+|---|---|---|
+| 条件 | 没有 `KIT_STORE` | 有 `KIT_STORE`（服务绑定，`props.game` 是游戏 id，游戏改不了） |
+| 存哪 | `ctx.storage.sql` 的 `kit_room`、`kit_day`、`kit_user` 表和 KV 的 `miss`，和 0.20 逐字一样（同表同列同 SQL，已有数据照读） | 宿主的 PostgreSQL，主键 (游戏, 角色, 名字, 表, 键)；DO 自己只用 workerd 的内存存储放闹钟 |
+| 一步之内 | 同步读写 sql，没有 await | 同步读写内存镜像（`src/store.ts` 的 `MirrorStore`），没有 await |
+| 广播 | Cloudflare 的输出门保证落盘后才发 | 这一步的 send / close 先排队，`flush`（一次事务提交脏行和当前闹钟）成功才发；没有改动不提交 |
+| 写存储失败 | 作废缓存 | 一样作废缓存、不发这一步的消息，连着的人 1013 断开（客户端照常重连，拿到 PG 里的状态）；kit 不重试，下一步自然重写 |
+| 每步 ≤ 2 行 | 按 `rowsWritten` 记 | 按镜像的 put / delete 记（建表那 2 行没有，开房那一步是 2 行） |
+| 进程重启 | — | 宿主按 PG 里存的闹钟逐个调 `kitWake(name)`（三个类都有，幂等，只有绑定能调），kit 读回来、重设闹钟（过期的马上响）；直接进房也会按房间码读回来 |
+
+- 角色名（`ns`）是 `room` / `meter` / `match`，名字是 `idFromName` 用的那个（房间码、`kit-meter`、`kit-miss:<key>`、`kit-match:<档位>`），kit 自己记、调 DO 时自己带，不依赖 `ctx.id.name`。
+- `KIT_STORE` 的 RPC 形状见 `src/store.ts` 的 `KitStoreRpc`：`load(ns, name) → { rows, alarmAt }`、`commit(ns, name, puts, deletes, alarmAt)`、`wipe(ns, name)`。RPC 的回话用完就释放（不释放的话对象空闲了也驱逐不掉）。
+- 桌上筹码的兜底不变：房间状态全丢了，平台钱包到 `until` 原样退回（钱包在平台库里，不靠房间）。
+- 测试两遍：`vitest run`（默认）和 `vitest run -c vitest.pg.config.ts`（多绑一个假 PG，`test/fake-pg.ts`），同一套房间、计量、排队的测试都过；PG 专有的几条（提交在广播前、提交失败不广播、重启后 kitWake、每次提交 ≤ 2 行）在 `test/store.test.ts`。
+
 ## 还没做的（以后按需加）
 
 - 人机验证；跨游戏的统一房间登记（5.3）。开房名额现在由每个游戏的计量各管各的（上面"每天的额度"），开放注册前看一眼门槛够不够紧；
@@ -739,6 +758,7 @@ packages/arcade-kit/
 │  ├─ guest.ts       独立模式：游客 cookie、游客身份、昵称清洗
 │  ├─ match.ts       快速匹配的排队 MatchQueue（Durable Object，0.20.0）
 │  ├─ meter.ts       每天的额度计量 RoomMeter
+│  ├─ store.ts       可插拔存储：自托管 PG 模式的内存镜像 MirrorStore 和 KIT_STORE 的形状（0.21.0）
 │  ├─ game.ts        规则接口 RoomGame、snapshotBytes
 │  ├─ client.ts      浏览器连接器 RoomClient、createRoom、默认文案
 │  ├─ protocol.ts    消息类型、关闭码、协议版本

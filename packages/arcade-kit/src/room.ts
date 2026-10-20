@@ -20,6 +20,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { CHAT_MAX, checkChat } from './chat.js';
 import type { RoomEffect, RoomGame, RoomSetup } from './game.js';
 import { type Identity, KIT_HOST, LIMITED_HEADER, MISS_HEADER, meterStub, parseIdentity } from './internal.js';
+import { kitStoreOf, MirrorStore } from './store.js';
 import type { MeterEnv, MeterLevel, RoomMeter } from './meter.js';
 import { ENTROPY_WORDS } from './rng.js';
 import {
@@ -246,6 +247,8 @@ interface Attachment {
 }
 
 const TABLE = 'kit_room';
+/** PG 模式把房间码记在内存存储里的 key（0.21.0）：连接上的事件、闹钟进来时靠它找回 PG 里的行 */
+const PG_NAME_KEY = 'kit.name';
 
 /** 开房的结果（kitCreate → worker.ts 的 acceptCreate）。 */
 export type CreateOutcome =
@@ -340,6 +343,14 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
 
   /** 内存缓存，被驱逐后从存储重建 */
   private st: Persist<S> | null | undefined;
+  /**
+   * 自托管 PG 模式（0.21.0，env 里有 KIT_STORE）的内存镜像；没有 KIT_STORE 时为 null，存储照旧直接用 ctx.storage.sql，行为逐字不变。
+   * PG 模式下这一步的 send/close 先进 outbox，flush 提交成功才发（flush 在广播之前，等于 Cloudflare 的输出门）
+   */
+  private readonly pg: MirrorStore | null;
+  private outbox: (() => void)[] | null = null;
+  /** 这一步关了房（PG 模式在 entry 最后删 PG 里的行，不走 flush） */
+  private pgWipe = false;
   /** 现在设着的闹钟；undefined 表示还不知道（刚建出来），进第一个入口前用 getAlarm() 读 */
   private alarmAt: number | null | undefined;
   /** 这一步要设的闹钟，entry 最后（广播之后）才真正 setAlarm */
@@ -387,6 +398,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const rpc = kitStoreOf(env);
+    this.pg = rpc ? new MirrorStore(rpc, 'room') : null;
     // 构造函数里不碰存储：探一个不存在的房间码不能留下任何东西
     // 心跳不唤醒房间、不计费（4.1）
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
@@ -402,6 +415,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     // 开房就定选项（0.4.0）：不合格的不占名额、不建房间
     const fixed = rawOpts !== undefined && this.game.options ? this.checkOpts(rawOpts) : null;
     if (fixed === undefined) return { r: 'bad_options' };
+    if (!(await this.pgOpen(code))) return { r: 'unavailable' };
     const meter = this.meter();
     let reserved = false;
     // 码不对、房间已经在（码撞了）的先挡掉，不去占名额；这两样 create 里还会再查一遍
@@ -431,6 +445,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const fixed = this.checkOpts(rawOpts);
     if (fixed === undefined || (rawOpts !== undefined && !this.game.options)) return { r: 'bad_options' };
     if (!validPlayers(code, players, fixed.count)) return { r: 'bad' };
+    if (!(await this.pgOpen(code))) return { r: 'unavailable' };
     const meter = this.meter();
     const users = players.map((p) => p.userId);
     let reserved = false;
@@ -470,6 +485,8 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     }
     const me = parseIdentity(request.headers.get('x-kit-user'));
     if (!me) return new Response('no identity', { status: 401 });
+    // PG 模式要知道自己的房间码才能从 PG 读（acceptJoin 在内部地址上带 code，0.21.0）；读不了按"稍后再试"
+    if (this.pg && !(await this.pgOpen(url.searchParams.get('code') ?? ''))) return this.refuse(CLOSE.tryLater);
     // 猜码超了门槛（0.14.0）：自己人照常进（断线重连不受牵连），别人不管房间在不在都回 1013，说不出房间在不在
     if (request.headers.has(LIMITED_HEADER) && !this.insider(me.userId)) return this.refuse(CLOSE.tryLater);
     const gate = await this.newcomerGate(me.userId);
@@ -485,7 +502,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     await this.entry(() => {
       // 对方先关的：回一个关闭帧把握手做完，不然对方一直等
       try {
-        ws.close(code === 1005 || code === 1006 ? 1000 : code, 'bye');
+        this.closeWs(ws, code === 1005 || code === 1006 ? 1000 : code, 'bye');
       } catch {
         // 已经关了
       }
@@ -502,6 +519,12 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     try {
       // 运行时叫醒我们时这个闹钟已经用掉了
       this.alarmAt = null;
+      // PG 模式读不进来（PG 一时连不上）：这次的闹钟已经用掉了，过一会儿再醒来，不然房间没人叫醒（0.21.0）
+      if (!(await this.pgOpen())) {
+        this.alarmAt = Date.now() + ALARM_RETRY_MS;
+        await this.setAlarmSafely(this.alarmAt);
+        return;
+      }
       await this.entry(() => this.onAlarm());
       // 出错时状态可能没走到"重设闹钟"那一步：房间还在、又没有闹钟，就过一会儿再醒来，不然房间永远没人关
       // setAlarm 本身失败时 alarmAt 是 undefined（不知道），以存储里读到的为准（0.11.1）
@@ -524,11 +547,13 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
    * （状态可能已经写进去了；闹钟设早了没关系，醒来会重新算）。
    */
   private async entry<T>(run: () => T): Promise<T | Response> {
+    if (this.pg && !(await this.pgOpen())) return new Response('room store unavailable', { status: 503 });
     if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
     this.writes = 0;
     this.closing = false;
     let out: T | Response;
     this.lastStepFailed = false;
+    if (this.pg) this.outbox = [];
     try {
       out = run();
     } catch (e) {
@@ -546,12 +571,83 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     this.totalWrites += this.writes;
     this.unmetered += this.writes;
     this.maxStepWrites = Math.max(this.maxStepWrites, this.writes);
+    if (this.pg) await this.pgCommit();
     if (at !== null && !(await this.setAlarmSafely(at))) {
       this.lastStepFailed = true;
       await this.recoverAlarm();
     }
     await this.afterStep();
     return out;
+  }
+
+  // ---------- 自托管 PG 模式（0.21.0，store.ts） ----------
+
+  /**
+   * 把 PG 里这个房间的行读进内存镜像（没有 KIT_STORE 时什么都不做，回 true）。name 是房间码：开房、进房、kitWake 带进来，
+   * 记进内存存储（workerd 的内存存储被驱逐时还在、进程重启才清），闹钟、连接上的事件进来时从那里取。读不了回 false
+   */
+  private async pgOpen(name?: string): Promise<boolean> {
+    const pg = this.pg;
+    if (!pg) return true;
+    try {
+      let n = name ?? pg.name;
+      if (n === null || n === undefined) n = (await this.ctx.storage.get<string>(PG_NAME_KEY)) ?? null;
+      if (!n) throw new Error('room name unknown');
+      if (pg.name === null) await this.ctx.storage.put(PG_NAME_KEY, n);
+      await pg.open(n);
+      return true;
+    } catch (e) {
+      console.error('room store open failed', e instanceof Error ? e.message : e);
+      return false;
+    }
+  }
+
+  /**
+   * 一步的最后、发消息之前：把脏行和现在的闹钟提交进 PG，成功才把排着的 send/close 发出去。
+   * 提交失败当"写存储失败"：作废缓存、不广播，断开这时连着的人（1013，客户端照常重连、拿到 PG 里的状态），
+   * 和 Cloudflare 上写存储失败、对象重置时大家掉线重连一样；kit 不重试，下一步自然重写
+   */
+  private async pgCommit(): Promise<void> {
+    const pg = this.pg!;
+    const box = this.outbox ?? [];
+    this.outbox = null;
+    try {
+      if (this.pgWipe) {
+        this.pgWipe = false;
+        await pg.wipe();
+      } else {
+        await pg.flush(this.alarmAt === undefined ? pg.storedAlarm : this.alarmAt);
+      }
+    } catch (e) {
+      console.error('room store commit failed', e instanceof Error ? e.message : e);
+      this.lastStepFailed = true;
+      this.st = undefined;
+      this.pendingInbound = 0;
+      this.pendingBy.clear();
+      for (const ws of this.sockets()) {
+        try {
+          ws.close(CLOSE.tryLater, 'store unavailable');
+        } catch {
+          // 已经关了
+        }
+      }
+      return;
+    }
+    for (const f of box) f();
+  }
+
+  /**
+   * 进程重启后宿主唤醒（0.21.0，只有 KIT_STORE 绑定能调的 RPC）：从 PG 读进来，按存着的闹钟重设（过期的马上响）。
+   * 幂等：已经醒着、闹钟已经设好的，再调一次什么都不变；没有 KIT_STORE 时什么都不做
+   */
+  async kitWake(name: string): Promise<void> {
+    if (!this.pg || !(await this.pgOpen(name))) return;
+    if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
+    const at = this.pg.storedAlarm;
+    if (at !== null && this.alarmAt === null) {
+      this.alarmAt = at;
+      await this.setAlarmSafely(at);
+    }
   }
 
   /**
@@ -699,7 +795,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     if (!validHost(code, host)) return 'bad';
     if (this.load()) return 'exists';
     // 只在开房时建表（一个房间只这一次，SQLite 记建表也算写入，如实计数）
-    this.writes += this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${TABLE} (k INTEGER PRIMARY KEY, v TEXT NOT NULL)`).rowsWritten;
+    if (!this.pg) this.writes += this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${TABLE} (k INTEGER PRIMARY KEY, v TEXT NOT NULL)`).rowsWritten;
     const now = Date.now();
     const seats: SeatState[] = Array.from({ length: this.game.seats }, () => emptySeat());
     // 房主先坐 0 号位，但还没连上：算掉线，连上就"回来"
@@ -718,7 +814,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   /** 匹配桌（0.20.0）：和 create 一样建表、存一行、设闹钟，只是排进来的人都先坐好（算掉线，连上就"回来"），记下最晚开打的时间。 */
   private createMatch(code: string, players: Identity[], fixed: { opts: O | undefined; count: number }): 'created' | 'exists' | 'bad' {
     if (this.load()) return 'exists';
-    this.writes += this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${TABLE} (k INTEGER PRIMARY KEY, v TEXT NOT NULL)`).rowsWritten;
+    if (!this.pg) this.writes += this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${TABLE} (k INTEGER PRIMARY KEY, v TEXT NOT NULL)`).rowsWritten;
     const now = Date.now();
     const seats: SeatState[] = Array.from({ length: this.game.seats }, () => emptySeat());
     let order: number[];
@@ -749,22 +845,22 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const done = () => new Response(null, { status: 101, webSocket: client });
     const st = this.load();
     if (!st) {
-      server.close(CLOSE.noRoom, 'no room');
+      this.closeWs(server, CLOSE.noRoom, 'no room');
       // 告诉 acceptJoin 这是一次"码不存在"（0.14.0，进房猜码按人、按 IP 计数）；它转给浏览器前去掉这个头
       return new Response(null, { status: 101, webSocket: client, headers: { [MISS_HEADER]: '1' } });
     }
     if (st.ending) {
-      server.close(CLOSE.roomClosed, st.ending.reason);
+      this.closeWs(server, CLOSE.roomClosed, st.ending.reason);
       return done();
     }
     const cv = Number(rawCv ?? '0');
     if (!Number.isFinite(cv) || cv < this.limits.minClientVersion) {
-      server.close(CLOSE.tooOld, 'client too old');
+      this.closeWs(server, CLOSE.tooOld, 'client too old');
       return done();
     }
     // 匹配桌只认排进来的人（0.20.0）：房间码不给页面看，别人拿到码也进不来、看不了，回的和"没有这个房间"一样
     if (st.match && !st.match.users.includes(me.userId)) {
-      server.close(CLOSE.noRoom, 'no room');
+      this.closeWs(server, CLOSE.noRoom, 'no room');
       return done();
     }
     const seat = this.seatOf(me.userId);
@@ -776,7 +872,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       // 不然几个陌生账号就能占满名额，让房主的朋友连进来选座都进不来
       const watchers = new Set(others.map((o) => attachmentOf(o)!.userId).filter((u) => u !== me.userId && this.seatOf(u) === null && !this.ownsRoom(st, u)));
       if (watchers.size >= this.limits.extraConnections) {
-        server.close(CLOSE.full, 'room full');
+        this.closeWs(server, CLOSE.full, 'room full');
         return done();
       }
     }
@@ -785,19 +881,19 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     const changed = s !== null && (s.awaySince !== null || s.auto || s.name !== me.name || st.noHumanSince !== null);
     // 消息额度用完的人进不来（不然断开以后重连还能接着发）
     if (this.inboundOf(st, me.userId) >= this.userInboundCap()) {
-      server.close(CLOSE.userQuota, 'too many messages');
+      this.closeWs(server, CLOSE.userQuota, 'too many messages');
       return done();
     }
     const used = st.joins[me.userId] ?? 0;
     if (s && changed && used >= this.limits.maxJoins) {
-      server.close(CLOSE.tooManyJoins, 'too many joins');
+      this.closeWs(server, CLOSE.tooManyJoins, 'too many joins');
       return done();
     }
     // 会写库的进房也算一条入站消息：房间一生的写入总数因此被 maxInbound 封住
     if (s && changed) {
       const r = this.countInbound(st, me.userId);
       if (r === 'user') {
-        server.close(CLOSE.userQuota, 'too many messages');
+        this.closeWs(server, CLOSE.userQuota, 'too many messages');
         return done();
       }
       if (r === 'room') {
@@ -808,7 +904,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     // 同一个账号只留一条连接：旧的让位
     for (const other of mine) {
       other.serializeAttachment(null);
-      other.close(CLOSE.replaced, 'replaced');
+      this.closeWs(other, CLOSE.replaced, 'replaced');
     }
     server.serializeAttachment({ userId: me.userId, name: me.name, ...(chat ? { chat: true as const } : {}) } satisfies Attachment);
 
@@ -836,12 +932,12 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private onMessage(ws: WebSocket, message: string | ArrayBuffer): void {
     const st = this.load();
     const me = attachmentOf(ws);
-    if (!st || !me || st.ending) return void ws.close(CLOSE.roomClosed, 'room closed');
+    if (!st || !me || st.ending) return void this.closeWs(ws, CLOSE.roomClosed, 'room closed');
     const bytes = typeof message === 'string' ? new TextEncoder().encode(message).byteLength : message.byteLength;
-    if (bytes > this.limits.maxMessageBytes) return void ws.close(CLOSE.tooBig, 'message too big');
-    if (!this.takeToken(me.userId)) return void ws.close(CLOSE.policy, 'too fast');
+    if (bytes > this.limits.maxMessageBytes) return void this.closeWs(ws, CLOSE.tooBig, 'message too big');
+    if (!this.takeToken(me.userId)) return void this.closeWs(ws, CLOSE.policy, 'too fast');
     const counted = this.countInbound(st, me.userId);
-    if (counted === 'user') return void ws.close(CLOSE.userQuota, 'too many messages');
+    if (counted === 'user') return void this.closeWs(ws, CLOSE.userQuota, 'too many messages');
     if (counted === 'room') return this.closeRoom();
 
     let msg: Record<string, unknown>;
@@ -1655,6 +1751,10 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
     this.pendingBy.clear();
     // 连同这一行、这一步要设的闹钟一起算上（entry 最后才加进内存里的 unmetered）
     st.unmetered = this.unmetered + this.writes + 1 + (this.alarmToSet !== null ? 1 : 0);
+    if (this.pg) {
+      this.writes += this.pg.put(TABLE, 1, JSON.stringify(st));
+      return;
+    }
     const cur = this.ctx.storage.sql.exec(
       `INSERT INTO ${TABLE} (k, v) VALUES (1, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v`,
       JSON.stringify(st),
@@ -1665,6 +1765,13 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   /** 只读：表不在（从没开过房、或者关房时连表一起删了）就是没有这个房间，不建表、不写任何东西。 */
   private load(): Persist<S> | null {
     if (this.st !== undefined) return this.st;
+    if (this.pg) {
+      // 镜像还没读进来（PG 连不上）时不能当"没有房间"：抛出去，入口当这一步出错
+      const v = this.pg.get(TABLE, 1);
+      this.st = v !== null ? loadPersist<S>(v) : null;
+      if (this.st) this.unmetered = this.st.unmetered ?? 0;
+      return this.st;
+    }
     const sql = this.ctx.storage.sql;
     const hasTable = sql.exec(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`, TABLE).toArray().length > 0;
     const row = hasTable ? sql.exec<{ v: string }>(`SELECT v FROM ${TABLE} WHERE k = 1`).toArray()[0] : undefined;
@@ -1690,7 +1797,7 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
       if (this.effectsOf(final).length) {
         for (const ws of this.sockets()) {
           ws.serializeAttachment(null);
-          ws.close(CLOSE.roomClosed, reason);
+          this.closeWs(ws, CLOSE.roomClosed, reason);
         }
         st.game = final;
         st.ending = { reason, at: Date.now() };
@@ -1710,13 +1817,15 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   private wipe(reason: string): void {
     for (const ws of this.sockets()) {
       ws.serializeAttachment(null);
-      ws.close(CLOSE.roomClosed, reason);
+      this.closeWs(ws, CLOSE.roomClosed, reason);
     }
     if (this.st) this.release = releaseOf(this.st);
     this.st = null;
     this.alarmToSet = null;
     this.alarmAt = null;
     this.writes++;
+    // PG 模式：内存存储照样清（闹钟、记下的名字），PG 里的行在 entry 最后删（pgCommit）
+    if (this.pg) this.pgWipe = true;
     void this.ctx.storage.deleteAlarm();
     void this.ctx.storage.deleteAll();
   }
@@ -1845,11 +1954,35 @@ export abstract class GameRoom<S, A, V, Env = unknown, O = unknown, E extends Ro
   }
 
   private send(ws: WebSocket, msg: DownMsg<V> | EmotedMsg | ChattedMsg): void {
+    if (this.outbox) {
+      const text = JSON.stringify(msg);
+      this.outbox.push(() => this.sendText(ws, text));
+      return;
+    }
+    this.sendText(ws, JSON.stringify(msg));
+  }
+
+  private sendText(ws: WebSocket, text: string): void {
     try {
-      ws.send(JSON.stringify(msg));
+      ws.send(text);
     } catch {
       // 连接正在关，忽略：webSocketClose 会处理座位
     }
+  }
+
+  /** 关一条连接；PG 模式在一步里的先排队，提交成功才关（和 send 一样，0.21.0） */
+  private closeWs(ws: WebSocket, code: number, reason: string): void {
+    if (this.outbox) {
+      this.outbox.push(() => {
+        try {
+          ws.close(code, reason);
+        } catch {
+          // 已经关了
+        }
+      });
+      return;
+    }
+    ws.close(code, reason);
   }
 
   private reject(ws: WebSocket, code: string, moveId?: string): void {

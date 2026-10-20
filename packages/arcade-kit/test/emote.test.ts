@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { roomStub } from '../src/internal.ts';
 import type { ChattedMsg, DownMsg, EmotedMsg, StateMsg } from '../src/protocol.ts';
 import { emoteRateOf } from '../src/room.ts';
-import { advance, type Conn, freezeClock, inspect, join, openRoom, resetMeter } from './helpers.ts';
+import { advance, type Conn, freezeClock, inspect, join, openRoom, resetMeter, roomRow } from './helpers.ts';
 import type { ChattyRoom, ToyView } from './worker.ts';
 
 beforeEach(async () => {
@@ -28,6 +28,12 @@ async function table(): Promise<{ code: string; a: Conn; b: Conn; watcher: Conn 
 }
 
 const emoted = (m: DownMsg<ToyView> | EmotedMsg | ChattedMsg): m is EmotedMsg => m.t === 'emote';
+
+/** 写了几行、房间那一行的内容（两种存储都能读，0.21.0） */
+const snapOf = async (code: string) => {
+  const s = roomStub(env.CHATTY_ROOM, code) as DurableObjectStub<ChattyRoom>;
+  return { total: await runInDurableObject(s, (r: ChattyRoom) => (r as unknown as { totalWrites: number }).totalWrites), rows: await roomRow(s, code) };
+};
 
 describe('快捷短语', () => {
   it('入座的人发：所有人（含自己、来看的）收到座位和编号；不写库、不改 seq；入站照样记数，下次写库时一起存', async () => {
@@ -127,10 +133,10 @@ describe('电脑座位的短语（0.10.0，GameRoom.botEmote）', () => {
     for (const c of [a, b, watcher]) expect(await c.until(emoted)).toEqual({ t: 'emote', seat: 3, id: 0, bot: true });
     const tries = await runInDurableObject(chatty(code), (r: ChattyRoom) => r.botTries);
     expect(tries).toEqual([{ seat: 0, ok: false }, { seat: 3, ok: true }]);
-    const before = await runInDurableObject(chatty(code), (r: ChattyRoom, st) => ({ total: (r as unknown as { totalWrites: number }).totalWrites, rows: st.storage.sql.exec('SELECT v FROM kit_room').toArray() }));
+    const before = await snapOf(code);
     expect(await runInDurableObject(chatty(code), (r: ChattyRoom) => r.tryBotEmote(2, 1, 0))).toBe(true);
     expect(await a.until(emoted)).toEqual({ t: 'emote', seat: 2, id: 1, to: 0, bot: true });
-    const after = await runInDurableObject(chatty(code), (r: ChattyRoom, st) => ({ total: (r as unknown as { totalWrites: number }).totalWrites, rows: st.storage.sql.exec('SELECT v FROM kit_room').toArray() }));
+    const after = await snapOf(code);
     expect(after).toEqual(before);
   });
 
@@ -159,7 +165,7 @@ describe('电脑座位的短语（0.10.0，GameRoom.botEmote）', () => {
 
   it('真人短语钩子（0.10.1，onEmote）：真人发的校验过、广播后调；里面 botEmote 的回应所有人收到；电脑的短语不触发；被拒的不触发；不写库', async () => {
     const { code, a, b, watcher } = await started();
-    const snap = () => runInDurableObject(chatty(code), (r: ChattyRoom, st) => ({ total: (r as unknown as { totalWrites: number }).totalWrites, rows: st.storage.sql.exec('SELECT v FROM kit_room').toArray() }));
+    const snap = () => snapOf(code);
     const before = await snap();
     b.send({ t: 'emote', id: 4, to: 0 });
     for (const c of [a, b, watcher]) {

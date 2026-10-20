@@ -18,7 +18,8 @@
  * 这里的方法只给 kit 自己调（房间经 RPC），游戏不直接用；kitUsage 给运维和测试看。
  */
 import { DurableObject } from 'cloudflare:workers';
-import { meterStub } from './internal.js';
+import { METER_NAME, meterStub } from './internal.js';
+import { kitStoreOf, MirrorStore } from './store.js';
 
 export interface QuotaLimits {
   /** 每人同时开着的房间数（自己开的，打完、关掉、到寿命就还） */
@@ -95,12 +96,58 @@ interface UserRow {
   live: { code: string; until: number }[];
 }
 
+/** PG 模式里 miss 那个 KV 记在哪张"表"（0.21.0，宿主那边按 (game, ns, name, table, key) 存） */
+const KV_TABLE = 'kv';
+
+function missCount(r: { h: number; n: number } | null, h: number): number {
+  return r && r.h === h ? r.n : 0;
+}
+
+function parseJson<T>(v: string | null): T | undefined {
+  if (v === null) return undefined;
+  try {
+    return JSON.parse(v) as T;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 房间寿命之外多留一分钟：房间到寿命那一刻的闹钟、关房、还额度都在这之前做完。 */
 const EXPIRY_SLACK_MS = 60_000;
 
 export class RoomMeter extends DurableObject<MeterEnv> {
   private ready = false;
   private limitsCache: QuotaLimits | null = null;
+  /**
+   * 自托管 PG 模式（0.21.0，env 里有 KIT_STORE）的内存镜像：kit_day、kit_user 两张表和进房猜码的 miss 都打镜像，
+   * 每次调用末尾一次事务提交（miss 原来是 KV 的 get、put 中间隔着 await，镜像里同步读改写，顺手没了丢更新的窗口）。
+   * 没有 KIT_STORE 时为 null，照旧用 ctx.storage.sql 和 KV，行为不变
+   */
+  private readonly pg: MirrorStore | null;
+
+  constructor(ctx: DurableObjectState, env: MeterEnv) {
+    super(ctx, env);
+    const rpc = kitStoreOf(env);
+    this.pg = rpc ? new MirrorStore(rpc, 'meter') : null;
+  }
+
+  /**
+   * 一次调用：PG 模式先把这个实例读进镜像，同步做完，再提交（提交失败往外抛，房间当计量连不上）；
+   * 默认模式直接跑（fn 是同步的，和原来写在 async 方法里一样）。name 是 idFromName 用的名字（全站那一个，或 kit-miss:<key>）
+   */
+  private async run<T>(name: string, fn: () => T): Promise<T> {
+    const pg = this.pg;
+    if (!pg) return fn();
+    await pg.open(name);
+    const out = fn();
+    await pg.flush(null);
+    return out;
+  }
+
+  /** 进程重启后宿主唤醒（0.21.0）：计量没有闹钟，只把镜像读进来；幂等。没有 KIT_STORE 时什么都不做 */
+  async kitWake(name: string): Promise<void> {
+    if (this.pg) await this.pg.open(name);
+  }
 
   /** 开房前占一个名额（房间调）。房间没建成要调 kitRelease(…, cancel) 退回。 */
   async kitReserve(userId: string, code: string, until: number): Promise<Reserve> {
@@ -113,22 +160,24 @@ export class RoomMeter extends DurableObject<MeterEnv> {
    * 全站开房数只记 1（一张桌一个房间）。一次写 1 + 人数 行（每人那一行加当天那一行），写在计量里、记进当天的数，不算房间的"每步 ≤ 2 行"
    */
   async kitReserveMany(userIds: readonly string[], code: string, until: number): Promise<ReserveMany> {
-    const now = Date.now();
-    const lim = this.limits();
-    const day = this.day(now);
-    const users = userIds.map((id) => ({ id, row: this.user(id, day.day, now) }));
-    // 先说"回你的房间"：在打的房间不受全站门槛影响，回去照样能玩
-    for (const { id, row } of users) if (row.live.length >= lim.roomsPerUser) return { ok: false, userId: id, error: 'has_room', code: row.live[row.live.length - 1]!.code };
-    for (const { id, row } of users) if (row.count >= lim.dailyRoomsPerUser) return { ok: false, userId: id, error: 'daily_limit' };
-    if (levelOf(day.writes, lim) !== 'ok' || day.rooms >= lim.dailyRooms) return { ok: false, userId: null, error: 'busy' };
-    let w = 0;
-    for (const { id, row } of users) {
-      row.count++;
-      row.live.push({ code, until: until + EXPIRY_SLACK_MS });
-      w += this.saveUser(id, row);
-    }
-    this.saveDay(day.day, day.writes + w + 1, day.rooms + 1);
-    return { ok: true };
+    return this.run(METER_NAME, () => {
+      const now = Date.now();
+      const lim = this.limits();
+      const day = this.day(now);
+      const users = userIds.map((id) => ({ id, row: this.user(id, day.day, now) }));
+      // 先说"回你的房间"：在打的房间不受全站门槛影响，回去照样能玩
+      for (const { id, row } of users) if (row.live.length >= lim.roomsPerUser) return { ok: false, userId: id, error: 'has_room', code: row.live[row.live.length - 1]!.code };
+      for (const { id, row } of users) if (row.count >= lim.dailyRoomsPerUser) return { ok: false, userId: id, error: 'daily_limit' };
+      if (levelOf(day.writes, lim) !== 'ok' || day.rooms >= lim.dailyRooms) return { ok: false, userId: null, error: 'busy' };
+      let w = 0;
+      for (const { id, row } of users) {
+        row.count++;
+        row.live.push({ code, until: until + EXPIRY_SLACK_MS });
+        w += this.saveUser(id, row);
+      }
+      this.saveDay(day.day, day.writes + w + 1, day.rooms + 1);
+      return { ok: true };
+    });
   }
 
   /**
@@ -144,23 +193,25 @@ export class RoomMeter extends DurableObject<MeterEnv> {
    * 匹配桌开打时没来的人（0.20.0）是 cancel 但不退全站数：桌子开成了，只是他的那一份退给他
    */
   async kitReleaseMany(userIds: readonly string[], code: string, writes: number, cancel = false, room = cancel): Promise<MeterLevel> {
-    const now = Date.now();
-    const day = this.day(now);
-    let w = 0;
-    let found = false;
-    for (const id of userIds) {
-      const user = this.user(id, day.day, now);
-      const i = user.live.findIndex((r) => r.code === code);
-      if (i < 0) continue;
-      found = true;
-      user.live.splice(i, 1);
-      if (cancel && user.count > 0) user.count--;
-      w += this.saveUser(id, user);
-    }
-    const rooms = room && found ? Math.max(0, day.rooms - 1) : day.rooms;
-    const total = day.writes + clean(writes) + w + 1;
-    this.saveDay(day.day, total, rooms);
-    return levelOf(total, this.limits());
+    return this.run(METER_NAME, () => {
+      const now = Date.now();
+      const day = this.day(now);
+      let w = 0;
+      let found = false;
+      for (const id of userIds) {
+        const user = this.user(id, day.day, now);
+        const i = user.live.findIndex((r) => r.code === code);
+        if (i < 0) continue;
+        found = true;
+        user.live.splice(i, 1);
+        if (cancel && user.count > 0) user.count--;
+        w += this.saveUser(id, user);
+      }
+      const rooms = room && found ? Math.max(0, day.rooms - 1) : day.rooms;
+      const total = day.writes + clean(writes) + w + 1;
+      this.saveDay(day.day, total, rooms);
+      return levelOf(total, this.limits());
+    });
   }
 
   /**
@@ -168,31 +219,37 @@ export class RoomMeter extends DurableObject<MeterEnv> {
    * 入队前就挡掉"有房间""今天用完了""联机忙"的人，不让他们白等 15 秒
    */
   async kitPeek(userId: string): Promise<Peek> {
-    const now = Date.now();
-    const lim = this.limits();
-    const day = this.day(now);
-    const user = this.user(userId, day.day, now);
-    const lv = levelOf(day.writes, lim);
-    // 全站开房数到了也开不了新桌，对排队的人和"联机忙"一样
-    const level = lv === 'ok' && day.rooms >= lim.dailyRooms ? 'busy' : lv;
-    return {
-      room: user.live.length >= lim.roomsPerUser ? user.live[user.live.length - 1]!.code : null,
-      daily: user.count >= lim.dailyRoomsPerUser,
-      level,
-    };
+    return this.run(METER_NAME, () => {
+      const now = Date.now();
+      const lim = this.limits();
+      const day = this.day(now);
+      const user = this.user(userId, day.day, now);
+      const lv = levelOf(day.writes, lim);
+      // 全站开房数到了也开不了新桌，对排队的人和"联机忙"一样
+      const level = lv === 'ok' && day.rooms >= lim.dailyRooms ? 'busy' : lv;
+      return {
+        room: user.live.length >= lim.roomsPerUser ? user.live[user.live.length - 1]!.code : null,
+        daily: user.count >= lim.dailyRoomsPerUser,
+        level,
+      };
+    });
   }
 
   /** 报一批写入（房间攒够一批时调），回现在的门槛。 */
   async kitReport(writes: number): Promise<MeterLevel> {
-    const day = this.day(Date.now());
-    const total = day.writes + clean(writes) + 1;
-    this.saveDay(day.day, total, day.rooms);
-    return levelOf(total, this.limits());
+    return this.run(METER_NAME, () => {
+      const day = this.day(Date.now());
+      const total = day.writes + clean(writes) + 1;
+      this.saveDay(day.day, total, day.rooms);
+      return levelOf(total, this.limits());
+    });
   }
 
   /** 只读：现在的门槛（房间放新人进来之前问，不写库）。 */
   async kitLevel(): Promise<MeterLevel> {
-    return levelOf(this.day(Date.now()).writes, this.limits());
+    return this.run(METER_NAME, () => {
+      return levelOf(this.day(Date.now()).writes, this.limits());
+    });
   }
 
   /**
@@ -200,36 +257,60 @@ export class RoomMeter extends DurableObject<MeterEnv> {
    * kitMissBlocked 只读，进房前问（门槛在这里按 KIT_QUOTA 算，worker.ts 不用在运行时引用本文件：它要能在普通 Node 里加载）；
    * kitMiss 记一次（1 行），只有真的进了一个不存在的房间才调，超了门槛的人进不到这一步，所以一小时最多写门槛那么多行
    */
-  async kitMissBlocked(kind: 'user' | 'ip'): Promise<boolean> {
+  async kitMissBlocked(kind: 'user' | 'ip', key?: string): Promise<boolean> {
     const lim = this.limits();
-    return (await this.kitMisses()) >= (kind === 'user' ? lim.joinMissesPerUser : lim.joinMissesPerIp);
+    return (await this.kitMisses(key)) >= (kind === 'user' ? lim.joinMissesPerUser : lim.joinMissesPerIp);
   }
 
-  /** 只读：这一小时记了几次（给测试看） */
-  async kitMisses(): Promise<number> {
+  /**
+   * 只读：这一小时记了几次（给测试看）。key（0.21.0）是 missStub 用的那个（u:<userId>、ip:<地址>）：
+   * PG 模式靠它找到 PG 里这个小实例的行（kit-miss:<key>）；默认模式不看它
+   */
+  async kitMisses(key?: string): Promise<number> {
+    if (this.pg) return this.run(`kit-miss:${key ?? ''}`, () => missCount(this.pgMiss(), hourOf(Date.now())));
     const r = await this.ctx.storage.get<{ h: number; n: number }>('miss');
     return r && r.h === hourOf(Date.now()) ? r.n : 0;
   }
 
-  async kitMiss(): Promise<number> {
+  async kitMiss(key?: string): Promise<number> {
     const h = hourOf(Date.now());
+    if (this.pg) {
+      return this.run(`kit-miss:${key ?? ''}`, () => {
+        const n = missCount(this.pgMiss(), h) + 1;
+        this.pg!.put(KV_TABLE, 'miss', JSON.stringify({ h, n }));
+        return n;
+      });
+    }
     const r = await this.ctx.storage.get<{ h: number; n: number }>('miss');
     const n = (r && r.h === h ? r.n : 0) + 1;
     await this.ctx.storage.put('miss', { h, n });
     return n;
   }
 
+  /** PG 模式镜像里的 miss（存成 JSON） */
+  private pgMiss(): { h: number; n: number } | null {
+    const v = this.pg!.get(KV_TABLE, 'miss');
+    if (v === null) return null;
+    try {
+      return JSON.parse(v) as { h: number; n: number };
+    } catch {
+      return null;
+    }
+  }
+
   /** 只读：当天的数，给运维和测试看。 */
   async kitUsage(): Promise<Usage> {
-    const day = this.day(Date.now());
-    const limits = this.limits();
-    return { day: day.day, writes: day.writes, rooms: day.rooms, level: levelOf(day.writes, limits), limits };
+    return this.run(METER_NAME, () => {
+      const day = this.day(Date.now());
+      const limits = this.limits();
+      return { day: day.day, writes: day.writes, rooms: day.rooms, level: levelOf(day.writes, limits), limits };
+    });
   }
 
   // ---------- 存储 ----------
 
   private ensure(): void {
-    if (this.ready) return;
+    if (this.ready || this.pg) return;
     const sql = this.ctx.storage.sql;
     // 建表只有第一次真的写（之后 IF NOT EXISTS 什么都不做）；建表那几行记不进当天的数，一个游戏一生只有一次
     sql.exec('CREATE TABLE IF NOT EXISTS kit_day (k INTEGER PRIMARY KEY, day TEXT NOT NULL, writes INTEGER NOT NULL, rooms INTEGER NOT NULL)');
@@ -242,11 +323,14 @@ export class RoomMeter extends DurableObject<MeterEnv> {
   private day(now: number): { day: string; writes: number; rooms: number } {
     this.ensure();
     const today = utcDay(now);
-    const row = this.ctx.storage.sql.exec<{ day: string; writes: number; rooms: number }>('SELECT day, writes, rooms FROM kit_day WHERE k = 1').toArray()[0];
+    const row = this.pg
+      ? parseJson<{ day: string; writes: number; rooms: number }>(this.pg.get('kit_day', 1))
+      : this.ctx.storage.sql.exec<{ day: string; writes: number; rooms: number }>('SELECT day, writes, rooms FROM kit_day WHERE k = 1').toArray()[0];
     return row && row.day === today ? row : { day: today, writes: 0, rooms: 0 };
   }
 
   private saveDay(day: string, writes: number, rooms: number): void {
+    if (this.pg) return void this.pg.put('kit_day', 1, JSON.stringify({ day, writes, rooms }));
     this.ctx.storage.sql.exec(
       'INSERT INTO kit_day (k, day, writes, rooms) VALUES (1, ?, ?, ?) ON CONFLICT (k) DO UPDATE SET day = excluded.day, writes = excluded.writes, rooms = excluded.rooms',
       day,
@@ -257,7 +341,9 @@ export class RoomMeter extends DurableObject<MeterEnv> {
 
   /** 这个人那一行：换了一天开房次数清零，到点的房间作废（只在内存里，下次保存时才写）。 */
   private user(userId: string, today: string, now: number): UserRow {
-    const raw = this.ctx.storage.sql.exec<{ v: string }>('SELECT v FROM kit_user WHERE id = ?', userId).toArray()[0];
+    const raw = this.pg
+      ? (((v) => (v === null ? undefined : { v }))(this.pg.get('kit_user', userId)))
+      : this.ctx.storage.sql.exec<{ v: string }>('SELECT v FROM kit_user WHERE id = ?', userId).toArray()[0];
     let row: UserRow = { day: today, count: 0, live: [] };
     if (raw) {
       try {
@@ -271,6 +357,7 @@ export class RoomMeter extends DurableObject<MeterEnv> {
 
   /** 存这个人那一行，返回写了几行。没有开着的房间、当天也没开过的，删掉这一行，不留着占地方。 */
   private saveUser(userId: string, row: UserRow): number {
+    if (this.pg) return row.live.length === 0 && row.count === 0 ? this.pg.delete('kit_user', userId) : this.pg.put('kit_user', userId, JSON.stringify(row));
     const sql = this.ctx.storage.sql;
     if (row.live.length === 0 && row.count === 0) return sql.exec('DELETE FROM kit_user WHERE id = ?', userId).rowsWritten;
     return sql.exec('INSERT INTO kit_user (id, v) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET v = excluded.v', userId, JSON.stringify(row)).rowsWritten;

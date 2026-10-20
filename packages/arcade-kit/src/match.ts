@@ -13,6 +13,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { type Identity, KIT_HOST, newRoomCode, parseIdentity, roomStub } from './internal.js';
 import { CLOSE, type MatchDownMsg, type MatchSoloWhy } from './protocol.js';
 import type { MatchOutcome } from './room.js';
+import { kitStoreOf, MirrorStore } from './store.js';
 
 export type { MatchDownMsg, MatchSoloWhy } from './protocol.js';
 
@@ -97,9 +98,50 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
   /** 每人这一小时排了几次 */
   private readonly hourly = new Map<string, number[]>();
 
+  /**
+   * 自托管 PG 模式（0.21.0，env 里有 KIT_STORE）：排队不存表，只把闹钟记进 PG，进程重启后宿主按它 kitWake；
+   * 没有 KIT_STORE 时为 null，行为不变
+   */
+  private readonly pg: MirrorStore | null;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    const rpc = kitStoreOf(env);
+    this.pg = rpc ? new MirrorStore(rpc, 'match') : null;
+  }
+
+  /** PG 模式：把现在的闹钟提交进 PG（和存着的一样就不调）；出错只记日志，排队照常 */
+  private async pgAlarm(): Promise<void> {
+    const pg = this.pg;
+    if (!pg || pg.name === null || this.alarmAt === undefined) return;
+    try {
+      await pg.open(pg.name);
+      await pg.flush(this.alarmAt);
+    } catch (e) {
+      console.error('match store commit failed', e instanceof Error ? e.message : e);
+    }
+  }
+
+  /**
+   * 进程重启后宿主唤醒（0.21.0，只有 KIT_STORE 绑定能调）：按 PG 里存的闹钟重设（过期的马上响，醒来凑桌时队里没人就什么都不做）。
+   * 幂等：闹钟已经设着的不动；没有 KIT_STORE 时什么都不做
+   */
+  async kitWake(name: string): Promise<void> {
+    const pg = this.pg;
+    if (!pg) return;
+    try {
+      await pg.open(name);
+      if (this.alarmAt === undefined) this.alarmAt = await this.ctx.storage.getAlarm();
+      const at = pg.storedAlarm;
+      if (at !== null && this.alarmAt === null) {
+        this.alarmAt = at;
+        await this.ctx.storage.setAlarm(at);
+      }
+    } catch (e) {
+      console.error('match wake failed', e instanceof Error ? e.message : e);
+      this.alarmAt = undefined;
+    }
   }
 
   /** 入队：只认 kit 自己拼的内部地址（worker.ts 的 acceptMatch），身份在 x-kit-user 头里。 */
@@ -111,6 +153,8 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
     const me = parseIdentity(request.headers.get('x-kit-user'));
     const tier = url.searchParams.get('tier');
     if (!me || !tier) return new Response('no identity', { status: 401 });
+    // PG 模式记下自己的名字（matchStub 用的），提交闹钟时带上
+    if (this.pg && this.pg.name === null) await this.pg.open(`kit-match:${tier}`).catch((e: unknown) => console.error('match store open failed', e instanceof Error ? e.message : e));
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
@@ -170,6 +214,7 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
       // 闹钟里不往外抛（会自动重试、每次计费）
       console.error('match alarm failed', e instanceof Error ? e.message : e);
     }
+    await this.pgAlarm();
   }
 
   // ---------- 凑桌 ----------
@@ -291,6 +336,7 @@ export abstract class MatchQueue<Env extends MatchEnv = MatchEnv> extends Durabl
       console.error('match setAlarm failed', e instanceof Error ? e.message : e);
       this.alarmAt = undefined;
     }
+    await this.pgAlarm();
   }
 
   // ---------- 连接 ----------

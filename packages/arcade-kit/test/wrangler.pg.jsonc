@@ -1,0 +1,108 @@
+// 自托管 PG 模式的测试（0.21.0，vitest.pg.config.ts）：和 wrangler.jsonc 一样，多绑一个 KIT_STORE（假的 PG，test/fake-pg.ts）。不部署。
+{
+  "name": "arcade-kit-test",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "ToyRoom"
+      },
+      {
+        "name": "METER",
+        "class_name": "RoomMeter"
+      },
+      {
+        "name": "FLAKY_ROOM",
+        "class_name": "FlakyRoom"
+      },
+      {
+        "name": "FLAKY_METER",
+        "class_name": "FlakyMeter"
+      },
+      {
+        "name": "LEDGER_ROOM",
+        "class_name": "LedgerRoom"
+      },
+      {
+        "name": "BANK",
+        "class_name": "ToyBank"
+      },
+      {
+        "name": "PAUSE_ROOM",
+        "class_name": "PauseRoom"
+      },
+      {
+        "name": "NORESUME_ROOM",
+        "class_name": "NoResumeRoom"
+      },
+      {
+        "name": "FAKE_BANK",
+        "class_name": "FakeBank"
+      },
+      {
+        "name": "CHATTY_ROOM",
+        "class_name": "ChattyRoom"
+      },
+      {
+        "name": "MATCH",
+        "class_name": "ToyQueue"
+      },
+      {
+        "name": "FAKE_PG",
+        "class_name": "FakePg"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "ToyRoom",
+        "RoomMeter",
+        "FlakyRoom",
+        "FlakyMeter",
+        "LedgerRoom",
+        "ToyBank",
+        "PauseRoom",
+        "NoResumeRoom",
+        "FakeBank",
+        "ChattyRoom",
+        "ToyQueue",
+        "FakePg"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "binding": "WALLET",
+      "service": "arcade-kit-test",
+      "entrypoint": "WalletService",
+      "props": {
+        "game": "toy"
+      }
+    },
+    {
+      "binding": "WALLET_BARE",
+      "service": "arcade-kit-test",
+      "entrypoint": "WalletService"
+    },
+    {
+      "binding": "KIT_STORE",
+      "service": "arcade-kit-test",
+      "entrypoint": "FakeKitStore",
+      "props": {
+        "game": "toy"
+      }
+    },
+    {
+      "binding": "KIT_STORE_FLAKY",
+      "service": "arcade-kit-test",
+      "entrypoint": "FakeKitStore",
+      "props": {
+        "game": "flaky"
+      }
+    }
+  ]
+}

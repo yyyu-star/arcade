@@ -1,6 +1,6 @@
 {
   "name": "@yyyu-star/arcade-kit",
-  "version": "0.20.4",
+  "version": "0.21.0",
   "description": "Multiplayer toolkit for small Cloudflare Workers games: Durable Object game rooms, room create/join entry points, browser client, daily write quota, ChaCha20 RNG, platform or standalone (guest) identity. 小游戏共用的联机底座",
   "license": "MIT",
   "type": "module",
@@ -61,7 +61,7 @@
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test",
     "check:dist": "npm run build && node scripts/manifest.mjs check",
-    "test": "npm run typecheck && vitest run && npm run check:dist",
+    "test": "npm run typecheck && vitest run && vitest run -c vitest.pg.config.ts && npm run check:dist",
     "prepack": "npm run build && node scripts/manifest.mjs pack",
     "postpack": "node scripts/manifest.mjs restore"
   },

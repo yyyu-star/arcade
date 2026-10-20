@@ -9,7 +9,7 @@ import { snapshotBytes } from '../src/game.ts';
 import { roomStub } from '../src/internal.ts';
 import type { StateMsg, WelcomeMsg } from '../src/protocol.ts';
 import { DEFAULT_LIMITS } from '../src/room.ts';
-import { advance, type Conn, freezeClock, join, openRoom, resetMeter } from './helpers.ts';
+import { advance, type Conn, freezeClock, join, openRoom, resetMeter, roomRow } from './helpers.ts';
 import { type NoResumeRoom, PAUSE_ACT, type PauseRoom, type PauseState, type PauseView, pauseGame, REST_MS } from './pause.ts';
 
 const P = '/pause';
@@ -28,9 +28,10 @@ afterEach(() => {
 type Room = PauseRoom | NoResumeRoom;
 const pauseStub = (code: string, ns: DurableObjectNamespace = env.PAUSE_ROOM) => roomStub(ns, code) as DurableObjectStub<Room>;
 
-function inspect(code: string, ns: DurableObjectNamespace = env.PAUSE_ROOM) {
+async function inspect(code: string, ns: DurableObjectNamespace = env.PAUSE_ROOM) {
+  const v = await roomRow(pauseStub(code, ns), code);
   return runInDurableObject(pauseStub(code, ns), async (room: Room, state) => {
-    const row = state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').toArray()[0];
+    const row = v !== null ? { v: JSON.stringify(v) } : undefined;
     return {
       last: room.lastStepWrites,
       max: room.maxStepWrites,

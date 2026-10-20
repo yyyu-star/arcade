@@ -10,7 +10,7 @@ import type { RoomMeter } from '../src/meter.ts';
 import { isEntropy } from '../src/rng.ts';
 import roomSrc from '../src/room.ts?raw';
 import workerSrc from '../src/worker.ts?raw';
-import { advance, Conn, freezeClock, inspect, join, openRoom, refusedWith, resetMeter, stub, upgrade } from './helpers.ts';
+import { advance, Conn, freezeClock, inspect, join, openRoom, PG, refusedWith, resetMeter, roomRow, setMissCount, setRoomRow, stub, upgrade } from './helpers.ts';
 import type { RoomGame } from '../src/game.ts';
 import { SITE, type ToyAction, type ToyRoom, type ToyView, toyGame } from './worker.ts';
 import { env, exports } from 'cloudflare:workers';
@@ -84,7 +84,8 @@ describe('开房、进房', () => {
   it('开房：建表 2 行 + 状态 1 行 + 设"没人 10 分钟"的闹钟 1 行，一个房间只这一次；房主连上写 1 行，收到快照坐在 0 号位', async () => {
     const code = await openRoom('host');
     expect(code).toMatch(/^\d{6}$/);
-    expect((await inspect(code)).last).toBe(4);
+    // PG 模式（0.21.0）没有建表这 2 行：状态 1 行 + 闹钟 1 行
+    expect((await inspect(code)).last).toBe(PG ? 2 : 4);
     expect(await alarmOf(code)).toBe(Date.now() + 10 * 60_000);
     const { welcome } = await join(code, 'host');
     expect(welcome).toMatchObject({ v: 1, you: { seat: 0 }, room: { code, status: 'waiting' }, view: null });
@@ -606,9 +607,7 @@ describe('只用一个闹钟', () => {
     conn.send({ t: 'start' });
     const st = await conn.state();
     expect(st.room.status).toBe('playing');
-    const game = await runInDurableObject(roomStub(env.FLAKY_ROOM, code), (_r, state) =>
-      JSON.parse(state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').one().v).game,
-    );
+    const game = (await roomRow<{ game: { key?: unknown; hands: number[][] } }>(roomStub(env.FLAKY_ROOM, code), code))!.game;
     expect(game.key).toBeUndefined();
     expect(game.hands.flat()).toHaveLength(12);
   });
@@ -919,12 +918,10 @@ describe('座位绑人（0.1.1）', () => {
     // 升级前 u3 已经离座：旧格式里看不出 2 号座位是他的
     conns[2]!.send({ t: 'leave' });
     await conns[2]!.until((m) => m.t === 'state' && m.you.seat === null);
-    await runInDurableObject(stub(code), (_r: ToyRoom, state) => {
-      const p = JSON.parse(state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').one().v) as Record<string, unknown>;
-      delete p.owners;
-      delete p.turnSeq;
-      state.storage.sql.exec('UPDATE kit_room SET v = ? WHERE k = 1', JSON.stringify(p));
-    });
+    const p = (await roomRow(stub(code), code))!;
+    delete p.owners;
+    delete p.turnSeq;
+    await setRoomRow(stub(code), code, p);
     await evictDurableObject(stub(code));
     conns[1]!.act('late', { card: (await hands(code))[1]![0] }, old1);
     expect(await conns[1]!.until((m) => m.t === 'error')).toMatchObject({ code: 'stale' });
@@ -1313,10 +1310,9 @@ describe('一组人：组标识、卡住、中途接管（0.1.1）', () => {
 
 describe('第三轮审计（0.14.0）', () => {
   const missStore = (key: string) => missStub(env.METER, key) as DurableObjectStub<RoomMeter>;
-  const misses = (key: string) => missStore(key).kitMisses();
+  const misses = (key: string) => missStore(key).kitMisses(key);
   /** 直接把某个人 / IP 这一小时的"码不存在"次数设成 n（省得真的猜 20 次） */
-  const setMisses = (key: string, n: number) =>
-    runInDurableObject(missStore(key), (_m: RoomMeter, state) => state.storage.put('miss', { h: Math.floor(Date.now() / 3_600_000), n }));
+  const setMisses = (key: string, n: number) => setMissCount(env.METER, key, n);
   const probe = (code: string, user: string, ip: string) => upgrade(code, user, { headers: { 'cf-connecting-ip': ip } });
   // 计数存在小实例里，同一个文件的测试共用：设过门槛的清回去，不连累后面用同名账号的测试
   afterEach(async () => {

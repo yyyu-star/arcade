@@ -135,7 +135,8 @@ export async function acceptJoin(request: Request, env: KitEnv, code: string, op
   const cv = q.get('cv') ?? '0';
   // chat=1（0.18.0）：新版 RoomClient 认聊天消息，房间只给这样的连接发
   const chat = q.get('chat') === '1' ? '&chat=1' : '';
-  const res = await roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}${chat}`, {
+  // code（0.21.0）：自托管 PG 模式的房间靠它从 PG 读自己的行；Cloudflare 上房间不看它
+  const res = await roomStub(env.ROOM, code).fetch(`https://${KIT_HOST}/ws?cv=${encodeURIComponent(cv)}${chat}&code=${encodeURIComponent(code)}`, {
     headers: { upgrade: 'websocket', 'x-kit-user': identityHeader(me), ...(limited ? { [LIMITED_HEADER]: '1' } : {}) },
   });
   if (!res.headers.has(MISS_HEADER)) return res;
@@ -198,11 +199,11 @@ function missGuard(env: KitEnv, userId: string, ip: string | null): { ok(): Prom
   const stub = (k: string) => missStub(ns, k) as DurableObjectStub<RoomMeter>;
   return {
     async ok() {
-      const blocked = await Promise.all(keys.map(([k, kind]) => stub(k).kitMissBlocked(kind)));
+      const blocked = await Promise.all(keys.map(([k, kind]) => stub(k).kitMissBlocked(kind, k)));
       return !blocked.includes(true);
     },
     async miss() {
-      await Promise.all(keys.map(([k]) => stub(k).kitMiss()));
+      await Promise.all(keys.map(([k]) => stub(k).kitMiss(k)));
       // 这几行也记进当天的写入（计量自己的规矩），报一次计量再写 1 行
       await (meterStub(ns) as DurableObjectStub<RoomMeter>).kitReport(keys.length);
     },

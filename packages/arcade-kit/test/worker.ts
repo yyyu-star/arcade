@@ -18,6 +18,10 @@ import type { ToyBank } from './ledger.ts';
 export { NoResumeRoom, PauseRoom } from './pause.ts';
 // 0.8.0 的假钱包照游戏的写法原样导出（WALLET 绑回这个 Worker 的 WalletService）
 export { FakeBank, WalletService } from '../src/testing.ts';
+// 0.21.0 自托管 PG 模式的假后端（只有 vitest.pg.config.ts 绑了 KIT_STORE、FAKE_PG）
+export { FakeKitStore, FakePg } from './fake-pg.ts';
+import type { FakeKitStore, FakePg } from './fake-pg.ts';
+import { type KitStoreRpc, MirrorStore } from '../src/store.ts';
 import type { FakeBank, WalletService } from '../src/testing.ts';
 
 export interface Env {
@@ -37,6 +41,10 @@ export interface Env {
   WALLET: Service<WalletService>;
   /** 没写 props.game */
   WALLET_BARE: Service<WalletService>;
+  /** 只有自托管 PG 模式的那一遍测试有（vitest.pg.config.ts，0.21.0） */
+  KIT_STORE?: Service<FakeKitStore>;
+  KIT_STORE_FLAKY?: Service<FakeKitStore>;
+  FAKE_PG?: DurableObjectNamespace<FakePg>;
 }
 
 export const SITE = 'https://game.example.com';
@@ -120,6 +128,11 @@ export class ToyRoom extends GameRoom<ToyState, ToyAction, ToyView, Env> {
  * 计量的测试替身：和 RoomMeter 一样，只是 down 为 true 时所有调用都抛错（"连不上"）。测试用 runInDurableObject 拨这个开关。
  */
 export class FlakyMeter extends RoomMeter {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env as never);
+    // PG 那一遍（0.21.0）：和全站计量（METER）是两个类，线上一个游戏只有一个计量；测试里给它单独一个游戏 id，PG 里的行不撞
+    if (env.KIT_STORE_FLAKY) (this as unknown as { pg: MirrorStore }).pg = new MirrorStore(env.KIT_STORE_FLAKY as unknown as KitStoreRpc, 'meter');
+  }
   down = false;
   /** 收到过几次 kitReport（测"攒够一批才报"） */
   reports = 0;

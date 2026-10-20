@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { roomStub } from '../src/internal.ts';
 import { meterLevel, meterReport } from '../src/meter.ts';
 import type { StateMsg } from '../src/protocol.ts';
-import { advance, type Conn, createRoom, freezeClock, join, meter, openRoom, refusedWith, resetMeter, upgrade } from './helpers.ts';
+import { advance, type Conn, createRoom, freezeClock, join, meter, openRoom, PG, refusedWith, resetMeter, roomRow, upgrade } from './helpers.ts';
 import { bank, type LedgerRoom, type LedgerState, type LedgerView, type ToyBank } from './ledger.ts';
 
 const P = '/ledger';
@@ -35,10 +35,12 @@ beforeEach(async () => {
 
 const ledgerStub = (code: string) => roomStub(env.LEDGER_ROOM, code) as DurableObjectStub<LedgerRoom>;
 
-function inspect(code: string) {
+async function inspect(code: string) {
+  // 两种存储都能读（0.21.0）：PG 模式那一行在假 PG 里
+  const v = await roomRow(ledgerStub(code), code);
   return runInDurableObject(ledgerStub(code), async (room: LedgerRoom, state) => {
-    const hasTable = state.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'kit_room'").one().n > 0;
-    const row = hasTable ? state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').toArray()[0] : undefined;
+    const hasTable = v !== null;
+    const row = v !== null ? { v: JSON.stringify(v) } : undefined;
     return {
       last: room.lastStepWrites,
       max: room.maxStepWrites,
@@ -122,7 +124,7 @@ describe('开局选项（options / seatCount）', () => {
 describe('开房就定选项（0.4.0）', () => {
   it('开房带选项：校验过的进 RoomInfo.opts，所有人进房就看到；开房仍是建表 2 + 状态 1 + 闹钟 1 行', async () => {
     const code = await openRoom('u1', P, { seats: 3, buyIn: 50 });
-    expect((await inspect(code)).last).toBe(4);
+    expect((await inspect(code)).last).toBe(PG ? 2 : 4);
     const host = await join(code, 'u1', P);
     const guest = await join(code, 'u2', P);
     expect(host.welcome.room.opts).toEqual({ seats: 3, buyIn: 50 });

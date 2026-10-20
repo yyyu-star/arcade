@@ -16,6 +16,9 @@
   `table-fun.ts` 和 `fun.ts` 同样的规矩：import 时不碰 DOM，动画只动 transform、opacity，量位置只在开菜单和 `controls()` 时。kit 里不出现任何游戏的名字、短语和人物，这些都由游戏传进来。
 - DOM 组件的主题（0.16.0，`src/theme.ts`）：颜色、圆角、字体走 `--ak-*` 变量，写成 `var(--ak-xxx, <默认值>)`，默认值就是原来的值（不传主题的游戏外观不变，`test/theme.test.ts` 扫源码守住）；
   新加的 DOM 样式照这个写，新变量同步加进 `theme.ts` 的表、README 的变量表和测试。`themeVars` 只放行安全的值（挡 `;` `{` `}` `<` `url(` `expression` 等），不要绕过它直接拼 CSS。
+- 可插拔存储（0.21.0，`src/store.ts`，自托管 PG 模式）：有 `KIT_STORE` 绑定才走 `MirrorStore`，没有时房间、计量、排队原来直接用 `ctx.storage` 的代码一行不动（零退化靠"根本没换"）。
+  改存储相关代码时两条路都要改、`npm test` 的两遍（默认、`vitest.pg.config.ts`）都要过；PG 路径里一步之内不 await、send/close 排队到 flush 之后、提交失败作废缓存不广播、`kitWake` 幂等，这几条 `test/store.test.ts` 守着。
+  直接读写存储的测试一律用 `test/helpers.ts` 里两种存储都能用的帮手，不要再在测试里写 `state.storage.sql`。
 - 游戏只经 `acceptCreate` / `acceptJoin` 开房进房，不自己把浏览器的请求转给房间；房间的 `fetch` 只认 `KIT_HOST` 内部地址，开房走 RPC。
   `internal.ts` 不进 `package.json` 的 `exports`，游戏引用不到；新加的内部工具也放 `internal.ts`。`auth.ts` 从 0.3.1 起导出（游戏的登录闸门用），只认人，不碰内部地址和身份头。
 - 能被别人挤占的额度不能挂在房间上：按座位（人）分开算，没入座的连接单独封顶，入座的人回来永远进得了；一个人也不能用光整个房间的额度（`maxInboundShare`）。

@@ -9,7 +9,7 @@ import { CHAT_MAX, blockReason, chatRejectText, checkChat, localChat, maskChat, 
 import { RoomClient, type WebSocketLike } from '../src/client.ts';
 import type { ChattedMsg, DownMsg, EmotedMsg } from '../src/protocol.ts';
 import { chatRateOf } from '../src/room.ts';
-import { advance, type Conn, freezeClock, inspect, join, openRoom, resetMeter, stub } from './helpers.ts';
+import { advance, type Conn, freezeClock, inspect, join, openRoom, resetMeter, roomRow, stub } from './helpers.ts';
 import type { ToyRoom, ToyView } from './worker.ts';
 
 describe('过滤（纯函数）', () => {
@@ -202,7 +202,7 @@ describe('房间转发聊天', () => {
     await a.until(chatted);
     const again = await join(code, 'u1', '', true);
     expect(JSON.stringify(again.welcome)).not.toContain('秘密暗号');
-    const dump = await runInDurableObject(stub(code), (_r: ToyRoom, state) => JSON.stringify(state.storage.sql.exec('SELECT * FROM kit_room').toArray()));
+    const dump = JSON.stringify(await roomRow(stub(code), code));
     expect(dump).not.toContain('秘密暗号');
   });
 

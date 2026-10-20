@@ -9,7 +9,7 @@ import { roomStub } from '../src/internal.ts';
 import { DEFAULT_QUOTA, levelOf, parseQuota, type RoomMeter } from '../src/meter.ts';
 import { CLOSE, CLOSE_REASON, isFinalClose, type StateMsg } from '../src/protocol.ts';
 import { DEFAULT_LIMITS } from '../src/room.ts';
-import { advance, type Conn, createRoom, freezeClock, inspect, join, meter, openRoom, refusedWith, resetMeter, stub, upgrade } from './helpers.ts';
+import { advance, type Conn, createRoom, freezeClock, inspect, join, loseRoomStorage, meter, openRoom, refusedWith, resetMeter, roomRow, setMeterDay, stub, upgrade } from './helpers.ts';
 import { type FlakyMeter, type FlakyRoom, SITE, type ToyView } from './worker.ts';
 
 const FLAKY = '/flaky';
@@ -28,23 +28,13 @@ async function body(res: Response): Promise<Record<string, unknown>> {
 /** 把计量当天的数直接改掉。 */
 async function setDay(writes: number, rooms = 0, ns: DurableObjectNamespace = env.METER): Promise<void> {
   const { day } = await usage(ns);
-  await runInDurableObject(meter(ns), (_m: RoomMeter, state) => {
-    state.storage.sql.exec(
-      'INSERT INTO kit_day (k, day, writes, rooms) VALUES (1, ?, ?, ?) ON CONFLICT (k) DO UPDATE SET day = excluded.day, writes = excluded.writes, rooms = excluded.rooms',
-      day,
-      writes,
-      rooms,
-    );
-  });
+  await setMeterDay(day, writes, rooms, ns);
 }
 
 /** FlakyRoom 存下的"没真人了"的时刻：房间还在、有人时是 null，房间关了（那一行删掉）是 undefined */
 async function noHumanSince(code: string): Promise<number | null | undefined> {
-  return runInDurableObject(flakyRoom(code), (_r: FlakyRoom, state) => {
-    const t = state.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'kit_room'").one().n;
-    const row = t ? state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').toArray()[0] : undefined;
-    return row ? (JSON.parse(row.v) as { noHumanSince: number | null }).noHumanSince : undefined;
-  });
+  const row = await roomRow<{ noHumanSince: number | null }>(flakyRoom(code), code);
+  return row ? row.noHumanSince : undefined;
 }
 
 /** 等到 fn 成立（房间还名额、报数是在广播之后 await 的，测试先收到消息）。 */
@@ -110,10 +100,7 @@ describe('按人的开房名额', () => {
 
   it('房间没来得及还（崩了、存储没了）：名额到"开房时间 + 房间寿命 + 1 分钟"自动作废', async () => {
     const code = await openRoom('a');
-    await runInDurableObject(stub(code), async (_r, state) => {
-      await state.storage.deleteAlarm();
-      await state.storage.deleteAll();
-    });
+    await loseRoomStorage(stub(code), code);
     expect((await createRoom('a')).status).toBe(409);
     advance(DEFAULT_LIMITS.maxLifeMs + 60_000 - 1);
     expect((await createRoom('a')).status).toBe(409);
@@ -222,9 +209,7 @@ describe('每日写入计量', () => {
     conn.send({ t: 'start' });
     const st = await conn.state();
     await eventually(async () => (await runInDurableObject(flakyRoom(code), (r: FlakyRoom) => r.lastStepWrites)) > 0);
-    const saved = await runInDurableObject(flakyRoom(code), (_r: FlakyRoom, state) =>
-      JSON.parse(state.storage.sql.exec<{ v: string }>('SELECT v FROM kit_room WHERE k = 1').one().v) as { unmetered: number },
-    );
+    const saved = (await roomRow<{ unmetered: number }>(flakyRoom(code), code))!;
     expect(saved.unmetered).toBeGreaterThan(0);
     const before = (await usage(env.FLAKY_METER)).writes;
     const reportsBefore = await runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.reports);
@@ -308,8 +293,12 @@ describe('计量连不上', () => {
     advance(30_000);
     expect(await refusedWith(await upgrade(code, 'newbie', { prefix: FLAKY }))).toBe(CLOSE.tryLater);
     expect((await playOut(h)).room.status).toBe('over');
-    // 打完时房间还名额是广播之后才 await 的：先等它真的被拒，再恢复计量，不然这一下可能赶在恢复之后、直接还成功
-    await eventually(() => runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.refusedReleases > 0));
+    // 打完时房间还名额是广播之后才 await 的：先等它真的被拒（或者前面报数被拒过、名额攒着等重试间隔），再恢复计量，
+    // 不然这一下可能赶在恢复之后、直接还成功。PG 模式（0.21.0）开房少记建表那 2 行，攒够一批报数的那一步落在计量断线期间，走的是后一种
+    await eventually(async () =>
+      (await runInDurableObject(flakyMeter(), (m: FlakyMeter) => m.refusedReleases > 0)) ||
+      (await runInDurableObject(flakyRoom(code), (r: FlakyRoom) => (r as unknown as { release: unknown; meterRetryAt: number }).release !== null && (r as unknown as { meterRetryAt: number }).meterRetryAt > Date.now())),
+    );
     // 恢复以后：过了重试间隔，房间下一次有事件时补上
     await setDown(false);
     expect((await createRoom('host', FLAKY)).status).toBe(409);

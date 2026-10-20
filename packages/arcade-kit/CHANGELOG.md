@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.21.0（2026-10-20）
+
+- **可插拔的存储（KitStore），给自托管 PG 模式**（主线·所有者 10-20，需求是自托管代理的 selfhost-kit-persistence，接口六条和它对过）：
+  env 里有 `KIT_STORE` 绑定时，房间、计量、排队的存储走宿主的 PostgreSQL（`src/store.ts` 的 `MirrorStore`：同步读写内存镜像，每一步末尾一次事务提交脏行和当前闹钟）；
+  没有时照旧直接用 `ctx.storage.sql`，同表同列同 SQL，Cloudflare 和自托管 SQLite 模式的行为逐字不变，已有数据照读。游戏代码、`wrangler.jsonc` 不用改。
+  - "一步之内没有 await"不变；PG 模式这一步的 send / close 排队，提交成功才发（等于 Cloudflare 的输出门）；提交失败作废缓存、不发，连着的人 1013 断开重连；没有改动的步骤不提交。
+  - 进程重启：三个类都加了 `kitWake(name)`（只有绑定能调的 RPC，幂等），宿主按 PG 里存的闹钟逐个唤醒；进房时 `acceptJoin` 在内部地址上多带房间码（`&code=`），重启后直接进房也能从 PG 读回来。
+  - 计量的进房猜码计数（原来 KV 的 get、put 中间隔着 await）在 PG 模式里镜像里同步读改写，没了丢更新的窗口；`kitMiss`、`kitMisses`、`kitMissBlocked` 多一个可选的 key 参数（PG 模式靠它找行，默认模式不看）。
+  - RPC 回话用完就释放：不释放的话对象空闲了也驱逐不掉（本地 workerd 实测）。
+- **测试两遍**：`npm test` 多跑一遍 `vitest run -c vitest.pg.config.ts`（测试 Worker 多绑一个假 PG，`test/fake-pg.ts`），同一套 425 条都过；
+  直接读写 sqlite 的几处测试换成两种存储都能用的帮手（`test/helpers.ts` 的 `roomRow`、`setRoomRow`、`setMeterDay`……）。
+  PG 专有的在 `test/store.test.ts`：不碰 sqlite、每次提交 ≤ 2 行、状态没变不提交、提交慢时消息等提交完、提交失败不广播并 1013、重启后 kitWake 恢复闹钟且幂等、重启后直接进房、计量和排队的 kitWake、猜码计数在 PG 里。
+  房间状态全丢后桌上筹码到期退回靠平台钱包的 until，`testing.test.ts` 的"到期原样退回"已经覆盖。
+
 ## 0.20.4（2026-10-20）
 
 - **头像旁所有气泡都不压名牌**（主线·所有者 10-20）：0.20.3 只管了首次提示；普通聊天、表情、电脑起哄的气泡还是"压名牌代价 ×3"，掼蛋 1920 上自己说话的气泡压住了上家阿强名牌的下半截。
