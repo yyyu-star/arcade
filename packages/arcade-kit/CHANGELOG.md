@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.22.0（2026-10-21）
+
+- **浏览器错误上报 `arcade-kit/report`**：`reportErrors({ game, version })` 挂上 `error` 和 `unhandledrejection`，把没人接住的报错 POST 给平台 `/api/client-error`，返回卸载函数。
+  只发 `{game, ver, msg, stack, path}`（msg 截 200 字、stack 截 1000 字、path 不带 query 和 hash），不带账号、昵称、cookie；同签名（msg 前 80 字）一页只报一次、一页最多 5 条；
+  优先 `sendBeacon`，没有就 `fetch`（keepalive），失败吞掉不重试；"Script error." 和浏览器扩展的报错不报；没有 window 时什么也不做。单测在 `test/report.test.ts`。
+
 ## 0.21.3（2026-10-20）
 
 - 补 0.21.2：聊天框小按钮的 `::before` 是从内边框算起的，芯片自带 1 像素边框，上下各少 1，1920 实测点按区只有 42。标题行改成上下各扩 5、常用语各扩 7（行距 12 → 14，滚动框上下留 7），实测 44；框比 0.21.2 再高 2 像素，看起来的按钮大小不变。单测把边框算进去。

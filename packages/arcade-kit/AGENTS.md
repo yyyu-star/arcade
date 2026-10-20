@@ -5,14 +5,14 @@
 - 内容：联机底座，给各游戏的 Worker 和页面用。服务端：`src/room.ts`（Durable Object 房间基类）、`src/worker.ts`（开房、进房、匹配、登录闸门入口）、`src/meter.ts`（每天的额度计量）、
   `src/match.ts`（快速匹配的排队 DO，设计 `docs/match.md`）、`src/store.ts`（可插拔存储）、`src/together.ts`（搭子战绩）、`src/auth.ts`（经平台 `/api/me` 认人；`identify` 按部署方式认人）、
   `src/guest.ts`（独立模式的游客身份）、`src/internal.ts`（内部地址、身份头）；两边共用：`src/game.ts`（规则接口、快照体积）、`src/protocol.ts`（消息和关闭码）、`src/rng.ts`（ChaCha20 随机数，纯函数）、`src/chat.ts`；
-  浏览器：`src/client.ts`（连接器）、`fun*.ts`、`table-fun.ts`、`table-chat.ts`、`share.ts`、`qr.ts`、`social.ts`、`theme.ts`。`src/testing.ts` 是假平台钱包，只给测试和本地开发。文件和入口的完整清单看 README 的"功能"和"目录结构"。
+  浏览器：`src/client.ts`（连接器）、`fun*.ts`、`table-fun.ts`、`table-chat.ts`、`share.ts`、`qr.ts`、`social.ts`、`theme.ts`、`report.ts`。`src/testing.ts` 是假平台钱包，只给测试和本地开发。文件和入口的完整清单看 README 的"功能"和"目录结构"。
   不部署，没有自己的 Worker。
 - 两种形态：npm 上发 `dist/`（JS + `.d.ts`，`npm run build`）；仓库里 `package.json` 的 `exports` 一律写 `"./x": "./src/x.ts"`，
   仓库内游戏的 `file:` 引用直接用源码。`prepack` / `postpack`（`scripts/manifest.mjs`）在打包时换成 dist 版再换回来，不要手改 exports 指 dist，也不提交 `dist/`。
   `src/` 里相互引用写 `.js` 扩展名（`./auth.js`），游戏的 tsconfig 不用特别配置。发布（`npm publish`）由维护者做。
 - 两种部署方式（`src/guest.ts`）：有 `ARCADE` 绑定是平台模式，游客 cookie 一律不认；没有 `ARCADE`、`GATE` 也不是 `"login"` 是独立模式（游客）。
   `GATE: "login"` 没绑 `ARCADE` 必须 fail-closed。改认人的代码时 `test/guest.test.ts` 的"平台模式不认游客"几条必须守住。
-- 会进浏览器包或普通 Node 测试的文件（`client.ts`、`protocol.ts`、`chat.ts`、`chat-words.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts`、`table-chat.ts`、`share.ts`、`qr.ts`、`social.ts`、`theme.ts`）
+- 会进浏览器包或普通 Node 测试的文件（`client.ts`、`protocol.ts`、`chat.ts`、`chat-words.ts`、`game.ts`、`rng.ts`、`guest.ts`、`fun.ts`、`fun-art.ts`、`fun-logic.ts`、`table-fun.ts`、`table-chat.ts`、`share.ts`、`qr.ts`、`social.ts`、`theme.ts`、`report.ts`）
   不能引用 `room.ts`、`match.ts`、`meter.ts`（依赖 `cloudflare:workers`）。`worker.ts`、`auth.ts` 同样要能在普通 Node 里加载（只引类型），`internal.ts` 不依赖运行时以外的东西。
 - 画面层的规矩（`fun.ts`、`table-fun.ts`、`share.ts`、`social.ts`）：import 时不碰 DOM，只在调用时碰；动画只动 `transform`、`opacity`，不读布局（量位置只在开菜单和 `controls()` 时）；
   素材只用 `fun-art.ts` 里手写的 SVG，不用 emoji 字体、不引外部资源，新素材也照这个来。

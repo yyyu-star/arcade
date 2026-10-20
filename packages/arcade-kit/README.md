@@ -48,6 +48,7 @@ a daily write-quota meter (`arcade-kit/meter`), a seeded ChaCha20 RNG (`arcade-k
 | `arcade-kit/share` | 浏览器 | 分享卡：`drawShareCard` 画 1080×1350 的战绩图，`shareCard` 带文件调系统分享，不支持就出预览（保存图片、复制链接）；不上传、0 行写入 |
 | `arcade-kit/social` | 浏览器 | `mountSocial` 报位置、收好友邀请并在顶上弹横条；`sendInvite`、`fetchFriends`、`setShowWhere`、`postMoment` 等接口小函数；只在有平台且已登录时挂 |
 | `arcade-kit/theme` | 浏览器 | DOM 组件的主题：`KitTheme`、`themeVars`（主题对象 → `--ak-*` 变量列表，挡 CSS 注入）、`applyTheme`；分享预览、邀请横条和面板、牌桌互动菜单都认 |
+| `arcade-kit/report` | 浏览器 | `reportErrors`：把页面里没人接住的报错报给平台 `/api/client-error`，见下面"浏览器错误上报" |
 | `arcade-kit/testing` | 游戏的测试、本地开发 | 假平台钱包：`WalletService`（含搭子战绩的 `together`）、`FakeBank`、`walletHttp`，只复刻接口形状和关键规则；不进线上代码 |
 
 **发布和仓库内引用是两种形态**：
@@ -555,6 +556,20 @@ export class CardRoom extends GameRoom<State, Action, View, Env> {
 - `team` 只有分队的游戏带（同一个数字是一队，0–3）；`win` 由游戏定、写进游戏自己的 DESIGN（分队的按这一场赢的那队，按分算的按这一场分数为正，平台 15.19 列了几种）。
 - 测试：`arcade-kit/testing` 的假钱包有 `together`，形状照平台查、按 op 去重，每个人的 `FakeBank.together` 记一笔给测试核对（假钱包不管好友关系，两两都算一对）。
 
+## 浏览器错误上报（report）
+
+游戏入口里调一次，线上出了没人接住的报错平台就能收到：
+
+```ts
+import { reportErrors } from '@yyyu-star/arcade-kit/report';
+reportErrors({ game: 'kaipan', version: __APP_VERSION__ }); // 返回卸载函数
+```
+
+- **报什么**：`window` 的 `error` 和 `unhandledrejection`。每条 `{game, ver, msg, stack, path}`：msg 截 200 字，stack 截 1000 字，path 是 `location.pathname`（不带 query 和 hash，里面可能有房间码）。不带账号、昵称、cookie。
+- **不报什么**：跨域脚本的 "Script error."；stack 里有 `chrome-extension://`、`moz-extension://` 的（浏览器扩展）；同签名（msg 前 80 字）的第二次；一页第 6 条起。
+- **怎么发**：优先 `navigator.sendBeacon`（JSON Blob），没有就 `fetch`（POST、keepalive、同源凭证）；失败吞掉，不重试，不抛。没有 `window`（服务端渲染）时返回空函数。
+- **平台接口约定**：`POST /api/client-error`（可用 `endpoint` 改），体 `{game, ver, msg, stack, path}`，平台自己限流和落库。
+
 ## 房间怎么守规矩
 
 - **只用 `ctx.acceptWebSocket`、一个闹钟**：所有到期时间（房间寿命 3 小时、没人 10 分钟、这一手 30 秒、掉线宽限 60 秒、电脑没算完、停够了）取最早的；
@@ -758,6 +773,7 @@ packages/arcade-kit/
 │  ├─ qr.ts          二维码编码器（字节模式、纠错 M、版本 1–10，纯函数，分享卡用）
 │  ├─ social.ts      报位置、收邀请的横条、好友和邀请的接口小函数
 │  ├─ theme.ts       DOM 组件的主题变量
+│  ├─ report.ts      浏览器错误上报 reportErrors
 │  ├─ testing.ts     假平台钱包（只给测试和本地开发）
 │  └─ internal.ts    内部地址、身份头（不在 exports 里）
 ├─ scripts/manifest.mjs  打包时把 exports 换成 dist 版、换回来、检查 dist
