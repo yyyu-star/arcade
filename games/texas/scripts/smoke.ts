@@ -1548,6 +1548,9 @@ async function tableHits(page: Page, where: string): Promise<string[]> {
         const dy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
         if (dx > 2 && dy > 2) out.push(`${where}: 压住 ${label(a.e)} × ${label(b.e)} ${Math.round(dx)}×${Math.round(dy)}`);
       }
+    // 出屏：只查两两互压发现不了被屏幕边缘切掉的部分
+    for (const { e, r } of items)
+      if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) out.push(`${where}: 出屏 ${label(e)} ${Math.round(r.left)},${Math.round(r.top)}–${Math.round(r.right)},${Math.round(r.bottom)}`);
     return out;
   }, [where] as const);
 }

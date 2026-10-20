@@ -78,7 +78,7 @@ const TALL_DEG: Record<number, number[]> = {
   5: [145, 210, 270, 330, 395],
   6: [145, 200, 247, 293, 340, 395],
   7: [145, 190, 230, 270, 310, 350, 395],
-  8: [145, 192, 224, 256, 284, 316, 348, 395],
+  8: [145, 190, 213, 247, 293, 327, 350, 395],
 };
 
 function ringPos(k: number, n: number, g: Geo): Pt {
@@ -124,8 +124,8 @@ export function betPos(p: Pt, g: Geo, mine: boolean): Pt {
 
 /** 庄家按钮：在下注的位置旁边偏一点 */
 export function buttonPos(p: Pt, g: Geo, mine: boolean): Pt {
-  // 竖屏别人的（0.21.3）：按下注摆会落到公共牌、别人的下注上；两侧的贴在头像朝外的上角（像角标：底牌在朝桌心那边，动作签在正上方），顶上的放名牌右下
-  if (g.tall && !mine) return isTop(p, g) ? { x: p.x + 84, y: p.y + 62 } : { x: p.x - (p.x < felt(g).cx ? 1 : -1) * 32, y: p.y - 26 };
+  // 竖屏别人的（0.21.3）：按下注摆会落到公共牌、别人的下注上；两侧的贴在头像朝外的一侧正中（底牌在朝桌心那边，动作签在正上方；上角会被弹出来的动作签碰到），顶上的放名牌右下
+  if (g.tall && !mine) return isTop(p, g) ? { x: p.x + 84, y: p.y + 62 } : { x: p.x - (p.x < felt(g).cx ? 1 : -1) * 42, y: p.y };
   const b = betPos(p, g, mine);
   // 别人的放在下注那摞筹码的左边（数字在右边），不压数字
   return mine ? { x: b.x - 96, y: b.y - 12 } : { x: b.x - 64, y: b.y };

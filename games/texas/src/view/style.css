@@ -535,6 +535,8 @@ body::before {
 /* 顶上一排桌心右边的：底牌在头像左边，动作签放到头像右边（外侧），不和左边那家的底牌、自己的底牌挤在一起（0.25.6，竖屏 7 人桌） */
 .seat.top.right .bubble { right: auto; left: 38px; }
 .seat.top.edge .bubble { left: 50%; right: auto; top: -64px; transform: translateX(-50%); }
+/* 竖屏右边下面那两家挨得近：动作签放头像正上方会压住上家名牌，又不能放外侧（出屏）。往外偏一点、压低到头像上沿，刚好让开上家名牌 */
+.stage.tall .seat.right:not(.top):not(.me):not(.shifted) .bubble { left: calc(50% + 22px); top: -34px; }
 
 /* 我：底牌在上、名牌在下、头像在名牌左边，三样不叠（座位的点在名牌上沿往上一点） */
 .seat.me .avatar { left: -142px; top: 6px; width: 56px; height: 56px; }
