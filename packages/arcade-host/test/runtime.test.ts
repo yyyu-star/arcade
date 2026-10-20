@@ -1,5 +1,5 @@
 /**
- * 在真的 workerd 上核实自托管依赖的行为（阶段 0 的实测项，结论汇总在 docs/verify.md）：
+ * 在真的 workerd 上核实自托管依赖的行为（实测项，结论汇总在 docs/verify.md）：
  * 绑定（变量、Secret、带 props 的 RPC）、D1 后端的语义、DO 存储和闹钟跨重启、WebSocket 休眠和自动应答、定时任务、备份恢复、内存存储。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
