@@ -138,10 +138,34 @@ describe('电脑版聊天框的快捷短语（0.20.2）', () => {
     expect(rule).toContain('overflow-y:auto');
     const max = Number(/max-height:(\d+)px/.exec(rule)?.[1]);
     const chip = Number(/\.atc-dock \.atc-quick \.atf-chip\{[^}]*min-height:(\d+)px/.exec(CHAT_CSS)?.[1]);
-    // 两行按钮加一个 6 像素的间距放得下，三行放不下
-    expect(max).toBeGreaterThanOrEqual(2 * chip + 6);
-    expect(max).toBeLessThan(3 * chip + 2 * 6);
+    // 两行按钮加一个行距放得下，三行放不下（0.21.2 行距 6 → 12，留给上下扩的点按区）
+    const gap = Number(/row-gap:(\d+)px/.exec(rule)?.[1] ?? 6);
+    expect(max).toBeGreaterThanOrEqual(2 * chip + gap);
+    expect(max).toBeLessThan(3 * chip + 2 * gap);
     // 手机输入条那排不受影响：还是一行横着滑
     expect(/\.atc-quick\{[^}]*overflow-x:auto/.test(CHAT_CSS)).toBe(true);
+  });
+});
+
+describe('聊天坞的芯片点按区（0.21.2）', () => {
+  // 画出来比 44 矮的芯片，要有 ::before 往上下各扩出去，凑够 44 CSS 像素；相邻两行之间的行距够两边各扩一半，不互相压
+  const rules = [...CHAT_CSS.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({ sel: m[1]!.trim(), body: m[2]! }));
+  it('每个比 44 矮的 .atf-chip 都扩到 ≥ 44', () => {
+    const short = rules.filter((r) => /\.atf-chip$/.test(r.sel) && /min-height:(\d+)px/.test(r.body) && Number(/min-height:(\d+)px/.exec(r.body)![1]) < 44);
+    expect(short.length).toBeGreaterThan(0);
+    for (const r of short) {
+      const h = Number(/min-height:(\d+)px/.exec(r.body)![1]);
+      const pad = rules.find((x) => x.sel === `${r.sel}::before`);
+      expect(pad, r.sel).toBeTruthy();
+      const ext = -Number(/inset:(-?\d+)px/.exec(pad!.body)![1]);
+      expect(h + 2 * ext, r.sel).toBeGreaterThanOrEqual(44);
+      // ::before 按芯片定位
+      expect(rules.some((x) => x.sel.split(',').includes(r.sel) && /position:relative/.test(x.body)), r.sel).toBe(true);
+    }
+  });
+  it('电脑版常用语换行时行距 ≥ 两边扩出去的和，滚动框上下留出扩的那截', () => {
+    const q = rules.find((r) => r.sel === '.atc-dock .atc-quick')!.body;
+    expect(Number(/row-gap:(\d+)px/.exec(q)![1])).toBeGreaterThanOrEqual(12);
+    expect(q).toMatch(/padding:6px 0/);
   });
 });
