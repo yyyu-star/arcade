@@ -25,6 +25,7 @@ import {
   newBotState,
   fitMenuWidth,
   bubbleSpot,
+  padBox,
   placeMenu,
   propId,
   stickerId,
@@ -548,6 +549,7 @@ export class TableFun {
     add(wrap, away, b);
     this.ui.appendChild(wrap);
     this.open = wrap;
+    this.moveCovered(b);
     return b;
   }
 
@@ -940,16 +942,13 @@ export class TableFun {
     this.layer.el.appendChild(b);
     const w = Math.min(maxW, b.offsetWidth || text.length * fs + 24);
     const h = b.offsetHeight || fs * 1.6;
-    const { avoid, hard } = bubbleZones(this.o.seats(), seat, {
-      avoid: [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].map((e) => e.getBoundingClientRect())],
-      over: [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : [])],
-    });
-    const at = bubbleSpot(s.rect, w, h, view, avoid, hard, strict);
+    const at = this.spot(seat, s.rect, w, h, strict);
     if (!at) {
       b.remove();
       return undefined;
     }
     b.style.transform = `translate(${at.left}px,${at.top}px)`;
+    b.dataset['seat'] = String(seat);
     this.live.add(b);
     void anim(b, [{ opacity: 0 }, { opacity: 1 }], 160)
       .then(() => anim(b, [{ opacity: 1 }, { opacity: 0 }], 260, ms))
@@ -958,6 +957,32 @@ export class TableFun {
         b.remove();
       });
     return b;
+  }
+
+  /**
+   * 气泡放哪：硬禁区是名牌、标签、聊天框、"互动"按钮和开着的菜单（0.21.1，德州 1920 报菜单盖住自己的气泡），四周再让 HARD_PAD；
+   * 软的是游戏的禁区、桌上的牌、别人的头像和正在冒的别的气泡（except 是要挪的那个自己）
+   */
+  private spot(seat: number, anchor: DOMRect | RectLike, w: number, h: number, strict: boolean, except?: HTMLElement): { left: number; top: number } | null {
+    const menu = this.open?.lastElementChild;
+    const { avoid, hard } = bubbleZones(this.o.seats(), seat, {
+      avoid: [...(this.o.avoid?.() ?? []), ...(this.o.center?.() ?? []), ...[...this.live].filter((e) => e !== except).map((e) => e.getBoundingClientRect())],
+      over: [...this.cui.rects(), ...(this.btn ? [this.btn.getBoundingClientRect()] : []), ...(menu ? [menu.getBoundingClientRect()] : [])],
+    });
+    return bubbleSpot(anchor, w, h, { width: window.innerWidth, height: window.innerHeight }, avoid, hard.map((r) => padBox(r)), strict);
+  }
+
+  /** 菜单刚打开（0.21.1）：被它盖住的气泡挪到别处（挪不开就留在原地，菜单关了自然露出来） */
+  private moveCovered(menu: Element): void {
+    const m = menu.getBoundingClientRect();
+    for (const b of this.live) {
+      const r = b.getBoundingClientRect();
+      if (r.right <= m.left || m.right <= r.left || r.bottom <= m.top || m.bottom <= r.top) continue;
+      const s = this.seat(Number(b.dataset['seat']));
+      if (!s) continue;
+      const at = this.spot(Number(b.dataset['seat']), s.rect, r.width, r.height, true, b);
+      if (at) b.style.transform = `translate(${at.left}px,${at.top}px)`;
+    }
   }
 
   /** 头像上方冒一个字（×N、回敬！、护盾）：放大弹一下再飘走 */
