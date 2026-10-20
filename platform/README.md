@@ -32,13 +32,13 @@ The rest of this README, the code comments and the API contract (`docs/platform-
 ## 功能
 
 - **大厅**：游戏卡片（最近玩过的排前面）、提醒条（桌上的筹码、就地领补给）、本周净赢、公告。
-  卡片上只有一个"进入游戏"（0.25.1）：好友房在游戏里开、进，叫人和邀请链接直接链到游戏的 `?room=`；卡片的标签里写着"好友房"。
+  卡片上只有一个"进入游戏"：好友房在游戏里开、进，叫人和邀请链接直接链到游戏的 `?room=`；卡片的标签里写着"好友房"。
 - **账号**：注册、登录、找回密码（恢复码）、改昵称和密码、换恢复码、退出其他设备、注销。
-- **邀请码**（0.20.0）：每人在"我的"里生成邀请码（普通用户 3 个、管理员 50 个，7 天有效，管理后台能调），链接 `/i/<码>` 打开就是填好码的注册页；
+- **邀请码**：每人在"我的"里生成邀请码（普通用户 3 个、管理员 50 个，7 天有效，管理后台能调），链接 `/i/<码>` 打开就是填好码的注册页；
   注册关着时必须凭码注册，用码注册的人和邀请人自动成为好友（`/api/invite-codes`）。
-- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名；好友在不在线、在哪个游戏哪个房间（0.13.0，`POST /api/presence`），本人可以在"我的"里关掉。好友在房间里时一键"加入"，好友叫你时顶上弹一条、"好友"带红点（0.14.0，`/api/invites`）。好友动态：实盘赢了、新称号、游戏里的名场面，好友能赞、扔道具（0.17.0，`/api/feed`）。搭子战绩：好友房打完，好友页写着和每个好友一起打了几场、各赢几场、谁是最佳搭档（0.19.0，房间服务端经钱包绑定的 `together()` 报，浏览器碰不到）。
+- **好友**：好友码和好友链接（`/f/<码>`）、请求、屏蔽；对别人只给公开资料，不给用户名；好友在不在线、在哪个游戏哪个房间（`POST /api/presence`），本人可以在"我的"里关掉。好友在房间里时一键"加入"，好友叫你时顶上弹一条、"好友"带红点（`/api/invites`）。好友动态：实盘赢了、新称号、游戏里的名场面，好友能赞、扔道具（`/api/feed`）。搭子战绩：好友房打完，好友页写着和每个好友一起打了几场、各赢几场、谁是最佳搭档（房间服务端经钱包绑定的 `together()` 报，浏览器碰不到）。
 - **钱包**（`/wallet`）：筹码余额、每日补给、"最近进出"流水。带入、结回、放弃只能由游戏的服务端经 `WalletService` RPC 调。
-- **战绩和排行榜**：战绩页（`/me/stats`、别人的 `/u/<id>`），排行榜（`/boards`：本周净赢、各游戏的每日挑战、称号收集，可只看好友；每日挑战只看好友时比这周每人最好的一天，好友超过你时大厅提一句，0.15.0）。异步挑战：把一局的开局做成链接发出去，大家的成绩挂在一起（0.18.0，`/api/challenges`，开盘先用）。晒战绩：战绩页"晒一晒"、排行榜"晒名次"把成绩画成图发给朋友，链接是自己的好友链接（0.21.0，用 `arcade-kit/share`，图不上传）。
+- **战绩和排行榜**：战绩页（`/me/stats`、别人的 `/u/<id>`），排行榜（`/boards`：本周净赢、各游戏的每日挑战、称号收集，可只看好友；每日挑战只看好友时比这周每人最好的一天，好友超过你时大厅提一句）。异步挑战：把一局的开局做成链接发出去，大家的成绩挂在一起（`/api/challenges`，开盘先用）。晒战绩：战绩页"晒一晒"、排行榜"晒名次"把成绩画成图发给朋友，链接是自己的好友链接（用 `arcade-kit/share`，图不上传）。
 - **云存档**：`/api/saves/<游戏>/<槽>`，游戏白名单就是 `src/games.ts`。
 - **邀请制**：不登录不能玩；注册默认关着，管理员在 `/admin` 或用命令行工具随时开关（存在 D1，不用重新部署）。
   `wrangler.jsonc` 的 `vars.REGISTRATION` 是紧急总闸：`"switch"`（默认）听上面的开关，改成别的值一定关。
@@ -60,8 +60,13 @@ npm test           # 类型检查 + vitest（跑在本地 workerd 里，D1 是�
 npm run build      # 类型检查 + 正式构建到 dist/
 npm run preview    # 用正式构建启动服务 0.0.0.0:4180
 npm run smoke      # 界面冒烟：临时本地 D1 + 无头浏览器走主流程，控制台零报错，截图到 shots/（5181 要空着）
-npm run smoke -- --only=wallet   # 只跑一段：wallet chunk next stats boards friends rules overview notice nudge sound
+npm run smoke -- --only=devices  # 只跑一段，见下
 ```
+
+冒烟的分段（`tools/smoke.ts` 末尾的 `only`）：`wallet` `chunk` `next` `stats` `desk` `phone` `devices` `boards` `friends` `rules` `invites` `overview` `notice` `nudge` `sound`。
+改布局跑 `devices`：26 个尺寸（竖屏手机 9、横屏手机 7、平板和折叠屏 7、电脑 3）× 10 页，自动查整页横滑、伸出屏幕、点击区（手机平板 44，320 宽 40，电脑 24）、
+字号（数字手机平板 14、电脑 12）、顶栏折行和重叠，每个尺寸截一张首页；`phone` 是四种常见屏幕的细查（第一屏、单手够得着、底部筹码条、转屏）。
+`--out <目录>` 把截图放到别处。
 
 起接口前先 `npm run build` 生成 `dist/`（wrangler 把它当静态资源目录；改了界面要重新 build），再把 `.dev.vars.example` 复制成 `.dev.vars`
 （里面是本地专用的假 Secret，`.dev.vars` 不进 Git）：
@@ -171,15 +176,16 @@ platform/
 │  ├─ session.tsx       登录状态；wallet.tsx 钱包余额；api.ts 接口封装；router.tsx 极简路由
 │  ├─ gamefile.ts       读各游戏公开的 JSON（titles.ts 读称号名，daily.ts 读每日榜分数写法）
 │  ├─ icons.tsx、sound.ts  手写 SVG 图标和小插画、大厅点按声（WebAudio 合成，可关）
-│  ├─ styles.css        全站样式：开头是主题变量（颜色、间距、字号、圆角、阴影），组件只用变量
+│  ├─ styles.css        全站样式：开头是主题变量（颜色、间距、字号、圆角、阴影），组件只用变量；配色表见 docs/style.md
 │  └─ format.ts、ui.tsx、ledger.tsx、next.ts、play.ts   格式化、表单和恢复码卡片、流水列表、登录后跳回的地址、进游戏的地址
 ├─ worker/              Worker
-│  ├─ index.ts          入口：/api/* 交给 api/router.ts；Cron；导出钱包 RPC 入口 WalletService（wallet-service.ts）
+│  ├─ index.ts          入口：默认导出 WorkerEntrypoint（fetch、给游戏的 RPC blockedAmong、Cron）；/api/* 交给 api/router.ts；导出钱包 RPC 入口 WalletService（wallet-service.ts）
 │  └─ api/              接口：router.ts 路由表和通用检查；auth、account、admin、friends、presence、invites、feed、challenges、mates、invite-codes、boards、saves、stats、leaderboard、settings；
 │                       钱包 wallet.ts（核心）→ wallet-store.ts（读写）→ wallet-api.ts（接口），只能 api → store → 核心这样 import；
 │                       crypto、validate、ratelimit、meter、db、time、config（所有上限和阈值的默认值）
 ├─ migrations/          D1 迁移，只增不删
 ├─ public/              静态资源：_headers（CSP 等安全头）、covers/（游戏封面）、favicon.svg、bg.svg（底色小图案）
+├─ docs/style.md        配色表和形状质感
 ├─ test/                接口测试（每个接口断言写入行数，docs/platform-backend.md 7.2）
 ├─ tools/               smoke.ts 界面冒烟、admin.ts 命令行工具、cover.ts 封面
 ├─ wrangler.jsonc       Worker 配置（不含域名和正式库 id）

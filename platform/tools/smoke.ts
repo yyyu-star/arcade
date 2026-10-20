@@ -80,10 +80,10 @@ function apiCalls(page: Page): string[] {
   return calls;
 }
 
-async function shot(page: Page, name: string): Promise<void> {
+async function shot(page: Page, name: string, fullPage = true): Promise<void> {
   shotNo += 1;
   const file = join(OUT, `${String(shotNo).padStart(2, '0')}-${name}.png`);
-  await page.screenshot({ path: file, fullPage: true });
+  await page.screenshot({ path: file, fullPage });
   console.log(`  截图 ${file}`);
 }
 
@@ -1847,8 +1847,8 @@ const PHONES = [
 ] as const;
 
 /** 在页面里量一遍，返回不合格的地方（一句话一条） */
-async function phoneIssues(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+async function phoneIssues(page: Page, minTap = 44, minNum = 14): Promise<string[]> {
+  return page.evaluate(([minTap, minNum]) => {
     const out: string[] = [];
     const vw = window.innerWidth;
     const name = (el: Element) => `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''}「${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 16)}」`;
@@ -1873,7 +1873,7 @@ async function phoneIssues(page: Page): Promise<string[]> {
       // 复选框、单选框按它外面那一整行标签算
       const target = (el as HTMLInputElement).type === 'checkbox' || (el as HTMLInputElement).type === 'radio' ? (el.closest('label') ?? el) : el;
       const r = target.getBoundingClientRect();
-      if (r.width < 44 - 0.5 || r.height < 44 - 0.5) out.push(`点击区小：${name(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
+      if (r.width < minTap - 0.5 || r.height < minTap - 0.5) out.push(`点击区小：${name(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
       if (r.right > vw + 1 && !inScroller(el)) out.push(`伸出屏幕：${name(el)} 右边到 ${Math.round(r.right)}`);
     }
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -1885,14 +1885,26 @@ async function phoneIssues(page: Page): Promise<string[]> {
       seen.add(el);
       const size = parseFloat(getComputedStyle(el).fontSize);
       const numeric = /^[+\-−]?[\d,.:%·\s]+$/.test(text);
-      if (size < (numeric ? 14 : 12) - 0.01) out.push(`字小：${name(el)} ${size}px${numeric ? '（数字）' : ''}`);
+      if (size < (numeric ? minNum : 12) - 0.01) out.push(`字小：${name(el)} ${size}px${numeric ? '（数字）' : ''}`);
       const r = el.getBoundingClientRect();
       if (r.right > vw + 1 && !inScroller(el)) out.push(`字伸出屏幕：${name(el)}`);
     }
     const tops = [...document.querySelectorAll('.topbar .account')].filter(visible).map((e) => Math.round(e.getBoundingClientRect().top));
-    if (new Set(tops).size > 1) out.push(`顶栏折成了 ${new Set(tops).size} 行`);
+    if (new Set(tops).size > 1) {
+      const bar = document.querySelector('.topbar')!;
+      const need = [...bar.querySelectorAll('.account')].reduce((w, e) => w + e.getBoundingClientRect().width, 0);
+      out.push(`顶栏折成了 ${new Set(tops).size} 行（按钮共 ${Math.round(need)}，这一行宽 ${Math.round(bar.getBoundingClientRect().width)}）`);
+    }
+    // 关键元素互不相交：顶栏按钮之间、顶栏按钮和左上角标题
+    const heads = [...document.querySelectorAll('.top__home, .topbar .account')].filter(visible).map((e) => [e, e.getBoundingClientRect()] as const);
+    for (let i = 0; i < heads.length; i++)
+      for (let j = i + 1; j < heads.length; j++) {
+        const [a, ra] = heads[i]!;
+        const [b, rb] = heads[j]!;
+        if (ra.left < rb.right - 1 && rb.left < ra.right - 1 && ra.top < rb.bottom - 1 && rb.top < ra.bottom - 1) out.push(`顶栏叠在一起：${name(a)} 和 ${name(b)}`);
+      }
     return [...new Set(out)];
-  });
+  }, [minTap, minNum] as const);
 }
 
 /**
@@ -1920,7 +1932,20 @@ async function stakeBarIssues(page: Page, viewport: { width: number; height: num
   return out;
 }
 
-async function phoneAudit(browser: Browser): Promise<void> {
+/** 多尺寸适配的尺寸矩阵（CSS 像素，所有游戏统一用这套）：手机竖、横，平板竖横和折叠屏，电脑 */
+const DEVICES: readonly (readonly [string, { width: number; height: number }])[] = [
+  ...([[320, 568], [360, 640], [360, 780], [375, 667], [390, 844], [393, 852], [412, 915], [414, 896], [430, 932]] as const).map(([w, h]) => [`竖${w}×${h}`, { width: w, height: h }] as const),
+  ...([[568, 320], [640, 360], [667, 375], [780, 360], [844, 390], [896, 414], [932, 430]] as const).map(([w, h]) => [`横${w}×${h}`, { width: w, height: h }] as const),
+  ...([[768, 1024], [1024, 768], [820, 1180], [1180, 820], [1024, 1366], [1366, 1024], [884, 1104]] as const).map(([w, h]) => [`平板${w}×${h}`, { width: w, height: h }] as const),
+  ...([[1280, 720], [1366, 768], [1920, 1080]] as const).map(([w, h]) => [`电脑${w}×${h}`, { width: w, height: h }] as const),
+];
+
+/** npm run smoke -- --only=devices：同一个浏览器把矩阵每个尺寸、每页过一遍通用检查（第一屏、单手够得着这些只按原来四台手机量），有问题的那页才截图 */
+async function deviceMatrix(browser: Browser): Promise<void> {
+  await phoneAudit(browser, DEVICES, true);
+}
+
+async function phoneAudit(browser: Browser, sizes: readonly (readonly [string, { width: number; height: number }])[] = PHONES, matrix = false): Promise<void> {
   const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
   const games = { kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000 }), texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }) };
   const u = (i: number) => String.fromCharCode(65 + i).repeat(22);
@@ -1958,9 +1983,11 @@ async function phoneAudit(browser: Browser): Promise<void> {
     wallet: ['.wallet__relief button'],
   };
   const problems: string[] = [];
-  for (const [label, viewport] of PHONES) {
+  for (const [label, viewport] of sizes) {
     console.log(`手机清单（${label} ${viewport.width}×${viewport.height}）：${pages.map((p) => p[0]).join('、')}`);
-    const { ctx, page } = await newPage(browser, `手机清单 ${label}`, 'portrait', { viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    // 电脑尺寸不模拟触屏（鼠标、宽窗口），其余按手机平板
+    const desk = label.startsWith('电脑');
+    const { ctx, page } = await newPage(browser, `手机清单 ${label}`, desk ? 'desktop' : 'portrait', desk ? { viewport } : { viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await mockAdmin(page);
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(wallet)));
@@ -1979,7 +2006,16 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await page.goto(`${BASE}${path}`);
       await page.locator(ready).first().waitFor();
       await page.waitForTimeout(150);
-      for (const p of await phoneIssues(page)) problems.push(`${label} ${name}：${p}`);
+      // 点击区：320 宽可以 40；电脑尺寸用鼠标、宽窗口里按钮本来就紧凑，按 WCAG 2.5.8 的 24 量
+      // 数字：手机平板上 ≥ 14（#228），电脑上按简报的 12（管理后台数据密、用鼠标看）
+      const found = await phoneIssues(page, desk ? 24 : viewport.width <= 320 ? 40 : 44, desk ? 12 : 14);
+      for (const p of found) problems.push(`${label} ${name}：${p}`);
+      if (matrix) {
+        // 每个尺寸留一张首页给人看，其余页有问题才截。只截看得见的一屏：整页截图会临时改视口，
+        // 截完平板的触屏模拟就丢了，后面几页全按电脑的小按钮量
+        if (found.length || name === 'home') await shot(page, `devices-${label}-${name}`, false);
+        continue;
+      }
       // 第一屏就有主操作（竖着拿的时候；横屏只有 390 高，标题和顶栏占掉一半，往下翻一下是正常的）
       if (label !== 'landscape') {
         for (const sel of firstScreen[name] ?? []) {
@@ -1999,7 +2035,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await shot(page, `phone-${label}-${name}`);
     }
     // 管理筹码小窗口在 SE 上不出屏、里面能点的够大
-    if (label === 'se') {
+    if (label === 'se' && !matrix) {
       await page.goto(`${BASE}/admin`);
       await page.getByTestId('admin-chips-open').click();
       await page.getByTestId('admin-chips').waitFor();
@@ -2010,7 +2046,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await shot(page, 'phone-se-admin-chips');
     }
     // 竖着转横着再转回来：不横着滑、顶栏不折行
-    if (label === 'iphone') {
+    if (label === 'iphone' && !matrix) {
       await page.goto(`${BASE}/`);
       await page.locator('.card').first().waitFor();
       for (const vp of [{ width: 844, height: 390 }, viewport]) {
@@ -2022,7 +2058,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
     await ctx.close();
   }
   // 电脑上（宽窗口、鼠标）还是页面里的一条提示，不是底部固定条
-  {
+  if (!matrix) {
     const { ctx, page } = await newPage(browser, '手机清单 电脑对照', 'desktop');
     await mockAdmin(page);
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
@@ -2033,7 +2069,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
     await ctx.close();
   }
   for (const p of problems) console.log(`  · ${p}`);
-  check(problems.length === 0, `手机清单有 ${problems.length} 处不合格（见上面的列表）`);
+  check(problems.length === 0, `${matrix ? '多尺寸矩阵' : '手机清单'}有 ${problems.length} 处不合格（见上面的列表）`);
 }
 
 /** 0.9.8：发版后旧分块没了（404）：整页重载一次拿新版；还是 404 就停下来提示刷新，不来回重载、不白屏。 */
@@ -2308,6 +2344,7 @@ try {
     stats: statsPage, // 战绩页
     desk: deskPages, // 电脑版排版：大厅、好友、我的、战绩
     phone: phoneAudit, // 手机界面专项：四种屏幕逐页量
+    devices: deviceMatrix, // 多尺寸矩阵：手机竖横、平板、折叠屏、电脑，只做通用检查
     boards: boardsPage, // 排行榜
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则

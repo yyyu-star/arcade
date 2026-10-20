@@ -2,7 +2,7 @@
   "name": "kaipan",
   "private": true,
   "license": "MIT",
-  "version": "0.19.5",
+  "version": "0.19.6",
   "type": "module",
   "scripts": {
     "dev": "vite",

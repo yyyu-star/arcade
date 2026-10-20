@@ -1,15 +1,15 @@
 # 《开盘》模块约定
 
 > 总仓库规范见仓库根的 `AGENTS.md`，其中第 1、2 节的硬约束优先于本文件。本文件只写开盘特有的约定。
-> 2026-10-13 随开盘并入总仓库而建立（并入前开盘是一个独立仓库）。
 
 ## 1. 这是什么
 
-一款股市主题的肉鸽网页游戏：散户每天看群聊情报，挑股票小人进持仓，跟着风口轮动赚钱，每月还月供，闯过 12 个月。
+一款股市主题的肉鸽网页游戏：散户每天看群聊情报，挑股票小人进持仓，跟着风口轮动赚钱，每月还月供，闯过 12 个月（短局 5 个月）。
 涨跌来自 1996–2018 年美股的真实历史行情段（公有领域数据），但游戏里不露年份、公司和代码，局末用花名讲一个"这段日子"小故事。
 
 产品取向：**游戏为主、娱乐为主，让人快乐**。真实性只为让涨跌像真的；不能把游戏做成炒股软件，不堆术语、不堆长句，
-信息用图标、数字、图表、动画来表达，但删掉的信息必须有替代，画面不能空。设计稿按版本放在 `docs/`，最新的是 `design-0.5.md` 和 `design-0.5-visual.md`；实盘模式（筹码）的设计在 `design-live.md`，难度和收益的配平（小白、普通两个玩家模型的实测）在 `design-balance.md`。群友和股票小人的性格、每局状态、按局面接话在 `design-0.7-chat.md`（改台词后用里面第 7 节的口径重新量重复率）。
+信息用图标、数字、图表、动画来表达，但删掉的信息必须有替代，画面不能空。文档在 `docs/`（索引 `docs/README.md`）：玩法总设计 `design.md`、规则核心接口 `core-api.md`、实盘 `design-live.md`、配平 `design-balance.md`、
+画面 `art-v3.md` / `design-0.5-visual.md` / `mobile.md`。群友和股票小人的性格、按局面接话在 `design-0.7-chat.md`（改台词后用里面第 7 节的口径重新量重复率）。
 
 ## 2. 目录
 
@@ -23,7 +23,7 @@ tests/         vitest
 tools/         sim.ts（机器人模拟）、bots.ts、shot.ts（无头冒烟与截图）、realness.ts（真实度实测）、art/（程序生成美术）、data/（数据管线）
 public/data/segments/  135 段行情段（只存逐日涨跌基点，文件名是不透明 id）
 public/data/years/     年包：数据管线（tools/data/）的产物和切段的默认输入，tests/story.test.ts 拿它核对化名；build:cf 不打进线上产物
-docs/          设计稿、接口说明（core-api-*.md）、history/（时间线与数据核对）、research/（规则与文献核对）
+docs/          设计（design.md 等）、规则接口（core-api.md）、画面与手机、history/（时间线与数据核对）、research/（规则与文献核对）
 ```
 
 ## 3. 规则核心的约束
@@ -76,7 +76,8 @@ docs/          设计稿、接口说明（core-api-*.md）、history/（时间�
 ## 7. 发布与验证
 
 1. 本目录 `npm run typecheck`、`npm test`、`npm run build:cf` 全过；改了画面就跑 `npm run shot`（或对应模式）并逐张看截图。
-2. 更新 `package.json` 版本和 `CHANGELOG.md`（用户看得懂的大白话）。
+2. 更新 `package.json` 和 lockfile 的版本、`CHANGELOG.md`（带日期，用户看得懂的大白话）；**同步改相关文档**（合并门槛）：规则或玩法改了改 `docs/design.md` /
+   `core-api.md` 和游戏里的「怎么玩」，画面或布局改了改 `art-v3.md` / `mobile.md`，命令、存储 key、URL 参数改了改本文件和 `README.md`。文档写现状，不写过程。
 3. 提交信息以 `kaipan:` 开头，只暂存明确路径；推 `kaipan/<说明>` 分支开 PR（见仓库根 CONTRIBUTING.md），审阅通过、合并进 `main` 后由 `.github/workflows/game-kaipan.yml` 部署。
    `wrangler.jsonc` 是能单独部署的独立配置（0.8.0）：不写平台绑定、`GATE`、路由和站点地址，代码里也不写站点地址；本站部署时由 `tools/deployer` 补上平台绑定、`GATE=login` 和路由（正式站主机名在 `production` 环境的 secret `SITE_HOST`，见 README 的「部署」一节）。
    Cloudflare 偶尔返回 504，但部署可能已经生效：先用 `npx wrangler deployments list` 核实再决定是否重跑。

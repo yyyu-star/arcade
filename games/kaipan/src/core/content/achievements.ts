@@ -240,7 +240,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     desc: '只买过老实股（奖励、事件进来的也算），还清前 9 个月要还的钱',
     tier: 'gold',
     icon: 'clover',
-    // 只买白马几乎不可能通关（实测连 oracle 都不到 1%），所以要求撑过 9 月，见 docs/design-0.3.md 第 14.1 节
+    // 只买白马几乎不可能通关（实测连 oracle 都不到 1%），所以要求撑过 9 月，见 docs/design.md 第 12 节
     check: (c) =>
       c.state.stats.billsPaid >= 9 && c.state.stats.acquired.length > 0 && c.state.stats.acquired.every((id) => roleOf.get(id) === 'bluechip'),
   },

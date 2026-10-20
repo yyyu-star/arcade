@@ -1,14 +1,14 @@
 # 规则核心接口（给画面层）
 
-> 0.1，2026-10-13。代码在 `src/variants/guandan/core/`（规则）和 `src/variants/guandan/ai/`（电脑）。画面层只从 `src/variants/guandan/core/index.ts`、`src/variants/guandan/ai/index.ts` import，
-> 只读状态和事件，不自己算规则。所有数据都是普通 JSON，可直接存档。
+> 代码在 `src/variants/guandan/core/`（规则）和 `src/variants/guandan/ai/`（电脑）；牌的编码、随机数、座位环、牌型框架在通用层 `src/core/`，规则核心再导出。
+> 画面层只从 `src/variants/guandan/core/index.ts`、`src/variants/guandan/ai/index.ts` import，只读状态和事件，不自己算规则。所有数据都是普通 JSON，可直接存档。
 
 ## 1. 牌
 
 - 一张牌是整数 `0..107`：`rankOf(c)` 点数（2..14，A=14；小王 16、大王 17），`suitOf(c)` 花色（0♠ 1♥ 2♣ 3♦，王为 -1）。
   `c` 和 `c+54` 是两副牌里同一张，画面上看起来一样。
 - `isWild(c, level)` 是否逢人配（红桃级牌）；`cardValue(c, level)` 单张大小（级牌 15）。
-- `sortHand(cards, level)` 理牌顺序（小到大，逢人配排在级牌之后）；`cardName(c)` 调试用文字。
+- `sortHand(cards, level)` 理牌顺序（小到大，逢人配排在级牌之后）；`cardName(c)` 调试用文字（在通用层 `src/core/cards.ts`）。
 
 ## 2. 开局与推进
 
@@ -16,7 +16,8 @@
 import { createGame, dispatch, viewFor, seatsToAct, legalPlays, canPass, hint, eventsFor } from './core/index.ts';
 import { decide, suggest } from './ai/index.ts';
 
-let { state, events } = createGame(seed, options?);   // options 见 options.ts，默认竞赛规则
+let { state, events } = createGame(seed, options?);   // 单机：按种子发牌；options 见 options.ts，默认竞赛规则
+// 联机房间用 createKeyedGame(key, options?)：按 256 位密钥发牌（见 5.1）
 const r = dispatch(state, action);                      // → { state, events, error? }
 if (r.error) 显示 r.error（大白话中文），state 不变
 ```
@@ -44,7 +45,7 @@ if (r.error) 显示 r.error（大白话中文），state 不变
 - `phase`：`'tribute'` 进贡 → `'return'` 还贡 → `'play'` 出牌 → `'dealEnd'` 一副结束 → 下一副，或 `'gameOver'` 整局结束。
   第一副和抗贡时直接从 `'play'` 开始。
 - 电脑行动：`decide(viewFor(state, seat), { seed, difficulty })` 返回一个 `Action`（不该它动时返回 `null`），再 `dispatch`。
-  `difficulty`：`'novice' | 'easy' | 'normal' | 'good' | 'hard'`。同样的局面和种子决定相同。
+  `difficulty`（`Difficulty`，定义在 `ai/persona.ts`）：`'novice' | 'easy' | 'normal' | 'good' | 'hard'`；另可传性格（`PersonaId`）。同样的局面和种子决定相同。
 
 ## 3. 玩家视角 `viewFor(state, seat)` → `PlayerView`
 
@@ -88,16 +89,16 @@ if (r.error) 显示 r.error（大白话中文），state 不变
 - `hintList(view, seed)`（src/variants/guandan/ai）：画面"提示"按钮用的完整列表：首条是 `suggest`，它判断该让时首条是 null（"建议不要"），
   后面接 `hint` 的全部出法（去重）。要不起时为空列表。
 
-## 5.1 联机用（P1，0.1.11 起；房间和浏览器共用）
+## 5.1 联机用（房间和浏览器共用）
 
 - `timeoutAction(view)`：超时或掉线时替这个座位代出，"能不出就不出，必须出就出最小的"。只看这个座位的视角，结果确定。
   出牌时能不要就不要（队友的牌也不接），必须领出时出一张最小的单牌（同样小先出不是逢人配的）；进贡、还贡交允许的牌里最小的；
   没轮到或一副结束时返回 null。掉线久了转电脑托管用 `src/variants/guandan/ai` 的 `decide`，不用它。
 - `previewNext(state)` → `{ anti, payers, to } | null`：一副结束（`dealEnd`）时下一副谁进贡（`payers`）、给谁（`to`，双下要等贡牌比大小，为 -1）、
   是不是抗贡（`anti`，这时 `payers` 是抗贡的人）。要用完整状态（下一副的牌）推演，所以联机时由房间算好随结算下发；其他阶段返回 null。
-- 规则版本：`RULES_VERSION`（现在 1）。`createGame` 把它记进 `state.rules`，视角里也有 `view.rules`。改了会影响牌局结果的规则就加 1，
-  并让 `rulesSupported` 继续认旧版本（旧版本的牌局要按旧规则打完）；`dispatch` 遇到不认的版本返回错误、状态不变。
-  0.1.10 及以前的存档没有这个字段，`rulesOf(state)` 按 1 算，下一步的新状态会补上。
+- 规则版本：`RULES_VERSION`（现在 2）。开局时记进 `state.rules`，视角里也有 `view.rules`。1 = 按种子发牌（`createGame`，单机），2 = 按密钥发牌（`createKeyedGame`，联机：
+  `GameState.key` 只在服务端、`viewFor` 不带，每一副从 `stream(key, 'deal', 第几副)` 发，`seed` 是空串）。改了会影响牌局结果的规则就加 1，
+  并让 `rulesSupported` 继续认旧版本（旧版本的牌局要按旧规则打完）；`dispatch` 遇到不认的版本返回错误、状态不变。没有 `rules` 字段的老存档，`rulesOf(state)` 按 1 算，下一步的新状态会补上。
 - 状态体积：整局里最大的一份状态 JSON 约 6 KB（测试卡 8 KB），房间每步整份存一次。
 
 ## 6. 事件 `GameEvent`（按顺序播放）
@@ -122,10 +123,10 @@ if (r.error) 显示 r.error（大白话中文），state 不变
 
 ## 7. 存档
 
-`state` 直接 `JSON.stringify` 存到 `localStorage['guandan.save']`（key 必须带 `guandan.` 前缀），读回来接着 `dispatch`。
+`state` 是纯 JSON，随整局存档存进 `localStorage['guandan.save']`（字段见 `AGENTS.md` 第 5 节；key 必须带 `guandan.` 前缀、只在 `src/view/store.ts` 里读写），读回来接着 `dispatch`。
 `state.v` 是存档格式版本（现在为 1）；`state.rules` 是规则版本（见 5.1），两者分开：一个管存储格式，一个管玩法。
 
 ## 8. 配置项 `options`
 
-见 `src/variants/guandan/core/options.ts` 和 `docs/rules.md`：`fullHouseJokerPair`（三带二能否带王对，默认是）、`maxBombSize`（10）、
-`aFailLimit`（打 A 失败几次退回 2，默认 3，0 = 不退回）、`endLevel`（打到几结束，默认 14 = 过 A；小于 14 时升到这一级就赢，0.25.0 的短局是 10，`endLevelOf(state)` 读，旧存档没有按 14）、`returnMaxRank`（还贡上限 10）、`antiTributeCombined`（双下合计两张大王抗贡，默认是）。
+见 `src/variants/guandan/core/options.ts`（`resolveOptions` 补默认值）和 `docs/rules.md`：`fullHouseJokerPair`（三带二能否带王对，默认是）、`maxBombSize`（10）、
+`aFailLimit`（打 A 失败几次退回 2，默认 3，0 = 不退回）、`endLevel`（打到几结束，默认 14 = 过 A；小于 14 时升到这一级就赢，单机娱乐的短局是 `SHORT_END_LEVEL` = 10，`endLevelOf(state)` 读，旧存档没有按 14）、`returnMaxRank`（还贡上限 10）、`antiTributeCombined`（双下合计两张大王抗贡，默认是）。

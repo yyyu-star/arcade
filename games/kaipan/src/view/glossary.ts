@@ -1,7 +1,7 @@
 import { DIR_LABEL, FEEL_LABEL, fx, itemById, MOOD_LABEL, ROLE_LABEL, STAGE_LABEL, type Dir, type Feel, type Mood, type Role, type Stage, type TurnTalk } from '../core/index.ts';
 
 /**
- * 小白词表（docs/design-0.3.1-friendly.md 第 2 节）：画面上一律用新说法，A 股原词只出现在提示和词典的括注里。
+ * 小白词表（docs/design.md 第 2 节）：画面上一律用新说法，A 股原词只出现在提示和词典的括注里。
  * 这里放画面层自己显示的词（按 core 的枚举映射），以及每个词的一句话解释和词典里的笑话例子。
  */
 
