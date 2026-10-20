@@ -358,9 +358,9 @@ export function placeBubble(
 }
 
 /**
- * 一点都不许压 hard 的位置（0.20.3，首次提示"点头像扔道具"用）：先按 placeBubble 挑头像四边；四边都会压到 hard（名牌、标签、按钮、聊天框）时，
+ * 一点都不许压 hard 的位置（0.20.3 首次提示"点头像扔道具"用，0.20.4 起头像旁所有气泡都用）：先按 placeBubble 挑头像四边；四边都会压到 hard（名牌、标签、按钮、聊天框）时，
  * 在可见区里按 8 像素的网格找完全不压 hard 的位置，软的压得越少、离头像越近越好。哪儿都放不下回 null，调用方缩短字或者晚点再试。
- * 提示是一次性的说明，不像聊天那样非贴着说话人不可，所以宁可挪远一点也不盖住任何人的名字和筹码（所有者 10-20）
+ * 宁可离说话人远一点，也不盖住任何人的名字和筹码（所有者 10-20）；离得多远由"软的压得少、离头像近"一起定
  */
 export function placeClear(
   anchor: Box,
@@ -392,6 +392,22 @@ export function placeClear(
     }
   }
   return best;
+}
+
+/**
+ * 头像旁气泡最终放哪（0.20.4）：先找一点都不压 hard 的位置（placeClear）；找不到时普通气泡退回 placeBubble（压得最少的一侧，话照样冒），
+ * strict（首次提示）回 null，由调用方换短句或晚点再试
+ */
+export function bubbleSpot(
+  anchor: Box,
+  w: number,
+  h: number,
+  view: { width: number; height: number },
+  avoid: readonly Box[] = [],
+  hard: readonly Box[] = [],
+  strict = false,
+): { left: number; top: number } | null {
+  return placeClear(anchor, w, h, view, avoid, hard) ?? (strict ? null : placeBubble(anchor, w, h, view, avoid, hard));
 }
 
 /** 气泡压到叠在它上面的按钮、聊天框时的代价倍数（0.19.1，主线定的 ×3） */

@@ -79,12 +79,21 @@ describe('sqlite 存储', () => {
     ws.close();
   }, 20_000);
 
-  it('定时任务：管理入口手动投一次，Worker 的 scheduled 收到 cron 和时间', async () => {
+  it('定时任务：管理入口手动投一次，类写法的默认入口（scheduled 是实例字段）收到 cron、ctx.waitUntil 做完', async () => {
     const r = await json(fetch(`${s.admin}/cron/run?worker=probe&cron=${encodeURIComponent('17 19 * * *')}`, { method: 'POST' }));
     expect(r).toEqual({ outcome: 'ok' });
     expect(await d1('ticks')).toEqual([{ cron: '17 19 * * *' }]);
     expect((await fetch(`${s.admin}/cron/run?worker=probe&cron=x`, { method: 'POST' })).status).toBe(404);
+    expect((await fetch(`${s.admin}/cron/run?worker=nope&cron=x`, { method: 'POST' })).status).toBe(404);
+    // 平台靠这一点防游戏自己触发清理：经服务绑定还是 RPC 调不到 scheduled
+    expect((await json(p('/rpc-scheduled'))).reachable).toBe(false);
   });
+
+  it('定时任务：闹钟自己到点投（对象写法的默认入口，每分钟一次）', async () => {
+    const deadline = Date.now() + 65_000;
+    while (!/home tick \* \* \* \* \* \d+/.test(s.log()) && Date.now() < deadline) await sleep(1_000);
+    expect(s.log()).toMatch(/home tick \* \* \* \* \* \d+/);
+  }, 70_000);
 
   it('备份恢复：导出 → 改动 → 导入，库回到导出时的样子（含迁移记录）', async () => {
     const dump = await (await fetch(`${s.admin}/d1/d1-probe-DB/export`)).text();

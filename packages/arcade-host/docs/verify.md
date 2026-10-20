@@ -1,6 +1,6 @@
 # 阶段 0 实测：workerd 能不能原样跑本站
 
-> 2026-10-20 实测。版本：workerd 1.20261006.1（`workerd --version` = 2026-10-06，和平台、各游戏 `node_modules` 里的同一版）、
+> 2026-10-20 实测（0.2.0 补 cron 的做法）。版本：workerd 1.20261006.1（`workerd --version` = 2026-10-06，和平台、各游戏 `node_modules` 里的同一版）、
 > wrangler 4.151.0（和 `tools/deployer` 钉死的同一版，对照用）、Node 24。方案正本是所有者批准的自托管 v2 / v2.1（SQLite 和 PostgreSQL 部署时二选一）。
 > 下面每一条都写成了测试（`test/runtime.test.ts`、`test/assets-parity.test.ts`），以后升 workerd 时 CI 会重新验一遍；"站点"一列是拿真站（平台 + 德州）跑 `tools/selfhost/smoke.mjs` 的结果。
 
@@ -8,7 +8,7 @@
 
 本站的模块代码和 `wrangler.jsonc` 不改一行，就能在一个 workerd 进程里跑起来：平台的页面和 `/api`、D1（自写的 SQLite 后端，11 个迁移自动跑）、
 德州的登录闸门（`ARCADE` 服务绑定）、单机带入结回（`WALLET` 带 `props.game` 的 RPC）、好友房（DO + WebSocket 休眠）、平台的每日清理（cron）。
-有两处和预想不同，影响后面的方案，见"要注意的两件事"。
+有两处和预想不同，见"要注意的两件事"（第 1 件 0.2.0 已绕开）。
 
 | 实测项 | 结果 | 证据 |
 |---|---|---|
@@ -16,27 +16,31 @@
 | 闹钟 | 通过：到点照响；停机时到点的闹钟，进程起来后立刻补响 | 测试"重启…没响的闹钟重启后照响"（定 1.5 秒，马上重启，起来后已响、`getAlarm()` 为空） |
 | WebSocket 休眠和 ping | 通过：`setWebSocketAutoResponse` 不唤醒对象就回 pong；空闲 10 秒后对象被驱逐、连接不断，下一条消息到时重新构造对象（构造时间变了） | 测试"WebSocket"（等 12 秒）；站点两人进房收到 welcome |
 | 钱包 props 的 RPC | 通过：`service = (name, entrypoint = "WalletService", props = (json = …))`，`this.ctx.props` 拿得到 | 测试"带 props 的服务绑定 RPC"；站点带入 400、结回 500，余额 10000 → 10100 |
-| cron 调用方式 | 通过，但要 `--experimental`（见下） | 测试"定时任务"；站点手动投平台清理 outcome=ok |
+| cron 调用方式 | 通过，不用实验特性（0.2.0，见下） | 测试"定时任务"两条；站点手动投平台清理 outcome=ok |
 | locationHint 被忽略 | 通过：kit 的 `get(id, { locationHint: 'apac' })` 照常拿到对象 | 测试"DO"；站点开房 |
 | 内存存储下的 storage.sql | **不可用**（见下）；键值存储和闹钟可用，重启后清空 | 测试"memory 存储" |
 | D1 语义 | 和 D1 / miniflare 一致：一个请求里的语句一个事务，batch 一条出错整体回滚；错误原文 `D1_ERROR: no such table: …`、`UNIQUE constraint failed: …`；`rows_written` 含索引（和 miniflare 同一个计数，平台按写入行数做的测试在两边一样）；BLOB 来回不变；`exec` 按行拆 | 测试"D1"两条 |
 | Secret 没设 | 绑定是 `null`（Cloudflare 上是没有这个键）；平台、kit 读 Secret 都按"假值就当没设"处理，没有差别 | 站点没设 `SITE_ORIGIN` 时按请求自己的地址认 Origin |
 | 静态资源 | 和 wrangler dev 逐条一样：5 种配置 × 27 个路径 × GET/页面跳转/HEAD/POST，比状态码、跳转、Content-Type、正文、`_headers` 的头、Cache-Control，加 ETag 的 304 | `test/assets-parity.test.ts` |
-| 调试端点 | 裸 workerd 没有：不开 `--debug-port`、不配 inspector，只有生成器写的两个监听（站点、管理入口） | 生成的 `config.capnp` |
+| 调试端点 | 裸 workerd 没有：不开 `--debug-port`、不配 inspector，只有生成器写的两个监听（站点、管理入口）；管理入口没有认证，生成器和启动脚本都只许回环地址 | 生成的 `config.capnp` |
 
 ## 要注意的两件事
 
-### 1. cron 要开 `--experimental`
+### 1. cron：不经服务绑定，在 Worker 里面直接调（0.2.0 起不用 `--experimental`）
 
-Cloudflare 按 `triggers.crons` 调 Worker 的 `scheduled()`；workerd 没有调度器，`arcade-host` 用一个 DO 的闹钟代替，到点经服务绑定投给平台。
-服务绑定上的 `scheduled()` 默认被当成 **RPC 调用**（这一版 compat date 下 Fetcher 上的未知方法都是 RPC），而平台故意把 `scheduled` 写成实例字段、不让 RPC 调到
-（`platform/worker/index.ts`：防止任何绑了 `ARCADE` 的游戏自己触发清理），所以直接调报 "The RPC receiver does not implement the method"。
-要投真的 scheduled 事件，调用方（cron 那个 Worker）得开兼容开关 `service_binding_extra_handlers`，miniflare 投定时任务也是靠它；这个开关在 workerd 里标了实验性，
-要 `workerd serve --experimental` 才认。
+Cloudflare 按 `triggers.crons` 调 Worker 的 `scheduled()`；workerd 没有调度器。0.1.0 的做法是一个单独的 cron Worker 经服务绑定投：
+服务绑定上的 `scheduled()` 默认被当成 **RPC 调用**，而平台故意把 `scheduled` 写成实例字段、不让 RPC 调到（`platform/worker/index.ts`：防止任何绑了 `ARCADE` 的游戏自己触发清理），
+要投真的 scheduled 事件得开实验开关 `service_binding_extra_handlers`、workerd 带 `--experimental` 起。
 
-- 取舍：平台不改（零退化的要求），就只能这样。`--experimental` 只是放行配置里显式写了的实验开关，生成器只给 cron 那一个内部 Worker 写这一个；模块自己的 Worker 不受影响。
-- 风险：以后的 workerd 可能改掉这个开关。workerd 版本钉死在本包的 `package-lock.json`，升级时 `test/runtime.test.ts` 的"定时任务"会先挂，不会悄悄失效。
-- 另一条路（不推荐）：让平台多开一个只给内部调的清理入口。要改平台，而且又多一个要守的口子。
+0.2.0 换成第二条路（主线 10-20 要求先试这条）：生成器把有 crons 的 Worker 的主模块换成 `runtime/cron-entry.js`，它原样转出模块自己的全部导出
+（默认入口不变，服务绑定、DO 类照旧），再多导出一个 DO 类 `ArcadeHostCron`；闹钟到点时在同一个 Worker 里把默认入口实例化
+（`new 默认入口类(ctx, env)`，ctx 的 `waitUntil` 收下的都等完）或直接拿对象写法的 `scheduled(controller, env, ctx)` 调。实测：
+
+- 平台（`WorkerEntrypoint` 子类、`scheduled` 是实例字段）手动投和真站冒烟都是 outcome=ok；测试里类写法和对象写法各一个，对象写法每分钟一次、闹钟自己投到；
+- 服务绑定上照旧 RPC 调不到 `scheduled`（测试"定时任务"里锁住：平台的防护在自托管下不变）；
+- 配置里没有任何实验开关，workerd 不带 `--experimental`。
+
+代价：有 crons 的 Worker 多一个 DO 类（存储键 `<Worker 名>-ArcadeHostCron`，只存"上次跑过"一行和一个闹钟）；模块自己不能有同名导出（生成器拦）。
 
 ### 2. 内存存储没有 SQL：PostgreSQL 模式下房间不能只换成 inMemory
 

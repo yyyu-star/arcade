@@ -8,7 +8,7 @@
 | D1 | 自写的 SQLite 后端：一个 Durable Object 一个库，workerd 自带的 D1 客户端原样用；启动时自动跑迁移（和 wrangler 同一张 `d1_migrations` 表） | `src/runtime/d1.ts` |
 | 静态资源（Workers Assets） | 按 Cloudflare asset-worker 的规则移植：`html_handling`、`not_found_handling`、`run_worker_first`、`_headers`、`_redirects`、ETag/304 | `src/runtime/assets.ts` |
 | 路由 | 按路径分给各 Worker（游戏 `/games/<id>`、`/games/<id>/*`，其余给平台）；`/__health`；挡 `/cdn-cgi/*` | `src/runtime/router.ts` |
-| Cron Triggers | 一个 DO 的闹钟按 cron 表投 `scheduled` 事件，停机错过的起来后补一次 | `src/runtime/cron.ts`、`cron-expr.ts` |
+| Cron Triggers | 有 crons 的 Worker 多一个 DO（主模块换成包装入口，原样转出模块的导出）：闹钟到点在 Worker 里面调默认入口的 `scheduled`，停机错过的起来后补一次 | `src/runtime/cron-entry.ts`、`cron-expr.ts` |
 | `wrangler d1 export` | 内部管理入口（单独的监听，不在站点上）：整库导出、导入恢复、手动投定时任务 | `src/runtime/admin.ts` |
 
 生成器（`src/gen/`，构建时用 Node 跑）把一份站点描述（`src/gen/site.ts`：各 Worker 的配置和打好的包在哪）变成一个发布目录：
@@ -28,13 +28,12 @@ generate(site, { out: 'release', storage: 'sqlite' });
 
 ```sh
 cd release
-workerd serve config.capnp --experimental --directory-path data=/var/lib/arcade
+workerd serve config.capnp --directory-path data=/var/lib/arcade
 ```
 
 - 必须在发布目录里起：静态资源目录按相对当前目录找。
-- `--experimental`：cron 要用的兼容开关 `service_binding_extra_handlers` 是实验性的（原因见 docs/verify.md）。
 - `--directory-path data=…`：DO 和 D1 的数据目录，要先建好。`storage: 'memory'` 时不要这个参数，什么都不落盘。
-- 监听：站点 `127.0.0.1:8787`、管理入口 `127.0.0.1:8788`，可以用 `--socket-addr http=… --socket-addr admin=…` 改。管理入口没有认证，只许听回环地址或容器内网。
+- 监听：站点 `127.0.0.1:8787`、管理入口 `127.0.0.1:8788`，可以用 `--socket-addr http=… --socket-addr admin=…` 改。管理入口没有认证，只许听回环地址：生成器（`adminListen`）和 `tools/selfhost` 的启动脚本都会拦；Docker 里也只听容器内的 127.0.0.1，用 `docker exec` 进容器调。
 - Secret：站点描述里列的 Secret 名从同名环境变量取（systemd 的 `EnvironmentFile`、Docker 的 `env_file`）。
 
 管理入口（`curl` 就能用）：

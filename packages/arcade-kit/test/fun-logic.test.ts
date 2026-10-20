@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   placeBubble,
   placeClear,
+  bubbleSpot,
   DANMAKU,
   barBottom,
   chatFont,
@@ -677,5 +678,25 @@ describe('placeClear（0.20.3，首次提示不盖任何名牌）', () => {
   });
   it('哪儿都放不下：回 null（调用方换短句或晚点再试）', () => {
     expect(placeClear(box(10, 10, 60, 60), 200, 30, view, [], [box(0, 0, 844, 390)])).toBeNull();
+  });
+});
+
+describe('bubbleSpot（0.20.4，所有头像旁气泡都不压名牌）', () => {
+  const view = { width: 1920, height: 1080 };
+  const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
+  const hits = (at: { left: number; top: number }, w: number, h: number, zones: { left: number; top: number; width: number; height: number }[]): boolean =>
+    zones.some((z) => at.left < z.left + z.width && z.left < at.left + w && at.top < z.top + z.height && z.top < at.top + h);
+  // 掼蛋 1920 实测的样子：自己在左下，上面是阿强的名牌，右边是"互动"按钮，左上是聊天框
+  const me = box(40, 545, 100, 100);
+  const hard = [box(80, 462, 100, 40), box(146, 540, 80, 92), box(10, 98, 376, 214)];
+  it('自己说话：不压上家名牌、"互动"按钮和聊天框，离头像不远', () => {
+    const at = bubbleSpot(me, 196, 44, view, [], hard)!;
+    expect(hits(at, 196, 44, hard)).toBe(false);
+    expect(Math.hypot(at.left + 98 - 90, at.top + 22 - 595)).toBeLessThan(260);
+  });
+  it('哪儿都不压不了：普通气泡照样冒（压得最少的一侧），首次提示回 null', () => {
+    const all = [box(0, 0, 1920, 1080)];
+    expect(bubbleSpot(me, 196, 44, view, [], all)).not.toBeNull();
+    expect(bubbleSpot(me, 196, 44, view, [], all, true)).toBeNull();
   });
 });

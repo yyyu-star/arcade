@@ -2,7 +2,7 @@
  * 生成器：站点描述（site.ts）→ 一个能直接交给 workerd 的发布目录。
  *
  *   <out>/config.capnp          workerd 配置（下面的文件都用相对路径 embed 进去）
- *   <out>/runtime/*.js          本包的运行时：router、assets、d1、cron
+ *   <out>/runtime/*.js          本包的运行时：router、assets、d1、cron-entry、admin
  *   <out>/workers/<名>/main.js  各模块打好的 Worker
  *   <out>/workers/<名>/*.json   非 ASCII 的变量值、静态资源配置、D1 迁移
  *   <out>/assets/<名>/          各模块的静态资源（不含 _headers、_redirects，它们已经解析进配置）
@@ -29,7 +29,7 @@ export interface GenerateOptions {
   storage?: 'sqlite' | 'memory';
   /** 监听地址；运行时可以用 --socket-addr http=<地址> 覆盖 */
   listen?: string;
-  /** 内部管理入口（备份、恢复、手动跑定时任务）的监听地址；运行时可以用 --socket-addr admin=<地址> 覆盖。只许回环或容器内网 */
+  /** 内部管理入口（备份、恢复、手动跑定时任务）的监听地址，只许回环地址（没有认证）。容器里也只听容器内的 127.0.0.1，用 docker exec 进去调 */
   adminListen?: string;
   /** 写进 release.json 的版本说明（比如 git 提交） */
   version?: string;
@@ -37,7 +37,11 @@ export interface GenerateOptions {
   runtimeDir?: string;
 }
 
-const RUNTIME = ['router', 'assets', 'd1', 'cron', 'admin'] as const;
+const RUNTIME = ['router', 'assets', 'd1', 'cron-entry', 'admin'] as const;
+/** 定时任务的 DO 类名：加进有 crons 的 Worker，模块自己不许有同名的导出 */
+const CRON_CLASS = 'ArcadeHostCron';
+/** 管理入口没有认证，只许听回环地址 */
+export const LOOPBACK = /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost|\[::1\]):\d+$/;
 /** 这些文件 wrangler 不当静态资源上传（解析进配置，或者是忽略规则本身） */
 const NOT_ASSETS = new Set(['_headers', '_redirects', '.assetsignore', '_worker.js']);
 
@@ -46,6 +50,9 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
   const storage = opts.storage ?? 'sqlite';
   const runtimeDir = opts.runtimeDir ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'runtime');
   validate(site);
+  if (opts.adminListen !== undefined && !LOOPBACK.test(opts.adminListen)) {
+    throw new Error(`管理入口没有认证，只许听回环地址（127.x、localhost、[::1]）：${opts.adminListen}`);
+  }
   if (existsSync(out)) rmSync(out, { recursive: true });
   mkdirSync(join(out, 'runtime'), { recursive: true });
   for (const r of RUNTIME) {
@@ -58,7 +65,7 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
   const doStorage: Capnp = storage === 'sqlite' ? { localDisk: 'data' } : { inMemory: VOID };
   const routes: [string, string][] = [];
   const routerBindings: Capnp[] = [];
-  const cronTargets: [string, string][] = [];
+  const cronWorkers: string[] = [];
   const d1List: string[] = [];
 
   for (const w of site.workers) {
@@ -149,58 +156,48 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
       front = `assets-${w.name}`;
     }
 
-    const classes = (w.durable_objects ?? []).map((d) => d.class_name);
+    const classes = [...new Set((w.durable_objects ?? []).map((d) => d.class_name))];
+    const modules: Capnp[] = [{ name: 'main.js', esModule: embed(rel(join(dir, 'main.js'))) }];
+    const namespaces: Capnp[] = classes.map((c) => ({ className: c, uniqueKey: `${w.name}-${c}`, enableSql: true }));
+    if (w.crons?.length) {
+      // 有定时任务的 Worker：主模块换成 cron-entry（原样转出 main.js 的全部导出），多一个 DO 类 ArcadeHostCron 在 Worker 里面调 scheduled
+      writeFileSync(join(dir, 'crons.js'), `export default ${JSON.stringify(w.crons)};\n`);
+      modules.unshift({ name: 'arcade-host-entry.js', esModule: embed('runtime/cron-entry.js') });
+      modules.push({ name: 'arcade-host-crons.js', esModule: embed(rel(join(dir, 'crons.js'))) });
+      namespaces.push({ className: CRON_CLASS, uniqueKey: `${w.name}-${CRON_CLASS}`, enableSql: true });
+      cronWorkers.push(w.name);
+    }
     services.push({
       name: w.name,
       worker: {
-        modules: [{ name: 'main.js', esModule: embed(rel(join(dir, 'main.js'))) }],
+        modules,
         compatibilityDate: w.compatibility_date,
         compatibilityFlags: w.compatibility_flags?.length ? w.compatibility_flags : undefined,
         bindings,
-        durableObjectNamespaces: classes.length
-          ? [...new Set(classes)].map((c) => ({ className: c, uniqueKey: `${w.name}-${c}`, enableSql: true }))
-          : undefined,
-        durableObjectStorage: classes.length ? doStorage : undefined,
+        durableObjectNamespaces: namespaces.length ? namespaces : undefined,
+        durableObjectStorage: namespaces.length ? doStorage : undefined,
       },
     });
 
     routerBindings.push({ name: w.name, service: front });
     for (const r of w.routes ?? []) routes.push([r, w.name]);
-    for (const c of w.crons ?? []) cronTargets.push([w.name, c]);
   }
 
-  const cronDate = site.workers[0]!.compatibility_date;
-  if (cronTargets.length) {
-    const f = join(out, 'runtime', 'crons.json');
-    writeFileSync(f, JSON.stringify(cronTargets));
-    services.push({
-      name: 'cron',
-      worker: {
-        modules: [{ name: 'cron.js', esModule: embed('runtime/cron.js') }],
-        compatibilityDate: cronDate,
-        // 有了这个开关，服务绑定的 scheduled() 才是投一个 scheduled 事件；没有它会被当成 RPC 调 scheduled 方法
-        // （平台故意把 scheduled 写成实例字段，不让 RPC 调到，见 platform/worker/index.ts）。miniflare 投定时任务也靠它
-        compatibilityFlags: ['service_binding_extra_handlers'],
-        bindings: [
-          { name: 'CRONS', json: embed('runtime/crons.json') },
-          ...[...new Set(cronTargets.map(([w]) => w))].map((w) => ({ name: w, service: w })),
-        ],
-        durableObjectNamespaces: [{ className: 'Cron', uniqueKey: 'arcade-host-cron', enableSql: true }],
-        durableObjectStorage: doStorage,
-      },
-    });
-  }
+  const date = site.workers[0]!.compatibility_date;
+  // 路由层和管理入口找各 Worker 的定时任务对象：绑定名 cron:<Worker 名>
+  const cronBindings = cronWorkers.map((w) => ({ name: `cron:${w}`, durableObjectNamespace: { className: CRON_CLASS, serviceName: w } }));
   // 精确路径在前，前缀按长度从长到短：/games/texas 和 /games/texas/* 谁先都一样，但以后有嵌套前缀时长的要先
   routes.sort((a, b) => Number(b[0].endsWith('/*') ? 0 : 1) - Number(a[0].endsWith('/*') ? 0 : 1) || b[0].length - a[0].length);
   services.push({
     name: 'router',
     worker: {
       modules: [{ name: 'router.js', esModule: embed('runtime/router.js') }],
-      compatibilityDate: cronDate,
+      compatibilityDate: date,
       bindings: [
         { name: 'ROUTES', json: JSON.stringify(routes) },
         { name: 'FALLBACK', text: site.fallback },
-        ...(cronTargets.length ? [{ name: 'CRON', durableObjectNamespace: { className: 'Cron', serviceName: 'cron' } }] : []),
+        { name: 'CRON_WORKERS', json: JSON.stringify(cronWorkers) },
+        ...cronBindings,
         ...routerBindings,
       ],
     },
@@ -209,11 +206,12 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
     name: 'admin',
     worker: {
       modules: [{ name: 'admin.js', esModule: embed('runtime/admin.js') }],
-      compatibilityDate: cronDate,
+      compatibilityDate: date,
       bindings: [
         { name: 'D1_LIST', json: JSON.stringify(d1List) },
         ...d1List.map((svc) => ({ name: svc, durableObjectNamespace: { className: 'D1Sqlite', serviceName: svc } })),
-        ...(cronTargets.length ? [{ name: 'CRON', durableObjectNamespace: { className: 'Cron', serviceName: 'cron' } }] : []),
+        { name: 'CRON_WORKERS', json: JSON.stringify(cronWorkers) },
+        ...cronBindings,
       ],
     },
   });
@@ -246,7 +244,7 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
 
 function validate(site: Site): void {
   const names = new Set<string>();
-  const reserved = new Set(['router', 'cron', 'admin', 'data', 'internet']);
+  const reserved = new Set(['router', 'admin', 'data', 'internet']);
   for (const w of site.workers) {
     if (!/^[a-z][a-z0-9-]*$/.test(w.name)) throw new Error(`Worker 名不合规：${w.name}`);
     if (names.has(w.name) || reserved.has(w.name) || /^(assets|files|d1)-/.test(w.name)) throw new Error(`Worker 名重复或和生成器的保留名冲突：${w.name}`);
@@ -257,6 +255,7 @@ function validate(site: Site): void {
       }
     }
     for (const c of w.crons ?? []) parseCron(c);
+    if (w.crons?.length && w.durable_objects?.some((d) => d.class_name === CRON_CLASS)) throw new Error(`${w.name}：DO 类名 ${CRON_CLASS} 是生成器保留的`);
     const h = w.assets?.html_handling;
     if (h && h !== 'auto-trailing-slash' && h !== 'none') throw new Error(`${w.name}：assets.html_handling 只支持 auto-trailing-slash 和 none`);
   }

@@ -7,9 +7,10 @@
 - 零退化：本包只在自托管时用，不改变 Cloudflare 上的任何行为；不要为了自托管去改模块代码，差别都在这里补，补不了的写进 `docs/verify.md` 报维护者。
 - 行为照 Cloudflare：静态资源的规则逐条照 workers-shared 的 asset-worker、router-worker 移植，改了要过 `test/assets-parity.test.ts`（和 wrangler dev 逐条对照）；
   D1 的协议照 miniflare 的 D1DatabaseObject（workerd 自带的客户端只认这个），错误原文、`rows_written` 的算法不能变（平台的测试和写入预算按它算）。
-- 存储键不能变：DO 的 uniqueKey 是 `<Worker 名>-<类名>`，D1 是 `d1-<Worker 名>-<绑定名>`，定时任务是 `arcade-host-cron`；改了等于换了一个空库。
+- 存储键不能变：DO 的 uniqueKey 是 `<Worker 名>-<类名>`，D1 是 `d1-<Worker 名>-<绑定名>`，定时任务是 `<Worker 名>-ArcadeHostCron`；改了等于换了一个空库。
 - workerd 版本钉死（`package.json` 精确版本 + lockfile），和平台、游戏 `node_modules` 里的保持一致；升级时 `npm test` 全过、`docs/verify.md` 的日期和版本跟着改。
-- 管理入口（`admin.ts`）没有认证，只许听回环地址或容器内网；不要把它挂到站点路由上，也不要加能读写任意 DO 的接口。
+- 管理入口（`admin.ts`）没有认证，只许听回环地址（生成器的 `LOOPBACK` 断言、启动脚本的检查都要留着；Docker 里也只听容器内的 127.0.0.1）；不要把它挂到站点路由上，也不要加能读写任意 DO 的接口。
+- 不用 workerd 的实验特性（`--experimental`、实验兼容开关）：定时任务就是为这个改成在 Worker 里面直接调的（`docs/verify.md`）。真要用，先在 verify.md 写清开了哪些、风险和替代计划，报维护者。
 - 运行时里不用 `setTimeout`/`setInterval`（定时任务只用一个闹钟），日志一行一个 JSON，不记请求体、cookie、Secret。
 - capnp 字符串只放 ASCII：中文变量值、迁移 SQL、静态资源清单都写进 embed 的文件（`src/gen/capnp.ts` 会拦）。
 - 测试：`npm test`（起真的 workerd，临时文件在 `os.tmpdir()`）。新加的运行时行为要有测试。
