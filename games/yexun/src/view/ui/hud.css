@@ -276,8 +276,9 @@
   .yx-hud .yx-timer { padding: 4px 10px; }
   .yx-hud .yx-home span { display: none; }
   .yx-hud .yx-home { padding: 0; }
-  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
-  .yx-hud .yx-bagpanel { top: 112px; max-height: calc(100% - 120px); }
+  /* 0.4.4 铜钱胶囊底下多了一行小字，背包再往下让一行 */
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 24px); }
+  .yx-hud .yx-bagpanel { top: 128px; max-height: calc(100% - 136px); }
 }
 
 /* ── 手机竖屏：顶栏并成一行（大厅、头像血条、计时、胶囊、暂停），夜探的背包在第二行右边 ──
@@ -306,8 +307,9 @@
   .yx-hud .yx-cap { gap: 2px; }
   .yx-hud .yx-ico { width: 14px; height: 14px; }
   .yx-hud .yx-pause { flex: none; padding: 0; }
-  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
-  .yx-hud .yx-bagpanel { top: 112px; right: 8px; }
+  /* 0.4.4 铜钱胶囊底下多了一行小字，背包再往下让一行 */
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 24px); }
+  .yx-hud .yx-bagpanel { top: 128px; right: 8px; }
   .yx-hud .yx-rs { top: 152px; }
   .yx-hud .yx-rs.lower { top: 190px; }
   .yx-hud .yx-mm { left: max(8px, env(safe-area-inset-left, 0px)); top: 108px; bottom: auto; width: 80px; height: 80px; }
