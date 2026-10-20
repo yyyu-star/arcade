@@ -1730,7 +1730,7 @@ export class GameScene extends Phaser.Scene {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
         img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
-        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : kind === Shot.Paper ? 1.1 : 1.2;
+        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : kind === Shot.Paper ? 1.5 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);
         // 光波不用图，画在 Graphics 上（drawGfx）
