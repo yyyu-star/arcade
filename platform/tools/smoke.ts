@@ -2235,7 +2235,8 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     const box = (await badge.boundingBox())!;
     const vw = page.viewportSize()!.width;
     check(box.x >= 0 && box.x + box.width <= vw, `筹码牌子出了屏幕：${JSON.stringify(box)}，屏宽 ${vw}`);
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `顶栏换行了：${tops}`);
     await shot(page, `wallet-badge-${screen}`);
     await badge.click();
@@ -2275,7 +2276,8 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     });
     await page.goto(`${BASE}/`);
     await page.getByTestId('wallet-badge').waitFor();
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `管理员的顶栏换行了：${tops}`);
     check((await page.getByTestId('admin-chips-open').count()) === 0, '大厅不该再有"管理筹码"按钮');
     await page.getByRole('link', { name: '管理', exact: true }).click();
