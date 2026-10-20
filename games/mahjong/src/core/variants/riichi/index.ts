@@ -3,7 +3,7 @@
  * 还没登记进 ../index.ts 的玩法表：界面和单机做完以前房间、单机都开不出立直（docs/riichi.md 第 6 节）。
  */
 import { MAX_TITLES, type Payment, type SettleStats } from '../../match/index.ts';
-import { wallLeft, type ClaimKind, type Meld, type RiverTile } from '../../table/index.ts';
+import { wallLeft, type ClaimKind, type Meld } from '../../table/index.ts';
 import type { Tile } from '../../tiles/index.ts';
 import { NEUTRAL_TUNE, type MatchResult, type Tune, type Variant, type VariantAi } from '../types.ts';
 import {
@@ -33,6 +33,7 @@ import {
   type RcAction,
   type RcEvent,
   type RcOpts,
+  type RcRiverTile,
   type RcState,
   type RoundSummary,
   type SeatStats,
@@ -71,7 +72,7 @@ export interface SeatView {
   riichi: 0 | 1 | 2;
   riichiAt: number;
   melds: Meld[];
-  river: RiverTile[];
+  river: RcRiverTile[];
   count: number;
   /** 一局结束时和了、听牌的人亮出来的手牌 */
   hand: Tile[] | null;

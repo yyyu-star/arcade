@@ -117,7 +117,6 @@ function visibleCounts(v: RcView): number[] {
 }
 
 /** 离庄家几手（庄家先打） */
-const rel = (v: RcView, seat: number): number => (seat - v.dealer + 4) % 4;
 
 /**
  * 这一家的威胁：立直是 1000；副露两组以上看着显眼的（三组、副露里有宝牌、役牌、一门到底）按副露和牌河长度估，上限不到立直。
@@ -142,22 +141,15 @@ function threatOf(v: RcView, o: number, doraHits: readonly number[], seatWindOf:
 }
 
 /**
- * 对立直的人，哪些牌是现物：他自己河里的牌，加上他立直之后别家打的牌（他没和，就是放过了）。
- * 视图里只有各家自己的河、没有谁先谁后，所以按"庄家先打、一人一张"推：立直宣告那一手之后别家各打了几张。
- * 有人鸣牌会让顺序错开，这里只管大概（宁少算：少算的是安全牌，不会把危险牌当成安全）
+ * 对立直的人，哪些牌是现物：他自己河里的牌，加上他立直宣告以后全桌打出的牌（他没和，就是放过了，同巡振听和立直后振听都管着他）。
+ * 先后按河里每张记的"全桌第几张"（n）判断，有人鸣牌打乱轮次也不会算错
  */
 function safeSetOf(v: RcView, o: number): Set<number> {
   const s = v.seats[o]!;
   const out = new Set<number>(s.river.map((r) => kindOf(r.tile)));
   if (!s.riichi || s.riichiAt < 0) return out;
-  const L = s.riichiAt + 1;
-  v.seats.forEach((x, i) => {
-    if (i === o) return;
-    // 排在他前面的家，他宣告时已经打了 L 张；排在后面的，打了 L-1 张
-    const before = rel(v, i) < rel(v, o) ? L : L - 1;
-    // 多算一张当缓冲：鸣牌改了轮次也不至于把立直前的牌算进来
-    for (const r of x.river.slice(before + 1)) out.add(kindOf(r.tile));
-  });
+  const at = s.river[s.riichiAt]!.n;
+  for (const x of v.seats) for (const r of x.river) if (r.n > at) out.add(kindOf(r.tile));
   return out;
 }
 

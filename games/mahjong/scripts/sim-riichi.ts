@@ -103,7 +103,7 @@ console.log(
   `一场结束得分：均值 ${mean(scores).toFixed(0)}  |得分| P50 ${pct(abs, 50)}  P90 ${pct(abs, 90)}  P99 ${pct(abs, 99)}  ` +
     `超过 ±50,000 ${frac((x) => Math.abs(x) > 50_000)}  ±100,000 ${frac((x) => Math.abs(x) > 100_000)}  ±150,000 ${frac((x) => Math.abs(x) > 150_000)}`,
 );
-console.log(`\n每份换多少点（现行 SHARE_POINTS = ${SHARE_POINTS.toLocaleString('en')}）：输掉整份 = 得分 ≤ −份；赢满 3 份封顶 = 得分 ≥ 3 × 份`);
+console.log(`\n每份换多少点（现行 SHARE_POINTS = ${SHARE_POINTS[LENGTH].toLocaleString('en')}）：输掉整份 = 得分 ≤ −份；赢满 3 份封顶 = 得分 ≥ 3 × 份`);
 for (const k of [30_000, 40_000, 50_000, 60_000, 80_000, 100_000]) {
   console.log(
     `  ${String(k).padStart(7)}：输掉整份 ${frac((x) => x <= -k).padStart(6)}  赢满 3 份 ${frac((x) => x >= 3 * k).padStart(6)}  赢超过 1 份 ${frac((x) => x >= k).padStart(6)}`,

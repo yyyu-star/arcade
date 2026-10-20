@@ -137,7 +137,7 @@ function peekHands(s: XzState, seat: number): XzAction | null {
   const v = view(s, seat);
   if (!v.prompt) return null;
   v.seats.forEach((x, i) => {
-    if (i !== seat && !s.players[i]!.won) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false }))];
+    if (i !== seat && !s.players[i]!.won) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false, n: 0 }))];
   });
   return decide(v);
 }
@@ -387,7 +387,7 @@ function rcPeekHands(s: RCm.RcState, seat: number): RCm.RcAction | null {
   const v = RCm.view(s, seat);
   if (!v.prompt) return null;
   v.seats.forEach((x, i) => {
-    if (i !== seat) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false }))];
+    if (i !== seat) x.river = [...x.river, ...s.players[i]!.hand.map((tile) => ({ tile, taken: false, n: 0 }))];
   });
   return AIS.riichi!.decide(v);
 }

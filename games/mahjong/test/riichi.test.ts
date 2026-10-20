@@ -61,7 +61,7 @@ function table(hands: string[], turn: number, wall = '', opts: { dealer?: number
     }
     return ts;
   });
-  s.players = hand.map((h, i) => ({ hand: h.sort((a, b) => a - b), melds: [], river: rivers[i]!.map((tile) => ({ tile })), riichi: 0, riichiAt: -1, ippatsu: false, passed: false, locked: false, banned: [], draws: 2 }));
+  s.players = hand.map((h, i) => ({ hand: h.sort((a, b) => a - b), melds: [], river: rivers[i]!.map((tile) => ({ tile, n: 0 })), riichi: 0, riichiAt: -1, ippatsu: false, passed: false, locked: false, banned: [], draws: 2 }));
   for (const x of pons) s.players[x.seat]!.melds.push({ kind: 'pon', tiles: x.tiles, from: x.from });
   const taken = new Set([...hand.flat(), ...w, ...dead, ...rivers.flat(), ...pons.flatMap((x) => x.tiles)]);
   const rest = allTiles(TILESET).filter((t) => !taken.has(t)).reverse();
@@ -343,6 +343,16 @@ describe('吃碰杠', () => {
     expect(discardOptions(n, 1).map(kindOf)).not.toContain(kinds('7m')[0]);
     expect(RC.apply(n, 1, { t: 'discard', tile: tileIn(n, 1, '7m') })).toEqual({ error: 'kuikae' });
     expect(act(n, 1, { t: 'discard', tile: tileIn(n, 1, '2m') }).turn).toBe(2);
+  });
+
+  test('河里每张记全桌第几张打出：有人碰牌跳过别家，顺序照实记（电脑认现物靠它）', () => {
+    let s = table(['*4m', '*', '*', '4m4m*'], 0, '1z2z');
+    s.discards = 0;
+    s = discard(s, 0, '4m');
+    s = claim(s, 3, 'pon');
+    s = act(s, 3, { t: 'discard', tile: discardOptions(s, 3)[0]! });
+    expect(s.players[0]!.river[0]!.n).toBe(1);
+    expect(s.players[3]!.river[0]!.n).toBe(2);
   });
 
   test('碰比吃优先；不是自己能吃的吃法不收', () => {

@@ -33,10 +33,10 @@ export const DEAD_WALL = 14;
 const URA0 = 5;
 const RINSHAN0 = 10;
 /**
- * 一场的得分（按点数记：+52.3 记 52,300）换筹码：SHARE_POINTS 分值一份（docs/riichi.md 2 的 K = 50，每千点值一份的 1/50）。
- * 小档一份 2,000 → 每 1,000 分 40 筹码
+ * 一场的得分（按点数记：+52.3 记 52,300）换筹码：多少分值一份（docs/riichi.md 第 2、7 节，按模拟定）。
+ * 半庄 50,000（K = 50，小档一份 2,000 → 每 1,000 分 40 筹码）；东风战打得短、得分摆动小，40,000，两种打法输掉整份的机会差不多（约 5%）
  */
-export const SHARE_POINTS = 50_000;
+export const SHARE_POINTS: Readonly<Record<RcOpts['length'], number>> = { hanchan: 50_000, tonpuu: 40_000 };
 
 export interface RcOpts {
   /** 东南半庄还是东风战 */
@@ -50,10 +50,15 @@ export type Phase = 'turn' | 'claim' | 'end' | 'over';
 /** 一局怎么结束的：和了、荒牌流局、流局满贯，或者中途流局的五种 */
 export type RcEnd = 'ron' | 'tsumo' | 'draw' | 'nagashi' | 'nine_terminals' | 'four_winds' | 'four_kans' | 'four_riichi' | 'three_ron';
 
+/** 河里的一张：n 是这一局全桌第几张打出的（从 1 起）。现物要看"立直以后别家打的"，鸣牌会打乱轮次，只看各家河里第几张推不准 */
+export interface RcRiverTile extends RiverTile {
+  n: number;
+}
+
 export interface RcPlayer {
   hand: Tile[];
   melds: Meld[];
-  river: RiverTile[];
+  river: RcRiverTile[];
   /** 0 没立直，1 立直，2 双立直 */
   riichi: 0 | 1 | 2;
   /** 立直宣告的那张在河里的位置（画面横放）；没立直是 -1 */
@@ -765,7 +770,7 @@ export function finishMatch(s: RcState): void {
     return x - RETURN_POINTS + UMA[r]! * 1000 + (r === 0 ? oka : 0);
   });
   s.final = { rank, score };
-  const chipsOf = (x: number): number => Math.floor((x * s.share) / SHARE_POINTS);
+  const chipsOf = (x: number): number => Math.floor((x * s.share) / SHARE_POINTS[s.opts.length]);
   const owe = score.map((x, i) => (x < 0 ? Math.min(chipsOf(-x), Math.max(0, s.chips[i]!)) : 0));
   const want = score.map((x) => (x > 0 ? chipsOf(x) : 0));
   const paid = owe.reduce((a, b) => a + b, 0);
@@ -862,7 +867,7 @@ export function applyMut(s: RcState, seat: number, a: RcAction): string | null {
         if (!riichiOptions(s, seat).includes(a.tile)) return 'cannot_riichi';
       } else if (!discardOptions(s, seat).includes(a.tile)) return p.riichi ? 'riichi_locked' : 'kuikae';
       p.hand.splice(p.hand.indexOf(a.tile), 1);
-      p.river.push({ tile: a.tile });
+      p.river.push({ tile: a.tile, n: s.discards + 1 });
       if (a.riichi) {
         p.riichiAt = p.river.length - 1;
         s.pendingRiichi = seat;

@@ -67,7 +67,8 @@ function table(spec: Spec): RcState {
   s.players = hands.map((h, i) => ({
     hand: h.slice().sort((a, b) => a - b),
     melds: [],
-    river: rivers[i]!.map((tile) => ({ tile })),
+    // 河里第几张：按座位轮着打（0 号先），立直以后谁打了什么由它决定
+    river: rivers[i]!.map((tile, j) => ({ tile, n: j * 4 + i + 1 })),
     riichi: spec.riichi?.[i] !== undefined ? 1 : 0,
     riichiAt: spec.riichi?.[i] ?? -1,
     ippatsu: false,
@@ -192,8 +193,8 @@ describe('押引', () => {
   });
 
   test('立直之后别家打的牌也是他的现物', () => {
-    // 座位 1 打到第 2 张宣告立直（庄家是 0，所以 0 号先打、2、3 号排在他后面）：之后座位 2 的第 3 张 4 万他放过了
-    const s = table({ hands: [MESS], dealer: 0, river: ['', '9m9p5s', '1p2p4m', ''], riichi: { 1: 1 } });
+    // 座位 1 的第 2 张宣告立直（全桌第 6 张）；座位 2 的第 1 张 1 筒在那之前，第 2 张 4 万（全桌第 7 张）在那之后，他放过了
+    const s = table({ hands: [MESS], dealer: 0, river: ['', '9m9p5s', '1p4m', ''], riichi: { 1: 1 } });
     expect(kindOfAction(decideAt(s, 0))).toBe(k1('4m'));
   });
 
