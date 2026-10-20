@@ -6,6 +6,7 @@
 import { exports } from 'cloudflare:workers';
 import type { DownMsg, StateMsg, WelcomeMsg } from 'arcade-kit/protocol';
 import { describe, expect, it } from 'vitest';
+import pkg from '../../package.json' with { type: 'json' };
 import { stakesOf } from '../../src/core/stakes.ts';
 import type { RoomView } from '../../src/room/rules.ts';
 
@@ -66,6 +67,12 @@ async function join(code: string, cookie: string, name?: string): Promise<Conn> 
 }
 
 describe('单独部署', () => {
+  it('探活不要登录：回 200 和版本号', async () => {
+    const res = await exports.default.fetch(`${BASE}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, version: pkg.version });
+  });
+
   it('站点根跳到游戏首页，查询参数带上', async () => {
     const res = await exports.default.fetch(`${SITE}/?room=123456`, { redirect: 'manual' });
     expect(res.status).toBe(302);

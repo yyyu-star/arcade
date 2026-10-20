@@ -2,6 +2,7 @@
  * texas Worker：挂在站点的 /games/texas* 下（DESIGN.md 10；路由部署时注入，见 README 的部署一节）。
  * 两种部署（kit 0.10 的 isStandalone，DESIGN.md 10.1）：本站由部署工具补上 ARCADE、WALLET 和 GATE=login，下面说的都是这种；
  * 单独部署（wrangler.jsonc 原样，没有平台）认游客 cookie，没有钱包：单机实盘的接口回 404 no_wallet，好友房的筹码不记账，`/` 跳到 /games/texas/。
+ * - /games/texas/health 是探活：不读存储、不要登录，回 {ok, version}（version 是 package.json 的版本），排在登录闸门前面，单独部署也能访问；
  * - 首页三个路径过登录闸门（15.8，kit 0.8.0 的 loginGate）：登录了放行，没登录 302 到 /login?next=<原路径和查询参数>（平台 0.10.1），平台不可用回德州自己的 503 页；GATE=off 时不拦；
  * - /games/texas/api/solo/* 是单机的带入、结回（5.4）：经服务绑定 WALLET 调平台钱包（client 模式）；看钱包、领补给页面直接走平台的 /api/wallet；
  * - /games/texas/rooms（开房）、/games/texas/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（6）；
@@ -15,6 +16,7 @@ import { sameOrigin, whoIs, type WhoIs } from 'arcade-kit/auth';
 import type { MeterEnv } from 'arcade-kit/meter';
 import { CLOSE } from 'arcade-kit/protocol';
 import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot } from 'arcade-kit/worker';
+import pkg from '../package.json' with { type: 'json' };
 import { PERSONAS } from '../src/ai/personas.ts';
 import { STAKES, type StakesId } from '../src/core/stakes.ts';
 import { MATCH_PATH, MATCH_TIERS } from '../src/room/match.ts';
@@ -76,6 +78,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     // 页面里的资源和接口都用相对路径，没有结尾斜杠时相对路径会落到 /games/ 下
+    if (path === `${BASE}/health`) return json({ ok: true, version: pkg.version }, 200);
     if (path === BASE) return Response.redirect(`${url.origin}${BASE}/${url.search}`, 301);
     if (path === `${BASE}/` || path === `${BASE}/index.html`) return secure(await loginGate(request, env, { downPage: DOWN_PAGE, guest: GUEST }), url);
     if (path.startsWith(SOLO)) return solo(request, env, path.slice(SOLO.length));

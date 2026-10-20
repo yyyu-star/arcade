@@ -267,7 +267,7 @@ describe('开房、买入、打牌', () => {
     expect((await inspect(code)).persist!.status).toBe('playing');
   });
 
-  it('机器人打 300 手：每一步 ≤ 2 行，记下每手平均写几行（DESIGN 6.3）；离桌、关房都结回钱包，钱包里的数对得上', { timeout: 120_000 }, async () => {
+  it('机器人打 300 手：每一步 ≤ 2 行，记下每手平均写几行（DESIGN 6.4）；离桌、关房都结回钱包，钱包里的数对得上', { timeout: 120_000 }, async () => {
     const { code, ids, conns } = await table(2, { stakes: 'small', size: 4 });
     await conns[0]!.see((x) => x.handNo >= 1);
     const w0 = (await inspect(code)).total;

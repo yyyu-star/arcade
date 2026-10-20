@@ -1,6 +1,7 @@
 /** Worker 这一层：登录闸门（15.8）、单机带入结回的 CSRF / 登录 / 请求体检查和转给平台钱包、平台 Set-Cookie 的转发。 */
 import { env, exports } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import pkg from '../../package.json' with { type: 'json' };
 import worker, { type Env } from '../../worker/main.ts';
 import { BASE, get, op, post, SITE, statsOf, usage, walletOf } from './helpers.ts';
 
@@ -18,6 +19,14 @@ async function body(res: Response): Promise<Record<string, unknown>> {
 async function call(path: string, patch: Partial<Env>, init: RequestInit = {}): Promise<Response> {
   return worker.fetch(new Request(`${BASE}${path}`, { redirect: 'manual', ...init }) as Parameters<typeof worker.fetch>[0], { ...env, ...patch });
 }
+
+describe('探活', () => {
+  it('没登录也回 200 和版本号，不经过登录闸门、不调平台', async () => {
+    const res = await exports.default.fetch(`${BASE}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, version: pkg.version });
+  });
+});
 
 describe('登录闸门', () => {
   it('没有结尾斜杠的首页 301 到带斜杠的（相对路径才对）', async () => {

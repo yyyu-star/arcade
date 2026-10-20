@@ -89,6 +89,8 @@ curl -b '__Host-sid=me' http://localhost:8775/api/wallet
 
 每天开房数、写入预算照 `wrangler.jsonc` 里的 `KIT_QUOTA`，可以按自己的用量改。
 
+探活：`GET /games/texas/health` 不要登录，回 `{"ok":true,"version":"<版本>"}`，两种部署都有；`wrangler.jsonc` 开着 `observability`，报错和请求在 Cloudflare 控制台的 Workers 日志里看。
+
 ## 本站部署
 
 德州是一个 Cloudflare Worker（名字 `texas`），本站挂在平台同一个域名的 `/games/texas` 路径下，用平台的登录和钱包，按仓库根 README 的部署一节用 GitHub Actions 部署：
