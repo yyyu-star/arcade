@@ -22,7 +22,7 @@ import { join, openMatch, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
 import { Button, ModeCard, fitWidth, iconButton, modal, segmented, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
-import { confirm, openRules, openSettings, openStats } from '../ui/panels.ts';
+import { confirm, openDdzRules, openRules, openSettings, openStats } from '../ui/panels.ts';
 import { openLevelPicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
 import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
@@ -200,7 +200,7 @@ export class TitleScene extends Phaser.Scene {
   private buildCorner(W: number): void {
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间
     const icons: [string, string, () => void][] = [
-      ['rules', 'rules', () => (this.overlay = openRules(this))],
+      ['rules', 'rules', () => (this.overlay = app.params?.ddz && getVariant() === 'ddz' ? openDdzRules(this) : openRules(this))],
       ['settings', 'settings', () => (this.overlay = openSettings(this))],
       ['stats', 'stats', () => (this.overlay = openStats(this))],
     ];

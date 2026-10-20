@@ -4,10 +4,11 @@ import { DEFAULT_OPTIONS, makeCard } from '../../variants/guandan/core/index.ts'
 import { app } from '../app.ts';
 import { levelName } from '../labels.ts';
 import { audio } from '../audio.ts';
-import { getSettings, getStats, setTutorialDone, updateSettings, type Settings } from '../store.ts';
+import { getSettings, getStats, setDdzTutorialDone, setTutorialDone, updateSettings, type Settings } from '../store.ts';
 import { COLOR, SPACE, TYPE, css, minHit } from '../theme.ts';
 import { Button, modal, segmented, text, worldW, type Modal } from './kit.ts';
-import { PATTERNS, miniCards, patternTile } from './patterns.ts';
+import { DDZ_RULE_TABS } from '../ddz-rules.ts';
+import { DDZ_PATTERNS, PATTERNS, miniCards, patternTile } from './patterns.ts';
 
 export function applyAudio(s: Settings = getSettings()): void {
   audio.apply({ volume: s.volume, music: s.music, muted: s.muted });
@@ -107,6 +108,7 @@ export function openSettings(scene: Phaser.Scene, opts: { onTutorial?: () => voi
   rule('双下两人合计两张大王抗贡', [{ label: '算', value: '1' }, { label: '不算', value: '0' }], rules.antiTributeCombined ? '1' : '0', (v) => setRule({ antiTributeCombined: v === '1' }));
   const tb = new Button(scene, colR + 90, y + P, 180, 50, '重看引导', 'wood', () => {
     setTutorialDone(false);
+    setDdzTutorialDone(false);
     m.close();
     opts.onTutorial?.();
   }, 'restart');
@@ -187,6 +189,37 @@ export function openRules(scene: Phaser.Scene, onClose?: () => void, level?: num
   };
   tabs.forEach((t, i) => {
     const btn = new Button(scene, -170 + i * 170, -248, 150, 48, t, i === 0 ? 'red' : 'red', () => show(i));
+    tabBtns.push(btn);
+    b.add(btn);
+  });
+  show(0);
+  return m;
+}
+
+/** 斗地主的规则页：牌型图示 + 叫分、算分两页文字（文字在 ddz-rules.ts，牌桌和主页共用） */
+export function openDdzRules(scene: Phaser.Scene, onClose?: () => void): Modal {
+  const m = modal(scene, panelW(scene), 640, '斗地主怎么玩', { onClose });
+  const b = m.body;
+  const page = scene.add.container(0, 0);
+  b.add(page);
+  const tabBtns: Button[] = [];
+  const show = (i: number): void => {
+    page.removeAll(true);
+    tabBtns.forEach((t, j) => t.setAlpha(j === i ? 1 : 0.62));
+    const lines = DDZ_RULE_TABS[i]!.lines;
+    let y = -190;
+    if (i === 0) {
+      DDZ_PATTERNS.forEach((p, k) => page.add(patternTile(scene, -405 + (k % 4) * 270, -170 + Math.floor(k / 4) * 124, p, 254)));
+      y = 210;
+    }
+    for (const l of lines) {
+      const t = text(scene, -520, y, l, { size: i === 0 ? TYPE.label : TYPE.body, color: COLOR.ink, ox: 0, oy: 0, wrap: 1040, align: 'left' });
+      page.add(t);
+      y += t.height + (i === 0 ? 6 : 16);
+    }
+  };
+  DDZ_RULE_TABS.forEach((t, i) => {
+    const btn = new Button(scene, -170 + i * 170, -248, 150, 48, t.tab, 'red', () => show(i));
     tabBtns.push(btn);
     b.add(btn);
   });

@@ -22,7 +22,7 @@ src/net/    玩法无关的联机部分：hall 牌馆的房间规则（一个 Ro
 src/view/   画面层（Phaser 4）：scenes 场景、table 牌桌部件（nudge 顺手提示和催促炸弹；其余互动在 kit 的 table-fun）、ui 组件与弹窗（kit 按钮和弹窗、panels 设置/战绩/规则/确认框、patterns 牌型图示、cloud 云朵图标、stake 选档、focus 画布里的键盘焦点）、idle 闲着时降帧、art 程序生成 SVG、audio 合成音效、store 存储、
             recap 每副复盘、highlights 名场面、suggest 公开事件后的短语建议、attention 轮到我时的振动和标题闪烁、lobby 回大厅、platform 有没有平台（单独部署）、
             share-card 结算页的分享卡（kit 的 share）、social 报位置和收好友邀请（kit 的 social）；
-            斗地主：scenes/DdzScene 三人桌、ddz-session 单机会话、ddz-view 理牌分列和牌型说法、ddz-daily 每日挑战（种子、榜名、交分）
+            斗地主：scenes/DdzScene 三人桌、ddz-session 单机会话、ddz-view 理牌分列和牌型说法、ddz-daily 每日挑战（种子、榜名、交分）、ddz-rules 玩法说明文字（牌桌和主页的"规则"共用，`ui/panels.ts` 的 `openDdzRules`）、ddz-tutorial 新手引导（外壳与掼蛋共用 `tutorial.ts` 的 `runTutorialSteps`）
 src/debug/  URL 参数、调试跳转（jump）、window.__game 调试桥
 worker/     线上 Worker：main.ts 部署入口（只导出默认导出和 Durable Object 类：workerd 把入口的每个具名导出都当入口，多导出常量单独部署时起不来）、index.ts 请求处理、gate.ts 登录闸门和房间路由、room.ts 联机房间、match.ts 快速匹配的排队、
             stake.ts 单机实盘的带入 / 结回 / 放弃（转给平台钱包 WALLET）
@@ -266,6 +266,7 @@ docs/       design.md 设计、rules.md 规则核实、core-api.md 接口、stak
 | `guandan.variant` | 主页上次选的玩法：`'guandan'` / `'ddz'`（只在 `?ddz=1` 时读） |
 | `guandan.ddz.save` | 斗地主进行中的一局：`{ v, state: DdzState, level, counted, dealsCounted }`；规则版本不对或整局结束就删 |
 | `guandan.ddz.stats` | 斗地主战绩：局数、胜局、副数、赢的副数、当地主几次、当地主赢几次、春天次数（只在本机，不进云同步） |
+| `guandan.ddz.tutorial` | 斗地主单机的新手引导是否看过 `{ v, done }`（第一次进单机娱乐牌桌弹，4 步；好友房、实盘、每日、托管、带 seed 的调试开局不弹；设置里"重看引导"一并清掉；只在本机，不进云同步） |
 | `guandan.ddz.stake` | 斗地主单机实盘这一场：`{ v, userId, ref, tier, share, until, state, settle }`；只在本机、不进云同步；结回或退回后删 |
 | `guandan.<槽>.pre-switch.<userId>.restored` | 上面的备份并回本地、传上去之后改名到这里（安全副本），以后不再并——"当前连胜"会归零，反复并会被旧值抬回去 |
 

@@ -32,7 +32,8 @@ import { DDZ_SEAT_PERSON, seatIdentity, seatName, seatPerson, setTablePersons } 
 import { goLobby, inOnlineGame, leaveText } from '../lobby.ts';
 import { lineFor, thinkTime, type Situation } from '../personas.ts';
 import { lobbyName } from '../platform.ts';
-import { getSettings, updateSettings } from '../store.ts';
+import { ddzTutorialDone, getSettings, updateSettings } from '../store.ts';
+import { runDdzTutorial } from '../ddz-tutorial.ts';
 import { COLOR, TYPE, minHit } from '../theme.ts';
 import { CardView } from '../table/card.ts';
 import { banner, bigWord, burst, flash, rays, shake } from '../table/fx.ts';
@@ -42,9 +43,9 @@ import { SeatView } from '../table/seats.ts';
 import { TrickView } from '../table/trick.ts';
 import { hasLayer } from '../ui/focus.ts';
 import { Button, iconButton, modal, setHit, text, toast, worldH, worldW, type Modal } from '../ui/kit.ts';
-import { applyAudio, confirm } from '../ui/panels.ts';
+import { applyAudio, confirm, openDdzRules } from '../ui/panels.ts';
 
-type Overlay = 'settle' | 'gameOver' | 'menu' | null;
+type Overlay = 'settle' | 'gameOver' | 'menu' | 'tutorial' | null;
 
 /** 叫分按钮：0 = 不叫 */
 const BIDS = [0, 1, 2, 3] as const;
@@ -475,23 +476,19 @@ export class DdzScene extends Phaser.Scene {
   }
 
   private openRules(): void {
-    const m = modal(this, 900, 600, '斗地主怎么玩', { onClose: () => this.closeOverlay() });
-    this.openOverlay('menu', m);
-    const lines = [
-      '一副 54 张，三人各 17 张，留 3 张底牌。轮流叫 1 分、2 分、3 分（只能比前面的高），叫得最高的当地主，拿走底牌先出。都不叫就重发；连着三次都不叫，第四次发完直接由先叫的人按 1 分当地主。',
-      '地主一个人对两个农民：谁先出完谁那边赢。',
-      '牌从小到大：3 4 5 … K A 2 小王 大王。同样的牌型、张数一样才能压，点数大的压小的。',
-      '牌型：单张、对子、三张、三带一、三带一对、顺子（5 张起）、连对（3 对起）、飞机（可带同样多的单张或对子）、四带二、四带两对、炸弹、王炸。顺子、连对、飞机里不能有 2 和王。',
-      '炸弹压一切别的牌型，王炸最大。每出一个炸弹或王炸翻一倍；春天（农民一张没出）、反春（地主只出了一手）也翻一倍。',
-      '每副的分 = 叫分 × 倍数：地主赢拿两份，两个农民各输一份；农民赢反过来。三家加起来总是 0。',
-    ];
-    // 一条可能折成两行：按实际高度往下排
-    let y = -224;
-    for (const l of lines) {
-      const t = text(this, -400, y, l, { size: TYPE.body, color: COLOR.ink, ox: 0, oy: 0, wrap: 800, align: 'left' });
-      m.body.add(t);
-      y += t.height + 14;
-    }
+    this.openOverlay('menu', openDdzRules(this, () => this.closeOverlay()));
+  }
+
+  /** 第一次玩单机娱乐出新手引导：好友房、实盘、每日、托管、URL 调试开局都不弹 */
+  private wantsTutorial(): boolean {
+    return !ddzTutorialDone() && !this.net && !this.ses.autoplay && !this.ses.daily && !(this.ses instanceof DdzStakeSession) && app.params?.seed === null;
+  }
+
+  private async startTutorial(): Promise<void> {
+    this.overlay = 'tutorial';
+    this.refreshButtons();
+    await runDdzTutorial(this);
+    this.overlay = null;
   }
 
   private openOverlay(kind: Overlay, m: Modal): void {
@@ -914,6 +911,7 @@ export class DdzScene extends Phaser.Scene {
         this.hand.setHand(v.hand, 0, { animate: false });
         this.dealToOthers(W / 2, 250);
         await this.hand.dealIn(W / 2, 250);
+        if (this.wantsTutorial()) await this.startTutorial();
         break;
       }
       case 'bid': {
