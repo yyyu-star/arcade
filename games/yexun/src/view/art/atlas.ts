@@ -15,6 +15,7 @@ import { SPRITES9 } from './sprites9.ts';
 import { SPRITES10 } from './sprites10.ts';
 import { SPRITES11 } from './sprites11.ts';
 import { SPRITES12 } from './sprites12.ts';
+import { SPRITES13 } from './sprites13.ts';
 import { HERO_SPRITES } from './heroes.ts';
 import { INK, artRng } from './draw.ts';
 
@@ -69,7 +70,7 @@ export const RAID_TEX = 'atlas8';
 
 /** 把精灵画好、按高度排成一行行装进图集 */
 export function buildAtlas(res: number): Atlas {
-  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...digitDefs()], res);
+  return pack([...SPRITES, ...SPRITES2, ...SPRITES3, ...SPRITES4, ...SPRITES5, ...SPRITES6, ...SPRITES7, ...SPRITES11, ...SPRITES13, ...digitDefs()], res);
 }
 
 /** 各地区的特色怪（sprites12）也装不进主图集，单独一张；守夜、夜探都要用 */

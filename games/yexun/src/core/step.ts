@@ -51,6 +51,7 @@ import {
   MAX_WEAPON_LEVEL,
   MAX_WEAPONS,
   DUAL_FX,
+  PAPER_FX,
   MERGES,
   PASSIVE_IDS,
   PASSIVES,
@@ -1636,6 +1637,9 @@ function fireWeapons(w: World, g: Grid): void {
       case 'crane':
         craneTick(w, g, k, wp, s, e);
         break;
+      case 'zhibing':
+        paperTick(w, k, wp, s, e);
+        break;
     }
   }
 }
@@ -1799,6 +1803,89 @@ function craneTick(w: World, g: Grid, k: number, wp: { timer: number; phase: num
     }
   }
   wp.timer = 4;
+}
+
+/** 纸兵：不够数就隔 cd 拍在主角身边补一个（剪刀让它活得更久） */
+function paperTick(w: World, k: number, wp: { timer: number; phase: number }, s: WeaponStats, e: { cd: number; amount: number; dmg: number }): void {
+  if (--wp.timer > 0) return;
+  let have = 0;
+  for (let i = 0; i < MAX_SHOTS; i++) if (w.sAlive[i] && w.sKind[i] === Shot.Paper && w.sSlot[i] === k) have++;
+  if (have >= e.amount) {
+    wp.timer = 6;
+    return;
+  }
+  wp.timer = e.cd;
+  const life = Math.round(s.duration * w.stats.durMul * (1 + PAPER_FX.jiandaoLife * (w.passives.jiandao ?? 0)));
+  const a = (wp.phase++ * 37) & (DIR_N - 1);
+  addShot(w, Shot.Paper, w.x + dcos(a) * 40, w.y + dsin(a) * 30, 0, 0, life, e.dmg, 20, 0, k, have);
+  w.ev.push(Ev.Fire, w.x, w.y, WEAPON_CODE.zhibing);
+}
+
+/**
+ * 纸兵这一拍：找 area 内最近的怪走过去，贴上了就停下顶住——每 rehit 拍打一下、把怪往回顶；
+ * 贴身时每拍多折 1 拍寿（挡怪是要付代价的）。没有怪就跟在主角身边。寿尽倒下：撒豆成兵炸开、火兵留火、鸣兵震开。
+ */
+function movePaper(w: World, g: Grid, i: number, k: number, s: WeaponStats): void {
+  const x = w.sX[i]!;
+  const y = w.sY[i]!;
+  const area = s.area * w.stats.areaMul;
+  const t = nearest(w, g, x, y, area);
+  let touching = false;
+  if (t >= 0) {
+    const dx = w.eX[t]! - x;
+    const dy = w.eY[t]! - y;
+    const d = fsqrt(dx * dx + dy * dy) || 1;
+    const reach = w.sR[i]! + ENEMIES[w.eKind[t]!]!.r * w.eSize[t]!;
+    if (d > reach) {
+      w.sX[i] = x + (dx / d) * s.speed;
+      w.sY[i] = y + (dy / d) * s.speed;
+    } else touching = true;
+  } else {
+    // 没有怪：回到主角身边（按编号错开站位）
+    const a = (w.sIdx[i]! * 41) & (DIR_N - 1);
+    const tx = w.x + dcos(a) * 60;
+    const ty = w.y + dsin(a) * 40;
+    const dx = tx - x;
+    const dy = ty - y;
+    const d = fsqrt(dx * dx + dy * dy);
+    if (d > s.speed) {
+      w.sX[i] = x + (dx / d) * s.speed * 1.4;
+      w.sY[i] = y + (dy / d) * s.speed * 1.4;
+    }
+  }
+  if (touching) {
+    const n = g.query(w, w.sX[i]!, w.sY[i]!, w.sR[i]! + 24);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) {
+      const j = scratch[q]!;
+      hitEnemy(w, j, w.sDmg[i]!, k, w.eX[j]! - w.sX[i]!, w.eY[j]! - w.sY[i]!, s.knock, s.rehit);
+    }
+    w.sLife[i]!--;
+    if (w.merges.includes('huobing') && --w.sDist[i]! <= 0) {
+      w.sDist[i] = DUAL_FX.paperFire.every;
+      addShot(w, Shot.Burn, w.sX[i]!, w.sY[i]!, 0, 0, DUAL_FX.paperFire.life, w.sDmg[i]! * DUAL_FX.paperFire.mul, DUAL_FX.paperFire.r, 0, k, 0);
+    }
+  }
+  if (--w.sLife[i]! > 0) return;
+  paperFall(w, g, i, k, s);
+  killShot(w, i);
+}
+
+function paperFall(w: World, g: Grid, i: number, k: number, s: WeaponStats): void {
+  const x = w.sX[i]!;
+  const y = w.sY[i]!;
+  const dmg = w.sDmg[i]!;
+  const evolved = w.weapons[k]?.evolved ?? false;
+  w.ev.push(Ev.Paper, x, y, 0, 0);
+  const ring = (r: number, d: number, knock: number, kind: number): void => {
+    w.ev.push(Ev.Paper, x, y, kind, r);
+    const n = g.query(w, x, y, r);
+    for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
+    for (let q = 0; q < n; q++) hitEnemy(w, scratch[q]!, d, -1, w.eX[scratch[q]!]! - x, w.eY[scratch[q]!]! - y, knock, 0, k);
+  };
+  if (evolved) ring(PAPER_FX.boomR * w.stats.areaMul, dmg * PAPER_FX.boomMul, s.knock, 1);
+  if (w.merges.includes('mingbing')) ring(DUAL_FX.paperBell.r * w.stats.areaMul, dmg * DUAL_FX.paperBell.mul, DUAL_FX.paperBell.knock, 2);
+  if (w.merges.includes('huobing')) addShot(w, Shot.Burn, x, y, 0, 0, DUAL_FX.paperFire.deathLife, dmg * DUAL_FX.paperFire.mul, DUAL_FX.paperFire.deathR, 0, k, 0);
 }
 
 /**
@@ -2221,6 +2308,10 @@ function moveShots(w: World, g: Grid): void {
       if (r >= w.sDist[i]!) killShot(w, i);
       continue;
     }
+    if (kind === Shot.Paper) {
+      movePaper(w, g, i, k, s);
+      continue;
+    }
     if (kind === Shot.Burn) {
       const n = g.query(w, w.sX[i]!, w.sY[i]!, w.sR[i]!);
       for (let q = 0; q < n; q++) scratch[q] = g.out[q]!;
@@ -2631,7 +2722,7 @@ function recompute(w: World): void {
   s.luck = 0.1 * p('huangli');
   s.xpMul = 1 + 0.08 * p('lingzhi') + 0.12 * p('yinhun');
   s.coinBonus = 0.12 * p('yinhun');
-  s.durMul = 1 + 0.1 * p('modou');
+  s.durMul = 1 + 0.1 * p('modou') + 0.06 * p('jiandao');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
   // 永久加成（实盘为空）
@@ -2837,10 +2928,14 @@ function upgradePassive(w: World, id: PassiveId): void {
 }
 
 /** 三选一的候选：手上没满级的法器、还能拿的新法器、被动同理 */
+/** 实盘局不进卡池的新内容（Setup.live） */
+const LIVE_HIDDEN: readonly string[] = ['zhibing', 'jiandao'];
+
 function choicePool(w: World): { c: Choice; weight: number }[] {
   const pool: { c: Choice; weight: number }[] = [];
+  const hide = w.setup.live ? LIVE_HIDDEN : [];
   for (const id of WEAPON_IDS) {
-    if (w.banned.includes(id)) continue;
+    if (w.banned.includes(id) || hide.includes(id)) continue;
     const o = w.weapons.find((x) => x.id === id);
     if (o) {
       // 黄历：手上东西的升级更容易出（好卡）
@@ -2849,7 +2944,7 @@ function choicePool(w: World): { c: Choice; weight: number }[] {
   }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
-    if (w.banned.includes(id)) continue;
+    if (w.banned.includes(id) || hide.includes(id)) continue;
     const lv = w.passives[id];
     if (lv !== undefined) {
       if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 + w.stats.luck });

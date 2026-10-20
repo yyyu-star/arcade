@@ -189,9 +189,9 @@ describe('双修：确定性和登记', () => {
     });
   }
 
-  it('三个双修各有自己的颜色，两件法器的类型或五行不同', () => {
+  it('五个双修各有自己的颜色，两件法器的类型或五行不同', () => {
     const duals = MERGES.filter((m) => m.dual);
-    expect(duals.length).toBe(3);
-    expect(new Set(duals.map((m) => m.color)).size).toBe(3);
+    expect(duals.length).toBe(5);
+    expect(new Set(duals.map((m) => m.color)).size).toBe(5);
   });
 });

@@ -13,8 +13,8 @@ import { Rng } from '../src/core/rng.ts';
 import { mergeHint } from '../src/view/ui/mergeHint.ts';
 
 export type Skill = 'novice' | 'normal';
-export type Build = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire';
-export const BUILD_IDS: Build[] = ['sword', 'talisman', 'ward', 'wood', 'fire'];
+export type Build = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire' | 'paper';
+export const BUILD_IDS: Build[] = ['sword', 'talisman', 'ward', 'wood', 'fire', 'paper'];
 
 /** 各流派想要的法器（按先后）和被动（进化要的放前面；仙桃谁都会拿，排第三） */
 export const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] }> = {
@@ -28,6 +28,8 @@ export const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] 
   wood: { weapons: ['thunder', 'sword', 'petals', 'talisman', 'gourd'], passives: ['nianzhu', 'zhusha', 'xiantao', 'lingzhi', 'xianglu', 'luopan'] },
   // 火：符咒、火葫芦，火 2 件
   fire: { weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'], passives: ['xianglu', 'luopan', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'] },
+  // 纸兵（10-20）：纸兵顶在前面，葫芦、铃凑双修（火兵、鸣兵），灵 3 件（纸兵、葫芦、花）
+  paper: { weapons: ['zhibing', 'gourd', 'bell', 'petals', 'talisman'], passives: ['jiandao', 'modou', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'] },
 };
 
 const VIEW = 560;

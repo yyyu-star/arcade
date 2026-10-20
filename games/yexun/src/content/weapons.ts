@@ -5,12 +5,12 @@
  */
 
 // 顺序决定法器编号（事件、宝箱里用），只往后加
-export type WeaponId = 'sword' | 'talisman' | 'coins' | 'flysword' | 'thunder' | 'bell' | 'mirror' | 'gourd' | 'rope' | 'petals' | 'shield' | 'crane';
+export type WeaponId = 'sword' | 'talisman' | 'coins' | 'flysword' | 'thunder' | 'bell' | 'mirror' | 'gourd' | 'rope' | 'petals' | 'shield' | 'crane' | 'zhibing';
 
 /** 五行和类型标签（DESIGN.md 3.1、3.4：同标签凑件数有套装加成） */
 export type Element = '金' | '木' | '水' | '火' | '土';
 export type WeaponType = '剑' | '符' | '镇' | '灵';
-export type PassiveId = 'zhusha' | 'xianglu' | 'caoxie' | 'xiantao' | 'luopan' | 'daopao' | 'nianzhu' | 'lingpai' | 'huangli' | 'lingzhi' | 'modou' | 'yinhun';
+export type PassiveId = 'zhusha' | 'xianglu' | 'caoxie' | 'xiantao' | 'luopan' | 'daopao' | 'nianzhu' | 'lingpai' | 'huangli' | 'lingzhi' | 'modou' | 'yinhun' | 'jiandao';
 
 /** 一件法器在某一级的数值 */
 export interface WeaponStats {
@@ -367,6 +367,33 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       stats: { dmg: 56, cd: 36, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
     },
   },
+  // 10-20 新流派（纸人这个名字已经是怪了，所以叫纸兵）：召唤会走的纸兵替你挡怪。实盘局不进卡池（Setup.live），配好系数再开
+  zhibing: {
+    id: 'zhibing',
+    name: '纸兵',
+    icon: 'i_zhibing',
+    desc: '剪出几个纸兵，走去顶住最近的怪，边挡边打；挨打会折寿',
+    el: '土',
+    type: '灵',
+    // amount：同时最多几个；cd：补一个要几拍；area：多远内找怪；speed：走多快；duration：活几拍；dmg、rehit：贴身每隔几拍打一下；knock：把怪顶回去多远
+    base: { dmg: 11, cd: 120, area: 280, amount: 2, speed: 2.6, duration: 300, knock: 10, rehit: 15 },
+    ups: [
+      { text: '多一个纸兵', delta: { amount: 1 } },
+      { text: '伤害 +4', delta: { dmg: 4 } },
+      { text: '补得更快', delta: { cd: -25 } },
+      { text: '活得更久', delta: { duration: 90 } },
+      { text: '多一个纸兵', delta: { amount: 1 } },
+      { text: '伤害 +5、顶得更远', delta: { dmg: 5, knock: 4 } },
+      { text: '多一个纸兵', delta: { amount: 1 } },
+    ],
+    evolve: {
+      with: 'jiandao',
+      name: '撒豆成兵',
+      icon: 'i_zhibing_evo',
+      desc: '纸兵成群，倒下时炸开一圈',
+      stats: { dmg: 36, cd: 60, area: 320, amount: 7, speed: 3, duration: 420, knock: 14, rehit: 12 },
+    },
+  },
 };
 
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
@@ -416,6 +443,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   lingzhi: { id: 'lingzhi', name: '灵芝', icon: 'p_lingzhi', text: '魂珠经验 +8%', max: 5 },
   modou: { id: 'modou', name: '墨斗', icon: 'p_modou', text: '持续 +10%：火、绳、铜钱、护盾', max: 5 },
   yinhun: { id: 'yinhun', name: '引魂灯', icon: 'p_yinhun', text: '怪多 10%、快 5%，经验和铜钱 +12%', max: 5 },
+  jiandao: { id: 'jiandao', name: '剪刀', icon: 'p_jiandao', text: '持续 +6%，纸兵活得更久 +20%', max: 5 },
 };
 
 /**
@@ -424,7 +452,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
  * color：这个合成自己的颜色（图标底牌、合成演出、图鉴边）。
  */
 export interface MergeDef {
-  id: 'zhuxie' | 'leihuo' | 'yinyang' | 'fujian' | 'fenzhong' | 'linghua';
+  id: 'zhuxie' | 'leihuo' | 'yinyang' | 'fujian' | 'fenzhong' | 'linghua' | 'huobing' | 'mingbing';
   name: string;
   icon: string;
   desc: string;
@@ -442,6 +470,8 @@ export const MERGES: readonly MergeDef[] = [
   { id: 'fujian', name: '符剑合璧', icon: 'm_fujian', desc: '飞剑打中的怪被贴一张符，一秒多后炸开', a: 'flysword', b: 'talisman', color: '#ff5a4a', dual: true },
   { id: 'fenzhong', name: '焚天金钟', icon: 'm_fenzhong', desc: '护盾在身，外圈一圈火持续烧；盾碎时地上留下一圈火', a: 'shield', b: 'gourd', color: '#ff9a2e', dual: true },
   { id: 'linghua', name: '铃落桃花', icon: 'm_linghua', desc: '铃声一响，空中的花瓣追着怪落下，落点也更大', a: 'petals', b: 'bell', color: '#ff7eb6', dual: true },
+  { id: 'huobing', name: '火兵', icon: 'm_huobing', desc: '纸兵着了火，贴着怪烧；倒下时留一摊火', a: 'zhibing', b: 'gourd', color: '#ff7a3a', dual: true },
+  { id: 'mingbing', name: '鸣兵', icon: 'm_mingbing', desc: '纸兵腰上挂铃，倒下时铃声震开一圈怪', a: 'zhibing', b: 'bell', color: '#7fc0ff', dual: true },
 ];
 
 /** 双修的数值（拍、单位）。强度参照现有合成：只给一点额外输出，不翻倍 */
@@ -452,6 +482,12 @@ export const DUAL_FX = {
   ring: { radius: 120, inner: 0.55, every: 15, mul: 0.22, pools: 5, poolMul: 0.35, poolLife: 90, poolR: 40 },
   /** 铃落桃花：花瓣每拍朝最近的怪挪多远、多远内才追、落点多大 */
   petal: { speed: 6, reach: 180, bonusR: 4 },
+  /** 火兵：贴身时每隔几拍在脚下点一小摊火、倒下留一摊，火的伤害是纸兵伤害的几成；鸣兵：倒下时震开多大、伤害几成、震多远 */
+  paperFire: { every: 30, life: 60, r: 36, mul: 0.5, deathLife: 90, deathR: 48 },
+  paperBell: { r: 120, mul: 1.2, knock: 34 },
 } as const;
+
+/** 纸兵进化（撒豆成兵）倒下时炸开：半径、伤害是纸兵伤害的几成；剪刀每级纸兵寿命 +20% */
+export const PAPER_FX = { boomR: 80, boomMul: 1.5, jiandaoLife: 0.2 };
 
 export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];

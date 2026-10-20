@@ -91,6 +91,8 @@ export const Ev = {
   Market: 52,
   Key: 53,
   Vault: 54,
+  /** 纸兵倒下：a = 0 倒下 / 1 撒豆成兵炸开 / 2 鸣兵震开；b = 半径 */
+  Paper: 55,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

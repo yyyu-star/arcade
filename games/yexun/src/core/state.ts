@@ -14,7 +14,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 20;
+export const RULES_VERSION = 21;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -40,6 +40,8 @@ export const Shot = {
   Crane: 7,
   /** 三昧真火留在地上的火：sLife 拍后灭 */
   Burn: 8,
+  /** 纸兵：走去顶住最近的怪，sLife 是还能活几拍（贴身挨打折寿），sDist 是火兵下次点火还差几拍 */
+  Paper: 9,
 } as const;
 export type Shot = (typeof Shot)[keyof typeof Shot];
 
@@ -143,6 +145,11 @@ export interface Setup {
    * 界面不开、录像和存档里不会有（缺省 false，不改变任何正常对局）
    */
   noDual?: boolean;
+  /**
+   * 实盘局（platform/live.ts liveSetup 写）：10-20 起加的新内容（纸兵、剪刀）不进卡池，卡池和 0.4.0 一模一样，
+   * 实盘倍数按老内容配的系数照样成立；新内容的系数配好以后去掉（DESIGN 8.1）
+   */
+  live?: boolean;
   /**
    * 竖屏开的局：刷怪圈转 90°（纵向远、横向近）。竖屏看得见的世界是竖长条，横屏那圈的上下两边会落在屏幕里，
    * 怪凭空冒出来（10-20）。开局按屏幕定、录进录像，转屏不改（缺省 false = 横屏那圈）

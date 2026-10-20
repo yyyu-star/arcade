@@ -95,9 +95,9 @@ const PHASE_BANNER: Partial<Record<string, [string, string][]>> = {
 };
 
 /** 子弹种类 → 图集帧（光波画在 Graphics 上，这里给个占位） */
-const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane', [Shot.Burn]: 'burn' };
+const SHOT_FRAME: Partial<Record<number, string>> = { [Shot.Talisman]: 'talisman', [Shot.Coin]: 'coin', [Shot.Fly]: 'flysword', [Shot.Fireball]: 'fireball', [Shot.Wave]: 'ring', [Shot.Petal]: 'petal', [Shot.Crane]: 'crane', [Shot.Burn]: 'burn', [Shot.Paper]: 'zhibing_s' };
 
-const FIRE_SFX: Partial<Record<string, SfxName>> = { sword: 'sword', talisman: 'talisman', coins: 'coins', flysword: 'flysword', thunder: 'thunder', bell: 'bell', mirror: 'mirror', gourd: 'fire', rope: 'rope', petals: 'petal', crane: 'crane' };
+const FIRE_SFX: Partial<Record<string, SfxName>> = { sword: 'sword', talisman: 'talisman', coins: 'coins', flysword: 'flysword', thunder: 'thunder', bell: 'bell', mirror: 'mirror', gourd: 'fire', rope: 'rope', petals: 'petal', crane: 'crane', zhibing: 'talisman' };
 
 export interface GameDeps {
   world: World;
@@ -889,6 +889,19 @@ export class GameScene extends Phaser.Scene {
           const tint = parseInt(MERGES[ev.a[i]!]!.color.slice(1), 16);
           this.fx.spawn({ frame: 'ring', x, y: y - 20, life: 700, s0: 0.5, s1: 7, a0: 1, a1: 0, tint, depth: 60 });
           this.burst(x, y - 30, tint, 2.2);
+          break;
+        }
+        case Ev.Paper: {
+          // 纸兵倒下：碎纸片飘散；撒豆成兵炸开一圈金黄，鸣兵荡开一圈铃声
+          const kind = ev.a[i]!;
+          if (kind === 0) {
+            for (let n = 0; n < (LOW_MEMORY ? 2 : 5); n++) this.fx.spawn({ frame: 'shard', x, y: y - 16, vx: (Math.random() - 0.5) * 140, vy: -60 - Math.random() * 80, g: 300, life: 480, s0: 1, s1: 0.6, tint: 0xf4d675, rot: Math.random() * 6, spin: 6 });
+          } else {
+            const tint = kind === 1 ? 0xf2c94c : 0x7fc0ff;
+            this.fx.spawn({ frame: 'ring', x, y: y - 10, life: 320, s0: 0.3, s1: (ev.b[i]! * 2) / 128, a0: 0.9, a1: 0, tint, depth: 60 });
+            if (kind === 1) this.burst(x, y - 12, 0xf4d675, ev.b[i]! / 40);
+            else sfx.play('bell', { volume: 0.25, pitch: 1.3 });
+          }
           break;
         }
         case Ev.Seal:
@@ -1717,7 +1730,7 @@ export class GameScene extends Phaser.Scene {
         const f = this.frame(key);
         const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
         img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
-        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : 1.2;
+        const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : kind === Shot.Paper ? 1.1 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);
         // 光波不用图，画在 Graphics 上（drawGfx）
@@ -1764,6 +1777,12 @@ export class GameScene extends Phaser.Scene {
           s.trail = 1;
           for (let k = 0; k < 4; k++) this.fx.spawn({ frame: 'petal', x, y: y - 4, vx: (Math.random() - 0.5) * 200, vy: -70 - Math.random() * 70, g: 320, life: 460, s0: 1.8, s1: 0.8, rot: Math.random() * 6, spin: 9 });
         }
+      } else if (kind === Shot.Paper) {
+        // 纸兵：朝走的方向，走路一晃一晃；火兵染成橙红，快到寿时变淡
+        const dx = w.sX[i]! - w.sPX[i]!;
+        if (Math.abs(dx) > 0.2) s.img.setFlipX(dx < 0);
+        s.img.setRotation(Math.sin(this.now * 0.018 + i * 1.7) * 0.12).setAlpha(Math.min(1, w.sLife[i]! / 30));
+        if (w.merges.includes('huobing')) s.img.setTint(0xffb070);
       } else if (kind === Shot.Crane) {
         const dx = w.sX[i]! - w.sPX[i]!;
         if (Math.abs(dx) > 0.3) s.img.setFlipX(dx < 0);

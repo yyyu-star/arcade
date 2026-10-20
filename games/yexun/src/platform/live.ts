@@ -34,9 +34,9 @@ const LIVE_FETCH_MS = 10_000;
 export function liveSetup(tier: LiveTier, seed: number, raid?: RaidLiveTemplate, character: CharacterId = 'xiaodao', map: MapId = 'snow'): Setup {
   if (raid && tier !== 'luxe') {
     // 夜探实盘：危险档按夜探自己的表（小 0、中 2、大 3）
-    return { seed, mode: 'raid', danger: RAID_LIVE.danger[tier] as Setup['danger'], raid: { template: raid, live: tier }, character, perks: {}, assist: false };
+    return { seed, mode: 'raid', danger: RAID_LIVE.danger[tier] as Setup['danger'], raid: { template: raid, live: tier }, character, perks: {}, assist: false, live: true };
   }
-  return { seed, mode: 'vigil', danger: LIVE_TIERS[tier].danger, character, map, perks: {}, assist: false };
+  return { seed, mode: 'vigil', danger: LIVE_TIERS[tier].danger, character, map, perks: {}, assist: false, live: true };
 }
 
 const CHARS: readonly CharacterId[] = CHARACTER_IDS;
