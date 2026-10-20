@@ -188,11 +188,11 @@ export interface Balance {
   };
   /** 道具、日历、事件、难度的效果数值，键为内容 id。描述文字从这里取数，改数值不用改文案 */
   fx: Record<string, Record<string, number>>;
-  /** 0.4 重做：真实行情驱动（state.real 不为 null 时生效），见 docs/core-api-0.4-redo.md 第 3 节 */
+  /** 0.4 重做：真实行情驱动（state.real 不为 null 时生效），见 docs/core-api.md 第 7 节 */
   real: RealParams;
-  /** 0.4 C：仓位、押跌、抵押（state.ext 不为 null 时生效），见 docs/core-api-0.4-redo.md 第 7 节 */
+  /** 0.4 C：仓位、押跌、抵押（state.ext 不为 null 时生效），见 docs/core-api.md 第 8 节 */
   ext: ExtParams;
-  /** 0.5：个股照搬真实走势（state.real.track 为 true 时生效），见 docs/core-api-0.5.md */
+  /** 0.5：个股照搬真实走势（state.real.track 为 true 时生效），见 docs/core-api.md 第 7.2 节 */
   track: TrackParams;
   /** 0.5：情报从真实未来推算（真实行情 0.5 模式） */
   intel: IntelParams;

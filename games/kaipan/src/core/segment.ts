@@ -5,7 +5,7 @@
  * 把本局登场的 6 个风口用到的部分（大盘、行业、绑定的真实股票）存进存档的 state.real，之后整局只从存档取数，
  * 读档、回放都不需要再下载。价格只存相对涨跌（基点），不存真实价格。
  *
- * 文件格式见 docs/core-api-0.4-redo.md 第 2 节。
+ * 文件格式见 docs/core-api.md 第 7.3 节。
  */
 import type { ThemeId } from './types.ts';
 

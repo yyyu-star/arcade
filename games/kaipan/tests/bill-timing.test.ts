@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BILL_MS, END_CUTSCENE_MS, OLD_BILL_MS, billStageMs } from '../src/view/trade/billTiming.ts';
 
-/** 0.17.0 月底账单舞台：每月自动停 ≤ 2 秒；一局 12 个月加起来不能比以前多出半分钟（art-v3 第 8 节）。 */
+/** 0.17.0 月底账单舞台：每月自动停 ≤ 2 秒；一局 12 个月加起来不能比以前多出半分钟（docs/art-v3.md 第 5 节）。 */
 describe('月底账单舞台的时长', () => {
   it('每个月自动停不超过 2 秒，简短模式更短', () => {
     expect(billStageMs()).toBeLessThanOrEqual(2000);

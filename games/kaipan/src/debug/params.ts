@@ -3,7 +3,7 @@ import { dailyDate } from '../view/labels.ts';
 import type { AnimOverride } from '../view/options.ts';
 
 /**
- * URL 参数（调试与自动化用），开局部分映射到 core 的 RunSetup（docs/core-api-0.3.md 第 12 节）：
+ * URL 参数（调试与自动化用），开局部分映射到 core 的 RunSetup（docs/core-api.md 第 14 节）：
  * - seed：指定种子开新局（不读存档，跳过开始菜单）
  * - account（开局账户，元）、items=a,b（道具 id）、friends=a,b（额外群友）、themes=a,b,…（6 个登场题材）、
  *   holdings=a,b（开局持仓的股票 id）、difficulty（难度等级 1..8）、persona（人设 id）
