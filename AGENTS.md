@@ -13,19 +13,20 @@ arcade/
 ├─ AGENTS.md / CLAUDE.md   本文件（总规范）
 ├─ README.md               总览：有哪些模块、怎么开发、怎么部署
 ├─ CONTRIBUTING.md         合作指南：分支、PR、审阅、合并、部署、回滚
-├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）、table-fun.md（牌桌互动规范：三个牌桌游戏共用）、balance.md（难度和收益的配平目标）、social.md（社交：分享、在线、邀请、旁观、好友榜和分期）
-├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh、verify-latest.sh（部署前核对）
+├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）、table-fun.md（牌桌互动规范：牌桌游戏共用）、balance.md（难度和收益的配平目标）、social.md（社交：分享、在线、邀请、旁观、好友榜和分期）
+├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、selfhost/（自托管打包和运维脚本）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh、verify-latest.sh（部署前核对）
 ├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
 ├─ games/
 │  ├─ kaipan/              模块：《开盘》（Worker 名 kaipan，路径 /games/kaipan/）
-│  ├─ guandan/             模块：掼蛋（Worker 名 guandan，路径 /games/guandan/）
+│  ├─ guandan/             模块：掼蛋（Worker 名 guandan，路径 /games/guandan/；正在重构成「牌馆」，掼蛋在 src/variants/guandan，之后加斗地主，方案见 games/guandan/docs/doudizhu.md）
 │  ├─ texas/               模块：德州扑克（Worker 名 texas，路径 /games/texas/；设计见 games/texas/DESIGN.md）
-│  ├─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法，先做川麻·血战到底，设计见 games/mahjong/DESIGN.md）
+│  ├─ mahjong/             模块：《雀馆》麻将（Worker 名 mahjong，路径 /games/mahjong/；一套引擎多种玩法，川麻·血战到底已上线，立直麻将规则核心已写好、还没上线，设计见 games/mahjong/DESIGN.md、docs/riichi.md）
 │  ├─ racing/              模块：《飞驰》回合制卡牌赛车（社区贡献者的游戏，Worker 名 racing，路径 /games/racing/）
 │  └─ yexun/               模块：《夜巡》幸存者类动作游戏，守夜 / 夜探两个模式（Worker 名 yexun，路径 /games/yexun/，设计见 games/yexun/DESIGN.md）
 └─ packages/
-   └─ arcade-kit/          共用包：联机房间基类、开房进房入口、浏览器连接器、协议、计量、表情道具（版本见它的 package.json；入场票以后加）。只测不部署（pkg-arcade-kit.yml）
+   ├─ arcade-kit/          共用包（已发 npm：@yyyu-star/arcade-kit，版本见它的 package.json）：联机房间基类、开房进房入口、浏览器连接器、协议、计量、牌桌互动、聊天、分享卡、社交部件。只测不部署（pkg-arcade-kit.yml）
+   └─ arcade-host/         自托管运行时：在一个 workerd 进程里跑平台和所有游戏，补上 D1（SQLite 或 PostgreSQL）、静态资源、路由、定时任务。只测不部署（pkg-arcade-host.yml）
 ```
 
 "模块" = `platform/`、`games/<id>/`、`packages/<name>/` 中的任意一个目录。
@@ -48,7 +49,7 @@ arcade/
      游戏自己的资源（静态资源、自己的 Durable Object、`vars`）写在里面，不带平台也能部署成一个能玩的游戏（共用包 0.10.0 的独立模式：游客身份）；
      接平台的服务绑定（`ARCADE`、`WALLET`）、`GATE: "login"`、路由、`SITE_ORIGIN` 由维护者的部署工具（`tools/deployer/deploy.mjs`）按 `tools/workers.json` 的声明在本站部署时补上，
      游戏不用写（过渡期写了的必须和规范形式一模一样）；平台的 Secret 用 `wrangler secret put` 设，不进仓库；
-   - 浏览器存储（localStorage、IndexedDB、Cache）的 key 一律加 `<游戏id>.` 前缀，比如开盘用 `kaipan.save`。平台自己的 key 用 `arcade.` 前缀（目前是 sessionStorage 的 `arcade.reloaded`：平台 0.9.8 起，发版后分块加载失败时防重复重载；localStorage 的 `arcade.sound`：平台 0.10.26 起，记住声音关没关）。所有游戏和平台同域，前缀是唯一的隔离手段；
+   - 浏览器存储（localStorage、IndexedDB、Cache）的 key 一律加 `<游戏id>.` 前缀，比如开盘用 `kaipan.save`。平台自己的 key 用 `arcade.` 前缀，目前有 sessionStorage 的 `arcade.reloaded`（发版后分块加载失败时防重复重载）和 localStorage 的 `arcade.sound`（记住声音关没关）。所有游戏和平台同域，前缀是唯一的隔离手段；
    - 游戏挂在 `/games/<id>/` 下，资源一律用相对路径，不假设自己在域名根；回大厅的入口例外，指向平台首页 `/`（平台的公开地址）；
    - 线上 Worker 数量 = 平台 1 个 + 每个游戏 1 个，**不另建测试或实验 Worker**（不设 staging）；需要临时实验时用完当天删除。
 6. **不写死本机路径**：代码和配置里不能有 `/root/`、`/home/`、`/tmp/` 这类绝对路径。临时文件用 `os.tmpdir()` 或命令行参数传入。
@@ -69,8 +70,10 @@ CI 每个 PR 都跑，部署前 `tools/deployer/deploy.mjs` 再严格查一遍�
   所以部署用的配置就是模块根目录那份 `wrangler.jsonc` 加上 `deploy.mjs` 按 `tools/workers.json` 叠加的平台绑定、`GATE`、关掉的 `workers_dev`，构建脚本改它、改 `.wrangler/` 都不起作用；Worker 必须能被 wrangler 打成单个文件。
 - **只部署一个游戏（不要平台）**：游戏的 `wrangler.jsonc` 本身就能部署（Deploy to Cloudflare 按钮或 fork 后 `npm run deploy`），得到一个 `workers.dev` 地址，
   以游客身份玩、好友房照常；没有登录、云存档、排行榜、钱包实盘。步骤见 [docs/new-game.md](docs/new-game.md) 第 7 节。
+- **自托管（不用 Cloudflare）**：`packages/arcade-host` 是运行时，`tools/selfhost/` 读各模块的 `wrangler.jsonc`、按部署工具同一套规则叠加平台绑定后打成发布包（裸 `workerd` 二进制加 systemd，或 Docker），
+  平台库在打包时二选一用 SQLite 或 PostgreSQL。它不改任何模块、不影响 Cloudflare 上的部署；模块代码因此只能依赖 Workers 运行时的标准能力。步骤见 [tools/selfhost/README.md](tools/selfhost/README.md)。
 - **拆成独立仓库**：`tools/split-module.sh games/<id>`，会生成带完整历史的分支 `split/<id>`，推到新仓库的 `main`；再按脚本里的说明搬部署流程、
-  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.10.1"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
+  把 `file:` 共用包换成 npm 上发布的版本（按别名装：`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，代码里的 `arcade-kit/...` 不用改）。线上 Worker、路由、存储前缀都不用改。
 - **新增一个游戏**（完整步骤见 [docs/new-game.md](docs/new-game.md)；PR 怎么审见 [docs/review-policy.md](docs/review-policy.md)）：
   1. 建 `games/<id>/`，满足第 1 节；
   2. 维护者确认 Cloudflare 账户里没有同名 Worker 后，把 `<id>` 加进 `tools/workers.json`（部署配置检查只放行名单里的 Worker），
@@ -143,6 +146,7 @@ dev 和 preview 监听 0.0.0.0，方便同一局域网里的手机、平板直�
 - **不碰真钱**：积分、筹码不能买、不能兑换、不能转让，不设现金或实物奖品。
 - **凭证**：不进 Git、不打印、不写进代码。部署凭证只放在 GitHub 环境 `production`（只许 main 用），本地需要时用自己家目录下、不进 Git 的 env 文件。
 - **注释和文档**：用中文，写"为什么"，不写显而易见的"做什么"；风格跟着所在文件走。
+- **文档跟着代码走**：每个 PR 同步更新受影响的文档（模块的 README、docs、AGENTS.md、CHANGELOG、游戏里的玩法说明；跨模块的改根 README 和 docs/），按代码现状写，删掉过时和重复的表达；过程和历史留给 CHANGELOG 和 git。文档没跟上的 PR 不合并。
 
 ## 5. Git 与发布
 
@@ -150,7 +154,7 @@ dev 和 preview 监听 0.0.0.0，方便同一局域网里的手机、平板直�
 - 每个克隆先执行 `git config core.hooksPath tools/git-hooks`：本地拦住直接推 main 和 force push。被拦了就改走 PR，不用 `--no-verify` 绕过。
 - 分支名 `<模块>/<简短说明>`；一个 PR 只改一个模块，标题以模块名开头（合并用 Squash，标题就是 main 上的提交信息）。
 - 提交：只暂存明确的路径，禁止 `git add -A` 或 `git add .`；提交信息以模块名开头；不 force push，不改写已推送的历史。
-- 开 PR 前自查这五条（2026-10-18 起；一晚 79 个 PR 里打回和上线后热修的，几乎都栽在这几处）：
+- 开 PR 前自查这五条（打回和上线后热修的，多数栽在这几处）：
   1. 每个要部署的 PR 都升版本：`package.json` 和 lockfile 一起改，`CHANGELOG.md` 写带日期的版本段，不攒"未发布"段（合并就会上线，版本要能和线上对上）；
   2. 金额、筹码数字不截断：放不下就换短说法（"最多输赢 X"、"4万"），不用"…"截；
   3. 新 CSS 限定在所属界面的根节点下（菜单、对局、面板各自加前缀），不写裸类名，免得串到别的界面；
