@@ -7,7 +7,7 @@ import { riichiOpen, RIICHI_GATED } from '../src/view/variants/riichi/gate.ts';
 import { handValue, scoreHead, yakuLines } from '../src/view/variants/riichi/summary.ts';
 import { roundName, scoreText, yakumanName } from '../src/view/variants/riichi/text.ts';
 import { tingOf } from '../src/view/variants/riichi/ting.ts';
-import { tableView } from '../src/view/variants/riichi/view.ts';
+import { tableView, windOf } from '../src/view/variants/riichi/view.ts';
 import { kinds } from './helpers.ts';
 
 const SETUP = { share: 2_000, base: 80, personas: [0, 1, 2, 3] };
@@ -53,6 +53,26 @@ describe('牌桌视图的换算', () => {
     expect(t.seats[0]!.won).toBeNull();
     s.phase = 'turn';
     expect(tableView(view(s, 0)).round).toBe(1);
+  });
+
+  test('结算停着时名牌的庄和自风按刚打完的这一局摆，和结算列表的风（windOf）一样；开了下一局再换', () => {
+    // 东三局 2 号坐庄、子家和了：规则核心已经换到下一局（3 号坐庄），结算列表还按 2 号坐庄写风
+    const s = RC.begin([1, 2, 3, 4, 5, 6, 7, 8], RC.defaults, ['human', 'ai', 'ai', 'ai'], SETUP) as RcState;
+    s.first = 0;
+    s.hand = 3;
+    s.dealer = 3;
+    s.history.push({ wind: 0, hand: 2, honba: 2, dealer: 2, end: 'ron', delta: [0, 8_600, 0, -8_600], wins: [{ seat: 1, from: 3, tile: 5, score: score('234m567p345s678s55p', '8s'), hand: [], melds: [], gain: 8_600, pao: null }], tenpai: null, dora: [], ura: [] });
+    s.phase = 'end';
+    const v = view(s, 0);
+    expect(v.seats.map((x) => x.wind)).toEqual([1, 2, 3, 0]);
+    const t = tableView(v);
+    expect(t.dealer).toBe(2);
+    expect(t.seats.map((x) => x.wind)).toEqual([0, 1, 2, 3].map((i) => windOf(2, i)));
+    expect(t.seats.map((x) => x.wind)).toEqual([2, 3, 0, 1]);
+    s.phase = 'turn';
+    const next = tableView(view(s, 0));
+    expect(next.dealer).toBe(3);
+    expect(next.seats.map((x) => x.wind)).toEqual([1, 2, 3, 0]);
   });
 });
 

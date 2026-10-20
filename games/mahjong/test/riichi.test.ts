@@ -233,6 +233,40 @@ describe('和牌收点', () => {
 
 // ---------- 立直、一发、振听 ----------
 
+describe('庄家轮转和庄家的点数', () => {
+  // 断幺平和、宝牌 2（指示 5p，手里 66p）：4 番 30 符，基本点 1,920。子家荣和 ×4 = 7,700，庄家荣和 ×6 = 11,600
+  test('东一局子家和了换庄；东二、东三局庄家荣和按 ×6 收（加本场），庄家和了连庄不换庄', () => {
+    let s = table(['*6s', TANYAO, '*', '*'], 0, '1z', { dealer: 0, dead: '5p' });
+    s = discard(s, 0, '6s');
+    s = claim(s, 1, 'ron');
+    expect(s.history.at(-1)!.wins[0]!.gain).toBe(7_700);
+    expect([s.wind, s.hand, s.dealer, s.honba]).toEqual([0, 1, 1, 0]);
+
+    // 东二局：1 号坐庄，2 号放铳
+    let t = table(['*', TANYAO, '*6s', '*'], 2, '1z', { dealer: 1, dead: '5p' });
+    t.first = 0;
+    t.hand = 1;
+    t = discard(t, 2, '6s');
+    t = claim(t, 1, 'ron');
+    expect(t.history.at(-1)!.dealer).toBe(1);
+    expect(t.history.at(-1)!.wins[0]!.gain).toBe(11_600);
+    expect(t.points[2]).toBe(25_000 - 11_600);
+    expect([t.hand, t.dealer, t.honba]).toEqual([1, 1, 1]);
+
+    // 东三局 2 本场：2 号坐庄，3 号放铳
+    let u = table(['*', '*', TANYAO, '*6s'], 3, '1z', { dealer: 2, dead: '5p' });
+    u.first = 0;
+    u.hand = 2;
+    u.honba = 2;
+    u = discard(u, 3, '6s');
+    u = claim(u, 2, 'ron');
+    expect(u.history.at(-1)!.dealer).toBe(2);
+    expect(u.history.at(-1)!.wins[0]!.gain).toBe(11_600 + 600);
+    expect(u.points[3]).toBe(25_000 - 12_200);
+    expect([u.hand, u.dealer, u.honba]).toEqual([2, 2, 3]);
+  });
+});
+
 describe('立直', () => {
   test('立直后打出的牌没人和才放棒，一发开始；立直后只能打摸到的牌', () => {
     let s = table([TANYAO + '9m', '*', '*', '*'], 0, '1z2z3z4z5z');
