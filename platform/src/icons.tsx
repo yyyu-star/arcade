@@ -37,6 +37,16 @@ export function TrophyIcon() {
   );
 }
 
+/** 对话气泡加一颗星：动态 */
+export function FeedIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M4 4.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4H4A1.5 1.5 0 0 1 2.5 15V6A1.5 1.5 0 0 1 4 4.5z" fill="currentColor" />
+      <path d="M12 6.8l1.1 2.3 2.5.3-1.8 1.7.5 2.5-2.3-1.2-2.3 1.2.5-2.5-1.8-1.7 2.5-.3z" fill="#ffc83d" />
+    </svg>
+  );
+}
+
 /** 盾牌加勾：管理 */
 export function ShieldIcon() {
   return (

@@ -2,6 +2,7 @@
  * 入口：错误兜底 → 竖屏提示 → 读设置和 URL 参数 → 准备会话 → 起 Phaser。
  */
 import Phaser from 'phaser';
+import { reportErrors } from 'arcade-kit/report';
 import { mountBridge } from './debug/bridge.ts';
 import { jumpToAce, jumpToTribute } from './debug/jump.ts';
 import { parseParams } from './debug/params.ts';
@@ -10,6 +11,7 @@ import { anim } from './view/anim.ts';
 import { app } from './view/app.ts';
 import { audio } from './view/audio.ts';
 import { CloudSync } from './view/cloud.ts';
+import { DdzSession } from './view/ddz-session.ts';
 import { LOW_MEMORY, appBox, fitAppToViewport, isIOS, markForeground, markRenderLost, webglUsable } from './view/device.ts';
 import { hideErrorPanel, installErrorHandler, showErrorPanel } from './view/errors.ts';
 import { installIdleLimiter } from './view/idle.ts';
@@ -19,21 +21,24 @@ import { mountRotateHint, setRotateLobbyLabel } from './view/orientation.ts';
 import { detectOnce, lobbyName, standalone } from './view/platform.ts';
 import { mountSocialOnce } from './view/social.ts';
 import { BootScene } from './view/scenes/BootScene.ts';
+import { DdzScene } from './view/scenes/DdzScene.ts';
 import { TableScene } from './view/scenes/TableScene.ts';
 import { TitleScene } from './view/scenes/TitleScene.ts';
 import { Session, randomSeed } from './view/session.ts';
-import { EMPTY_STATS, KEYS, backupKey, SYNC_SLOTS, getSettings, getStats, loadSave, onSyncedChange, rawStore, tutorialDone, type SyncSlot } from './view/store.ts';
+import { EMPTY_STATS, KEYS, backupKey, SYNC_SLOTS, getSettings, getStats, loadDdzSave, loadSave, onSyncedChange, rawStore, tutorialDone, type SyncSlot } from './view/store.ts';
 import { GAME_HEIGHT, RENDER_SCALE, worldWidthFor } from './view/theme.ts';
 import { dropBackdrops, ensureBackdrops } from './view/textures.ts';
 import { worldW } from './view/ui/kit.ts';
 import { applyAudio } from './view/ui/panels.ts';
 
 installErrorHandler();
+// 没人接住的报错报给平台（kit 0.22：只发报错文字、调用栈、路径、版本，不带账号；同一条一页只报一次）。兜底面板照旧给玩家看
+reportErrors({ game: 'guandan', version: __APP_VERSION__ });
 // 有没有平台（单独部署时没有）：开场景、进房、云存档都等它（kit 默认最多等 2.5 秒）
 const platform = detectOnce();
 // 竖屏提示层里的"大厅"：牌桌被盖住，有打到一半的存档（或好友房正在打）时用浏览器自带的确认框
 mountRotateHint(() => {
-  if ((app.net ? inOnlineGame() : savedGameInProgress()) && !window.confirm(leaveText())) return;
+  if ((app.net || app.ddzNet ? inOnlineGame() : savedGameInProgress()) && !window.confirm(leaveText())) return;
   goLobby();
 });
 
@@ -43,7 +48,12 @@ if (params.anim === false) anim.instant = true;
 if (params.speed) anim.forcedSpeed = params.speed;
 
 // URL 指定了开局（调试 / 自动化）：直接进牌桌。已有存档时这一局不写存档，免得覆盖玩家进度。
-if (params.seed !== null || params.jump !== null) {
+// 带 ddz=1 时开的是斗地主单机（jump 只有掼蛋有）
+if (params.ddz && params.seed !== null) {
+  const ses = DdzSession.fresh(params.seed, params.difficulty ?? getSettings().difficulty, undefined, !loadDdzSave());
+  ses.autoplay = params.autoplay;
+  app.ddz = ses;
+} else if (params.seed !== null || params.jump !== null) {
   const seed = params.seed ?? randomSeed();
   const rules = getSettings().rules;
   const start = params.jump === 'tribute' ? jumpToTribute(seed, rules) : params.jump === 'ace' ? jumpToAce(seed, rules) : createGame(seed, rules);
@@ -93,7 +103,7 @@ void platform.then(() => {
   else {
     void cloud.start();
     // 报位置、收好友邀请（0.13.0）：没登录 mountSocialOnce 自己不挂
-    void mountSocialOnce(() => app.net ?? lobbySession());
+    void mountSocialOnce(() => app.net ?? app.ddzNet ?? lobbySession());
   }
 });
 
@@ -129,7 +139,7 @@ const config: Phaser.Types.Core.GameConfig = {
   // 多重采样的缓冲按画布像素 ×4 份算；iOS 2 倍渲染时边缘锯齿本来就看不出，省下这块内存
   render: { maxTextures: navigator.webdriver ? 1 : -1, antialiasGL: LOW_MEMORY === 0 && !(isIOS() && RENDER_SCALE >= 2) },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, TitleScene, TableScene],
+  scene: [BootScene, TitleScene, TableScene, DdzScene],
 };
 let game: Phaser.Game;
 try {

@@ -24,8 +24,9 @@ export const DEFAULT_LIMITS = {
    * 钱包（wallet）再从存档里分出 3_000（0.9.0）：每次带入、结回、放弃、领补给 1 行，一场实盘 2 行，够 1,500 场；合计仍是 4 万。
    * 0.10.2 再从存档挪 3_000 给钱包（维护者定）：三个游戏都接了钱包，玩的人多了不该先撞上"服务器有点忙"；有几天实际用量后再调。
    * 好友在线和邀请（live，0.13.0，docs/social.md）：从存档、登录找回各挪 2_000。报位置每人每 2 分钟最多 1 行，50 人每天在线 2 小时约 3,000 行，邀请另算（platform-backend.md 15.13）。
+   * 监控（mon，0.26.0，第 16 节）：从登录找回挪 1_000。浏览器报错每个签名每 5 分钟最多记 1 行，巡检状态只在变了时写 1 行。
    */
-  budget: { reg: 2_700, auth: 10_000, save: 4_300, social: 5_000, acct: 2_000, board: 2_500, wallet: 6_000, live: 4_000, sys: 3_500 },
+  budget: { reg: 2_700, auth: 9_000, save: 4_300, social: 5_000, acct: 2_000, board: 2_500, wallet: 6_000, live: 4_000, mon: 1_000, sys: 3_500 },
   /** 账号安全类超出预算后另给的封顶；0 表示不给超额。 */
   acctOverflow: 3_000,
   noGrowthDbBytes: 300_000_000,
@@ -103,6 +104,21 @@ export const DEFAULT_LIMITS = {
   challengeTtlMs: 30 * 86_400_000,
   challengesPerDay: 20,
   challengeMaxResults: 100,
+
+  // 监控（第 16 节）：浏览器报错每个 IP 每分钟几条、同一签名多久记一次；巡检的阈值和超时；报错计数留几天
+  clientErrorsPerIpPerMinute: 10,
+  clientErrorDedupMs: 300_000,
+  monitorHealthTimeoutMs: 5_000,
+  /** 单个游戏 10 分钟内的浏览器报错到这个数就告警 */
+  monitorErrorsPer10Min: 20,
+  /** 当前版本才出现的新签名报到这个数就告警 */
+  monitorNewSigMin: 5,
+  /** 当天用量（调用数、写入、读取里最高的那项，对停服线）到这个百分比就告警 */
+  monitorQuotaPct: 80,
+  /** 巡检状态多久没更新算 Cron 没在跑（毫秒）；状态没变时每小时也写一次 */
+  monitorStaleMs: 1_800_000,
+  monitorHeartbeatMs: 3_600_000,
+  monitorKeepDays: 7,
 
   // Cron 清理（7.3）
   cleanupMaxRows: 3_000,

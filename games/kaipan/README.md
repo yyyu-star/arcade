@@ -91,7 +91,7 @@ The rest of this README, the in-game text, code comments and design docs (`docs/
 - **回大厅**（`src/view/lobby.ts`）：跳平台首页 `/`。主页和结束页左上角的「大厅」直接走；对局里从设置走先确认一次，走之前先补传云存档
   （keepalive 额度记账在 `src/platform/keepalive.ts`）。
 - **安全头**（`public/_headers`）：CSP、`frame-ancestors 'self'`、`X-Frame-Options: SAMEORIGIN`；经 Worker 回的首页也带上。用到新来源时同时改这里，`tests/headers.test.ts` 锁底线。
-- 未捕获的错误弹独立面板，可以继续、重新载入、放弃存档开新局或复制错误信息；最近 20 条错误记在 `kaipan.errors`。
+- 未捕获的错误弹独立面板，可以继续、重新载入、放弃存档开新局或复制错误信息；最近 20 条错误记在 `kaipan.errors`。没人接住的报错同时经共用包 `arcade-kit/report` 发给平台 `/api/client-error`（单独部署时没有这个接口，发不出去就算了）。
 
 单独部署（没有平台）时：有完整的单机游戏和本机的每日挑战；没有登录、云存档、排行榜、好友挑战和实盘。页面启动时问一次同域 `/api/me`，
 回 404 或不是 JSON 就当没有平台，把这些入口藏起来；实盘接口回 `501 no_wallet`。开盘没有好友房。
@@ -147,8 +147,10 @@ node tools/mem-probe.ts  # 按几种手机、平板、电脑的视口和 DPR 估
 | `WALLET` | 服务绑定 → `arcade` 的 `WalletService`，`props.game = kaipan` | 实盘的带入、结回、放弃 |
 | `GATE` | 变量 `login` | 登录闸门：没登录跳 `/login?from=kaipan`，平台有问题回 503 不放行 |
 
-另外关掉 `workers_dev`、`preview_urls`，注入 `<站点>/games/kaipan` 和 `<站点>/games/kaipan/*` 两条路由。独立配置里只有 `ASSETS`，没有 secret。
-写了 `GATE=login` 却没有 `ARCADE` 时首页回 503。只有根路径、首页和实盘接口 `/games/kaipan/api/*` 进 Worker（分流在 `src/worker/route.ts`），其余静态资源不经过 Worker。
+另外关掉 `workers_dev`、`preview_urls`，注入 `<站点>/games/kaipan` 和 `<站点>/games/kaipan/*` 两条路由。独立配置里只有 `ASSETS`，没有 secret；开着 Workers 日志（`observability`）。
+写了 `GATE=login` 却没有 `ARCADE` 时首页回 503。只有根路径、首页、实盘接口 `/games/kaipan/api/*` 和健康检查进 Worker（分流在 `src/worker/route.ts`），其余静态资源不经过 Worker。
+
+健康检查 `GET /games/kaipan/health` 回 `{"ok":true,"version":"<版本>"}`：走在登录闸门前面，不要登录、不读存储、不问平台，单独部署时一样能访问，给监控用。
 
 本仓库的正式站由 `.github/workflows/game-kaipan.yml` 部署：改动经 PR 合并进 `main` 后测试、打包，再由部署工具补上平台绑定和路由部署；PR 上只测试不部署。
 需要拆成单独仓库时，在仓库根运行 `tools/split-module.sh games/kaipan`。

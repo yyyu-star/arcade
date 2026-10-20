@@ -1,3 +1,4 @@
-# 本目录放的真 Secret，不进 Git
+# 本目录放的真 Secret 和本机设置，不进 Git
 secrets.env
 pg_password.txt
+.env

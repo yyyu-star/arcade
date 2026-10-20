@@ -283,7 +283,7 @@ export function samePlayShape(a: Pick<Play, 'type' | 'rank' | 'extra'>, b: Pick<
 }
 
 /**
- * 掼蛋的牌型按通用层的 PatternSet 包一层（牌馆重构 ①b，docs/doudizhu.md 1.1）：识别要级牌和规则开关；函数本身就是上面这些，行为不变
+ * 掼蛋的牌型按通用层的 PatternSet 包一层（牌馆重构 ①b，docs/doudizhu.md 第 1 节）：识别要级牌和规则开关；函数本身就是上面这些，行为不变
  */
 export const guandanPatterns: PatternSet<Play, { level: number; opts: Options }> = {
   interpret: (cards, c) => interpret(cards, c.level, c.opts),

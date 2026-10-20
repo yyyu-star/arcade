@@ -51,6 +51,10 @@ import { Cards } from './view/ui/cards.ts';
 import { Hud } from './view/ui/hud.ts';
 import { type BuildRow, Confirm, Menu, Pause, Result, Tips, type Toggle } from './view/ui/screens.ts';
 import { LOW_MEMORY, TOUCH, fitViewport, renderScale, worldZoom } from './view/viewport.ts';
+import { reportErrors } from 'arcade-kit/report';
+
+// 页面里没人接住的报错发给平台（共用包 0.22）：只带报错、调用栈、路径、游戏和版本；单独部署没有平台时发不出去也不影响玩
+reportErrors({ game: 'yexun', version: __APP_VERSION__ });
 
 const q = new URLSearchParams(location.search);
 

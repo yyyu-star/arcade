@@ -10,12 +10,29 @@
  */
 import { sameOrigin, whoIs } from 'arcade-kit/auth';
 import { SOLO_HOURS, TIERS, isSoloRef, isTier, payout, soloOp, soloRef, soloRefTier, validSoloResult, type TierId } from '../src/variants/guandan/stake/index.ts';
+import * as ddz from '../src/variants/doudizhu/stake/index.ts';
 import { STAKE_PATH } from '../src/net/version.ts';
 import type { Fetcher } from './gate.ts';
 
 /** 请求体最多几个字节：最大的结回请求约 90 字节，带上战绩小结（平台只收 ≤ 256 字节的）不到 400，留足余量 */
 const MAX_BODY = 1024;
 const GAME = 'guandan';
+
+/**
+ * 两个玩法的实盘规则（请求体的 variant：没有或 'guandan' 是掼蛋，'ddz' 是斗地主；旧页面不带，照旧是掼蛋）。
+ * 钱包里 game 都是 guandan（牌馆一个游戏），玩法靠 ref 的格式区分（斗地主 `solo-ddz-…`），所以同一时间钱包里只有一份
+ */
+interface Rules {
+  isSoloRef(x: unknown): x is string;
+  soloRef(tier: TierId, hex: string): string;
+  soloRefTier(ref: string): TierId | null;
+  payout(tier: TierId, points: number): number;
+  validSoloResult(points: unknown, deals: unknown): boolean;
+}
+const RULES: Record<'guandan' | 'ddz', Rules> = {
+  guandan: { isSoloRef, soloRef, soloRefTier, payout, validSoloResult },
+  ddz: { isSoloRef: ddz.isSoloRef, soloRef: ddz.soloRef, soloRefTier: ddz.soloRefTier, payout: ddz.payout, validSoloResult: ddz.validSoloResult },
+};
 
 /** 钱包的回话（平台 5.9）。只列掼蛋用到的字段 */
 export type WalletReply =
@@ -77,25 +94,29 @@ async function handleStake(request: Request, env: StakeEnv, action: string): Pro
     return reply({ ok: false, error: 'bad_request' }, 400);
   }
   // 参数先查，免得为一个写错的请求去问平台
+  // variant 只认没有、'guandan'、'ddz'；别的值是写错了
+  const variant = body['variant'];
+  if (variant !== undefined && variant !== 'guandan' && variant !== 'ddz') return reply({ ok: false, error: 'bad_request' }, 400);
+  const rules = RULES[variant ?? 'guandan'];
   let call: (userId: string, wallet: WalletRpc) => Promise<WalletReply>;
   let extra: Record<string, unknown> = {};
   if (action === 'buyin') {
     const tier = body['tier'];
     if (!isTier(tier)) return reply({ ok: false, error: 'bad_request' }, 400);
-    const ref = soloRef(tier, randomHex());
+    const ref = rules.soloRef(tier, randomHex());
     // 钱包最长给 24 小时（超过按 24 小时算）；页面按回来的 until 判断过没过期
     const until = Date.now() + SOLO_HOURS * 3_600_000;
     extra = { ref, tier, share: TIERS[tier], until };
     call = (userId, w) => w.buyin({ userId, game: GAME, ref, tier, amount: TIERS[tier], until, mode: 'client', op: soloOp(ref, 'in') });
   } else {
     const ref = body['ref'];
-    if (!isSoloRef(ref)) return reply({ ok: false, error: 'bad_request' }, 400);
+    if (!rules.isSoloRef(ref)) return reply({ ok: false, error: 'bad_request' }, 400);
     if (action === 'settle') {
       // 档位按 ref 里编的算（ref 是带入时 Worker 生成的），页面带来的不信；只有 0.12.1 以前带入的旧 ref（没编档位，24 小时内过期）才用页面带的
       const { points, deals, stats } = body;
-      const tier = soloRefTier(ref) ?? body['tier'];
-      if (!isTier(tier) || !validSoloResult(points, deals)) return reply({ ok: false, error: 'bad_request' }, 400);
-      const amount = payout(tier, points as number);
+      const tier = rules.soloRefTier(ref) ?? body['tier'];
+      if (!isTier(tier) || !rules.validSoloResult(points, deals)) return reply({ ok: false, error: 'bad_request' }, 400);
+      const amount = rules.payout(tier, points as number);
       // 页面报的战绩小结原样转给平台（5.10：游戏的接口不改、不补，平台校验）；没带就不带
       call = (userId, w) => w.settle({ userId, game: GAME, ref, amount, mode: 'client', op: soloOp(ref, 'out'), ...(stats !== undefined ? { stats } : {}) });
     } else {

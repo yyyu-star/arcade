@@ -8,7 +8,7 @@
 | 四种花色 | 自己画的 SVG 路径 | `src/view/art.ts` |
 | 人头牌半身像、数字牌的中心花色、A 的大花色 | 自己画的 SVG | `src/view/art.ts`、`src/view/pips.ts` |
 | 10 个电脑和"我"的头像 | 按性格用 SVG 拼（脸、发型、眼镜、帽子，加渐变光影） | `src/view/art.ts` |
-| 毡面、桌边、牌背、筹码、庄家钮、按钮、面板 | CSS 渐变和内联 SVG | `src/view/skin.css`、`src/view/style.css` |
+| 毡面、桌边、牌背、筹码、庄家钮、按钮、面板（现行皮肤是卡通换皮，`docs/art-cartoon.md`） | CSS 渐变和内联 SVG | `src/view/skin.css`、`src/view/style.css` |
 | 分层背景：墙面、散景光斑、吊灯、吧台酒瓶剪影、光锥、浮尘（0.18.0） | CSS 渐变和内联 SVG | `src/view/scene.ts`、`src/view/scene.css` |
 | 四间主题房的配色和材质（毡面、绒面光泽、金色菱格、黄铜边，0.18.1） | CSS 渐变和变量 | `src/view/rooms.css`、`src/view/rooms.ts` |
 | 荷官半身像（0.18.3） | 自己画的 SVG | `src/view/dealer.ts` |

@@ -1,6 +1,6 @@
 /**
  * 实盘（DESIGN.md 第 4 节）：档位、开局配置、结回倍数。Worker 只从这里取档位表和 liveReturn，不引规则核心（整个核心会被打进 Worker）。
- * 倍数曲线第 7 步按模拟器每格 2,000 局配到 balance.md 第 2 节的区间：形状四档共用，天亮倍数每档一个（DESIGN.md 4.2）。
+ * 倍数曲线按模拟器结局配到 balance.md 4.4 的区间（0.4.7 全量重拟）：形状四档共用，天亮倍数每档一个（DESIGN.md 4.2）。
  */
 import type { MapId } from './maps.ts';
 import type { CharacterId } from './meta.ts';
@@ -17,7 +17,7 @@ export const LIVE_OPEN = true;
  * 实盘暂不开放的守夜图：新图要先按 LIVE_MAP_BP 同一套方法拟合系数、偏离同档平均 ±0.15 份以内才开（DESIGN 8.1，主线 10-20）。
  * 菜单上这几张图在实盘里灰着；直接调带入也会退回雪原（main.ts startLive）。
  */
-export const LIVE_MAP_CLOSED: readonly MapId[] = ['temple'];
+export const LIVE_MAP_CLOSED: readonly MapId[] = [];
 export const liveMapOk = (m: MapId): boolean => !LIVE_MAP_CLOSED.includes(m);
 
 export type LiveTier = 'small' | 'medium' | 'large' | 'luxe';
@@ -35,15 +35,15 @@ export interface LiveTierDef {
   stake: number;
   /** 固定映射的危险档（4.1）：只维护一套怪表 */
   danger: Danger;
-  /** 撑到天亮结回几倍（万分比）；中途倒下按 VIGIL_SHAPE 折算，打倒尸王再加 VIGIL_BOSS_ADD_BP。第 7 步用 .local 的 fit.mjs 从模拟器结局拟合 */
+  /** 撑到天亮结回几倍（万分比）；中途倒下按 VIGIL_SHAPE 折算，打倒尸王再加 VIGIL_BOSS_ADD_BP。按模拟器结局拟合（DESIGN 4.2） */
   dawnBp: number;
 }
 
 export const LIVE_TIERS: Record<LiveTier, LiveTierDef> = {
-  small: { id: 'small', wallet: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 12_700 },
-  medium: { id: 'medium', wallet: 'mid', name: '中', stake: 10_000, danger: 2, dawnBp: 16_000 },
-  large: { id: 'large', wallet: 'big', name: '大', stake: 50_000, danger: 3, dawnBp: 16_000 },
-  luxe: { id: 'luxe', wallet: 'lux', name: '豪华', stake: 200_000, danger: 4, dawnBp: 16_000 },
+  small: { id: 'small', wallet: 'small', name: '小', stake: 2_000, danger: 0, dawnBp: 13_500 },
+  medium: { id: 'medium', wallet: 'mid', name: '中', stake: 10_000, danger: 2, dawnBp: 17_200 },
+  large: { id: 'large', wallet: 'big', name: '大', stake: 50_000, danger: 3, dawnBp: 18_400 },
+  luxe: { id: 'luxe', wallet: 'lux', name: '豪华', stake: 200_000, danger: 4, dawnBp: 19_100 },
 };
 
 export function isLiveTier(v: unknown): v is LiveTier {
@@ -78,29 +78,30 @@ export const VIGIL_BOSS_ADD_BP = 2_000;
  */
 export type LiveCoef<K extends string> = Partial<Record<K, Partial<Record<LiveTier, number>>>>;
 export const LIVE_CHAR_BP: LiveCoef<CharacterId> = {
-  fushi: { medium: 10_900, large: 11_500, luxe: 10_900 },
-  jianxia: { medium: 11_200, large: 12_100, luxe: 11_100 },
-  pang: { medium: 9_100, large: 9_200, luxe: 8_000 },
-  caiyao: { medium: 10_600, large: 11_200 },
-  gengfu: { large: 10_900, luxe: 10_800 },
+  jianxia: { small: 9_900, medium: 8_900, large: 8_700, luxe: 7_500 },
+  pang: { small: 9_800, medium: 8_200, large: 7_600, luxe: 6_100 },
+  gengfu: { small: 10_100, medium: 11_300, large: 12_300, luxe: 14_500 },
+  caiyao: { small: 9_900, medium: 9_700, large: 9_500, luxe: 8_400 },
+  fushi: { medium: 9_500, large: 9_100, luxe: 8_400 },
 };
 export const LIVE_MAP_BP: LiveCoef<MapId> = {
-  yizhuang: { small: 10_800, medium: 14_200, large: 15_400, luxe: 23_700 },
-  bamboo: { medium: 8_900, large: 9_000, luxe: 8_900 },
-  icelake: { medium: 11_100, large: 12_400, luxe: 12_900 },
-  riverbank: { luxe: 10_800 },
+  bamboo: { small: 9_900, medium: 8_900, large: 8_500, luxe: 8_300 },
+  icelake: { small: 9_900, medium: 9_700, large: 10_700, luxe: 12_000 },
+  riverbank: { small: 9_900, medium: 9_900, large: 9_600, luxe: 10_500 },
+  yizhuang: { small: 10_500, medium: 13_100, large: 13_900, luxe: 17_800 },
+  temple: { small: 10_200, medium: 12_700, large: 13_300, luxe: 16_600 },
 };
 
 /**
  * 组合系数（0.3.7）：「角色 × 地图 × 档」整套系数（万分比），写了就替换 LIVE_CHAR_BP × LIVE_MAP_BP 的乘积。
- * 只给乘积偏出同档平均 0.15 份以上的格子（新种子模拟，每格 2,000–6,000 局拟合，见 CHANGELOG 0.3.7）；没写的组合仍按乘积。
+ * 只给乘积偏出同档平均 0.10 份以上的格子（0.4.7 全扫 6 角色 × 6 地图 × 4 档，每格 600 局拟合，DESIGN 4.2a）；没写的组合仍按乘积。小道士 × 雪原是基准，不写。
  */
 export const LIVE_COMBO_BP: Partial<Record<CharacterId, Partial<Record<MapId, Partial<Record<LiveTier, number>>>>>> = {
-  pang: { yizhuang: { medium: 10_000, large: 10_100, luxe: 10_000 }, riverbank: { luxe: 7_200 } },
-  caiyao: { yizhuang: { medium: 13_000, large: 13_900, luxe: 15_300 }, icelake: { medium: 10_400, large: 12_200 } },
-  jianxia: { bamboo: { large: 9_300 } },
-  fushi: { bamboo: { large: 8_900 }, icelake: { large: 12_200 } },
-  gengfu: { icelake: { luxe: 11_200 } },
+  xiaodao: { temple: { medium: 13_900, large: 15_100, luxe: 25_000 }, riverbank: { large: 8_700 }, bamboo: { luxe: 7_500 } },
+  fushi: { bamboo: { medium: 7_800 }, yizhuang: { medium: 13_500 }, icelake: { large: 8_700, luxe: 8_800 }, temple: { large: 13_400, luxe: 20_800 } },
+  pang: { yizhuang: { medium: 9_900, large: 9_200, luxe: 9_000 }, icelake: { luxe: 9_300 }, temple: { luxe: 8_800 } },
+  gengfu: { snow: { medium: 10_100, large: 10_700, luxe: 11_300 }, riverbank: { medium: 12_100 }, icelake: { large: 12_000, luxe: 12_200 }, yizhuang: { large: 25_000, luxe: 25_000 }, temple: { luxe: 25_000 } },
+  caiyao: { temple: { medium: 11_100, large: 11_100, luxe: 11_800 }, yizhuang: { large: 12_100, luxe: 13_400 }, bamboo: { luxe: 7_900 }, icelake: { luxe: 11_400 } },
 };
 
 /** 实盘档 tier 的守夜撑了 ticks 拍（每秒 30 拍）、赢没赢、打没打倒尸王 → 结回倍数（万分比，整数）；角色、地图缺省 = 小道士、雪原 */

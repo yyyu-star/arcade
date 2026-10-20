@@ -29,6 +29,8 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onFit: (f: F
     last = f;
     stage.style.width = `${f.w}px`;
     stage.style.height = `${f.h}px`;
+    // 操作区按舞台宽度限宽（style.css 的 .actions .odds/.quick，0.25.3）
+    stage.style.setProperty('--stage-w', `${f.w}px`);
     // 竖屏（0.10.0）：手机竖着拿，换竖的牌桌（style.css 的 .stage.tall、layout.ts 的竖屏位置）
     stage.classList.toggle('tall', f.tall);
     stage.style.transform = `translate(-50%, -50%) scale(${f.scale})`;
@@ -37,6 +39,8 @@ export function watchViewport(app: HTMLElement, stage: HTMLElement, onFit: (f: F
     document.documentElement.style.setProperty('--ui', Math.max(1, 1 / f.scale).toFixed(3));
     // 手机横屏（缩到 0.9 倍以下）：字和按钮放大以后标题页放不下，换紧凑的排法（style.css 的 .stage.tight）
     stage.classList.toggle('tight', f.scale < 0.9);
+    // 舞台收到 900 以下（平板竖拿、4:3）：牌桌左下那一排放不下，收窄（style.css 的 .stage.narrow，0.25.3）
+    stage.classList.toggle('narrow', !f.tall && f.w < 900);
     onFit(f);
   };
   const later = (): void => {

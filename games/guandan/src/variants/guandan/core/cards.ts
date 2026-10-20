@@ -1,6 +1,6 @@
 /**
  * 掼蛋的牌：两副 108 张、每人 27 张，级牌和逢人配的牌序、理牌。
- * 牌的编码在通用层 core/cards.ts（牌馆重构 ①b，docs/doudizhu.md 1.1），这里原样再导出，掼蛋各处照旧从这里取。
+ * 牌的编码在通用层 core/cards.ts（牌馆重构 ①b，docs/doudizhu.md 第 1 节），这里原样再导出，掼蛋各处照旧从这里取。
  */
 export * from '../../../core/cards.ts';
 import { HEART, rankOf, suitOf, type Card } from '../../../core/cards.ts';

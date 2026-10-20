@@ -40,3 +40,15 @@ export function seatAnchors(W: number, partnerMinX = 0): SeatAnchor[] {
     { ax: d + 86, ay: 262, size: 96, px: d + 200, py: 262, align: 'left', bx: d + 150, by: 176, bdir: 'down' },
   ];
 }
+
+/** 三人桌左右两家比四人桌往上挪多少：上方没有对家，挪上去给我头像上的"地主"牌和气泡让地方 */
+const SIDE_LIFT_3 = 48;
+
+/**
+ * 三人桌（斗地主）：座位 0 我在下，1 下家在右，2 上家在左；左右两家取四人桌的位置再往上挪，桌子上方空出来放底牌和倍数
+ */
+export function seatAnchors3(W: number): SeatAnchor[] {
+  const a = seatAnchors(W);
+  const lift = (s: SeatAnchor): SeatAnchor => ({ ...s, ay: s.ay - SIDE_LIFT_3, py: s.py - SIDE_LIFT_3, by: s.by - SIDE_LIFT_3 });
+  return [a[0]!, lift(a[1]!), lift(a[3]!)];
+}

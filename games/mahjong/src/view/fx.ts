@@ -75,7 +75,7 @@ export function celebrate(layer: HTMLElement, x: number, y: number, text: string
 }
 
 /**
- * 一局结算的动画（docs/art-v3.md 第 5 节，0.17.2）：每家的分从 0 数到最后的数（0.6 秒），同时几枚铜钱从输家那一行飞到赢家那一行。
+ * 一局结算的动画（docs/art-v3.md，0.17.2）：每家的分从 0 数到最后的数（0.6 秒），同时几枚铜钱从输家那一行飞到赢家那一行。
  * box 是 roundSummary() 画的那块（行上有 data-seat，分上有 data-n，box 上有 data-moves）。省内存、减少动态效果时只数数不飞钱。
  * 返回飞没飞钱（飞了由调用的放一声筹码响）。只动 transform / opacity；数字是改文字，一共几十次
  */

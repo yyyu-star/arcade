@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import worker, { type Env, type PlatformWallet } from '../../worker/main.ts';
+import pkg from '../../package.json' with { type: 'json' };
 
 const SITE = 'https://game.example.com';
 const BASE = `${SITE}/games/mahjong`;
@@ -65,6 +66,19 @@ const post = (path: string, e: Env, body: unknown, sid: string | null = 'u1', he
     body: text,
   });
 };
+
+describe('健康检查', () => {
+  it('走在登录闸门前面：没登录、平台挂了也回 200 和版本，不缓存；只认 GET、HEAD', async () => {
+    for (const cookie of [undefined, '__Host-sid=bad']) {
+      const res = await call('/health', env(), cookie ? { headers: { cookie } } : {});
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, version: pkg.version });
+      expect(res.headers.get('cache-control')).toBe('no-store');
+    }
+    expect((await call('/health', env(), { method: 'HEAD' })).status).toBe(200);
+    expect((await call('/health', env(), { method: 'POST' })).status).toBe(405);
+  });
+});
 
 describe('登录闸门', () => {
   it('没有结尾斜杠 301 到带斜杠的（查询参数带上）', async () => {

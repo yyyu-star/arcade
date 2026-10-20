@@ -1,5 +1,5 @@
 /**
- * 每天的清理（docs/platform-backend.md 7.3）：过期会话、窗口已过的限流计数、60 天前的每日榜、7 天前的计量行、1 年没登录的账号；
+ * 每天的清理（docs/platform-backend.md 7.3）：过期会话、窗口已过的限流计数、60 天前的每日榜、7 天前的计量行和浏览器报错计数、1 年没登录的账号；
  * 清理前先记一行昨天的全站筹码统计（5.9）。
  * 写入记在"系统"类；每次最多删 cleanupMaxRows 行，删不完留到第二天，系统类预算用完就当天不清。
  */
@@ -11,6 +11,7 @@ import { limitsOf } from './config';
 import { DAY } from './context';
 import { Db, newStats } from './db';
 import { hourKey, meter } from './meter';
+import { monitorCleanupStatement } from './monitor';
 import { GAME_IDS } from '../../src/games';
 import { deleteUserStatements } from './session';
 import { beijingDate } from './time';
@@ -118,6 +119,7 @@ export async function runCleanup(env: Env, now: number): Promise<{ rowsWritten: 
     );
     // 邀请码：没用的过期或撤回满 30 天就删，已用的留着（额度要算）
     await step('invite_codes', () => db.run(inviteCleanupStatement(db, now, budget())));
+    await step('monitor_counts', () => db.run(monitorCleanupStatement(db, now, limits, budget())));
     await step('meter_hourly', () =>
       db.run(
         db.stmt('DELETE FROM meter_hourly WHERE hour IN (SELECT hour FROM meter_hourly WHERE hour < ?1 LIMIT ?2)', hourKey(now - 7 * DAY), budget()),

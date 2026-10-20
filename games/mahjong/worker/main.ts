@@ -8,6 +8,7 @@
  * - /games/mahjong/rooms（开房）、/games/mahjong/rooms/<码>/ws（进房）原样交给 kit 的 acceptCreate / acceptJoin（第 6 节）；
  *   /games/mahjong/rooms/match/<档位>（快速匹配排队，0.21.0）交给 kit 的 acceptMatch：排到了开一张匹配桌，只剩自己的转单机；
  *   开房的请求体 { opts } 是玩法、档位和规则设置，kit 开房时校验、定下，进房的人都看得到；
+ * - /games/mahjong/health 是给线上监控看的：回 {"ok":true,"version"}，不读存储、不认人，排在登录闸门前面，单独部署也能访问；
  * - 别的路径不经过这里（wrangler.jsonc 的 run_worker_first 只列了上面这些），由静态资源直接回。
  *
  * 带入、结回要过两道：CSRF（X-Arcade: 1 且 Origin 是本站：设了 SITE_ORIGIN 按它，没设按请求自己的 origin）、登录；额度、每日上限、写入次数都由平台钱包管（docs/economy.md 第 3、4 节）。
@@ -23,6 +24,7 @@ import type { SettleStats } from '../src/core/match/index.ts';
 import { soloOp } from '../src/game/ops.ts';
 import { stakesOf, type TierId } from '../src/game/stakes.ts';
 import { GAME } from './game.ts';
+import pkg from '../package.json' with { type: 'json' };
 import type { MahjongRoom } from './room.ts';
 
 export { RoomMeter } from 'arcade-kit/meter';
@@ -64,6 +66,7 @@ export interface Env extends MeterEnv {
 }
 
 const BASE = '/games/mahjong';
+const HEALTH = `${BASE}/health`;
 const STAKE = `${BASE}/api/stake/`;
 const ROOMS = `${BASE}/rooms`;
 const JOIN = /^\/games\/mahjong\/rooms\/([^/]+)\/ws$/;
@@ -90,8 +93,15 @@ const STATUS: Record<string, number> = {
   bad_request: 400,
 };
 
+/** 健康检查：只说活着和版本，不碰存储、平台和 cookie（监控每几分钟调一次，不该有任何副作用） */
+function health(request: Request): Response {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } });
+  return Response.json({ ok: true, version: pkg.version }, { headers: { 'cache-control': 'no-store' } });
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
+    if (new URL(request.url).pathname === HEALTH) return health(request);
     const root = standaloneRoot(request, env, GAME);
     if (root) return root;
     const url = new URL(request.url);

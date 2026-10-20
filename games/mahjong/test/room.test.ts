@@ -67,7 +67,6 @@ describe('选项', () => {
     expect(G.options!(undefined)).toMatchObject({ variant: 'sichuan-xuezhan', stakes: 'fun' });
     expect(G.options!({ variant: 'sichuan-xuezhan', stakes: 'mid', rules: { rounds: 8 } })).toMatchObject({ stakes: 'mid', rules: { rounds: 8, cap: 4 } });
     expect(G.options!({ stakes: 'x' })).toBeNull();
-    expect(G.options!({ variant: 'riichi', stakes: 'fun' })).toBeNull();
     expect(G.options!({ stakes: 'fun', rules: { rounds: 5 } })).toBeNull();
     expect(G.options!([])).toBeNull();
   });

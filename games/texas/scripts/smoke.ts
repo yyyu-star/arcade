@@ -19,7 +19,7 @@
  * 端口一律由系统分配（不占 5175 / 4175）。截图放在 --shots（默认系统临时目录下的 texas-shots）。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1357,6 +1357,135 @@ async function tourRoomFlow(browser: Browser, base: string): Promise<void> {
   }
 }
 
+/**
+ * 多尺寸（--only devices，0.25.3，所有者 10-20）：一个浏览器跑完手机竖横、平板、折叠屏、电脑的尺寸矩阵，每个尺寸走
+ * 主页 → 选桌（娱乐）→ 对局（轮到我）→ 离桌结算，自动查：横向滚动、伸出屏幕、点击区 ≥ 44（320 宽 ≥ 40）、关键元素互相压、
+ * 截字（有意的省略号除外）、字号 ≥ 12、控制台报错。有问题的尺寸才截图；问题全收齐了一起报
+ */
+const DEVICE_SIZES: { name: string; w: number; h: number; touch: boolean }[] = [
+  ...[[320, 568], [360, 640], [360, 780], [375, 667], [390, 844], [393, 852], [412, 915], [414, 896], [430, 932]].map(([w, h]) => ({ name: `phone-${w}x${h}`, w: w!, h: h!, touch: true })),
+  ...[[568, 320], [640, 360], [667, 375], [780, 360], [844, 390], [896, 414], [932, 430]].map(([w, h]) => ({ name: `land-${w}x${h}`, w: w!, h: h!, touch: true })),
+  ...[[768, 1024], [1024, 768], [820, 1180], [1180, 820], [1024, 1366], [1366, 1024], [884, 1104]].map(([w, h]) => ({ name: `tab-${w}x${h}`, w: w!, h: h!, touch: true })),
+  ...[[1280, 720], [1366, 768], [1920, 1080]].map(([w, h]) => ({ name: `desk-${w}x${h}`, w: w!, h: h!, touch: false })),
+];
+
+/** 这一屏的毛病（看得见的元素按屏幕坐标量） */
+async function audit(page: Page, where: string, touch: boolean): Promise<string[]> {
+  return page.evaluate(([where, touch]) => {
+    const W = innerWidth;
+    const H = innerHeight;
+    const out: string[] = [];
+    const shown = (e: Element): DOMRect | null => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      const cs = getComputedStyle(e);
+      if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return null;
+      // 盖在弹窗遮罩下面的不算（摸不到、也看不清）
+      const mask = document.querySelector('.mask:not(.hidden)');
+      if (mask && !mask.contains(e) && getComputedStyle(mask).display !== 'none') return null;
+      return r;
+    };
+    const label = (e: Element): string => `${e.tagName.toLowerCase()}.${[...e.classList].slice(0, 3).join('.')}「${(e.textContent ?? '').trim().slice(0, 8)}」`;
+    if (document.documentElement.scrollWidth > W + 1) out.push(`横向滚动 ${document.documentElement.scrollWidth}>${W}`);
+    const clickable = [...document.querySelectorAll('button, a[href], input, select, [role="button"]')].filter((e) => !(e as HTMLButtonElement).disabled);
+    // 触屏上 button 和"大厅"用 ::before 把能点的范围撑到 44 个屏幕像素（style.css 的 --hit，无头浏览器不认 pointer: coarse，量不到）；
+    // 电脑用鼠标，不查点按区
+    const small = (e: Element): boolean => touch && !(e.tagName === 'BUTTON' || e.classList.contains('home'));
+    const min = W <= 320 ? 40 : 44;
+    for (const e of clickable) {
+      const r = shown(e);
+      if (!r) continue;
+      if (r.left < -1 || r.top < -1 || r.right > W + 1 || r.bottom > H + 1) out.push(`伸出屏幕 ${label(e)} ${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`);
+      // 点击区：按钮自己或外面一圈能点的（::before 扩出来的不算，量不到）
+      if (small(e) && (r.width < min - 0.5 || r.height < min - 0.5)) out.push(`点击区小 ${label(e)} ${Math.round(r.width)}×${Math.round(r.height)}`);
+    }
+    // 关键元素两两不压（同一个元素里套着的不算）
+    const KEY = '.seat .plate, .seat .avatar, .seat.me .bubble.on, .seat.me .card, .card.board, .actions .act, .actions .preset, .actions .qbet, .actions .odds, .hud > :not(.hidden), .topbar > :not(.spacer), .atc-pill, .atf-btn, .lobby .start, .lobby .tour-btn, .lobby .mcard';
+    const keys = [...document.querySelectorAll(KEY)].map((e) => ({ e, r: shown(e) })).filter((x): x is { e: Element; r: DOMRect } => !!x.r);
+    for (let i = 0; i < keys.length; i++)
+      for (let j = i + 1; j < keys.length; j++) {
+        const a = keys[i]!;
+        const b = keys[j]!;
+        if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+        // kit 的"互动""聊天"按钮就摆在给它留的占位格上
+        if ([a.e, b.e].some((e) => e.classList.contains('fun-slot'))) continue;
+        const dx = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+        const dy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+        if (dx > 2 && dy > 2) out.push(`重叠 ${label(a.e)} × ${label(b.e)} ${Math.round(dx)}×${Math.round(dy)}`);
+      }
+    // 截字和字号：叶子文字元素
+    for (const e of document.querySelectorAll('body *')) {
+      if (e.children.length || !(e.textContent ?? '').trim()) continue;
+      const r = shown(e);
+      if (!r) continue;
+      const cs = getComputedStyle(e);
+      if (parseFloat(cs.fontSize) * (r.height / Math.max(1, (e as HTMLElement).offsetHeight || r.height)) < 11.5) out.push(`字小 ${label(e)} ${cs.fontSize}`);
+      const he = e as HTMLElement;
+      if (cs.textOverflow !== 'ellipsis' && cs.overflow !== 'visible' && he.scrollWidth > he.clientWidth + 1) out.push(`截字 ${label(e)}`);
+    }
+    return [...new Set(out)].map((x) => `${where}: ${x}`);
+  }, [where, touch] as const);
+}
+
+async function devicesFlow(browser: Browser, base: string): Promise<void> {
+  const report: string[] = [];
+  // --sizes 568x320,780x360：只跑这几个，每一屏都截（检测量不到折行这类，人看一眼）
+  const pick = opt('sizes', '').split(',').filter(Boolean);
+  const contexts = new Map<boolean, BrowserContext>();
+  for (const d of DEVICE_SIZES.filter((x) => !pick.length || pick.includes(`${x.w}x${x.h}`))) {
+    let ctx = contexts.get(d.touch);
+    if (!ctx) {
+      ctx = await newContext(browser, base, d.touch ? 'smoke-dev-touch' : 'smoke-dev-desk', d.touch ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } : {});
+      await ctx.addInitScript(() => {
+        if (!localStorage.getItem('texas.settings')) localStorage.setItem('texas.settings', JSON.stringify({ fast: true }));
+      });
+      // tsx 编译时给函数加了 __name(...) 包装，audit 里定义的小函数传进页面会找不到它
+      await ctx.addInitScript('globalThis.__name = (f) => f;');
+      contexts.set(d.touch, ctx);
+    }
+    const page = await ctx.newPage();
+    const before = errors.length;
+    watch(page, `devices ${d.name}`);
+    const found: string[] = [];
+    // 哪一屏有问题就截哪一屏
+    const check = async (where: string): Promise<void> => {
+      const got = await audit(page, where, d.touch);
+      if (got.length || pick.length) await page.screenshot({ path: join(SHOTS, `dev-${d.name}-${where}.png`) });
+      found.push(...got);
+    };
+    try {
+      await page.setViewportSize({ width: d.w, height: d.h });
+      await page.goto(`${base}/games/texas/`);
+      await page.locator('.w-balance').filter({ hasText: /\d/ }).waitFor({ state: 'attached' });
+      await page.waitForTimeout(400);
+      await check('home');
+      await enter(page, '娱乐', d.touch);
+      await page.waitForTimeout(400);
+      await check('lobby');
+      await page.locator('.lobby .start').click();
+      await page.locator('.stage.at-table').waitFor();
+      await skipTips(page);
+      await page.locator('.actions.on').waitFor({ timeout: 30_000 });
+      await page.waitForTimeout(500);
+      await check('table');
+      await page.locator('.pill.leave').click();
+      if (await page.locator('.dialog').isVisible({ timeout: 2_000 }).catch(() => false)) await page.locator('.d-btn.primary').click();
+      await page.locator('.summary').waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(400);
+      await check('summary');
+    } catch (e) {
+      found.push(`flow: ${(e as Error).message.split('\n')[0]}`);
+    }
+    for (const x of errors.splice(before)) found.push(`报错 ${x}`);
+    if (found.length) report.push(...found.map((x) => `[${d.name}] ${x}`));
+    log('devices', d.name, found.length ? `${found.length} issues` : 'ok');
+    await page.close();
+  }
+  for (const c of contexts.values()) await c.close();
+  writeFileSync(join(SHOTS, 'devices.txt'), report.join('\n') + '\n');
+  if (report.length) throw new Error(`devices: ${report.length} issues in ${new Set(report.map((x) => x.slice(0, x.indexOf(']') + 1))).size} sizes, see ${join(SHOTS, 'devices.txt')}`);
+}
+
 /** 起一个 wrangler dev，跑完关掉、删掉它的本地存储 */
 async function withWorker(config: string[], run: (base: string) => Promise<void>): Promise<void> {
   const port = await freePort();
@@ -1496,6 +1625,7 @@ async function main(): Promise<void> {
         if (only === 'tp') await takeProfitFlow(browser, base);
         if (only === 'tour') await tourFlow(browser, base);
         if (only === 'tourroom') await tourRoomFlow(browser, base);
+        if (only === 'devices') await devicesFlow(browser, base);
       });
     if (!only || only === 'standalone') await withWorker(STANDALONE_CONFIG, (base) => standalone(browser, base));
   } catch (e) {

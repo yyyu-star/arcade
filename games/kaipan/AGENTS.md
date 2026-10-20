@@ -47,7 +47,7 @@ docs/          设计（design.md 等）、规则接口（core-api.md）、画�
 | `npm test` | vitest 全量（规则、回放、内容、文案扫描、防泄漏、架构约束） |
 | `npm run build` / `npm run build:cf` | 根路径构建 / 线上子路径 `/games/kaipan/` 构建到 `dist-cf/` |
 | `npm run sim -- …` | 机器人模拟与平衡验收（参数见 `tools/sim.ts` 顶部） |
-| `npm run shot` | 无头 Chromium 冒烟 + 截图，默认输出到 `shots/`（已忽略）；`--out` 指定目录；`--real`、`--ext`、`--story`、`--vis`、`--v05` 等模式见脚本顶部 |
+| `npm run shot` | 无头 Chromium 冒烟 + 截图，默认输出到 `shots/`（已忽略）；`--out` 指定目录；`--real`、`--ext`、`--story`、`--vis`、`--v05`、`--touch` 等模式见脚本顶部 |
 | `node tools/realness.ts` | 实测游戏个股、大盘与真实走势的逐日相关度（0.5 验收：个股 ≥ 0.9） |
 
 截图脚本需要 `playwright-core` 和一个 chromium-headless-shell；中文截图要装中文字体。浏览器启动参数用
@@ -81,7 +81,7 @@ docs/          设计（design.md 等）、规则接口（core-api.md）、画�
 3. 提交信息以 `kaipan:` 开头，只暂存明确路径；推 `kaipan/<说明>` 分支开 PR（见仓库根 CONTRIBUTING.md），审阅通过、合并进 `main` 后由 `.github/workflows/game-kaipan.yml` 部署。
    `wrangler.jsonc` 是能单独部署的独立配置（0.8.0）：不写平台绑定、`GATE`、路由和站点地址，代码里也不写站点地址；本站部署时由 `tools/deployer` 补上平台绑定、`GATE=login` 和路由（正式站主机名在 `production` 环境的 secret `SITE_HOST`，见 README 的「部署」一节）。
    Cloudflare 偶尔返回 504，但部署可能已经生效：先用 `npx wrangler deployments list` 核实再决定是否重跑。
-4. 发布后在线上 `/games/kaipan/` 实际打开：版本号、开局能加载行情段、玩一天、控制台零报错。
+4. 发布后在线上 `/games/kaipan/` 实际打开：版本号、开局能加载行情段、玩一天、控制台零报错；`/games/kaipan/health` 回的版本号和这次一致。
 
 ## 8. 已知待办
 

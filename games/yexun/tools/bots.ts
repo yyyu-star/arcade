@@ -6,6 +6,7 @@
  */
 import { ENEMIES } from '../src/content/enemies.ts';
 import { ARENA } from '../src/content/player.ts';
+import { MARKET_GOODS, NIGHT_MARKET, type MarketGood } from '../src/content/market.ts';
 import { MERGES, WEAPONS, type PassiveId, type WeaponId } from '../src/content/weapons.ts';
 import { inputCos, inputSin } from '../src/core/fmath.ts';
 import { Drop, MAX_DROPS, MAX_ENEMIES, MAX_PROPS, MAX_SHOTS, Pick, Shot, type Choice, type World } from '../src/core/index.ts';
@@ -34,6 +35,44 @@ export const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] 
 
 const VIEW = 560;
 
+/**
+ * 搭配路线（DESIGN 8.1，10-20 全流派配平）：流派 + 一条进化或合成，sim 用 `--build 流派:路线`。
+ * 路线是法器 id（走它的进化）或合成 id（两件都进化后合成）；机器人把路线要的法器和进化被动排到单子最前面，其余照流派单子。
+ */
+export const ROUTES: Record<Build, string[]> = {
+  sword: ['sword', 'flysword', 'coins', 'zhuxie', 'fujian'],
+  talisman: ['talisman', 'thunder', 'crane', 'leihuo', 'fujian'],
+  ward: ['bell', 'mirror', 'shield', 'rope', 'yinyang', 'fenzhong', 'linghua'],
+  wood: ['thunder', 'petals', 'linghua', 'leihuo'],
+  fire: ['gourd', 'talisman', 'fenzhong', 'leihuo'],
+  paper: ['zhibing', 'huobing', 'mingbing', 'bell'],
+};
+
+/** 路线要的法器（进化路线一件，合成路线两件） */
+export function routeWeapons(route: string): WeaponId[] {
+  const m = MERGES.find((x) => x.id === route);
+  if (m) return [m.a, m.b];
+  if (!(route in WEAPONS)) throw new Error(`没有这条路线：${route}`);
+  return [route as WeaponId];
+}
+
+/** 这局走成了没有：进化路线 = 那件进化了；合成路线 = 合成了 */
+export function routeDone(w: World, route: string): boolean {
+  if (MERGES.some((x) => x.id === route)) return w.merges.includes(route as never);
+  return w.weapons.some((o) => o.id === route && o.evolved);
+}
+
+function routePlan(build: Build, route: string | null): { weapons: WeaponId[]; passives: PassiveId[] } {
+  const base = BUILDS[build];
+  if (!route) return base;
+  const ws = routeWeapons(route);
+  const ps = ws.map((id) => WEAPONS[id].evolve!.with);
+  return {
+    weapons: [...ws, ...base.weapons.filter((x) => !ws.includes(x))].slice(0, Math.max(5, ws.length)),
+    passives: [...new Set([...ps, ...base.passives])],
+  };
+}
+
 export class Bot {
   readonly skill: Skill;
   readonly build: Build;
@@ -44,10 +83,19 @@ export class Bot {
   /** 会不会去凑双修的另一半（1.1 起模拟默认凑；13.3 的节奏验收按不凑的老口径量，见 tests/pace.test.ts） */
   readonly dual: boolean;
 
-  constructor(skill: Skill, build: Build, seed: number, opts: { dual?: boolean } = {}) {
+  /** 搭配路线（`流派:路线` 的后半，没有就是 null：照流派单子） */
+  readonly route: string | null;
+  private readonly plan: { weapons: WeaponId[]; passives: PassiveId[] };
+
+  /** spec：流派，或 `流派:路线`（ROUTES）；随机流只按流派分，同种子下不同路线的局可以配对比 */
+  constructor(skill: Skill, spec: Build | string, seed: number, opts: { dual?: boolean } = {}) {
     this.dual = opts.dual ?? true;
     this.skill = skill;
+    const [build, route] = spec.split(':') as [Build, string | undefined];
+    if (!(build in BUILDS)) throw new Error(`没有这个流派：${build}`);
     this.build = build;
+    this.route = route ?? null;
+    this.plan = routePlan(build, this.route);
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
   }
 
@@ -168,6 +216,23 @@ export class Bot {
     }
     // 夜探：隔着墙的魂珠不去捡（按直线距离挑最近的，魂珠在墙那边就一直往墙上顶）
     if (best >= 0 && w.raid && blockedBy(w, w.x, w.y, tx, ty)) best = -1;
+    // 守夜夜市：开着时去买一样买得起的（法器 +1 级最先；血少先回血），站到摊上就不再拉
+    let atStall = false;
+    if (!w.raid && w.mkPhase === 2) {
+      const want: MarketGood[] = w.hp < w.stats.hpMax * 0.6 ? ['heal', 'upgrade', 'might', 'reroll', 'vacuum', 'speed', 'ban'] : ['upgrade', 'might', 'reroll', 'heal', 'vacuum', 'speed', 'ban'];
+      let pick = -1;
+      for (const g of want) {
+        pick = w.mkGood.findIndex((x, k) => MARKET_GOODS[x] === g && !w.mkSold[k] && w.coins >= w.mkPrice[k]!);
+        if (pick >= 0) break;
+      }
+      if (pick >= 0) {
+        best = MAX_DROPS + MAX_PROPS;
+        tx = w.mkX[pick]!;
+        ty = w.mkY[pick]!;
+        bd = 0;
+        atStall = Math.hypot(tx - w.x, ty - w.y) < NIGHT_MARKET.r * 0.5;
+      }
+    }
     let gx = 0;
     let gy = 0;
     // 夜探沿路走：怪的推力封顶。窄街里怪成群，不封顶就被推来推去原地打转（10 分钟开不了一个箱子）；
@@ -193,7 +258,7 @@ export class Bot {
       const pull = threat > 0 ? 0.8 : 1;
       gx = inputCos(this.goal) * pull;
       gy = inputSin(this.goal) * pull;
-    } else if (best >= 0) {
+    } else if (best >= 0 && !atStall) {
       const dx = tx - w.x;
       const dy = ty - w.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -280,7 +345,7 @@ export class Bot {
       });
       return k;
     }
-    const plan = BUILDS[this.build];
+    const plan = this.plan;
     let best = 0;
     let bs = -Infinity;
     cs.forEach((c, i) => {

@@ -9,8 +9,11 @@ import { Session, randomSeed } from '../session.ts';
 import { SOLO_DEALS, type TierId } from '../../variants/guandan/stake/index.ts';
 import { LENGTH_CARD, LEVEL_CARD, STAKE_ERROR, TIER_NAME, signed, stakeError } from '../stake-text.ts';
 import { StakeSession, buyinStake, clearStake, loadStake, stakeExpired, stakeLeft } from '../stake.ts';
-import { getSettings, getStats, loadSave, updateSettings } from '../store.ts';
-import { COLOR, RADIUS, TYPE, minHit } from '../theme.ts';
+import { getDdzStats, getSettings, getStats, getVariant, loadDdzSave, loadSave, setVariant, updateSettings, type VariantId } from '../store.ts';
+import { DdzSession } from '../ddz-session.ts';
+import { DDZ_FLOW, DdzStakeSession, clearDdzStakeSave, ddzStakeExpired, ddzStakeLeft, loadDdzStakeSave } from '../ddz-stake.ts';
+import { DDZ_DAILY_LEVEL, beijingDate, ddzDailySeed } from '../ddz-daily.ts';
+import { COLOR, RADIUS, TYPE, minHit, phoneType } from '../theme.ts';
 import { FIGURE_SIZE, LANTERN_SIZE, homeLayout } from '../home-layout.ts';
 import { LOW_MEMORY } from '../device.ts';
 import { anim } from '../anim.ts';
@@ -18,13 +21,17 @@ import { goLobby } from '../lobby.ts';
 import { join, openMatch, openOnline } from '../online.ts';
 import { currentUserId, myRoom } from '../net.ts';
 import { cloudButton } from '../ui/cloud.ts';
-import { Button, ModeCard, iconButton, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
-import { confirm, openRules, openSettings, openStats } from '../ui/panels.ts';
+import { Button, ModeCard, fitWidth, iconButton, modal, segmented, setHit, text, toast, worldH, worldW, type ButtonStyle, type Modal } from '../ui/kit.ts';
+import { confirm, openDdzRules, openRules, openSettings, openStats } from '../ui/panels.ts';
 import { openLevelPicker, openTierPicker } from '../ui/stake.ts';
 import { standalone } from '../platform.ts';
+import type { SoloLevel } from '../../variants/guandan/ai/venue.ts';
 
 /** 一句玩法：不会掼蛋的人也知道这是什么 */
 const PITCH = '两两搭档，先出完牌、先打过 A 的一队赢';
+/** 斗地主（牌馆 0.28.0）那一句 */
+const PITCH_DDZ = '一个地主对两个农民，谁先出完谁那边赢';
+const PITCH_DDZ_SHORT = '一个地主对两个农民';
 
 /** screen= 只在打开页面后的第一次主页生效，回到主页不再弹 */
 let screenOpened = false;
@@ -36,6 +43,9 @@ export class TitleScene extends Phaser.Scene {
   /** 本机记着这个账号的房间时才有 */
   private backBtn: Button | null = null;
   overlay: Modal | null = null;
+
+  /** 掼蛋 / 斗地主切换的两个点（?ddz=1 时才有，冒烟点它） */
+  private variantAt: Record<VariantId, { x: number; y: number }> | null = null;
 
   constructor() {
     super('title');
@@ -55,6 +65,7 @@ export class TitleScene extends Phaser.Scene {
     const lively = LOW_MEMORY === 0 && !anim.instant;
     this.buttons = {};
     this.overlay = null;
+    this.variantAt = null;
     this.add.image(0, 0, `title:${W}`).setOrigin(0, 0).setDisplaySize(W, worldH);
 
     // 灯笼轻摆、四个人轻轻起伏（错开节奏）；省内存模式只摆静图
@@ -96,12 +107,26 @@ export class TitleScene extends Phaser.Scene {
     const cx = P.x + P.w / 2;
     const inner = P.w - 48;
 
-    const logo = this.add.image(cx, P.y + 92, 'logo').setDisplaySize(380, 161).setDepth(20);
+    // 牌馆（掼蛋 + 斗地主）的切换露出时标题写"牌馆"
+    const logo = this.add.image(cx, P.y + 92, app.params?.ddz ? 'logo:hall' : 'logo').setDisplaySize(380, 161).setDepth(20);
     if (lively) {
       logo.setAlpha(0).setScale(logo.scaleX * 1.2);
       this.tweens.add({ targets: logo, alpha: 1, scale: logo.scaleX / 1.2, duration: 520, ease: 'Back.easeOut' });
     }
-    text(this, cx, P.y + 186, PITCH, { size: TYPE.label, color: 0xf6e4c0 }).setDepth(20);
+    // 牌馆（0.28.0）：掼蛋 / 斗地主的切换。斗地主全部做完前只在 ?ddz=1 时露出（docs/doudizhu.md 第 4 节），平时主页和以前一样
+    const variant: VariantId = app.params?.ddz ? getVariant() : 'guandan';
+    if (app.params?.ddz) {
+      const seg = segmented(this, cx - 75, P.y + 186, [{ label: '掼蛋', value: 'guandan' }, { label: '斗地主', value: 'ddz' }], variant, (v) => {
+        setVariant(v as VariantId);
+        this.scene.restart();
+      }, 150).setDepth(20);
+      this.variantAt = { guandan: { x: seg.x, y: seg.y }, ddz: { x: seg.x + 150, y: seg.y } };
+    } else text(this, cx, P.y + 186, PITCH, { size: TYPE.label, color: 0xf6e4c0 }).setDepth(20);
+    if (variant === 'ddz') {
+      this.buildDdzPanel(P, cx, inner);
+      this.buildCorner(W);
+      return;
+    }
 
     const save = loadSave();
     // 单机实盘的存档（只在这台设备上）：过了 24 小时钱包已经原样退回，删掉说一句；没过就把主按钮换成"接着打实盘"
@@ -168,9 +193,14 @@ export class TitleScene extends Phaser.Scene {
     setHit(statsHit, inner, statsH);
     statsHit.on('pointerup', () => (this.overlay = openStats(this)));
 
+    this.buildCorner(W);
+  }
+
+  /** 右上角的图标、左上角的回大厅和回到房间、版本号、音乐（掼蛋和斗地主的主页共用） */
+  private buildCorner(W: number): void {
     // 右上角：规则、设置、战绩、云存档（图标），左上角：回大厅、回到房间
     const icons: [string, string, () => void][] = [
-      ['rules', 'rules', () => (this.overlay = openRules(this))],
+      ['rules', 'rules', () => (this.overlay = app.params?.ddz && getVariant() === 'ddz' ? openDdzRules(this) : openRules(this))],
       ['settings', 'settings', () => (this.overlay = openSettings(this))],
       ['stats', 'stats', () => (this.overlay = openStats(this))],
     ];
@@ -197,13 +227,135 @@ export class TitleScene extends Phaser.Scene {
     this.backBtn = null;
     void myRoom().then((back) => {
       if (!back || !this.sys.isActive() || this.backBtn) return;
-      this.backBtn = new Button(this, bx, 40, 180, 52, '回到房间', 'red', () => join(back.code, back.host), 'cards').setDepth(20);
+      this.backBtn = new Button(this, bx, 40, 180, 52, '回到房间', 'red', () => join(back.code, back.host, null, false, back.variant ?? 'guandan'), 'cards').setDepth(20);
     });
 
     text(this, W - 16, worldH - 10, `v${__APP_VERSION__}`, { size: TYPE.small, color: 0xb8a690, ox: 1, oy: 1 }).setDepth(20).setAlpha(0.7);
     audio.music('title');
     showA2hs(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => showA2hs(false));
+  }
+
+  /**
+   * 斗地主的面板：主按钮（接着打实盘 / 继续上局 / 快速开始）、三张卡（娱乐：选难度、快速匹配；实盘；好友房）、战绩条（右边是每日挑战）。
+   */
+  private buildDdzPanel(P: { x: number; y: number; w: number; h: number }, cx: number, inner: number): void {
+    // 手机横屏字号托底放大，整句放不下：删字不缩字（AGENTS 画面层约定），再按面板宽度兜底
+    const phone = phoneType();
+    fitWidth(text(this, cx, P.y + 228, phone ? PITCH_DDZ_SHORT : PITCH_DDZ, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20), inner);
+    const save = loadDdzSave();
+    const saved = save && save.state.phase !== 'gameOver' ? `第 ${save.state.dealNo}/${save.state.opts.deals} 副 · 我 ${signed(save.state.scores[0]!)} 分` : null;
+    const level = getSettings().difficulty;
+    const by = P.y + 286;
+    // 主按钮：有没结完的实盘先接着打（或去结算），否则有存档"继续上局"，否则"快速开始"。过期没结的那一份平台已经原样退回，存档删掉
+    let stake = standalone() ? null : loadDdzStakeSave();
+    if (stake && !stake.settle && ddzStakeExpired(stake)) {
+      clearDdzStakeSave(stake.ref);
+      stake = null;
+    }
+    if (stake) {
+      const s = stake;
+      const left = ddzStakeLeft(s);
+      this.buttons['resumeStake'] = new Button(this, cx, by, inner, 72, s.settle ? '结算上次的实盘' : '接着打实盘', 'red', () => this.startDdzStake(DdzStakeSession.fromSave(s)), 'play').setDepth(20);
+      text(this, cx, by + 52, `${TIER_NAME[s.tier]} · 打完 ${left.dealsDone}/${s.state.opts.deals} 副 · ${signed(left.points)} 分`, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20);
+    } else {
+      const btn = saved
+        ? new Button(this, cx, by, inner, 72, '继续上局', 'red', () => this.continueDdz(), 'play')
+        : new Button(this, cx, by, inner, 72, '快速开始', 'red', () => this.newDdz(level), 'play');
+      this.buttons[saved ? 'continue' : 'quick'] = btn.setDepth(20);
+      text(this, cx, by + 52, saved ?? `娱乐 · ${LEVEL_CARD[level].name}`, { size: TYPE.small, color: 0xf6e4c0 }).setDepth(20);
+    }
+    // 模式卡（和掼蛋同一种排法）：娱乐（选难度）、实盘（选档，单独部署没有钱包不摆）、好友房
+    const modes: [string, string, string, ButtonStyle, string, () => void][] = [
+      ['fun', '娱乐', phone ? '随便玩' : '和老周、王姐', 'green', 'robot', () => this.pickDdz(saved)],
+      ...(standalone() ? [] : [['stake', '实盘', phone ? '带筹码' : '带一份筹码', 'gold', 'crown', () => this.pickDdzStake()] as [string, string, string, ButtonStyle, string, () => void]]),
+      // 好友房：开房时带上玩法（斗地主），3 个座位
+      ['online', '好友房', '叫朋友来', 'blue', 'cards', () => openOnline('ddz')],
+    ];
+    const gap = 16;
+    const cw = (inner - gap * (modes.length - 1)) / modes.length;
+    modes.forEach(([key, name, desc, style, icon, fn], i) => {
+      this.buttons[key] = new ModeCard(this, P.x + 24 + cw / 2 + i * (cw + gap), P.y + 428, cw, 150, name, desc, style, icon, fn).setDepth(20);
+    });
+    const st = getDdzStats();
+    const sy = P.y + P.h - 62;
+    const strip = this.add.graphics().setDepth(19);
+    strip.fillStyle(0xffffff, 0.06).fillRoundedRect(P.x + 24, sy - 30, inner, 60, RADIUS.lg);
+    const line = st.games > 0 ? `赢了 ${st.wins}/${st.games} 局 · 当地主 ${st.landlord} 次赢 ${st.landlordWins}` : '打完第一局，这里会记下战绩';
+    // 战绩条右边是每日挑战（全服同一副牌，打完上今天的榜；单独部署没有榜，不摆）
+    const daily = !standalone();
+    const lx = daily ? P.x + 24 + (inner - 176) / 2 : cx;
+    fitWidth(text(this, lx, sy, line, { size: TYPE.label, color: st.games > 0 ? COLOR.goldLight : 0xd8c6a6 }).setDepth(20), daily ? inner - 200 : inner - 24);
+    if (daily) this.buttons['daily'] = new Button(this, P.x + 24 + inner - 88, sy, 160, 48, '每日挑战', 'gold', () => this.newDdzDaily(), 'crown').setDepth(20);
+  }
+
+  /** 斗地主实盘：选档位（和掼蛋同一个选档页，换成斗地主的规则和带入）；快速匹配排不到就转这一档的单机（照常带入一份） */
+  pickDdzStake(): void {
+    this.overlay = openTierPicker(this, (ses) => this.startDdzStake(ses), (tier) => openMatch(tier, () => void this.soloDdzStake(tier), 'ddz'), DDZ_FLOW);
+  }
+
+  private async soloDdzStake(tier: TierId): Promise<void> {
+    if (!this.scene.isActive()) return;
+    const r = await DDZ_FLOW.buyin(tier);
+    if (!this.scene.isActive()) return;
+    if (r.ok) this.startDdzStake(r.ses);
+    else toast(this, stakeError(r.error), worldW(this) / 2, worldH - 60);
+  }
+
+  startDdzStake(ses: DdzStakeSession): void {
+    app.ddz = ses;
+    this.scene.start('ddz');
+  }
+
+  continueDdz(): void {
+    const ses = DdzSession.restore();
+    if (!ses) return this.newDdz(getSettings().difficulty);
+    app.ddz = ses;
+    this.scene.start('ddz');
+  }
+
+  newDdz(level: SoloLevel): void {
+    app.ddz = DdzSession.fresh(app.params?.seed ?? randomSeed(), level);
+    if (app.params?.autoplay) app.ddz.autoplay = true;
+    this.scene.start('ddz');
+  }
+
+  /** 斗地主每日挑战：今天的种子、普通难度，不存档、不记战绩（不碰"继续上局"的那一局） */
+  newDdzDaily(): void {
+    const date = beijingDate(Date.now());
+    const ses = DdzSession.fresh(ddzDailySeed(date), DDZ_DAILY_LEVEL, undefined, false);
+    ses.daily = date;
+    if (app.params?.autoplay) ses.autoplay = true;
+    app.ddz = ses;
+    this.scene.start('ddz');
+  }
+
+  /** 斗地主娱乐：选难度（三档，和掼蛋共用设置里的难度）；有存档时再确认一次 */
+  pickDdz(saved: string | null): void {
+    const m = modal(this, 720, 500, '选难度', { onClose: () => (this.overlay = null) });
+    this.overlay = m;
+    const levels: SoloLevel[] = ['novice', 'normal', 'pro'];
+    const fresh = (lv: SoloLevel): void => {
+      if (saved) this.overlay = confirm(this, '重新开一局？现在这局的进度会丢掉', '开新局', () => this.newDdz(lv));
+      else this.newDdz(lv);
+    };
+    levels.forEach((lv, i) => {
+      const b = new Button(this, 0, -100 + i * 90, 420, 72, LEVEL_CARD[lv].name, lv === getSettings().difficulty ? 'red' : 'wood', () => {
+        m.close();
+        updateSettings({ difficulty: lv });
+        fresh(lv);
+      }, 'play');
+      m.body.add(b);
+      m.body.setData(`btn:level:${lv}`, b);
+    });
+    // 快速匹配（牌馆 ⑤）：排 ddz-fun 档；排不到就按现在的难度开一局单机
+    const match = new Button(this, 0, 170, 420, 72, '快速匹配', 'blue', () => {
+      m.close();
+      this.overlay = null;
+      openMatch(null, () => this.scene.isActive() && fresh(getSettings().difficulty), 'ddz');
+    }, 'cards');
+    m.body.add(match);
+    m.body.setData('btn:match', match);
   }
 
   /** 主按钮：有娱乐存档时"继续上局"，没有就"快速开始"（按上次选的难度直接开一局娱乐） */
@@ -292,6 +444,7 @@ export class TitleScene extends Phaser.Scene {
     if (this.cloudBtn?.visible) out['cloud'] = { x: this.cloudBtn.x, y: this.cloudBtn.y };
     if (this.lobbyBtn?.visible) out['lobby'] = { x: this.lobbyBtn.x, y: this.lobbyBtn.y };
     if (this.backBtn) out['back'] = { x: this.backBtn.x, y: this.backBtn.y };
+    if (this.variantAt) for (const [k, p] of Object.entries(this.variantAt)) out[`variant:${k}`] = p;
     // 弹层里的按钮（选模式、选档位）：坐标是弹层里的，加上弹层的位置
     const body = this.overlay?.root.scene ? this.overlay.body : null;
     for (const [k, v] of Object.entries((body?.data?.getAll() ?? {}) as Record<string, unknown>)) {

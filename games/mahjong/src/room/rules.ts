@@ -215,7 +215,7 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
 
   parse(raw) {
     if (!raw || typeof raw !== 'object') return null;
-    const a = raw as { t?: unknown; a?: unknown };
+    const a = raw as { t?: unknown; a?: unknown; v?: unknown };
     if (a.t === 'rebuy') return { t: 'rebuy' };
     // 新房间号只收合法的格式（6 位数字），别的一律不认
     if (a.t === 'next') {
@@ -223,7 +223,13 @@ export const mahjongRoom: RoomGame<RoomState, RoomAction, RoomView, RoomOpts, Wa
       return typeof code === 'string' && ROOM_CODE_RE.test(code) ? { t: 'next', code } : null;
     }
     if (a.t !== 'play') return null;
-    // 玩法之间的动作形状可能撞：按登记表的顺序取第一个认得的，apply 再对一下是不是这一桌的玩法
+    // 页面带上这一桌的玩法 id（parse 拿不到房间状态，玩法之间的动作形状会撞），就按它解析；apply 再对一下是不是这一桌的玩法。
+    // 不带的是立直上线前的旧页面，那时只有川麻：按登记表的顺序取第一个认得的
+    if (a.v !== undefined) {
+      const v = variantOf(a.v);
+      const x = v ? v.parse(a.a) : null;
+      return v && x !== null ? { t: 'play', v: v.id, a: x } : null;
+    }
     for (const v of Object.values(VARIANTS)) {
       const x = v.parse(a.a);
       if (x !== null) return { t: 'play', v: v.id, a: x };

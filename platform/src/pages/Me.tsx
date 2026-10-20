@@ -56,6 +56,17 @@ export function MePage() {
           </dd>
           <dt>注册于</dt>
           <dd>{fullDateText(user.createdAt)}</dd>
+          {user.isAdmin && (
+            <>
+              {/* 窄屏顶栏放不下"管理"，从这里进 */}
+              <dt>管理</dt>
+              <dd>
+                <Link className="inline-link" href="/admin" data-testid="me-admin">
+                  去管理后台
+                </Link>
+              </dd>
+            </>
+          )}
         </dl>
         <Rename />
         <LogoutButton />

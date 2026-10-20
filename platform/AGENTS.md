@@ -3,15 +3,18 @@
 > 总规范见仓库根的 `AGENTS.md`（拆成独立仓库后，以本文件和随附的 docs 为准）。
 
 - 内容：平台主界面（React + Vite，`src/`）和平台 Worker（`worker/`），Worker 名 `arcade`。站点域名和正式 D1 的 id 不写进仓库，部署时注入（README 的部署一节）；代码里不写死站点地址。
-- `/api/*`（账号、云存档、好友、排行榜，以后还有房间登记）的方案和**接口约定**见仓库根的 `docs/platform-backend.md`（第 5–7 节、第 15 节）。
+- `/api/*`（账号、云存档、好友、排行榜、钱包、社交）的方案和**接口约定**见仓库根的 `docs/platform-backend.md`（第 5–7 节、第 15 节）。
   拆分时把这份文档一起复制到 `platform/docs/`。
 - 游戏目录在 `src/games.ts`，封面放在 `public/covers/<id>.webp`（16:9），来源写进 `ASSETS.md`。平台只负责展示和跳转，不引用任何游戏的代码。
 - 正式环境只有这一个平台 Worker：不开 workers.dev（它绕过网关限速）、不建测试 Worker。测试全在本地：`npm test`（vitest 跑在本地 workerd 里）、
   `npm run dev:api`（wrangler dev + 本地 D1）。上线后由维护者在线上验证。
 - 测试期是邀请制：注册默认关着，管理员可在 `/admin` 随时开关（D1 `settings`；`vars.REGISTRATION` 是紧急总闸，见 `worker/api/settings.ts`），账号由管理员在 `/admin` 或用
-  `npm run admin` 建（维护者 2026-10-14 定）；0.20.0 起老用户也能生成邀请码，注册关着时凭码注册（`worker/api/invite-codes.ts`，15.20）。没登录的访客在首页一个 `/api` 请求都不发，只有打开登录页时问一次 `/api/me`。
+  `npm run admin` 建；老用户也能生成邀请码，注册关着时凭码注册（`worker/api/invite-codes.ts`，15.20）。没登录的访客在首页一个 `/api` 请求都不发，只有打开登录页时问一次 `/api/me`。
 - 管理接口 `/api/admin/*` 的两种认证（Bearer 令牌、管理员会话）和各自能做什么写在 `worker/api/admin.ts` 开头；改权限时同步改那里和测试。
-- 改界面后跑 `npm run smoke`（无头浏览器走建号和账号主流程，控制台零报错、没有意料外的 4xx/5xx），并亲自看 `shots/` 里的截图。
+- 改界面后跑相关的那段冒烟（`npm run smoke -- --only=<段>`，分段见 README；改布局跑 `devices`），控制台零报错、没有意料外的 4xx/5xx，并亲自看截图。
+  新 CSS 限定在所属页面的根节点下；颜色只用 `src/styles.css` 的变量（`docs/style.md`）。
+- 每次改动同步更新相关文档：`README.md`、`docs/style.md`、仓库根 `docs/platform-backend.md`（接口、写入行数）、`CHANGELOG.md`（带日期的版本段）。
+  文档写现状，过程和历史只进 CHANGELOG。
 - 命令：`npm run dev`（界面，5180）、`npm run dev:api`（接口，5181）、`npm test`、`npm run smoke`、`npm run build`、`npm run preview`（4180）、
   `npm run deploy`（一键部署或拆成独立仓库后用；本仓库的正式站只经 PR 合并进 main 后由 CI 部署，CI 注入域名和正式库 id，见 README）。
 - 测试夹具里的站点用保留的示例域名（`game.example.com`、`game.test`），不写正式域名。

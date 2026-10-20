@@ -84,7 +84,7 @@ describe('纸兵', () => {
     expect(burns).toBeGreaterThan(0);
   });
 
-  it('实盘局的卡池里没有纸兵和剪刀（系数配好前），娱乐局有', () => {
+  it('实盘局和娱乐局的卡池里都有纸兵和剪刀（0.4.7 配好实盘系数后放开）', () => {
     const pool = (live: boolean): Set<string> => {
       const ids = new Set<string>();
       // 0.4.5 前几次升级偏向角色初始法器那一类，开局的卡换了一批：多跑几个种子、每局多一分钟
@@ -101,7 +101,7 @@ describe('纸兵', () => {
       return ids;
     };
     const live = pool(true);
-    expect(live.has('zhibing') || live.has('jiandao')).toBe(false);
+    expect(live.has('zhibing') || live.has('jiandao')).toBe(true);
     const fun = pool(false);
     expect(fun.has('zhibing') || fun.has('jiandao')).toBe(true);
   }, 60_000);

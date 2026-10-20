@@ -31,12 +31,16 @@ function cachedBlock(key: string, now: number): void {
 
 /** 匿名接口的内存令牌桶。 */
 export function takeAnonToken(ipHash: string, limits: Limits, now: number): void {
-  const rate = limits.anonPerIpPerMinute;
-  let b = buckets.get(ipHash);
+  takeIpToken(ipHash, limits.anonPerIpPerMinute, now);
+}
+
+/** 按键（IP 哈希，别的用途加前缀分开）的内存令牌桶，每分钟 rate 个；不够就 429 */
+export function takeIpToken(key: string, rate: number, now: number): void {
+  let b = buckets.get(key);
   if (!b) {
     if (buckets.size >= MAX_CACHE) buckets.clear();
     b = { tokens: rate, at: now };
-    buckets.set(ipHash, b);
+    buckets.set(key, b);
   }
   b.tokens = Math.min(rate, b.tokens + ((now - b.at) * rate) / 60_000);
   b.at = now;

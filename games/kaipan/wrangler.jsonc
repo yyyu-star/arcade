@@ -11,13 +11,15 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "preview_urls": false,
+  // Workers 日志：线上出错时能在 Cloudflare 面板里看到 Worker 的报错和请求
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
     "not_found_handling": "none",
     // 先进 Worker 的路径（其余静态资源直接回，不经过 Worker）：
     // /（单独部署时转到 /games/kaipan/）、首页三种写法（GATE=login 时问平台登录了没有，见 src/worker/gate.ts）、
-    // /games/kaipan/api/*（实盘钱包接口，src/worker/live.ts，总要认人；单独部署时一律 501）
-    "run_worker_first": ["/", "/games/kaipan", "/games/kaipan/", "/games/kaipan/index.html", "/games/kaipan/api/*"]
+    // /games/kaipan/api/*（实盘钱包接口，src/worker/live.ts，总要认人；单独部署时一律 501）、/games/kaipan/health（监控，不要登录）
+    "run_worker_first": ["/", "/games/kaipan", "/games/kaipan/", "/games/kaipan/index.html", "/games/kaipan/api/*", "/games/kaipan/health"]
   }
 }

@@ -46,7 +46,7 @@ src/view/      Phaser 画面层 + DOM 界面 + 程序合成的图和声音
 src/platform/  本地存档、云存档、实盘的浏览器端
 src/online/    排行榜、每日挑战、分享、社交部件
 src/replay/    本机录像
-worker/        Worker：登录闸门、实盘带入结回
+worker/        Worker：登录闸门、实盘带入结回、巡检用的 /games/yexun/health
 tools/         冒烟、截图、模拟器、机器人、封面、字体子集
 tests/         vitest
 ```

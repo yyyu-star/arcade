@@ -238,3 +238,62 @@ describe('没到钱包的情况', () => {
     expect((await handle(post('buyin', { tier: 'small' }, { Origin: 'http://127.0.0.1:8787' }), e)).status).toBe(200);
   });
 });
+
+describe('斗地主（variant: ddz）', () => {
+  const DDZ_REF = `solo-ddz-mid-${'ab'.repeat(16)}`;
+
+  it('带入：ref 带 ddz 标记和档位，op 是 ref-in，钱包里 game 仍是 guandan；ref 长度和字符满足钱包的格式', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    const res = await handle(post('buyin', { variant: 'ddz', tier: 'big' }), env(w));
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ ok: true, tier: 'big', share: 50_000 });
+    const ref = body['ref'] as string;
+    expect(ref).toMatch(/^solo-ddz-big-[0-9a-f]{32}$/);
+    expect(w.calls[0]!.req).toMatchObject({ game: 'guandan', ref, tier: 'big', amount: 50_000, mode: 'client', op: `${ref}-in` });
+    for (const k of ['in', 'out', 'refund']) expect(`${ref}-${k}`).toMatch(WALLET_ID);
+  });
+
+  it('结回：每分是一份的 1/40，按 ref 里的档位算，不信页面带的', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    await handle(post('settle', { variant: 'ddz', ref: DDZ_REF, tier: 'lux', points: 8, deals: 8 }), env(w));
+    // 中档一份 10,000、每分 250：10,000 + 2,000
+    expect(w.calls[0]).toEqual({ method: 'settle', req: { userId: 'u1', game: 'guandan', ref: DDZ_REF, amount: 12_000, mode: 'client', op: `${DDZ_REF}-out` } });
+    await handle(post('settle', { variant: 'ddz', ref: DDZ_REF, points: -40, deals: 3 }), env(w));
+    expect(w.calls[1]!.req).toMatchObject({ amount: 0 });
+    await handle(post('settle', { variant: 'ddz', ref: DDZ_REF, points: 40, deals: 8 }), env(w));
+    expect(w.calls[2]!.req).toMatchObject({ amount: 20_000 });
+  });
+
+  it('结回的数不在规则范围里（|分| > 40、副数 > 8、一副最多动 48 分）：400', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    for (const b of [
+      { ref: DDZ_REF, points: 41, deals: 8 },
+      { ref: DDZ_REF, points: 1, deals: 9 },
+      { ref: DDZ_REF, points: 1 },
+      { ref: DDZ_REF, points: 1.5, deals: 2 },
+      { ref: DDZ_REF, points: 40, deals: 0 },
+    ]) {
+      expect((await handle(post('settle', { variant: 'ddz', ...b }), env(w))).status, JSON.stringify(b)).toBe(400);
+    }
+    expect(w.calls).toHaveLength(0);
+  });
+
+  it('掼蛋的 ref 和斗地主的 ref 互不通用：缺 variant 用斗地主 ref、variant ddz 用掼蛋 ref 都是 400；variant 写错也是 400', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W }));
+    expect((await handle(post('settle', { ref: DDZ_REF, points: 1, deals: 1 }), env(w))).status).toBe(400);
+    expect((await handle(post('refund', { ref: DDZ_REF }), env(w))).status).toBe(400);
+    expect((await handle(post('settle', { variant: 'ddz', ref: REF, points: 1, deals: 1 }), env(w))).status).toBe(400);
+    expect((await handle(post('refund', { variant: 'ddz', ref: REF }), env(w))).status).toBe(400);
+    expect((await handle(post('buyin', { variant: 'poker', tier: 'mid' }), env(w))).status).toBe(400);
+    expect(w.calls).toHaveLength(0);
+  });
+
+  it('放弃：op 是 ref-refund；variant guandan 等于不带', async () => {
+    const w = wallet(() => ({ ok: true, wallet: W, credited: 10_000 }));
+    const res = await handle(post('refund', { variant: 'ddz', ref: DDZ_REF }), env(w));
+    expect(await res.json()).toEqual({ ok: true, wallet: W, credited: 10_000 });
+    expect(w.calls[0]).toEqual({ method: 'refund', req: { userId: 'u1', game: 'guandan', ref: DDZ_REF, mode: 'client', op: `${DDZ_REF}-refund` } });
+    await handle(post('refund', { variant: 'guandan', ref: REF }), env(w));
+    expect(w.calls[1]!.req).toMatchObject({ ref: REF });
+  });
+});

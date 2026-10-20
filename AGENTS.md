@@ -15,7 +15,7 @@ arcade/
 ├─ CONTRIBUTING.md         合作指南：分支、PR、审阅、合并、部署、回滚
 ├─ docs/                   跨模块的设计：project.md（项目总体定义）、architecture.md（整体架构）、platform-backend.md（账号/联机/熔断方案）、economy.md（筹码体系：一个钱包，娱乐和实盘）、table-fun.md（牌桌互动规范：牌桌游戏共用）、balance.md（难度和收益的配平目标）、social.md（社交：分享、在线、邀请、旁观、好友榜和分期）
 ├─ tools/                  仓库级工具：check-isolation.mjs（模块独立性检查）、check-deploy-config.mjs（部署配置检查）、deployer/（钉死的 wrangler 和部署程序）、selfhost/（自托管打包和运维脚本）、split-module.sh（拆分模块）、git-hooks/（本地推送拦截）、verify-main.sh、verify-latest.sh（部署前核对）
-├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）
+├─ .github/workflows/      每个模块一个流程（test 作业测试构建打包、main 上的 deploy 作业经维护者批准后部署，按路径触发）+ check.yml（独立性和部署配置检查）+ main-guard.yml（直接推 main 报警）+ monitor.yml（每 10 分钟读线上状态，异常开 alert issue）
 ├─ platform/               模块：平台主界面 + /api（Worker 名 arcade，挂在站点主机名的根路径）
 ├─ games/
 │  ├─ kaipan/              模块：《开盘》（Worker 名 kaipan，路径 /games/kaipan/）

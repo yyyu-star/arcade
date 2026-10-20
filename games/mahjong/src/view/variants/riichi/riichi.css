@@ -1,0 +1,339 @@
+/* 立直牌桌和结算的样式（docs/riichi.md 第 4 节）。全部限定在 .table.rc、.rc-summary、.rc-guide、.lobby-variants 下：
+ * 川麻和公共牌桌的样子一点不动。横屏、竖屏的位置沿用 style.css 里的舞台坐标，这里只管里面的东西。 */
+
+/* ---------- 名牌：自风小签（放在川麻缺门签的位置）、立直棒 ---------- */
+.table.rc .tag.rc-wind {
+  background: #ffffff26;
+  min-width: 20px;
+  text-align: center;
+}
+.table.rc .tag.rc-wind.w0 {
+  background: linear-gradient(#f3c86b, #c8902a);
+  border-color: #fff0c4;
+  color: #3a2a00;
+}
+/* 立直棒：名牌正下面横着一根白棒，中间一个红点（和真牌桌的点棒一样）；双立直两个点 */
+.table.rc .badge .rc-stick {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 3px);
+  width: 56px;
+  height: 7px;
+  margin-left: -28px;
+  border-radius: 4px;
+  background: linear-gradient(#fffdf4, #d8d0b8);
+  box-shadow: 0 1px 2px #000a, inset 0 -1px 0 #0003;
+}
+.table.rc .badge .rc-stick::before,
+.table.rc .badge .rc-stick::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #c4232b;
+}
+.table.rc .badge .rc-stick.double::before {
+  margin-left: -9px;
+}
+.table.rc .badge .rc-stick.double::after {
+  margin-left: 4px;
+}
+.table.rc .badge .rc-stick:not(.double)::before {
+  display: none;
+}
+
+/* ---------- 河：立直宣告那张横放 ---------- */
+/* 转 90 度后宽变成原来的高：两边各让出差的一半，再往下压半差，和同一排的牌底边对齐 */
+.table.rc .river .tile.rc-riichi {
+  --rc-k: 5px;
+  margin: 0 var(--rc-k);
+  transform: translateY(var(--rc-k)) rotate(90deg);
+}
+[data-orient='land'] .table.rc .river .tile.rc-riichi {
+  --rc-k: 6px;
+}
+/* 最近一张的小箭头在横放的牌上会朝右，去掉，留金边 */
+.table.rc .river .tile.rc-riichi.last::after {
+  display: none;
+}
+
+/* ---------- 中控盘：宝牌指示一条、局名、剩几张、本场和供托 ----------
+ * 四边各有一条 7 高的方向灯（离边 4），内容要躲开：上下左右各留 12。盘子高 112，手机上字号放大到 1.75 倍时四行刚好放下 */
+.table.rc .center .mid.rc-mid {
+  inset: 12px 11px;
+  gap: 0;
+}
+.table.rc .rc-dora {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+.table.rc .rc-dora .tile {
+  width: 16px;
+  height: 22px;
+}
+.table.rc .center .rc-name {
+  font-size: calc(11px * var(--fs-k, 1));
+  line-height: 1.05;
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.table.rc .center .rc-end {
+  font-size: calc(11px * var(--fs-k, 1));
+  line-height: 1.05;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.table.rc .center .rc-wall {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.table.rc .center .rc-wall .wall {
+  font-size: 26px;
+}
+.table.rc .center .rc-wall small {
+  font-size: calc(10px * var(--fs-k, 1));
+  opacity: 0.75;
+}
+.table.rc .center .rc-sub {
+  display: flex;
+  gap: 8px;
+  font-size: calc(9.5px * var(--fs-k, 1));
+  line-height: 1.1;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+.table.rc .center .rc-sub b {
+  margin-left: 2px;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 操作条：立直、九种九牌、吃的选择 ---------- */
+.table.rc .bar .act.riichi {
+  border-color: #cfe4ff;
+  background: linear-gradient(#5aa0e8, #1d4f9a);
+  color: #fff;
+  text-shadow: 0 1px 0 #0a2a5a;
+}
+.table.rc .bar .act.riichi.on {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.table.rc .bar .act.kyuu {
+  min-width: 64px;
+  min-height: 48px;
+  font-size: var(--fs-lg);
+  background: linear-gradient(#ffffff26, #ffffff0f);
+  border-color: #ffffff33;
+  box-shadow: none;
+}
+.table.rc .bar .act.kyuu.armed {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.table.rc .bar .act.kan .tile {
+  margin-left: 2px;
+}
+.table.rc .bar .act.on {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.table.rc .bar .ting {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.table.rc .bar .hint.rc-fu {
+  color: #ffb4a8;
+  font-weight: 700;
+}
+/* 吃、杠有几种选法：弹在操作条上面一块小面板，一种一个按钮 */
+.table.rc .bar .rc-pick {
+  position: absolute;
+  bottom: calc(100% + var(--sp-2));
+  left: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: 520px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-lg);
+  background: linear-gradient(#1d4b3cf8, #0e2e24f8);
+  border: 2px solid #f3c86b99;
+  box-shadow: var(--sh-3);
+  transform: translateX(-50%);
+  z-index: 6;
+}
+[data-orient='land'] .table.rc .bar .rc-pick {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.table.rc .bar .rc-pick-title {
+  width: 100%;
+  text-align: center;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--gold);
+}
+.table.rc .bar .rc-opt {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: max(var(--tap), 56px);
+  min-height: max(var(--tap), 56px);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid #ffffff3a;
+  border-radius: var(--r-md);
+  background: linear-gradient(#ffffff2e, #ffffff14);
+  box-shadow: 0 3px 0 #0006;
+}
+.table.rc .bar .rc-opt small {
+  align-self: center;
+  margin-left: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+/* 被吃的那张描金，一眼看出哪张是别人打的 */
+.table.rc .bar .rc-opt .tile.called {
+  box-shadow: 0 0 0 2px var(--gold);
+  border-radius: 4px;
+}
+.table.rc .banner.riichi {
+  color: #cfe4ff;
+  -webkit-text-stroke-color: #0a2a5a;
+}
+.table.rc .banner.draw {
+  font-size: 40px;
+}
+
+/* ---------- 结算 ---------- */
+.rc-summary h2 small {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  opacity: 0.8;
+}
+.rc-summary .rc-inds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-2);
+}
+.rc-summary .rc-ind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+.rc-summary .rc-ind .group {
+  display: flex;
+  gap: 2px;
+}
+.rc-summary .rc-win {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: #ffffff0d;
+  border: 1px solid #f3c86b40;
+}
+.rc-summary .rc-who {
+  font-size: var(--fs-md);
+}
+.rc-summary .rc-who b {
+  color: var(--gold);
+}
+.rc-summary .rc-who small {
+  font-size: var(--fs-xs);
+  opacity: 0.85;
+}
+/* 役种表：一个役一行，名字在左、番数在右；宝牌这一类淡一点；横屏放得下就分两栏 */
+.rc-summary .rc-yaku {
+  display: block;
+  font-size: var(--fs-sm);
+}
+[data-orient='land'] .rc-summary .rc-yaku {
+  columns: 2;
+  column-gap: var(--sp-5);
+}
+.rc-summary .rc-yaku-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 2px 0;
+  border-bottom: 1px dashed #ffffff26;
+  break-inside: avoid;
+}
+.rc-summary .rc-yaku-row .f {
+  color: var(--gold);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rc-summary .rc-yaku-row.dora .n {
+  opacity: 0.85;
+}
+.rc-summary .rc-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+}
+.rc-summary .rc-head {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--gold);
+}
+.rc-summary .rc-value {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rc-summary .rc-pts {
+  min-width: 80px;
+  text-align: right;
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+.rc-summary .rc-score {
+  min-width: 90px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.rc-summary .rc-sticks {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  opacity: 0.85;
+}
+
+/* ---------- 选桌页的玩法选项 ---------- */
+.lobby-variants {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.lobby-variants .label {
+  opacity: 0.8;
+}
+.rules-opts .rc-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}

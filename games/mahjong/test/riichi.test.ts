@@ -233,6 +233,40 @@ describe('和牌收点', () => {
 
 // ---------- 立直、一发、振听 ----------
 
+describe('庄家轮转和庄家的点数', () => {
+  // 断幺平和、宝牌 2（指示 5p，手里 66p）：4 番 30 符，基本点 1,920。子家荣和 ×4 = 7,700，庄家荣和 ×6 = 11,600
+  test('东一局子家和了换庄；东二、东三局庄家荣和按 ×6 收（加本场），庄家和了连庄不换庄', () => {
+    let s = table(['*6s', TANYAO, '*', '*'], 0, '1z', { dealer: 0, dead: '5p' });
+    s = discard(s, 0, '6s');
+    s = claim(s, 1, 'ron');
+    expect(s.history.at(-1)!.wins[0]!.gain).toBe(7_700);
+    expect([s.wind, s.hand, s.dealer, s.honba]).toEqual([0, 1, 1, 0]);
+
+    // 东二局：1 号坐庄，2 号放铳
+    let t = table(['*', TANYAO, '*6s', '*'], 2, '1z', { dealer: 1, dead: '5p' });
+    t.first = 0;
+    t.hand = 1;
+    t = discard(t, 2, '6s');
+    t = claim(t, 1, 'ron');
+    expect(t.history.at(-1)!.dealer).toBe(1);
+    expect(t.history.at(-1)!.wins[0]!.gain).toBe(11_600);
+    expect(t.points[2]).toBe(25_000 - 11_600);
+    expect([t.hand, t.dealer, t.honba]).toEqual([1, 1, 1]);
+
+    // 东三局 2 本场：2 号坐庄，3 号放铳
+    let u = table(['*', '*', TANYAO, '*6s'], 3, '1z', { dealer: 2, dead: '5p' });
+    u.first = 0;
+    u.hand = 2;
+    u.honba = 2;
+    u = discard(u, 3, '6s');
+    u = claim(u, 2, 'ron');
+    expect(u.history.at(-1)!.dealer).toBe(2);
+    expect(u.history.at(-1)!.wins[0]!.gain).toBe(11_600 + 600);
+    expect(u.points[3]).toBe(25_000 - 12_200);
+    expect([u.hand, u.dealer, u.honba]).toEqual([2, 2, 3]);
+  });
+});
+
 describe('立直', () => {
   test('立直后打出的牌没人和才放棒，一发开始；立直后只能打摸到的牌', () => {
     let s = table([TANYAO + '9m', '*', '*', '*'], 0, '1z2z3z4z5z');
@@ -522,6 +556,45 @@ describe('一场结束', () => {
     expect(s.phase).toBe('over');
   });
 
+  test('没打完就要结果（好友房离座、单机中途离开）：只按点数差换筹码，不算马和头名奖，打到一半的这一局不算', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.start = [10_000, 40_000, 25_000, 25_000];
+    s.points = [9_000, 40_000, 25_000, 25_000];
+    s.sticks = 1;
+    const r = RC.result(s);
+    // 0 号：这一局开始时 10,000 − 25,000 = −15,000 → 小档 600；这一局他刚放的立直棒不算
+    expect(r.seats[0]!.net).toBe(-600);
+    expect(r.seats[1]!.net).toBe(600);
+    expect(s.phase).toBe('turn');
+    // 开局点数都一样：谁走都不输不赢（起家不会因为排第一白拿头名奖）
+    const t = table(['*', '*', '*', '*'], 0, '1z');
+    expect(RC.result(t).seats.map((x) => x.net)).toEqual([0, 0, 0, 0]);
+    expect(RC.finish(t).chips).toEqual([2_000, 2_000, 2_000, 2_000]);
+  });
+
+  test('开局时的带入到账（还没人打过牌）不记接手得分', () => {
+    const s = table(['*', '*', '*', '*'], 0, '1z');
+    s.discards = 0;
+    const t = RC.restake(RC.restake(s, 0, 2_000), 1, 2_000);
+    expect(t.entry ?? [0, 0, 0, 0]).toEqual([0, 0, 0, 0]);
+  });
+
+  test('中途接管：新来的人只为接手以后的涨落负责；前面那段由庄家补给赢家', () => {
+    const base = (): RcState => {
+      const s = table(['*', '*', '*', '*'], 0, '1z');
+      s.points = [10_000, 40_000, 25_000, 25_000];
+      s.start = s.points.slice();
+      s.kyoku = 3;
+      return s;
+    };
+    const plain = base();
+    finishMatch(plain);
+    const t = RC.restake(base(), 0, 2_000);
+    finishMatch(t);
+    expect(t.chips[0]).toBe(2_000);
+    expect(t.chips[1]).toBe(plain.chips[1]);
+  });
+
   const last = (dealer: number, first: number, points: number[]): RcState => {
     const s = table(['*', TANYAO + '6s', '*', '*'], 1, '1z', { dealer });
     s.first = first;
@@ -545,6 +618,29 @@ describe('一场结束', () => {
     d = RC.resume(d);
     expect(d.phase).toBe('turn');
     expect(act(last(0, 1, [25_000, 28_000, 25_000, 22_000]), 1, { t: 'tsumo' }).phase).toBe('over');
+  });
+
+  test('西入后庄家连庄：别家已到 30,000 但庄家不是第一，接着打；换庄时有人到 30,000 就结束', () => {
+    // 西一局，1 号是庄，荒牌流局时庄家听牌连庄；3 号已经 31,000
+    let s = table(['*8s', TANYAO, '*', '*'], 0, '', { dealer: 1 });
+    s.first = 1;
+    s.wind = 2;
+    s.hand = 0;
+    s.points = [20_000, 24_000, 25_000, 31_000];
+    s.start = s.points.slice();
+    s = discard(s, 0, '8s');
+    expect(s.history.at(-1)!.tenpai).toEqual([false, true, false, false]);
+    expect(s.phase).toBe('end');
+    expect(s.dealer).toBe(1);
+    // 同一局庄家没听（换庄）：3 号到了 30,000，结束
+    let t = table(['*8s', '*', TANYAO, '*'], 0, '', { dealer: 1 });
+    t.first = 1;
+    t.wind = 2;
+    t.hand = 0;
+    t.points = [20_000, 24_000, 25_000, 31_000];
+    t.start = t.points.slice();
+    t = discard(t, 0, '8s');
+    expect(t.phase).toBe('over');
   });
 
   test('东风战打完东四局结束；西入最多打到西四局', () => {

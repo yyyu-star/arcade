@@ -3,24 +3,17 @@
  * 和 src/core 一样是纯函数：不碰 DOM、网络、时间、随机数（ref 里的随机数由调用方给）。Worker、页面、房间都从这里取数，
  * 不各算一份。
  */
-import { teamOf, type DealResult, type Phase, type Seat, type Team } from '../core/index.ts';
+import { TIERS, setPaid, type Paid, type RoomBook, type TierId } from '../../../core/stake.ts';
+import { teamOf, type DealResult, type Phase, type Team } from '../core/index.ts';
 
-/** 档位表（docs/economy.md 第 2 节，三个游戏共用）：一份多少 */
-export const TIERS = { small: 2_000, mid: 10_000, big: 50_000, lux: 200_000 } as const;
-export type TierId = keyof typeof TIERS;
-export const TIER_IDS: readonly TierId[] = ['small', 'mid', 'big', 'lux'];
-
-export function isTier(x: unknown): x is TierId {
-  return typeof x === 'string' && (TIER_IDS as readonly string[]).includes(x);
-}
+// 档位、钱包 id 格式、单机有效期、op 的拼法是玩法无关的，放在通用层；这里原样再导出，掼蛋这边的 import 不变
+export { SOLO_HOURS, TIERS, TIER_IDS, WALLET_ID, isTier, seatOp, setPaid, soloOp, type Paid, type RoomBook, type SeatBook, type TierId } from '../../../core/stake.ts';
 
 /** 每分 = 一份的 1/20，一场两头都封顶 20 分（1.2：模拟里没有一场碰到） */
 export const POINTS_PER_SHARE = 20;
 /** 一场打几副：单机 8 副，好友房几个真人轮流想、一副更慢，5 副（1.4） */
 export const SOLO_DEALS = 8;
 export const ROOM_DEALS = 5;
-/** 单机放着不打的最长时间：钱包里那一份的到期时间（钱包最长也只给 24 小时） */
-export const SOLO_HOURS = 24;
 /** 好友房：房间寿命 8 小时 + 关房收尾 1 小时 + 余量 */
 export const ROOM_HOURS = 10;
 
@@ -48,7 +41,6 @@ export function payout(tier: TierId, points: number): number {
 
 // ───────────── 钱包的 ref 和 op（平台 5.9：8–64 位的 [A-Za-z0-9_-]） ─────────────
 
-export const WALLET_ID = /^[A-Za-z0-9_-]{8,64}$/;
 /**
  * 单机 ref：`solo-<档位>-<32 位十六进制>`（0.12.2 起把档位编进去）。ref 由 Worker 生成，结回时按 ref 里的档位算结回额，
  * 不信页面带来的档位——否则小档带入、报豪华档结回会按豪华档算（安全审计 2026-10-16，低危：钱包另有"不超过带入 + 20 份"兜着）。
@@ -73,19 +65,11 @@ export function soloRefTier(ref: string): TierId | null {
   return (SOLO_REF.exec(ref)?.[1] as TierId | undefined) ?? null;
 }
 
-export function soloOp(ref: string, kind: 'in' | 'out' | 'refund'): string {
-  return `${ref}-${kind}`;
-}
-
 /** 好友房：hex 是从这一场的密钥流里取的 64 位（16 位十六进制） */
 export function roomRef(hex: string): string {
   const ref = `gd-${hex}`;
   if (!ROOM_REF.test(ref)) throw new Error(`好友房 ref 要 16 位小写十六进制：${hex}`);
   return ref;
-}
-
-export function seatOp(ref: string, seat: Seat, kind: 'in' | 'out'): string {
-  return `${ref}-s${seat}-${kind}`;
 }
 
 // ───────────── 单机一场（我是 0 号，我方 = 0 队） ─────────────
@@ -127,35 +111,8 @@ export function validSoloResult(points: unknown, deals: unknown): boolean {
 
 // ───────────── 好友房：每个座位一本账（3.2） ─────────────
 
-/**
- * no：电脑座位或还没带入；pending：带入在办；yes：到账了，分算他的；refused：带入被拒，这一场不计输赢；
- * left：中途点了"离开"，按当时的分结回了（0.6.0），之后的分归庄家
- */
-export type Paid = 'no' | 'pending' | 'yes' | 'refused' | 'left';
-
-export interface SeatBook {
-  paid: Paid;
-  /** 到账以后的净分（封顶） */
-  points: number;
-}
-
-export interface RoomBook {
-  tier: TierId;
-  seats: SeatBook[];
-  /** 记过的副数 */
-  deals: number;
-  /** 庄家：不归任何到账座位的分，只用来日志和统计 */
-  house: number;
-  /** 离开时已经结回、后来又带入了新的一份的那些份的分（0.6.0）；庄家 + 这个 + 各座位的分恒为 0 */
-  settled?: number;
-}
-
 export function newRoomBook(tier: TierId): RoomBook {
   return { tier, seats: [0, 1, 2, 3].map(() => ({ paid: 'no' as Paid, points: 0 })), deals: 0, house: 0 };
-}
-
-export function setPaid(b: RoomBook, seat: Seat, paid: Paid): RoomBook {
-  return { ...b, seats: b.seats.map((s, i) => (i === seat ? { ...s, paid } : s)) };
 }
 
 /**

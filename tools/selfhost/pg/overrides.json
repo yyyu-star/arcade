@@ -300,17 +300,17 @@
   },
   {
     "why": "计量按小时累加：同上，补 meter_hourly.",
-    "sqlite": "INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys, login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) ON CONFLICT (hour) DO UPDATE SET requests = requests + excluded.requests, rows_read = rows_read + excluded.rows_read, rows_reg = rows_reg + excluded.rows_reg, rows_auth = rows_auth + excluded.rows_auth, rows_save = rows_save + excluded.rows_save, rows_social = rows_social + excluded.rows_social, rows_acct = rows_acct + excluded.rows_acct, rows_board = rows_board + excluded.rows_board, rows_sys = rows_sys + excluded.rows_sys, rows_wallet = rows_wallet + excluded.rows_wallet, rows_live = rows_live + excluded.rows_live, login_attempts = login_attempts + excluded.login_attempts, recover_attempts = recover_attempts + excluded.recover_attempts, db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE db_size END, updated_at = excluded.updated_at",
+    "sqlite": "INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys, login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live, rows_mon) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17) ON CONFLICT (hour) DO UPDATE SET requests = requests + excluded.requests, rows_read = rows_read + excluded.rows_read, rows_reg = rows_reg + excluded.rows_reg, rows_auth = rows_auth + excluded.rows_auth, rows_save = rows_save + excluded.rows_save, rows_social = rows_social + excluded.rows_social, rows_acct = rows_acct + excluded.rows_acct, rows_board = rows_board + excluded.rows_board, rows_sys = rows_sys + excluded.rows_sys, rows_wallet = rows_wallet + excluded.rows_wallet, rows_live = rows_live + excluded.rows_live, rows_mon = rows_mon + excluded.rows_mon, login_attempts = login_attempts + excluded.login_attempts, recover_attempts = recover_attempts + excluded.recover_attempts, db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE db_size END, updated_at = excluded.updated_at",
     "pg": [
       "INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys,",
-      "  login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live)",
-      "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+      "  login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live, rows_mon)",
+      "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
       "ON CONFLICT (hour) DO UPDATE SET",
       "  requests = meter_hourly.requests + excluded.requests, rows_read = meter_hourly.rows_read + excluded.rows_read,",
       "  rows_reg = meter_hourly.rows_reg + excluded.rows_reg, rows_auth = meter_hourly.rows_auth + excluded.rows_auth,",
       "  rows_save = meter_hourly.rows_save + excluded.rows_save, rows_social = meter_hourly.rows_social + excluded.rows_social,",
       "  rows_acct = meter_hourly.rows_acct + excluded.rows_acct, rows_board = meter_hourly.rows_board + excluded.rows_board, rows_sys = meter_hourly.rows_sys + excluded.rows_sys,",
-      "  rows_wallet = meter_hourly.rows_wallet + excluded.rows_wallet, rows_live = meter_hourly.rows_live + excluded.rows_live,",
+      "  rows_wallet = meter_hourly.rows_wallet + excluded.rows_wallet, rows_live = meter_hourly.rows_live + excluded.rows_live, rows_mon = meter_hourly.rows_mon + excluded.rows_mon,",
       "  login_attempts = meter_hourly.login_attempts + excluded.login_attempts,",
       "  recover_attempts = meter_hourly.recover_attempts + excluded.recover_attempts,",
       "  db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE meter_hourly.db_size END,",
@@ -333,7 +333,8 @@
         4096,
         100,
         1,
-        0
+        0,
+        1
       ],
       [
         "2026-10-20T01",
@@ -351,6 +352,7 @@
         0,
         200,
         0,
+        2,
         2
       ]
     ],
@@ -486,5 +488,19 @@
       ]
     ],
     "after": "SELECT * FROM saves ORDER BY user_id, game_id, slot"
+  },
+  {
+    "why": "监控的钱包自检（第 16 节）：余额、桌上每份筹码都得是非负整数。stakes 是对象（wallet.ts 的 Record<string, Stake>），SQLite 的 json_each 遍历它的值，PG 同样用 json_each 取 value；SQLite 的 typeof 分得出 integer/real，PG 用 json_typeof 加取整比较，不是数的先挡成 NULL 再算，免得转换报错",
+    "sqlite": "SELECT COUNT(*) AS bad FROM wallets WHERE typeof(json_extract(state, '$.balance')) != 'integer' OR json_extract(state, '$.balance') < 0 OR EXISTS (SELECT 1 FROM json_each(state, '$.stakes') AS s WHERE typeof(json_extract(s.value, '$.amount')) != 'integer' OR json_extract(s.value, '$.amount') < 0)",
+    "pg": [
+      "SELECT COUNT(*) AS bad FROM wallets AS w",
+      "WHERE (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) IS NULL",
+      "   OR (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) < 0 OR (CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END) <> trunc(CASE WHEN json_typeof(w.state::json->'balance') = 'number' THEN (w.state::json->>'balance')::numeric END)",
+      "   OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_typeof(w.state::json->'stakes') = 'object' THEN w.state::json->'stakes' END) AS s",
+      "              WHERE (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) IS NULL OR (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) < 0 OR (CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END) <> trunc((CASE WHEN json_typeof(s.value->'amount') = 'number' THEN (s.value->>'amount')::numeric END)))"
+    ],
+    "samples": [
+      []
+    ]
   }
 ]

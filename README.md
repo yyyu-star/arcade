@@ -129,11 +129,104 @@ nickname with `?name=`) and local saves. It has no login, cloud saves, leaderboa
 
 ### Self-hosting (no Cloudflare)
 
-[`packages/arcade-host`](packages/arcade-host/README.md) is a small runtime that runs the platform and all games, unmodified, in a single
-[workerd](https://github.com/cloudflare/workerd) process: it supplies what Cloudflare normally provides (D1 on SQLite or PostgreSQL, static assets, routing, cron triggers, Durable Object storage).
-[`tools/selfhost`](tools/selfhost/README.md) builds a release tarball from the modules' `wrangler.jsonc` (same rules as the Cloudflare deployer) and adds install, upgrade, rollback, backup and restore scripts,
-a systemd unit, a Caddyfile and a Docker image with compose. A server needs only the `workerd` binary (shipped in the tarball), bash, curl and tar; Node is used only on the machine that builds the package.
-The database is chosen when you build: SQLite or PostgreSQL, not both. The Cloudflare deployment is unaffected.
+The whole site (platform + all games) also runs on your own machine as **one process**: [`packages/arcade-host`](packages/arcade-host/README.md)
+runs the unmodified modules in [workerd](https://github.com/cloudflare/workerd) and supplies what Cloudflare normally provides
+(D1 on SQLite or PostgreSQL, static assets, routing, cron triggers). The Cloudflare deployment is unaffected.
+A ready-made multi-arch image (amd64, arm64) is published from `main` as **`ghcr.io/yyyu-star/arcade`**
+(tags: `latest`, the release version, the commit short hash). The image contains no secrets, hostnames or database IDs — everything comes from environment variables.
+
+**Settings** (environment variables; put them in a `secrets.env` file):
+
+| Variable | Required | What |
+|---|---|---|
+| `PEPPER_PW`, `PEPPER_RC`, `PEPPER_SID`, `PEPPER_IP` | yes | hashing peppers, format `k1:<random>`; never change or lose them once in use |
+| `ADMIN_TOKEN` | to create the first admin | same format |
+| `SITE_ORIGIN` | behind HTTPS (compose, Caddy) | the public origin, e.g. `https://game.example.com`; without it logins fail behind a TLS proxy |
+| `ARCADE_DB` | no | `sqlite` (default) or `pg` |
+| `ARCADE_PG_URL` | with `ARCADE_DB=pg` | PostgreSQL connection string |
+
+Generate the secrets once (keep a copy of the file somewhere safe, apart from backups):
+
+```sh
+mkdir arcade && cd arcade
+for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do echo "$k=k1:$(openssl rand -hex 24)"; done > secrets.env
+chmod 600 secrets.env
+```
+
+**Try it — one container, SQLite, data in a volume:**
+
+```sh
+docker run -d --name arcade --restart unless-stopped -p 127.0.0.1:8787:8787 -v arcade-data:/data --env-file secrets.env ghcr.io/yyyu-star/arcade:latest
+docker exec arcade /app/ops/create-admin.sh zhanzhang 站长   # prints the first admin's password and recovery code once
+```
+
+Open <http://localhost:8787> and log in; registration is closed until you open it (or create accounts) in `/admin`.
+For a public site put HTTPS in front — the compose setup below does that.
+
+**Production — docker compose with automatic HTTPS (Caddy):** [`compose.yaml`](tools/selfhost/docker/compose.yaml) runs `arcade` (not published to the host),
+`caddy` (ports 80/443, gets and renews the certificate for `SITE_HOST`, passes the real client IP) and, with the `pg` profile, `postgres`.
+Point the domain's DNS at the server first. In the same directory as `secrets.env`:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/yyyu-star/arcade/main/tools/selfhost/docker/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/yyyu-star/arcade/main/tools/selfhost/docker/Caddyfile
+echo "SITE_ORIGIN=https://game.example.com" >> secrets.env
+echo "SITE_HOST=game.example.com" > .env
+docker compose up -d
+docker compose exec arcade /app/ops/create-admin.sh zhanzhang 站长
+```
+
+PostgreSQL instead of SQLite (the platform database goes into the bundled `postgres` service; game rooms stay in the `arcade-data` volume) — do this before the first start:
+
+```sh
+openssl rand -hex 24 > pg_password.txt
+echo "ARCADE_PG_URL=postgres://arcade:$(cat pg_password.txt)@postgres:5432/arcade" >> secrets.env
+printf 'ARCADE_DB=pg\nCOMPOSE_PROFILES=pg\n' >> .env
+docker compose up -d
+```
+
+**Backup and restore** (SQLite: logical export through the internal admin endpoint, which only listens inside the container):
+
+```sh
+docker compose exec arcade /app/ops/backup.sh /data/backups
+docker compose cp arcade:/data/backups ./backups                      # copy off the server from here
+docker compose exec arcade sh -c '/app/ops/restore.sh d1-arcade-DB "$(ls -d /data/backups/*/ | tail -1)d1-arcade-DB.sql"'   # restore the latest
+```
+
+With PostgreSQL: `docker compose exec postgres pg_dump -U arcade --clean --if-exists arcade > arcade.sql` and
+`docker compose exec -T postgres psql -U arcade -d arcade < arcade.sql`.
+
+**Upgrade and roll back** (migrations only add, so an older image still works with the newer database):
+
+```sh
+docker tag ghcr.io/yyyu-star/arcade:latest arcade:previous     # keep the running version
+docker compose pull && docker compose up -d                     # upgrade
+echo "ARCADE_IMAGE=arcade:previous" >> .env && docker compose up -d   # roll back (remove the line again to follow latest)
+```
+
+**Without Docker — binary + systemd** (Debian/Ubuntu; Node 22 is needed only to build): build a release tarball from source, install it,
+and put Caddy in front.
+
+```sh
+git clone https://github.com/yyyu-star/arcade.git && cd arcade
+npm ci --ignore-scripts --prefix tools/deployer
+(cd packages/arcade-host && npm ci && npm run build)
+v=$(git rev-parse --short HEAD)
+tools/selfhost/pack-all.sh build/art && ARCADE_VERSION=$v tools/selfhost/release.sh build/art build/out --with-pg
+sudo build/out/arcade-$v/ops/install.sh build/out/arcade-$v.tar.gz game.example.com   # user, dirs, secrets in /etc/arcade/secrets.env, systemd unit
+sudo /opt/arcade/current/ops/create-admin.sh zhanzhang 站长
+sudo apt install caddy && sudo cp /opt/arcade/current/ops/Caddyfile /etc/caddy/Caddyfile
+echo "SITE_HOST=game.example.com" | sudo tee /etc/default/caddy && sudo systemctl restart caddy
+```
+
+Backup: `sudo /opt/arcade/current/ops/backup.sh /var/lib/arcade/backups` (nightly via cron or a systemd timer). Upgrade: pull, rebuild as above, then
+`sudo /opt/arcade/current/ops/upgrade.sh build/out/arcade-$v.tar.gz` (backs up first, switches back automatically if the new version does not come up);
+roll back: `sudo /opt/arcade/current/ops/rollback.sh`. PostgreSQL: add the two lines `ARCADE_DB=pg` and `ARCADE_PG_URL` (your connection string) to `/etc/arcade/secrets.env`.
+
+Not verified on a real server yet: Caddy getting a real certificate for a public domain, and the systemd unit and install/upgrade scripts.
+CI tests the published image (SQLite and PostgreSQL), the full compose setup through Caddy on `localhost` (Caddy's internal certificate), and the binary.
+Keeping game rooms in PostgreSQL too (nothing on disk) needs every game with rooms on arcade-kit ≥ 0.21.0, which is not the case yet.
+Details, all options and the CI coverage: [tools/selfhost/README.md](tools/selfhost/README.md).
 
 ## Architecture
 

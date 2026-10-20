@@ -11,6 +11,8 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "preview_urls": false,
+  // Workers 日志和调用记录（线上排查用；只在 Cloudflare 后台看，不进仓库）
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist-cf",
     "binding": "ASSETS",
@@ -18,8 +20,8 @@
     // 只有首页导航先进 Worker 做登录检查（单独部署时发游客 cookie）、房间接口（开房、进房）和单机实盘接口（带入、结回、放弃）进 Worker；js、图片等照旧直接走静态资源，不花 Worker 请求额度。
     // 站点根 / 和 /api/me 也先进 Worker：单独部署时 / 转到 /games/guandan/，/api/me 回 { standalone: true }（kit 0.10.2，页面认作没有平台，控制台不冒 404）；
     // 有平台时这两个原样交给静态资源——本站的根和 /api/* 由平台的路由接，到不了这里。
-    // 实盘接口放在 /api/ 下面，才在网关的限速范围里（/games/* 下含 /api/）
-    "run_worker_first": ["/", "/api/me", "/games/guandan", "/games/guandan/", "/games/guandan/index.html", "/games/guandan/room/*", "/games/guandan/api/stake/*"]
+    // 实盘接口放在 /api/ 下面，才在网关的限速范围里（/games/* 下含 /api/）；/games/guandan/health 是监控读的健康检查（不认人、不读存储）
+    "run_worker_first": ["/", "/api/me", "/games/guandan", "/games/guandan/", "/games/guandan/index.html", "/games/guandan/room/*", "/games/guandan/api/stake/*", "/games/guandan/health"]
   },
   // 联机房间：一个房间码一个 Durable Object（worker/room.ts）。免费版只能用 SQLite 后端。
   // METER 是 arcade-kit 的计量（全局一个）：每天的写入额度、按人和全站的开房名额。删了它就不限额（tests/config.test.ts 会挂）

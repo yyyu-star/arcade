@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { RoomView } from '../../src/room/rules.ts';
 import worker, { type Env } from '../../worker/main.ts';
 import { BASE, SITE } from './helpers.ts';
+import pkg from '../../package.json' with { type: 'json' };
 
 const solo: Env = { ...(env as unknown as Env), ARCADE: undefined, WALLET: undefined, GATE: undefined, SITE_ORIGIN: SITE };
 const call = (url: string, init: RequestInit = {}): Promise<Response> => worker.fetch(new Request(url, { redirect: 'manual', ...init }) as never, solo);
@@ -53,6 +54,13 @@ async function join(code: string, cookie: string, query = '') {
 }
 
 describe('单独部署（没有平台）', () => {
+  it('健康检查回 ok 和版本，不发 cookie', async () => {
+    const res = await call(`${BASE}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, version: pkg.version });
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
   it('站点根转到 /games/mahjong/', async () => {
     const res = await call(`${SITE}/`);
     expect(res.status).toBe(302);

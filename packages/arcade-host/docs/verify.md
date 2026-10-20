@@ -47,7 +47,7 @@ workerd 的 `durableObjectStorage = inMemory` 不带 SQLite：`ctx.storage.sql` 
 - DO 的磁盘存储（`localDisk`）在 workerd 的配置说明里标着"实验性、可能不兼容地改动"（不需要 `--experimental`）。文件布局是 `<uniqueKey>/<对象 id>.sqlite`（加 `-wal`/`-shm`），
   所以 uniqueKey 固定成 `<Worker 名>-<类名>`、D1 是 `d1-<Worker 名>-<绑定名>`，生成器保证不变；升 workerd 前先做逻辑备份（`/d1/<库>/export`）。
 - 迁移文件整个交给 `ctx.storage.sql.exec` 执行，和 wrangler 是同一张 `d1_migrations` 表、同样的列，从 Cloudflare 导出的库（`wrangler d1 export`）可以直接导入。
-- `request.cf` 是 `undefined`，本站代码没有用到。真实 IP 只认 `cf-connecting-ip` 头，要由前面的反向代理用真实地址覆盖（`tools/selfhost/Caddyfile`）。
+- `request.cf` 是 `undefined`，本站代码没有用到。真实 IP 只认 `cf-connecting-ip` 头，要由前面的反向代理用真实地址覆盖（`tools/selfhost/docker/Caddyfile`）。
 - ETag 的值和 Cloudflare 不同（Cloudflare 用 blake3，这里用 sha256），语义一样：内容加扩展名的哈希，带回来回 304。
 - workerd 默认的出站网络只许公网地址（防 SSRF），连本机或内网的 PG 报 "cannot connect to the specified address"：连 PG 的 Worker 单独配 `pg-network`。
 - postgres.js 的 workerd 版要 `node:buffer` 等：`nodejs_compat` 从 compat date 2026-08-04 起默认开着，再显式写 workerd 会报错，所以不写。

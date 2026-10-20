@@ -20,14 +20,14 @@ export function savedGameInProgress(): boolean {
 
 /** 好友房正在打：回大厅不算离开房间，座位留着 */
 export function inOnlineGame(): boolean {
-  return app.net?.room?.status === 'playing';
+  return (app.net ?? app.ddzNet)?.room?.status === 'playing';
 }
 
 /** 确认框里的话：这局会不会留着 */
 export function leaveText(): string {
   // 房间的规矩（arcade-kit）：掉线头 60 秒座位留着，轮到你时等满 30 秒按"能不出就不出"代出；60 秒后才换电脑托管
   const to = `回${lobbyName()}？`;
-  if (app.net) return `${to}头 60 秒轮到你时，等 30 秒按"能不出就不出"代出；之后电脑替你打。回来还能接着打`;
+  if (app.net || app.ddzNet) return `${to}头 60 秒轮到你时，等 30 秒按"能不出就不出"代出；之后电脑替你打。回来还能接着打`;
   // 单机实盘（StakeSession，不在这里 import 免得互相引用）：存档在 guandan.stake，24 小时内回来接着打
   if (app.session && 'stake' in app.session) return `${to}这场实盘会存着，24 小时内回来接着打`;
   return app.session?.persist === false ? `${to}这一局不会保存` : `${to}这一局会存着，下次进来点"继续"接着打`;

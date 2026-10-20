@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { limitsOf, setLimitsForTests, type LimitsOverride } from '../worker/api/config';
 import { meter, resetMeterForTests } from '../worker/api/meter';
 import { resetRateLimitCacheForTests } from '../worker/api/ratelimit';
+import { resetMonitorForTests } from '../worker/api/monitor';
 import { lastStats } from '../worker/api/router';
 import { resetSettingsCacheForTests } from '../worker/api/settings';
 import { resetLeaderboardCacheForTests } from '../worker/api/leaderboard';
@@ -11,7 +12,7 @@ import { resetWalletRulesCacheForTests } from '../worker/api/wallet-store';
 import { resetInviteRulesCacheForTests } from '../worker/api/invite-codes';
 
 export const ORIGIN = 'https://game.test';
-const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats', 'invites', 'feed', 'feed_reactions', 'challenges', 'challenge_results', 'mates', 'invite_codes'];
+const TABLES = ['users', 'sessions', 'credentials', 'friendships', 'blocks', 'saves', 'rate_counters', 'meter_hourly', 'boards', 'settings', 'wallets', 'wallet_stats', 'invites', 'feed', 'feed_reactions', 'challenges', 'challenge_results', 'mates', 'invite_codes', 'monitor_counts'];
 
 /** 测试用的上限：PBKDF2 迭代降到 1,000 省时间；计量只在显式调用或本 isolate 第一次时上报，结果可预期。 */
 export const TEST_LIMITS: LimitsOverride = {
@@ -51,6 +52,7 @@ export async function resetAll(limits: LimitsOverride = {}): Promise<void> {
   resetInviteRulesCacheForTests();
   resetMeterForTests();
   resetRateLimitCacheForTests();
+  resetMonitorForTests();
   setLimitsForTests({ ...TEST_LIMITS, ...limits });
 }
 

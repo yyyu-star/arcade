@@ -1,5 +1,5 @@
 /**
- * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--danger 0,2,4 | --diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire] [--map snow|yizhuang] [--char xiaodao|fushi|jianxia|pang|gengfu|caiyao] [--threads N] [--json 文件] [--from 偏移]
+ * 机器人模拟（DESIGN.md 第 8 节）：node tools/sim.ts [--n 局数] [--danger 0,2,4 | --diff easy,normal,hard] [--skill novice,normal] [--build sword,talisman,ward,wood,fire | 流派:路线，见 bots.ts ROUTES] [--map snow|yizhuang] [--char xiaodao|fushi|jianxia|pang|gengfu|caiyao] [--threads N] [--json 文件] [--from 偏移]
  * --json：把每局的结局（赢没赢、打没打倒尸王、撑了几拍）按格存下来，第 7 步离线调实盘倍数曲线用（曲线不影响对局，改曲线不用重跑）。
  *
  * --from：种子从 from+1 起（默认 0），把一格拆成几片分到不同机器上跑，再用 tools/sim-merge.ts 拼表。
@@ -16,7 +16,7 @@ import { DIFFICULTIES, type Danger } from '../src/content/waves.ts';
 import { tierOfDanger, vigilBp } from '../src/content/live.ts';
 import type { MapId } from '../src/content/maps.ts';
 import type { CharacterId } from '../src/content/meta.ts';
-import { Bot, type Build, type Skill } from './bots.ts';
+import { Bot, routeDone, type Build, type Skill } from './bots.ts';
 import { RaidBot } from '../src/explore/bot.ts';
 import { settleRaid } from '../src/explore/settle.ts';
 import type { RaidTemplateId } from '../src/content/explore.ts';
@@ -40,6 +40,8 @@ export interface RunResult {
   value: number;
   /** 合成了几件双修（1.1 验收：普通机器人每 20 局至少 5 次） */
   duals: number;
+  /** 搭配路线走成了没有（`--build 流派:路线`；没指定路线是 false） */
+  routed: boolean;
   /** 第一次合成双修是第几拍（没合成 -1）：比"合成那一刻还活着的局"的胜率用 */
   dualTick: number;
   /** 输了的局最后一下是谁打的（怪的编号；远程弹 1000 + 弹种；赢了或不明 -1） */
@@ -67,7 +69,7 @@ export function runRaid(seed: number, danger: Danger, who: string, build: Build,
     step(w, a.dir, a.choice);
   }
   const won = w.raid!.outcome === 'escaped';
-  return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0, duals: dualsOf(w), dualTick: -1, killer: won ? -1 : w.hurtBy };
+  return { won, boss: false, seconds: w.tick / 30, firstLevel: 0, levels3: 0, levels5: 0, levels: w.level - 1, late: 0, kills: w.kills, elites: 0, ticks: w.tick, value: won ? settleRaid(w.raid!, 0).value : 0, duals: dualsOf(w), routed: false, dualTick: -1, killer: won ? -1 : w.hurtBy };
 }
 
 export function runOne(seed: number, danger: Danger, skill: Skill, build: Build, map: MapId = 'snow', character: CharacterId = 'xiaodao', noDual = false, tall = false): RunResult {
@@ -95,7 +97,7 @@ export function runOne(seed: number, danger: Danger, skill: Skill, build: Build,
       else if (t === Ev.Merge && dualTick < 0 && MERGES[ev.a[i]!]?.dual) dualTick = w.tick;
     }
   }
-  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick, value: 0, duals: dualsOf(w), dualTick, killer: w.won ? -1 : w.hurtBy };
+  return { won: w.won, boss: w.bossKilled, seconds: w.tick / 30, firstLevel, levels3, levels5, levels: w.level - 1, late: late / Math.max(1, (w.tick - 30 * 450) / 1800), kills: w.kills, elites, ticks: w.tick, value: 0, duals: dualsOf(w), routed: bot.route ? routeDone(w, bot.route) : false, dualTick, killer: w.won ? -1 : w.hurtBy };
 }
 
 interface Cell {
@@ -185,7 +187,7 @@ if (!isMainThread) {
   console.log(
     raid
       ? '镇子 | 危险 | 玩家 | 流派 | 撤出 ±2SE | 带出价值（撤出的局） | 平均待了 | 击杀'
-      : '危险 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英 | 实盘期望 ±2SE（份）',
+      : '危险 | 玩家 | 流派 | 胜率 ±2SE | 打倒尸王 | 平均撑 | 第一次升级 | 3 分钟升级 | 5 分钟升级 | 全局升级 | 后半段每分钟 | 击杀 | 精英 | 实盘期望 ±2SE（份） | 路线走成',
   );
   const lines: string[] = [];
   let printed = 0;
@@ -222,6 +224,7 @@ if (!isMainThread) {
           mean(rs.map((r) => r.kills)).toFixed(0),
           mean(rs.map((r) => r.elites)).toFixed(1),
           ev(rs, diff),
+          build.includes(':') ? `${(mean(rs.map((r) => (r.routed ? 1 : 0))) * 100).toFixed(0)}%` : '-',
         ].join(' | ') + `   (${((now - tPrev) / 1000).toFixed(1)} s)`,
       );
       console.log(lines[lines.length - 1]);
@@ -257,10 +260,10 @@ if (!isMainThread) {
   });
   const total = cells.length * n;
   if (jsonOut) {
-    // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍, 双修几件, 第一次双修的拍, 死因]；夜探每局 [撤没撤出, 带出价值, 待了几拍, 双修几件, -1, 死因]（mode 字段区分）
+    // 守夜每局 [赢没赢, 打没打倒尸王, 撑了几拍, 双修几件, 第一次双修的拍, 死因, 路线走成没有]；夜探每局 [撤没撤出, 带出价值, 待了几拍, 双修几件, -1, 死因]（mode 字段区分）
     writeFileSync(
       jsonOut,
-      JSON.stringify(cells.map((c, i) => ({ ...c, char, mode: raid ? 'raid' : 'vigil', ...(noDual ? { noDual } : {}), ...(tall ? { tall } : {}), from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer]) }))),
+      JSON.stringify(cells.map((c, i) => ({ ...c, char, mode: raid ? 'raid' : 'vigil', ...(noDual ? { noDual } : {}), ...(tall ? { tall } : {}), from: seedFrom, runs: results[i]!.map((r) => [r.won ? 1 : 0, raid ? r.value : r.boss ? 1 : 0, r.ticks, r.duals, r.dualTick, r.killer, r.routed ? 1 : 0]) }))),
     );
     console.log(`每局结局写到 ${jsonOut}`);
   }

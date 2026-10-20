@@ -6,6 +6,7 @@
 import { PICKS } from '../../content/picks.ts';
 import type { EnemyKind } from '../../content/enemies.ts';
 import { GATE_WINDOWS, RAID_DAWN, RAID_LATE } from '../../content/explore.ts';
+import { NIGHT_MARKET } from '../../content/market.ts';
 import { GUIDE_EXAMPLES, ROLE_NAME, ROLE_TIP, SCHOOLS, WEAPON_ROLE, type Role, type SchoolId } from '../../content/guide.ts';
 import { LIVE_MAP_CLOSED, LIVE_MAX_BP, LIVE_TIER_IDS, LIVE_TIERS } from '../../content/live.ts';
 import { MAP_IDS, MAP_UNLOCK, MAPS } from '../../content/maps.ts';
@@ -235,7 +236,8 @@ export class Guide {
     const tiers = LIVE_TIER_IDS.map((t) => `${LIVE_TIERS[t].name}档 ${LIVE_TIERS[t].stake.toLocaleString('zh-CN')}`).join('、');
     const closed = LIVE_MAP_CLOSED.map((m) => MAPS[m].name).join('、');
     return (
-      this.sec('守夜', `<p>选地图和危险档，撑到天亮（${clock(DAWN_TICK)}）。打倒尸王提前天亮。也可以选「天亮不收工」一直打到倒下。</p>`) +
+      this.sec('守夜', `<p>选地图和危险档，撑到天亮（${clock(DAWN_TICK)}）。打倒尸王提前天亮。也可以选「天亮不收工」一直打到倒下。</p>` +
+        `<p><b>夜市</b>开打后第 ${NIGHT_MARKET.at.map((t) => Math.round(t / 1800)).join('、')} 分钟，货郎在你附近摆 ${NIGHT_MARKET.stalls} 个摊，开 ${NIGHT_MARKET.open / 30} 秒，屏幕边的箭头指路；站在摊前一会儿就用局里的铜钱买下：回血、刷新、封禁、临时增益、法器升一级。第二次贵一些，怪照样来。</p>`) +
       this.sec(
         '夜探：搜宝、打怪、找门撤离',
         '<ul class="yx-glist">' +

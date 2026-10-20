@@ -68,11 +68,11 @@ describe('专属被动', () => {
     const b = make('xiaodao');
     expect(a.stats.critDmg - b.stats.critDmg).toBeCloseTo(CHAR_FX.jianxiaCritDmg, 6);
   });
-  it('胖师叔：血多 50、走得慢、挨打震开身边', () => {
+  it('胖师叔：血多、走得慢、挨打震开身边', () => {
     const p = make('pang');
     const x = make('xiaodao');
-    // 0.4.5 起并进初始数值（血 150%），多的还是 50
-    expect(p.stats.hpMax - x.stats.hpMax).toBe(CHAR_FX.pangHp);
+    expect(p.stats.hpMax).toBe(Math.round(x.stats.hpMax * CHARACTERS.pang.base.hp));
+    expect(p.stats.hpMax).toBeGreaterThan(x.stats.hpMax);
     expect(p.hp).toBe(p.stats.hpMax);
     expect(p.stats.speed).toBeLessThan(x.stats.speed);
   });
@@ -115,7 +115,7 @@ describe('专属被动', () => {
 
 describe('角色初始数值和小特权（所有者 10-20，0.4.5）', () => {
   const at = (ch: Setup['character'], extra: Partial<Setup> = {}): World => createWorld({ seed: 9, mode: 'vigil', danger: 0, character: ch, ...extra });
-  it('初始数值按 base 乘到小道士身上；实盘局暂不带', () => {
+  it('初始数值按 base 乘到小道士身上；实盘局一样', () => {
     const x = at('xiaodao');
     for (const id of CHARACTER_IDS) {
       const w = at(id);
@@ -125,12 +125,10 @@ describe('角色初始数值和小特权（所有者 10-20，0.4.5）', () => {
       expect(w.stats.areaMul / x.stats.areaMul).toBeCloseTo(b.area, 6);
       expect(w.stats.magnet / x.stats.magnet).toBeCloseTo(b.magnet, 6);
       expect(w.stats.luck - x.stats.luck).toBeCloseTo(b.luck, 6);
-      // 符师的连环符本来就乘冷却，这里只比 base 那一层：同角色实盘局（不带 base）对照
-      expect(w.stats.cdMul / at(id, { live: true }).stats.cdMul).toBeCloseTo(b.cd, 6);
+      // 符师的连环符不改 cdMul（只改符类），这里直接和小道士比
+      expect(w.stats.cdMul / x.stats.cdMul).toBeCloseTo(b.cd, 6);
+      expect(at(id, { live: true }).stats.hpMax).toBe(w.stats.hpMax);
     }
-    // 胖师叔实盘局还是旧被动：血 +50、慢 8%，和娱乐局的初始数值一样多
-    expect(at('pang', { live: true }).stats.hpMax).toBe(at('pang').stats.hpMax);
-    expect(at('fushi', { live: true }).stats.hpMax).toBe(PLAYER.hp);
   });
   it('数值大致相抵：没有哪个角色六项全不吃亏', () => {
     for (const id of CHARACTER_IDS) {
@@ -140,10 +138,9 @@ describe('角色初始数值和小特权（所有者 10-20，0.4.5）', () => {
       expect(worse, id).toBe(true);
     }
   });
-  it('小道士起步多 1 次刷新、符师多 1 次封禁；实盘局不加', () => {
+  it('小道士起步多 1 次刷新、符师多 1 次封禁', () => {
     expect(at('xiaodao').rerolls - at('jianxia').rerolls).toBe(1);
     expect(at('fushi').bans - at('jianxia').bans).toBe(1);
-    expect(at('xiaodao', { live: true }).rerolls).toBe(at('jianxia', { live: true }).rerolls);
   });
   it('剑侠打倒精英多补 1 次刷新', () => {
     const got = (ch: Setup['character']): number => {

@@ -14,6 +14,17 @@ import { CardView, HAND_H, HAND_W } from './card.ts';
 export type { SortMode } from './columns.ts';
 import { MAX_COL, columnsFor, type SortMode } from './columns.ts';
 
+/**
+ * 手牌怎么理、怎么分列（牌馆 0.28.0：玩法给；不给就是掼蛋的，按级牌牌序、逢人配排在级牌后）。
+ * level 是掼蛋的级牌，别的玩法不用它
+ */
+export interface HandOrder {
+  sort(cards: readonly Card[], level: number): Card[];
+  columns(cards: readonly Card[], level: number, mode: SortMode, maxCol?: number): Card[][];
+}
+
+export const GUANDAN_ORDER: HandOrder = { sort: sortHand, columns: columnsFor };
+
 const BOTTOM_PAD = 8;
 /** 手牌区最高能叠到多高（含一张整牌） */
 const MAX_STACK = 248;
@@ -41,8 +52,11 @@ export class HandView {
   private dragging: { mode: boolean; seen: Set<Card> } | null = null;
   onChange: () => void = () => {};
 
-  constructor(scene: Phaser.Scene) {
+  private readonly order: HandOrder;
+
+  constructor(scene: Phaser.Scene, order: HandOrder = GUANDAN_ORDER) {
     this.scene = scene;
+    this.order = order;
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.down(p));
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => this.move(p));
     scene.input.on('pointerup', () => (this.dragging = null));
@@ -143,8 +157,8 @@ export class HandView {
     const margin = 26;
     const avail = W - margin * 2;
     const spacingFor = (n: number) => (n <= 1 ? 0 : Math.min(HAND_W + 6, (avail - HAND_W) / (n - 1)));
-    let cols = columnsFor(this.cards, this.level, this.mode, MAX_COL - 1);
-    if (cols.length > 1 && spacingFor(cols.length) < MIN_SPACING_SHORT) cols = columnsFor(this.cards, this.level, this.mode);
+    let cols = this.order.columns(this.cards, this.level, this.mode, MAX_COL - 1);
+    if (cols.length > 1 && spacingFor(cols.length) < MIN_SPACING_SHORT) cols = this.order.columns(this.cards, this.level, this.mode);
     const n = cols.length;
     const spacing = spacingFor(n);
     const total = spacing * (n - 1) + HAND_W;
@@ -178,7 +192,7 @@ export class HandView {
   setHand(cards: readonly Card[], level: number, opts: { animate?: boolean; from?: { x: number; y: number } } = {}): void {
     const levelChanged = level !== this.level;
     this.level = level;
-    this.cards = sortHand(cards, level);
+    this.cards = this.order.sort(cards, level);
     const keep = new Set(this.cards);
     for (const [c, v] of this.views) {
       if (!keep.has(c)) {

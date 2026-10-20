@@ -80,10 +80,10 @@ function apiCalls(page: Page): string[] {
   return calls;
 }
 
-async function shot(page: Page, name: string): Promise<void> {
+async function shot(page: Page, name: string, fullPage = true): Promise<void> {
   shotNo += 1;
   const file = join(OUT, `${String(shotNo).padStart(2, '0')}-${name}.png`);
-  await page.screenshot({ path: file, fullPage: true });
+  await page.screenshot({ path: file, fullPage });
   console.log(`  截图 ${file}`);
 }
 
@@ -1043,6 +1043,81 @@ async function fakeFeedFiles(page: Page): Promise<void> {
   await page.route('**/games/guandan/titles.json', (r) => r.fulfill(json({ double_down: { name: '双下王', desc: '打出双下' } })));
 }
 
+/** 一条动态的三段：名字、在哪、结果标签（每个标签一块，数字整个在标签里） */
+async function feedLine(item: Locator, who: string, where: string, tags: string[]): Promise<void> {
+  await item.locator('.feed__name', { hasText: who }).waitFor();
+  check((await item.locator('.feed__game').textContent())?.trim() === where, `动态"在哪"不对：${await item.locator('.feed__game').textContent()}`);
+  const got = (await item.locator('.feed__tag').allTextContents()).map((t) => t.trim());
+  check(got.join('|') === tags.join('|'), `动态的标签不对：${got.join('|')}`);
+}
+
+/**
+ * 顶栏"动态"：有新的带红点，点开就消失；电脑是按钮下面约 360 宽的浮层（Esc、点外面收起），手机是底部半屏面板（点遮罩、往下拉收起）；
+ * 底下"看全部"进好友页；能点的都够 44（电脑上看得见就行）。四种屏幕各截关、开两张。
+ */
+async function feedPop(browser: Browser): Promise<void> {
+  const sizes = [
+    ['电脑1280', 'desktop', { width: 1280, height: 800 }],
+    ['电脑1920', 'desktop', { width: 1920, height: 1080 }],
+    ['竖390', 'portrait', { width: 390, height: 844 }],
+    ['横844', 'landscape', { width: 844, height: 390 }],
+  ] as const;
+  for (const [label, screen, viewport] of sizes) {
+    console.log(`顶栏动态（${label}）`);
+    const { ctx, page } = await newPage(browser, `动态 ${label}`, screen, { viewport });
+    await mockSession(page, { feed: FAKE_FEED });
+    await fakeFeedFiles(page);
+    await page.goto(`${BASE}/`);
+    const btn = page.getByTestId('feed-button');
+    await btn.getByTestId('feed-dot').waitFor();
+    const b = (await btn.boundingBox())!;
+    check(b.height >= 44 && b.width >= 44, `${label}："动态"按钮不到 44（${Math.round(b.width)}×${Math.round(b.height)}）`);
+    check((await page.locator('.topbar').evaluate((el) => {
+      const tops = new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+      return tops.size;
+    })) === 1, `${label}：顶栏折行了`);
+    await shot(page, `feedpop-${label}-closed`, false);
+    await btn.click();
+    const pop = page.getByTestId('feed-pop');
+    await pop.waitFor();
+    await feedLine(pop.getByTestId('feed-item').first(), '小明', '牌馆小档', ['赢了 1.6 份', '称号：双下王']);
+    check((await pop.getByTestId('feed-item').count()) === 2, `${label}：浮层里该有 2 条`);
+    check((await btn.getByTestId('feed-dot').count()) === 0, `${label}：点开了红点该消失`);
+    check((await pop.getByRole('link', { name: '看全部' }).getAttribute('href')) === '/friends', `${label}："看全部"该进好友页`);
+    const p = (await pop.boundingBox())!;
+    if (screen === 'desktop') {
+      check(Math.abs(p.width - 360) <= 2 && p.y >= b.y + b.height && p.x >= 0 && p.x + p.width <= viewport.width, `${label}：浮层该挂在按钮下面、约 360 宽（${Math.round(p.x)},${Math.round(p.y)} ${Math.round(p.width)} 宽）`);
+    } else {
+      check(Math.abs(p.y + p.height - viewport.height) <= 1 && Math.abs(p.width - viewport.width) <= 1, `${label}：手机上该是贴底的整宽面板（${Math.round(p.y)}+${Math.round(p.height)}）`);
+      for (const el of await pop.locator('a, button').all()) {
+        const r = await el.boundingBox();
+        if (r && (r.height < 44 || r.width < 44)) fail(`${label}：浮层里的「${(await el.textContent())?.trim()}」不到 44（${Math.round(r.width)}×${Math.round(r.height)}）`);
+      }
+    }
+    await shot(page, `feedpop-${label}-open`, false);
+    if (screen === 'desktop') {
+      await page.keyboard.press('Escape');
+      await pop.waitFor({ state: 'detached' });
+      await btn.click();
+      await pop.waitFor();
+      await page.mouse.click(20, viewport.height - 20);
+      await pop.waitFor({ state: 'detached' });
+    } else {
+      // 点遮罩（面板上面那块）收起；再打开，把顶上的小横条往下拉收起
+      await page.mouse.click(viewport.width / 2, 10);
+      await pop.waitFor({ state: 'detached' });
+      await btn.click();
+      const grab = (await pop.locator('.feedpop__grab').boundingBox())!;
+      await page.mouse.move(grab.x + grab.width / 2, grab.y + grab.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(grab.x + grab.width / 2, grab.y + 150, { steps: 5 });
+      await page.mouse.up();
+      await pop.waitFor({ state: 'detached' });
+    }
+    await ctx.close();
+  }
+}
+
 async function fakeFriends(page: Page, invites: object[] = [], feed: object[] = []): Promise<void> {
   await mockSession(page, { invites, feed });
   await fakeFeedFiles(page);
@@ -1092,7 +1167,7 @@ async function mobile(browser: Browser): Promise<void> {
   await shot(page, 'mobile-privacy');
   // 用模拟的登录状态打开"我的账号"，量点击区
   // 0.15.0：好友超过了我这周的开盘每日挑战，大厅顶上提一句
-  // 0.17.0：大厅一条好友动态的小条，最新 3 条 + "看全部"，没看过的带红点
+  // 好友动态不在大厅占地方，在顶栏"动态"按钮里（细查见 feedPop）
   await mockSession(page, { overtakes: [{ gameId: 'kaipan', by: { userId: 'f1', displayName: '小明' }, score: 12, mine: 9 }], feed: FAKE_FEED });
   await fakeFeedFiles(page);
   await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
@@ -1101,11 +1176,8 @@ async function mobile(browser: Browser): Promise<void> {
   const overtake = page.getByTestId('nudge-overtake');
   await overtake.getByText('超过了你这周的开盘每日挑战纪录').waitFor();
   check((await overtake.getByRole('link', { name: '去挑战' }).getAttribute('href'))?.startsWith('/games/kaipan/') === true, '"去挑战"该进开盘');
-  const strip = page.getByTestId('feed-strip');
-  await strip.getByText('小明在牌馆小档赢了 1.6 份，称号：双下王').waitFor();
-  await strip.getByTestId('feed-dot').waitFor();
-  check((await strip.getByRole('button').count()) === 0, '大厅小条上不放赞的按钮');
-  check((await strip.getByRole('link', { name: /看全部/ }).getAttribute('href')) === '/friends', '"看全部"该进好友页');
+  check((await page.getByTestId('feed-strip').count()) === 0, '大厅不该再有整块的动态');
+  await page.getByTestId('feed-button').getByTestId('feed-dot').waitFor();
   await shot(page, 'mobile-home-overtake');
   const guandan = page.locator('.card', { hasText: '掼蛋' });
   const enterBox = await guandan.getByRole('link', { name: '进入游戏' }).boundingBox();
@@ -1169,8 +1241,8 @@ async function mobile(browser: Browser): Promise<void> {
   check((await fr.page.getByTestId('invite-dot').count()) === 0, '点了"不了"红点该消失');
   // 0.17.0 好友动态：结回的按平台模板拼、称号读 titles.json；名场面按游戏的模板拼；模板不合格的那条不显示
   const feed = fr.page.getByTestId('feed');
-  await feed.getByText('小明在牌馆小档赢了 1.6 份，称号：双下王').waitFor();
-  await feed.getByText('阿花一副牌扔了 4 个炸弹').waitFor();
+  await feedLine(feed.getByTestId('feed-item').first(), '小明', '牌馆小档', ['赢了 1.6 份', '称号：双下王']);
+  await feedLine(feed.getByTestId('feed-item').nth(1), '阿花', '牌馆', ['一副牌扔了 4 个炸弹']);
   check((await feed.getByTestId('feed-item').count()) === 2, '模板不合格的动态不该显示');
   check((await feed.getByText('<b>').count()) === 0, '模板不能当 HTML');
   await feed.getByTestId('feed-item').nth(1).getByText('你扔了番茄').waitFor();
@@ -1850,8 +1922,8 @@ const PHONES = [
 ] as const;
 
 /** 在页面里量一遍，返回不合格的地方（一句话一条） */
-async function phoneIssues(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+async function phoneIssues(page: Page, minTap = 44, minNum = 14): Promise<string[]> {
+  return page.evaluate(([minTap, minNum]) => {
     const out: string[] = [];
     const vw = window.innerWidth;
     const name = (el: Element) => `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''}「${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 16)}」`;
@@ -1876,7 +1948,7 @@ async function phoneIssues(page: Page): Promise<string[]> {
       // 复选框、单选框按它外面那一整行标签算
       const target = (el as HTMLInputElement).type === 'checkbox' || (el as HTMLInputElement).type === 'radio' ? (el.closest('label') ?? el) : el;
       const r = target.getBoundingClientRect();
-      if (r.width < 44 - 0.5 || r.height < 44 - 0.5) out.push(`点击区小：${name(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
+      if (r.width < minTap - 0.5 || r.height < minTap - 0.5) out.push(`点击区小：${name(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
       if (r.right > vw + 1 && !inScroller(el)) out.push(`伸出屏幕：${name(el)} 右边到 ${Math.round(r.right)}`);
     }
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -1888,14 +1960,26 @@ async function phoneIssues(page: Page): Promise<string[]> {
       seen.add(el);
       const size = parseFloat(getComputedStyle(el).fontSize);
       const numeric = /^[+\-−]?[\d,.:%·\s]+$/.test(text);
-      if (size < (numeric ? 14 : 12) - 0.01) out.push(`字小：${name(el)} ${size}px${numeric ? '（数字）' : ''}`);
+      if (size < (numeric ? minNum : 12) - 0.01) out.push(`字小：${name(el)} ${size}px${numeric ? '（数字）' : ''}`);
       const r = el.getBoundingClientRect();
       if (r.right > vw + 1 && !inScroller(el)) out.push(`字伸出屏幕：${name(el)}`);
     }
     const tops = [...document.querySelectorAll('.topbar .account')].filter(visible).map((e) => Math.round(e.getBoundingClientRect().top));
-    if (new Set(tops).size > 1) out.push(`顶栏折成了 ${new Set(tops).size} 行`);
+    if (new Set(tops).size > 1) {
+      const bar = document.querySelector('.topbar')!;
+      const need = [...bar.querySelectorAll('.account')].reduce((w, e) => w + e.getBoundingClientRect().width, 0);
+      out.push(`顶栏折成了 ${new Set(tops).size} 行（按钮共 ${Math.round(need)}，这一行宽 ${Math.round(bar.getBoundingClientRect().width)}）`);
+    }
+    // 关键元素互不相交：顶栏按钮之间、顶栏按钮和左上角标题
+    const heads = [...document.querySelectorAll('.top__home, .topbar .account')].filter(visible).map((e) => [e, e.getBoundingClientRect()] as const);
+    for (let i = 0; i < heads.length; i++)
+      for (let j = i + 1; j < heads.length; j++) {
+        const [a, ra] = heads[i]!;
+        const [b, rb] = heads[j]!;
+        if (ra.left < rb.right - 1 && rb.left < ra.right - 1 && ra.top < rb.bottom - 1 && rb.top < ra.bottom - 1) out.push(`顶栏叠在一起：${name(a)} 和 ${name(b)}`);
+      }
     return [...new Set(out)];
-  });
+  }, [minTap, minNum] as const);
 }
 
 /**
@@ -1923,7 +2007,20 @@ async function stakeBarIssues(page: Page, viewport: { width: number; height: num
   return out;
 }
 
-async function phoneAudit(browser: Browser): Promise<void> {
+/** 多尺寸适配的尺寸矩阵（CSS 像素，所有游戏统一用这套）：手机竖、横，平板竖横和折叠屏，电脑 */
+const DEVICES: readonly (readonly [string, { width: number; height: number }])[] = [
+  ...([[320, 568], [360, 640], [360, 780], [375, 667], [390, 844], [393, 852], [412, 915], [414, 896], [430, 932]] as const).map(([w, h]) => [`竖${w}×${h}`, { width: w, height: h }] as const),
+  ...([[568, 320], [640, 360], [667, 375], [780, 360], [844, 390], [896, 414], [932, 430]] as const).map(([w, h]) => [`横${w}×${h}`, { width: w, height: h }] as const),
+  ...([[768, 1024], [1024, 768], [820, 1180], [1180, 820], [1024, 1366], [1366, 1024], [884, 1104]] as const).map(([w, h]) => [`平板${w}×${h}`, { width: w, height: h }] as const),
+  ...([[1280, 720], [1366, 768], [1920, 1080]] as const).map(([w, h]) => [`电脑${w}×${h}`, { width: w, height: h }] as const),
+];
+
+/** npm run smoke -- --only=devices：同一个浏览器把矩阵每个尺寸、每页过一遍通用检查（第一屏、单手够得着这些只按原来四台手机量），有问题的那页才截图 */
+async function deviceMatrix(browser: Browser): Promise<void> {
+  await phoneAudit(browser, DEVICES, true);
+}
+
+async function phoneAudit(browser: Browser, sizes: readonly (readonly [string, { width: number; height: number }])[] = PHONES, matrix = false): Promise<void> {
   const career = (o: Record<string, unknown>) => ({ n: 3, net: 2_000, wnet: 0, rounds: 0, wins: 0, best: 0, titles: [], max: {}, sum: {}, ...o });
   const games = { kaipan: career({ n: 2, wnet: 12_000, rounds: 2, wins: 1, best: 12_000 }), texas: career({ n: 4, wnet: -1_500, rounds: 1_000, wins: 213, best: 18_400 }) };
   const u = (i: number) => String.fromCharCode(65 + i).repeat(22);
@@ -1961,9 +2058,11 @@ async function phoneAudit(browser: Browser): Promise<void> {
     wallet: ['.wallet__relief button'],
   };
   const problems: string[] = [];
-  for (const [label, viewport] of PHONES) {
+  for (const [label, viewport] of sizes) {
     console.log(`手机清单（${label} ${viewport.width}×${viewport.height}）：${pages.map((p) => p[0]).join('、')}`);
-    const { ctx, page } = await newPage(browser, `手机清单 ${label}`, 'portrait', { viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    // 电脑尺寸不模拟触屏（鼠标、宽窗口），其余按手机平板
+    const desk = label.startsWith('电脑');
+    const { ctx, page } = await newPage(browser, `手机清单 ${label}`, desk ? 'desktop' : 'portrait', desk ? { viewport } : { viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await mockAdmin(page);
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
     await page.route('**/api/wallet', (r) => r.fulfill(json(wallet)));
@@ -1982,7 +2081,16 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await page.goto(`${BASE}${path}`);
       await page.locator(ready).first().waitFor();
       await page.waitForTimeout(150);
-      for (const p of await phoneIssues(page)) problems.push(`${label} ${name}：${p}`);
+      // 点击区：320 宽可以 40；电脑尺寸用鼠标、宽窗口里按钮本来就紧凑，按 WCAG 2.5.8 的 24 量
+      // 数字：手机平板上 ≥ 14（#228），电脑上按简报的 12（管理后台数据密、用鼠标看）
+      const found = await phoneIssues(page, desk ? 24 : viewport.width <= 320 ? 40 : 44, desk ? 12 : 14);
+      for (const p of found) problems.push(`${label} ${name}：${p}`);
+      if (matrix) {
+        // 每个尺寸留一张首页给人看，其余页有问题才截。只截看得见的一屏：整页截图会临时改视口，
+        // 截完平板的触屏模拟就丢了，后面几页全按电脑的小按钮量
+        if (found.length || name === 'home') await shot(page, `devices-${label}-${name}`, false);
+        continue;
+      }
       // 第一屏就有主操作（竖着拿的时候；横屏只有 390 高，标题和顶栏占掉一半，往下翻一下是正常的）
       if (label !== 'landscape') {
         for (const sel of firstScreen[name] ?? []) {
@@ -2002,7 +2110,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await shot(page, `phone-${label}-${name}`);
     }
     // 管理筹码小窗口在 SE 上不出屏、里面能点的够大
-    if (label === 'se') {
+    if (label === 'se' && !matrix) {
       await page.goto(`${BASE}/admin`);
       await page.getByTestId('admin-chips-open').click();
       await page.getByTestId('admin-chips').waitFor();
@@ -2013,7 +2121,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
       await shot(page, 'phone-se-admin-chips');
     }
     // 竖着转横着再转回来：不横着滑、顶栏不折行
-    if (label === 'iphone') {
+    if (label === 'iphone' && !matrix) {
       await page.goto(`${BASE}/`);
       await page.locator('.card').first().waitFor();
       for (const vp of [{ width: 844, height: 390 }, viewport]) {
@@ -2025,7 +2133,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
     await ctx.close();
   }
   // 电脑上（宽窗口、鼠标）还是页面里的一条提示，不是底部固定条
-  {
+  if (!matrix) {
     const { ctx, page } = await newPage(browser, '手机清单 电脑对照', 'desktop');
     await mockAdmin(page);
     await page.route('**/api/me', (r) => r.fulfill(json({ user: FAKE_ADMIN, service: 'ok', saves: 'ok', registration: 'closed' })));
@@ -2036,7 +2144,7 @@ async function phoneAudit(browser: Browser): Promise<void> {
     await ctx.close();
   }
   for (const p of problems) console.log(`  · ${p}`);
-  check(problems.length === 0, `手机清单有 ${problems.length} 处不合格（见上面的列表）`);
+  check(problems.length === 0, `${matrix ? '多尺寸矩阵' : '手机清单'}有 ${problems.length} 处不合格（见上面的列表）`);
 }
 
 /** 0.9.8：发版后旧分块没了（404）：整页重载一次拿新版；还是 404 就停下来提示刷新，不来回重载、不白屏。 */
@@ -2130,7 +2238,8 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     const box = (await badge.boundingBox())!;
     const vw = page.viewportSize()!.width;
     check(box.x >= 0 && box.x + box.width <= vw, `筹码牌子出了屏幕：${JSON.stringify(box)}，屏宽 ${vw}`);
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `顶栏换行了：${tops}`);
     await shot(page, `wallet-badge-${screen}`);
     await badge.click();
@@ -2170,10 +2279,17 @@ async function walletAndSlowNet(browser: Browser): Promise<void> {
     });
     await page.goto(`${BASE}/`);
     await page.getByTestId('wallet-badge').waitFor();
-    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    // 窄屏上"管理"收进了"我的"页（display: none），不算
+    const tops = await page.locator('.topbar .account').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().top)));
     check(new Set(tops).size === 1, `管理员的顶栏换行了：${tops}`);
     check((await page.getByTestId('admin-chips-open').count()) === 0, '大厅不该再有"管理筹码"按钮');
-    await page.getByRole('link', { name: '管理', exact: true }).click();
+    if (screen === 'desktop') await page.getByRole('link', { name: '管理', exact: true }).click();
+    else {
+      // 手机上顶栏没有"管理"，从"我的"页的"去管理后台"进
+      await page.route('**/api/saves/*', (r) => r.fulfill(json({ saves: [] })));
+      await page.locator('.topbar a[href="/me"]').click();
+      await page.getByTestId('me-admin').click();
+    }
     await page.getByTestId('admin-chips-open').click();
     const box = page.getByTestId('admin-chips');
     await box.getByLabel('用户名').fill('xiaoming_2026');
@@ -2311,7 +2427,9 @@ try {
     stats: statsPage, // 战绩页
     desk: deskPages, // 电脑版排版：大厅、好友、我的、战绩
     phone: phoneAudit, // 手机界面专项：四种屏幕逐页量
+    devices: deviceMatrix, // 多尺寸矩阵：手机竖横、平板、折叠屏、电脑，只做通用检查
     boards: boardsPage, // 排行榜
+    feedpop: feedPop, // 顶栏的动态按钮和浮层
     friends: friendsUx, // 好友分享、点名字看战绩、战绩页加好友
     rules: walletRulesAdmin, // 管理页的钱包规则
     invites: adminInvites, // 管理页的邀请码
@@ -2334,6 +2452,7 @@ try {
     await deskPages(browser);
     await phoneAudit(browser);
     await boardsPage(browser);
+    await feedPop(browser);
     await friendsUx(browser);
     await walletRulesAdmin(browser);
     await adminInvites(browser);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 /** core、ai 与实盘规则（stake）的源码（以文本形式导入，不执行）。 */
-// 牌馆重构（①b，docs/doudizhu.md 1.1）：通用层 src/core 加上每个玩法的 core、ai、stake
+// 牌馆重构（①b，docs/doudizhu.md 第 1 节）：通用层 src/core 加上每个玩法的 core、ai、stake
 const sources = import.meta.glob(['../src/core/**/*.ts', '../src/variants/*/core/**/*.ts', '../src/variants/*/ai/**/*.ts', '../src/variants/*/stake/**/*.ts'], {
   query: '?raw',
   import: 'default',
