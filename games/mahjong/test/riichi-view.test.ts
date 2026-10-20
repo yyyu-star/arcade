@@ -66,7 +66,7 @@ describe('听牌提示', () => {
     ]);
     // 1 号手里藏着 3s，看不见，不减；河里打出一张 3s、宝牌指示牌是 6s，各减一张
     s.players[1]!.hand = [...T('3s'), ...s.players[1]!.hand.slice(1)];
-    s.players[2]!.river.push({ tile: tileOf(k('3s'), 0) });
+    s.players[2]!.river.push({ tile: tileOf(k('3s'), 0), n: 1 });
     s.dead[0] = tileOf(k('6s'), 0);
     s.doraOpen = 1;
     expect(tingOf(view(s, 0), null)).toEqual([
