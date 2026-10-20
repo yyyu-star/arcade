@@ -126,10 +126,11 @@ export function dealerSpots(g: Geo, size: number): Pt[] {
   if (g.tall) return [];
   const f = felt(g);
   const seats = Array.from({ length: size }, (_, k) => seatPos(k, 0, size, g)).filter((p) => p.y < 200);
-  // 0.66 / 0.34 是离顶上座位刚好够远的最后一档：顶栏右边按钮多了（0.19.3 单机也有聊天开关）68% 处会碰到，往里挪一点
-  return [0.5, 0.68, 0.32, 0.66, 0.34]
+  // 顶栏右边按钮多了就往里挪：0.19.3 单机加了聊天开关，68% 处碰到；0.22.0 又加了止盈小旗子，66% 也碰到、左边 34% 碰到钱包，
+  // 荷官没地方站（0.25.2 冒烟）。座位右边只有底牌，比左边的动作签窄，右边让 DEALER_ROOM_RIGHT 就够，63% 能站
+  return [0.5, 0.68, 0.32, 0.66, 0.34, 0.63, 0.625]
     .map((fx) => g.w * fx)
-    .filter((x) => seats.every((p) => Math.abs(p.x - x) >= DEALER_ROOM))
+    .filter((x) => seats.every((p) => Math.abs(p.x - x) >= (x > p.x ? DEALER_ROOM_RIGHT : DEALER_ROOM)))
     .map((x) => {
       const t = (x - f.cx) / f.rx;
       return { x, y: f.cy - f.ry * Math.sqrt(1 - t * t) };
@@ -137,6 +138,8 @@ export function dealerSpots(g: Geo, size: number): Pt[] {
 }
 /** 荷官左右各要让出多宽（头像 60、名牌 108、旁边的底牌和动作签都算上） */
 const DEALER_ROOM = 150;
+/** 站在座位右边时：右边只有两张底牌（头像右侧约 80），加上荷官半个身子 */
+const DEALER_ROOM_RIGHT = 120;
 
 /**
  * 竖屏公共牌那一行的中心（0.21.3）：比桌心低一点，上面让出一条放上半边两侧座位的下注。

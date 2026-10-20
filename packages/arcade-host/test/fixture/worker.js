@@ -35,6 +35,11 @@ export class Probe extends DurableObject {
   async alarm() {
     await this.ctx.storage.put('fired', Date.now());
   }
+  /** PG 模式重启后由 kitstore 唤醒（kit 0.21 的约定）：这里记下名字，测试读出来 */
+  async kitWake(name) {
+    await this.ctx.storage.put('k', `woke:${name}`);
+    return { ok: true };
+  }
   webSocketMessage(ws, msg) {
     ws.send(JSON.stringify({ echo: String(msg), born: this.born }));
   }
@@ -48,7 +53,7 @@ export default class Probe2 extends WorkerEntrypoint {
     const sub = url.pathname.replace(/^\/games\/probe/, '');
     if (sub.startsWith('/do/')) {
       const [, , name, ...rest] = sub.split('/');
-      const stub = env.PROBE.get(env.PROBE.idFromName(name), { locationHint: 'apac' });
+      const stub = env.ROOM.get(env.ROOM.idFromName(name), { locationHint: 'apac' });
       return stub.fetch(new Request(`http://do/${rest.join('/')}${url.search}`, request));
     }
     if (sub === '/d1') {
@@ -57,6 +62,15 @@ export default class Probe2 extends WorkerEntrypoint {
     }
     if (sub === '/env') return Response.json({ secret: env.PROBE_SECRET, text: env.TEXT, obj: env.OBJ, cn: env.CN });
     if (sub === '/rpc') return Response.json(await env.SELF_RPC.hello('x'));
+    if (sub === '/kit') {
+      // PG 模式的 KIT_STORE：{ op, args } 原样转过去
+      const { op, args } = await request.json();
+      try {
+        return Response.json(await env.KIT_STORE[op](...args));
+      } catch (e) {
+        return Response.json({ error: e.message }, { status: 500 });
+      }
+    }
     if (sub === '/rpc-scheduled') {
       try {
         await env.SELF_DEFAULT.scheduled({});

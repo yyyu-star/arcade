@@ -15,6 +15,7 @@ import { LIVE_OPEN, LIVE_TIERS, liveMapOk, type LiveTier } from './content/live.
 import { applyRun, loadRecords, RunTally, saveRecords, summarize } from './meta/records.ts';
 import { rewardCoins } from './content/achievements.ts';
 import { AchievementToast, Codex } from './view/ui/codex.ts';
+import { Guide } from './view/ui/guide.ts';
 import { Recorder } from './replay/recorder.ts';
 import { loadReplays, storeReplay } from './replay/store.ts';
 import { ReplayPlayer } from './replay/player.ts';
@@ -231,6 +232,13 @@ async function boot(): Promise<void> {
     codex.hide();
     menu.show(menuState());
   };
+  // 玩法说明：主页和暂停面板都能开；从主页开的关掉回主页，从暂停开的关掉回暂停面板（它一直在底下）
+  const guide = new Guide(stage, (k) => icon(k));
+  let guideFromMenu = false;
+  guide.onClose = () => {
+    guide.hide();
+    if (guideFromMenu) menu.show(menuState());
+  };
   /** 流水 id 的随机后缀：两台设备同时买同一样东西也不会撞成一条（画面层，不进规则核心） */
   const nonce = (): string => Math.random().toString(36).slice(2, 10);
   const prepState = (): PrepState => ({
@@ -301,6 +309,11 @@ async function boot(): Promise<void> {
   menu.onCodex = () => {
     menu.hide();
     codex.show();
+  };
+  menu.onGuide = () => {
+    menu.hide();
+    guideFromMenu = true;
+    guide.show();
   };
   menu.onClick = () => sfx.play('click');
 
@@ -397,6 +410,10 @@ async function boot(): Promise<void> {
     });
   };
   pause.onHome = askHome;
+  pause.onGuide = () => {
+    guideFromMenu = false;
+    guide.show();
+  };
   pause.onQuit = () =>
     confirm.ask('认输就算这一局结束，确定吗？', '认输', '接着打', (ok) => {
       if (ok && world) {
@@ -413,6 +430,7 @@ async function boot(): Promise<void> {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' || e.key === 'p') {
       if (confirm.open) confirm.close(false);
+      else if (guide.open) guide.onClose();
       else if (pause.open) pause.onResume();
       else openPause();
     } else if (banners.skipReveal()) e.preventDefault();

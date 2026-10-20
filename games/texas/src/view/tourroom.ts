@@ -44,7 +44,8 @@ export function tourEndBody(i: TourEnd): HTMLElement {
     el('span', '', li, r.me ? `${r.name}（你）` : r.name);
     if (r.prize !== null) el('span', 'tour-row-prize', li, `奖金 ${chips(r.prize)}`);
   }
-  el('div', 'sum-note', body, '奖池只在真人之间按名次分，电脑不拿奖');
+  // 娱乐赛没有奖池，这句只给实盘（0.25.2）
+  if (!i.fun) el('div', 'sum-note', body, '奖池只在真人之间按名次分，电脑不拿奖');
   return body;
 }
 

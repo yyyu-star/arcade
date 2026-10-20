@@ -369,7 +369,16 @@ async function desktop(browser: Browser, base: string): Promise<void> {
   await skipTips(page);
   await page.locator('.seat.me .card.up').first().waitFor();
   // 荷官（0.18.3）：电脑上 6 人桌站在桌子顶边
-  if ((await page.locator('.dealer-guy:not(.hidden)').count()) !== 1) throw new Error('desktop 6-seat table should show the dealer');
+  if ((await page.locator('.dealer-guy:not(.hidden)').count()) !== 1) {
+    // 带上顶栏各块的位置，好看出是谁挡了荷官的站位
+    const bar = await page.locator('.topbar > :not(.spacer)').evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return `${e.className}:${Math.round(r.left)}-${Math.round(r.right)}x${Math.round(r.top)}-${Math.round(r.bottom)}`; }));
+    const st = await page.evaluate(() => {
+      const t = document.querySelector('.table');
+      const r = t?.getBoundingClientRect();
+      return `table ${t?.clientWidth}x${t?.clientHeight} at ${Math.round(r?.left ?? 0)}-${Math.round(r?.right ?? 0)}x${Math.round(r?.top ?? 0)} transform ${getComputedStyle(t ?? document.body).transform}`;
+    });
+    throw new Error(`desktop 6-seat table should show the dealer; top bar ${bar.join(' ')}; ${st}`);
+  }
   // 互动（docs/table-fun.md，0.13.0 起是 kit 的 TableFun）：点 1 号电脑的头像扔一个道具，点自己的头像发一个表情；
   // "互动"面板里发一句；全部屏蔽、再全部恢复；点名牌看对手
   await page.locator('.atf-hot[data-seat="1"]').click();
@@ -1115,6 +1124,24 @@ async function takeProfitFlow(browser: Browser, base: string): Promise<void> {
  * 单机锦标赛（--only tour，0.23.0）：娱乐锦标赛进去，一直跟注到被淘汰或打完；淘汰了点"现在离开"；
  * 看到结束页，名次在 1–6，前三名三行；顶上写"锦标赛 · 第 N 级"，桌上没有止盈旗子；选桌里"坐下开打"和锦标赛入口都在第一屏
  */
+/** 名牌上的标签（锦标赛出局的"没筹码"等）不压名字（0.25.2）；返回这次查到几个标签 */
+async function badgesClear(page: Page): Promise<number> {
+  const r = await page.evaluate(() => {
+    const seats = [...document.querySelectorAll('.seat')].filter((seat) => seat.querySelector('.badge.on'));
+    const covered = seats.flatMap((seat) => {
+      const b = seat.querySelector('.badge.on')!.getBoundingClientRect();
+      const n = seat.querySelector('.plate .name')?.getBoundingClientRect();
+      if (!n || !n.width) return [];
+      const dy = Math.min(b.bottom, n.bottom) - Math.max(b.top, n.top);
+      const dx = Math.min(b.right, n.right) - Math.max(b.left, n.left);
+      return dx > 0 && dy > 1 ? [`${seat.querySelector('.plate .name')?.textContent} ${Math.round(dy)}px`] : [];
+    });
+    return { covered, n: seats.length };
+  });
+  if (r.covered.length) throw new Error(`seat badge covers the name: ${r.covered.join(', ')}`);
+  return r.n;
+}
+
 async function tourFlow(browser: Browser, base: string): Promise<void> {
   const ctx = await newContext(browser, base, 'smoke-tour');
   await ctx.addInitScript(() => {
@@ -1143,6 +1170,7 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
   if ((await page.locator('.tp-toggle:visible').count()) !== 0) throw new Error('take-profit flag should not show in a tournament');
   if (await page.locator('.next-hand:visible').count()) throw new Error('tournament should not have a next-hand button');
   let shotTable = false;
+  let badges = 0;
   const deadline = Date.now() + 560_000;
   while (!(await page.locator('.tour-sum').isVisible())) {
     if (Date.now() > deadline) {
@@ -1150,6 +1178,7 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
       throw new Error('tournament never ended');
     }
     if (await page.locator('.d-title', { hasText: '你出局了' }).isVisible()) {
+      badges += await badgesClear(page);
       await shot(page, 'tour-out');
       await page.locator('.d-btn', { hasText: '现在离开' }).click();
       continue;
@@ -1163,11 +1192,18 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
         shotTable = true;
         await shot(page, 'tour-table');
       }
-      await page.locator('.act.call').click().catch(() => {});
+      badges += await badgesClear(page);
+      // 一直跟注撑到单挑时要打很久（冒烟 560 秒等不起）：20 手以后能全下就全下
+      if ((await handText(page)) >= 20 && (await page.locator('.act.raise:not(.hidden)').isVisible())) {
+        await page.locator('.act.raise').click({ timeout: 2_000 }).catch(() => {});
+        await page.locator('.preset').nth(4).click({ timeout: 2_000 }).catch(() => {});
+        await page.locator('.act.raise').click({ timeout: 2_000 }).catch(() => {});
+      } else await page.locator('.act.call').click().catch(() => {});
     }
     await page.waitForTimeout(120);
   }
   await shot(page, 'tour-summary');
+  log('tour badges checked', badges + (await badgesClear(page)));
   const place = Number(((await page.locator('.tour-place').textContent()) ?? '').replace(/\D/g, ''));
   if (!(place >= 1 && place <= 6)) throw new Error(`tour place out of range: ${place}`);
   if ((await page.locator('.tour-top li').count()) !== 3) throw new Error('tour summary should list the top 3');

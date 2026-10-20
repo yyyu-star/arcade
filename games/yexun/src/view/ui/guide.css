@@ -1,0 +1,44 @@
+/* 玩法说明：和图鉴同一套宣纸面板，内容区能滚；图标小而多，字 ≥ 13px。手机横屏（高度 < 500）收紧。 */
+.yx-guide { z-index: 56; }
+.yx-guide-panel { width: min(820px, 100%); height: min(640px, 100%); }
+.yx-guide .yx-gtabs { flex-wrap: wrap; gap: 6px; }
+.yx-guide .yx-gtabs .yx-tab { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 16px; white-space: nowrap; }
+.yx-guide .yx-gbody { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-right: 2px; }
+.yx-guide .yx-gsec { margin: 0 0 12px; padding: 10px 12px; border: 2.5px solid var(--ink, #17131c); border-radius: 12px; background: #fbf5e4; }
+.yx-guide .yx-gsec h3 { margin: 0 0 6px; font-size: 17px; color: var(--red, #c8402a); }
+.yx-guide .yx-gsec h4 { margin: 0 0 2px; font-size: 16px; }
+.yx-guide .yx-gsec p { margin: 4px 0; font-size: 14px; line-height: 1.55; color: #3a3140; }
+.yx-guide .yx-gnote { color: #6a5a48; font-size: 13px; }
+.yx-guide .yx-glist { margin: 2px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.45; }
+.yx-guide .yx-glist.num { padding-left: 1.4em; list-style: decimal; }
+.yx-guide .yx-glist.two { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 14px; }
+.yx-guide .yx-glist li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.yx-guide .yx-glist.num li { display: list-item; }
+.yx-guide .yx-glist li b { color: var(--ink, #17131c); }
+.yx-guide .yx-glist li small { flex-basis: 100%; font-size: 13px; color: #6a5a48; }
+.yx-guide .yx-gi { width: 26px; height: 26px; object-fit: contain; vertical-align: middle; flex: none; }
+.yx-guide .yx-gw { display: inline-flex; align-items: center; gap: 3px; margin: 0 2px; padding: 1px 7px 1px 2px; border: 1.5px solid rgba(23, 19, 28, 0.35); border-radius: 9px; background: #fff; font-size: 13px; white-space: nowrap; }
+.yx-guide .yx-gw.evo { border-color: var(--red, #c8402a); background: #fff1d6; }
+.yx-guide .yx-gw b { font-weight: 700; }
+.yx-guide .yx-grecipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 12px; }
+.yx-guide .yx-grecipe { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
+.yx-guide .yx-grecipe > i { font-style: normal; color: #6a5a48; }
+.yx-guide .yx-gmerge { margin: 6px 0; padding: 6px 8px; border: 2px solid rgba(23, 19, 28, 0.25); border-radius: 10px; background: #fff8e8; }
+.yx-guide .yx-gmerge.dual { border-color: var(--mc, #b58cff); }
+.yx-guide .yx-gmerge p { margin: 3px 0 0; font-size: 13px; }
+.yx-guide .yx-gtag { font-style: normal; font-size: 12px; color: #fff; background: var(--mc, #b58cff); border-radius: 7px; padding: 0 6px; }
+.yx-guide .yx-gcards { display: flex; gap: 8px; margin: 2px 0 6px; }
+.yx-guide .yx-gcards span { flex: 1; padding: 10px 4px; text-align: center; font-size: 14px; font-weight: 700; border: 2.5px solid var(--ink, #17131c); border-radius: 10px; background: #fff3c4; box-shadow: 0 3px 0 var(--ink, #17131c); }
+.yx-guide .yx-groles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.yx-guide .yx-grole { padding: 6px 8px; border: 2px dashed rgba(23, 19, 28, 0.3); border-radius: 10px; }
+.yx-guide .yx-gsteps b { margin-right: 4px; }
+@media (max-height: 500px) {
+  .yx-guide .yx-gtabs .yx-tab { min-height: 44px; font-size: 14px; }
+  .yx-guide .yx-gsec { padding: 6px 10px; margin-bottom: 8px; }
+  .yx-guide .yx-gsec h3 { font-size: 15px; }
+}
+@media (orientation: portrait) and (max-width: 700px) {
+  .yx-guide-panel { height: 100%; }
+  .yx-guide .yx-gtabs .yx-tab { flex: 1 1 30%; }
+  .yx-guide .yx-grecipes { grid-template-columns: 1fr; }
+}

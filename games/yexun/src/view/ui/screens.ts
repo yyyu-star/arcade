@@ -214,6 +214,7 @@ export class Home {
       select: () => this.m.openSelect(),
       settings: () => this.root.classList.toggle('show-settings'),
       codex: () => this.m.onCodex(),
+      guide: () => this.m.onGuide(),
       boards: () => this.m.onBoards(),
       replays: () => this.m.onReplays(),
       daily: () => this.m.onDaily(),
@@ -238,6 +239,7 @@ export class Home {
       '<button type="button" class="yx-btn" data-a="boards">排行</button>' +
       '<button type="button" class="yx-btn" data-a="replays">回放</button>' +
       '<button type="button" class="yx-btn" data-a="codex">图鉴</button>' +
+      '<button type="button" class="yx-btn" data-a="guide">玩法</button>' +
       '</div>';
     const title = '<div class="yx-title"><b>夜巡</b><span>道士夜巡雪夜古镇 · 撑到天亮</span></div>';
     // 新老玩家同一版主页（所有者 10-18：新手专用首屏只有"开始守夜"，找不到夜探和实盘）。
@@ -533,6 +535,7 @@ export class Menu {
   onClick: () => void = () => undefined;
   /** 图鉴和成就 */
   onCodex: () => void = () => undefined;
+  onGuide: () => void = () => undefined;
 
   private readonly home: Home;
   private readonly select: Select;
@@ -610,6 +613,7 @@ export class Pause {
   onResume: () => void = () => undefined;
   onHome: () => void = () => undefined;
   onQuit: () => void = () => undefined;
+  onGuide: () => void = () => undefined;
 
   constructor(parent: HTMLElement, toggles: Toggle[], icons: (k: string) => string) {
     this.root = layer(parent, 'yx-pausescr');
@@ -620,6 +624,7 @@ export class Pause {
       resume: () => this.onResume(),
       home: () => this.onHome(),
       quit: () => this.onQuit(),
+      guide: () => this.onGuide(),
     });
     const pick = (e: Event): void => {
       const el = (e.target as HTMLElement).closest<HTMLElement>('.yx-cell');
@@ -653,6 +658,7 @@ export class Pause {
       '</div>' +
       `<div class="yx-pause-side"><div class="yx-toggles">${togglesHtml(this.toggles)}</div>` +
       '<button type="button" class="yx-big yx-resume" data-a="resume">继续</button>' +
+      '<button type="button" class="yx-big ghost yx-pguide" data-a="guide">玩法说明</button>' +
       '<div class="yx-row2"><button type="button" class="yx-big ghost" data-a="quit">认输</button><button type="button" class="yx-big ghost" data-a="home">回大厅</button></div>' +
       '</div></div></div>';
     this.root.style.display = '';

@@ -13,7 +13,7 @@ import workerdPath from 'workerd';
 
 export const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixture');
 /** workerd 的真二进制（workerd 包的默认导出是按平台装好的那个文件；不经 node 包装，停进程时停的就是它） */
-export const workerdBin = (): string => workerdPath;
+export const workerdBin = (): string => (typeof workerdPath === 'string' ? workerdPath : (workerdPath as { default: string }).default);
 
 export async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -50,13 +50,15 @@ export async function startSite(site: Site, opts: Omit<GenerateOptions, 'out' | 
   const start = async () => {
     const args = ['serve', 'config.capnp'];
     if ((opts.storage ?? 'sqlite') === 'sqlite') args.push('--directory-path', `data=${data}`);
-    child = spawn(workerdBin(), args, { cwd: out, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    // 有的机器给所有进程预加载了代理库（LD_PRELOAD），workerd 连本机的 PG 会被它截走；测试里不要
+    const { LD_PRELOAD: _preload, ...inherited } = process.env;
+    child = spawn(workerdBin(), args, { cwd: out, env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout!.on('data', (d) => (logs += d));
     child.stderr!.on('data', (d) => (logs += d));
     const deadline = Date.now() + 10_000;
     for (;;) {
       try {
-        if ((await fetch(`${base}/__health`)).ok) return;
+        if ((await fetch(`${base}/__health`, { signal: AbortSignal.timeout(1_000) })).ok) return;
       } catch {
         // 还没起来
       }
@@ -108,8 +110,10 @@ export function fixtureSite(): Site {
           { binding: 'SELF_RPC', service: 'probe', entrypoint: 'Hello', props: { game: 'probe' } },
           { binding: 'SELF_DEFAULT', service: 'probe' },
         ],
-        durable_objects: [{ name: 'PROBE', class_name: 'Probe' }],
-        d1_databases: [{ binding: 'DB', database_name: 'probe', migrations_dir: join(FIXTURE, 'migrations') }],
+        durable_objects: [{ name: 'ROOM', class_name: 'Probe' }],
+        d1_databases: [
+          { binding: 'DB', database_name: 'probe', migrations_dir: join(FIXTURE, 'migrations'), pg: { migrations_dir: join(FIXTURE, 'migrations-pg') } },
+        ],
         crons: ['17 19 * * *'],
         routes: ['/games/probe', '/games/probe/*'],
       },

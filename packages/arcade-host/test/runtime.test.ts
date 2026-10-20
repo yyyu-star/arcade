@@ -130,7 +130,10 @@ describe('sqlite 存储', () => {
 describe('memory 存储（PostgreSQL 模式的底子：不留任何 SQLite 文件）', () => {
   let s: Running;
   beforeAll(async () => {
-    s = await startSite(fixtureSite(), { storage: 'memory' }, { PROBE_SECRET: 'x' });
+    // 内存存储下 SQLite 版的 D1 不许用（生成器拦），这里只看 DO：把 D1 去掉
+    const site = fixtureSite();
+    site.workers[0]!.d1_databases = [];
+    s = await startSite(site, { storage: 'memory' }, { PROBE_SECRET: 'x' });
   });
   afterAll(async () => s?.cleanup());
   const p = (path: string, init?: RequestInit) => fetch(`${s.base}/games/probe${path}`, init);

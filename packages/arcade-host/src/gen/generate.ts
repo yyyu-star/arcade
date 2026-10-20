@@ -27,6 +27,11 @@ import { parseCron } from '../runtime/cron-expr.ts';
 export interface GenerateOptions {
   out: string;
   storage?: 'sqlite' | 'memory';
+  /**
+   * D1 的后端：sqlite（默认，DO 里的 SQLite）或 pg（PostgreSQL，连接串运行时从 ARCADE_PG_URL 取）。
+   * v2.1 的 PG 模式是 db: 'pg' + storage: 'memory'：什么都不落盘，DO 的状态经 KIT_STORE 存进 PG（kit 0.21 起）。
+   */
+  db?: 'sqlite' | 'pg';
   /** 监听地址；运行时可以用 --socket-addr http=<地址> 覆盖 */
   listen?: string;
   /** 内部管理入口（备份、恢复、手动跑定时任务）的监听地址，只许回环地址（没有认证）。容器里也只听容器内的 127.0.0.1，用 docker exec 进去调 */
@@ -37,7 +42,13 @@ export interface GenerateOptions {
   runtimeDir?: string;
 }
 
-const RUNTIME = ['router', 'assets', 'd1', 'cron-entry', 'admin'] as const;
+const RUNTIME = ['router', 'assets', 'd1', 'd1pg', 'kitstore', 'cron-entry', 'admin'] as const;
+/** kit 的角色 → kit 依赖的 DO 绑定名（kit 的 internal.ts 就按这几个名字找命名空间） */
+const KIT_ROLES = [
+  ['room', 'ROOM'],
+  ['meter', 'METER'],
+  ['match', 'MATCH'],
+] as const;
 /** 定时任务的 DO 类名：加进有 crons 的 Worker，模块自己不许有同名的导出 */
 const CRON_CLASS = 'ArcadeHostCron';
 /** 管理入口没有认证，只许听回环地址 */
@@ -48,6 +59,11 @@ const NOT_ASSETS = new Set(['_headers', '_redirects', '.assetsignore', '_worker.
 export function generate(site: Site, opts: GenerateOptions): { config: string } {
   const out = opts.out;
   const storage = opts.storage ?? 'sqlite';
+  const db = opts.db ?? 'sqlite';
+  // 内存存储下 SQLite 版的 D1 重启就清空：平台库必须在 PG
+  if (storage === 'memory' && db === 'sqlite' && site.workers.some((w) => w.d1_databases?.length)) {
+    throw new Error('storage: memory 时 D1 必须用 db: pg（不然平台库重启就没了）');
+  }
   const runtimeDir = opts.runtimeDir ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'runtime');
   validate(site);
   if (opts.adminListen !== undefined && !LOOPBACK.test(opts.adminListen)) {
@@ -66,6 +82,9 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
   const routes: [string, string][] = [];
   const routerBindings: Capnp[] = [];
   const cronWorkers: string[] = [];
+  const kitStore = db === 'pg' && storage === 'memory';
+  /** [游戏, kit 角色, DO 绑定名, 类名]：重启后唤醒存了闹钟的对象用 */
+  const wake: [string, string, string, string][] = [];
   const d1List: string[] = [];
 
   for (const w of site.workers) {
@@ -93,33 +112,76 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
       });
     }
     for (const d of w.durable_objects ?? []) bindings.push({ name: d.name, durableObjectNamespace: { className: d.class_name } });
+    if (kitStore && w.durable_objects?.length) {
+      // PG 模式：kit 看到 KIT_STORE 就把房间、计量、排队的状态存进 PG（kit 0.21）；props.game 定这是哪个游戏，游戏自己改不了
+      bindings.push({ name: 'KIT_STORE', service: { name: 'kitstore', entrypoint: 'KitStore', props: { json: JSON.stringify({ game: w.name }) } } });
+      for (const [role, b] of KIT_ROLES) {
+        const d = w.durable_objects.find((x) => x.name === b);
+        if (d) wake.push([w.name, role, b, d.class_name]);
+      }
+    }
 
-    for (const db of w.d1_databases ?? []) {
-      const svc = `d1-${w.name}-${db.binding}`;
+    for (const d of w.d1_databases ?? []) {
+      const svc = `d1-${w.name}-${d.binding}`;
       d1List.push(svc);
-      const migrations = existsSync(db.migrations_dir)
-        ? readdirSync(db.migrations_dir)
-            .filter((f) => f.endsWith('.sql'))
-            .sort()
-            .map((f) => [f, readFileSync(join(db.migrations_dir, f), 'utf8')])
-        : [];
-      const f = join(dir, `d1-${db.binding}-migrations.json`);
-      writeFileSync(f, JSON.stringify(migrations));
-      services.push({
-        name: svc,
-        worker: {
-          modules: [{ name: 'd1.js', esModule: embed('runtime/d1.js') }],
-          compatibilityDate: w.compatibility_date,
-          bindings: [
-            { name: 'DB_OBJECT', durableObjectNamespace: { className: 'D1Sqlite' } },
-            { name: 'MIGRATIONS', json: embed(rel(f)) },
-          ],
-          durableObjectNamespaces: [{ className: 'D1Sqlite', uniqueKey: svc, enableSql: true }],
-          durableObjectStorage: doStorage,
-        },
-      });
+      const readMigrations = (dirPath: string) =>
+        existsSync(dirPath)
+          ? readdirSync(dirPath)
+              .filter((f) => f.endsWith('.sql'))
+              .sort()
+              .map((f) => [f, readFileSync(join(dirPath, f), 'utf8')] as [string, string])
+          : [];
+      const migrations = readMigrations(d.migrations_dir);
+      if (db === 'sqlite') {
+        const f = join(dir, `d1-${d.binding}-migrations.json`);
+        writeFileSync(f, JSON.stringify(migrations));
+        services.push({
+          name: svc,
+          worker: {
+            modules: [{ name: 'd1.js', esModule: embed('runtime/d1.js') }],
+            compatibilityDate: w.compatibility_date,
+            bindings: [
+              { name: 'DB_OBJECT', durableObjectNamespace: { className: 'D1Sqlite' } },
+              { name: 'MIGRATIONS', json: embed(rel(f)) },
+            ],
+            durableObjectNamespaces: [{ className: 'D1Sqlite', uniqueKey: svc, enableSql: true }],
+            durableObjectStorage: doStorage,
+          },
+        });
+      } else {
+        if (!d.pg) throw new Error(`${w.name} 的 D1 ${d.binding} 没有 PG 版（d1_databases[].pg）`);
+        const pgMigrations = readMigrations(d.pg.migrations_dir);
+        // PG 版迁移和 SQLite 版一一对应：平台加了迁移忘了写 PG 版，生成时就挡住
+        const names = (l: [string, string][]) => l.map(([n]) => n).join(',');
+        if (names(pgMigrations) !== names(migrations)) {
+          throw new Error(`${w.name} 的 PG 版迁移和 SQLite 版对不上：SQLite ${names(migrations)}；PG ${names(pgMigrations)}`);
+        }
+        const fm = join(dir, `d1pg-${d.binding}-migrations.json`);
+        writeFileSync(fm, JSON.stringify(pgMigrations));
+        const fo = join(dir, `d1pg-${d.binding}-overrides.json`);
+        writeFileSync(fo, d.pg.overrides ? readFileSync(d.pg.overrides, 'utf8') : '{}');
+        services.push({
+          name: svc,
+          worker: {
+            modules: [{ name: 'd1pg.js', esModule: embed('runtime/d1pg.js') }],
+            compatibilityDate: w.compatibility_date,
+            // postgres.js 的 workerd 版要 node:buffer、node:stream、node:events：nodejs_compat 从 compat date 2026-08-04 起默认就开着，
+            // 再写一遍 workerd 会报错（本站的模块都是 2026-10-01）
+            bindings: [
+              { name: 'DB_OBJECT', durableObjectNamespace: { className: 'D1Pg' } },
+              { name: 'PG_URL', fromEnvironment: 'ARCADE_PG_URL' },
+              { name: 'MIGRATIONS', json: embed(rel(fm)) },
+              { name: 'OVERRIDES', json: embed(rel(fo)) },
+            ],
+            // 对象只放连接池，不存东西
+            durableObjectNamespaces: [{ className: 'D1Pg', uniqueKey: svc }],
+            globalOutbound: 'pg-network',
+            durableObjectStorage: { inMemory: VOID },
+          },
+        });
+      }
       bindings.push({
-        name: db.binding,
+        name: d.binding,
         wrapped: { moduleName: 'cloudflare-internal:d1-api', innerBindings: [{ name: 'fetcher', service: svc }] },
       });
     }
@@ -186,6 +248,24 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
   const date = site.workers[0]!.compatibility_date;
   // 路由层和管理入口找各 Worker 的定时任务对象：绑定名 cron:<Worker 名>
   const cronBindings = cronWorkers.map((w) => ({ name: `cron:${w}`, durableObjectNamespace: { className: CRON_CLASS, serviceName: w } }));
+  if (kitStore) {
+    services.push({
+      name: 'kitstore',
+      worker: {
+        modules: [{ name: 'kitstore.js', esModule: embed('runtime/kitstore.js') }],
+        compatibilityDate: date,
+        bindings: [
+          { name: 'STORE', durableObjectNamespace: { className: 'KitStorePg' } },
+          { name: 'PG_URL', fromEnvironment: 'ARCADE_PG_URL' },
+          { name: 'WAKE', json: JSON.stringify(wake.map(([g, r, b]) => [g, r, b])) },
+          ...wake.map(([g, , b, c]) => ({ name: `wake:${g}:${b}`, durableObjectNamespace: { className: c, serviceName: g } })),
+        ],
+        durableObjectNamespaces: [{ className: 'KitStorePg', uniqueKey: 'arcade-host-kitstore' }],
+        globalOutbound: 'pg-network',
+        durableObjectStorage: { inMemory: VOID },
+      },
+    });
+  }
   // 精确路径在前，前缀按长度从长到短：/games/texas 和 /games/texas/* 谁先都一样，但以后有嵌套前缀时长的要先
   routes.sort((a, b) => Number(b[0].endsWith('/*') ? 0 : 1) - Number(a[0].endsWith('/*') ? 0 : 1) || b[0].length - a[0].length);
   services.push({
@@ -198,6 +278,7 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
         { name: 'FALLBACK', text: site.fallback },
         { name: 'CRON_WORKERS', json: JSON.stringify(cronWorkers) },
         ...cronBindings,
+        ...(kitStore ? [{ name: 'KITSTORE', service: 'kitstore' }] : []),
         ...routerBindings,
       ],
     },
@@ -209,13 +290,15 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
       compatibilityDate: date,
       bindings: [
         { name: 'D1_LIST', json: JSON.stringify(d1List) },
-        ...d1List.map((svc) => ({ name: svc, durableObjectNamespace: { className: 'D1Sqlite', serviceName: svc } })),
+        ...d1List.map((svc) => ({ name: svc, durableObjectNamespace: { className: db === 'pg' ? 'D1Pg' : 'D1Sqlite', serviceName: svc } })),
         { name: 'CRON_WORKERS', json: JSON.stringify(cronWorkers) },
         ...cronBindings,
       ],
     },
   });
   if (storage === 'sqlite') services.push({ name: 'data', disk: { writable: true } });
+  // workerd 默认的出站网络只许公网地址（防 SSRF）；PG 常在本机或内网，只给连 PG 的两个 Worker 放开，模块自己的 Worker 不变
+  if (db === 'pg') services.push({ name: 'pg-network', network: { allow: ['public', 'private', 'local'] } });
 
   const config = {
     services,
@@ -232,6 +315,7 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
       {
         version: opts.version ?? null,
         storage,
+        db,
         workers: site.workers.map((w) => w.name),
         generated: new Date().toISOString(),
       },
@@ -244,7 +328,7 @@ export function generate(site: Site, opts: GenerateOptions): { config: string } 
 
 function validate(site: Site): void {
   const names = new Set<string>();
-  const reserved = new Set(['router', 'admin', 'data', 'internet']);
+  const reserved = new Set(['router', 'admin', 'data', 'internet', 'kitstore', 'pg-network']);
   for (const w of site.workers) {
     if (!/^[a-z][a-z0-9-]*$/.test(w.name)) throw new Error(`Worker 名不合规：${w.name}`);
     if (names.has(w.name) || reserved.has(w.name) || /^(assets|files|d1)-/.test(w.name)) throw new Error(`Worker 名重复或和生成器的保留名冲突：${w.name}`);
