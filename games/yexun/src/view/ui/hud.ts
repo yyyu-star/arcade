@@ -73,6 +73,12 @@ export class Hud {
   private gbArrow: HTMLDivElement;
   private gbIcon: HTMLElement;
   private gbText: HTMLSpanElement;
+  /** 夜市的箭头（青绿色） */
+  private mkArrow: HTMLDivElement;
+  private mkIcon: HTMLElement;
+  private mkText: HTMLSpanElement;
+  /** 夜市买的临时增益小标签（顶栏计时下面） */
+  private buffTag: HTMLDivElement;
   private raidOn = false;
   private kills: HTMLSpanElement;
   private coins: HTMLSpanElement;
@@ -173,6 +179,13 @@ export class Hud {
     this.gbIcon.innerHTML = this.arrowIcon.innerHTML.replace(/#ffd23a/g, '#ff8a2a');
     this.gbText = el('span', 'yx-xa-text', this.gbArrow);
     this.gbArrow.style.display = 'none';
+    this.mkArrow = el('div', 'yx-xa mk', root);
+    this.mkIcon = el('i', 'yx-xa-ico', this.mkArrow);
+    this.mkIcon.innerHTML = this.arrowIcon.innerHTML.replace(/#ffd23a/g, '#5fe0b0');
+    this.mkText = el('span', 'yx-xa-text', this.mkArrow);
+    this.mkArrow.style.display = 'none';
+    this.buffTag = el('div', 'yx-buffs', root);
+    this.buffTag.style.display = 'none';
     // 连斩横幅
     this.combo = el('div', 'yx-combo', root);
     el('span', 'yx-ink yx-ink-a', this.combo);
@@ -252,6 +265,21 @@ export class Hud {
   /** 宝妖的箭头：同 setArrow，橙色 */
   setGoblinArrow(a: HudArrow | null): void {
     this.place(this.gbArrow, this.gbIcon, this.gbText, a);
+  }
+
+  /** 夜市的箭头：同 setArrow，青绿色 */
+  setMarketArrow(a: HudArrow | null): void {
+    this.place(this.mkArrow, this.mkIcon, this.mkText, a);
+  }
+
+  /** 临时增益小标签：null 收起；文字没变不碰 DOM */
+  setBuffs(text: string | null): void {
+    if (!text) {
+      if (this.buffTag.style.display !== 'none') this.buffTag.style.display = 'none';
+      return;
+    }
+    this.buffTag.style.display = '';
+    if (this.buffTag.textContent !== text) this.buffTag.textContent = text;
   }
 
   private place(box: HTMLDivElement, icon: HTMLElement, text: HTMLSpanElement, a: HudArrow | null): void {
