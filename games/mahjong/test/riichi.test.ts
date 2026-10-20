@@ -567,6 +567,29 @@ describe('一场结束', () => {
     expect(act(last(0, 1, [25_000, 28_000, 25_000, 22_000]), 1, { t: 'tsumo' }).phase).toBe('over');
   });
 
+  test('西入后庄家连庄：别家已到 30,000 但庄家不是第一，接着打；换庄时有人到 30,000 就结束', () => {
+    // 西一局，1 号是庄，荒牌流局时庄家听牌连庄；3 号已经 31,000
+    let s = table(['*8s', TANYAO, '*', '*'], 0, '', { dealer: 1 });
+    s.first = 1;
+    s.wind = 2;
+    s.hand = 0;
+    s.points = [20_000, 24_000, 25_000, 31_000];
+    s.start = s.points.slice();
+    s = discard(s, 0, '8s');
+    expect(s.history.at(-1)!.tenpai).toEqual([false, true, false, false]);
+    expect(s.phase).toBe('end');
+    expect(s.dealer).toBe(1);
+    // 同一局庄家没听（换庄）：3 号到了 30,000，结束
+    let t = table(['*8s', '*', TANYAO, '*'], 0, '', { dealer: 1 });
+    t.first = 1;
+    t.wind = 2;
+    t.hand = 0;
+    t.points = [20_000, 24_000, 25_000, 31_000];
+    t.start = t.points.slice();
+    t = discard(t, 0, '8s');
+    expect(t.phase).toBe('over');
+  });
+
   test('东风战打完东四局结束；西入最多打到西四局', () => {
     const s = last(0, 1, [25_000, 25_000, 25_000, 25_000]);
     s.wind = 2;
