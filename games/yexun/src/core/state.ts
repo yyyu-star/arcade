@@ -15,7 +15,7 @@ import { Raid } from '../explore/raid.ts';
 import type { RaidSetup } from '../explore/host.ts';
 import { BlockIndex, type RaidBlock } from '../explore/blocks.ts';
 
-export const RULES_VERSION = 23;
+export const RULES_VERSION = 24;
 export const TICKS_PER_SECOND = 30;
 
 export const MAX_ENEMIES = 300;
@@ -204,6 +204,8 @@ export class World {
   readonly rProp: Rng;
   /** 跳过的随机小奖（单独一路，不动别的随机） */
   readonly rSkip: Rng;
+  /** 守夜夜市摆什么货、摊在哪个方向 */
+  readonly rMarket: Rng;
 
   // 主角
   x = ARENA.w / 2;
@@ -238,6 +240,23 @@ export class World {
   bans = 1;
   /** 跳过抽中"下次多一张卡"：下一次升级多给一张（不叠加） */
   bonusCard = 0;
+  /** 守夜夜市（content/market.ts）：第几次（0、1 是还没开的那次，2 = 都开过了）、这次的阶段 0 没到 / 1 预告 / 2 开着 */
+  mkIndex = 0;
+  mkPhase = 0;
+  /** 这次收市的拍 */
+  mkEnd = 0;
+  /** 三个摊：位置、货（MARKET_GOODS 的序号）、价格、卖掉没有 */
+  readonly mkX: number[] = [];
+  readonly mkY: number[] = [];
+  readonly mkGood: number[] = [];
+  readonly mkPrice: number[] = [];
+  readonly mkSold: number[] = [];
+  /** 正站在哪一摊前（-1 没有）、站了几拍 */
+  mkStall = -1;
+  mkHold = 0;
+  /** 夜市买的临时增益到哪一拍 */
+  mightUntil = 0;
+  speedUntil = 0;
   banned: (WeaponId | PassiveId)[] = [];
   /** 合成了哪几个（MergeDef.id） */
   merges: MergeDef['id'][] = [];
@@ -418,6 +437,7 @@ export class World {
     this.rWeapon = new Rng(s, 'weapon');
     this.rProp = new Rng(s, 'prop');
     this.rSkip = new Rng(s, 'skip');
+    this.rMarket = new Rng(s, 'market');
     this.stats = baseStats();
   }
 }

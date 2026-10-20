@@ -97,6 +97,8 @@ export const Ev = {
   Skip: 56,
   /** 补了一次刷新：a = 0 进化 / 1 打倒精英或首领 */
   Reroll: 57,
+  /** 守夜夜市：x, y = 中间那摊；a = 0 预告 / 1 开市 / 2 收市 / 3 买下（b = 第几摊，c = 货在 MARKET_GOODS 里的序号） */
+  NightMarket: 58,
 } as const;
 export type Ev = (typeof Ev)[keyof typeof Ev];
 

@@ -47,6 +47,7 @@ import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, typ
 import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import { PICKS, SKIP_FX, SKIP_PRIZES } from '../content/picks.ts';
+import { MARKET_GOODS, MARKET_PRICE, NIGHT_MARKET, type MarketGood } from '../content/market.ts';
 import {
   MAX_PASSIVES,
   MAX_WEAPON_LEVEL,
@@ -185,6 +186,7 @@ export function step(w: World, dir: number, choice = -1): void {
   if (w.setup.character === 'gengfu' && w.tick > 0 && w.tick % CHAR_FX.gongEvery === 0) gong(w, g);
   movePickups(w);
   if (!w.raid) props(w);
+  if (!w.raid && !w.setup.live) nightMarket(w);
   regen(w);
   if (w.phase !== 'play') return;
   if (w.raid) {
@@ -2747,6 +2749,9 @@ function recompute(w: World): void {
     s.magnet *= b.magnet;
     s.luck += b.luck;
   }
+  // 夜市买的临时增益（到点在 nightMarket 里重算）
+  if (w.tick < w.mightUntil) s.might *= 1 + NIGHT_MARKET.might;
+  if (w.tick < w.speedUntil) s.speed *= 1 + NIGHT_MARKET.speed;
   // 永久加成（实盘为空）
   s.might *= 1 + PERK_FX.liliang * perk(w, 'liliang');
   s.armor += PERK_FX.huti * perk(w, 'huti');
@@ -3047,6 +3052,110 @@ function skipPrize(w: World): void {
   } else if (id === 'card') w.bonusCard = 1;
   else addReroll(w, -1);
   w.ev.push(Ev.Skip, w.x, w.y, k, n);
+}
+
+// ───────────────────────── 守夜夜市 ─────────────────────────
+
+/**
+ * 守夜夜市（content/market.ts）：预告时就定好摊位和货（画面能先指方向），开市后站在没卖掉的摊前 hold 拍、铜钱够就买下。
+ * 更夫提前预告、多开一会儿，采药女打九折（角色小特权）。实盘局暂不开（配平 PR 一起打开）。
+ */
+function nightMarket(w: World): void {
+  const M = NIGHT_MARKET;
+  if (w.tick === w.mightUntil || w.tick === w.speedUntil) recompute(w);
+  if (w.mkIndex >= M.at.length) return;
+  const at = M.at[w.mkIndex]!;
+  const gengfu = w.setup.character === 'gengfu';
+  const warnAt = at - M.warn - (gengfu ? CHAR_FX.gengfuMarketWarn : 0);
+  if (w.mkPhase === 0 && w.tick >= warnAt) {
+    stallsUp(w);
+    w.mkPhase = 1;
+    w.ev.push(Ev.NightMarket, w.mkX[1]!, w.mkY[1]!, 0, w.mkIndex);
+  }
+  if (w.mkPhase === 1 && w.tick >= at) {
+    w.mkPhase = 2;
+    w.mkEnd = at + M.open + (gengfu ? CHAR_FX.gengfuMarketLonger : 0);
+    w.ev.push(Ev.NightMarket, w.mkX[1]!, w.mkY[1]!, 1, w.mkIndex);
+  }
+  if (w.mkPhase !== 2) return;
+  if (w.tick >= w.mkEnd) {
+    w.ev.push(Ev.NightMarket, w.mkX[1]!, w.mkY[1]!, 2, w.mkIndex);
+    w.mkIndex++;
+    w.mkPhase = 0;
+    w.mkStall = -1;
+    w.mkHold = 0;
+    return;
+  }
+  let s = -1;
+  for (let k = 0; k < w.mkX.length; k++) {
+    if (w.mkSold[k] || w.coins < w.mkPrice[k]!) continue;
+    const dx = w.mkX[k]! - w.x;
+    const dy = w.mkY[k]! - w.y;
+    if (dx * dx + dy * dy <= M.r * M.r) {
+      s = k;
+      break;
+    }
+  }
+  if (s !== w.mkStall) {
+    w.mkStall = s;
+    w.mkHold = 0;
+  }
+  if (s < 0 || ++w.mkHold < M.hold) return;
+  w.coins -= w.mkPrice[s]!;
+  w.mkSold[s] = 1;
+  w.mkStall = -1;
+  w.mkHold = 0;
+  marketGive(w, MARKET_GOODS[w.mkGood[s]!]!);
+  w.ev.push(Ev.NightMarket, w.mkX[s]!, w.mkY[s]!, 3, s, w.mkGood[s]!);
+}
+
+/** 摆摊：主角身边随机一个方向 dist 远，三摊横着排开（推出墙和障碍、不出场地）；货从五样里挑三样不重样 */
+function stallsUp(w: World): void {
+  const M = NIGHT_MARKET;
+  const a = w.rMarket.int(DIR_N);
+  const cx = w.x + dcos(a) * M.dist;
+  const cy = w.y + dsin(a) * M.dist;
+  // 横着排：沿和方向垂直的那条线
+  const px = -dsin(a);
+  const py = dcos(a);
+  const buff: MarketGood = (['might', 'speed', 'vacuum'] as const)[w.rMarket.int(3)]!;
+  const canUp = w.weapons.some((o) => !o.evolved && o.level < MAX_WEAPON_LEVEL);
+  const kinds: MarketGood[] = ['heal', 'reroll', 'ban', buff, ...(canUp ? (['upgrade'] as const) : [])];
+  const goods: MarketGood[] = [];
+  while (goods.length < M.stalls && kinds.length > 0) goods.push(kinds.splice(w.rMarket.int(kinds.length), 1)[0]!);
+  const price = (w.mkIndex > 0 ? M.later : 1) * (w.setup.character === 'caiyao' ? CHAR_FX.caiyaoMarket : 1);
+  w.mkX.length = w.mkY.length = w.mkGood.length = w.mkPrice.length = w.mkSold.length = 0;
+  for (let k = 0; k < goods.length; k++) {
+    const off = (k - (goods.length - 1) / 2) * M.gap;
+    const p = { x: clamp(cx + px * off, 80, w.arenaW - 80), y: clamp(cy + py * off, 80, w.arenaH - 80) };
+    if (w.blocks.length) push(w, p, 30);
+    w.mkX.push(p.x);
+    w.mkY.push(p.y);
+    w.mkGood.push(MARKET_GOODS.indexOf(goods[k]!));
+    w.mkPrice.push(Math.ceil(MARKET_PRICE[goods[k]!] * price));
+    w.mkSold.push(0);
+  }
+}
+
+function marketGive(w: World, g: MarketGood): void {
+  const M = NIGHT_MARKET;
+  if (g === 'heal') heal(w, w.stats.hpMax * M.heal);
+  else if (g === 'reroll') {
+    // 买的刷新不受"最多攒 9"以外的限制（实盘局不开夜市）
+    if (w.rerolls < PICKS.rerollMax) w.rerolls++;
+  } else if (g === 'ban') w.bans++;
+  else if (g === 'might') {
+    w.mightUntil = w.tick + M.buffTicks;
+    recompute(w);
+  } else if (g === 'speed') {
+    w.speedUntil = w.tick + M.buffTicks;
+    recompute(w);
+  } else if (g === 'vacuum') {
+    for (let s = 0; s < MAX_DROPS; s++) if (w.dAlive[s] && w.dKind[s] === Drop.Soul) w.dPull[s] = PICKUP.pull;
+  } else {
+    const pool = w.weapons.filter((o) => !o.evolved && o.level < MAX_WEAPON_LEVEL);
+    if (pool.length) upgradeWeapon(w, pool[w.rMarket.int(pool.length)]!.id);
+  }
 }
 
 /** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领。实盘局暂不补 */
