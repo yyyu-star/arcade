@@ -3,3 +3,5 @@ dist/
 *.log
 .vite/
 .wrangler/
+# 自托管打包的输出（README 的 Self-hosting：tools/selfhost/pack-all.sh build/art、release.sh … build/out）
+/build/
