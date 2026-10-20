@@ -5,7 +5,7 @@
  *   2. 管理令牌建两个号（平台 /api/admin/users），各自登录拿会话，/api/me 认得；
  *   3. 德州单机：带入 400 → 钱包少 400；结回 500 → 钱包多 500（WALLET 服务绑定 + props.game 的 RPC）；
  *   4. 德州好友房：A 开房，A、B 各连一条 WebSocket，都收到 welcome（ARCADE 认人、DO、WebSocket 休眠接口）；
- *   5. 管理入口手动投一次平台的定时清理，结果是 ok；导出平台库，里面有刚建的号。
+ *   5. 管理入口手动投一次平台的定时清理，结果是 ok；导出平台库，里面有刚建的号（PG 模式不经管理入口导出，回 501，备份用 pg_dump）。
  * 用法：ADMIN_TOKEN=… node tools/selfhost/smoke.mjs --base http://127.0.0.1:8787 --admin http://127.0.0.1:8788
  * Docker 里管理入口只听容器内的 127.0.0.1，宿主连不到：--admin skip 跳过第 5 步，由 selfhost.yml 用 docker exec 在容器里做。
  * 只认 tools/workers.json 里本仓库的平台和德州：别的游戏起没起都不影响。
@@ -141,8 +141,14 @@ if (admin === 'skip') {
   const r = await fetch(`${admin}/cron/run?worker=arcade&cron=${encodeURIComponent('17 19 * * *')}`, { method: 'POST' });
   const out = await body(r);
   check(r.ok && out.outcome === 'ok', '手动投平台的定时清理', out);
-  const dump = await (await fetch(`${admin}/d1/d1-arcade-DB/export`)).text();
-  check(dump.includes(a.username) && dump.includes('d1_migrations'), '导出的平台库里没有刚建的号');
-  ok(`平台定时清理 outcome=ok；导出平台库 ${dump.split('\n').length} 行`);
+  const ex = await fetch(`${admin}/d1/d1-arcade-DB/export`);
+  if (ex.status === 501) {
+    await ex.body?.cancel();
+    ok('平台定时清理 outcome=ok；PG 模式，平台库不经管理入口导出');
+  } else {
+    const dump = await ex.text();
+    check(dump.includes(a.username) && dump.includes('d1_migrations'), '导出的平台库里没有刚建的号');
+    ok(`平台定时清理 outcome=ok；导出平台库 ${dump.split('\n').length} 行`);
+  }
 }
 console.log('selfhost smoke：全部通过');

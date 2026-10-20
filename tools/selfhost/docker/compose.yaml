@@ -1,4 +1,4 @@
-# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）。postgres 先占位（profile pg，PostgreSQL 模式做好之前不用）。
+# 自托管的 compose：arcade（workerd）+ caddy（HTTPS、真实 IP）。postgres 在 profile pg 里（PostgreSQL 模式：发布包用 --db pg 打，arcade 加 ARCADE_PG_URL）。
 # 用法：先 docker build 出 arcade 镜像（见 Dockerfile 开头），再在本目录：
 #   SITE_HOST=game.example.com ARCADE_IMAGE=arcade:<版本> docker compose up -d
 # Secret 放 secrets.env（和本文件同目录，不进 Git；格式见 tools/selfhost/README.md），SITE_ORIGIN 也写在里面。
@@ -31,7 +31,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
   postgres:
-    # 占位：PostgreSQL 模式（平台库放 PG、DO 不落盘）做好之前不用，docker compose --profile pg 才会起
+    # PostgreSQL 模式（平台库放 PG）才用：docker compose --profile pg 才会起；arcade 的 secrets.env 里加 ARCADE_PG_URL=postgres://arcade:<密码>@postgres:5432/arcade
     profiles: [pg]
     image: postgres:17
     restart: unless-stopped

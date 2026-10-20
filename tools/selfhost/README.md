@@ -15,7 +15,7 @@ tools/selfhost/pack-all.sh <产物目录>                     # 各模块 npm ci
 tools/selfhost/release.sh <产物目录> <输出目录>           # → <输出目录>/arcade-<版本>.tar.gz
 ```
 
-`release.sh` 后面可以接 `build.mjs` 的参数：`--only arcade,texas`（只要这几个，必须带平台）、`--storage memory`（不落盘，PostgreSQL 模式的底子，还没做完）。
+`release.sh` 后面可以接 `build.mjs` 的参数：`--only arcade,texas`（只要这几个，必须带平台）、`--db pg`（平台库放 PostgreSQL，见下面一节）、`--storage memory`（房间也不落盘，要 kit 0.21，还没发）。
 
 | 文件 | 做什么 |
 |---|---|
@@ -28,7 +28,11 @@ tools/selfhost/release.sh <产物目录> <输出目录>           # → <输出�
 | `install.sh`、`upgrade.sh`、`rollback.sh` | 第一次安装、升级（先备份、换软链接、等健康检查，起不来自动切回）、回滚 |
 | `systemd/arcade.service` | systemd 单元（只听 127.0.0.1、只能写数据目录） |
 | `Caddyfile` | HTTPS、用真实地址覆盖 `cf-connecting-ip`、挡 `/cdn-cgi` |
-| `docker/Dockerfile`、`docker/compose.yaml` | 镜像（上下文是发布目录）和 arcade + caddy 的 compose（postgres 先占位） |
+| `docker/Dockerfile`、`docker/compose.yaml` | 镜像（上下文是发布目录）和 arcade + caddy 的 compose（postgres 在 profile pg 里） |
+| `pg/migrations/` | 平台迁移的 PG 版（文件名一一对应；文本列一律 `COLLATE "C"`，和 SQLite 一样按字节比较、排序） |
+| `pg/overrides.json` | 覆盖表：机械翻译翻不了的平台语句的 PG 版，每条带为什么、对照参数 |
+| `pg/check-sql.mjs` | 语句覆盖检查：平台每条 SQL 都在 PG 上 PREPARE，覆盖表和 SQLite 灌同样的数据（`pg/fixture.sql`）对照结果 |
+| `pg/verify-import.mjs` | SQLite → PG 迁移后逐表逐行核对，外加钱包筹码合计 |
 
 ## 二进制部署（systemd）
 
@@ -60,6 +64,27 @@ docker compose exec arcade /app/ops/backup.sh /data/backups     # 备份（管�
 
 站点只给 caddy 经内部网络连（不发布到宿主）；管理入口只听容器内的 127.0.0.1。
 
+## PostgreSQL 模式
+
+平台库（账号、钱包、榜单……）放进 PostgreSQL，平台代码一条 SQL 都不改：`packages/arcade-host` 的 D1 后端把 SQLite 方言机械翻译成 PG 的，
+翻不了的走 `pg/overrides.json`。SQLite 和 PG 是部署时二选一，PG 模式下平台库不在数据目录里。房间这一版仍然落盘（`--db pg` 配默认的 `--storage sqlite`），
+数据目录照样要；房间也进 PG（`--storage memory`）要等 kit 0.21 的 KIT_STORE。
+
+```sh
+tools/selfhost/release.sh <产物目录> <输出目录> --db pg
+ARCADE_PG_URL=postgres://arcade:…@127.0.0.1:5432/arcade ARCADE_DATA=/var/lib/arcade/data bin/arcade   # systemd 的话写进 EnvironmentFile
+```
+
+- 第一次起站自动建表（`pg/migrations/`，记在 PG 的 `d1_migrations` 表里）。建库用什么区域设置都行：文本列都带了 `COLLATE "C"`。
+- **从 SQLite 档迁过来**：旧站 `ops/backup.sh` 导出平台库 → 停旧站 → PG 档起站 → `ops/restore.sh d1-arcade-DB <备份里的 d1-arcade-DB.sql>`
+  （整库替换，一个事务，回的 JSON 里有每张表的行数和数字列总和）→ 在打包的机器上 `node tools/selfhost/pg/verify-import.mjs <同一个 .sql> --pg <连接串>` 逐行核对 → 开站。
+  房间（打到一半的牌局）不迁。
+- **备份**：平台库用 `pg_dump`（`backup.sh` 遇到 PG 的库会跳过，只给房间打快照）。
+- **平台改了 SQL**：`selfhost.yml` 的 pg 作业会跑 `pg/check-sql.mjs`。新语句机械翻译不了（json 函数、`SUM(布尔)`、`ON CONFLICT DO UPDATE` 里不带表名的列……），
+  就在 `overrides.json` 加一条 PG 版和对照参数（写语句再加 `after`：跑完查哪张表），本地 `node tools/selfhost/pg/check-sql.mjs`（PGlite）或 `--pg <测试库>` 跑通。
+  平台加了迁移，`pg/migrations/` 跟着加同名的 PG 版。
+
 ## 验证
 
-`.github/workflows/selfhost.yml`：打平台和德州 → 发布包 → 二进制起一次（冒烟、备份、恢复演练）→ 同一个包做成镜像起一次（冒烟，容器里跑备份和定时任务）。
+`.github/workflows/selfhost.yml`：打平台和德州 → 发布包 → 二进制起一次（冒烟、备份、恢复演练）→ 同一个包做成镜像起一次（冒烟，容器里跑备份和定时任务）；
+pg 作业连 postgres:17：语句覆盖检查 → SQLite 档冒烟、备份 → PG 档冒烟 → 备份迁进 PG、逐行核对 → 再冒烟。

@@ -1,0 +1,490 @@
+[
+  {
+    "why": "管理页用户列表：余额、桌上筹码、各游戏结回份数",
+    "sqlite": "SELECT u.id, u.username, u.display_name, u.role, u.created_at, u.last_seen_at, json_extract(w.state, '$.balance') AS balance, (SELECT COALESCE(SUM(json_extract(s.value, '$.amount')), 0) FROM json_each(w.state, '$.stakes') AS s) AS on_table, (SELECT json_group_object(g.key, json_extract(g.value, '$.n')) FROM json_each(w.state, '$.career') AS g) AS played FROM users u LEFT JOIN wallets w ON w.user_id = u.id ORDER BY u.created_at DESC, u.id LIMIT ?1",
+    "pg": [
+      "SELECT u.id, u.username, u.display_name, u.role, u.created_at, u.last_seen_at,",
+      "  (w.state::json->>'balance')::numeric AS balance,",
+      "  (SELECT COALESCE(SUM((s.value->>'amount')::numeric), 0) FROM json_each(w.state::json->'stakes') AS s) AS on_table,",
+      "  (SELECT COALESCE(json_object_agg(g.key, g.value->'n')::text, '{}') FROM json_each(w.state::json->'career') AS g) AS played",
+      "FROM users u LEFT JOIN wallets w ON w.user_id = u.id",
+      "ORDER BY u.created_at DESC, u.id LIMIT $1"
+    ],
+    "samples": [
+      [
+        10
+      ],
+      [
+        2
+      ]
+    ]
+  },
+  {
+    "why": "动态的点赞：参数是 id 的 JSON 数组（先当 text 收：参数类型推成 json 的话 postgres.js 会把字符串再 JSON 编码一次）",
+    "sqlite": "SELECT item_id, user_id, kind FROM feed_reactions WHERE item_id IN (SELECT value FROM json_each(?1))",
+    "pg": [
+      "SELECT item_id, user_id, kind FROM feed_reactions WHERE item_id IN (SELECT json_array_elements_text($1::text::json))"
+    ],
+    "samples": [
+      [
+        "[\"f1\",\"f3\",\"zz\"]"
+      ],
+      [
+        "[]"
+      ]
+    ]
+  },
+  {
+    "why": "好友周榜：每人每个游戏的本周净赢和称号数",
+    "sqlite": "SELECT w.user_id, u.display_name, u.avatar_json, g.key AS game, CASE WHEN json_extract(g.value, '$.wk') = ?1 THEN json_extract(g.value, '$.wnet') END AS wnet, (SELECT COUNT(*) FROM json_each(g.value, '$.titles')) AS titles FROM wallets w JOIN users u ON u.id = w.user_id, json_each(w.state, '$.career') AS g",
+    "pg": [
+      "SELECT w.user_id, u.display_name, u.avatar_json, g.key AS game,",
+      "  CASE WHEN g.value->>'wk' = $1 THEN (g.value->>'wnet')::numeric END AS wnet,",
+      "  (SELECT COUNT(*) FROM json_each(g.value->'titles')) AS titles",
+      "FROM wallets w JOIN users u ON u.id = w.user_id CROSS JOIN LATERAL json_each(w.state::json->'career') AS g"
+    ],
+    "samples": [
+      [
+        "2026-10-19"
+      ],
+      [
+        "2026-10-12"
+      ]
+    ]
+  },
+  {
+    "why": "榜单列表：游戏 id 是 JSON 数组参数",
+    "sqlite": "SELECT DISTINCT game_id, board_id FROM boards WHERE game_id IN (SELECT value FROM json_each(?3)) AND board_id >= ?1 AND board_id < ?2",
+    "pg": [
+      "SELECT DISTINCT game_id, board_id FROM boards",
+      "WHERE game_id IN (SELECT json_array_elements_text($3::text::json)) AND board_id >= $1 AND board_id < $2"
+    ],
+    "samples": [
+      [
+        "week-2026-10-19",
+        "week-2026-10-20",
+        "[\"texas\",\"guandan\"]"
+      ],
+      [
+        "daily-2026-10-20",
+        "daily-2026-10-21",
+        "[\"texas\",\"kaipan\"]"
+      ]
+    ]
+  },
+  {
+    "why": "报位置：位置没变且没到时间就不写（IS NOT 是不认 NULL 的不等于）",
+    "sqlite": "UPDATE users SET presence_json = ?1, presence_at = ?2, last_seen_at = ?2 WHERE id = ?3 AND (presence_at <= ?4 OR presence_json IS NULL OR json_extract(presence_json, '$.place') IS NOT ?5 OR json_extract(presence_json, '$.game') IS NOT ?6 OR json_extract(presence_json, '$.room') IS NOT ?7)",
+    "pg": [
+      "UPDATE users SET presence_json = $1, presence_at = $2, last_seen_at = $2",
+      "WHERE id = $3 AND (presence_at <= $4",
+      "  OR presence_json IS NULL",
+      "  OR (presence_json::json->>'place') IS DISTINCT FROM $5",
+      "  OR (presence_json::json->>'game') IS DISTINCT FROM $6",
+      "  OR (presence_json::json->>'room') IS DISTINCT FROM $7)"
+    ],
+    "samples": [
+      [
+        "{\"place\":\"lobby\"}",
+        9000,
+        "Ua",
+        3000,
+        "lobby",
+        null,
+        null
+      ],
+      [
+        "{\"place\":\"game\",\"game\":\"texas\",\"room\":\"R2\"}",
+        9100,
+        "ub",
+        1000,
+        "game",
+        "texas",
+        "R2"
+      ],
+      [
+        "{\"place\":\"lobby\"}",
+        9200,
+        "_c",
+        1000,
+        "lobby",
+        null,
+        null
+      ]
+    ],
+    "after": "SELECT id, presence_json, presence_at, last_seen_at FROM users ORDER BY id"
+  },
+  {
+    "why": "战绩页：career 原样取出（json 类型保留原文）",
+    "sqlite": "SELECT u.id, u.display_name, u.avatar_json, u.show_mates, (SELECT json_extract(w.state, '$.career') FROM wallets w WHERE w.user_id = u.id) AS career, f.status, f.requested_by, EXISTS (SELECT 1 FROM blocks bl WHERE bl.blocker = u.id AND bl.blocked = ?2) AS blocked_me, EXISTS (SELECT 1 FROM blocks bl WHERE bl.blocker = ?2 AND bl.blocked = u.id) AS i_blocked FROM users u LEFT JOIN friendships f ON f.user_a = ?3 AND f.user_b = ?4 WHERE u.id = ?1",
+    "pg": [
+      "SELECT u.id, u.display_name, u.avatar_json, u.show_mates,",
+      "  (SELECT (w.state::json->'career')::text FROM wallets w WHERE w.user_id = u.id) AS career,",
+      "  f.status, f.requested_by,",
+      "  EXISTS (SELECT 1 FROM blocks bl WHERE bl.blocker = u.id AND bl.blocked = $2) AS blocked_me,",
+      "  EXISTS (SELECT 1 FROM blocks bl WHERE bl.blocker = $2 AND bl.blocked = u.id) AS i_blocked",
+      "FROM users u LEFT JOIN friendships f ON f.user_a = $3 AND f.user_b = $4",
+      "WHERE u.id = $1"
+    ],
+    "samples": [
+      [
+        "Ua",
+        "ub",
+        "Ua",
+        "ub"
+      ],
+      [
+        "_c",
+        "Ua",
+        "Ua",
+        "_c"
+      ],
+      [
+        "Zd",
+        "nobody",
+        "x",
+        "y"
+      ]
+    ]
+  },
+  {
+    "why": "管理页：全站最近 10 次调整（SQLite 的逗号连接在 PG 里 ON 看不到 w，改成 LATERAL）",
+    "sqlite": "SELECT u.username, u.display_name, json_extract(l.value, '$.at') AS at, json_extract(l.value, '$.amount') AS amount, json_extract(l.value, '$.note') AS note, json_extract(l.value, '$.by') AS by FROM wallets w, json_each(w.state, '$.adminLog') l JOIN users u ON u.id = w.user_id ORDER BY at DESC LIMIT 10",
+    "pg": [
+      "SELECT u.username, u.display_name, (l.value->>'at')::numeric AS \"at\", (l.value->>'amount')::numeric AS amount,",
+      "  l.value->>'note' AS note, l.value->>'by' AS \"by\"",
+      "FROM wallets w CROSS JOIN LATERAL json_array_elements(w.state::json->'adminLog') AS l JOIN users u ON u.id = w.user_id",
+      "ORDER BY \"at\" DESC LIMIT 10"
+    ],
+    "samples": [
+      []
+    ]
+  },
+  {
+    "why": "今天每个游戏有几个人带过筹码",
+    "sqlite": "SELECT g.key AS game, COUNT(*) AS n FROM wallets, json_each(state, '$.today.games') AS g WHERE json_extract(state, '$.today.day') = ?1 AND json_extract(g.value, '$.in') > 0 GROUP BY g.key",
+    "pg": [
+      "SELECT g.key AS game, COUNT(*) AS n FROM wallets CROSS JOIN LATERAL json_each(wallets.state::json->'today'->'games') AS g",
+      "WHERE wallets.state::json->'today'->>'day' = $1 AND (g.value->>'in')::numeric > 0 GROUP BY g.key"
+    ],
+    "samples": [
+      [
+        "2026-10-20"
+      ],
+      [
+        "2026-10-19"
+      ]
+    ]
+  },
+  {
+    "why": "每日统计：全站钱包合计（当天的计数在 today 或 prev 里）",
+    "sqlite": "SELECT COUNT(*) AS wallets, COALESCE(SUM(CASE WHEN CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END IS NOT NULL THEN 1 ELSE 0 END), 0) AS active, COALESCE(SUM(CASE WHEN json_extract(CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END, '$.relief') > 0 THEN 1 ELSE 0 END), 0) AS relief_n, COALESCE(SUM(json_extract(state, '$.balance') + COALESCE((SELECT SUM(json_extract(value, '$.amount')) FROM json_each(state, '$.stakes')), 0)), 0) AS total, COALESCE(SUM(json_extract(CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END, '$.grant')), 0) AS \"grant\", COALESCE(SUM(json_extract(CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END, '$.relief')), 0) AS relief, COALESCE(SUM(json_extract(CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END, '$.admin')), 0) AS admin FROM wallets",
+    "pg": [
+      "SELECT COUNT(*) AS wallets,",
+      "  COALESCE(SUM(CASE WHEN d IS NOT NULL THEN 1 ELSE 0 END), 0) AS active,",
+      "  COALESCE(SUM(CASE WHEN (d->>'relief')::numeric > 0 THEN 1 ELSE 0 END), 0) AS relief_n,",
+      "  COALESCE(SUM((st->>'balance')::numeric + COALESCE((SELECT SUM((k.value->>'amount')::numeric) FROM json_each(st->'stakes') AS k), 0)), 0) AS total,",
+      "  COALESCE(SUM((d->>'grant')::numeric), 0) AS \"grant\",",
+      "  COALESCE(SUM((d->>'relief')::numeric), 0) AS relief,",
+      "  COALESCE(SUM((d->>'admin')::numeric), 0) AS admin",
+      "FROM (SELECT st, CASE WHEN st->'today'->>'day' = $1 THEN st->'today' WHEN st->'prev'->>'day' = $1 THEN st->'prev' END AS d FROM (SELECT state::json AS st FROM wallets) AS x) AS w"
+    ],
+    "samples": [
+      [
+        "2026-10-20"
+      ],
+      [
+        "2026-10-19"
+      ],
+      [
+        "2026-01-01"
+      ]
+    ]
+  },
+  {
+    "why": "每日统计：按游戏合计（键按字节排，和 SQLite 一样）",
+    "sqlite": "SELECT g.key AS game, SUM(json_extract(g.value, '$.in')) AS i, SUM(json_extract(g.value, '$.out')) AS o, SUM(CASE WHEN json_extract(g.value, '$.in') > 0 THEN 1 ELSE 0 END) AS p, SUM(json_extract(g.value, '$.back')) AS b, SUM(json_extract(g.value, '$.capped')) AS c FROM (SELECT CASE WHEN json_extract(state, '$.today.day') = ?1 THEN json_extract(state, '$.today') WHEN json_extract(state, '$.prev.day') = ?1 THEN json_extract(state, '$.prev') END AS d FROM wallets) AS w, json_each(w.d, '$.games') AS g WHERE w.d IS NOT NULL GROUP BY g.key ORDER BY g.key",
+    "pg": [
+      "SELECT g.key AS game, SUM((g.value->>'in')::numeric) AS i, SUM((g.value->>'out')::numeric) AS o,",
+      "  SUM(CASE WHEN (g.value->>'in')::numeric > 0 THEN 1 ELSE 0 END) AS p,",
+      "  SUM((g.value->>'back')::numeric) AS b, SUM((g.value->>'capped')::numeric) AS c",
+      "FROM (SELECT CASE WHEN st->'today'->>'day' = $1 THEN st->'today' WHEN st->'prev'->>'day' = $1 THEN st->'prev' END AS d FROM (SELECT state::json AS st FROM wallets) AS x) AS w CROSS JOIN LATERAL json_each(w.d->'games') AS g",
+      "WHERE w.d IS NOT NULL GROUP BY g.key ORDER BY g.key COLLATE \"C\""
+    ],
+    "samples": [
+      [
+        "2026-10-20"
+      ],
+      [
+        "2026-10-19"
+      ],
+      [
+        "2026-01-01"
+      ]
+    ]
+  },
+  {
+    "why": "好友数、发出和收到的请求数：PG 的 SUM 不收布尔",
+    "sqlite": "SELECT COALESCE(SUM(status = 'accepted'), 0) AS friends, COALESCE(SUM(status = 'pending' AND requested_by = ?1), 0) AS outgoing, COALESCE(SUM(status = 'pending' AND requested_by != ?1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker = ?1 AND b.blocked = requested_by)), 0) AS incoming FROM friendships WHERE user_a = ?1 OR user_b = ?1",
+    "pg": [
+      "SELECT",
+      "  COALESCE(SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END), 0) AS friends,",
+      "  COALESCE(SUM(CASE WHEN status = 'pending' AND requested_by = $1 THEN 1 ELSE 0 END), 0) AS outgoing,",
+      "  COALESCE(SUM(CASE WHEN status = 'pending' AND requested_by != $1",
+      "    AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker = $1 AND b.blocked = requested_by) THEN 1 ELSE 0 END), 0) AS incoming",
+      "FROM friendships WHERE user_a = $1 OR user_b = $1"
+    ],
+    "samples": [
+      [
+        "Ua"
+      ],
+      [
+        "ub"
+      ],
+      [
+        "Zd"
+      ],
+      [
+        "nobody"
+      ]
+    ]
+  },
+  {
+    "why": "搭子计数：DO UPDATE 里不带表名的列在 PG 里有歧义（和 excluded 重名），补上 mates.",
+    "sqlite": "INSERT INTO mates (lo, hi, game, n, lo_wins, hi_wins, team_n, team_wins, last_op, last_at) VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT (lo, hi, game) DO UPDATE SET n = n + 1, lo_wins = lo_wins + excluded.lo_wins, hi_wins = hi_wins + excluded.hi_wins, team_n = team_n + excluded.team_n, team_wins = team_wins + excluded.team_wins, last_op = excluded.last_op, last_at = excluded.last_at WHERE mates.last_op <> excluded.last_op",
+    "pg": [
+      "INSERT INTO mates (lo, hi, game, n, lo_wins, hi_wins, team_n, team_wins, last_op, last_at)",
+      "VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9)",
+      "ON CONFLICT (lo, hi, game) DO UPDATE SET",
+      "  n = mates.n + 1, lo_wins = mates.lo_wins + excluded.lo_wins, hi_wins = mates.hi_wins + excluded.hi_wins,",
+      "  team_n = mates.team_n + excluded.team_n, team_wins = mates.team_wins + excluded.team_wins,",
+      "  last_op = excluded.last_op, last_at = excluded.last_at",
+      "WHERE mates.last_op <> excluded.last_op"
+    ],
+    "samples": [
+      [
+        "Ua",
+        "ub",
+        "guandan",
+        1,
+        0,
+        1,
+        1,
+        "op2",
+        60
+      ],
+      [
+        "Ua",
+        "ub",
+        "guandan",
+        1,
+        0,
+        1,
+        1,
+        "op2",
+        61
+      ],
+      [
+        "Ua",
+        "Zd",
+        "texas",
+        0,
+        1,
+        0,
+        0,
+        "op3",
+        70
+      ]
+    ],
+    "after": "SELECT * FROM mates ORDER BY lo, hi, game"
+  },
+  {
+    "why": "计量按小时累加：同上，补 meter_hourly.",
+    "sqlite": "INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys, login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) ON CONFLICT (hour) DO UPDATE SET requests = requests + excluded.requests, rows_read = rows_read + excluded.rows_read, rows_reg = rows_reg + excluded.rows_reg, rows_auth = rows_auth + excluded.rows_auth, rows_save = rows_save + excluded.rows_save, rows_social = rows_social + excluded.rows_social, rows_acct = rows_acct + excluded.rows_acct, rows_board = rows_board + excluded.rows_board, rows_sys = rows_sys + excluded.rows_sys, rows_wallet = rows_wallet + excluded.rows_wallet, rows_live = rows_live + excluded.rows_live, login_attempts = login_attempts + excluded.login_attempts, recover_attempts = recover_attempts + excluded.recover_attempts, db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE db_size END, updated_at = excluded.updated_at",
+    "pg": [
+      "INSERT INTO meter_hourly (hour, requests, rows_read, rows_reg, rows_auth, rows_save, rows_social, rows_acct, rows_board, rows_sys,",
+      "  login_attempts, recover_attempts, db_size, updated_at, rows_wallet, rows_live)",
+      "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+      "ON CONFLICT (hour) DO UPDATE SET",
+      "  requests = meter_hourly.requests + excluded.requests, rows_read = meter_hourly.rows_read + excluded.rows_read,",
+      "  rows_reg = meter_hourly.rows_reg + excluded.rows_reg, rows_auth = meter_hourly.rows_auth + excluded.rows_auth,",
+      "  rows_save = meter_hourly.rows_save + excluded.rows_save, rows_social = meter_hourly.rows_social + excluded.rows_social,",
+      "  rows_acct = meter_hourly.rows_acct + excluded.rows_acct, rows_board = meter_hourly.rows_board + excluded.rows_board, rows_sys = meter_hourly.rows_sys + excluded.rows_sys,",
+      "  rows_wallet = meter_hourly.rows_wallet + excluded.rows_wallet, rows_live = meter_hourly.rows_live + excluded.rows_live,",
+      "  login_attempts = meter_hourly.login_attempts + excluded.login_attempts,",
+      "  recover_attempts = meter_hourly.recover_attempts + excluded.recover_attempts,",
+      "  db_size = CASE WHEN excluded.db_size > 0 THEN excluded.db_size ELSE meter_hourly.db_size END,",
+      "  updated_at = excluded.updated_at"
+    ],
+    "samples": [
+      [
+        "2026-10-20T01",
+        5,
+        9,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        4096,
+        100,
+        1,
+        0
+      ],
+      [
+        "2026-10-20T01",
+        3,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        200,
+        0,
+        2
+      ]
+    ],
+    "after": "SELECT * FROM meter_hourly ORDER BY hour"
+  },
+  {
+    "why": "限流计数：同上，补 rate_counters.",
+    "sqlite": "INSERT INTO rate_counters (key, window_start, count) VALUES (?1, ?2, 1) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN window_start < ?2 THEN 1 ELSE count + 1 END, window_start = ?2 WHERE window_start < ?2 OR count < ?3 RETURNING count",
+    "pg": [
+      "INSERT INTO rate_counters (key, window_start, count) VALUES ($1, $2, 1)",
+      "ON CONFLICT (key) DO UPDATE SET",
+      "  count = CASE WHEN rate_counters.window_start < $2 THEN 1 ELSE rate_counters.count + 1 END,",
+      "  window_start = $2",
+      "WHERE rate_counters.window_start < $2 OR rate_counters.count < $3",
+      "RETURNING count"
+    ],
+    "samples": [
+      [
+        "ip:1",
+        1000,
+        5
+      ],
+      [
+        "ip:2",
+        1000,
+        5
+      ],
+      [
+        "ip:3",
+        1000,
+        5
+      ],
+      [
+        "ip:2",
+        2000,
+        5
+      ]
+    ],
+    "after": "SELECT * FROM rate_counters ORDER BY key"
+  },
+  {
+    "why": "登录失败计数和锁定：同上；1 << n 写成 bigint 左移（SQLite 的整数是 64 位）",
+    "sqlite": "INSERT INTO rate_counters (key, window_start, count, blocked_until) VALUES (?1, ?2, 1, 0) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN window_start + ?3 <= ?2 THEN 1 ELSE count + 1 END, blocked_until = CASE WHEN window_start + ?3 <= ?2 THEN 0 WHEN count + 1 >= ?4 THEN ?2 + MIN(?5 * (1 << MIN(count + 1 - ?4, 20)), ?6) ELSE 0 END, window_start = CASE WHEN window_start + ?3 <= ?2 THEN ?2 ELSE window_start END WHERE blocked_until <= ?2 OR window_start + ?3 <= ?2 RETURNING blocked_until",
+    "pg": [
+      "INSERT INTO rate_counters (key, window_start, count, blocked_until) VALUES ($1, $2, 1, 0)",
+      "ON CONFLICT (key) DO UPDATE SET",
+      "  count = CASE WHEN rate_counters.window_start + $3 <= $2 THEN 1 ELSE rate_counters.count + 1 END,",
+      "  blocked_until = CASE",
+      "    WHEN rate_counters.window_start + $3 <= $2 THEN 0",
+      "    WHEN rate_counters.count + 1 >= $4 THEN $2 + LEAST($5 * (1::bigint << LEAST(rate_counters.count + 1 - $4, 20)::int), $6)",
+      "    ELSE 0 END,",
+      "  window_start = CASE WHEN rate_counters.window_start + $3 <= $2 THEN $2 ELSE rate_counters.window_start END",
+      "WHERE rate_counters.blocked_until <= $2 OR rate_counters.window_start + $3 <= $2",
+      "RETURNING blocked_until"
+    ],
+    "samples": [
+      [
+        "fail:a",
+        1500,
+        1000,
+        3,
+        100,
+        100000
+      ],
+      [
+        "fail:a",
+        1600,
+        1000,
+        3,
+        100,
+        100000
+      ],
+      [
+        "fail:b",
+        2500,
+        1000,
+        3,
+        100,
+        100000
+      ],
+      [
+        "fail:new",
+        100,
+        1000,
+        3,
+        100,
+        100000
+      ]
+    ],
+    "after": "SELECT * FROM rate_counters ORDER BY key"
+  },
+  {
+    "why": "新建云存档：?5（大小）既是插入值又参与加法，PG 推不出一个类型，写明 bigint",
+    "sqlite": "INSERT INTO saves (user_id, game_id, slot, rev, data, size, updated_at) SELECT ?1, ?2, ?3, 1, ?4, ?5, ?6 WHERE (SELECT COUNT(*) FROM saves WHERE user_id = ?1 AND game_id = ?2) < ?7 AND (SELECT COALESCE(SUM(size), 0) FROM saves WHERE user_id = ?1) + ?5 <= ?8 ON CONFLICT DO NOTHING RETURNING rev, updated_at",
+    "pg": [
+      "INSERT INTO saves (user_id, game_id, slot, rev, data, size, updated_at)",
+      "SELECT $1, $2, $3, 1, $4, $5::bigint, $6",
+      "WHERE (SELECT COUNT(*) FROM saves WHERE user_id = $1 AND game_id = $2) < $7",
+      "  AND (SELECT COALESCE(SUM(size), 0) FROM saves WHERE user_id = $1) + $5::bigint <= $8",
+      "ON CONFLICT DO NOTHING",
+      "RETURNING rev, updated_at"
+    ],
+    "samples": [
+      [
+        "Ua",
+        "kaipan",
+        "s2",
+        "data3",
+        5,
+        200,
+        3,
+        100
+      ],
+      [
+        "Ua",
+        "kaipan",
+        "main",
+        "zz",
+        2,
+        300,
+        3,
+        100
+      ],
+      [
+        "Ua",
+        "texas",
+        "s9",
+        "big",
+        95,
+        300,
+        3,
+        100
+      ]
+    ],
+    "after": "SELECT * FROM saves ORDER BY user_id, game_id, slot"
+  }
+]

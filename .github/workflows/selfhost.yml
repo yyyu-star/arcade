@@ -1,6 +1,9 @@
 # 自托管（tools/selfhost + packages/arcade-host）的整站验证：只测不部署，不碰线上、不用凭证（冒烟用的 pepper 和管理令牌是这次运行临时生成的）。
 #   binary：打平台和德州 → 发布包 → 解开用 bin/arcade 起 → 全站冒烟 → 备份 → 恢复演练；发布包交给 docker 作业；
-#   docker：同一个发布包做成镜像、起容器 → 冒烟（管理入口只在容器里，备份和定时任务用 docker exec 跑）；compose 文件校验。
+#   docker：同一个发布包做成镜像、起容器 → 冒烟（管理入口只在容器里，备份和定时任务用 docker exec 跑）；compose 文件校验；
+#   pg：PostgreSQL 模式（postgres:17 服务容器，测试密码固定，只在这次运行里）。平台每条 SQL 在 PG 上 PREPARE、覆盖表和 SQLite 对照（check-sql）→
+#       SQLite 档起站冒烟、备份 → PG 档起站冒烟 → 把 SQLite 的备份迁进 PG、逐行核对（verify-import）→ 迁移后再冒烟一次。
+#       房间先用落盘存储（pg + sqlite）：DO 不落盘的 pg + memory 要 kit 0.21 的 KIT_STORE，kit 发版后再加。
 # 平台和德州改了也跑：它们一变，自托管能不能原样跑起来要马上知道。
 name: Self-host
 on:
@@ -129,3 +132,75 @@ jobs:
       - name: 失败时的容器日志
         if: failure()
         run: docker logs arcade 2>&1 | tail -200 || true
+  pg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      # 服务容器的默认库是 en_US.utf8 排序：故意不用 C，PG 版迁移的 COLLATE "C" 和覆盖表的排序要在这里经得住
+      ARCADE_PG_URL: postgres://postgres:test@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            tools/deployer/package-lock.json
+            packages/arcade-host/package-lock.json
+            platform/package-lock.json
+            games/texas/package-lock.json
+      - name: 装钉死的 wrangler 和运行时
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deployer
+          (cd packages/arcade-host && npm ci --no-audit --no-fund && npm run build)
+      - name: 平台的每条 SQL 在 PG 上过一遍（check-sql）
+        run: node tools/selfhost/pg/check-sql.mjs --pg "$ARCADE_PG_URL"
+      - name: 打包平台和德州，出 SQLite 档和 PG 档两个发布包
+        run: |
+          tools/selfhost/pack-all.sh "$RUNNER_TEMP/art" arcade texas
+          ARCADE_VERSION=ci-sqlite tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas
+          ARCADE_VERSION=ci-pg tools/selfhost/release.sh "$RUNNER_TEMP/art" "$RUNNER_TEMP/out" --only arcade,texas --db pg
+      - name: 临时 Secret（只在这次运行里）
+        run: |
+          r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          : > "$RUNNER_TEMP/secrets.env"
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> "$RUNNER_TEMP/secrets.env"; done
+      - name: SQLite 档起站、冒烟、备份
+        run: |
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          ARCADE_DATA="$RUNNER_TEMP/data-sqlite" "$RUNNER_TEMP/out/arcade-ci-sqlite/bin/arcade" > "$RUNNER_TEMP/workerd-sqlite.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 50); do curl -fsS http://127.0.0.1:8787/__health >/dev/null 2>&1 && break; sleep 0.2; done
+          node tools/selfhost/smoke.mjs
+          "$RUNNER_TEMP/out/arcade-ci-sqlite/ops/backup.sh" "$RUNNER_TEMP/backups" http://127.0.0.1:8788 "$RUNNER_TEMP/data-sqlite"
+          kill "$pid"; wait "$pid" || true
+      - name: PG 档起站、冒烟；SQLite 的备份迁进 PG、逐行核对、再冒烟
+        run: |
+          set -a; . "$RUNNER_TEMP/secrets.env"; set +a
+          ARCADE_DATA="$RUNNER_TEMP/data-pg" "$RUNNER_TEMP/out/arcade-ci-pg/bin/arcade" > "$RUNNER_TEMP/workerd-pg.log" 2>&1 &
+          for _ in $(seq 50); do curl -fsS http://127.0.0.1:8787/__health >/dev/null 2>&1 && break; sleep 0.2; done
+          node tools/selfhost/smoke.mjs
+          dump=$(ls "$RUNNER_TEMP"/backups/*/d1-arcade-DB.sql | tail -1)
+          "$RUNNER_TEMP/out/arcade-ci-pg/ops/restore.sh" d1-arcade-DB "$dump" | tee "$RUNNER_TEMP/import.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/import.json"
+          node tools/selfhost/pg/verify-import.mjs "$dump" --pg "$ARCADE_PG_URL"
+          node tools/selfhost/smoke.mjs
+          # PG 模式的备份：平台库跳过（用 pg_dump），不报错
+          "$RUNNER_TEMP/out/arcade-ci-pg/ops/backup.sh" "$RUNNER_TEMP/backups-pg" http://127.0.0.1:8788 "$RUNNER_TEMP/data-pg"
+          # 没给连接串起不来
+          if env -u ARCADE_PG_URL ARCADE_DATA="$RUNNER_TEMP/x" "$RUNNER_TEMP/out/arcade-ci-pg/bin/arcade"; then echo "::error::没有 ARCADE_PG_URL 也起来了"; exit 1; fi
+      - name: 失败时的 workerd 日志
+        if: failure()
+        run: tail -100 "$RUNNER_TEMP"/workerd-*.log || true
