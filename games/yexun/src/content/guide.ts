@@ -27,9 +27,10 @@ export const WEAPON_ROLE: Record<WeaponId, Role> = {
   petals: 'crowd',
   shield: 'guard',
   crane: 'single',
+  zhibing: 'guard',
 };
 
-export type SchoolId = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire';
+export type SchoolId = 'sword' | 'talisman' | 'ward' | 'wood' | 'fire' | 'paper';
 
 export interface School {
   id: SchoolId;
@@ -42,7 +43,7 @@ export interface School {
   tip: string;
 }
 
-export const SCHOOL_IDS: readonly SchoolId[] = ['sword', 'talisman', 'ward', 'wood', 'fire'];
+export const SCHOOL_IDS: readonly SchoolId[] = ['sword', 'talisman', 'ward', 'wood', 'fire', 'paper'];
 
 export const SCHOOLS: Record<SchoolId, School> = {
   sword: {
@@ -79,6 +80,13 @@ export const SCHOOLS: Record<SchoolId, School> = {
     weapons: ['talisman', 'gourd', 'thunder', 'sword', 'petals'],
     passives: ['xianglu', 'luopan', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'],
     tip: '纸扎和僵尸都怕火；提灯鬼不怕，半夜见它要换着打',
+  },
+  paper: {
+    id: 'paper',
+    name: '纸兵',
+    weapons: ['zhibing', 'gourd', 'bell', 'petals', 'talisman'],
+    passives: ['jiandao', 'modou', 'xiantao', 'zhusha', 'nianzhu', 'lingpai'],
+    tip: '纸兵顶在前面替你挨打；配葫芦成火兵、配铃成鸣兵，后半夜靠撒豆成兵炸开',
   },
 };
 
