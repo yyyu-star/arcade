@@ -35,6 +35,44 @@ export const BUILDS: Record<Build, { weapons: WeaponId[]; passives: PassiveId[] 
 
 const VIEW = 560;
 
+/**
+ * 搭配路线（DESIGN 8.1，10-20 全流派配平）：流派 + 一条进化或合成，sim 用 `--build 流派:路线`。
+ * 路线是法器 id（走它的进化）或合成 id（两件都进化后合成）；机器人把路线要的法器和进化被动排到单子最前面，其余照流派单子。
+ */
+export const ROUTES: Record<Build, string[]> = {
+  sword: ['sword', 'flysword', 'coins', 'zhuxie', 'fujian'],
+  talisman: ['talisman', 'thunder', 'crane', 'leihuo', 'fujian'],
+  ward: ['bell', 'mirror', 'shield', 'rope', 'yinyang', 'fenzhong', 'linghua'],
+  wood: ['thunder', 'petals', 'linghua', 'leihuo'],
+  fire: ['gourd', 'talisman', 'fenzhong', 'leihuo'],
+  paper: ['zhibing', 'huobing', 'mingbing', 'bell'],
+};
+
+/** 路线要的法器（进化路线一件，合成路线两件） */
+export function routeWeapons(route: string): WeaponId[] {
+  const m = MERGES.find((x) => x.id === route);
+  if (m) return [m.a, m.b];
+  if (!(route in WEAPONS)) throw new Error(`没有这条路线：${route}`);
+  return [route as WeaponId];
+}
+
+/** 这局走成了没有：进化路线 = 那件进化了；合成路线 = 合成了 */
+export function routeDone(w: World, route: string): boolean {
+  if (MERGES.some((x) => x.id === route)) return w.merges.includes(route as never);
+  return w.weapons.some((o) => o.id === route && o.evolved);
+}
+
+function routePlan(build: Build, route: string | null): { weapons: WeaponId[]; passives: PassiveId[] } {
+  const base = BUILDS[build];
+  if (!route) return base;
+  const ws = routeWeapons(route);
+  const ps = ws.map((id) => WEAPONS[id].evolve!.with);
+  return {
+    weapons: [...ws, ...base.weapons.filter((x) => !ws.includes(x))].slice(0, Math.max(5, ws.length)),
+    passives: [...new Set([...ps, ...base.passives])],
+  };
+}
+
 export class Bot {
   readonly skill: Skill;
   readonly build: Build;
@@ -45,10 +83,19 @@ export class Bot {
   /** 会不会去凑双修的另一半（1.1 起模拟默认凑；13.3 的节奏验收按不凑的老口径量，见 tests/pace.test.ts） */
   readonly dual: boolean;
 
-  constructor(skill: Skill, build: Build, seed: number, opts: { dual?: boolean } = {}) {
+  /** 搭配路线（`流派:路线` 的后半，没有就是 null：照流派单子） */
+  readonly route: string | null;
+  private readonly plan: { weapons: WeaponId[]; passives: PassiveId[] };
+
+  /** spec：流派，或 `流派:路线`（ROUTES）；随机流只按流派分，同种子下不同路线的局可以配对比 */
+  constructor(skill: Skill, spec: Build | string, seed: number, opts: { dual?: boolean } = {}) {
     this.dual = opts.dual ?? true;
     this.skill = skill;
+    const [build, route] = spec.split(':') as [Build, string | undefined];
+    if (!(build in BUILDS)) throw new Error(`没有这个流派：${build}`);
     this.build = build;
+    this.route = route ?? null;
+    this.plan = routePlan(build, this.route);
     this.rng = new Rng(seed, `bot-${skill}-${build}`);
   }
 
@@ -298,7 +345,7 @@ export class Bot {
       });
       return k;
     }
-    const plan = BUILDS[this.build];
+    const plan = this.plan;
     let best = 0;
     let bs = -Infinity;
     cs.forEach((c, i) => {

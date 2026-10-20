@@ -18,11 +18,11 @@ const evs = (w: World, t: number): { a: number; b: number }[] => {
 };
 
 describe('选卡三件套（10-20）', () => {
-  it('起步刷新 3、封禁 2；实盘局暂照旧 2、1', () => {
+  it('起步刷新 3、封禁 2；实盘局一样', () => {
     const w = createWorld({ seed: 1, mode: 'vigil', danger: 0, character: 'jianxia' });
     expect([w.rerolls, w.bans]).toEqual([PICKS.rerolls, PICKS.bans]);
     const l = createWorld({ seed: 1, mode: 'vigil', danger: 0, live: true });
-    expect([l.rerolls, l.bans]).toEqual([PICKS.liveRerolls, PICKS.liveBans]);
+    expect([l.rerolls, l.bans]).toEqual([PICKS.rerolls + 1, PICKS.bans]); // 默认小道士多 1 次刷新
   });
 
   it('跳过：抽一样小奖，不加经验；同一种子抽到的一样（录像能复现）', () => {
@@ -78,7 +78,7 @@ describe('选卡三件套（10-20）', () => {
     expect(w.choices.length).toBe(3);
   });
 
-  it('打倒精英补一次刷新，最多攒到 9；实盘局不补', () => {
+  it('打倒精英补一次刷新，最多攒到 9；实盘局一样', () => {
     for (const live of [false, true]) {
       const w = createWorld({ seed: 5, mode: 'vigil', danger: 0, live });
       w.rerolls = PICKS.rerollMax - 1;
@@ -94,16 +94,14 @@ describe('选卡三件套（10-20）', () => {
         }
         expect(w.eAlive[i]).toBe(0);
       }
-      expect(w.rerolls).toBe(live ? PICKS.rerollMax - 1 : PICKS.rerollMax);
-      expect(got).toBe(live ? 0 : 1);
+      expect(w.rerolls).toBe(PICKS.rerollMax);
+      expect(got).toBe(1);
     }
   });
 
-  it('实盘局跳过照旧换一点魂', () => {
+  it('实盘局跳过也是小奖', () => {
     const w = toChoice(7, { live: true });
-    const xp = w.xp;
     step(w, 0, Pick.Skip);
-    expect(w.xp).toBeGreaterThan(xp);
-    expect(evs(w, Ev.Skip)[0]!.a).toBe(-1);
+    expect(evs(w, Ev.Skip)[0]!.a).toBeGreaterThanOrEqual(0);
   }, 20_000);
 });

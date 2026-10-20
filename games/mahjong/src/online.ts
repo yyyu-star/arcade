@@ -85,9 +85,10 @@ export class Online {
   start(): void {
     this.client.start();
   }
-  /** 玩法的动作（房间的 parse 认出是哪个玩法） */
+  /** 玩法的动作，带上这一桌的玩法 id：房间的 parse 拿不到房间状态，不同玩法的动作形状会撞（立直的出牌长得和川麻一样） */
   play(a: unknown): void {
-    this.client.act({ t: 'play', a } as RoomAction);
+    const v = this.s.opts?.variant;
+    this.client.act({ t: 'play', a, ...(v ? { v } : {}) } as RoomAction);
   }
   /** 再来一场：我开好的新房间号告诉这一桌 */
   next(code: string): void {

@@ -35,7 +35,7 @@ installErrorHandler();
 const platform = detectOnce();
 // 竖屏提示层里的"大厅"：牌桌被盖住，有打到一半的存档（或好友房正在打）时用浏览器自带的确认框
 mountRotateHint(() => {
-  if ((app.net ? inOnlineGame() : savedGameInProgress()) && !window.confirm(leaveText())) return;
+  if ((app.net || app.ddzNet ? inOnlineGame() : savedGameInProgress()) && !window.confirm(leaveText())) return;
   goLobby();
 });
 
@@ -100,7 +100,7 @@ void platform.then(() => {
   else {
     void cloud.start();
     // 报位置、收好友邀请（0.13.0）：没登录 mountSocialOnce 自己不挂
-    void mountSocialOnce(() => app.net ?? lobbySession());
+    void mountSocialOnce(() => app.net ?? app.ddzNet ?? lobbySession());
   }
 });
 

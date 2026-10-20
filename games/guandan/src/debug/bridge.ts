@@ -7,6 +7,7 @@ import type { Action, Card, GameState, PlayerView } from '../variants/guandan/co
 import { anim } from '../view/anim.ts';
 import { app } from '../view/app.ts';
 import { audio } from '../view/audio.ts';
+import { NetSession } from '../view/net.ts';
 import { lobbySession } from '../view/online.ts';
 import { loadStake } from '../view/stake.ts';
 import type { StakeView } from '../variants/guandan/net/stake.ts';
@@ -150,7 +151,7 @@ export function mountBridge(game: Phaser.Game): void {
     state: () => app.session?.state ?? null,
     view: () => (app.net?.shown ? app.net.view() : (app.session?.view() ?? null)),
     ddzState: () => app.ddz?.state ?? null,
-    ddzView: () => app.ddz?.view() ?? null,
+    ddzView: () => (app.ddzNet?.shown ? app.ddzNet.view() : (app.ddz?.view() ?? null)),
     toScreen,
     controls: () => {
       const out: Record<string, Pt & { enabled?: boolean; visible?: boolean }> = {};
@@ -271,7 +272,7 @@ export function mountBridge(game: Phaser.Game): void {
       return { save: s ? { ref: s.ref, tier: s.tier, deals: s.match.deals, settle: s.settle, until: s.until } : null, outcome: table()?.stakeOutcome ?? null };
     },
     net: () => {
-      const n = app.net ?? lobbySession();
+      const n = app.net ?? app.ddzNet ?? lobbySession();
       if (!n) return null;
       return {
         code: n.code,
@@ -285,7 +286,7 @@ export function mountBridge(game: Phaser.Game): void {
         queue: n.queue.length,
         pending: n.pending !== null,
         // 好友房实盘：最新一帧里每个座位的账（按我的座位转过，我是 0 号）
-        stake: n.queue[n.queue.length - 1]?.nv.stake ?? n.shown?.stake ?? null,
+        stake: (n instanceof NetSession ? (n.queue[n.queue.length - 1]?.nv.stake ?? n.shown?.stake) : null) ?? null,
         match: n.match,
         chat: n.chatOn,
       };

@@ -165,12 +165,55 @@ async function friendRoom(browser: Browser, stack: OnlineStack): Promise<void> {
   notes.push(`好友房实盘打完一场：两人 ${pts.join(' / ')} 分，结算页写"已经结回钱包"`);
 }
 
+/** 斗地主单机实盘（牌馆）：主页切到斗地主 → 实盘卡 → 小档进场 → 电脑代打到一场结束 → 结回钱包、存档删掉 */
+async function ddzSolo(browser: Browser, stack: OnlineStack): Promise<void> {
+  const page = await openPage(browser, stack, 'ddz-a', { balance: 10_000, stakes: [] }, undefined, '&ddz=1&autoplay=1');
+  await click(page, 'variant:ddz');
+  await until(page, '斗地主面板的实盘卡', "'stake' in g.controls() && 'daily' in g.controls()");
+  await click(page, 'stake');
+  await until(page, '选档位', "'tier:small' in g.controls()");
+  await shot(page, '70-ddz-tiers');
+  await click(page, 'tier:small');
+  await until(page, '斗地主牌桌', "g.scene === 'ddz'");
+  const ref = await page.evaluate(() => JSON.parse(localStorage.getItem('guandan.ddz.stake') ?? 'null')?.ref as string | undefined);
+  assert(ref?.startsWith('solo-ddz-small-'), `斗地主实盘的 ref：${ref}`);
+  // URL 的 autoplay 只管调试开局（?seed=），从主页进的实盘局在这里开代打
+  await page.evaluate(() => window.__game!.setAutoplay(true));
+  await until(page, '一场打完、结回', "g.overlay === 'gameOver' && g.texts().some((t) => t.s.includes('结回钱包'))", 240_000);
+  await shot(page, '71-ddz-settled');
+  assert((await page.evaluate(() => localStorage.getItem('guandan.ddz.stake'))) === null, '结回后删掉斗地主实盘存档');
+  assert((await page.evaluate(() => localStorage.getItem('guandan.ddz.stats'))) === null, '实盘不记战绩');
+  notes.push('斗地主单机实盘：小档进场、代打一场、结回钱包、存档删掉、不记战绩');
+  await page.context().close();
+}
+
 async function main(): Promise<void> {
   mkdirSync(OUT, { recursive: true });
   const stack = await startOnlineStack({ build: !process.argv.includes('--no-build') });
   console.log(`本地联机栈：${stack.origin}`);
   const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
   try {
+    if (process.argv.includes('--ddz-only')) await ddzSolo(browser, stack);
+    else await guandanParts(browser, stack);
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e));
+  } finally {
+    await browser.close();
+    await stack.stop();
+  }
+  for (const n of notes) console.log(`· ${n}`);
+  console.log(`截图 → ${OUT}`);
+  if (errors.length) {
+    console.log(`失败 ${errors.length} 项：`);
+    for (const e of errors) console.log(`  ✗ ${e}`);
+    process.exitCode = 1;
+  } else if (process.argv.includes('--ddz-only')) console.log('斗地主实盘冒烟通过，控制台零报错');
+  else console.log('实盘冒烟通过：选档、退回、接着打、结算、到顶、再来一场、现在结算、被拒，控制台零报错');
+}
+
+/** 掼蛋的各段，最后接斗地主单机和好友房实盘 */
+async function guandanParts(browser: Browser, stack: OnlineStack): Promise<void> {
+  {
     // ① 选模式、选档位：钱包 10,000，大档、豪华档灰掉
     // "capped" 开头的号：假钱包当它今天已经赢满了
     const page = await openPage(browser, stack, 'capped-main', { balance: 10_000, stakes: [] });
@@ -283,20 +326,9 @@ async function main(): Promise<void> {
     await shot(stray, '51-stray');
     notes.push('钱包里有一份不在本机的单机实盘：照样能开新的，也可以原样退回');
 
+    await ddzSolo(browser, stack);
     if (!process.argv.includes('--no-room')) await friendRoom(browser, stack);
-  } catch (e) {
-    errors.push(e instanceof Error ? e.message : String(e));
-  } finally {
-    await browser.close();
-    await stack.stop();
   }
-  for (const n of notes) console.log(`· ${n}`);
-  console.log(`截图 → ${OUT}`);
-  if (errors.length) {
-    console.log(`失败 ${errors.length} 项：`);
-    for (const e of errors) console.log(`  ✗ ${e}`);
-    process.exitCode = 1;
-  } else console.log('实盘冒烟通过：选档、退回、接着打、结算、到顶、再来一场、现在结算、被拒，控制台零报错');
 }
 
 await main();

@@ -73,8 +73,8 @@ describe('守夜夜市（10-20）', () => {
     runTo(w, w.mightUntil + 1, w.tick);
     expect(w.stats.might).toBeCloseTo(m0, 6);
   });
-  it('实盘局暂不开夜市', () => {
+  it('实盘局也开夜市', () => {
     const w = make({ live: true });
-    expect(runTo(w, M.at[0]! + 2)).toEqual([]);
+    expect(runTo(w, M.at[0]! + 2, M.at[0]! - 400).filter((_, k) => k % 2 === 0)).toEqual([0, 1]);
   });
 });

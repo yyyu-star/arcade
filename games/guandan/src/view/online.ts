@@ -7,7 +7,9 @@
 import { MATCH_TEXT, MatchClient, type MatchSoloWhy } from 'arcade-kit/client';
 import { CLOSE } from 'arcade-kit/protocol';
 import { app } from './app.ts';
-import { NetSession, createRoom, errorText, forgetRoom, isFinalForRoom, myRoom, roomInUrl, savedRoom } from './net.ts';
+import { NetSession, createRoom, errorText, forgetRoom, isFinalForRoom, myRoom, roomInUrl, roomVariant, savedRoom, seatCountOf, type RoomVariant } from './net.ts';
+import { DdzNetSession } from './ddz-net.ts';
+import { MATCH_DDZ, MATCH_DDZ_TABLE } from '../variants/doudizhu/net/match.ts';
 import { MATCH_PATH, matchTierOf } from '../variants/guandan/net/match.ts';
 import { parseRoomOpts } from '../variants/guandan/net/stake.ts';
 import { ROOM_DEALS, TIERS, TIER_IDS, pointValue, type TierId } from '../variants/guandan/stake/index.ts';
@@ -22,7 +24,11 @@ import { mountThemeCss } from './theme.ts';
 const TEAM = ['#d9443a', '#3a78c8'];
 
 let root: HTMLElement | null = null;
-let ses: NetSession | null = null;
+/** 大厅里连着的会话：两种玩法共用（RoomLink 的那一半），进牌桌时按玩法交给 app.net 或 app.ddzNet */
+type Link = NetSession | DdzNetSession;
+let ses: Link | null = null;
+/** 好友房面板现在开的是哪个玩法（斗地主面板进来的是 ddz；进房后以房间信息为准） */
+let panelVariant: RoomVariant = 'guandan';
 let offSes: (() => void) | null = null;
 let note = '';
 
@@ -49,6 +55,10 @@ function style(): void {
   font: bold 22px var(--gd-font-num); letter-spacing: 4px; background: #fffaf0; color: var(--gd-ink); }
 #online input:focus-visible { outline: 3px solid var(--gd-focus); outline-offset: 1px; }
 #online .ol-seats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gd-s2); }
+/* 斗地主 3 个座位排一行：没有队伍，名字在上、按钮在下 */
+#online .ol-seats.ol-seats-3 { grid-template-columns: repeat(3, 1fr); }
+#online .ol-seats-3 .ol-seat { flex-direction: column; align-items: stretch; justify-content: center; gap: var(--gd-s1); padding: var(--gd-s1) var(--gd-s2); border-left-width: 2px; }
+#online .ol-seats-3 .ol-seat .gd-btn { width: 100%; }
 #online .ol-seat { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-s2); min-height: 52px; min-width: 0; padding: var(--gd-s1) var(--gd-s2) var(--gd-s1) var(--gd-s3);
   border-radius: var(--gd-r-md); background: linear-gradient(#fffaf0, #f1e4c6); border: 2px solid #2b1d14; border-left: 8px solid var(--team);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 3px 8px rgba(0, 0, 0, 0.14); }
@@ -110,16 +120,17 @@ function noteEl(): HTMLElement {
   return el('div', { class: 'ol-note', id: 'ol-note' }, note);
 }
 
-/** 好友房入口：开房 / 输码进房 / 回到刚才的房间 */
-export function openOnline(): void {
+/** 好友房入口：开房 / 输码进房 / 回到刚才的房间。variant：从哪个玩法的主页进来的（斗地主面板传 'ddz'，开房时带上；输码、链接进房以房间信息为准） */
+export function openOnline(variant: RoomVariant = 'guandan'): void {
+  panelVariant = variant;
   const c = card();
   c.appendChild(el('h2', {}, '好友房'));
-  c.appendChild(el('div', { class: 'ol-tip' }, '开个房间把房间码发给朋友，4 个人一起打；人不够电脑补上。'));
+  c.appendChild(el('div', { class: 'ol-tip' }, variant === 'ddz' ? '开个房间把房间码发给朋友，3 个人一起打斗地主；人不够电脑补上。' : '开个房间把房间码发给朋友，4 个人一起打；人不够电脑补上。'));
   // 回到刚才的房间：先问平台现在是谁，是这个账号记下的才给（换了账号的人看不到）
   const slot = el('div');
   c.appendChild(slot);
   void myRoom().then((back) => {
-    if (back && slot.isConnected) slot.appendChild(button(`回到刚才的房间 ${back.code}`, () => join(back.code, back.host), '', 'ol-back'));
+    if (back && slot.isConnected) slot.appendChild(button(`回到刚才的房间 ${back.code}`, () => join(back.code, back.host, null, false, back.variant ?? 'guandan'), '', 'ol-back'));
   });
   // 单独部署（0.8.0）没有账号：别人看到的名字自己填，开房、进房的地址上带着（不填就叫"游客"加数字）
   if (standalone()) {
@@ -134,7 +145,7 @@ export function openOnline(): void {
   const make = el('div', { class: 'ol-row' });
   make.appendChild(button('开个房间', () => void create(null), '', 'ol-create'));
   // 实盘房间（0.5.0，docs/stake.md 第 3 节）：开房时选档位，之后不能改。单独部署没有钱包，不摆
-  if (!standalone()) make.appendChild(button('开实盘房间', () => pickTier(tiers), 'gd-2', 'ol-create-stake'));
+  if (!standalone() && variant === 'guandan') make.appendChild(button('开实盘房间', () => pickTier(tiers), 'gd-2', 'ol-create-stake'));
   c.appendChild(make);
   const tiers = el('div', { class: 'ol-row', id: 'ol-tiers' });
   c.appendChild(tiers);
@@ -183,10 +194,10 @@ async function create(stake: TierId | null): Promise<void> {
   // 等回话时按钮转圈、不能再点（连点会开出两个房间）
   const btn = document.getElementById(stake === null ? 'ol-create' : 'ol-create-stake');
   btn?.classList.add('is-loading');
-  const r = await createRoom(fetch, stake).finally(() => btn?.classList.remove('is-loading'));
+  const r = await createRoom(fetch, stake, panelVariant === 'ddz' ? 'ddz' : null).finally(() => btn?.classList.remove('is-loading'));
   if ('code' in r) {
     note = '';
-    join(r.code, true);
+    join(r.code, true, null, false, panelVariant);
     return;
   }
   setNote(r.error);
@@ -198,18 +209,32 @@ async function create(stake: TierId | null): Promise<void> {
  * 开打了就接管电脑的座位。返回要给人看的一句话（弹了系统分享、或者自己关掉了分享面板时没有）。大厅和牌桌（0.6.1）共用
  */
 
-/** 进房（含房主自己）：连上后画房间。prefer：再来一场跟过来的，想坐的真实座位；match：快速匹配排到的桌 */
-export function join(code: string, host: boolean, prefer: number | null = null, match = false): void {
+/**
+ * 进房（含房主自己）：连上后画房间。prefer：再来一场跟过来的，想坐的真实座位；match：快速匹配排到的桌。
+ * variant：先按它连（开房、匹配、本机记着的房间都知道是哪个玩法）；不知道的（输码、邀请链接）先当掼蛋连，
+ * 房间信息一到发现是斗地主就换一条斗地主的会话重连——玩法由房间说了算，不看本机设置
+ */
+export function join(code: string, host: boolean, prefer: number | null = null, match = false, variant?: RoomVariant): void {
   offSes?.();
   ses?.close();
-  const s = new NetSession(code, host, match ? { match } : {});
+  const v: RoomVariant = variant ?? (savedRoom()?.code === code ? (savedRoom()?.variant ?? 'guandan') : 'guandan');
+  const s: Link = v === 'ddz' ? new DdzNetSession(code, host, match ? { match } : {}) : new NetSession(code, host, match ? { match } : {});
   s.prefer = prefer;
   ses = s;
   roomInUrl(code);
   app.net = null;
+  app.ddzNet = null;
   // 进了房间（第一次连上）马上报一次位置，好友那边看得到"在掼蛋好友房 3/4"
   let told = false;
   offSes = s.on((k) => {
+    if (s.wrongVariant) {
+      // 房间是另一个玩法：放手这条，换对的重连（座位、房间码都没动）
+      offSes?.();
+      offSes = null;
+      s.detach();
+      join(code, host, prefer, match, roomVariant(s.room));
+      return;
+    }
     if (!told && k === 'reset') {
       told = true;
       presenceNow();
@@ -219,8 +244,9 @@ export function join(code: string, host: boolean, prefer: number | null = null, 
   renderRoom();
 }
 
-function seatLabel(i: number, mine: number | null): string {
+function seatLabel(i: number, mine: number | null, n = 4): string {
   if (mine === null) return `${i + 1} 号位`;
+  if (n === 3) return i === mine ? '你' : (i - mine + 3) % 3 === 1 ? '下家' : '上家';
   if (i === mine) return '你';
   return (i - mine + 4) % 2 === 0 ? '对家（和你一队）' : (i - mine + 4) % 4 === 1 ? '下家' : '上家';
 }
@@ -236,6 +262,7 @@ function renderRoom(): void {
   const c = card();
   const match = s.match;
   c.appendChild(el('h2', {}, match ? '快速匹配' : '好友房'));
+  panelVariant = s.variant;
   if (s.status === 'closed' || s.status === 'failed') {
     c.appendChild(el('div', { class: 'ol-note' }, s.linkText()));
     // 回不去了（房间散了、码不对、满了、在别处进了……）：地址栏里的房间码也去掉，免得刷新又撞上
@@ -258,7 +285,7 @@ function renderRoom(): void {
     head.appendChild(el('span', {}, '房间码'));
     head.appendChild(el('span', { class: 'ol-code', id: 'ol-room-code' }, s.code));
     c.appendChild(head);
-    if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void openInvitePanel(s.code), 'gd-big', 'ol-share'));
+    if (s.room?.status !== 'over') c.appendChild(button('叫朋友来', () => void openInvitePanel(s.code, s.variant === 'ddz' ? '斗地主' : '掼蛋'), 'gd-big', 'ol-share'));
   }
   // 实盘房间：开房时定的档位，进房的人都看得到
   const stake = parseRoomOpts(s.room?.opts)?.stake ?? null;
@@ -273,16 +300,17 @@ function renderRoom(): void {
     return;
   }
   const room = s.room;
-  const seats = el('div', { class: 'ol-seats' });
-  room.seats.forEach((st, i) => {
+  const n = seatCountOf(room);
+  const seats = el('div', { class: n === 3 ? 'ol-seats ol-seats-3' : 'ol-seats' });
+  room.seats.slice(0, n).forEach((st, i) => {
     const box = el('div', { class: 'ol-seat', 'data-seat': String(i) });
-    box.style.setProperty('--team', TEAM[i % 2]!);
+    box.style.setProperty('--team', n === 3 ? '#c8a050' : TEAM[i % 2]!);
     const who = el('div');
     // 电脑座位带 name 的是绑了人、主人离座了，电脑在替他打
     const name =
       st.kind === 'human' ? (i === s.mySeat ? `${st.name ?? ''}（你）` : (st.name ?? '玩家')) : st.kind === 'ai' ? (st.name !== null ? `电脑代 ${st.name} 打` : '电脑') : '空位';
     who.appendChild(el('b', { title: name }, name));
-    who.appendChild(el('small', {}, `${seatLabel(i, s.mySeat)}${st.kind === 'human' && st.away ? ' · 掉线了' : ''}`));
+    who.appendChild(el('small', {}, `${seatLabel(i, s.mySeat, n)}${st.kind === 'human' && st.away ? ' · 掉线了' : ''}`));
     box.appendChild(who);
     if (room.status === 'waiting' && st.kind === 'empty' && !match) box.appendChild(button(s.mySeat === null ? '坐这里' : '换到这', () => s.sit(i), '', `ol-sit-${i}`));
     if (room.status === 'playing' && s.mySeat === null) {
@@ -328,11 +356,12 @@ function leave(): void {
   ses?.leave();
   ses = null;
   app.net = null;
+  app.ddzNet = null;
   presenceNow();
   note = '';
   // 匹配桌是从选档页排来的：离开就回标题页（好友房面板和它不相干）
   if (match) close();
-  else openOnline();
+  else openOnline(panelVariant);
 }
 
 let matcher: MatchClient | null = null;
@@ -350,12 +379,13 @@ function stopMatch(): void {
  * 排队连接只建一条、不轮询；人数变了服务端推一次（带剩余毫秒数），倒计时页面自己数。15 秒只剩自己、联机忙、今天局数用完都转单机；
  * 排到了用好友房同一套进房（match = true）
  */
-export function openMatch(stake: TierId | null, solo: () => void): void {
+export function openMatch(stake: TierId | null, solo: () => void, variant: RoomVariant = 'guandan'): void {
   stopMatch();
+  const ddz = variant === 'ddz';
   const c = card();
   c.appendChild(el('h2', {}, '快速匹配'));
   c.appendChild(
-    el('div', { class: 'ol-stake', id: 'ol-match-tier' }, stake ? `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${ROOM_DEALS} 副` : '娱乐 · 打过 A · 不计战绩'),
+    el('div', { class: 'ol-stake', id: 'ol-match-tier' }, ddz ? '斗地主 · 娱乐 · 不计战绩' : stake ? `实盘 · ${TIER_NAME[stake]}（一份 ${fmtChips(TIERS[stake])}）· 打 ${ROOM_DEALS} 副` : '娱乐 · 打过 A · 不计战绩'),
   );
   const wait = el('div', { class: 'ol-wait', id: 'ol-match-wait' }, '正在找人…');
   c.appendChild(wait);
@@ -367,7 +397,7 @@ export function openMatch(stake: TierId | null, solo: () => void): void {
   row.appendChild(cancel);
   c.appendChild(row);
   let n = 1;
-  let seats = 4;
+  let seats = ddz ? MATCH_DDZ_TABLE : 4;
   let until = 0;
   const paint = (): void => {
     const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
@@ -383,20 +413,20 @@ export function openMatch(stake: TierId | null, solo: () => void): void {
   };
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const m = new MatchClient({
-    url: withNick(`${proto}//${window.location.host}${MATCH_PATH}/${matchTierOf(stake)}`),
+    url: withNick(`${proto}//${window.location.host}${MATCH_PATH}/${ddz ? MATCH_DDZ : matchTierOf(stake)}`),
     onWaiting: (count, size, leftMs) => {
       [n, seats, until] = [count, size, Date.now() + leftMs];
       paint();
     },
     onMatched: (code) => {
       stopMatch();
-      join(code, false, null, true);
+      join(code, false, null, true, variant);
     },
     // 已经有一个开着的房间（kit 入队前先问计量）：带他回去，是他开的好友房还当房主
     onHasRoom: (code) => {
       stopMatch();
       const saved = savedRoom();
-      join(code, saved?.code === code && saved.host);
+      join(code, saved?.code === code && saved.host, null, false, saved?.code === code ? (saved.variant ?? 'guandan') : variant);
     },
     // 别的页面排上了：这里不排了，也不替他开单机
     onSolo: (why: MatchSoloWhy) => done(MATCH_TEXT[why], why === 'replaced' ? null : solo),
@@ -406,25 +436,28 @@ export function openMatch(stake: TierId | null, solo: () => void): void {
   m.start();
 }
 
-function enterTable(s: NetSession): void {
+function enterTable(s: Link): void {
   close();
   offSes?.();
   offSes = null;
-  app.net = s;
+  // 两个玩法各一个牌桌场景：会话放进各自的位置，另一个清空
+  app.net = s instanceof NetSession ? s : null;
+  app.ddzNet = s instanceof DdzNetSession ? s : null;
+  const scene = s.variant === 'ddz' ? 'ddz' : 'table';
   s.autoplay = !!app.params?.autoplay;
   mountNetBanner(s);
   // 还在载入（字体、纹理没烘完）：不打断，BootScene 载完看到 app.net 会自己进牌桌
   if (!app.ready) return;
   const game = app.game!;
   const active = game.scene.getScenes(true)[0];
-  if (active?.scene.key === 'table') active.scene.restart();
-  else game.scene.getScenes(true).forEach((sc) => sc.scene.start('table'));
+  if (active?.scene.key === scene) active.scene.restart();
+  else game.scene.getScenes(true).forEach((sc) => sc.scene.start(scene));
 }
 
 let bannerOff: (() => void) | null = null;
 
 /** 牌桌上方的连接状态：断线重连中；房间关了、被顶掉时弹一句话 */
-function mountNetBanner(s: NetSession): void {
+function mountNetBanner(s: Link): void {
   style();
   bannerOff?.();
   let b = document.getElementById('net-banner');
@@ -434,7 +467,7 @@ function mountNetBanner(s: NetSession): void {
   }
   const banner = b;
   const paint = (): void => {
-    if (app.net !== s) {
+    if ((app.net ?? app.ddzNet) !== s) {
       banner.classList.remove('on');
       return;
     }
@@ -457,11 +490,11 @@ export async function autoJoin(code: string | null): Promise<void> {
   if (!code || !/^\d{6}$/.test(code)) return;
   // 房主标记只给记下它的那个账号（同一台设备换了账号，链接里的房间照进，但不是房主）
   const saved = await myRoom();
-  join(code, saved?.code === code ? saved.host : false);
+  join(code, saved?.code === code ? saved.host : false, null, false, saved?.code === code ? saved.variant : undefined);
 }
 
 /** 大厅里（还没进牌桌）的联机会话，给调试桥看状态用 */
-export function lobbySession(): NetSession | null {
+export function lobbySession(): Link | null {
   return ses;
 }
 

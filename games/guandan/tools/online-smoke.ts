@@ -10,6 +10,7 @@
  * - 页面冻结（模拟切后台）20 秒再恢复能续上；同一个号在另一台设备进房，旧连接让位（4001）并提示。
  *
  * 用法：node tools/online-smoke.ts [--out <截图目录>] [--no-build] [--quick]（--quick 跳过 70 秒那项）
+ *       node tools/online-smoke.ts --ddz [--out <截图目录>] [--no-build]（斗地主快速段，牌馆 ⑤：三个浏览器开斗地主房，约 2 分钟）
  */
 import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright-core';
@@ -22,6 +23,7 @@ const OUT = ((): string => {
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1]! : `${process.cwd()}/shots/online`;
 })();
 const QUICK = process.argv.includes('--quick');
+const DDZ = process.argv.includes('--ddz');
 /** 省内存标记要带当前版本号才认（device.ts：换了版本就重新试正常画质） */
 const VERSION = (JSON.parse(readFileSync(`${process.cwd()}/package.json`, 'utf8')) as { version: string }).version;
 const IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1';
@@ -70,7 +72,7 @@ interface Client {
   raw: string[];
 }
 
-async function openClient(browser: Browser, stack: OnlineStack, spec: Spec, query: string, reuse?: BrowserContext, online = true): Promise<Client> {
+async function openClient(browser: Browser, stack: OnlineStack, spec: Spec, query: string, reuse?: BrowserContext, online = true, autoplay = true): Promise<Client> {
   const context = reuse ?? (await browser.newContext(spec.ctx));
   if (!reuse) {
     // 真平台的会话 cookie 叫 __Host-sid：必须 Secure、Path=/、不带 Domain。Chromium 把 127.0.0.1 当可信来源，http 下也存、也发（含 ws://）
@@ -106,7 +108,7 @@ async function openClient(browser: Browser, stack: OnlineStack, spec: Spec, quer
     });
   });
   // 机器忙时（别的代理也在跑浏览器）首屏 1.6 MB 的包加载会超过默认的 30 秒
-  await page.goto(`${stack.origin}/games/guandan/?${online ? 'online=1&' : ''}debug=1&anim=0&autoplay=1${query}`, { timeout: 90_000 });
+  await page.goto(`${stack.origin}/games/guandan/?${online ? 'online=1&' : ''}debug=1&anim=0${autoplay ? '&autoplay=1' : ''}${query}`, { timeout: 90_000 });
   return c;
 }
 
@@ -474,4 +476,98 @@ async function main(): Promise<void> {
   } else console.log('联机冒烟通过：四个客户端控制台零报错');
 }
 
-await main();
+/** 斗地主的快速段（牌馆 ⑤）：房主在斗地主主页开好友房、两个人点邀请链接进房（不带任何斗地主的参数，玩法由房间信息决定）、
+ * 开局；房主亲手出第一手，之后三家托管打到第一副结算、房间开下一副；再来一个旁观的人。检查控制台零报错、下行里没有别人的手牌。 */
+async function mainDdz(): Promise<void> {
+  mkdirSync(OUT, { recursive: true });
+  const t0 = Date.now();
+  const stack = await startOnlineStack({ build: !process.argv.includes('--no-build') });
+  notes.push(`联机栈：${stack.origin}（${Math.round((Date.now() - t0) / 1000)} 秒）`);
+  const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--no-proxy-server', '--no-zygote', '--in-process-gpu'] });
+  const clients: Client[] = [];
+  const click = async (c: Client, name: string): Promise<void> => {
+    const p = (await c.page.evaluate(() => window.__game!.controls()))[name];
+    assert(p, `[${c.spec.name}] 没有控件 ${name}`);
+    await c.page.mouse.click(p!.x, p!.y);
+  };
+  try {
+    // ① 房主：斗地主主页 → 好友房卡 → 开个房间（请求体带 variant: ddz），座位网格 3 格
+    const host = await openClient(browser, stack, SPECS[0]!, '&ddz=1', undefined, false, false);
+    clients.push(host);
+    await until(host, '标题页', "g.ready && g.scene === 'title'");
+    await click(host, 'variant:ddz');
+    await until(host, '斗地主主页（有每日挑战）的好友房卡', "!!g.controls()['online'] && !!g.controls()['daily']");
+    await shot(host, '60-ddz-title');
+    await click(host, 'online');
+    await host.page.click('#ol-create');
+    await host.page.waitForSelector('#ol-room-code');
+    const code = (await host.page.textContent('#ol-room-code'))!.trim();
+    assert(/^\d{6}$/.test(code), `房间码格式不对：${code}`);
+    await until(host, '房主坐下', 'g.net()?.seat === 0');
+    assert((await host.page.$$('#online .ol-seats-3 .ol-seat')).length === 3, '斗地主房间的座位网格应该是 3 格');
+    assert(!(await host.page.$('#ol-create-stake')), '斗地主面板不该有实盘房间按钮');
+    await shot(host, '61-ddz-lobby-host');
+    // ② 另外两个人用邀请链接进房：链接里没有斗地主的参数，会话先按掼蛋连、房间信息一到换成斗地主的
+    for (let i = 1; i < 3; i++) {
+      const c = await openClient(browser, stack, SPECS[i]!, `&room=${code}`);
+      clients.push(c);
+      await until(c, '自动坐下', `g.net()?.seat === ${i}`, 30_000);
+    }
+    await until(host, '三人都坐下', "g.net()?.seats.slice(0, 3).every((s) => s.startsWith('human'))");
+    await shot(host, '62-ddz-lobby-full');
+    await host.page.click('#ol-start');
+    for (const c of clients) await until(c, '进斗地主牌桌', "g.scene === 'ddz' && g.ddzView()?.dealNo >= 1", 40_000);
+    await shot(clients[1]!, '63-ddz-iphone-table');
+    // ③ 房主亲手出第一手：叫分阶段点"不叫"（或轮到出牌时提示 + 出牌），然后交给托管
+    await until(host, '轮到房主', "g.ddzView()?.turn === 0 && (g.ddzView().phase === 'bid' || g.ddzView().phase === 'play')", 120_000);
+    const ph = await host.page.evaluate(() => window.__game!.ddzView()!.phase);
+    await shot(host, '64-ddz-host-turn');
+    if (ph === 'bid') await click(host, 'bid:0');
+    else {
+      await click(host, 'hint');
+      await click(host, 'play');
+    }
+    notes.push(`房主亲手点了一次（${ph === 'bid' ? '不叫' : '提示 + 出牌'}）`);
+    const step0 = await host.page.evaluate(() => window.__game!.ddzView()!.step);
+    await until(host, '房主出手后牌局往前走', `g.ddzView()?.step > ${step0}`, 30_000);
+    await host.page.evaluate(() => window.__game!.setAutoplay(true));
+    // ④ 三家托管打到第一副结算（结算页托管会自动点继续），房间开下一副
+    await until(host, '结算页', "g.overlay === 'settle'", 240_000).then(() => shot(host, '65-ddz-settle')).catch(() => undefined);
+    for (const c of clients) await until(c, '第一副打完、开第二副', 'g.ddzView()?.dealNo >= 2', 240_000);
+    notes.push(`第一副打完、房间开了第二副：${Math.round((Date.now() - t0) / 1000)} 秒`);
+    await shot(host, '66-ddz-deal2');
+    // ⑤ 旁观：第四个人点链接进来，看得到牌桌、没有手牌、不能出手
+    const spec = { ...SPECS[3]!, name: '旁观', user: 'u-watch' };
+    const w = await openClient(browser, stack, spec, `&room=${code}`);
+    clients.push(w);
+    await until(w, '旁观进了斗地主牌桌', "g.scene === 'ddz' && g.net()?.seat === null && !!g.ddzView()", 40_000);
+    const wv = await w.page.evaluate(() => ({ hand: window.__game!.ddzView()!.hand.length, seat: window.__game!.ddzView()!.seat }));
+    assert(wv.hand === 0 && wv.seat === -1, `旁观的人不该有手牌（${JSON.stringify(wv)}）`);
+    await shot(w, '67-ddz-watch');
+    notes.push('旁观：进斗地主牌桌，视图座位 -1、没有手牌');
+    // ⑥ 隐藏信息：下行里没有 seed、hands、密钥；每个入座的人收到的视图里手牌只有自己的张数
+    for (const x of clients) for (const t of x.raw) assert(!/"seed"|"hands"|"key"/.test(t), `[${x.spec.name}] 下行里出现了 seed、hands 或发牌密钥`);
+    for (const x of clients) for (const g of x.got) for (const nv of g.views as unknown as { view: { seat: number; hand: number[]; counts: number[] } }[]) assert(nv.view.seat < 0 ? nv.view.hand.length === 0 : nv.view.hand.length === nv.view.counts[nv.view.seat], `[${x.spec.name}] 视图里手牌张数和座位对不上`);
+    notes.push(`下行没有 seed、hands、密钥；${clients.reduce((n, x) => n + x.got.length, 0)} 条消息的手牌张数都对得上`);
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e));
+    for (const [i, c] of clients.entries()) {
+      if (c.page.isClosed()) continue;
+      const info = await c.page.evaluate(() => ({ net: window.__game?.net() ?? null, scene: window.__game?.scene ?? null, ddz: window.__game?.ddzView() ? { phase: window.__game.ddzView()!.phase, turn: window.__game.ddzView()!.turn, step: window.__game.ddzView()!.step } : null, lobby: document.querySelector('#online')?.textContent?.slice(0, 200) ?? null })).catch(() => null);
+      notes.push(`失败现场 ${c.spec.name}：${JSON.stringify(info)}`);
+      await c.page.screenshot({ path: `${OUT}/fail-${i}.png` }).catch(() => undefined);
+    }
+  } finally {
+    await browser.close();
+    await stack.stop();
+  }
+  for (const n of notes) console.log(`· ${n}`);
+  console.log(`截图 → ${OUT}`);
+  if (errors.length) {
+    console.log(`失败 ${errors.length} 项：`);
+    for (const e of errors) console.log(`  ✗ ${e}`);
+    process.exitCode = 1;
+  } else console.log('斗地主联机冒烟通过：控制台零报错');
+}
+
+await (DDZ ? mainDdz() : main());

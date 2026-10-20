@@ -146,15 +146,12 @@ export function step(w: World, dir: number, choice = -1): void {
         openChoices(w);
       }
     } else if (choice === Pick.Skip) {
-      // 跳过：不选，抽一样随机小奖（content/picks.ts）；实盘局暂照旧换一点魂
+      // 跳过：不选，抽一样随机小奖（content/picks.ts）
       w.pendingLevels--;
       w.choices = [];
       w.phase = 'play';
       w.bonusCard = 0;
-      if (w.setup.live) {
-        gainXp(w, xpNeed(w.level, w.raid !== null) * PICKS.liveSkipXp);
-        w.ev.push(Ev.Skip, w.x, w.y, -1, 0);
-      } else skipPrize(w);
+      skipPrize(w);
       if (w.pendingLevels > 0) openChoices(w);
     }
     return;
@@ -186,7 +183,7 @@ export function step(w: World, dir: number, choice = -1): void {
   if (w.setup.character === 'gengfu' && w.tick > 0 && w.tick % CHAR_FX.gongEvery === 0) gong(w, g);
   movePickups(w);
   if (!w.raid) props(w);
-  if (!w.raid && !w.setup.live) nightMarket(w);
+  if (!w.raid) nightMarket(w);
   regen(w);
   if (w.phase !== 'play') return;
   if (w.raid) {
@@ -2737,18 +2734,16 @@ function recompute(w: World): void {
   s.durMul = 1 + 0.1 * p('modou') + 0.06 * p('jiandao');
   s.curse = p('yinhun');
   s.bindDouble = w.weapons.some((o) => o.id === 'rope' && o.evolved);
-  // 角色初始数值（所有者 10-20，content/meta.ts 的 base）：血量只乘底子的 100，仙桃、加成的血照加；实盘局暂不带（配平 PR 一起打开）
+  // 角色初始数值（所有者 10-20，content/meta.ts 的 base）：血量只乘底子的 100，仙桃、加成的血照加
   const ch = w.setup.character ?? 'xiaodao';
-  if (!w.setup.live) {
-    const b = CHARACTERS[ch].base;
-    s.hpMax += PLAYER.hp * (b.hp - 1);
-    s.speed *= b.speed;
-    s.might *= b.might;
-    s.cdMul *= b.cd;
-    s.areaMul *= b.area;
-    s.magnet *= b.magnet;
-    s.luck += b.luck;
-  }
+  const b = CHARACTERS[ch].base;
+  s.hpMax += PLAYER.hp * (b.hp - 1);
+  s.speed *= b.speed;
+  s.might *= b.might;
+  s.cdMul *= b.cd;
+  s.areaMul *= b.area;
+  s.magnet *= b.magnet;
+  s.luck += b.luck;
   // 夜市买的临时增益（到点在 nightMarket 里重算）
   if (w.tick < w.mightUntil) s.might *= 1 + NIGHT_MARKET.might;
   if (w.tick < w.speedUntil) s.speed *= 1 + NIGHT_MARKET.speed;
@@ -2771,10 +2766,6 @@ function recompute(w: World): void {
   } else if (ch === 'caiyao') {
     s.xpMul += CHAR_FX.caiyaoXp;
     s.regen += CHAR_FX.caiyaoRegen;
-  } else if (ch === 'pang' && w.setup.live) {
-    // 实盘局还是旧的被动（血 +50、慢 8%）；娱乐局已经并进初始数值
-    s.hpMax += CHAR_FX.pangHp;
-    s.speed *= CHAR_FX.pangSpeed;
   }
   // 套装：按类型和五行数件数
   const types: Partial<Record<WeaponType, number>> = {};
@@ -2955,28 +2946,24 @@ function upgradePassive(w: World, id: PassiveId): void {
 }
 
 /** 三选一的候选：手上没满级的法器、还能拿的新法器、被动同理 */
-/** 实盘局不进卡池的新内容（Setup.live） */
-const LIVE_HIDDEN: readonly string[] = ['zhibing', 'jiandao'];
-
 function choicePool(w: World): { c: Choice; weight: number }[] {
   const pool: { c: Choice; weight: number }[] = [];
-  const hide = w.setup.live ? LIVE_HIDDEN : [];
   for (const id of WEAPON_IDS) {
-    if (w.banned.includes(id) || hide.includes(id)) continue;
+    if (w.banned.includes(id)) continue;
     const o = w.weapons.find((x) => x.id === id);
     if (o) {
       // 黄历：手上东西的升级更容易出（好卡）
       if (!o.evolved && o.level < MAX_WEAPON_LEVEL) pool.push({ c: { kind: 'weapon', id }, weight: 1.3 * (1 + w.stats.luck) });
     } else if (w.weapons.length < MAX_WEAPONS + w.merges.length) pool.push({ c: { kind: 'weapon', id }, weight: 1 });
   }
-  // 前几次升级：和角色初始法器同一类的法器卡更容易出，开局更像这个角色（实盘局暂不开）
-  if (!w.setup.live && w.level - w.pendingLevels + 1 <= 1 + CHAR_FX.earlyEvery) {
+  // 前几次升级：和角色初始法器同一类的法器卡更容易出，开局更像这个角色
+  if (w.level - w.pendingLevels + 1 <= 1 + CHAR_FX.earlyEvery) {
     const kind = WEAPONS[CHARACTERS[w.setup.character ?? 'xiaodao'].start].type;
     for (const p of pool) if (p.c.kind === 'weapon' && WEAPONS[p.c.id as WeaponId].type === kind) p.weight *= CHAR_FX.earlyMul;
   }
   const owned = Object.keys(w.passives).length;
   for (const id of PASSIVE_IDS) {
-    if (w.banned.includes(id) || hide.includes(id)) continue;
+    if (w.banned.includes(id)) continue;
     const lv = w.passives[id];
     if (lv !== undefined) {
       if (lv < PASSIVES[id].max) pool.push({ c: { kind: 'passive', id }, weight: 1 + w.stats.luck });
@@ -3058,7 +3045,7 @@ function skipPrize(w: World): void {
 
 /**
  * 守夜夜市（content/market.ts）：预告时就定好摊位和货（画面能先指方向），开市后站在没卖掉的摊前 hold 拍、铜钱够就买下。
- * 更夫提前预告、多开一会儿，采药女打九折（角色小特权）。实盘局暂不开（配平 PR 一起打开）。
+ * 更夫提前预告、多开一会儿，采药女打九折（角色小特权）。
  */
 function nightMarket(w: World): void {
   const M = NIGHT_MARKET;
@@ -3158,9 +3145,9 @@ function marketGive(w: World, g: MarketGood): void {
   }
 }
 
-/** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领。实盘局暂不补 */
+/** 补一次刷新（最多攒到 PICKS.rerollMax）；why：-1 跳过奖（事件由跳过发）、0 进化、1 精英首领 */
 function addReroll(w: World, why: number): void {
-  if (w.setup.live || w.setup.curses?.includes('noreroll') || w.rerolls >= PICKS.rerollMax) return;
+  if (w.setup.curses?.includes('noreroll') || w.rerolls >= PICKS.rerollMax) return;
   w.rerolls++;
   if (why >= 0) w.ev.push(Ev.Reroll, w.x, w.y, why);
 }

@@ -8,6 +8,7 @@ import type { ShareCard } from 'arcade-kit/share';
 import { el } from '../../dom.ts';
 import { GAME_NAME, num, signed, TITLE_NAME } from '../../text.ts';
 import { backUrl, tileName, tileUrl } from '../../tiles.ts';
+import { windOf } from './view.ts';
 import { ABORT_WHY, END_NAME, LIMIT_NAME, PAY_NAME, RC_WIND, roundName, scoreText, yakumanName } from './text.ts';
 
 export interface YakuLine {
@@ -97,7 +98,7 @@ export function roundSummary(v: RcView, names: string[]): HTMLElement {
   for (let seat = 0; seat < SEATS; seat++) {
     const row = el('div', `row${seat === v.me?.seat ? ' me' : ''}`, rows);
     row.dataset.seat = `${seat}`;
-    el('span', 'who', row, `${RC_WIND[(seat - h.dealer + SEATS) % SEATS]}家 ${names[seat]}`);
+    el('span', 'who', row, `${RC_WIND[windOf(h.dealer, seat)]}家 ${names[seat]}`);
     const what = el('span', 'what', row);
     const win = h.wins.find((x) => x.seat === seat);
     if (win) what.textContent = win.from === null ? '自摸' : '荣和';

@@ -1,19 +1,20 @@
 # 雀馆 · Mahjong (games/mahjong)
 
-A browser mahjong game built as one engine with pluggable rule variants; the first variant is **Sichuan "Bloody Battle" (血战到底)**.
+A browser mahjong game built as one engine with pluggable rule variants: **Sichuan "Bloody Battle" (血战到底)** is live; Japanese riichi mahjong is in development.
 Play solo against three computer opponents (they only ever see what a player at their seat could see), or open a friends' room and play together online.
 Plain TypeScript with DOM + SVG rendering (every tile and picture is generated in code); the server is a Cloudflare Worker with a Durable Object per room, built on
 [`@yyyu-star/arcade-kit`](https://www.npmjs.com/package/@yyyu-star/arcade-kit).
 It is one module of the Arcade monorepo, but deploys on its own too (see "单独部署这个游戏" below): solo play and guest friends' rooms work without the platform.
 Chips are play money only — they cannot be bought, cashed out or transferred. Docs below are in Chinese. MIT licensed.
 
-一套麻将引擎 + 多个玩法的网页麻将，第一个玩法是**川麻·血战到底**；单机对三个电脑，也能开好友房一起打。
+一套麻将引擎 + 多个玩法的网页麻将。玩法：川麻·血战到底、立直麻将（天凤式四人，见 [docs/riichi.md](docs/riichi.md)；入口暂时只有地址带 `?rc=1` 才显示）。单机对三个电脑，也能开好友房一起打。
 
 <img src="public/cover.svg" alt="雀馆封面" width="360">
 
 ## 功能
 
-- **川麻·血战到底**：换三张、定缺、刮风下雨、一炮多响、查花猪查大叫；局数、封顶番数、换三张、自摸加底可以选。
+- **川麻·血战到底**：换三张、定缺、刮风下雨、一炮多响、查花猪查大叫；局数、封顶番数、换三张、自摸加底、呼叫转移可以选。
+- **立直麻将**：东南半庄或东风战，赤宝牌 3 张，单机、好友房、娱乐和实盘都能打；电脑沿用茶馆的人物。入口开关在 `src/view/variants/riichi/gate.ts`，统一验收前只有带 `?rc=1` 才在选桌页看到"玩法"选项。
 - **电脑**：六个性格（快、贪、稳、爱杠、老练、新手），每一场的状态不一样，落后会追、领先会稳、点了炮会上头；出手快慢和互动的脾气跟性格走。
   娱乐分新手、普通、高手三个难度，新手档的电脑像人一样弱；实盘档位越高越强，豪华档接近最强；好友房实盘一律最强。
 - **单机**：娱乐局直接玩；实盘局从平台钱包带筹码上桌，打完结回。筹码无任何现金价值，不能买、不能兑换、不能转让。
@@ -23,23 +24,24 @@ Chips are play money only — they cannot be bought, cashed out or transferred. 
 - **社交**：结算页"分享"出一张战绩图（不含任何一张牌）；好友房一场打完颁奖（MVP、手气最背、杠王），能分享；登录后好友看得到你在哪个房间，好友叫你来会在顶上弹一条；房间里"叫朋友来"列出好友，点"叫他来"（共用包的 `arcade-kit/share`、`arcade-kit/social`）。
 - **手机**：横屏竖屏都能玩，小到 iPhone SE。
 
-设计和规则细节见 [DESIGN.md](DESIGN.md)，模块约定见 [AGENTS.md](AGENTS.md)，素材来源见 [ASSETS.md](ASSETS.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+设计和规则细节见 [DESIGN.md](DESIGN.md)，立直麻将见 [docs/riichi.md](docs/riichi.md)，画风见 [docs/art-v3.md](docs/art-v3.md) 和 [docs/cartoon.md](docs/cartoon.md)，模块约定见 [AGENTS.md](AGENTS.md)，素材来源见 [ASSETS.md](ASSETS.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 本地开发
 
-需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.12.4"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
+需要 Node 22（见 `.nvmrc`）。共用包从 npm 装（`"arcade-kit": "npm:@yyyu-star/arcade-kit@^0.21.3"`，代码里照旧写 `arcade-kit/...`），直接 `npm ci` 就行。
 
 ```bash
 npm ci
 npm run dev          # http://localhost:5176/games/mahjong/（娱乐局直接能玩；平台接口转给 5181）
 npm test             # 类型检查 + vitest（规则、电脑、架构约束、房间规则）+ workerd 里的 Worker 和房间测试
 npm run build        # 页面
-node scripts/balance.ts 2000 solo:small   # 配平：小白、普通两个代理玩家在一个场地的期望、胜率、时长（docs/balance.md，DESIGN.md 4.1）
+node scripts/balance.ts 2000 solo:small   # 配平：小白、普通两个代理玩家在一个场地的期望、胜率、时长（仓库根 docs/balance.md，DESIGN.md 4.1）
 npm run sim 1500     # 模拟器：单机各场地代理玩家的期望，各性格的打法指标（DESIGN.md 4.1）
 node scripts/strength.ts 1200 0,2,3 5   # 一个性格对固定三家的强弱（轮换座位）
 node scripts/stake-room.ts 1500 venues   # 好友房实盘桌：两个普通真人对电脑的期望（DESIGN.md 4.1）
-npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场
+npm run smoke        # 无头浏览器冒烟：单机横竖屏各一场（川麻、立直）
 npm run build:cf && npm run smoke:room  # 好友房两个浏览器（本地 wrangler dev + 假平台）
+npm run build:cf && node scripts/smoke-room-riichi.ts  # 好友房开立直：娱乐打一局、实盘开打再离开结回
 npm run build:cf && npm run smoke:match  # 快速匹配：两个浏览器同档同桌、取消、一个人转单机
 npm run build:cf && npm run smoke:standalone  # 单独部署：wrangler.jsonc 原样起，两个游客
 npm run build:cf && npm run dev:worker  # 本地整套（Worker + 页面 + 假平台），端口由系统分配，打开它打印的地址；登录用 __Host-sid cookie（见 test/arcade.dev.ts）
@@ -82,13 +84,13 @@ node scripts/capture.ts se-port 40      # 截图到 shots/，并报互相压住�
 | 目录 | 是什么 |
 |---|---|
 | `src/core/tiles`、`hand`、`table`、`match` | 通用层：牌、向听和听牌、牌桌小件、筹码账 |
-| `src/core/variants/<id>/` | 玩法（`sichuan-xuezhan`）；`variants/index.ts` 登记 |
+| `src/core/variants/<id>/` | 玩法：`sichuan-xuezhan`（已登记）、`riichi`（规则核心，还没登记）；`variants/index.ts` 是登记表 |
 | `src/ai/` | 电脑（只拿视图）：`personas.ts` 性格，`style.ts` 这一场的状态和局面，`venues.ts` 场地 → 电脑 |
-| `src/game/` | 档位和底分、单机推进、互动编号、名场面（banter） |
+| `src/game/` | 档位和底分（`stakes`）、快速匹配档位（`match`）、单机推进（`driver`）、钱包操作号（`ops`）、互动编号（`emotes`）、名场面（`banter`、`feed`）、颁奖（`awards`） |
 | `src/room/` | 好友房的规则（kit 的 RoomGame：带入结回、座位换人、再来一场），房间和页面共用 |
 | `src/net/` | 单机实盘的带入结回（经本模块 Worker 转平台钱包） |
 | `src/main.ts`、`solo.ts`、`online.ts` | 页面入口、单机控制器、好友房连接 |
-| `src/view/` | 牌桌（DOM + SVG），`view/variants/<id>/` 是玩法专属的界面（听牌提示、胡牌亮牌、结算） |
+| `src/view/` | 牌桌（DOM + SVG），`view/variants/<id>/` 是玩法专属的界面（听牌提示、结算小结） |
 | `worker/` | 登录闸门、单机带入结回、开房进房、房间 DO（`room.ts`） |
 
 ## 许可证

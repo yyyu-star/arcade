@@ -20,6 +20,7 @@ import type { GuestOptions } from 'arcade-kit/guest';
 import { acceptCreate, acceptJoin, acceptMatch, json, loginGate, readJson, standaloneRoot, type GateEnv, type GateOptions, type KitEnv } from 'arcade-kit/worker';
 import { CLOSE } from 'arcade-kit/protocol';
 import { MATCH_FUN, MATCH_PATH, MATCH_TIERS } from '../src/variants/guandan/net/match.ts';
+import { MATCH_DDZ } from '../src/variants/doudizhu/net/match.ts';
 import { ROOM_PATH } from '../src/net/version.ts';
 import { routeStake, type WalletRpc } from './stake.ts';
 
@@ -93,7 +94,7 @@ export function routeRoom(request: Request, env: Env): Promise<Response> | Respo
   if (match) {
     // 快速匹配（0.26.0）：档位不认得、没开放的，kit 回 4004。没有钱包（单独部署）只开娱乐，实盘的排不了
     if (!env.MATCH) return refuseSocket(request, CLOSE.noRoom, 'no match');
-    const tiers = env.WALLET ? MATCH_TIERS : [MATCH_FUN];
+    const tiers = [...(env.WALLET ? MATCH_TIERS : [MATCH_FUN]), MATCH_DDZ];
     return acceptMatch(request, { ...kitEnv, MATCH: env.MATCH }, match[1]!, { ...opts, tiers });
   }
   return acceptJoin(request, kitEnv, join![1]!, opts);
@@ -113,11 +114,17 @@ function refuseSocket(request: Request, code: number, reason: string): Response 
  */
 async function createWithOptions(request: Request, env: Env, kitEnv: KitEnv, opts: GateOptions): Promise<Response> {
   let stake: unknown;
+  let variant: unknown;
   if (request.headers.get('content-type')?.includes('application/json')) {
     // 认人之前读请求体：kit 的 readJson 只读带 content-length 且不超过 512 字节的（{ stake } 只有几十字节）。kit 开房不读请求体
     const body = await readJson(request, 512);
-    if (body && typeof body === 'object') stake = (body as { stake?: unknown }).stake;
+    if (body && typeof body === 'object') {
+      stake = (body as { stake?: unknown }).stake;
+      variant = (body as { variant?: unknown }).variant;
+    }
   }
+  // 玩法（牌馆 ⑤）：{ variant: 'ddz' } 开斗地主房；没带是掼蛋。带了别的值、或斗地主带 stake 的，交给房间的 options 校验后回 400 bad_options
+  if (variant !== undefined && variant !== null) return acceptCreate(request, kitEnv, { ...opts, options: stake === undefined || stake === null ? { variant } : { variant, stake } });
   if (stake === undefined || stake === null) return acceptCreate(request, kitEnv, opts);
   // 没有钱包（单独部署）开不了实盘房：页面上本来就不给选，这里挡住手写的请求
   if (!env.WALLET) return json({ error: 'no_wallet' }, 409);

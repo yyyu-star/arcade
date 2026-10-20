@@ -367,7 +367,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       stats: { dmg: 56, cd: 36, area: 340, amount: 6, speed: 20, duration: 0, knock: 6, rehit: 10 },
     },
   },
-  // 10-20 新流派（纸人这个名字已经是怪了，所以叫纸兵）：召唤会走的纸兵替你挡怪。实盘局不进卡池（Setup.live），配好系数再开
+  // 10-20 新流派（纸人这个名字已经是怪了，所以叫纸兵）：召唤会走的纸兵替你挡怪
   zhibing: {
     id: 'zhibing',
     name: '纸兵',
@@ -479,7 +479,8 @@ export const DUAL_FX = {
   /** 符剑合璧：贴符后几拍炸、炸多大、伤害是符咒伤害的几成 */
   seal: { delay: 36, area: 84, mul: 0.5 },
   /** 焚天金钟：外圈半径（再乘范围加成）、内沿占比、几拍烧一下、伤害是葫芦伤害的几成；盾碎时留几摊火、火摊伤害占比 */
-  ring: { radius: 120, inner: 0.55, every: 15, mul: 0.22, pools: 5, poolMul: 0.35, poolLife: 90, poolR: 40 },
+  // 0.4.7 配平：焚天金钟危险 2 比镇守最好的单修高 15 个百分点（口径 ≤ 8），外圈火和盾碎火圈都减一截
+  ring: { radius: 110, inner: 0.55, every: 15, mul: 0.07, pools: 5, poolMul: 0.15, poolLife: 90, poolR: 40 },
   /** 铃落桃花：花瓣每拍朝最近的怪挪多远、多远内才追、落点多大 */
   petal: { speed: 6, reach: 180, bonusR: 4 },
   /** 火兵：贴身时每隔几拍在脚下点一小摊火、倒下留一摊，火的伤害是纸兵伤害的几成；鸣兵：倒下时震开多大、伤害几成、震多远 */

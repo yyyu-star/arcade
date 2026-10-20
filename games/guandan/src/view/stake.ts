@@ -9,6 +9,7 @@
 import type { Venue } from '../variants/guandan/ai/venue.ts';
 import { createGame, type Action, type GameEvent, type GameState } from '../variants/guandan/core/index.ts';
 import { STAKE_PATH } from '../net/version.ts';
+import { isSoloRef as isDdzSoloRef } from '../variants/doudizhu/stake/index.ts';
 import { TIERS, isSoloRef, isTier, soloAddDeal, soloOver, soloPoints, type SoloMatch, type TierId } from '../variants/guandan/stake/index.ts';
 import { emptyTally, statsOf, tallyDeal, type Tally } from '../variants/guandan/stake/stats.ts';
 import { currentUserId } from './net.ts';
@@ -109,7 +110,7 @@ export function transient(error: string): boolean {
 /** 重试的间隔（毫秒）：第一次失败后等 1 秒、再失败等 3 秒，共试 3 次 */
 const RETRY_MS = [1_000, 3_000];
 
-async function withRetry(call: () => Promise<StakeReply>, sleep: (ms: number) => Promise<void>): Promise<StakeReply> {
+export async function withRetry(call: () => Promise<StakeReply>, sleep: (ms: number) => Promise<void>): Promise<StakeReply> {
   let r = await call();
   for (const ms of RETRY_MS) {
     if (r.ok || !transient(r.error)) return r;
@@ -119,7 +120,7 @@ async function withRetry(call: () => Promise<StakeReply>, sleep: (ms: number) =>
   return r;
 }
 
-const realSleep = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
+export const realSleep = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms));
 
 export type SettleOutcome =
   | { kind: 'done'; points: number; credited: number; capped: number; balance: number | null }
@@ -130,31 +131,49 @@ export type SettleOutcome =
   | { kind: 'later' }
   | { kind: 'failed'; error: string };
 
-/** 结回这一场（存档里必须已经记了 settle）。成功、结过、过期都删存档 */
-export async function settleStake(s: StakeSave, deps: { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {}): Promise<SettleOutcome> {
-  const st = s.settle;
-  if (!st) return { kind: 'failed', error: 'not_over' };
-  const body = { ref: s.ref, tier: s.tier, points: st.points, deals: st.deals, ...(s.tally ? { stats: statsOf(s.tally) } : {}) };
+export interface Deps {
+  fetcher?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * 结回的公共部分（掼蛋和斗地主共用）：发请求、钱包忙就重试，再按回话处理存档（clear 删存档）。
+ * 成功、结过（no_stake）、过期（expired）都删存档，一直忙就留着下次再结
+ */
+export async function settleWith(body: Record<string, unknown>, points: number, clear: () => void, deps: Deps = {}): Promise<SettleOutcome> {
   const r = await withRetry(() => postStake('settle', body, deps.fetcher), deps.sleep ?? realSleep);
   if (r.ok) {
-    clearStake(s.ref);
-    return { kind: 'done', points: st.points, credited: r.credited ?? 0, capped: r.capped ?? 0, balance: r.wallet?.balance ?? null };
+    clear();
+    return { kind: 'done', points, credited: r.credited ?? 0, capped: r.capped ?? 0, balance: r.wallet?.balance ?? null };
   }
   if (r.error === 'no_stake' || r.error === 'expired') {
-    clearStake(s.ref);
+    clear();
     return r.error === 'expired' ? { kind: 'expired' } : { kind: 'gone' };
   }
   return transient(r.error) ? { kind: 'later' } : { kind: 'failed', error: r.error };
 }
 
-/** 一副没打完就不玩了：那一份原样退回。和结回一样，退过、过期都算办完 */
-export async function refundStake(s: StakeSave, deps: { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {}): Promise<SettleOutcome> {
-  const r = await withRetry(() => postStake('refund', { ref: s.ref }, deps.fetcher), deps.sleep ?? realSleep);
+/** 放弃的公共部分：那一份原样退回。和结回一样，退过、过期都算办完 */
+export async function refundWith(body: Record<string, unknown>, clear: () => void, deps: Deps = {}): Promise<SettleOutcome> {
+  const r = await withRetry(() => postStake('refund', body, deps.fetcher), deps.sleep ?? realSleep);
   if (r.ok || r.error === 'no_stake' || r.error === 'expired') {
-    clearStake(s.ref);
+    clear();
     return r.ok ? { kind: 'done', points: 0, credited: r.credited ?? 0, capped: 0, balance: r.wallet?.balance ?? null } : r.error === 'expired' ? { kind: 'expired' } : { kind: 'gone' };
   }
   return transient(r.error) ? { kind: 'later' } : { kind: 'failed', error: r.error };
+}
+
+/** 结回这一场（存档里必须已经记了 settle）。成功、结过、过期都删存档 */
+export async function settleStake(s: StakeSave, deps: Deps = {}): Promise<SettleOutcome> {
+  const st = s.settle;
+  if (!st) return { kind: 'failed', error: 'not_over' };
+  const body = { ref: s.ref, tier: s.tier, points: st.points, deals: st.deals, ...(s.tally ? { stats: statsOf(s.tally) } : {}) };
+  return settleWith(body, st.points, () => clearStake(s.ref), deps);
+}
+
+/** 一副没打完就不玩了：那一份原样退回 */
+export async function refundStake(s: StakeSave, deps: Deps = {}): Promise<SettleOutcome> {
+  return refundWith({ ref: s.ref }, () => clearStake(s.ref), deps);
 }
 
 /** 进场：认人、带入一份，成功就开一场。带入不重试：ref 由 Worker 生成，重发是另一份 */
@@ -169,10 +188,10 @@ export async function buyinStake(tier: TierId, fetcher: typeof fetch = fetch): P
 
 /**
  * 钱包里掼蛋桌上那一份，但这台设备上没有它的存档（别的设备开的，或者带入的回话没收到）：单机的可以原样退回，
- * 不然要干等 24 小时到期。好友房的（gd-）不归这里管。
+ * 不然要干等 24 小时到期。好友房的（gd-）不归这里管；斗地主单机的（solo-ddz-）归 ddz-stake.ts。
  */
 export function strayStake(w: WalletView, local: StakeSave | null): { ref: string; solo: boolean } | null {
-  const st = w.stakes.find((x) => x.game === 'guandan');
+  const st = w.stakes.find((x) => x.game === 'guandan' && !isDdzSoloRef(x.ref));
   if (!st || st.ref === local?.ref) return null;
   return { ref: st.ref, solo: isSoloRef(st.ref) };
 }
@@ -183,7 +202,7 @@ export async function refundStray(ref: string, deps: { fetcher?: typeof fetch; s
 }
 
 /** 实盘局的种子：浏览器里用 crypto 生成（2.1），不用 Math.random */
-function stakeSeed(): string {
+export function stakeSeed(): string {
   const b = crypto.getRandomValues(new Uint8Array(8));
   return `s${[...b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }

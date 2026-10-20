@@ -31,12 +31,13 @@
    * 小字有下限：舞台整体缩放，手机横屏只有 0.72 倍，13 号字实际不到 10 px。--ui 是"一个屏幕像素合几个设计单位"
    * （viewport.ts 按缩放写在根上，大屏是 1），小三号字按它放大，实际最小 11–12 px；大屏不变
    */
-  --fs-1: max(11px, calc(11px * var(--ui)));
-  --fs-2: max(13px, calc(11.5px * var(--ui)));
-  --fs-3: max(14px, calc(12px * var(--ui)));
-  --fs-4: 16px;
-  --fs-5: 18px;
-  --fs-6: 20px;
+  --fs-1: max(11px, calc(12px * var(--ui)));
+  --fs-2: max(13px, calc(12.5px * var(--ui)));
+  --fs-3: max(14px, calc(13px * var(--ui)));
+  /* 0.25.3 多尺寸：手机上舞台缩小后，16、18、20 的字缩到 10 上下；下限按屏幕上 13–14 算（小屏才起作用） */
+  --fs-4: max(16px, calc(13px * var(--ui)));
+  --fs-5: max(18px, calc(13.5px * var(--ui)));
+  --fs-6: max(20px, calc(14px * var(--ui)));
   --fs-8: 30px;
   --fs-9: 40px;
   --fs-hero: 76px;
@@ -63,6 +64,18 @@
   /* 点按区域至少 44 个屏幕像素（按钮看着小的，触屏上用 ::before 把能点的范围撑开，不改画面） */
   --hit: calc(44px * var(--ui));
 }
+/* 手机横屏（矮）：中大号字按屏幕上 13–14 放大以后选桌页"好友房""带上桌"折行、面板出屏（0.25.3 多尺寸实测），这里下限只给到 12 */
+@media (orientation: landscape) and (max-height: 430px) {
+  :root { --fs-3: max(14px, calc(12px * var(--ui))); --fs-4: max(16px, calc(12px * var(--ui))); --fs-5: max(18px, calc(12.5px * var(--ui))); --fs-6: max(20px, calc(13px * var(--ui))); }
+  /* 字放大后"好友房""带上桌"折成两行 */
+  .stage.tight .lobby :is(.mode, .buyin .label) { white-space: nowrap; }
+  .stage.tight .lobby .mode { flex: none; width: auto; padding: 0 var(--s-2); }
+  /* 赔率条折成两行会顶到右边座位的头像：括号里"赢面过几成可跟"的提示收起，只留底池、跟多少、赔率 */
+  .stage.tight .actions .odds .need { display: none; }
+  /* 一键下注四个折成两行会把整块顶到右边座位的下注上：收起"⅔池"（加注面板里照样能下任意数），三个一行 */
+  .stage.tight .actions .qbet[data-frac^="0.66"] { display: none; }
+}
+
 
 * { box-sizing: border-box; }
 html, body {
@@ -298,7 +311,7 @@ body::before {
   background: radial-gradient(circle at 35% 30%, #fff, #ddd 60%, #aaa);
   color: #333;
   /* 手机横屏也不小于 11 px（按 --ui 放大） */
-  font-size: max(13px, calc(11px * var(--ui)));
+  font-size: max(13px, calc(12px * var(--ui)));
   font-weight: 900;
   display: grid;
   place-items: center;
@@ -628,6 +641,11 @@ body::before {
 .quick { display: flex; gap: var(--s-2); }
 .qbet { height: 36px; padding: 0 var(--s-3); border-radius: var(--r-3); border: 1px solid rgba(243, 200, 107, .45); background: rgba(243, 200, 107, .1); color: var(--gold); font-size: var(--fs-3); font-weight: 800; white-space: nowrap; }
 .actions.open .quick { display: none; }
+/* 赔率条和一键下注最宽只到我的底牌右边（底牌在舞台正中，左右各约 90）：平板 4:3、手机横屏舞台窄，原来压到第二张底牌（0.25.3 多尺寸）；
+   放不下就折行，竖屏的操作区另有排法 */
+.stage:not(.tall) .actions :is(.odds, .quick) { max-width: calc(var(--stage-w, 960px) / 2 - 90px - var(--s-3)); }
+.stage:not(.tall) .actions .odds { white-space: normal; text-align: right; }
+.stage:not(.tall) .actions .quick { flex-wrap: wrap; justify-content: flex-end; }
 .act {
   min-width: 104px;
   height: 54px;
@@ -878,7 +896,7 @@ body::before {
   font-size: var(--fs-4);
   font-weight: 700;
 }
-.buy-amt { width: 76px; text-align: right; font-weight: 800; color: var(--gold); }
+.buy-amt { min-width: 76px; text-align: right; font-size: var(--fs-3); font-weight: 800; color: var(--gold); }
 .go-row { display: flex; gap: var(--s-3); margin-top: var(--s-3); }
 /* 快速匹配（0.20.0）挨着"坐下开打"，和它一样高 */
 .lobby .go-row .pill.match { height: 52px; padding: 0 var(--s-5); font-size: var(--fs-4); font-weight: 800; }
@@ -974,6 +992,18 @@ body::before {
 .stage.tight .mcard { min-height: 0; padding: var(--s-2); }
 .stage.tight .mcard svg { width: 26px; height: 26px; }
 .stage.tight :is(.modes, .stakes, .sizes, .buyin, .go-row, .friends) { margin-top: var(--s-2); }
+/* 缩小了或收窄了的横版牌桌（手机横屏、平板竖拿）：左下那一排变宽，"歇一手"压到我的头像（0.25.3 多尺寸）——占位按竖屏的宽度、按钮留白收窄、第几手收起 */
+:is(.stage.tight, .stage.narrow):not(.tall) .hud .fun-slot { width: calc(64px * var(--ui)); }
+:is(.stage.tight, .stage.narrow):not(.tall) .hud > .pill { padding: 0 var(--s-2); }
+:is(.stage.tight, .stage.narrow):not(.tall) .hud .hand-no { display: none; }
+/* 我的动作签（"大盲 20"）字放大后变宽，往右伸到第一张底牌、盖住点数：按右边对齐，右沿停在底牌左边 */
+.stage.tight:not(.tall) .seat.me .bubble { left: -76px; transform: translateX(-100%); }
+/* 568×320 这种矮横屏：选桌最下面一排"坐下开打"出了屏（0.25.3 多尺寸），锦标赛那行说明收起（按钮上的提示里有） */
+@media (max-height: 340px) {
+  .stage.tight .lobby .tour-note { display: none; }
+  /* 娱乐的三张难度卡的小字（一场多久、不碰钱包）也收起：实盘档的"最多输""赢很少过"不动 */
+  .stage.tight .lobby .tile.diff small { display: none; }
+}
 
 /* ---------- 好友房 ---------- */
 /* 0.17.4：好友房和娱乐、实盘并排；输码进房紧跟在选项下面，开房间在"坐下开打"的位置（一样大、金色） */
@@ -1174,6 +1204,8 @@ body::before {
 .stage.tall .act { flex: 1; min-width: 0; height: 60px; }
 .stage.tall .quick { justify-content: stretch; }
 .stage.tall .qbet { flex: 1; height: 44px; }
+/* 320 宽的老 SE 上"全下 2,000"挤出屏幕（0.25.3 多尺寸）：四个按钮左右留白收窄，按内容分宽度 */
+.stage.tall .qbet { min-width: 0; padding: 0 var(--s-1); }
 .stage.tall .odds { align-self: center; }
 .stage.tall .raise-panel { width: auto; }
 .stage.tall .pre-btn { flex: 1; height: 52px; }

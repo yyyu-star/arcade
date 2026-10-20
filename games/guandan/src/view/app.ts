@@ -6,6 +6,7 @@ import type { CloudSync } from './cloud.ts';
 import type { NetSession } from './net.ts';
 import type { Session } from './session.ts';
 import type { DdzSession } from './ddz-session.ts';
+import type { DdzNetSession } from './ddz-net.ts';
 import type { LaunchParams } from '../debug/params.ts';
 
 export const app = {
@@ -15,6 +16,8 @@ export const app = {
   ddz: null as DdzSession | null,
   /** 联机会话（好友房）；在牌桌上时优先用它 */
   net: null as NetSession | null,
+  /** 斗地主的联机会话（牌馆 ⑤）；斗地主牌桌优先用它，没有再用单机的 ddz */
+  ddzNet: null as DdzNetSession | null,
   params: null as LaunchParams | null,
   /** 云存档（main.ts 启动） */
   cloud: null as CloudSync | null,

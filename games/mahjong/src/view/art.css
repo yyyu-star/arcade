@@ -19,7 +19,7 @@
     var(--art-speck, linear-gradient(transparent, transparent)) 0 0 / 37px 37px,
     radial-gradient(ellipse at 50% 45%, #187152 0%, var(--felt) 45%, var(--felt-dark) 100%);
 }
-/* 牌桌页（0.17.1，docs/art-v3.md 第 5 节）：舞台是茶馆的板壁（远景），呢子只铺在木框里面（.table::after），
+/* 牌桌页（0.17.1，docs/art-v3.md）：舞台是茶馆的板壁（远景），呢子只铺在木框里面（.table::after），
  * 电脑宽屏牌桌两边露出的就是板壁和顶灯的一团暖光，不再是压暗的同一块呢子 */
 .stage:has(> .screen.game) {
   background:

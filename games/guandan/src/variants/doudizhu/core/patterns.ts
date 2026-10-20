@@ -1,5 +1,5 @@
 /**
- * 斗地主的牌型（牌馆 PR ②，设计 docs/doudizhu.md 2.2，规则细节 docs/rules.md「斗地主」一节）。
+ * 斗地主的牌型（牌馆 PR ②，设计 docs/doudizhu.md 第 3 节，规则细节 docs/rules.md「斗地主」一节）。
  * 实现牌馆通用层的 PatternSet（ctx 不需要，传 undefined）。牌的编码沿用 core/cards.ts，只用第一副 0..53。
  */
 import { BIG_JOKER, type Card, SMALL_JOKER, rankOf, suitOf } from '../../../core/cards.ts';
