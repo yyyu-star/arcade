@@ -113,6 +113,8 @@ export interface DangerDef {
   eliteExtra: number;
   /** 两只尸王，各 75% 血（危险 5） */
   twinBoss: boolean;
+  /** 精英一下打碎金钟罩的全部层（危险 4、5；ELITE_BREAK） */
+  eliteBreak: boolean;
   /** 一句话 */
   blurb: string;
 }
@@ -129,12 +131,12 @@ export const FIRST_RUN_GUARD = 180 * S;
  * 实盘四档固定用危险 0 / 2 / 3 / 4（DESIGN.md 4.1）。
  */
 export const DANGERS: Record<Danger, DangerDef> = {
-  0: { id: 0, name: '危险 0', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, mixShift: -1, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '第一次玩选这个' },
-  1: { id: 1, name: '危险 1', stars: 1, hpMul: 1.0, dmgMul: 1.0, countMul: 1.0, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, blurb: '怪种按时出' },
-  2: { id: 2, name: '危险 2', stars: 2, hpMul: 1.2, dmgMul: 1.2, countMul: 1.1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, blurb: '会躲会选就能撑到天亮' },
-  3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.38, dmgMul: 1.36, countMul: 1.16, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: -20 * S, eliteExtra: 0, twinBoss: false, blurb: '怪更硬、下手更重' },
-  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.56, dmgMul: 1.5, countMul: 1.22, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, blurb: '精英成群' },
-  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.75, dmgMul: 1.65, countMul: 1.28, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, blurb: '两只尸王' },
+  0: { id: 0, name: '危险 0', stars: 1, hpMul: 0.72, dmgMul: 0.6, countMul: 0.85, openSlow: 0.5, magnetMul: 2.4, earlyDmg: 0.8, armsFirst: 4, mixShift: -1, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, eliteBreak: false, blurb: '第一次玩选这个' },
+  1: { id: 1, name: '危险 1', stars: 1, hpMul: 1.0, dmgMul: 1.0, countMul: 1.0, openSlow: 1, magnetMul: 1.4, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 30 * S, eliteExtra: 0, twinBoss: false, eliteBreak: false, blurb: '怪种按时出' },
+  2: { id: 2, name: '危险 2', stars: 2, hpMul: 1.2, dmgMul: 1.2, countMul: 1.1, openSlow: 1, magnetMul: 1, earlyDmg: 0.8, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 0, twinBoss: false, eliteBreak: false, blurb: '会躲会选就能撑到天亮' },
+  3: { id: 3, name: '危险 3', stars: 3, hpMul: 1.38, dmgMul: 1.36, countMul: 1.16, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: -20 * S, eliteExtra: 0, twinBoss: false, eliteBreak: false, blurb: '怪更硬、下手更重' },
+  4: { id: 4, name: '危险 4', stars: 3, hpMul: 1.56, dmgMul: 1.5, countMul: 1.22, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: false, eliteBreak: true, blurb: '精英成群' },
+  5: { id: 5, name: '危险 5', stars: 4, hpMul: 1.75, dmgMul: 1.65, countMul: 1.28, openSlow: 1, magnetMul: 1, earlyDmg: 1, armsFirst: 0, mixShift: 0, eliteLate: 0, eliteExtra: 1, twinBoss: true, eliteBreak: true, blurb: '两只尸王' },
 };
 /**
  * 夜探的危险档（DESIGN.md 4.2）：夜探没有天亮可撑、还有巡夜将，同一档比守夜难得多（第 3 轮：普通玩家危险 0 撤出 80%，危险 1 只剩 45%），
@@ -163,6 +165,13 @@ export const RAID_DANGERS: Record<Danger, DangerDef> = {
 export function dangerDef(mode: 'vigil' | 'raid', d: Danger): DangerDef {
   return mode === 'raid' ? RAID_DANGERS[d] : DANGERS[d];
 }
+
+/**
+ * 破罩（0.4.7，主线 10-20）：危险 4、5 的精英专克「站桩 + 护罩 + 火」——镇守走焚天金钟路线在危险 5 胜率 59%，
+ * --nodual 对照里双修本身只贡献约 0.5 点，强在金钟罩一层层挡掉精英、火葫芦烧掉弹。按配平方法加克制的怪、不砍法器：
+ * 精英碰到护罩一下全碎，pierce 是这一下穿透到血上的比例。远程弹不算（火葫芦烧弹是烈火流派自己的本事）。
+ */
+export const ELITE_BREAK = { pierce: 0 };
 
 /** 两只尸王时每只的血 */
 export const TWIN_BOSS_HP = 0.75;

@@ -44,7 +44,7 @@ import { GUARD_MOVE, guardStep } from '../explore/guards.ts';
 import { raidMinute, raidSpawnPoint, raidZoneMul } from '../explore/spawn.ts';
 import type { Raid } from '../explore/raid.ts';
 import { RAID_REGIONS, VIGIL_REGIONS, EMERGE_KINDS, regionKind, regionTotal, type Region } from '../content/regions.ts';
-import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
+import { CALM, DAWN_TICK, dangerDef, EARLY_TICKS, ELITE_BREAK, EVENTS, FIRST_RUN_GUARD, lampShare, MINUTES, OPEN_TICKS, SCALE, TWIN_BOSS_HP, type WaveEvent } from '../content/waves.ts';
 import { ASSIST, CHAR_FX, CHARACTERS, CURSE_FX, PERK_FX, REVIVE, type PerkId } from '../content/meta.ts';
 import { PICKS, SKIP_FX, SKIP_PRIZES } from '../content/picks.ts';
 import { MARKET_GOODS, MARKET_PRICE, NIGHT_MARKET, type MarketGood } from '../content/market.ts';
@@ -327,14 +327,22 @@ function heal(w: World, n: number): void {
 function hurt(w: World, dmg: number, by = -1): void {
   if (w.invuln > 0 || w.phase !== 'play') return;
   w.hurtBy = by;
+  const diff = dangerDef(w.setup.mode, w.setup.danger);
   if (w.shield > 0) {
     // 金钟罩挡下这一下，碎的时候震开身边（下一拍出手时结算，那时有格子）
-    w.shield--;
     w.shieldBurst = true;
     w.invuln = PLAYER.invuln;
-    return;
+    // 破罩：危险 4、5 的精英一下打碎全部层，按 pierce 穿透一部分
+    if (diff.eliteBreak && by >= 0 && by < MAX_ENEMIES && ENEMIES[w.eKind[by]!]!.elite) {
+      w.shield = 0;
+      w.ev.push(Ev.Shield, w.x, w.y, 2, 0);
+      if (ELITE_BREAK.pierce <= 0) return;
+      dmg *= ELITE_BREAK.pierce;
+    } else {
+      w.shield--;
+      return;
+    }
   }
-  const diff = dangerDef(w.setup.mode, w.setup.danger);
   const d = Math.max(1, Math.round(dmg * diff.dmgMul * (w.tick < EARLY_TICKS ? diff.earlyDmg : 1) * (w.setup.assist ? ASSIST.dmg : 1) - w.stats.armor));
   w.hp -= d;
   // 胖师叔：挨打时震开身边（下一拍有格子时结算）
