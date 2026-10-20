@@ -83,7 +83,7 @@ export async function clientError(c: Ctx): Promise<Response> {
   await c.db.run(
     c.db.stmt(
       `INSERT INTO monitor_counts (day, game, kind, sig, n, first_ver, ver, last_at) VALUES (?1, ?2, 'error', ?3, 1, ?4, ?4, ?5)
-       ON CONFLICT (day, game, kind, sig) DO UPDATE SET n = n + 1, ver = excluded.ver, last_at = excluded.last_at`,
+       ON CONFLICT (day, game, kind, sig) DO UPDATE SET n = monitor_counts.n + 1, ver = excluded.ver, last_at = excluded.last_at`,
       utcDay(c.now), game, sig, version, c.now,
     ),
   );
