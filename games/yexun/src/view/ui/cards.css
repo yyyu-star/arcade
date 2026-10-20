@@ -97,4 +97,12 @@
   .yx-pick-text { font-size: 13px; text-align: left; }
   .yx-pick-hint, .yx-pick-counter, .yx-pick-set { margin-top: 0; text-align: left; }
   .yx-picks-bar { flex-wrap: wrap; justify-content: center; }
+  /* 320×568：三张卡加按钮放不下，按钮掉出屏幕；放不下时从顶上排、能滚 */
+  .yx-picks { justify-content: safe center; overflow-y: auto; padding-top: 10px; padding-bottom: 10px; }
+}
+/* 平板竖屏：三张卡加起来比屏幕宽（768 宽两边各切掉一截），改成三张平分宽度。
+   宽度是 screens.css 里主页「选模式」按钮的 .yx-pick { min-width: 260px } 串过来撑的（两处同名），这里多一层 .yx-picks 压过它 */
+@media (min-width: 601px) and (max-width: 999px) and (orientation: portrait) {
+  .yx-picks-row { width: calc(100% - 24px); max-width: 760px; }
+  .yx-picks .yx-pick { flex: 1 1 0; width: auto; min-width: 0; }
 }

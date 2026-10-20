@@ -1728,8 +1728,9 @@ export class GameScene extends Phaser.Scene {
       const key = kind === Shot.Fireball && w.sState[i] !== 0 ? (w.sState[i] === 1 ? 'ice' : 'money') : (SHOT_FRAME[kind] ?? 'fireball');
       if (!s || s.gen !== w.sGen[i]) {
         const f = this.frame(key);
-        const img = s?.img ?? this.add.image(0, 0, 'atlas', f.key);
-        img.setFrame(f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
+        // 纸兵的图在特色怪那张图集（atlas.ts）：按帧所在的贴图换，不能只换帧
+        const img = s?.img ?? this.add.image(0, 0, f.tex ?? 'atlas', f.key);
+        img.setTexture(f.tex ?? 'atlas', f.key).setOrigin(f.ox, f.oy).setVisible(true).clearTint();
         const sc = kind === Shot.Talisman ? 1.25 : kind === Shot.Coin ? 1.3 : kind === Shot.Fly ? 1.1 : kind === Shot.Petal ? 3 : kind === Shot.Crane ? (w.sIdx[i]! >= 1000 ? 0.8 : 1.3) : kind === Shot.Burn ? 1.6 : kind === Shot.Paper ? 1.5 : 1.2;
         img.setScale(sc / f.res);
         if (key === 'fireball' && !this.frames.has('fireball')) img.setTint(0x7a3aa0);

@@ -94,6 +94,6 @@
   .yx-chestrow { top: max(15vh, 56px); gap: 2px; }
   .yx-chestrow .h { font-size: 26px; -webkit-text-stroke-width: 5px; }
   .yx-chestrow.t5 .h { font-size: 30px; -webkit-text-stroke-width: 5px; }
-  .yx-chestrow .c { min-width: 54px; padding: 3px 4px 2px; font-size: 11px; }
+  .yx-chestrow .c { min-width: 54px; padding: 3px 4px 2px; font-size: 12px; }
   .yx-chestrow .c img { width: 32px; height: 32px; }
 }

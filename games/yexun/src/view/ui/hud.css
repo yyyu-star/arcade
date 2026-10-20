@@ -55,7 +55,7 @@
 
 /* 左上 */
 .yx-hud .yx-tl { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: 10px; display: flex; align-items: flex-start; gap: 10px; }
-.yx-hud .yx-home span { font-size: calc(14px * var(--s, 1)); }
+.yx-hud .yx-home span { font-size: max(12px, calc(14px * var(--s, 1))); }
 .yx-card { display: flex; align-items: center; gap: calc(8px * var(--s, 1)); }
 .yx-avatar {
   position: relative;
@@ -74,7 +74,7 @@
   min-width: calc(22px * var(--s, 1)); padding: 0 3px;
   border: 2px solid var(--ink); border-radius: 8px;
   background: var(--red); color: #fff;
-  font-size: calc(12px * var(--s, 1)); text-align: center; line-height: calc(18px * var(--s, 1));
+  font-size: max(12px, calc(12px * var(--s, 1))); text-align: center; line-height: calc(18px * var(--s, 1));
 }
 .yx-bars { display: flex; flex-direction: column; gap: 4px; }
 .yx-bar {
@@ -93,7 +93,7 @@
 .yx-sh .yx-fill { background: linear-gradient(#a8dcff, #4ba3e6 60%, #2f7cc0); }
 .yx-bar-text {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  color: #fff; font-size: calc(12px * var(--s, 1));
+  color: #fff; font-size: max(12px, calc(12px * var(--s, 1)));
   text-shadow: -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink);
 }
 
@@ -118,7 +118,7 @@
   transform: rotate(-20deg);
 }
 .yx-tcol { display: flex; flex-direction: column; align-items: center; }
-.yx-tlabel { font-size: calc(11px * var(--s, 1)); opacity: 0.75; letter-spacing: 2px; }
+.yx-tlabel { font-size: max(12px, calc(12px * var(--s, 1))); opacity: 0.75; letter-spacing: 2px; }
 .yx-time { font-size: calc(26px * var(--s, 1)); line-height: 1; letter-spacing: 1px; }
 
 /* 夜探：14:00 起顶上的倒计时醒目，最后 30 秒变红闪 */
@@ -140,7 +140,7 @@
 .yx-xa-text {
   position: absolute; left: 0; top: 0; white-space: nowrap;
   padding: 2px 8px; border: 2px solid var(--ink); border-radius: 8px;
-  background: rgba(28, 34, 48, 0.9); color: #ffe9a0; font-size: calc(13px * var(--s, 1));
+  background: rgba(28, 34, 48, 0.9); color: #ffe9a0; font-size: max(12px, calc(13px * var(--s, 1)));
 }
 .yx-xa.gb .yx-xa-text { color: #ffd9a8; }
 
@@ -185,7 +185,7 @@
   border: 2px solid var(--ink); border-radius: 7px; background: linear-gradient(#fbf5e6, #e9dcbc);
 }
 .yx-pass img { position: absolute; inset: 6%; width: 88%; height: 88%; }
-.yx-pass .yx-slot-lv { left: -5px; bottom: -5px; font-size: 9px; line-height: 11px; min-width: 12px; }
+.yx-pass .yx-slot-lv { left: -5px; bottom: -5px; font-size: 12px; line-height: 13px; min-width: 14px; padding: 0 2px; }
 .yx-slot {
   position: relative;
   width: calc(46px * var(--s, 1)); height: calc(46px * var(--s, 1));
@@ -200,7 +200,7 @@
   position: absolute; left: -6px; bottom: -6px;
   min-width: 16px; padding: 0 3px;
   border: 2px solid var(--ink); border-radius: 6px;
-  background: var(--gold); font-size: 11px; line-height: 14px; text-align: center;
+  background: var(--gold); font-size: 12px; line-height: 14px; text-align: center;
 }
 
 /* 连斩横幅：毛笔字 + 墨点，数字一变就弹一下 */
@@ -256,10 +256,27 @@
 #stage .yx-tip button { font-size: 12px; background: none; }
 /* 选卡时提示条让开：竖屏下它正好压在"升到 N 级"上，选卡时也用不上走位提示 */
 #stage:has(.yx-picks.open) .yx-tip { visibility: hidden; }
-@media (max-height: 500px) { #stage .yx-tip { top: 108px; } }
+@media (max-height: 500px) {
+  #stage .yx-tip { top: 108px; }
+  /* 夜探目标条：缩到 0.8 倍时顶在 54 像素，压到计时和血条下沿几像素（10-20 矩阵 568–932 横屏） */
+  .yx-hud .yx-rs { top: 62px; }
+}
+/* 小手机横屏（≤ 700 宽、矮）：血条、计时、右上三件一排放不下，血条压到计时、夜探的背包压到胶囊（10-20 矩阵 568–667 宽）。
+   血条短一截、计时去掉月亮和"离天亮"（竖屏同样的做法）、"大厅"只留小房子；夜探背包挪到胶囊下面 */
+@media (max-height: 500px) and (max-width: 700px) and (orientation: landscape) {
+  .yx-hud .yx-bar { width: calc(130px * var(--s, 1)); }
+  .yx-hud .yx-sh { width: calc(100px * var(--s, 1)); }
+  .yx-hud .yx-moon, .yx-hud .yx-tlabel { display: none; }
+  .yx-hud .yx-timer { padding: 4px 10px; }
+  .yx-hud .yx-home span { display: none; }
+  .yx-hud .yx-home { padding: 0; }
+  .yx-hud .yx-bag { position: absolute; right: 0; top: calc(100% + 8px); }
+  .yx-hud .yx-bagpanel { top: 112px; max-height: calc(100% - 120px); }
+}
 
-/* ── 手机竖屏：顶栏并成一行（大厅、头像血条、计时、胶囊、暂停），夜探的背包在第二行右边 ── */
-@media (max-width: 600px) and (orientation: portrait) {
+/* ── 手机竖屏：顶栏并成一行（大厅、头像血条、计时、胶囊、暂停），夜探的背包在第二行右边 ──
+   平板竖屏（768、820、884 宽）也用这一套：老样子血条固定 190 宽、计时居中，两者相交（10-20 多尺寸矩阵） */
+@media (max-width: 999px) and (orientation: portrait) {
   .yx-hud .yx-top {
     position: absolute; display: flex; align-items: center; gap: 4px;
     left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); top: 12px;
@@ -271,7 +288,7 @@
   .yx-hud .yx-home { padding: 0; flex: none; }
   .yx-hud .yx-card { flex: 1 1 0; min-width: 0; gap: 3px; }
   .yx-hud .yx-avatar { width: 34px; height: 34px; flex: none; border-width: 2.5px; }
-  .yx-hud .yx-lv { min-width: 16px; font-size: 10px; line-height: 12px; right: -4px; bottom: -4px; }
+  .yx-hud .yx-lv { min-width: 16px; font-size: 12px; line-height: 13px; right: -4px; bottom: -4px; }
   .yx-hud .yx-bars { flex: 1 1 0; min-width: 0; gap: 3px; }
   .yx-hud .yx-bar { width: 100%; min-width: 0; height: 16px; }
   .yx-hud .yx-sh { width: 72%; height: 9px; }
@@ -290,6 +307,13 @@
   .yx-hud .yx-mm { left: max(8px, env(safe-area-inset-left, 0px)); top: 108px; bottom: auto; width: 80px; height: 80px; }
   #stage .yx-tip { top: 204px; }
 }
+/* 再窄一点（≤ 400 宽）：夜探目标条居中时压到左边的小地图（10-20 矩阵 320、360 宽），往右让出小地图的宽度、字小一号 */
+@media (max-width: 400px) and (orientation: portrait) {
+  .yx-hud .yx-rs { left: calc(50% + 44px); }
+  .yx-hud .yx-rs-1, .yx-hud .yx-rs-2 { font-size: 13px; padding: 3px 8px; }
+  /* 320 宽提示条折成两行，底边压到法器格 2 像素：往上提一点 */
+  #stage .yx-tip { top: 198px; }
+}
 
 /* ── 电脑（≥1000 宽、≥600 高）：左上、中间、右上收进居中的一排，不再散在三个角 ── */
 @media (min-width: 1000px) and (min-height: 600px) {
@@ -302,9 +326,9 @@
   .yx-hud .yx-tl { justify-self: start; gap: calc(10px * var(--s, 1)); }
   .yx-hud .yx-tr { justify-self: end; gap: calc(8px * var(--s, 1)); }
   .yx-hud .yx-timer { justify-self: center; }
-  .yx-hud .yx-xa-text { font-size: calc(13px * var(--s, 1)); }
+  .yx-hud .yx-xa-text { font-size: max(12px, calc(13px * var(--s, 1))); }
   .yx-hud .yx-side { right: max(24px, 2vw); }
-  .yx-hud .yx-slot-lv { font-size: calc(11px * var(--s, 1)); line-height: calc(14px * var(--s, 1)); }
+  .yx-hud .yx-slot-lv { font-size: max(12px, calc(11px * var(--s, 1))); line-height: max(14px, calc(14px * var(--s, 1))); }
   #stage .yx-tip { top: 150px; }
   .yx-hud .yx-combo { left: max(26px, 6vw); }
 }
