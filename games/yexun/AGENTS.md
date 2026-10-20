@@ -19,7 +19,7 @@ src/view/      画面层：art/（程序画的图集、地形、雪地）、game
 src/platform/  本地存档（save.ts）、云存档（cloud.ts）、实盘浏览器端（live.ts）
 src/online/    排行榜分数、每日挑战、分享卡、社交部件
 src/replay/    本机录像：格式、录制、回放、存储
-worker/        Worker（登录闸门、单独部署的根路径、实盘带入结回），自己一份 tsconfig（workers-types）
+worker/        Worker（登录闸门、单独部署的根路径、实盘带入结回、巡检用的 health），自己一份 tsconfig（workers-types）
 tools/         shot.ts / smoke.ts（截图和冒烟）、sim.ts / sim-merge.ts / bots.ts（机器人配平）、bench.ts（核心耗时）、feel.ts（手感）、
                cover.ts（大厅封面）、subset-font.ts（毛笔字子集）、gen-dirs.ts（方向表）
 tests/         vitest

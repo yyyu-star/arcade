@@ -4,8 +4,10 @@
  * - 单独部署（wrangler.jsonc 原样）：没有平台，谁打开都能玩，站点根 / 转到 /games/yexun/。
  * 首页三种写法过共用包的登录闸门 loginGate：登录了放行，没登录 302 到平台登录页，平台不可用回 503 页。
  * 实盘的带入、结回走 /games/yexun/api/live/*（./live.ts），不看 GATE、总要认人。入口模块只导出 default（具名导出会让单独部署的 Worker 起不来）。
+ * /games/yexun/health 给平台巡检用（./health.ts），排在最前面：登录闸门、单独部署的根路径都在它后面。
  */
 import { loginGate, standaloneRoot, type GateEnv } from 'arcade-kit/worker';
+import { health } from './health.ts';
 import { LIVE_PREFIX, handleLive, type LiveEnv } from './live.ts';
 
 const GAME = 'yexun';
@@ -19,9 +21,11 @@ const DOWN_PAGE = `<!doctype html>
 
 export default {
   async fetch(request: Request, env: GateEnv & LiveEnv): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    const ok = health(request, path);
+    if (ok) return ok;
     const root = standaloneRoot(request, env, GAME);
     if (root) return root;
-    const path = new URL(request.url).pathname;
     if (path.startsWith(LIVE_PREFIX)) return handleLive(request, env);
     if (path === BASE) return Response.redirect(new URL(`${BASE}/`, request.url).toString(), 301);
     if (path === `${BASE}/` || path === `${BASE}/index.html`) return loginGate(request, env, { downPage: DOWN_PAGE });

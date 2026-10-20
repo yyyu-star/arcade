@@ -507,7 +507,9 @@ games/yexun/
 - 首页三种写法过 kit 的 `loginGate`；站点根 `/` 和 `/api/me` 过 `standaloneRoot`（独立模式）。
 - `/games/yexun/api/live/{buyin,settle,refund}`：照开盘 0.11.2——浏览器只给 `ref`、`tier`、`bp`（倍数万分比）、可选战绩小结；带入金额固定是这一档一份、到期 24 小时由 Worker 定；
   **结回前先 `WALLET.view` 取桌上这一份的金额按它算**，不信浏览器报的档位；CSRF（`X-Arcade: 1` + Origin）、请求体 ≤ 2 KB、超时 5 秒；独立部署回 501 `no_wallet`。
-- **没有 Durable Object**（不做联机、不做服务端录像），所以 `wrangler.jsonc` 只有静态资源。
+- `GET /games/yexun/health`（`worker/health.ts`）：回 `{"ok":true,"version":"<package.json 版本>"}`、不缓存，给平台巡检用；排在最前面，不过登录闸门、不读存储、不问平台，单独部署时也能访问。
+- **没有 Durable Object**（不做联机、不做服务端录像），所以 `wrangler.jsonc` 只有静态资源，外加 `observability`（Workers Logs）。
+- 浏览器入口调共用包的 `reportErrors`（`arcade-kit/report`），页面里没人接住的报错发到平台 `/api/client-error`：只带报错、调用栈、路径、游戏和版本，每页最多 5 条。
 
 ### 5.7 排行榜
 
