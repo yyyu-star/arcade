@@ -4,6 +4,8 @@
 #   pg：PostgreSQL 模式（postgres:17 服务容器，测试密码固定，只在这次运行里）。平台每条 SQL 在 PG 上 PREPARE、覆盖表和 SQLite 对照（check-sql）→
 #       SQLite 档起站冒烟、备份 → PG 档起站冒烟 → 把 SQLite 的备份迁进 PG、逐行核对（verify-import）→ 迁移后再冒烟一次。
 #       → 房间也进 PG（pg + memory，什么都不落盘）：冒烟、开房记下房间码 → 重启 → 两人回到同一个房间（宿主重启后按 PG 里的闹钟唤醒）。
+#   docker-pg：pg 作业的 pg + memory 发布包做成镜像，compose --profile pg 起 arcade + postgres（Secret、密码文件、健康检查依赖都按 compose 文件走）→
+#       冒烟 → 重启 arcade 后回到同一个房间 → 容器里跑定时任务和备份（平台库在 PG，跳过）。
 #       pg + memory 要 kit 0.21.0 起的 KIT_STORE：德州还没升时，这个作业在工作区里临时把德州的 kit 换成 0.21.0（不提交，德州自己升了这一步就什么都不做）。
 # 平台和德州改了也跑：它们一变，自托管能不能原样跑起来要马上知道。
 name: Self-host
@@ -228,6 +230,66 @@ jobs:
           grep '"msg":"kitstore wake"' "$RUNNER_TEMP/workerd-pgmem.log" | tail -1 | tee "$RUNNER_TEMP/wake.json"
           grep -q '"failed":\[\]' "$RUNNER_TEMP/wake.json"
           kill "$pid"; wait "$pid" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: selfhost-release-pgmem
+          path: ${{ runner.temp }}/out/arcade-ci-pgmem.tar.gz
+          retention-days: 1
       - name: 失败时的 workerd 日志
         if: failure()
         run: tail -100 "$RUNNER_TEMP"/workerd-*.log || true
+  docker-pg:
+    needs: pg
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: packages/arcade-host/.nvmrc
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: selfhost-release-pgmem
+          path: ${{ runner.temp }}/rel
+      - name: 做镜像
+        run: |
+          cd "$RUNNER_TEMP/rel" && tar -xzf arcade-ci-pgmem.tar.gz
+          docker build -f "$GITHUB_WORKSPACE/tools/selfhost/docker/Dockerfile" -t arcade:ci-pg "$RUNNER_TEMP/rel/arcade-ci-pgmem"
+      - name: compose --profile pg 起 arcade + postgres、冒烟、重启后回房间、容器里跑定时任务和备份
+        working-directory: tools/selfhost/docker
+        env:
+          SITE_HOST: game.example.com
+          ARCADE_IMAGE: arcade:ci-pg
+        run: |
+          r() { echo "k1:$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"; }
+          # mask 那行要打到日志（stdout）里才生效，值只写进文件
+          pw=$(head -c 24 /dev/urandom | base64 | tr -d '/+='); echo "::add-mask::$pw"
+          printf '%s\n' "$pw" > pg_password.txt
+          : > secrets.env
+          for k in PEPPER_PW PEPPER_RC PEPPER_SID PEPPER_IP ADMIN_TOKEN; do v=$(r); echo "::add-mask::$v"; echo "$k=$v" >> secrets.env; done
+          echo "ARCADE_PG_URL=postgres://arcade:$pw@postgres:5432/arcade" >> secrets.env
+          # 只在 CI：站点发布到宿主的回环口给冒烟连（正式用法是只给 caddy 连）；caddy 不起
+          printf 'services:\n  arcade:\n    ports:\n      - "127.0.0.1:8787:8787"\n' > "$RUNNER_TEMP/ci.yaml"
+          dc() { docker compose --profile pg -f compose.yaml -f "$RUNNER_TEMP/ci.yaml" "$@"; }
+          healthy() { for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q arcade)")" = healthy ] && return; sleep 1; done; return 1; }
+          dc up -d arcade postgres
+          healthy
+          set -a; . ./secrets.env; set +a
+          cd "$GITHUB_WORKSPACE"
+          node tools/selfhost/smoke.mjs --admin skip --save "$RUNNER_TEMP/room.json"
+          cd tools/selfhost/docker
+          # 平台库和房间都在 PG：arcade 容器重启（内存全丢）后，两人回到同一个房间
+          dc restart arcade
+          healthy
+          cd "$GITHUB_WORKSPACE" && node tools/selfhost/smoke.mjs --rejoin "$RUNNER_TEMP/room.json" && cd tools/selfhost/docker
+          dc logs arcade | grep '"msg":"kitstore wake"' | tail -1 | grep -q '"failed":\[\]'
+          dc exec -T arcade curl -fsS -X POST 'http://127.0.0.1:8788/cron/run?worker=arcade&cron=17%2019%20*%20*%20*' | grep -q '"outcome":"ok"'
+          dc exec -T arcade /app/ops/backup.sh /data/backups | grep -q 'PostgreSQL 里，跳过'
+          # 冒烟建的两个号在 PG 里（arcade 容器重启过，还在）
+          [ "$(dc exec -T postgres psql -U arcade -d arcade -tAc "SELECT count(*) FROM users WHERE username LIKE 'smoke%'")" = 2 ]
+      - name: 失败时的容器日志
+        if: failure()
+        working-directory: tools/selfhost/docker
+        run: docker compose --profile pg logs 2>&1 | tail -200 || true

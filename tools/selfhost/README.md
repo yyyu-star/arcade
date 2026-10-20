@@ -64,6 +64,10 @@ docker compose exec arcade /app/ops/backup.sh /data/backups     # 备份（管�
 
 站点只给 caddy 经内部网络连（不发布到宿主）；管理入口只听容器内的 127.0.0.1。
 
+PG 档：发布包用 `--db pg --storage memory` 打（房间也进 PG，容器里什么都不落盘），本目录再放 `pg_password.txt`（数据库密码，一行），
+`secrets.env` 里加 `ARCADE_PG_URL=postgres://arcade:<同一个密码>@postgres:5432/arcade`，然后 `docker compose --profile pg up -d`
+（arcade 等 postgres 健康了才起）。`secrets.env`、`pg_password.txt` 都在本目录的 `.gitignore` 里。平台库备份：`docker compose exec postgres pg_dump -U arcade arcade > arcade.sql`。
+
 ## PostgreSQL 模式
 
 平台库（账号、钱包、榜单……）放进 PostgreSQL，平台代码一条 SQL 都不改：`packages/arcade-host` 的 D1 后端把 SQLite 方言机械翻译成 PG 的，
@@ -89,4 +93,5 @@ ARCADE_PG_URL=postgres://arcade:…@127.0.0.1:5432/arcade ARCADE_DATA=/var/lib/a
 ## 验证
 
 `.github/workflows/selfhost.yml`：打平台和德州 → 发布包 → 二进制起一次（冒烟、备份、恢复演练）→ 同一个包做成镜像起一次（冒烟，容器里跑备份和定时任务）；
-pg 作业连 postgres:17：语句覆盖检查 → SQLite 档冒烟、备份 → PG 档冒烟 → 备份迁进 PG、逐行核对 → 再冒烟 → pg + memory 档冒烟、重启、两人回到同一个房间。
+pg 作业连 postgres:17：语句覆盖检查 → SQLite 档冒烟、备份 → PG 档冒烟 → 备份迁进 PG、逐行核对 → 再冒烟 → pg + memory 档冒烟、重启、两人回到同一个房间；
+docker-pg 作业把 pg + memory 包做成镜像，`compose --profile pg` 起 arcade + postgres：冒烟 → 重启 arcade 容器后回到同一个房间 → 容器里跑定时任务和备份。
