@@ -1373,7 +1373,9 @@ function hitEnemy(w: World, i: number, dmg: number, slot: number, kx: number, ky
   // 怪对这件法器的克制（类型、五行）
   const owner = credit >= 0 ? w.weapons[credit] : undefined;
   const vs = owner ? VS[w.eKind[i]! * WEAPON_IDS.length + WEAPON_CODE[owner.id]]! : 1;
-  const d = Math.max(1, Math.round(dmg * bound * pinned * vs * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
+  // 危险 4、5 的精英抗火葫芦（克制镇守 + 火葫芦站桩，DESIGN 8.1）
+  const resist = owner?.id === 'gourd' && ENEMIES[w.eKind[i]!]!.elite ? dangerDef(w.setup.mode, w.setup.danger).eliteGourd : 1;
+  const d = Math.max(1, Math.round(dmg * bound * pinned * vs * resist * w.stats.might * (crit ? PLAYER.critMul + w.stats.critDmg : 1)));
   w.eHp[i]! -= d;
   // 结算页的"每件法器打了多少"：只记，不影响规则
   const owned = owner;
