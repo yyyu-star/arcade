@@ -87,6 +87,13 @@ describe('昵称', () => {
     for (const n of ['小白兔', '虎子哥哥', '老鹰捉小鸡']) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('ok');
   });
 
+  it('弹里个弹的电脑名字（团团、企企、柴柴、兔兔、鼠鼠、橘子）也拦，繁体"團團"同样拦；团子照常能用', () => {
+    for (const n of ['团团', '團團', '橘子', '鼠鼠2', '柴 柴']) {
+      expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
+    }
+    expect(checkDisplayName(normalizeDisplayName('团子'))).toBe('ok');
+  });
+
   it('电脑名字按游戏分组：games.ts 登记的每个游戏都有一组（没有电脑就空数组），不多不少', () => {
     expect(Object.keys(RESERVED_PERSONAS).sort()).toEqual([...GAME_IDS].sort());
     for (const n of Object.values(RESERVED_PERSONAS).flat()) expect(checkDisplayName(normalizeDisplayName(n)), n).toBe('reserved_display_name');
