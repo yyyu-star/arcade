@@ -79,7 +79,9 @@ const settings = loadSettings();
 setSound(settings.sound);
 setVolume(settings.volume);
 const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-const pace = (): number => (reduced ? 0.3 : settings.fast ? 0.55 : 1);
+/** 好友房追上最新状态（切回前台、重连）时剩下的动画瞬间走完：节奏取 0 */
+let skipAnim = false;
+const pace = (): number => (skipAnim ? 0 : reduced ? 0.3 : settings.fast ? 0.55 : 1);
 /** 自动下一手：结果摆这么久再发（按动画快慢缩放） */
 const AUTO_NEXT_MS = 3_500;
 
@@ -1925,7 +1927,10 @@ const roomUi = (mine: () => boolean): OnlineUi => ({
     if (rows) void roomSummary(stage, '这一场', text, rows, tally.awards(rows), share);
     else void dialog(stage, '好友房', text, [{ label: '好', value: 'ok', primary: true }]);
   },
-  wait: (ms) => new Promise((ok) => window.setTimeout(ok, ms * pace())),
+  wait: (ms) => (pace() === 0 ? Promise.resolve() : new Promise((ok) => window.setTimeout(ok, ms * pace()))),
+  skip: (on) => {
+    skipAnim = on;
+  },
 });
 
 /** 房间替电脑发的、等这一手播完再画的（seat、id、to） */

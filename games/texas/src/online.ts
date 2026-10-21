@@ -60,6 +60,8 @@ export interface OnlineUi {
   /** 房间停了（关了、被顶掉、连不上）：text 给人看，final 为 true 时不会再连 */
   ended(text: string, code: number): void;
   wait(ms: number): Promise<void>;
+  /** 正在播的这一步别再等了、剩下的动画瞬间走完（切回前台、重连追上最新状态时）；on 为 false 恢复正常节奏 */
+  skip?(on: boolean): void;
 }
 
 export class Online {
@@ -71,6 +73,13 @@ export class Online {
   private shown: RoomView | null = null;
   private readonly queue: { view: RoomView | null; delay: number; fresh: boolean }[] = [];
   private playing = false;
+  /** 已经收下的最新 seq：房间发来更小的（重连后拿到旧快照、乱序）一律不要，画面不倒退 */
+  private seq = -1;
+  private readonly onVisible = (): void => {
+    // 切回前台：后台时落下的帧不再一手一手重播（像回放旧的操作），直接摆最新的
+    if (document.hidden) return;
+    if (this.playing || this.queue.length) this.collapse();
+  };
 
   /** name：单独部署时游客的昵称，带在进房地址上（kit 的 ?name=） */
   /** 这条连接带不带聊天（kit 传了 onChat 才带 chat=1）：陌生人桌按设置"和陌生人打字聊天"，进房时定下，中途改了下次进房生效 */
@@ -79,6 +88,7 @@ export class Online {
   constructor(saved: SavedRoom, ui: OnlineUi, opts: { url?: string; name?: string | null; chat?: boolean } = {}) {
     this.ui = ui;
     this.saved = saved;
+    document.addEventListener('visibilitychange', this.onVisible);
     this.chatOn = opts.chat ?? true;
     this.s = { code: saved.code, host: saved.host, opts: null, status: 'connecting', room: null, you: null, view: null, busy: false };
     this.client = new RoomClient<RoomAction, RoomView>({
@@ -141,6 +151,7 @@ export class Online {
     this.client.retry();
   }
   close(): void {
+    document.removeEventListener('visibilitychange', this.onVisible);
     this.client.close();
   }
 
@@ -150,15 +161,24 @@ export class Online {
       if (!(EMOTE_ERRORS as readonly string[]).includes(m.code)) this.ui.toast(errorText(m.code));
       return;
     }
+    if (m.seq < this.seq) return;
+    this.seq = m.seq;
     this.s = { ...this.s, room: m.room, you: m.you, opts: (m.room.opts as RoomOpts | undefined) ?? null };
     if (m.t === 'welcome') {
-      // 快照：不管还有什么没播，整桌重画
+      // 快照：不管还有什么没播，直接摆到最新（不重播、正在播的这一步也瞬间走完）
       this.queue.length = 0;
       this.queue.push({ view: m.view, delay: 0, fresh: true });
+      if (this.playing) this.ui.skip?.(true);
     } else {
       for (const f of m.frames) this.queue.push({ view: (f.view as RoomView | null) ?? null, delay: f.delay, fresh: false });
     }
     void this.pump();
+  }
+
+  /** 只留最后一帧、直接摆；正在播的那一步也别再等 */
+  private collapse(): void {
+    if (this.queue.length) this.queue.splice(0, this.queue.length, { ...this.queue.at(-1)!, fresh: true });
+    this.ui.skip?.(true);
   }
 
   private async pump(): Promise<void> {
@@ -166,8 +186,9 @@ export class Online {
     this.playing = true;
     try {
       while (this.queue.length) {
-        // 落下太多：只留最后一帧，直接摆
-        if (this.queue.length > MAX_BACKLOG) this.queue.splice(0, this.queue.length - 1, { ...this.queue.at(-1)!, fresh: true });
+        // 落下太多、或页面在后台（计时器被节流、动画不走，播出来也没人看）：只留最后一帧，直接摆
+        if (this.queue.length > MAX_BACKLOG || (document.hidden && this.queue.length > 1)) this.collapse();
+        else if (document.hidden) this.ui.skip?.(true);
         const f = this.queue.shift()!;
         this.s = { ...this.s, busy: true };
         this.redraw();
@@ -190,6 +211,7 @@ export class Online {
       }
     } finally {
       this.playing = false;
+      this.ui.skip?.(false);
       this.s = { ...this.s, busy: false };
       this.redraw();
     }
