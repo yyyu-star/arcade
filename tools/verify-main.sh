@@ -21,9 +21,22 @@ TRUSTED_BASE=2c2b905a67d2443fd6db04f2080d838018dff9e8
 SHA=${1:?用法：verify-main.sh <sha>}
 : "${REPO:?}" "${OWNER:?}" "${GH_TOKEN:?}"
 
+# GitHub API 偶尔回空的 200（2026-10-22 起时有时无）：不带 --jq 时 gh 报 "unexpected end of JSON input"，带 --jq 时什么也不输出、却返回成功。
+# 所以失败或输出为空都隔几秒重试，五次都不行才算失败（照样 fail-closed，不会放过没核对的提交）。这里的调用正常时都不会是空输出。
+api() {
+  local out i
+  for i in 1 2 3 4 5; do
+    if out=$(gh api "$@") && [ -n "$out" ]; then printf '%s\n' "$out"; return 0; fi
+    sleep $((i * 3))
+  done
+  echo "::error::GitHub API 连续 5 次失败：gh api $*" >&2
+  return 1
+}
+
 # 从哪里开始核对：最近一次 main-guard 通过、且是 SHA 祖先的提交
 stop=""
-for s in $(gh api "repos/$REPO/actions/workflows/main-guard.yml/runs?branch=main&event=push&status=success&per_page=30" \
+# 这一步查不到也能核对（退回可信起点），但要从头走几百个提交、费 API 额度，所以同样重试
+for s in $(api "repos/$REPO/actions/workflows/main-guard.yml/runs?branch=main&event=push&status=success&per_page=30" \
              --jq '.workflow_runs[].head_sha' 2>/dev/null || true); do
   [ "$s" = "$SHA" ] && continue
   if git merge-base --is-ancestor "$s" "$SHA" 2>/dev/null; then stop=$s; break; fi
@@ -38,7 +51,7 @@ for c in $commits; do
   # 刚合并时 GitHub 关联 PR 偶尔有几秒延迟，查不到就重试几次
   pr=""
   for i in 1 2 3 4; do
-    pr=$(gh api "repos/$REPO/commits/$c/pulls" \
+    pr=$(api "repos/$REPO/commits/$c/pulls" \
           | jq -r --arg c "$c" '[.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $c and .head.sha != $c)][0].number // empty')
     [ -n "$pr" ] && break
     sleep 10
@@ -46,8 +59,9 @@ for c in $commits; do
   if [ -z "$pr" ]; then
     echo "::error::$c 不是任何已合并 PR 的合并提交（直接推送？）"; bad=1; continue
   fi
-  read -r committer verified < <(gh api "repos/$REPO/commits/$c" --jq '"\(.committer.login // "none") \(.commit.verification.verified)"')
-  merged_by=$(gh api "repos/$REPO/pulls/$pr" --jq '.merged_by.login // "none"')
+  info=$(api "repos/$REPO/commits/$c" --jq '"\(.committer.login // "none") \(.commit.verification.verified)"')
+  read -r committer verified <<< "$info"
+  merged_by=$(api "repos/$REPO/pulls/$pr" --jq '.merged_by.login // "none"')
   if [ "$committer" != "web-flow" ] || [ "$verified" != "true" ]; then
     echo "::error::$c（PR #$pr）不是 GitHub 生成的合并提交（committer=$committer verified=$verified）"; bad=1
   elif [ "$merged_by" != "$OWNER" ]; then
