@@ -6,7 +6,8 @@
     "guandan": ["GATE", "ONLINE", "KIT_QUOTA"],
     "texas": ["GATE", "KIT_QUOTA"],
     "mahjong": ["GATE", "KIT_QUOTA"],
-    "racing": ["KIT_QUOTA"]
+    "racing": ["KIT_QUOTA"],
+    "danli": ["KIT_QUOTA"]
   },
   "forbiddenVars": [
     "SITE_ORIGIN",
