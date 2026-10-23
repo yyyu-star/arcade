@@ -36,12 +36,13 @@ export const SLOTS = 6;
 export const TURN_MS = 30_000;
 /** 电脑的回合借真人的座位时，过多久按超时代出 */
 export const BOT_TURN_MS = 1000;
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 /**
  * 页面版本（kit 的 clientVersion，页面 src/friend.ts 连房间时带上）；房间只收不低于它的页面（worker/room.ts 的 minClientVersion），旧页面收到 4005、提示刷新。
- * 规则含义变了（RULES_VERSION 加一）就跟着加一：旧页面按旧规则重放会和房间对不上（0.3.1：纸飞机不限次数，旧页面重放第 3 次纸飞机会出错）。
+ * 规则含义变了（RULES_VERSION 加一）就跟着加一：旧页面按旧规则重放会和房间对不上（0.3.1：纸飞机不限次数，旧页面重放第 3 次纸飞机会出错；
+ * 0.4.0：多了 5 张图、"随机"从 11 张里抽，旧页面认不得新图）。
  */
-export const CLIENT_VERSION = 2;
+export const CLIENT_VERSION = 3;
 /** 准备、结算时房主"出手"的时限：只是为了让 kit 在房主掉线满宽限（60 秒，转托管）时调 ai 把房主交出去，在线的房主永远等不到它 */
 export const HOST_WAIT_MS = 24 * 3_600_000;
 

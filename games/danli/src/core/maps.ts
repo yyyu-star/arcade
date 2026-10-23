@@ -1,18 +1,19 @@
 /**
  * 地图（DESIGN.md 第 3 节）："轮廓多边形 + 预挖的洞"描述，开局光栅化成地形网格；另有一张出生点的候选表（只给 x），开局由 rules.ts 洗牌挑。
- * 整张图是一页画本：世界 3000×780，地形悬空，下面是雾；左、右、下三边是纸边，出了纸边就出局。上边不封顶。
+ * 整张图是一页画本：世界 3000×780（0.4.0 的寿司长台 3600 宽），地形悬空，下面是雾；左、右、下三边是纸边，出了纸边就出局。上边不封顶。
  * 轮廓的上沿、下沿各是几个关键点，按 Catmull-Rom 采样成折线；只用加减乘除，再取整。
  * 每块地有材质（面团、冰淇淋、饺子皮……），材质码写进格子（规则上都一样能炸穿，只给画面分颜色）。
- * 6 张图的数据在 mapData.ts（美术代理交付）；准备房间的地图卡片墙和"随机"按 MAP_IDS 取。
+ * 11 张图的数据在 mapData.ts（0.2.0 的 6 张）和 mapData2.ts（0.4.0 的 5 张），都是美术代理交付的；准备房间的地图卡片墙和"随机"按 MAP_IDS 取。
  */
 import { BENTO, BREAKFAST, DUMPLING, ICECREAM, KITCHEN, MATERIAL_CODE, NIGHTMARKET } from './mapData.ts';
+import { CAKE, HOTPOT, MAP_IDS2, PIZZA, SUSHI, TEATIME, type MapId2, type MaterialId2 } from './mapData2.ts';
 import { carve, CELL, emptyTerrain, fillPolygon, SCORCH, type Pt, type Terrain } from './terrain.ts';
 
-export type MapId = 'kitchen' | 'icecream' | 'dumpling' | 'bento' | 'nightmarket' | 'breakfast';
+export type MapId = 'kitchen' | 'icecream' | 'dumpling' | 'bento' | 'nightmarket' | 'breakfast' | MapId2;
 
 export type MaterialId =
   | 'dough' | 'mint' | 'berry' | 'vanilla' | 'choco' | 'waffle' | 'snow' | 'dumpling' | 'rice' | 'tamago' | 'sausage' | 'tempura' | 'broccoli'
-  | 'biscuit' | 'awning' | 'toast' | 'baguette' | 'eggwhite' | 'yolk' | 'butter' | 'pancake' | 'nori' | 'bamboo' | 'strawberry' | 'mug';
+  | 'biscuit' | 'awning' | 'toast' | 'baguette' | 'eggwhite' | 'yolk' | 'butter' | 'pancake' | 'nori' | 'bamboo' | 'strawberry' | 'mug' | MaterialId2;
 
 interface LandDef {
   /** 上沿的关键点（从左到右） */
@@ -78,10 +79,10 @@ export function landOutline(l: LandDef): Pt[] {
 
 export { BENTO, BREAKFAST, DUMPLING, ICECREAM, KITCHEN, MATERIAL_CODE, NIGHTMARKET };
 
-export const MAPS: Readonly<Record<MapId, MapDef>> = { kitchen: KITCHEN, icecream: ICECREAM, dumpling: DUMPLING, bento: BENTO, nightmarket: NIGHTMARKET, breakfast: BREAKFAST };
+export const MAPS: Readonly<Record<MapId, MapDef>> = { kitchen: KITCHEN, icecream: ICECREAM, dumpling: DUMPLING, bento: BENTO, nightmarket: NIGHTMARKET, breakfast: BREAKFAST, cake: CAKE, hotpot: HOTPOT, pizza: PIZZA, sushi: SUSHI, teatime: TEATIME };
 
 /** 准备房间的地图卡片墙按这个顺序摆 */
-export const MAP_IDS: readonly MapId[] = ['kitchen', 'icecream', 'dumpling', 'bento', 'nightmarket', 'breakfast'];
+export const MAP_IDS: readonly MapId[] = ['kitchen', 'icecream', 'dumpling', 'bento', 'nightmarket', 'breakfast', ...MAP_IDS2];
 
 export function isMapId(v: unknown): v is MapId {
   return typeof v === 'string' && Object.hasOwn(MAPS, v);

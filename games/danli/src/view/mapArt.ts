@@ -4,8 +4,9 @@
  */
 import type { MapId, MaterialId } from '../core/maps.ts';
 import type { ThemeId } from './backdrops.ts';
+import { MAP_ART2, MATERIALS2, type TexId2 } from './mapArt2.ts';
 
-export type TexId = 'pores' | 'chips' | 'seeds' | 'bean' | 'swirl' | 'waffle' | 'sparkle' | 'pleats' | 'grains' | 'rolls' | 'cuts' | 'batter' | 'florets' | 'docked' | 'stripes' | 'scores' | 'none' | 'layers' | 'nori' | 'bamboo' | 'strawseed' | 'band';
+export type TexId = 'pores' | 'chips' | 'seeds' | 'bean' | 'swirl' | 'waffle' | 'sparkle' | 'pleats' | 'grains' | 'rolls' | 'cuts' | 'batter' | 'florets' | 'docked' | 'stripes' | 'scores' | 'none' | 'layers' | 'nori' | 'bamboo' | 'strawseed' | 'band' | TexId2;
 
 export interface Material {
   code: number;
@@ -22,6 +23,7 @@ export interface Material {
 }
 
 export const MATERIALS: Readonly<Record<MaterialId, Material>> = {
+  ...MATERIALS2,
   dough: {code: 1, name: '面团', grad: ['#fdeccb','#f8dfb2','#efc78c','#d99a5c'], crust: '#eba650', rim: '#e08f3e', crumb: ['#f8dfb2','#e3a865'], tex: 'pores'},
   mint: {code: 2, name: '薄荷冰淇淋', grad: ['#d9f5e8','#bfead6','#9fd9c0','#7cc2a6'], crust: '#fffaf2', rim: '#5fae90', crumb: ['#bfead6','#5a3a2a'], tex: 'chips'},
   berry: {code: 3, name: '草莓冰淇淋', grad: ['#ffe1ea','#fbc6d6','#f2a3bd','#de7fa0'], crust: '#fffaf2', rim: '#cf6a8e', crumb: ['#fbc6d6','#e2432a'], tex: 'seeds'},
@@ -66,6 +68,7 @@ export interface MapArt {
 }
 
 export const MAP_ART: Readonly<Record<MapId, MapArt>> = {
+  ...MAP_ART2,
   kitchen: { theme: 'kitchen', card: {short: '什么都有一点，上手就选它', feature: '左山头挡平射；中间长台地有口井，炸井边能把人送下去；右边凹谷四面是崖，进去难出来；两块浮岛是高点', players: '1v1–3v3'} },
   icecream: { theme: 'icecream', card: {short: '平射过不去，只能高抛或者把塔打穿', feature: '三层高塔挡死平射，塔顶是全图最高点也最险；塔脚两颗冰淇淋球贴着塔，是躲高抛的死角；两边山坡起伏，坑多好藏', players: '1v1–3v3'} },
   dumpling: { theme: 'dumpling', card: {short: '躲进隧道，只有平射、钻地和窄缝打得着', feature: '山肚子里一段隧道：躲进去高抛打不着，拖鞋平射、萝卜钻能掏进去；隧道只在中间有底，山顶两侧打穿就直接掉出画本；山顶窄缝正对隧道中段，从蒸笼上往下垂直打；两头的大饺子是掩体', players: '1v1–3v3'} },

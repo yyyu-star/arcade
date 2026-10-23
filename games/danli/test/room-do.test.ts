@@ -182,8 +182,8 @@ describe('好友房（真的 kit 房间）', () => {
     expect(h.maxWrites).toBeLessThanOrEqual(2);
   });
 
-  it('旧页面（clientVersion 1）进房被拒（4005，提示刷新），现在的版本能进', async () => {
-    expect(CLIENT_VERSION).toBe(2);
+  it('旧页面（clientVersion 低于现在的）进房被拒（4005，提示刷新），现在的版本能进', async () => {
+    expect(CLIENT_VERSION).toBe(3);
     const h = new Harness(await roomClass());
     await h.create('userA');
     const old = await h.join('userA', '小A', 1);

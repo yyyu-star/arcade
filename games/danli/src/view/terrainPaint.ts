@@ -7,16 +7,12 @@
  */
 import { CELL, MAT_MASK, SCORCH, cellAt, type Terrain } from '../core/terrain.ts';
 import type { Material, TexId } from './mapArt.ts';
+import { TEX2 } from './mapArt2.ts';
+import { hash, tiles } from './paintKit.ts';
 import { INK } from './palette.ts';
 
 type Ctx = CanvasRenderingContext2D;
 type P = [number, number];
-
-function hash(x: number, y: number): number {
-  let h = (x * 374761393 + y * 668265263) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
 
 /** marching squares：solid(c,r) 回 0/1；回填色路径和边线段 */
 function march(solid: (c: number, r: number) => number, c0: number, c1: number, r0: number, r1: number): { fill: Path2D; segs: [P, P][] } {
@@ -47,12 +43,9 @@ function march(solid: (c: number, r: number) => number, c0: number, c1: number, 
   return { fill, segs };
 }
 
-// ---------------- 纹理：每种一个小函数，(ctx, 世界范围, 材质) ----------------
-function tiles(x0: number, y0: number, w: number, h: number, T: number, fn: (tx: number, ty: number, x: number, y: number, v: number) => void): void {
-  for (let ty = Math.floor(y0 / T) - 1; ty <= Math.floor((y0 + h) / T) + 1; ty++)
-    for (let tx = Math.floor(x0 / T) - 1; tx <= Math.floor((x0 + w) / T) + 1; tx++) fn(tx, ty, tx * T + hash(tx + 7, ty) * T, ty * T + hash(tx, ty + 7) * T, hash(tx, ty));
-}
+// ---------------- 纹理：每种一个小函数，(ctx, 世界范围, 材质)；0.4.0 新图的 13 种在 mapArt2.ts ----------------
 const TEX: Record<TexId, (ctx: Ctx, x0: number, y0: number, w: number, h: number) => void> = {
+  ...TEX2,
   none() {},
   pores(ctx, x0, y0, w, h) {
     ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.globalAlpha = 0.24; ctx.beginPath();

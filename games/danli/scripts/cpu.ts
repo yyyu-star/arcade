@@ -1,6 +1,6 @@
 /**
  * 服务器 CPU 预算（DESIGN.md 5.6，硬约束）：好友房每一步（结算一发真人的 act、电脑想一步加结算）在开发机上 p99 ≤ 3 ms。
- * 量法在 test/cpu-bench.ts（真的 kit 房间，6 张图 × 3v3，典型和最坏局面）。这里用普通 Node 跑（不经 vitest 转译，和线上打成一个文件的 Worker 差不多快），
+ * 量法在 test/cpu-bench.ts（真的 kit 房间，11 张图 × 3v3，典型和最坏局面）。这里用普通 Node 跑（不经 vitest 转译，和线上打成一个文件的 Worker 差不多快），
  * 把 kit 引的 'cloudflare:workers' 指到 test/fake-workers.ts。超了就以非 0 退出（npm test 的最后一步）。
  * 有环境变量 CI 时门槛放宽到 p99 ≤ 8 ms（GitHub 的共享机器偶尔慢），输出里写着用的是哪个门槛。
  * 用法：npm run cpu

@@ -428,24 +428,27 @@ describe('视图和重放', () => {
 });
 
 describe('快照上限', () => {
-  /** 定的上限：3v3 打满 15 轮（90 手），每手都是字段写满、计数到形状上限的 Rec（比体力买得起的还长）也放得下 */
+  /** 定的上限：3v3 打满 15 轮（90 手），每手都是字段写满、计数到形状上限的 Rec（比体力买得起的还长）也放得下；用最宽的寿司长台（3600 宽，出生点坐标位数最多） */
   const LIMIT = 20 * 1024;
 
-  it('3v3 打满 15 轮、每手都是最长的那种 Rec：不超过上限', () => {
-    let s = R.resume!(ok(lobby(3), 0, { t: 'start' }));
+  it('寿司长台 3v3 打满 15 轮、每手都是最长的那种 Rec：不超过上限', () => {
+    let s = R.resume!(ok(lobby(3, 'sushi'), 0, { t: 'start' }));
+    expect(s.game!.setup.map).toBe('sushi');
     // 字段都写满、计数都到上限（不管合不合法，只量最长）
     const longest: Rec = { m: 'LR'.repeat(25), a: 88, p: 100, f: -1, p1: 9, p2: 4, fork: 1, b10: 10, b20: 10, b50: 1, lid: true, plane: true, w: -5 };
     s = { ...s, game: { ...s.game!, log: Array.from({ length: 90 }, () => longest), anim: 1 } };
     const bytes = snapshotBytes(R, s);
-    console.log(`快照（3v3、90 手最长的 Rec）：${bytes} 字节，上限 ${LIMIT}`);
+    console.log(`快照（寿司长台 3v3、90 手最长的 Rec）：${bytes} 字节，上限 ${LIMIT}`);
     expect(bytes).toBeLessThanOrEqual(LIMIT);
   });
 
-  it('真打完的 3v3（结算页，还带着整局）远在上限以内', () => {
-    const s = playOut(R.resume!(ok(lobby(3), 0, { t: 'start' })));
-    const bytes = snapshotBytes(R, s);
-    console.log(`快照（真打完的 3v3，${s.game!.log.length} 手）：${bytes} 字节`);
-    expect(bytes).toBeLessThanOrEqual(LIMIT);
+  it('真打完的 3v3（结算页，还带着整局）远在上限以内：厨房面团岛、寿司长台', () => {
+    for (const map of ['kitchen', 'sushi'] as const) {
+      const s = playOut(R.resume!(ok(lobby(3, map), 0, { t: 'start' })));
+      const bytes = snapshotBytes(R, s);
+      console.log(`快照（真打完的 ${map} 3v3，${s.game!.log.length} 手）：${bytes} 字节`);
+      expect(bytes).toBeLessThanOrEqual(LIMIT);
+    }
   });
 
   it('准备阶段的快照很小', () => {

@@ -63,7 +63,7 @@ describe('房间设置 → 开局设置', () => {
       asked.push([...ids]);
       return ids[1]!;
     });
-    expect(asked).toEqual([['kitchen', 'icecream', 'dumpling', 'bento', 'nightmarket', 'breakfast']]);
+    expect(asked).toEqual([['kitchen', 'icecream', 'dumpling', 'bento', 'nightmarket', 'breakfast', 'cake', 'hotpot', 'pizza', 'sushi', 'teatime']]);
     expect(setup.map).toBe('icecream');
   });
 

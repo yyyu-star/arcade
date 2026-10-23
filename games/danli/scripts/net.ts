@@ -1,6 +1,6 @@
 /**
  * 好友房走一遍（冒烟 smoke.ts、截图 shots.ts 共用）：两个浏览器上下文（两个游客）、真的本地 Worker（worker.ts）：
- * A 开房 → 复制链接 → B 用链接进房（自动坐进黄队）→ B 换小动物和武器 → A 改 3v3、空位都加电脑（6 个位子），再改 2v2、撤掉一个电脑（2 对 1）→ A 先点开打（B 没准备，开不了）→ B 准备 → A 开打 →
+ * A 开房 → 复制链接 → B 用链接进房（自动坐进黄队）→ B 换小动物和武器 → A 改 3v3、空位都加电脑（6 个位子），再改 2v2、撤掉一个电脑（2 对 1）、换地图（0.4.0 的生日蛋糕城）→ A 先点开打（B 没准备，开不了）→ B 准备 → A 开打 →
  * 各打几手（真按钮：爬、道具、拖角度盘、按住发射）→ B 刷新页面，回到原来的局面 → 轮到 B 时不动，30 秒后按超时弃权 →
  * B 把自己炸出局（烟花筒正上方连发 +1 叠两个），黄队没人了、打完 → 两边都到结算页 → A 点"再来一局"，两边回到同一个房间，B 的选择还在。
  * 检查控制台零报错（别的请求失败、4xx、5xx 都算）。snap 在几个时刻截图（6 个位子的房间、2 对 1 的房间、某某正在瞄准、结算）。
@@ -12,7 +12,7 @@ import { startWorker } from './worker.ts';
 type Net = {
   __danliNet: {
     code: string;
-    view(): { phase: string; slots: ({ k: string; seat: number; look: string; weapon: string; ready: boolean } | null)[]; game: { log: { pass?: true }[] } | null } | null;
+    view(): { phase: string; map: string; slots: ({ k: string; seat: number; look: string; weapon: string; ready: boolean } | null)[]; game: { log: { pass?: true }[] } | null } | null;
     room(): { turn: { seat: number } | null } | null;
     seat(): number | null;
     page(): string | null;
@@ -160,6 +160,10 @@ export async function netRoute(browser: Browser, o: NetOpts): Promise<string[]> 
     await a.click('.pick .delbot');
     await until('撤掉黄队 2 号的电脑', 5000, async () => (await net(a).view())?.slots[4] === null && (await net(a).view())?.slots[1]?.k === 'bot');
     if (await b.$('.dl-seg button[data-size="1"]:not([disabled])')) errors.push('B 不是房主，对阵却能点');
+    // A 换一张 0.4.0 的新图（生日蛋糕城），B 那边看得到
+    await a.click('.dl-friend .tabs button[data-tab="map"]');
+    await a.click('.dl-friend .dl-mapcard[data-map="cake"]');
+    await until('换成生日蛋糕城', 5000, async () => (await net(b).view())?.map === 'cake');
     await a.click('.dl-room-go[data-act="start"]');
     await until('提示等 B 准备', 5000, async () => ((await a.textContent('.dl-friend .say .line')) ?? '').includes('小B'));
     await b.click('.dl-room-go[data-act="ready"]');

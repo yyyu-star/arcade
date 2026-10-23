@@ -3,9 +3,11 @@
  * 画面用的远景主题、配色、卡片文案在 view/mapArt.ts。世界 3000×780，地形悬空，左、右、下三边是纸边。
  */
 import type { MapDef, MaterialId } from './maps.ts';
+import { MATERIAL_CODE2 } from './mapData2.ts';
 
 /** 材质码：写进地形格子的低 7 位（规则上都一样能炸穿，只给画面分颜色和纹理） */
 export const MATERIAL_CODE: Readonly<Record<MaterialId, number>> = {
+  ...MATERIAL_CODE2,
   dough: 1,
   mint: 2,
   berry: 3,

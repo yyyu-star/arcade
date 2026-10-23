@@ -2,7 +2,7 @@
   "name": "danli",
   "private": true,
   "license": "MIT",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "description": "弹里个弹：回合制抛物线对战，萌宠和厨房道具大乱斗；地形能炸、有风，掉出画本出局；单机和好友房",
   "scripts": {

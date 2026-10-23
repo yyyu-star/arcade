@@ -1,7 +1,7 @@
 /**
  * 冒烟（AGENTS.md 第 4 节"每个游戏一个无头浏览器冒烟"）：起 vite 开发服务器（系统分配端口），手机横屏 844×390、竖屏 390×844 各走一遍
  * （都按手机模拟：触屏、像素比 3、CPU 降速 4 倍当省内存设备；?turbo 动画加速）：
- * 首页 → 准备房间 → 选冰淇淋雪山 → 3v3 → 换我的武器（冲天烟花筒）和小动物（兔兔，和电脑同一张人物选单，换成在场的就对调）、替一个电脑换武器、静音来回点 →
+ * 首页 → 准备房间 → 选地图（横屏披萨火山、竖屏冰淇淋雪山）→ 3v3 → 换我的武器（冲天烟花筒）和小动物（兔兔，和电脑同一张人物选单，换成在场的就对调）、替一个电脑换武器、静音来回点 →
  * 开打 → 我故意把自己炸出局（烟花筒往正上方打、连发 +1 叠两个（3 轮），落回自己头上）→ 出现"快进""跳到结果"→ 跳到结果 → 结算页 → 回房间。检查：
  * - 控制台零报错。开发时平台接口没起，只放过 /api/ 下的 502、504 和掐断；别的请求失败或 4xx、5xx 都算失败；
  * - danli.prefs 记下了房间里的选择；开局的座位、人物、武器、地图和房间里选的一样；顶栏写"第 N 轮 / 15"；对局里的静音也记得住；
@@ -10,7 +10,7 @@
  *   叠一组道具（三岔 + 连发 +1 + 连发 +2）真打出去，"已选"那一行、"已选"标记、买不起的红边都对；
  *   出局以后先点一下"快进"再"跳到结果"；
  * - 竖屏那一遍：第一手用一次纸飞机（人真的飞过去了；纸飞机不限次数，按钮上不标剩几次）；
- * - 结算页：6 行（每人一行）、有伤害和结果章、有"再来一局""回房间""大厅"；danli.solo 删掉了；整个画面没被滚走；回房间以后还是 3v3、冰淇淋雪山。
+ * - 结算页：6 行（每人一行）、有伤害和结果章、有"再来一局""回房间""大厅"；danli.solo 删掉了；整个画面没被滚走；回房间以后还是 3v3、这张图。
  * 最后走一遍好友房（scripts/net.ts）：打包、本机起真的 Worker（wrangler dev），A 手机横屏、B 手机竖屏两个上下文，
  * 开房 → 链接进房 → 选人选武器、准备 → 加电脑 2 对 1 → 开打 → 各打几手 → B 刷新回到原局面 → B 超时弃权 → 打完 → 再来一局。
  * 用法：npm run smoke（只走好友房：npm run smoke net）。截图在 shots/smoke-*.png。
@@ -21,6 +21,7 @@ import { createServer } from 'vite';
 import { launch } from './browser.ts';
 import { aimAndFire, myTurn, playTurn } from './drive.ts';
 import { netRoute } from './net.ts';
+import { MAP_IDS, MAPS } from '../src/core/maps.ts';
 
 const root = new URL('..', import.meta.url).pathname;
 mkdirSync(`${root}shots`, { recursive: true });
@@ -68,6 +69,9 @@ for (const [name, viewport] of onlyNet
     ] as const)) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const errors: string[] = [];
+  // 横屏打 0.4.0 的新图（披萨火山），竖屏打老图（冰淇淋雪山）
+  const mapId = name === 'land' ? 'pizza' : 'icecream';
+  const mapName = MAPS[mapId].name;
   const isApi = (url: string): boolean => new URL(url).pathname.startsWith('/api/');
   page.on('response', (r) => {
     if (r.status() >= 400 && !(isApi(r.url()) && (r.status() === 502 || r.status() === 504))) errors.push(`${r.status()} ${new URL(r.url()).pathname}`);
@@ -102,9 +106,9 @@ for (const [name, viewport] of onlyNet
     await page.click('.dl-seg button[data-size="3"]');
     if ((await page.$$('.dl-slot')).length !== 6) errors.push(`3v3 的房间里不是 6 个位子：${(await page.$$('.dl-slot')).length}`);
     await page.click('.tabs button[data-tab="map"]');
-    if ((await page.$$('.dl-mapcard')).length !== 7) errors.push(`地图卡片不是 6 张加"随机"：${(await page.$$('.dl-mapcard')).length}`);
+    if ((await page.$$('.dl-mapcard')).length !== MAP_IDS.length + 1) errors.push(`地图卡片不是 ${MAP_IDS.length} 张加"随机"：${(await page.$$('.dl-mapcard')).length}`);
     if (!(await page.$('.dl-mapcard[data-map="bento"] .dl-fast'))) errors.push('便当群岛的卡片上没有"快图"角标');
-    await page.click('.dl-mapcard[data-map="icecream"]');
+    await page.click(`.dl-mapcard[data-map="${mapId}"]`);
     await page.click('.tabs button[data-tab="weapon"]');
     await page.click('.dl-wcard[data-weapon="rocket"]');
     if (!((await (await page.$('.dl-wcard[data-weapon="slipper"] .tip'))?.textContent()) ?? '').includes('只能平射，打中很疼')) errors.push('拖鞋弹弓的卡上没有"只能平射，打中很疼"');
@@ -121,13 +125,13 @@ for (const [name, viewport] of onlyNet
     if (!(await prefsOf(page))?.muted) errors.push('点了静音，danli.prefs 里没记下');
     await page.click('.dl-room .dl-mute');
     const pf = await prefsOf(page);
-    if (pf?.muted !== false || pf.room.size !== 3 || pf.room.map !== 'icecream' || pf.room.me.weapon !== 'rocket' || pf.room.me.look !== 'rabbit' || pf.room.foes[1]?.weapon !== 'frisbee')
+    if (pf?.muted !== false || pf.room.size !== 3 || pf.room.map !== mapId || pf.room.me.weapon !== 'rocket' || pf.room.me.look !== 'rabbit' || pf.room.foes[1]?.weapon !== 'frisbee')
       errors.push(`danli.prefs 没记对：${JSON.stringify(pf)}`);
     await page.click('.dl-room-go');
     await page.waitForSelector('.dl-hud');
     const st0 = await stOf(page);
     const lineup = st0.chars.map((c) => `${c.team}${c.ai ? '电脑' : `我(${c.look})`}${c.ai ? c.name : ''}:${c.weapon}`).join(' ');
-    if (st0.setup.map !== 'icecream' || lineup !== '0我(rabbit):rocket 0电脑橘子:steamer 0电脑团团:milktea 1电脑柴柴:melon 1电脑鼠鼠:frisbee 1电脑企企:paddle')
+    if (st0.setup.map !== mapId || lineup !== '0我(rabbit):rocket 0电脑橘子:steamer 0电脑团团:milktea 1电脑柴柴:melon 1电脑鼠鼠:frisbee 1电脑企企:paddle')
       errors.push(`开局和房间里选的不一样：${st0.setup.map} ${lineup}`);
     const badge = (await (await page.$('.dl-turn .dl-round'))?.textContent()) ?? '';
     if (!/^第 \d+ 轮 \/ 15$/.test(badge)) errors.push(`顶栏的轮数不对：${badge}`);
@@ -177,7 +181,7 @@ for (const [name, viewport] of onlyNet
       await page.reload();
       await page.waitForSelector('.dl-lobby');
       const card = (await (await page.$('.dl-lobby .resume'))?.textContent()) ?? '';
-      if (!card.includes('冰淇淋雪山') || !card.includes('3v3')) errors.push(`首页"接着上一局"写的不对：${card}`);
+      if (!card.includes(mapName) || !card.includes('3v3')) errors.push(`首页"接着上一局"写的不对：${card}`);
       await page.click('.dl-lobby .resume');
       await page.waitForSelector('.dl-hud');
       await page.waitForTimeout(300);
@@ -248,7 +252,7 @@ for (const [name, viewport] of onlyNet
     await page.waitForSelector('.dl-room');
     if (!(await page.$('.dl-seg button.on[data-size="3"]'))) errors.push('回房间以后不是 3v3 了');
     await page.click('.tabs button[data-tab="map"]');
-    if (!(await page.$('.dl-mapcard.on[data-map="icecream"]'))) errors.push('回房间以后地图不是冰淇淋雪山了');
+    if (!(await page.$(`.dl-mapcard.on[data-map="${mapId}"]`))) errors.push(`回房间以后地图不是${mapName}了`);
   } catch (e) {
     errors.push(String(e));
     await page.screenshot({ path: `${root}shots/smoke-${name}-fail.png` }).catch(() => {});

@@ -63,9 +63,9 @@ export interface ItemView {
   once: boolean;
   /** 还能再加一个（体力够、没到上限、组合合法）；不能就标红边 */
   can: boolean;
-  /** 特殊道具这一局还剩几次 */
-  /** 特殊道具（纸飞机、锅盖）：选上了画勾 */
+  /** 选上了画勾 */
   special?: boolean;
+  /** 锅盖这一局还剩几次（纸飞机不限次数，不带） */
   uses?: number;
 }
 

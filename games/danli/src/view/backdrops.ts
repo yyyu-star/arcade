@@ -4,10 +4,13 @@
  * 规矩：远景是透明水彩感，往后退——低饱和、低对比、墨线透明度 ≤ 0.3；不用滤镜和阴影模糊，光晕用一圈圈半透明的圆叠出来；
  * 游戏里按 0.4 倍烘焙一次，所以细节不小于 3 个世界单位，字不小于 40。随机数写死种子，每次画得一样。
  */
+import { THEMES2, type ThemeId2 } from './mapArt2.ts';
+import { blobs, cloud, halo, lcg, type Rnd } from './paintKit.ts';
 import { INK } from './palette.ts';
 
+export { lcg } from './paintKit.ts';
+
 type Ctx = CanvasRenderingContext2D;
-type Rnd = () => number;
 /** 烘焙范围（世界坐标） */
 export interface Area {
   x0: number;
@@ -17,32 +20,7 @@ export interface Area {
 }
 const FONT = "-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif";
 
-export function lcg(seed: number): Rnd {
-  let s = seed >>> 0;
-  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
-}
 const TAU = Math.PI * 2;
-function blobs(ctx: Ctx, r: Rnd, n: number, color: string, alpha: number, x0: number, x1: number, y0: number, y1: number, rx0: number, rx1: number, ry0: number, ry1: number): void {
-  ctx.fillStyle = color;
-  for (let i = 0; i < n; i++) {
-    ctx.globalAlpha = alpha * (0.6 + r() * 0.4);
-    ctx.beginPath(); ctx.ellipse(x0 + r() * (x1 - x0), y0 + r() * (y1 - y0), rx0 + r() * (rx1 - rx0), ry0 + r() * (ry1 - ry0), 0, 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-/** 软光晕：一圈圈半透明的圆（代替模糊滤镜） */
-function halo(ctx: Ctx, x: number, y: number, r: number, color: string, alpha = 0.08, n = 6): void {
-  ctx.fillStyle = color;
-  for (let i = n; i >= 1; i--) { ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(x, y, (r * i) / n, 0, TAU); ctx.fill(); }
-  ctx.globalAlpha = 1;
-}
-function cloud(ctx: Ctx, x: number, y: number, k: number, fill: string, line: string | null, alpha = 0.8): void {
-  ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.beginPath();
-  ctx.ellipse(x, y, 60 * k, 22 * k, 0, 0, TAU); ctx.ellipse(x - 30 * k, y - 8 * k, 30 * k, 22 * k, 0, 0, TAU); ctx.ellipse(x + 22 * k, y - 18 * k, 34 * k, 26 * k, 0, 0, TAU);
-  ctx.fill();
-  if (line) { ctx.globalAlpha = 0.2; ctx.strokeStyle = line; ctx.lineWidth = 3; ctx.stroke(); }
-  ctx.globalAlpha = 1;
-}
 function lantern(ctx: Ctx, x: number, y: number, k: number, lit: boolean): void {
   if (lit) halo(ctx, x, y + 6 * k, 46 * k, '#ffcf6a', 0.07, 5);
   ctx.lineWidth = 3 * k; ctx.strokeStyle = INK;
@@ -83,7 +61,7 @@ function text(ctx: Ctx, s: string, x: number, y: number, size: number, fill: str
   ctx.restore();
 }
 
-export type ThemeId = 'kitchen' | 'icecream' | 'dumpling' | 'bento' | 'nightmarket' | 'breakfast';
+export type ThemeId = 'kitchen' | 'icecream' | 'dumpling' | 'bento' | 'nightmarket' | 'breakfast' | ThemeId2;
 
 export interface Theme {
   name: string;
@@ -101,6 +79,7 @@ export interface Theme {
 }
 
 export const THEMES: Readonly<Record<ThemeId, Theme>> = {
+  ...THEMES2,
   // 厨房：米色瓷砖墙、一扇大窗、挂着的锅勺、左边一排调料罐
   kitchen: {
     name: '厨房', base: '#efe8dc', mist: '#c9c6cf', mistDeep: '#9fa3b8', fog: '#f4f2f6', desk: '#33251f', deskLine: '#4a362c',
@@ -302,7 +281,7 @@ export const THEMES: Readonly<Record<ThemeId, Theme>> = {
 
 /**
  * 画远景（墙/天空 + 装饰 + 往下淡成的雾），不含纸边外的书桌。
- * A：烘焙范围（世界坐标）{x0, y0, w, h}，游戏里是 {x0: -700, y0: -900, w: 4400, h: 2100}。
+ * A：烘焙范围（世界坐标）{x0, y0, w, h}，游戏里是 {x0: -700, y0: -900, w: 地图宽 + 1400, h: 2100}（backdrop.ts）。
  */
 export function paintBackdrop(ctx: Ctx, theme: ThemeId, W: number, H: number, A: Area): void {
   const th = THEMES[theme];

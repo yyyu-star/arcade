@@ -1,7 +1,7 @@
 /**
  * 验收截图（真实运行，正常速度，不开 ?turbo）：电脑 1280×720、手机竖屏 390×844，存到 shots/v030-<屏>-<场景>.png。
- * - lobby 首页；room-weapons 准备房间（3v3、我的武器页签）、room-maps（地图页签）、room-maps-2（往下滑，"快图""慢图"角标）、room-bot（给黄队 2 号换人物和武器）；
- * - map-<id> 6 张图各开一局 3v3，轮到我时截一张；items 第一张轮得到我的图上道具栏叠了一组（三岔 + 连发 +1 + 连发 +2）；
+ * - lobby 首页；room-weapons 准备房间（3v3、我的武器页签）、room-maps（地图页签）、room-maps-2（往下滑，"快图""慢图"角标）、room-maps-3（滑到底：0.4.0 的新图和"随机"）、room-bot（给黄队 2 号换人物和武器）；
+ * - map-<id> 11 张图各开一局 3v3，轮到我时截一张；items 第一张轮得到我的图上道具栏叠了一组（三岔 + 连发 +1 + 连发 +2）；
  * - lobby-resume 打到一半回首页（有"接着上一局"）；
  * - out 最后一张图上我故意把自己炸出局（烟花筒正上方连发 +1 叠两个），出现"快进""跳到结果"；end 跳到结果以后的结算页。
  * - friend-* 好友房（scripts/net.ts，本机起真的 Worker，两个浏览器上下文 A、B 同一种屏）：room6（3v3 六个位子坐满）、room（两个真人 + 一个电脑，2 对 1）、
@@ -23,6 +23,7 @@ import { apply, newGame } from '../src/core/rules.ts';
 import { solidAt } from '../src/core/terrain.ts';
 import type { Action, Setup, State } from '../src/core/types.ts';
 import { WEAPON_IDS, WEAPONS, type WeaponId } from '../src/core/weapons.ts';
+import { MAP_IDS } from '../src/core/maps.ts';
 import { defaultRoom, roomSetup } from '../src/room.ts';
 import { SOLO_KEY, SOLO_VERSION } from '../src/solo.ts';
 
@@ -33,7 +34,7 @@ const server = await createServer({ root, server: { port: 0, host: '127.0.0.1', 
 await server.listen();
 const port = (server.httpServer!.address() as { port: number }).port;
 const browser = await launch();
-const MAPS = ['kitchen', 'icecream', 'dumpling', 'bento', 'nightmarket', 'breakfast'];
+const MAPS = MAP_IDS;
 
 type Hook = { __danli: { state(): { phase: string; actor: number; chars: { x: number; out: boolean; ai: boolean }[] }; preview(a: unknown): { ok: boolean; events?: { t: string; x?: number }[] } } };
 
@@ -122,11 +123,18 @@ for (const [name, opts] of SCREENS) {
   });
   await page.waitForTimeout(300);
   await page.screenshot({ path: file('room-maps-2') });
+  // 滑到底：0.4.0 的 5 张新图和"随机"
+  await page.evaluate(() => {
+    const sheet = document.querySelector('.dl-room .sheet') as HTMLElement;
+    sheet.scrollTo(0, sheet.scrollHeight);
+  });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: file('room-maps-3') });
   await page.click('.dl-slot[data-seat="3"]');
   await page.waitForTimeout(300);
   await page.screenshot({ path: file('room-bot') });
 
-  // 6 张图各开一局，轮到我时截一张；最后一张接着打：把自己炸出局、跳到结果
+  // 11 张图各开一局，轮到我时截一张；最后一张接着打：把自己炸出局、跳到结果
   let itemsShot = false;
   for (const map of MAPS) {
     await startOn(page, map);

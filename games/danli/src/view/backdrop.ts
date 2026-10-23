@@ -6,10 +6,10 @@
 import { lcg, paintBackdrop, THEMES, type ThemeId } from './backdrops.ts';
 import { INK } from './palette.ts';
 
-/** 烘焙的范围（世界坐标）：比画本大一圈，镜头拉远、拖到边上也有东西 */
+/** 烘焙的范围（世界坐标）：比画本大一圈（左右各 700），镜头拉远、拖到边上也有东西；宽按地图宽算（0.4.0 的寿司长台 3600 宽） */
 const BX0 = -700;
 const BY0 = -900;
-const BW = 4400;
+const BMARGIN = 1400;
 const BH = 2100;
 const BAKE = 0.4;
 
@@ -19,11 +19,14 @@ export class Backdrop {
   readonly edge: Path2D;
 
   readonly width: number;
+  /** 烘焙的宽（世界单位）：地图宽 + BMARGIN */
+  private readonly bw: number;
   readonly height: number;
   private theme: ThemeId;
 
   constructor(width: number, height: number, theme: ThemeId) {
     this.width = width;
+    this.bw = width + BMARGIN;
     this.height = height;
     this.theme = theme;
     const r = lcg(13);
@@ -40,14 +43,14 @@ export class Backdrop {
 
   private bake(pts: [number, number][]): HTMLCanvasElement {
     const c = document.createElement('canvas');
-    c.width = Math.ceil(BW * BAKE);
+    c.width = Math.ceil(this.bw * BAKE);
     c.height = Math.ceil(BH * BAKE);
     const ctx = c.getContext('2d')!;
     ctx.setTransform(BAKE, 0, 0, BAKE, -BX0 * BAKE, -BY0 * BAKE);
     const W = this.width;
     const H = this.height;
     // 远景：按地图的主题画（美术的 backdrops.ts），墙 / 天空 + 装饰 + 往下淡成的雾
-    paintBackdrop(ctx, this.theme, W, H, { x0: BX0, y0: BY0, w: BW, h: BH });
+    paintBackdrop(ctx, this.theme, W, H, { x0: BX0, y0: BY0, w: this.bw, h: BH });
     const th = THEMES[this.theme];
     const f = lcg(31);
     // 纸边外是书桌：深色 + 木纹
@@ -57,7 +60,7 @@ export class Backdrop {
     for (const p of pts) page.lineTo(p[0], p[1]);
     page.closePath();
     const outside = new Path2D();
-    outside.rect(BX0, BY0, BW, BH);
+    outside.rect(BX0, BY0, this.bw, BH);
     outside.addPath(page);
     ctx.fillStyle = th.desk;
     ctx.fill(outside, 'evenodd');
@@ -68,7 +71,7 @@ export class Backdrop {
     ctx.beginPath();
     for (let y = H + 30; y < BY0 + BH; y += 22) {
       ctx.moveTo(BX0, y);
-      for (let x = BX0; x < BX0 + BW; x += 600) ctx.quadraticCurveTo(x + 300, y + (f() - 0.5) * 14, x + 600, y);
+      for (let x = BX0; x < BX0 + this.bw; x += 600) ctx.quadraticCurveTo(x + 300, y + (f() - 0.5) * 14, x + 600, y);
     }
     for (let x = -40; x > BX0; x -= 22) {
       ctx.moveTo(x, BY0);
@@ -87,7 +90,7 @@ export class Backdrop {
     st.position = 'absolute';
     st.left = `${BX0}px`;
     st.top = `${BY0}px`;
-    st.width = `${BW}px`;
+    st.width = `${this.bw}px`;
     st.height = `${BH}px`;
     layer.prepend(this.canvas);
   }

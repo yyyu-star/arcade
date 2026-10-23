@@ -13,6 +13,7 @@
  * - 焦痕宽度（从坑边往外）scorchWidth(r) = max(0.5 r, 10) 单位，越往外越淡，外沿是参差的；小坑也至少 10 单位（2.5 格），镜头 0.7 时还有 7 像素。
  *   有几样图案会多溅出去一点（西瓜汁滴、烟花的火星、奶茶往下淌），都算进 scorchReach。
  */
+import { GROUND_TONE2 } from './mapArt2.ts';
 import { craterReach, inCrater, type CraterKind } from '../core/craters.ts';
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -534,6 +535,7 @@ export type Tone = 'red' | 'light' | null;
 
 /** 材质 id → 底色（材质的中间色亮度 ≥ 0.82 算浅色；香肠、草莓、红白雨棚算红色）。不在表里的是 null */
 export const GROUND_TONE: Readonly<Record<string, Tone>> = {
+  ...GROUND_TONE2,
   sausage: 'red', strawberry: 'red', awning: 'red',
   dough: 'light', mint: 'light', berry: 'light', vanilla: 'light', snow: 'light', dumpling: 'light', rice: 'light', tamago: 'light',
   tempura: 'light', toast: 'light', eggwhite: 'light', butter: 'light', mug: 'light',

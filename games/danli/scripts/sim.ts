@@ -4,11 +4,11 @@
  * - 1v1 / 2v2 / 3v3：对阵（默认 1v1）；
  * - mix：电脑拿各自性格偏好的武器（personas.ts），不写就人人包子蒸笼（和 0.1.0 的数能比）；
  * - room：用准备房间的默认阵容（room.ts 的 defaultRoom，我那个位子也换成电脑）；
- * - map:<id>：在这张图上打（默认厨房面团岛；map:all 六张各打 N 局，一张一行）；
+ * - map:<id>：在这张图上打（默认厨房面团岛；map:all 11 张各打 N 局，一张一行）；
  * - cap:N：打满 N 轮按血量定（默认 MAX_ROUNDS）；cap:999 看不限轮数时一局自然打多久；
  * - ab：每种道具再打 N 局"全会的电脑"对"禁了这种道具的电脑"（单双局换边），看用和不用的胜率差（平局算半局），最后比"全会"对"常用道具都不用"（commons）、"什么道具都不用"（none）；
  *   ab:none 只比这一组，ab:commons,fork 只比这几种；
- * - weapons：8 把武器两两 1v1 对打（每一对 N 局、单双局换边，同一把也打；加 map:all 六张图轮着打），打印胜率表和每把的平均胜率；
+ * - weapons：8 把武器两两 1v1 对打（每一对 N 局、单双局换边，同一把也打；加 map:all 11 张图轮着打），打印胜率表和每把的平均胜率；
  * - online：好友房的"联机档"电脑（ai/online.ts）对单机档（ai/index.ts）打 N 局（单双局换边），看联机档弱多少，再打 N 局联机档对联机档看一局多长。
  * 改了数值或电脑跑一遍，结果写进 README 的"数值"一节。
  */
@@ -131,7 +131,7 @@ if (args.includes('weapons')) {
       let score = 0;
       for (let g = 0; g < n; g++) {
         const aTeam: Team = g % 2 === 0 ? 0 : 1;
-        // map:all：6 张图轮着打
+        // map:all：11 张图轮着打
         if (mapArg === 'all') map = MAP_IDS[g % MAP_IDS.length]!;
         const w = play(1000 * i + 37 * j + g, makeSetup(aTeam === 0 ? [a, b] : [b, a]), [{}, {}], all);
         score += w === null ? 0.5 : w === aTeam ? 1 : 0;
