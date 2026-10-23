@@ -922,9 +922,7 @@ export class TableView {
   }
 
   private nameOf(i: number, s: SeatFrame): string {
-    const who = this.people?.[i];
-    if (i === this.me && (s.owner === 'player' || who?.name)) return '你';
-    return who?.name ?? (s.owner === 'house' ? personaName(s.persona) : '空位');
+    return seatName(s, i === this.me, this.people?.[i]?.name ?? null);
   }
 
   // ---------- 摆出来 ----------
@@ -1003,9 +1001,9 @@ export class TableView {
     const blockers = [
       at({ x: (b0.x + b4.x) / 2, y: b0.y }, (b4.x - b0.x) / 2 + 32, 44),
       at(potPos(this.g), 110, 22),
-      ...(this.resultEl.classList.contains('on') ? [this.resultEl.getBoundingClientRect()] : []),
-      // 正亮着的动作签（每次重画都摆一次 D，说了话的下一帧就躲开）
-      ...[...this.root.querySelectorAll('.seat .bubble.on')].map((e) => e.getBoundingClientRect()),
+      // 结果条按版式估一块（实际宽高随行数变，量出来的会让 D 一手打完才跳）；动作签也不算：
+      // 它们一闪一闪的，D 跟着躲就是"跳来跳去"（所有者反馈 10-23），签画在 D 上面压一下无妨
+      at(resultPos(this.g), 140, 34),
       ...this.seats.flatMap((n, i) =>
         n.root.classList.contains('empty')
           ? []
@@ -1015,6 +1013,8 @@ export class TableView {
     const half = (this.dealer.offsetWidth || 26) / 2;
     const hits = (q: Pt): boolean => {
       const d = at(q, half, half);
+      // 出了牌桌区域（竖屏右侧座位的外侧）也算压：以前靠动作签把 D 挤回来，现在得自己躲
+      if (d.left < box.left || d.right > box.right || d.top < box.top || d.bottom > box.bottom) return true;
       return blockers.some((r) => Math.min(d.right, r.right) - Math.max(d.left, r.left) > 1 && Math.min(d.bottom, r.bottom) - Math.max(d.top, r.top) > 1);
     };
     place(this.dealer, DEALER_TRY.map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy })).find((q) => !hits(q)) ?? p);
@@ -1262,6 +1262,15 @@ function tagFor(a: Action, put: number, stack: number, to: number): string {
     default:
       return '';
   }
+}
+
+/**
+ * 结果条等处叫座位的名字：我是"你"，好友房的真人用昵称，电脑按性格名，都不是才是空位。
+ * 锦标赛里电脑座位的 owner 是 'player'（人人同样的比赛筹码），不能按 owner 判电脑，要看 persona（-1 是真人）
+ */
+export function seatName(s: Pick<SeatFrame, 'owner' | 'persona'>, mine: boolean, real: string | null): string {
+  if (mine && (s.owner === 'player' || real)) return '你';
+  return real ?? (s.owner !== 'none' && s.persona >= 0 ? personaName(s.persona) : '空位');
 }
 
 /** 第几个池子叫什么：主池、边池（只有一个时）或边池一、边池二……（不用数字：挨着金额会读成"1 600"） */

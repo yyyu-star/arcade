@@ -1172,6 +1172,7 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
   if ((await page.locator('.tp-toggle:visible').count()) !== 0) throw new Error('take-profit flag should not show in a tournament');
   if (await page.locator('.next-hand:visible').count()) throw new Error('tournament should not have a next-hand button');
   let shotTable = false;
+  let resShot = false;
   let badges = 0;
   const deadline = Date.now() + 560_000;
   while (!(await page.locator('.tour-sum').isVisible())) {
@@ -1184,6 +1185,13 @@ async function tourFlow(browser: Browser, base: string): Promise<void> {
       await shot(page, 'tour-out');
       await page.locator('.d-btn', { hasText: '现在离开' }).click();
       continue;
+    }
+    // 结果条里不该有"空位"（0.26.x：锦标赛电脑座位 owner 是 player，赢家名字一律显示空位）
+    const res = (await page.locator('.result.on').isVisible()) ? await page.locator('.result.on').textContent({ timeout: 500 }).catch(() => null) : null;
+    if (res?.includes('空位')) throw new Error(`tour result bar shows 空位: ${res}`);
+    if (res && !resShot) {
+      resShot = true;
+      await shot(page, 'tour-result');
     }
     if (await page.locator('.dialog').isVisible()) {
       await page.waitForTimeout(200);
@@ -1545,6 +1553,10 @@ async function tableHits(page: Page, where: string): Promise<string[]> {
         const b = items[j]!;
         if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
         if (a.seat && a.seat === b.seat) continue;
+        // 动作签一闪而过、画在 D 上面可以；D 不能为它挪位置（scenes 另查前后 D 没动）
+        const d = (e: Element): boolean => e.classList.contains('dealer');
+        const bb = (e: Element): boolean => e.classList.contains('bubble');
+        if ((d(a.e) && bb(b.e)) || (bb(a.e) && d(b.e))) continue;
         const dx = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
         const dy = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
         if (dx > 2 && dy > 2) out.push(`${where}: 压住 ${label(a.e)} × ${label(b.e)} ${Math.round(dx)}×${Math.round(dy)}`);
@@ -1566,6 +1578,14 @@ const SCENE_SIZES: { name: string; w: number; h: number; touch: boolean }[] = [
   { name: 'phone-390x844', w: 390, h: 844, touch: true },
 ];
 
+/** D 的位置（没显示返回 null）：同一手里它只该跟庄家换人或版式走 */
+const dealerRect = (page: Page): Promise<number[] | null> =>
+  page.evaluate(() => {
+    const e = document.querySelector('.dealer:not(.hidden)');
+    const r = e?.getBoundingClientRect();
+    return r && r.width > 0 ? [r.left, r.top] : null;
+  });
+
 async function scenesFlow(browser: Browser, base: string): Promise<void> {
   const report: string[] = [];
   const pick = opt('sizes', '').split(',').filter(Boolean);
@@ -1579,14 +1599,21 @@ async function scenesFlow(browser: Browser, base: string): Promise<void> {
   for (const d of SCENE_SIZES.filter((x) => !pick.length || pick.some((p) => x.name.endsWith(p)))) {
     const ctx = await newContext(browser, base, user, d.touch ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {});
     await ctx.addInitScript('globalThis.__name = (f) => f;');
-    for (const [n, sides, kind] of cases) {
-      const tag = `${d.name}-${n}p-${kind}${kind === 'side' ? sides : ''}`;
+    // D 只跟庄家座位走：竖屏（D 贴着头像外侧、最容易被动作签挤）把庄家挨个换到每个座位，其余尺寸换一个（按局面轮着来）
+    const withBtn = cases.flatMap(([n, sides, kind], k): [number, number, SceneKind, number][] =>
+      kind !== 'side' ? [[n, sides, kind, -1]] : d.name.startsWith('phone') ? Array.from({ length: n }, (_, b) => [n, sides, kind, b]) : [[n, sides, kind, k % n]],
+    );
+    for (const [n, sides, kind, btn] of withBtn) {
+      const tag = `${d.name}-${n}p-${kind}${kind === 'side' ? `${sides}-btn${btn}` : ''}`;
       const page = await ctx.newPage();
       const before = errors.length;
       watch(page, `scenes ${tag}`);
       const found: string[] = [];
       try {
-        const save = sceneSave(scene(n, sides, kind, n * 10 + sides), user);
+        const table = scene(n, sides, kind, n * 10 + sides);
+        // 只改显示用的庄家：翻牌后轮到我，之后的行动顺序由 toAct 接着走，冒烟只看版式
+        if (btn >= 0) table.button = btn;
+        const save = sceneSave(table, user);
         await page.addInitScript(([save]) => {
           localStorage.setItem('texas.settings', JSON.stringify({ fast: true }));
           localStorage.setItem('texas.session', save);
@@ -1600,11 +1627,15 @@ async function scenesFlow(browser: Browser, base: string): Promise<void> {
           await page.locator('.actions.on').waitFor({ timeout: 15_000 });
           await page.waitForTimeout(700);
           found.push(...(await tableHits(page, 'flop')));
+          const d0 = await dealerRect(page);
           await page.screenshot({ path: join(SHOTS, `scene-${tag}.png`) });
           // 我过牌、电脑跟着说话：动作签都亮着的时候再查一遍
           await page.locator('.actions .act', { hasText: /过牌|跟注/ }).first().click();
           await page.waitForTimeout(900);
           found.push(...(await tableHits(page, 'after')));
+          // 同一手、同一个庄：动作签冒出来不能把 D 顶开（0.26.x 所有者截图：右下那家的 D 跟着"下注 800"跳）
+          const d1 = await dealerRect(page);
+          if (d0 && d1 && Math.max(Math.abs(d0[0]! - d1[0]!), Math.abs(d0[1]! - d1[1]!)) > 1) found.push(`after: D 移动了 ${d0.map(Math.round)} → ${d1.map(Math.round)}`);
           await page.screenshot({ path: join(SHOTS, `scene-${tag}-after.png`) });
         } else {
           await page.locator('.result.on').waitFor({ timeout: 15_000 });

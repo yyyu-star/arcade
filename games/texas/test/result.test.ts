@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { evalCards } from '../src/core/eval.ts';
 import { parseCards } from '../src/core/cards.ts';
 import type { HandResult } from '../src/core/table.ts';
-import { resultLines } from '../src/view/table.ts';
+import { resultLines, seatName } from '../src/view/table.ts';
+import { personaName } from '../src/view/text.ts';
 
 const NAMES = ['你', '阿飙', '稳哥', '老好'];
 const name = (s: number): string => NAMES[s]!;
@@ -64,5 +65,20 @@ describe('结果条', () => {
     const [l] = resultLines(r, name, 0);
     expect(strip(l!.html)).toBe('平分：你、老好 各 20 · 两对');
     expect(l!.mine).toBe(true);
+  });
+});
+
+describe('座位名（结果条）', () => {
+  // 锦标赛里电脑座位 owner 是 'player'，从前按 owner==='house' 判，赢家一律显示"空位"
+  it('锦标赛里的电脑（owner player、persona 有值）显示性格名，不是空位', () => {
+    const n = seatName({ owner: 'player', persona: 3 }, false, null);
+    expect(n).not.toBe('空位');
+    expect(n).toBe(personaName(3));
+  });
+  it('现金桌电脑、我、好友房真人、空位', () => {
+    expect(seatName({ owner: 'house', persona: 2 }, false, null)).toBe(personaName(2));
+    expect(seatName({ owner: 'player', persona: -1 }, true, null)).toBe('你');
+    expect(seatName({ owner: 'player', persona: -1 }, false, '小明')).toBe('小明');
+    expect(seatName({ owner: 'none', persona: -1 }, false, null)).toBe('空位');
   });
 });
